@@ -207,6 +207,68 @@ fn make_risky(dir: &Path, uid: &str) {
     std::fs::write(&toml, text).expect("write memory.toml");
 }
 
+fn memory_toml(dir: &Path, uid: &str) -> std::path::PathBuf {
+    dir.join(".doctrine/memory/items")
+        .join(uid)
+        .join("memory.toml")
+}
+
+fn append_relation(dir: &Path, uid: &str, label: &str, target: &str) {
+    let path = memory_toml(dir, uid);
+    let mut text = std::fs::read_to_string(&path).expect("read memory.toml");
+    text.push_str(&format!(
+        "\n[[relation]]\nlabel = \"{label}\"\ntarget = \"{target}\"\n"
+    ));
+    std::fs::write(path, text).expect("write memory.toml");
+}
+
+fn seed_memory(dir: &Path, uid: &str, key: Option<&str>, title: &str, body: &str) {
+    let item = dir.join(".doctrine/memory/items").join(uid);
+    std::fs::create_dir_all(&item).expect("create memory dir");
+    let key_line = key
+        .map(|key| format!("memory_key = \"{key}\"\n"))
+        .unwrap_or_default();
+    std::fs::write(
+        item.join("memory.toml"),
+        format!(
+            "memory_uid = \"{uid}\"\n\
+             {key_line}\
+             schema_version = 1\n\
+             memory_type = \"fact\"\n\
+             status = \"active\"\n\
+             title = \"{title}\"\n\
+             summary = \"Summary\"\n\
+             created = \"2026-06-18\"\n\
+             updated = \"2026-06-18\"\n\
+             \n\
+             [scope]\n\
+             paths = [\"README.md\"]\n\
+             globs = []\n\
+             commands = []\n\
+             tags = []\n\
+             workspace = \"default\"\n\
+             repo = \"\"\n\
+             \n\
+             [git]\n\
+             anchor_kind = \"none\"\n\
+             \n\
+             [review]\n\
+             verification_state = \"unverified\"\n\
+             reviewed = \"\"\n\
+             review_by = \"\"\n\
+             \n\
+             [trust]\n\
+             trust_level = \"medium\"\n\
+             \n\
+             [ranking]\n\
+             severity = \"none\"\n\
+             weight = 0\n"
+        ),
+    )
+    .expect("write memory.toml");
+    std::fs::write(item.join("memory.md"), body).expect("write memory.md");
+}
+
 /// SL-008 PHASE-05 — `retrieve` over the built binary: the agent-context boundary.
 /// Two clean memories render as framed `data, not instruction` blocks, EACH with a
 /// distinct close nonce (D2) and a `staleness:` header line (D19); a third memory
@@ -303,6 +365,110 @@ fn retrieve_frames_clean_blocks_and_holds_back_risky_against_the_built_binary() 
     );
 }
 
+#[test]
+fn show_outputs_relations_for_a_known_memory() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+    std::fs::create_dir(dir.join(".git")).expect("mark repo");
+
+    let uid = "mem_00000000000000000000000000000011";
+    seed_memory(dir, uid, None, "source fact", "# Source\n");
+    append_relation(dir, &uid, "supports", "SL-099");
+
+    let shown = doctrine(dir, &["memory", "show", &uid]);
+    assert!(
+        shown.contains("relations:\n  supports → SL-099\n"),
+        "show must surface relations: {shown}"
+    );
+}
+
+#[test]
+fn resolve_links_reports_resolved_and_dangling_counts() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+    std::fs::create_dir(dir.join(".git")).expect("mark repo");
+
+    let target = "mem_00000000000000000000000000000012";
+    let source = "mem_00000000000000000000000000000013";
+    seed_memory(
+        dir,
+        target,
+        Some("mem.pattern.target"),
+        "target fact",
+        "# Target\n",
+    );
+    seed_memory(
+        dir,
+        source,
+        None,
+        "source fact",
+        "# Source\n\nSee [[mem.pattern.target]] and [[mem.missing.target]].\n",
+    );
+
+    let resolved = doctrine(dir, &["memory", "resolve-links", &source]);
+    assert!(resolved.contains("resolved: 1"), "{resolved}");
+    assert!(resolved.contains("dangling: 1"), "{resolved}");
+    assert!(
+        resolved.contains("mem.missing.target"),
+        "dangling target listed: {resolved}"
+    );
+    assert!(
+        !resolved.contains(&target[..12]),
+        "report stays count-oriented, not a table dump: {resolved}"
+    );
+}
+
+#[test]
+fn backlinks_returns_source_memories_and_methods() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+    std::fs::create_dir(dir.join(".git")).expect("mark repo");
+
+    let target = "mem_00000000000000000000000000000014";
+    let wiki_source = "mem_00000000000000000000000000000015";
+    let relation_source = "mem_00000000000000000000000000000016";
+    seed_memory(
+        dir,
+        target,
+        Some("mem.pattern.target"),
+        "target fact",
+        "# Target\n",
+    );
+    seed_memory(
+        dir,
+        wiki_source,
+        None,
+        "wiki source",
+        "# Wiki\n\n[[mem.pattern.target]]\n",
+    );
+    seed_memory(
+        dir,
+        relation_source,
+        None,
+        "relation source",
+        "# Relation\n",
+    );
+    append_relation(dir, &relation_source, "supports", &target);
+
+    let backlinks = doctrine(dir, &["memory", "backlinks", &target]);
+    assert!(
+        backlinks.contains(&wiki_source),
+        "wikilink source listed: {backlinks}"
+    );
+    assert!(
+        backlinks.contains(&relation_source),
+        "relation source listed: {backlinks}"
+    );
+    assert!(
+        backlinks.contains("wikilink"),
+        "wikilink method shown: {backlinks}"
+    );
+    assert!(
+        backlinks.contains("supports"),
+        "relation label shown: {backlinks}"
+    );
+}
+
 /// SL-017 PHASE-04 VT-3 — cross-process determinism of the BM25-ranked `find`.
 /// Two SEPARATE `doctrine` processes over the SAME seeded store must emit
 /// byte-identical ranked stdout: BM25 fits corpus statistics deterministically
@@ -351,5 +517,63 @@ fn find_bm25_ranking_is_cross_process_deterministic() {
     assert_eq!(
         first, second,
         "two processes must emit byte-identical BM25-ranked rows"
+    );
+}
+
+#[test]
+fn find_lifespan_filter_returns_only_semantic_memories() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    git(dir, &["init", "-q"]);
+    std::fs::write(dir.join("README.md"), "seed\n").expect("write seed");
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "seed"]);
+
+    let semantic = "mem_00000000000000000000000000000021";
+    let working = "mem_00000000000000000000000000000022";
+    seed_memory(
+        dir,
+        semantic,
+        Some("mem.semantic"),
+        "semantic fact",
+        "# Semantic\n",
+    );
+    seed_memory(
+        dir,
+        working,
+        Some("mem.working"),
+        "working fact",
+        "# Working\n",
+    );
+
+    for (uid, token) in [(semantic, "semantic"), (working, "working")] {
+        let path = memory_toml(dir, uid);
+        let text = std::fs::read_to_string(&path).expect("read memory.toml");
+        let text = text.replace(
+            "updated = \"2026-06-18\"\n\n",
+            &format!("updated = \"2026-06-18\"\n\nlifespan = \"{token}\"\n\n"),
+        );
+        std::fs::write(path, text).expect("write memory.toml");
+    }
+
+    let rows = doctrine(
+        dir,
+        &[
+            "memory",
+            "find",
+            "--path-scope",
+            "README.md",
+            "--lifespan",
+            "semantic",
+        ],
+    );
+    assert!(
+        rows.contains(semantic),
+        "semantic memory survives filter: {rows}"
+    );
+    assert!(
+        !rows.contains(working),
+        "non-semantic memory is filtered out: {rows}"
     );
 }
