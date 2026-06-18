@@ -1016,7 +1016,11 @@ fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Re
     // Build key_to_uid map for resolving wikilink key-form targets
     let key_to_uid: BTreeMap<String, String> = all_memories
         .iter()
-        .filter_map(|m| m.key.as_ref().map(|k| (normalize_key(k).unwrap_or_default(), m.uid.clone())))
+        .filter_map(|m| {
+            m.key
+                .as_ref()
+                .map(|k| (normalize_key(k).unwrap_or_default(), m.uid.clone()))
+        })
         .collect();
     let known_uids: BTreeSet<String> = all_memories.iter().map(|m| m.uid.clone()).collect();
 

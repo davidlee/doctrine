@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `estimate` — the optional estimation facet (SL-101, SPEC-020 §3).
-#![allow(dead_code, reason = "lifted in PHASE-03 when dtoml.rs wires config imports")]
+#![allow(
+    dead_code,
+    reason = "lifted in PHASE-03 when dtoml.rs wires config imports"
+)]
 //!
 //! A bounded human-attention-burden claim: two finite `f64` bounds (`lower`/`upper`),
 //! parsed from an entity `[estimate]` TOML table. The facet is kind-agnostic and
@@ -150,7 +153,11 @@ fn normalise(raw: EstimateRaw) -> anyhow::Result<EstimateFacet> {
 /// everything else as a parse-time type error.
 fn toml_to_f64(value: &toml::Value, name: &str) -> anyhow::Result<f64> {
     let f = match value {
-        #[expect(clippy::cast_precision_loss, clippy::as_conversions, reason = "integer <= 2^53 fits exactly in f64")]
+        #[expect(
+            clippy::cast_precision_loss,
+            clippy::as_conversions,
+            reason = "integer <= 2^53 fits exactly in f64"
+        )]
         toml::Value::Integer(i) => *i as f64,
         toml::Value::Float(f) => *f,
         _ => anyhow::bail!("estimate: {name} must be a number"),
@@ -280,11 +287,7 @@ mod tests {
     fn e11_upper_lt_lower() {
         let t = table_from("lower=5\nupper=2");
         let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(
-            err.contains("upper must be >= lower"),
-            "got: {}",
-            err
-        );
+        assert!(err.contains("upper must be >= lower"), "got: {}", err);
     }
 
     // ---- E12: resolve_unit default ----
@@ -392,7 +395,11 @@ mod tests {
         assert_eq!(facet.upper, 8.0);
         // Serialised form must NOT contain the extra key
         let serialised = toml::to_string(&facet).unwrap();
-        assert!(!serialised.contains("mode"), "extra key leaked: {}", serialised);
+        assert!(
+            !serialised.contains("mode"),
+            "extra key leaked: {}",
+            serialised
+        );
     }
 
     // ---- Extra: direct validate tests ----
