@@ -9,7 +9,7 @@ skill from spec-driver's `doctrine` skill.
 spec-driver had a single governance hook — `.spec-driver/hooks/doctrine.md` — a
 user-editable file the `doctrine`/`/canon` skill loaded to learn project-local
 "articles of truth". Doctrine has no equivalent: `/canon` currently points at a fixed
-list (`CLAUDE.md`, `AGENTS.md`, `.doctrine/adr/`, `doc/*`, the slice `design.md`).
+list (`CLAUDE.md`, `AGENTS.md`, `.doctrine/adr/`, `.doctrine/spec/tech/`, the slice `design.md`).
 
 Want a customizable surface that:
 
@@ -26,4 +26,4 @@ Want a customizable surface that:
   `.doctrine/` with install seeding a template only when absent.
 - One file vs per-point files (a `canon.md` vs `route.md`/`execute.md` hooks).
 - How `/canon` references it without an `@` force-load (CSO: avoid force-loading).
-- Relationship to ADRs/`doc/*` — pointer layer, not a competing truth.
+- Relationship to ADRs and specs — pointer layer, not a competing truth.

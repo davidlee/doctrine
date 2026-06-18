@@ -11,7 +11,7 @@ numeric/named materialiser); this is the spec-side composition layer in
 through the same `entity.rs` `Fresh` materialiser as specs/slices. Identity is
 **immutable**. It is **spec-mediated** — no standalone CLI; `spec req add` is the
 only producer. This overturned the old canon's compound-key facet row
-`SPEC-110.FR-001` (see `doc/spec-entity-spec.md`).
+`SPEC-110.FR-001` (see SPEC-004, the entity engine spec).
 
 ## 2. Membership is a spec-side edge row carrying FK + a MOBILE label
 

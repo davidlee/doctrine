@@ -1,0 +1,577 @@
+# Implementation plan for SL-099 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-099"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Schema + template widening"
+objective = "Widen the Rust types (Lifespan, Provenance, RawSource, Memory, Draft, RecordArgs), TOML schema (lifespan, review_by, [[source]]), and template so new record flags parse, round-trip, and land in the written TOML without data loss."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "Design D3 (template + Draft widening) is specified and locked; no unresolved design questions for schema surfaces."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "Existing memory test suite passes (`cargo test -p doctrine -- memory`) as the unchanged baseline."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "`Lifespan` enum (5 variants + Display/FromStr) and `Provenance` struct exist in `src/memory.rs`."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "`RawSource` widened from empty struct to carry `kind`, `ref`, `note` fields (serde defaults)."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "`Memory` (validated projection) carries `relations: Vec<RawRelation>`, `lifespan: Option<Lifespan>`, `sources: Vec<Provenance>` — no longer dropped via `..`."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "`Draft` and `RecordArgs` widened with lifespan, review_by, sources, trust_level, severity."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "`render_memory_toml` emits lifespan line (when set), review_by, [[source]] blocks, and honours --trust/--severity overrides on existing [trust]/[ranking] blocks."
+
+[[phase.exit_criteria]]
+id   = "EX-6"
+text = "Template `install/templates/memory.toml` carries lifespan key (absent by default), review_by substitution token, and [[source]] loop."
+
+[[phase.exit_criteria]]
+id   = "EX-7"
+text = "All five new record flags (--lifespan, --review-by, --provenance-source, --trust, --severity) parse, accept valid values, and reject invalid values with clear error messages."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "`Lifespan::from_str` parses all 5 variants; invalid string → error."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "`Provenance` round-trips through TOML serialise/deserialise with all three fields (kind, ref, note)."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "`Memory::try_from` maps `RawMemoryToml` with lifespan + relations + sources correctly into `Memory` fields."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "`render_memory_toml` with lifespan=Some(Semantic) produces `lifespan = \"semantic\"`; with None produces no lifespan line."
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "`render_memory_toml` with sources=[Provenance{kind:\"code\", ref_:\"src/foo.rs\", note:\"\"}] produces `[[source]]` block with kind + ref."
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "`render_memory_toml` with trust_level=Some(\"high\") produces `trust_level = \"high\"` in [trust] block."
+
+[[phase.verification]]
+id      = "VT-7"
+expects = "Existing memory parse tests pass unchanged — backward compatibility with no-new-field memories is proven."
+
+[[phase.verification]]
+id      = "VT-8"
+expects = "`--lifespan garbage` on CLI → exit non-zero with parse error mentioning valid variants."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "`just check` passes with zero warnings."
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Wikilink extractor (`src/links.rs`)"
+objective = "Implement the pure wikilink extraction, resolution, and backlinks-index functions in a new leaf-tier module with zero imports from command/engine tiers."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete — Memory carries relations and body path access so call-site projection from Memory→string-keyed data is possible."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "Existing `lexical.rs` tests pass unchanged (Bm25Ranker is not touched)."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "`src/links.rs` exists as a leaf-tier module with zero imports from `memory`, `retrieve`, or any engine/command module."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "`extract_wikilinks(body: &str) -> Vec<Wikilink>` — line-aware state machine extracts `[[mem.<key>]]` and `[[mem_<uid>]]`, skips fenced/inline code."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "`resolve_wikilink(known_uids, key_to_uid, target, is_uid) -> Result<String, String>` — resolves to uid or returns dangling target."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "`backlinks_index(wikilinks_by_uid, relations_by_uid) -> BTreeMap<String, BTreeSet<String>>` — builds reverse index from wikilinks + relations (deduped)."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "`extract_wikilinks` on body with `[[mem.foo]]` returns Wikilink { target: \"mem.foo\", is_uid: false }."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "`extract_wikilinks` on body with `[[mem_018f3a]]` returns Wikilink { target: \"mem_018f3a\", is_uid: true }."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "`extract_wikilinks` on body with ```fenced code block containing [[mem.foo]]``` returns empty vec."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "`extract_wikilinks` on body with inline `` `[[mem.foo]]` `` code returns empty vec."
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "`extract_wikilinks` on body with `[[SL-099]]` (non-mem prefix) returns empty vec."
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "`resolve_wikilink` with target in known_uids → Ok(uid); with unknown target → Err(dangling_target)."
+
+[[phase.verification]]
+id      = "VT-7"
+expects = "`resolve_wikilink` with key target in key_to_uid → Ok(resolved_uid); with unknown key → Err."
+
+[[phase.verification]]
+id      = "VT-8"
+expects = "`backlinks_index` with A→B wikilink + C→B relation produces B → {A, C}."
+
+[[phase.verification]]
+id      = "VT-9"
+expects = "`backlinks_index` with duplicate A→B (wikilink) + A→B (relation) produces B → {A} (deduped)."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "`just check` passes with zero warnings. Module is leaf-tier — verify no import of `memory` or `retrieve`."
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Show/retrieve surface widening + resolve-links/backlinks CLI"
+objective = "Surface relations and wikilinks in `memory show` output, add `relations:` line to `retrieve` blocks, and wire `memory resolve-links` and `memory backlinks` CLI verbs."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete (Memory carries relations)."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "PHASE-02 complete (wikilink extraction functions available)."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "`memory show` (text) renders `relations:` block (label → target) after `anchor:` when Memory.relations is non-empty."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "`memory show --json` includes `\"relations\": [{\"label\":..., \"target\":...}]` array."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "`memory show` (text) renders `wikilinks:` section: resolved targets with resolved uid, dangling marked `(dangling)`."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "`memory show --json` includes `\"wikilinks\": [...]` array."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "`memory retrieve` blocks include `relations:` line when Memory.relations is non-empty."
+
+[[phase.exit_criteria]]
+id   = "EX-6"
+text = "`memory resolve-links [REF]` CLI wired — reports resolved count, dangling count, dangling targets. Single-ref and corpus-wide modes both work."
+
+[[phase.exit_criteria]]
+id   = "EX-7"
+text = "`memory backlinks <REF>` CLI wired — returns tabular listing via `listing::render_columns` with uid, type, title, method columns."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Unit: `render_show` on Memory with relations=[RawRelation{label:\"bears-on\", target:\"mem_abc\"}] produces `relations:` block in output."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Unit: `show_json` on Memory with relations produces correct JSON array."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "Unit: `render_show` on Memory with body containing `[[mem.foo]]` produces `wikilinks:` section."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "Integration: `memory show mem_<uid>` for a known memory with relations outputs relations block."
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "Integration: `memory resolve-links mem_<uid>` for a memory with wikilinks reports correct resolved/dangling counts."
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "Integration: `memory backlinks mem_<target>` returns correct source memories in table."
+
+[[phase.verification]]
+id      = "VT-7"
+expects = "Empty relations → no `relations:` block in text output, empty `\"relations\":[]` in JSON."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "`just check` passes with zero warnings."
+
+[[phase]]
+id        = "PHASE-04"
+name      = "`inspect` memory bridge"
+objective = "Pre-dispatch `MemoryRef::parse` in `run_inspect` so `doctrine inspect` accepts `mem_<uid>` and `mem.<key>` refs, rendering inbound/outbound/dangling/wikilinks sections in the standard inspect format."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete (Memory carries relations)."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "PHASE-02 complete (wikilink extraction for wikilinks section)."
+
+[[phase.entrance_criteria]]
+id   = "EN-3"
+text = "PHASE-03 complete (render_show and wikilink section patterns established)."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "`run_inspect` in `main.rs` pre-dispatches `MemoryRef::parse(arg)` before falling through to `parse_canonical_ref`."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "`memory_inspect_view` in `memory.rs` (command tier) reads catalog-scan relations + extract_wikilinks from body and renders outbound/inbound/danglers/wikilinks sections."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "Outbound section lists the memory's own `[[relation]]` rows (label → target)."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "Inbound section lists other memories' `[[relation]]` rows pointing to this uid (derived, no stored reverse edges)."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "Danglers section lists this memory's `[[relation]]` targets that don't resolve to any known entity or memory."
+
+[[phase.exit_criteria]]
+id   = "EX-6"
+text = "Wikilinks section lists `[[mem.…]]` references extracted from body (resolved with uid; dangling marked)."
+
+[[phase.exit_criteria]]
+id   = "EX-7"
+text = "Non-memory refs (e.g. `SL-099`, `ADR-001`) fall through unchanged — existing inspect behaviour preserved."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Integration: `doctrine inspect mem_<uid>` for a memory with a `[[relation]]` edge to `mem_<other>` renders outbound section with label + target."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Integration: `doctrine inspect mem_<target>` shows inbound edge from `mem_<source>`."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "Integration: `doctrine inspect mem_<uid>` for a memory with wikilinks shows `wikilinks:` section."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "Integration: `doctrine inspect mem.<key>` (key form) resolves and renders correctly."
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "Integration: `doctrine inspect SL-099` (numbered entity) still works — fall-through path unchanged."
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "`doctrine inspect mem_deadbeef` (nonexistent memory) → clear error message, non-zero exit."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "`just check` passes with zero warnings. No new imports from `relation_graph` into leaf tier."
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Lifespan filter + ageing"
+objective = "Implement `lifespan_factor`, `effective_age`, sort key modulation, and `--lifespan` filter on `find`/`retrieve` — with behaviour-preservation: unset lifespan = 1.0 multiplier = identical sort."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete (Lifespan enum, Memory.lifespan field)."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "Existing retrieve rank tests pass unchanged as baseline."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "`lifespan_factor(Option<Lifespan>) -> f64` returns correct multiplier per the design table (identity=0.0, semantic=0.1, procedural=0.33, episodic=1.0, working=10.0, None=1.0)."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "`effective_age(days: i64, lifespan: Option<Lifespan>) -> i64` modulates days by factor; sentinel `i64::MAX` passes through unchanged; valid ages clamp to `i64::MAX - 1`."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "`sort_key` key 8 uses `effective_age` instead of raw `days_between(…).unwrap_or(i64::MAX)`."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "`QueryContext` gains `lifespan: Option<Lifespan>`; `--lifespan` filter applied in `query()` filter cascade after `match_scope`."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "`--lifespan` flag on `find` and `retrieve` wired through CLI parsing."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Table-driven: `effective_age(10, Some(Semantic))` → 1; `effective_age(10, Some(Working))` → 100; `effective_age(10, None)` → 10."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "`effective_age(i64::MAX, Some(Working))` → `i64::MAX` (sentinel never modulated)."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "`rank` with two memories: same reviewed date, A.working vs B.semantic → B ranks higher than A (B's effective age is lower)."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "Existing rank tests (`rank_ordinals_polarity_and_unknown_worst`, `rank_key8_more_recent_first_missing_last`, etc.) pass with zero edits — unset lifespan = 1.0 = identical sort."
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "`memory find --lifespan semantic` returns only semantic-lifespan memories; `memory find --lifespan working` returns only working-lifespan memories."
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "`--lifespan garbage` → CLI parse error."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "`just check` passes with zero warnings. `as` conversions on `effective_age` handled with stacked `#[expect]` per `lexical::quantize` precedent."
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Suggested relations + `--expand N`"
+objective = "Post-record BM25 scoring for suggested relations (stderr hint) and BFS graph expansion via `memory retrieve --expand N` with visited-set cycle handling and depth annotation."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete (Memory, collect_all, lex_doc)."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "PHASE-02 complete (links.rs for BFS edge set)."
+
+[[phase.entrance_criteria]]
+id   = "EN-3"
+text = "PHASE-03 complete (render_show for framed blocks)."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "After `memory record` writes a memory: score new body against existing corpus with `Bm25Ranker`, report top 5 to stderr as `note: you might want to link to:` with uid + title."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "Suggested relations deduplicate against already-authored `[[relation]]` targets (BTreeSet of (label, target) pairs)."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "Suggested relations skip silently when corpus < 1 memory (nothing to score against)."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "`memory retrieve --expand N` performs BFS from matched memories following union of wikilinks + `[[relation]]` targets (memory→memory edges only)."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "Output: framed blocks (via `render_show`) with `depth: 1`, `depth: 2`, … staleness lines. Depth-0 (matched memories) excluded. Blocks separated by blank lines."
+
+[[phase.exit_criteria]]
+id   = "EX-6"
+text = "Cycle handling: `visited: BTreeSet<String>` prevents A→B→A loops (A skipped at depth 2)."
+
+[[phase.exit_criteria]]
+id   = "EX-7"
+text = "Nodes at equal depth sorted by `sort_default` (created desc, uid asc) — consistent with `memory list`."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Unit: BM25 scores for a body with overlapping terms > 0; unrelated body → score 0."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Integration: `memory record …` on a memory about 'git hooks' emits `note: you might want to link to:` with top matches to stderr."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "Unit: BFS from A where A→B→C at depth 2 returns B (depth 1) and C (depth 2)."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "Unit: BFS with A→B→A cycle — A appears only at depth 0 (visited gate skips at depth 2)."
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "Unit: BFS filters out non-memory targets (cross-entity edges not traversed)."
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "Integration: `memory retrieve --expand 2 <query>` outputs depth:1 and depth:2 blocks via render_show, no depth:0 duplicates."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "`just check` passes with zero warnings."
+
+[[phase]]
+id        = "PHASE-07"
+name      = "`validate` + `--allow-dirty`"
+objective = "Implement `memory validate [REF]` (three advisory checks: dangling relations, stale verification, draft expiry) and `memory verify --allow-dirty` (stamps working-tree state)."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete (Memory carries relations, review_by, scope.paths)."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "Existing `verify` tests pass as baseline."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "`memory validate [REF]` CLI wired — corpus-wide if no REF, single-memory if REF given."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "Dangling check: for each `[[relation]]` target, resolve via MemoryRef→memory store, fall back to catalog entity scan. Report `UID: dangling: [[relation]] target \"X\" not found`."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "Stale check: if `verified_sha` set and memory has `scope.paths`, run `commits_touching(root, &paths, &verified_sha, \"HEAD\")`. Report `UID: stale: verified_sha N commits behind HEAD on scoped paths`."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "Draft expiry check: if `status == \"draft\"` and `review_by` set and `days_between(review_by, today) < 0`, report `UID: expired: draft past review_by DATE (N days ago)`."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "`validate` exits 0 if clean, 1 if any warnings. Never writes."
+
+[[phase.exit_criteria]]
+id   = "EX-6"
+text = "`memory verify --allow-dirty` skips dirty-tree bail and stamps `checkout_state_id` in `verified_sha`."
+
+[[phase.exit_criteria]]
+id   = "EX-7"
+text = "`memory verify` without `--allow-dirty` refuses dirty tree — behaviour byte-identical to current."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Unit: pure validation predicate for dangling returns error for unresolved MemoryRef target."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Unit: pure validation predicate for draft expiry returns error when `days_between(review_by, today)` is negative."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "Integration: `memory validate` on corpus with a memory whose `[[relation]]` target doesn't exist → exit 1, dangling warning output."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "Integration: `memory validate` on corpus with all clean → exit 0, no output."
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "Integration: `memory verify --allow-dirty` on dirty tree succeeds, stamps checkout_state_id in verified_sha."
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "Integration: `memory verify` (no flag) on dirty tree → refuses with clear error message."
+
+[[phase.verification]]
+id      = "VT-7"
+expects = "Unit: `stamp_verification` with `allow_dirty=true` and `AnchorKind::CheckoutState` writes `checkout_state_id`."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "`just check` passes with zero warnings."
+
+[[phase]]
+id        = "PHASE-08"
+name      = "Integration + behaviour-preservation gate"
+objective = "Cross-phase integration tests, behaviour-preservation gate run against all shared machinery, and final `just gate` green — proving no regression in entity, relation, catalog, retrieve, or lexical subsystems."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "All PHASE-01 through PHASE-07 complete with their VT/VA criteria verified."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "`just check` passes with zero warnings."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "`cargo test -p doctrine -- entity` — all tests pass unchanged."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "`cargo test -p doctrine -- relation` — all tests pass unchanged."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "`cargo test -p doctrine -- catalog` — all tests pass unchanged."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "`cargo test -p doctrine -- retrieve` — all tests pass. Existing rank tests green (unset lifespan = 1.0)."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "`cargo test -p doctrine -- lexical` — all tests pass unchanged."
+
+[[phase.exit_criteria]]
+id   = "EX-6"
+text = "`cargo test -p doctrine -- memory` — all new PHASE-01 through PHASE-07 tests pass."
+
+[[phase.exit_criteria]]
+id   = "EX-7"
+text = "`just gate` green — workspace-wide clippy zero warnings."
+
+[[phase.exit_criteria]]
+id   = "EX-8"
+text = "No test was edited to accommodate new behaviour — existing suites are proof of preservation."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Full `cargo test -p doctrine` suite green."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "`just gate` exit zero, zero warnings."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "Cross-phase e2e: `record` with all new flags → `show` displays relations + wikilinks → `validate` passes → `find --lifespan` filters → `retrieve --expand 2` expands → `inspect mem_<uid>` renders all sections → `backlinks` returns sources → `verify --allow-dirty` stamps."
+
+[[phase.verification]]
+id      = "VA-2"
+expects = "Existing memory files without new fields parse and display correctly (backward compatibility smoke test)."

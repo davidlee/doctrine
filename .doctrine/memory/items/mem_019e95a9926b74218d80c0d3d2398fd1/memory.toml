@@ -9,7 +9,7 @@ created = "2026-06-05"
 updated = "2026-06-05"
 
 [scope]
-paths = ["doc/memory-spec.md"]
+paths = [".doctrine/spec/tech/007"]
 globs = []
 commands = []
 tags = ["backend", "forgettable", "sl-005"]

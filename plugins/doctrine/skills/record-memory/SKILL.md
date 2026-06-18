@@ -79,7 +79,7 @@ until you raise its trust by attesting it — by design. Set trust to match real
 Put "do X" steps in bullets with exact command snippets. Reference related
 artifacts and memories inline with `[[uid]]` / `[[key]]` (cheaper than relations).
 If the item would become an ADR or an evergreen spec, STOP — `doctrine adr new`
-or author under `doc/*` instead. Memory is a pointer/recipe layer, not canon.
+or author a spec or ADR instead. Memory is a pointer/recipe layer, not canon.
 
 ## 7. Sanity-check surfaceability
 

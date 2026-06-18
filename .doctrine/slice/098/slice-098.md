@@ -5,4 +5,5 @@ requirement placement a natural part of every pass through the design→plan→a
 
 No new code — the entity machinery already supports the operations. This slice
 edits the affected skills (§8 of the design): `/design`, `/plan`, `/audit`,
-`/reconcile`, `/close`, `/spec-product`, `/spec-tech`.
+`/reconcile`, `/close`. The `/spec-product` and `/spec-tech` skills are upstream
+of the reconcile loop and are deferred to IMP-096.

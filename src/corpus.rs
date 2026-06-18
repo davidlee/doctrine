@@ -817,7 +817,7 @@ updated = "2026-01-01"
 [scope]
 workspace = "global"
 repo = ""
-paths = ["doc/"]
+paths = [".doctrine/spec/tech/"]
 
 [git]
 anchor_kind = ""
@@ -892,7 +892,10 @@ weight = 0
     #[test]
     fn lint_flags_a_tag_only_scope() {
         // Drop the path scope, add a tag — tag-only fails the floor (Charge X).
-        let toml = clean_master_toml().replace(r#"paths = ["doc/"]"#, r#"tags = ["doctrine"]"#);
+        let toml = clean_master_toml().replace(
+            r#"paths = [".doctrine/spec/tech/"]"#,
+            r#"tags = ["doctrine"]"#,
+        );
         let v = lint_master(&toml).unwrap_err();
         assert!(
             v.contains(&Violation::ScopeFloor),

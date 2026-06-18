@@ -117,7 +117,7 @@ impl SpecSubtype {
 }
 
 /// A code anchor a tech spec governs (tech-only; `[[source]]`). Shape mirrors the
-/// legacy canon `doc/spec-entity-spec.md` (D-3): the language + a code identifier,
+/// legacy canon `doc/spec-entity-spec.md`; superseded by SPEC-004: the language + a code identifier,
 /// with an optional finer module path. Read by `spec show` render (PHASE-04).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct Source {

@@ -24,7 +24,7 @@ field-owned, "no undispositioned findings before close" is enforced by the binar
 
 > **Reconciliation scope.** Doctrine has no specs/contracts registry or
 > `sync`/`validate` surface; reconciliation here means reconciling against
-> `design.md`, ADRs, and `doc/*`, not a spec engine.
+> `design.md`, ADRs, and `.doctrine/spec/tech/`, not a spec engine.
 
 > **Dispatched slice — review the candidate surface, not the raw evidence.** When
 > the slice was driven by `/dispatch`, `review/*` and `phase/*` are immutable
@@ -38,7 +38,7 @@ Inputs:
 
 - the slice's implemented phases and their verification evidence
 - `design.md` (canonical), `slice-nnn.md`, `plan.toml`
-- relevant ADRs and `doc/*` specs (see `/canon`)
+- relevant ADRs and tech specs (see `/canon`)
 
 ## Audit lens
 
@@ -91,10 +91,27 @@ not mutate a finding to `fixed`/`remediated`.
    is large; do not normalise **tolerated** without a real rationale; and do not
    downgrade a true **blocker** to dodge the close-gate. If the right route is
    ambiguous after reading `design.md` and governance, stop and `/consult`.
-4. **Synthesize.** Write the audit's reasoning as the review's `## Synthesis`
+4a. **Orphan survey.** After raising findings, before synthesis:
+
+     1. Read `design-requirements.toml` — collect every `REQ-DNN` handle.
+     2. Cross-reference: has a canonical `REQ-NNN` already been created for it?
+        (Unlikely in first pass; possible in later loop iterations.)
+     3. For each still-orphaned requirement, hold the survey output for
+        brief-writing (step 6, the renumbered reconciliation brief step). Do
+        **not** add orphan entries to the brief now — the brief doesn't exist
+        yet; step 6 writes it.
+
+     **Legacy design with no `design-requirements.toml`:** Not an error — the
+     orphan survey yields nothing. If the auditor spots an implied requirement
+     in the design prose, it becomes a regular finding, dispositioned normally.
+
+     **Drift detection:** If a `REQ-DNN` is in `design-requirements.toml` but
+     absent from `plan.md`'s `## Requirements verification` section, flag it as
+     a finding — audit identifies the gap; reconcile decides how to resolve it.
+5. **Synthesize.** Write the audit's reasoning as the review's `## Synthesis`
    (append it to `review-NNN.md`) — the closure story, the standing risks, the
    tradeoffs consciously accepted (the prose the old `audit.md` carried).
-5. **Write the reconciliation brief.** Append a dedicated `## Reconciliation Brief`
+6. **Write the reconciliation brief.** Append a dedicated `## Reconciliation Brief`
    section to `review-NNN.md` — separate from `## Synthesis`. This is the
    structured handoff from audit to `/reconcile`, mapping every spec/governance
    finding to its target and the intended write surface (D3):
@@ -109,18 +126,25 @@ not mutate a finding to `fixed`/`remediated`.
    ### Governance/spec (REV)
    - ADR-006 §D5: branch-point staleness description is wrong → REV modify
    - REQ-077: cordage scale target verified at 50k nodes → REV status active
+
+   #### Orphaned requirements (REV introduce)
+   - REQ-D01: "Audit trail retention" — quality, likely tech spec at container level.
+     Descends from Decision §4. No canonical REQ yet. See `design-requirements.toml`.
+   - REQ-D02: "Orphan detection gate" — constraint, likely existing tech spec.
+     Descends from Decision §7. No canonical REQ yet. See `design-requirements.toml`.
    ```
 
    Build the brief from every non-aligned, non-tolerated finding that touches
    design or governance. Group by write surface (per-slice direct edit vs.
    governance/spec REV). Each entry cites the finding id and describes the exact
-   change needed.
-6. **Harvest (audit tail).** Harvest durable risks, decisions, and gotchas from the
+   change needed. Include orphaned requirements from the survey (step 4a) under
+   Governance/spec as a `#### Orphaned requirements (REV introduce)` sub-section.
+7. **Harvest (audit tail).** Harvest durable risks, decisions, and gotchas from the
    disposable runtime phase sheets into `notes.md`; promote reusable facts via
    `/record-memory`; capture durable follow-up **work** the audit surfaced — risks,
    issues, chores — as backlog items with `backlog new` (the work / knowledge /
    decision boundary: `using-doctrine.md`).
-7. **Hand off to reconcile.** Once the reconciliation brief is written, the ledger
+8. **Hand off to reconcile.** Once the reconciliation brief is written, the ledger
    is resolved, and every finding is terminal, hand off to `/reconcile`. Do NOT
    hand off directly to `/close` — reconcile is the sole writer of reconciled
    truth; close only confirms the outcome. Record the lifecycle move:

@@ -366,7 +366,7 @@ pub(crate) struct Matcher {
 /// ```toml
 /// source = "stdout"
 /// source = "stderr"
-/// source = "file:doc/*.md"
+/// source = "file:.doctrine/spec/tech/*/*.md"
 /// ```
 ///
 /// `Stdout ⇄ "stdout"`, `Stderr ⇄ "stderr"`, and `File(glob) ⇄ "file:<glob>"`
@@ -1170,7 +1170,7 @@ git_anchor = "anchor-abc123"
             Some("test"),
             None,
             Some(matcher(
-                Some(MatchSource::File("doc/../../x".to_owned())),
+                Some(MatchSource::File(".doctrine/spec/tech/../../x".to_owned())),
                 "ok",
                 false,
             )),
@@ -1197,7 +1197,7 @@ git_anchor = "anchor-abc123"
             Some("test"),
             None,
             Some(matcher(
-                Some(MatchSource::File("doc/*.md".to_owned())),
+                Some(MatchSource::File(".doctrine/spec/tech/*/*.md".to_owned())),
                 "ok",
                 false,
             )),
@@ -1215,8 +1215,8 @@ git_anchor = "anchor-abc123"
             (MatchSource::Stdout, "\"stdout\""),
             (MatchSource::Stderr, "\"stderr\""),
             (
-                MatchSource::File("doc/*.md".to_owned()),
-                "\"file:doc/*.md\"",
+                MatchSource::File(".doctrine/spec/tech/*/*.md".to_owned()),
+                "\"file:.doctrine/spec/tech/*/*.md\"",
             ),
         ] {
             let m = matcher(Some(src.clone()), "ok", false);
@@ -1244,7 +1244,9 @@ git_anchor = "anchor-abc123"
             command: None,
             extra_args: vec!["--quiet".to_owned()],
             matcher: Some(matcher(
-                Some(MatchSource::File("doc/spec.md".to_owned())),
+                Some(MatchSource::File(
+                    ".doctrine/spec/tech/003/spec-003.md".to_owned(),
+                )),
                 "PASS",
                 true,
             )),

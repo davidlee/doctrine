@@ -1,0 +1,16 @@
+id = 2
+slug = "workflow"
+title = "Workflow"
+status = "draft"
+created = "2026-06-18"
+updated = "2026-06-18"
+description = ""
+
+# DSL format: one edge per line
+#   Source Label > relationship > Target Label
+# Lines starting with # are comments, blank lines are ignored.
+# Example:
+#   User Story > expresses > User Need
+#   Capability > aggregates > Requirements
+dsl = '''
+'''

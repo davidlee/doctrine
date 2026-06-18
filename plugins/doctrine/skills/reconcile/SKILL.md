@@ -17,7 +17,7 @@ You write to **two surfaces** with different mechanisms (D2):
 | **Per-slice artefacts** (`design.md`, `slice-NNN.md`) | Direct edit with user agreement |
 | **Governance/spec truth** (ADRs, specs, requirements, policies, standards) | REV kind (`doctrine revision`) — typed `[[change]]` rows, approval checkpoint, apply path |
 
-Project-local documentation (`doc/*`) is **not** a doctrine feature category — edit
+Project-local documentation outside `.doctrine/` is **not** a doctrine feature category — edit
 it directly like any project file, same as per-slice artefacts.
 
 A single reconcile pass may use both surfaces — e.g. update `design.md` directly
@@ -71,9 +71,14 @@ on.
 
 ### 2. No-op gate
 
-If the reconciliation brief is **empty** — every finding was withdrawn or tolerated
-with no writes needed — append a `## Reconciliation Outcome` section to
-`review-NNN.md` confirming the no-op, then hand off to `/close`:
+**Orphan content counts.** `#### Orphaned requirements (REV introduce)`
+entries are brief content. The no-op gate does **not** fire while any orphan
+is unplaced — proceed to step 4 (and 4f) even if every RV finding is terminal.
+
+If the reconciliation brief is **empty** (including no orphan entries — see
+guard above) — every finding was withdrawn or tolerated with no writes
+needed — append a `## Reconciliation Outcome` section to `review-NNN.md`
+confirming the no-op, then hand off to `/close`:
 
 ```markdown
 ## Reconciliation Outcome
@@ -91,7 +96,7 @@ For each direct-edit item in the brief:
 - **Write** the edit to `design.md` and/or `slice-NNN.md` (if scope changed during
   implementation).
 - **Record** what was edited — and which finding drove it — in a running
-  reconciliation outcome. You will append this to the RV markdown in step 6.
+  reconciliation outcome. You will append this to the RV markdown in step 7.
 
 ### 4. REV authoring
 
@@ -177,7 +182,84 @@ If any row is known to require **separate debate** or will not land in this pass
 omnibus REV that blocks close because one row is stuck. A REV stays `started` until
 all rows land — a stuck row in an omnibus REV blocks the whole slice.
 
-### 5. Approve & apply
+#### 4f. Orphan placement
+
+For each orphaned requirement in the brief's
+`#### Orphaned requirements (REV introduce)` sub-section:
+
+**Determine spec home(s).** Survey existing specs. For each candidate:
+- Does the spec's scope cover this requirement's subject?
+- Is the spec's C4 level / product altitude right for this requirement?
+- Would the requirement fit coherently alongside existing requirements?
+
+If no existing spec fits, propose creating a new one (a `create` row in the
+same REV). If a spec almost fits but is too broad, consider splitting.
+
+Altitude assessment is reconcile's responsibility. The audit brief's home
+hint is a starting point, not binding.
+
+**⚠️ Altitude framework gap.** No altitude decision framework exists (tracked
+as IMP-097). Until it does, rely on existing spec `c4_level`/`descends_from`
+as reference points and on domain reasoning. When the altitude question is
+genuinely ambiguous, trigger `/consult` rather than guessing. Do not force
+placement when no natural home exists — a stuck orphan is a design smell, not
+a reconcile failure.
+
+**Work with existing requirements.** When the design cited existing `REQ-NNN`
+entries:
+- Verify they're still current. If a cited REQ has drifted, propose REV `modify`.
+- If an implied `REQ-DNN` duplicates an existing canonical REQ, record the
+  `REQ-DNN → REQ-NNN` mapping in the narrative; no new row needed.
+- If an existing REQ is in the wrong spec, REV `move`.
+
+**Handle multi-spec placement.** A requirement may belong in multiple specs
+(PRD + component spec). The CLI does **not** support attaching one `REQ-NNN`
+to a second spec: each `revision change add --action introduce` mints a new
+labelled requirement in one `--member-of` spec, and no re-member verb exists.
+Multi-spec placement is therefore expressed as **sibling requirements with
+traced lineage**: one `introduce` row per destination spec, each minting its
+own `REQ-NNN`, all traced back to the same `REQ-DNN` in the narrative.
+
+**Negotiate wording.** The requirement's statement may need rewording for its
+new home. Present proposed wording. If rewording materially changes the
+obligation, `/consult`.
+
+**Author REV rows.** Each placement becomes a REV `introduce` row in this REV
+(discovered at 4a, guarded at 4b). If a new spec is needed, add a `create`
+row. Multi-spec placement = multiple `introduce` rows, one per spec, each
+with its own `--new-label` and `--member-of`.
+
+**Record the mapping.** In the REV's reconcile narrative (`revision-NNN.md`)
+under `### Orphan placements`, recording the `REQ-DNN → REQ-NNN` lineage
+(one line per placement; multi-spec placements get one line per sibling REQ):
+
+```markdown
+### Orphan placements
+- REQ-D01 → REQ-201 (FR-004 in SPEC-018): audit trail retention
+- REQ-D02 → REQ-202 (FR-005 in SPEC-003): orphan detection gate
+- REQ-D03 → REQ-210 (FR-001 in SPEC-002), REQ-211 (FR-001 in SPEC-007):
+  traceability across product + component (multi-spec siblings, same REQ-D03)
+```
+
+**Stuck or withdrawn orphans.** An orphan that cannot be placed is
+**non-terminal** for close. Two outcomes:
+
+- **Stuck — `/consult`.** The altitude question is genuinely ambiguous. Record
+  the stuck state in the narrative. Close **refuses** a stuck orphan (it has
+  no `→ REQ-NNN` mapping and no withdrawal) and returns to reconcile. Stuck is
+  not a resting state; it routes through `/consult` to a placement or a
+  withdrawal.
+- **Withdrawn.** The orphan is retracted at the design level — edit
+  `design-requirements.toml` to remove or annotate the `[[implied]]` row with
+  rationale, and record the withdrawal in the narrative. Orphans are **not**
+  RV findings, so "withdrawn" here is a design-level retraction recorded in the
+  reconcile narrative, not the RV finding disposition. Close passes a
+  withdrawn orphan on the narrative record.
+
+The 4e split rule applies: a stuck orphan that will not land in this pass is
+split into its own REV before approve/apply, so it doesn't block the omnibus.
+
+### 6. Approve & apply
 
 When all `[[change]]` rows are written and the narrative is complete:
 
@@ -194,7 +276,7 @@ doctrine revision apply REV-N
   fires, re-inspect the affected targets and retry.
 - Note which rows were auto-landed and which are surfaced-for-manual.
 
-### 6. Manual prose landing
+### 7. Manual prose landing
 
 For surfaced-for-manual rows, perform the edits by hand under the **authored-truth
 honour model**. The REV tells you *what* to change; you make the actual file edit.
@@ -222,7 +304,7 @@ Outcome` section to `review-NNN.md`:
 - RV-042 F4: tolerated — drift in error message wording; rationale in finding disposition.
 ```
 
-### 7. Escalation gate
+### 8. Escalation gate
 
 If while reconciling you discover that the **model itself is inadequate** — not
 mere instance drift, but a design flaw that the change cannot be expressed within —
