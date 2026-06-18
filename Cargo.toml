@@ -30,6 +30,7 @@ toml.workspace = true
 toml_edit.workspace = true
 glob.workspace = true
 bm25.workspace = true
+regex.workspace = true
 regex-lite.workspace = true
 comfy-table.workspace = true
 owo-colors.workspace = true
@@ -94,6 +95,7 @@ rust-embed = { version = "8", features = ["debug-embed"] }
 toml = "0.8"
 toml_edit = "0.22"
 glob = "0.3"
+regex = "1"
 # Pure-Rust regex for the shared list `--regexp` filter (SL-025 D9). regex-lite
 # over full `regex` deliberately: no regex-automata/aho-corasick — id/slug/title
 # matching needs nothing fancy, and it keeps compile time + binary size down.

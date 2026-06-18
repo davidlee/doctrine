@@ -17,12 +17,16 @@
 //! is retired (its self-clearing condition has arrived).
 
 use std::cmp::Reverse;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::io::{self, Write};
 
 use serde::Serialize;
 
 use crate::lexical::{Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker};
-use crate::memory::{Memory, MemoryType, Status, normalize_key};
+use crate::links::extract_wikilinks;
+use crate::memory::{
+    self, Lifespan, Memory, MemoryType, Status, collect_all, normalize_key, sort_default,
+};
 
 /// A `thread` memory is expired unless verified within this many days (design
 /// D6 — the verification window, distinct from `staleness`'s 30-day boundary).
@@ -85,6 +89,7 @@ pub(crate) struct QueryContext {
     pub(crate) globs: Vec<String>,
     pub(crate) commands: Vec<String>,
     pub(crate) tags: Vec<String>,
+    pub(crate) lifespan: Option<Lifespan>,
     pub(crate) query: Option<String>,
 }
 
@@ -224,6 +229,36 @@ pub(crate) fn days_between(a: &str, b: &str) -> Option<i64> {
     Some((to - from).whole_days())
 }
 
+fn lifespan_factor(lifespan: Option<Lifespan>) -> f64 {
+    match lifespan {
+        Some(Lifespan::Identity) => 0.0,
+        Some(Lifespan::Semantic) => 0.1,
+        Some(Lifespan::Procedural) => 0.33,
+        Some(Lifespan::Episodic) | None => 1.0,
+        Some(Lifespan::Working) => 10.0,
+    }
+}
+
+fn effective_age(days: i64, lifespan: Option<Lifespan>) -> i64 {
+    if days == i64::MAX {
+        return i64::MAX;
+    }
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        reason = "design requires floating scaling then round; no safe std i64→f64 API"
+    )]
+    let days_f64 = days as f64;
+    let scaled = (days_f64 * lifespan_factor(lifespan)).round();
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        reason = "bounded finite float→i64 after round(); sentinel handled above"
+    )]
+    let age = scaled as i64;
+    age.min(i64::MAX - 1)
+}
+
 // === PHASE-02: scoring, staleness & the total-order rank =====================
 // The ordering core over the PHASE-01 filter survivors (design § 5.2). Pure: git
 // arrives pre-resolved as `GitFacts`, `today` as a `&str`. Filters already dropped
@@ -234,7 +269,7 @@ pub(crate) fn days_between(a: &str, b: &str) -> Option<i64> {
 /// in v1 — Q1/B15). The ONE adapter from `Memory` into the lexical axis (design
 /// D6) — `query` builds the fit corpus through it, and the behaviour-preservation
 /// parity test scores through it, so there is no parallel projection.
-fn lex_doc(m: &Memory) -> LexDoc {
+pub(crate) fn lex_doc(m: &Memory) -> LexDoc {
     let tags = m.scope.tags.join(" ");
     let text = [
         m.title.as_str(),
@@ -451,7 +486,10 @@ fn sort_key<'a>(c: &Candidate<'a>, today: &str) -> SortKey<'a> {
         trust_rank(&m.trust_level),
         severity_rank(&m.severity),
         Reverse(m.weight),
-        days_between(&m.reviewed, today).unwrap_or(i64::MAX),
+        effective_age(
+            days_between(&m.reviewed, today).unwrap_or(i64::MAX),
+            m.lifespan,
+        ),
         m.uid.as_str(),
         m.key.as_deref().unwrap_or(""),
     )
@@ -469,7 +507,6 @@ pub(crate) fn rank<'a>(mut cands: Vec<Candidate<'a>>, today: &str) -> Vec<Candid
 // (design §5.1). The pure layer never reads a clock, git, or disk; this shell is
 // the only place that does. `retrieve` (PHASE-05) reuses `freeze` + `query`.
 
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -564,6 +601,9 @@ pub(crate) fn query<'a>(
             let scope_match = match_scope(m, q);
             // Scope-bearing query: a non-match drops. Bare --query: keep (None).
             if scoped && scope_match.is_none() {
+                return None;
+            }
+            if q.lifespan.is_some() && m.lifespan != q.lifespan {
                 return None;
             }
             // thread_expiry reads only `m`; its ScopeMatch arg is vestigial.
@@ -702,6 +742,7 @@ fn load_query(
     globs: Vec<String>,
     commands: Vec<String>,
     tags: Vec<String>,
+    lifespan: Option<Lifespan>,
     free_query: Option<String>,
     type_f: Option<MemoryType>,
     status_f: Option<Status>,
@@ -714,6 +755,7 @@ fn load_query(
         globs,
         commands,
         tags,
+        lifespan,
         query: free_query,
     };
     let snap = freeze(&root);
@@ -739,6 +781,7 @@ pub(crate) fn run_find(
     globs: Vec<String>,
     commands: Vec<String>,
     tags: Vec<String>,
+    lifespan: Option<Lifespan>,
     free_query: Option<String>,
     type_f: Option<MemoryType>,
     status_f: Option<Status>,
@@ -754,7 +797,7 @@ pub(crate) fn run_find(
         snap,
         ..
     } = load_query(
-        path, paths, globs, commands, tags, free_query, type_f, status_f,
+        path, paths, globs, commands, tags, lifespan, free_query, type_f, status_f,
     )?;
     // BM25 is the hard default on both surfaces — no user-facing selector (D5).
     let ranker = Bm25Ranker;
@@ -895,6 +938,7 @@ pub(crate) fn run_retrieve(
     globs: Vec<String>,
     commands: Vec<String>,
     tags: Vec<String>,
+    lifespan: Option<Lifespan>,
     free_query: Option<String>,
     type_f: Option<MemoryType>,
     status_f: Option<Status>,
@@ -903,6 +947,7 @@ pub(crate) fn run_retrieve(
     min_trust: Option<&str>,
     offset: usize,
     format: crate::listing::Format,
+    expand: Option<usize>,
 ) -> Result<()> {
     let Loaded {
         root,
@@ -910,7 +955,7 @@ pub(crate) fn run_retrieve(
         q,
         snap,
     } = load_query(
-        path, paths, globs, commands, tags, free_query, type_f, status_f,
+        path, paths, globs, commands, tags, lifespan, free_query, type_f, status_f,
     )?;
     // BM25 is the hard default on both surfaces — no user-facing selector (D5).
     let ranker = Bm25Ranker;
@@ -939,6 +984,7 @@ pub(crate) fn run_retrieve(
                     &body,
                     &nonce,
                     Some(c.staleness.label()),
+                    &[],
                 ));
             }
             // Truncation notice: suppressed under --json (D4).
@@ -952,7 +998,130 @@ pub(crate) fn run_retrieve(
     }
     let output = parts.concat();
     write!(io::stdout(), "{output}")?;
+
+    // PHASE-06: --expand N graph expansion
+    if let Some(expand_depth) = expand {
+        expand_graph(&visible, expand_depth, &root)?;
+    }
+
     Ok(())
+}
+
+/// PHASE-06: Graph expansion for --expand N flag
+fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Result<()> {
+    // Build edge set from all memories
+    let all_memories = collect_all(root)?;
+    let mut edges = BTreeMap::new();
+
+    for memory in &all_memories {
+        let mut targets = Vec::new();
+
+        // Add wikilink targets (need to read body from disk)
+        let body_path = root
+            .join("memory/items")
+            .join(&memory.uid)
+            .join("memory.md");
+        let body = std::fs::read_to_string(body_path).unwrap_or_default();
+        let wikilinks = extract_wikilinks(&body);
+        for link in wikilinks {
+            targets.push(link.target);
+        }
+
+        // Add relation targets
+        for relation in &memory.relations {
+            targets.push(relation.target.clone());
+        }
+
+        edges.insert(memory.uid.clone(), targets);
+    }
+
+    // Convert visible candidates to starting uids
+    let start_uids: Vec<String> = visible.iter().map(|c| c.memory.uid.clone()).collect();
+
+    // Perform BFS expansion
+    let expanded = bfs_expand(&edges, start_uids, max_depth);
+
+    // Render expanded nodes by depth
+    for (depth, uids) in expanded.iter().enumerate() {
+        if uids.is_empty() {
+            continue;
+        }
+
+        writeln!(io::stderr())?; // blank line separator
+
+        // Collect memories for this depth
+        let mut depth_memories: Vec<Memory> = all_memories
+            .iter()
+            .filter(|m| uids.contains(&m.uid))
+            .cloned()
+            .collect();
+
+        // Sort by default ordering
+        sort_default(&mut depth_memories);
+
+        // Render each memory in this depth
+        for memory in &depth_memories {
+            let depth_num = depth + 1;
+            let staleness_line = format!("depth: {depth_num}");
+
+            // Read body from disk
+            let body_path = root
+                .join("memory/items")
+                .join(&memory.uid)
+                .join("memory.md");
+            let body = std::fs::read_to_string(body_path).unwrap_or_default();
+
+            // Reuse render_show with proper parameters
+            let guard = "memory-show";
+            let wikilinks = Vec::new(); // Empty for now
+            let rendered =
+                memory::render_show(memory, &body, guard, Some(&staleness_line), &wikilinks);
+            write!(io::stdout(), "{rendered}")?;
+        }
+    }
+
+    Ok(())
+}
+
+/// BFS expansion following memory-to-memory edges only
+fn bfs_expand(
+    edges: &BTreeMap<String, Vec<String>>,
+    start: Vec<String>,
+    max_depth: usize,
+) -> Vec<BTreeSet<String>> {
+    let mut visited = BTreeSet::new();
+    let mut result = Vec::new();
+    let mut current_level: BTreeSet<String> = start.into_iter().collect();
+
+    // Mark starting nodes as visited
+    for node in &current_level {
+        visited.insert(node.clone());
+    }
+
+    for _depth in 1..=max_depth {
+        let mut next_level = BTreeSet::new();
+
+        for node in &current_level {
+            if let Some(targets) = edges.get(node) {
+                for target in targets {
+                    // Only traverse memory→memory edges
+                    if target.starts_with("mem_") && !visited.contains(target) {
+                        visited.insert(target.clone());
+                        next_level.insert(target.clone());
+                    }
+                }
+            }
+        }
+
+        if next_level.is_empty() {
+            break;
+        }
+
+        result.push(next_level.clone());
+        current_level = next_level;
+    }
+
+    result
 }
 
 #[cfg(test)]
@@ -979,6 +1148,7 @@ mod tests {
         globs: &'static [&'static str],
         commands: &'static [&'static str],
         tags: &'static [&'static str],
+        lifespan: Option<&'static str>,
         anchor_kind: &'static str,
         verified_sha: &'static str,
         verification_state: &'static str,
@@ -1003,6 +1173,7 @@ mod tests {
                 globs: &[],
                 commands: &[],
                 tags: &[],
+                lifespan: None,
                 anchor_kind: "",
                 verified_sha: "",
                 verification_state: "unverified",
@@ -1029,10 +1200,14 @@ mod tests {
         } else {
             format!("memory_key = {:?}\n", f.key)
         };
+        let lifespan_line = f
+            .lifespan
+            .map(|lifespan| format!("lifespan = {:?}\n", lifespan))
+            .unwrap_or_default();
         let text = format!(
             r#"
 memory_uid = "{uid}"
-{key_line}schema_version = 1
+{key_line}{lifespan_line}schema_version = 1
 memory_type = "{kind}"
 status = "{status}"
 title = "{title}"
@@ -1069,6 +1244,7 @@ weight = {weight}
             status = f.status,
             title = f.title,
             summary = f.summary,
+            lifespan_line = lifespan_line,
             workspace = f.workspace,
             repo = f.repo,
             paths = toml_list(f.paths),
@@ -1905,6 +2081,48 @@ weight = {weight}
     }
 
     #[test]
+    fn effective_age_scales_by_lifespan_factor() {
+        assert_eq!(
+            effective_age(10, Some(crate::memory::Lifespan::Semantic)),
+            1
+        );
+        assert_eq!(
+            effective_age(10, Some(crate::memory::Lifespan::Working)),
+            100
+        );
+        assert_eq!(effective_age(10, None), 10);
+    }
+
+    #[test]
+    fn effective_age_preserves_the_missing_review_sentinel() {
+        assert_eq!(
+            effective_age(i64::MAX, Some(crate::memory::Lifespan::Working)),
+            i64::MAX
+        );
+    }
+
+    #[test]
+    fn rank_key8_prefers_longer_lived_memories_at_equal_review_date() {
+        let [u0, u1, _] = uids();
+        let working = memory(&Fixture {
+            uid: u0,
+            lifespan: Some("working"),
+            reviewed: "2026-06-01",
+            ..Default::default()
+        });
+        let semantic = memory(&Fixture {
+            uid: u1,
+            lifespan: Some("semantic"),
+            reviewed: "2026-06-01",
+            ..Default::default()
+        });
+        assert_ranks_first(
+            cand(&semantic, 1, false, None),
+            cand(&working, 1, false, None),
+        );
+    }
+
+    #[test]
     fn rank_verification_stale_not_double_penalised_by_staleness() {
         // verification_state and the Staleness column are separate axes: two
         // candidates equal on every Ord key but differing in `staleness` must
@@ -2071,6 +2289,38 @@ weight = {weight}
             &Bm25Ranker,
         );
         assert!(ranked.is_empty(), "retracted is dropped by base_filter");
+    }
+
+    #[test]
+    fn query_lifespan_filter_keeps_only_exact_matches() {
+        let [u0, u1, _] = uids();
+        let semantic = memory(&Fixture {
+            uid: u0,
+            paths: &["src/main.rs"],
+            lifespan: Some("semantic"),
+            ..Default::default()
+        });
+        let working = memory(&Fixture {
+            uid: u1,
+            paths: &["src/main.rs"],
+            lifespan: Some("working"),
+            ..Default::default()
+        });
+        let mems = vec![semantic, working];
+        let ranked = query(
+            &mems,
+            &QueryContext {
+                paths: vec!["src/main.rs".to_owned()],
+                lifespan: Some(crate::memory::Lifespan::Semantic),
+                ..Default::default()
+            },
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked[0].memory.uid, u0);
     }
 
     // VT-1 — Key-1 (exact_key) dominates Key-2 (BM25 magnitude). An exact
