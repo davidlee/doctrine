@@ -218,12 +218,12 @@ fn supersede_refuses_non_adr_cross_kind_and_self() {
     let slc_pair = run(root, &["supersede", "SL-001", "ADR-001"]);
     assert!(!slc_pair.status.success(), "non-ADR/cross-kind refused");
 
-    // (b) cross-kind: ADR new, slice old.
+    // (b) cross-family: ADR new, slice old.
     let cross = run(root, &["supersede", "ADR-001", "SL-001"]);
-    assert!(!cross.status.success(), "cross-kind refused");
+    assert!(!cross.status.success(), "cross-family refused");
     assert!(
-        stderr(&cross).contains("cross-kind"),
-        "names cross-kind: {}",
+        stderr(&cross).contains("cross-family"),
+        "names cross-family: {}",
         stderr(&cross)
     );
 

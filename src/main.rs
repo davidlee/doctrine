@@ -4117,36 +4117,45 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
         !(new_kref.kind.prefix == old_kref.kind.prefix && new_id == old_id),
         "`{new}` cannot supersede itself — a self-supersession is not a decision change"
     );
-    // Cross-kind gating: ADR → same-kind only; records → matrix; mixed → refuse
+    // Cross-kind gating: ADR → same-kind only; records → matrix; mixed → refuse.
+    // The old same-kind guard is retained for non-ADR, non-record pairs (e.g. SL→SL).
     let new_is_adr = new_kref.kind.prefix == "ADR";
     let old_is_adr = old_kref.kind.prefix == "ADR";
-    match (new_is_adr, old_is_adr) {
-        (true, true) => {
-            // Both ADR: same-kind only — always true here (both are "ADR"), but keep
-            // the ensure! for symmetry and as a guard against future ADR sub-kinds.
-        }
-        (false, false) => {
-            // Both records: check matrix
-            let new_record_kind = crate::knowledge::RecordKind::from_prefix(new_kref.kind.prefix)
-                .context("NEW kind not a valid record kind")?;
-            let old_record_kind = crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix)
-                .context("OLD kind not a valid record kind")?;
-            anyhow::ensure!(
-                crate::supersede::validate_matrix(new_record_kind, old_record_kind),
-                "cross-kind supersession refused: the §6 matrix disallows {} → {}",
-                new_kref.kind.prefix,
-                old_kref.kind.prefix
-            );
-        }
-        _ => {
-            // Mixed: refuse
-            anyhow::bail!(
-                "cross-family supersession refused: `{new}` is a {} but `{old}` is a {}",
-                new_kref.kind.prefix,
-                old_kref.kind.prefix
-            );
-        }
-    }
+    let new_is_record = crate::knowledge::RecordKind::from_prefix(new_kref.kind.prefix).is_some();
+    let old_is_record = crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix).is_some();
+    let same_family = if new_is_adr && old_is_adr {
+        true // ADR family
+    } else if new_is_record && old_is_record {
+        // Both records: validate matrix. from_prefix already proved Some by the
+        // is_some() gate, but each arm needs a non-panicking fallback for clippy.
+        let Some(new_record_kind) =
+            crate::knowledge::RecordKind::from_prefix(new_kref.kind.prefix)
+        else {
+            anyhow::bail!("NEW kind not a valid record kind")
+        };
+        let Some(old_record_kind) =
+            crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix)
+        else {
+            anyhow::bail!("OLD kind not a valid record kind")
+        };
+        anyhow::ensure!(
+            crate::supersede::validate_matrix(new_record_kind, old_record_kind),
+            "cross-kind supersession refused: the §6 matrix disallows {} → {}",
+            new_kref.kind.prefix,
+            old_kref.kind.prefix
+        );
+        true // record family: matrix passed
+    } else if new_kref.kind.prefix == old_kref.kind.prefix {
+        true // same kind (e.g. SL→SL); fall through to supersede_policy "not yet supported"
+    } else {
+        false // cross-family or cross-kind
+    };
+    anyhow::ensure!(
+        same_family,
+        "cross-family supersession refused: `{new}` is a {} but `{old}` is a {}",
+        new_kref.kind.prefix,
+        old_kref.kind.prefix
+    );
     let policy = crate::supersede::supersede_policy(new_kref.kind).with_context(|| {
         format!(
             "supersession not yet supported for {} (follow-up F2)",
