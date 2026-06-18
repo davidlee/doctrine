@@ -163,3 +163,28 @@ vite build            ✓ dist/assets/index-tsznYhUh.js 331.98 kB
 - PHASE-03 VA-3: Zoom to minK on small graph, click node with large neighbourhood
   — scale clamped up, graph centred.
 - PHASE-03 VA-4: First load — graph fits container.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- **design.md § State model + app.ts integration:** Removed `lastRenderedFocusId`
+  field; updated code block to reflect reuse of existing `prevFocusId` pattern
+  (RV-072 F-6).
+- **design.md § Pure helpers:** Added `parseTransform(transform: string):
+  GraphViewport` to the helpers list; updated affected-files table to reference
+  `viewport.ts` (RV-072 F-6).
+- **design.md § Integration flow step 4:** Noted that `minK` is stored on
+  `wrapper.dataset.minK`, not captured in handler closure (RV-072 F-6).
+
+### REVs completed
+
+None required — no governance/spec changes.
+
+### Withdrawn / tolerated
+
+- RV-072 F-1–F-4: aligned (conformance findings, no write needed).
+- RV-072 F-5: verified (6 VA criteria deferred; mechanical evidence gates pass;
+  recommended browser checks before close).
+
+Reconcile pass complete — handoff to /close.

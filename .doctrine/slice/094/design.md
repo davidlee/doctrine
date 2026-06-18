@@ -65,7 +65,6 @@ interface GraphViewport {
 
 `app.ts` state gains:
 - `graphViewport: GraphViewport | null` — null = first render (fit-to-content)
-- `lastRenderedFocusId: string | null`
 
 ## Viewport rules
 
@@ -97,13 +96,13 @@ function readSvgDims(svgEl: SVGSVGElement): { w: number; h: number } {
 
 ## Pure helpers (testable)
 
-Extracted to `web/map/src/svg.ts` (or a new `viewport.ts` if `svg.ts` becomes
-unwieldy):
+Extracted to `web/map/src/viewport.ts`:
 
 ```ts
 function fitViewport(svgW: number, svgH: number, cw: number, ch: number): GraphViewport
 function applyFocusChange(vp: GraphViewport | null, minK: number, svgW: number, svgH: number, cw: number, ch: number): GraphViewport
 function clampViewport(vp: GraphViewport, minK: number, maxK: number): GraphViewport
+function parseTransform(transform: string): GraphViewport
 ```
 
 ## Event handling
@@ -167,7 +166,8 @@ onViewportChange?: (vp: GraphViewport) => void;
    - `initialViewport` is null → `fitViewport()`
    - `focusChanged` → `applyFocusChange(initialViewport, minK, …)`
    - else → restore `initialViewport` as-is
-4. Create `.graph-transform-layer` wrapper (fresh each render — `container.innerHTML = ''` clears the prior one), apply CSS transform
+4. Create `.graph-transform-layer` wrapper (fresh each render — `container.innerHTML = ''` clears the prior one), apply CSS transform.
+   Store `minK` on `wrapper.dataset.minK` (not captured in handler closure) so wheel handlers always read the current wrapper's `minK` after re-renders.
 5. Wire wheel + mousedown handlers on `.graph-area` once, guarded with `container.dataset.zoomWired` to avoid duplicate listeners on re-render
 6. On every viewport mutation → call `onViewportChange` for persistence
 
@@ -176,17 +176,18 @@ onViewportChange?: (vp: GraphViewport) => void;
 ```ts
 // state additions
 graphViewport: GraphViewport | null = null
-lastRenderedFocusId: string | null = null
 
 // in render(), before graphPane():
-const focusChanged = state.focusId !== state.lastRenderedFocusId
+// prevFocusId is captured at the top of render() (existing pattern at L273)
+const focusChanged = state.focusId !== prevFocusId
 graphPane({
   // …existing…
   initialViewport: state.graphViewport,
   focusChanged,
   onViewportChange: (newVp) => { state.graphViewport = newVp },
 })
-state.lastRenderedFocusId = state.focusId
+// No post-render assignment needed — prevFocusId is stale after render and
+// will be re-captured on the next call.
 ```
 
 ## Affected files
@@ -195,8 +196,8 @@ state.lastRenderedFocusId = state.focusId
 |---|---|
 | `web/map/src/render.ts` | `graphPane()`: create wrapper, wire events, viewport logic. New helpers or imports. `GraphPaneOpts` extended. |
 | `web/map/src/graph.css` | `.graph-area` restyle, `.graph-transform-layer`, `.grabbing` |
-| `web/map/src/app.ts` | State: `graphViewport`, `lastRenderedFocusId`. Pass new opts to `graphPane()`. |
-| `web/map/src/svg.ts` | Possibly house `GraphViewport` type + pure helpers; or new `viewport.ts`. |
+| `web/map/src/app.ts` | State: `graphViewport`. Pass new opts to `graphPane()`; reuse existing `prevFocusId` for change detection. |
+| `web/map/src/viewport.ts` | `GraphViewport` type, `fitViewport`, `applyFocusChange`, `clampViewport`, `parseTransform`, `readSvgDims` |
 | `web/map/src/priority.ts` | No change — this is the IMP-092 d3 path |
 | `web/map/src/dot.ts` | No change |
 | `web/map/src/model.ts` | No change |
