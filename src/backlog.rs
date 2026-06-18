@@ -1539,21 +1539,142 @@ pub(crate) fn run_needs(
     Ok(())
 }
 
-/// `doctrine backlog after <ITEM> <TO> [--rank N]` — append ONE soft-sequence edge
-/// (PRD-009, design §5.5). Thin shell: validate ITEM + the single TO exists, then
-/// append `{ to, rank }` (rank optional, default 0). **Never** rejects a cycle — a
-/// soft `after` cycle is surfaced (and an edge evicted) when `list` composes the
-/// sequence (VT-6).
+/// `doctrine backlog after <ITEM> <TO> [--rank N] [--remove] [--prune]` — append
+/// or remove ONE soft-sequence edge (PRD-009, design §5.5). **Never** rejects a
+/// cycle — a soft `after` cycle is surfaced (and an edge evicted) when `list`
+/// composes the sequence (VT-6).
 pub(crate) fn run_after(
     path: Option<PathBuf>,
     reference: &str,
-    to: &str,
+    to: Option<&str>,
     rank: i32,
+    remove: bool,
+    prune: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let target = require_item(&root, reference)?;
-    require_item(&root, to)?;
 
+    if prune {
+        let name = format!("{:03}", target.1);
+        let item_path = root
+            .join(target.0.kind().dir)
+            .join(&name)
+            .join(format!("{BACKLOG_STEM}-{name}.toml"));
+        let ds = dep_seq::read(&item_path)?;
+
+        let mut dropped: Vec<(String, i32, String)> = Vec::new();
+        let mut to_drop: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+        for edge in &ds.after {
+            let is_dangling = match crate::integrity::parse_canonical_ref(&edge.to) {
+                Ok((kref, tid)) => {
+                    let target_path = root
+                        .join(kref.kind.dir)
+                        .join(format!("{tid:03}"))
+                        .join(format!("{}-{tid:03}.toml", kref.stem));
+                    if target_path.exists() {
+                        let body = std::fs::read_to_string(&target_path).unwrap_or_default();
+                        let val: toml::Value = match toml::from_str(&body) {
+                            Ok(v) => v,
+                            Err(_) => toml::Value::Table(toml::Table::new()),
+                        };
+                        let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                        status == "resolved" || status == "closed"
+                    } else {
+                        true
+                    }
+                }
+                Err(_) => true,
+            };
+
+            if is_dangling {
+                let reason = match crate::integrity::parse_canonical_ref(&edge.to) {
+                    Ok((kref2, tid2)) => {
+                        let target_path = root
+                            .join(kref2.kind.dir)
+                            .join(format!("{tid2:03}"))
+                            .join(format!("{}-{tid2:03}.toml", kref2.stem));
+                        if target_path.exists() {
+                            let body =
+                                std::fs::read_to_string(&target_path).unwrap_or_default();
+                            let val: toml::Value = match toml::from_str(&body) {
+                                Ok(v) => v,
+                                Err(_) => toml::Value::Table(toml::Table::new()),
+                            };
+                            let status =
+                                val.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                            let resolution = val
+                                .get("resolution")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("");
+                            if resolution.is_empty() {
+                                status.to_string()
+                            } else {
+                                format!("{status}/{resolution}")
+                            }
+                        } else {
+                            "absent".to_string()
+                        }
+                    }
+                    Err(_) => "(unparseable)".to_string(),
+                };
+                dropped.push((edge.to.clone(), edge.rank, reason));
+                to_drop.insert(edge.to.clone());
+            }
+        }
+
+        if dropped.is_empty() {
+            writeln!(
+                io::stdout(),
+                "{}: nothing to prune",
+                target.0.canonical_id(target.1)
+            )?;
+            return Ok(());
+        }
+
+        for target_id in &to_drop {
+            let _ = dep_seq::remove(&item_path, target_id, None)?;
+        }
+
+        for (target_id, r, reason) in &dropped {
+            writeln!(
+                io::stdout(),
+                "{} after {target_id} (rank {r}) dropped (dangling: {reason})",
+                target.0.canonical_id(target.1),
+            )?;
+        }
+        return Ok(());
+    }
+
+    if remove {
+        let to = to.ok_or_else(|| anyhow::anyhow!("--remove requires a target"))?;
+        require_item(&root, to)?;
+        let name = format!("{:03}", target.1);
+        let item_path = root
+            .join(target.0.kind().dir)
+            .join(&name)
+            .join(format!("{BACKLOG_STEM}-{name}.toml"));
+        let ceiling = if rank == 0 { None } else { Some(rank) };
+        let removed = dep_seq::remove(&item_path, to, ceiling)?;
+        if removed == 0 {
+            anyhow::bail!(
+                "{} has no after edge to {to}",
+                target.0.canonical_id(target.1)
+            );
+        }
+        writeln!(
+            io::stdout(),
+            "{} after {to} removed ({} edge{})",
+            target.0.canonical_id(target.1),
+            removed,
+            if removed == 1 { "" } else { "s" }
+        )?;
+        return Ok(());
+    }
+
+    // Original append path
+    let to = to.ok_or_else(|| anyhow::anyhow!("after requires a target"))?;
+    require_item(&root, to)?;
     append_relationship(&root, target.0, target.1, &RelEdit::After { to, rank })?;
     let suffix = if rank == 0 {
         String::new()
@@ -3898,7 +4019,15 @@ tags = []
         new_item(root, ItemKind::Issue, "Auth"); // ISS-001
         new_item(root, ItemKind::Issue, "Login"); // ISS-002
 
-        run_after(Some(root.to_path_buf()), "ISS-001", "ISS-002", 0).unwrap();
+        run_after(
+            Some(root.to_path_buf()),
+            "ISS-001",
+            Some("ISS-002"),
+            0,
+            false,
+            false,
+        )
+        .unwrap();
 
         let item = read_item(root, ItemKind::Issue, 1).unwrap();
         assert_eq!(
@@ -3930,7 +4059,15 @@ tags = []
         write_rel_item(root, ItemKind::Issue, 2, "open", &[], &[]);
 
         // close the reciprocal soft edge Y.after=[X] — must NOT be rejected.
-        run_after(Some(root.to_path_buf()), "ISS-002", "ISS-001", 5).unwrap();
+        run_after(
+            Some(root.to_path_buf()),
+            "ISS-002",
+            Some("ISS-001"),
+            5,
+            false,
+            false,
+        )
+        .unwrap();
         let item = read_item(root, ItemKind::Issue, 2).unwrap();
         assert_eq!(
             item.relationships.after,

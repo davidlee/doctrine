@@ -316,3 +316,344 @@ fn scaffolded_slice_keeps_relationships_before_first_relation_row() {
         "both dep/seq arrays precede the first [[relation]] row:\n{toml}"
     );
 }
+
+// --- VT-5: after --remove (SL-105 PHASE-02) ----------------------------------
+
+#[test]
+fn after_remove_single() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 101, "One", "one"); // SL-101
+    seed_slice(root, 102, "Two", "two"); // SL-102
+
+    // Append after edge
+    let append = run(root, &["after", "SL-101", "SL-102"]);
+    assert!(append.status.success(), "append: {}", stderr(&append));
+
+    // Remove the edge
+    let remove = run(root, &["after", "SL-101", "SL-102", "--remove"]);
+    assert!(remove.status.success(), "remove: {}", stderr(&remove));
+    assert!(
+        stdout(&remove).contains("removed (1 edge)"),
+        "remove message: {}",
+        stdout(&remove)
+    );
+
+    // Second remove — no edge left
+    let again = run(root, &["after", "SL-101", "SL-102", "--remove"]);
+    assert!(!again.status.success(), "second remove should fail");
+    assert!(
+        stderr(&again).contains("no after edge"),
+        "error names the missing edge: {}",
+        stderr(&again)
+    );
+}
+
+#[test]
+fn after_remove_rank_ceiling() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 103, "Three", "three"); // SL-103
+    seed_slice(root, 104, "Four", "four"); // SL-104
+
+    // Append two edges: rank 0 and rank 5
+    assert!(run(root, &["after", "SL-103", "SL-104"]).status.success());
+    assert!(
+        run(root, &["after", "SL-103", "SL-104", "--rank", "5"])
+            .status
+            .success()
+    );
+
+    // Remove with rank ceiling 2 — only rank-0 edge removed, rank-5 kept
+    let rm = run(
+        root,
+        &["after", "SL-103", "SL-104", "--remove", "--rank", "2"],
+    );
+    assert!(rm.status.success(), "rank-ceiling remove: {}", stderr(&rm));
+    assert!(
+        stdout(&rm).contains("removed (1 edge)"),
+        "only rank-0 removed: {}",
+        stdout(&rm)
+    );
+
+    // Remove remaining (no ceiling) → rank-5 edge removed
+    let rm2 = run(root, &["after", "SL-103", "SL-104", "--remove"]);
+    assert!(rm2.status.success(), "remove all: {}", stderr(&rm2));
+    assert!(
+        stdout(&rm2).contains("removed (1 edge)"),
+        "rank-5 removed: {}",
+        stdout(&rm2)
+    );
+}
+
+#[test]
+fn after_remove_nonexistent() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 105, "Five", "five"); // SL-105
+
+    // Try to remove an edge to non-existent SL-999
+    let rm = run(root, &["after", "SL-105", "SL-999", "--remove"]);
+    assert!(!rm.status.success(), "non-existent target refused");
+    assert!(
+        stderr(&rm).contains("does not resolve"),
+        "error names unresolvable target: {}",
+        stderr(&rm)
+    );
+}
+
+#[test]
+fn after_remove_backlog() {
+    let t = tmp();
+    let root = t.path();
+    new_issue(root, "One", "one"); // ISS-001
+    new_issue(root, "Two", "two"); // ISS-002
+
+    // Append edge
+    let append = run(root, &["backlog", "after", "ISS-001", "ISS-002"]);
+    assert!(append.status.success(), "append: {}", stderr(&append));
+
+    // Remove the edge
+    let remove = run(
+        root,
+        &["backlog", "after", "ISS-001", "ISS-002", "--remove"],
+    );
+    assert!(remove.status.success(), "remove: {}", stderr(&remove));
+    assert!(
+        stdout(&remove).contains("removed (1 edge)"),
+        "remove message: {}",
+        stdout(&remove)
+    );
+}
+
+#[test]
+fn after_append_still_works() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 106, "Six", "six"); // SL-106
+    seed_slice(root, 107, "Seven", "seven"); // SL-107
+
+    // Plain append (no flags)
+    let out = run(root, &["after", "SL-106", "SL-107"]);
+    assert!(out.status.success(), "append: {}", stderr(&out));
+    assert_eq!(stdout(&out), "SL-106 after SL-107\n");
+
+    // Append with rank
+    let out2 = run(root, &["after", "SL-106", "SL-107", "--rank", "3"]);
+    assert!(out2.status.success(), "append with rank: {}", stderr(&out2));
+    assert_eq!(stdout(&out2), "SL-106 after SL-107 (rank 3)\n");
+}
+
+// --- SL-105 PHASE-03: prune goldens ---
+
+/// Set an entity's status in its TOML (edit-preserving via toml_edit).
+/// For backlog items, also sets a resolution when status is terminal.
+fn set_entity_status(toml_path: &Path, status: &str) {
+    let text = fs::read_to_string(toml_path).unwrap();
+    let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
+    doc["status"] = toml_edit::value(status);
+    if status == "resolved" || status == "closed" {
+        doc["resolution"] = toml_edit::value("done");
+    }
+    fs::write(toml_path, doc.to_string()).unwrap();
+}
+
+/// Resolve a backlog item's TOML path from kind and id.
+fn backlog_toml(root: &Path, kind: &str, id: u32) -> std::path::PathBuf {
+    let name = format!("{id:03}");
+    root.join(format!(".doctrine/backlog/{kind}/{name}/backlog-{name}.toml"))
+}
+
+// --- VT-1: after_prune_drops_resolved ---
+
+#[test]
+fn after_prune_drops_resolved() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 201, "Alpha", "alpha"); // SL-201
+    seed_slice(root, 202, "Beta", "beta"); // SL-202
+
+    // Append two after edges (rank 0 and rank 3)
+    assert!(
+        run(root, &["after", "SL-201", "SL-202"])
+            .status
+            .success(),
+        "after rank 0"
+    );
+    assert!(
+        run(root, &["after", "SL-201", "SL-202", "--rank", "3"])
+            .status
+            .success(),
+        "after rank 3"
+    );
+
+    // Resolve SL-202
+    let sl202 = root.join(".doctrine/slice/202/slice-202.toml");
+    set_entity_status(&sl202, "resolved");
+
+    // Prune
+    let prune = run(root, &["after", "SL-201", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    let out = stdout(&prune);
+    // 2 edges dropped
+    assert!(
+        out.contains("SL-201 after SL-202 (rank 0) dropped")
+            && out.contains("SL-201 after SL-202 (rank 3) dropped"),
+        "both edges dropped: {out}"
+    );
+    assert!(out.contains("resolved"), "reason contains resolved: {out}");
+
+    // Verify SL-201 after array is empty
+    let toml = slice_toml(root, 201);
+    assert!(
+        toml.contains("after = []"),
+        "after array empty:\n{toml}"
+    );
+}
+
+// --- VT-2: after_prune_noop ---
+
+#[test]
+fn after_prune_noop() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 203, "Charlie", "charlie"); // SL-203
+    seed_slice(root, 204, "Delta", "delta"); // SL-204 (stays proposed)
+
+    // Append edge
+    assert!(
+        run(root, &["after", "SL-203", "SL-204"])
+            .status
+            .success()
+    );
+
+    // Prune — nothing to prune (SL-204 is proposed/open, not terminal)
+    let prune = run(root, &["after", "SL-203", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    assert!(
+        stdout(&prune).contains("nothing to prune"),
+        "no-op: {}",
+        stdout(&prune)
+    );
+
+    // Edge still present
+    let toml = slice_toml(root, 203);
+    assert!(
+        toml.contains("SL-204"),
+        "edge still present:\n{toml}"
+    );
+}
+
+// --- VT-3: after_prune_mixed ---
+
+#[test]
+fn after_prune_mixed() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 205, "Echo", "echo"); // SL-205
+    seed_slice(root, 206, "Foxtrot", "foxtrot"); // SL-206 (live)
+    seed_slice(root, 207, "Golf", "golf"); // SL-207 (will be resolved)
+
+    // Append both edges
+    assert!(
+        run(root, &["after", "SL-205", "SL-206"])
+            .status
+            .success()
+    );
+    assert!(
+        run(root, &["after", "SL-205", "SL-207"])
+            .status
+            .success()
+    );
+
+    // Resolve SL-207
+    let sl207 = root.join(".doctrine/slice/207/slice-207.toml");
+    set_entity_status(&sl207, "resolved");
+
+    // Prune
+    let prune = run(root, &["after", "SL-205", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    let out = stdout(&prune);
+    assert!(
+        out.contains("SL-205 after SL-207") && out.contains("dropped"),
+        "SL-207 dropped: {out}"
+    );
+    assert!(
+        !out.contains("SL-206"),
+        "SL-206 NOT dropped: {out}"
+    );
+
+    // Verify TOML: only SL-206 remains
+    let toml = slice_toml(root, 205);
+    assert!(
+        toml.contains("SL-206") && !toml.contains("SL-207"),
+        "only SL-206 remains in after:\n{toml}"
+    );
+}
+
+// --- after_prune_absent_target (bonus) ---
+
+#[test]
+fn after_prune_absent_target() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 208, "Hotel", "hotel"); // SL-208
+
+    // Manually write an after edge to a non-existent target
+    let toml_path = root.join(".doctrine/slice/208/slice-208.toml");
+    let text = fs::read_to_string(&toml_path).unwrap();
+    let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
+    let after = doc["relationships"]["after"].as_array_mut().unwrap();
+    let mut edge = toml_edit::InlineTable::new();
+    edge.insert("to", "SL-999".into());
+    edge.insert("rank", 0.into());
+    after.push(edge);
+    fs::write(&toml_path, doc.to_string()).unwrap();
+
+    // Prune
+    let prune = run(root, &["after", "SL-208", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    let out = stdout(&prune);
+    assert!(
+        out.contains("absent"),
+        "absent in reason: {out}"
+    );
+
+    // Edge is gone
+    let toml = fs::read_to_string(&toml_path).unwrap();
+    assert!(
+        !toml.contains("SL-999"),
+        "edge to SL-999 removed:\n{toml}"
+    );
+}
+
+// --- VT-4: backlog_after_prune ---
+
+#[test]
+fn backlog_after_prune() {
+    let t = tmp();
+    let root = t.path();
+    new_issue(root, "Prune Alpha", "prune-alpha"); // ISS-001
+    new_issue(root, "Prune Beta", "prune-beta"); // ISS-002
+
+    // Append edge: ISS-001 after ISS-002
+    let after = run(root, &["backlog", "after", "ISS-001", "ISS-002"]);
+    assert!(after.status.success(), "backlog after: {}", stderr(&after));
+
+    // Resolve ISS-002
+    let iss2 = backlog_toml(root, "issue", 2);
+    set_entity_status(&iss2, "resolved");
+
+    // Prune
+    let prune = run(root, &["backlog", "after", "ISS-001", "--prune"]);
+    assert!(
+        prune.status.success(),
+        "backlog prune exit: {}",
+        stderr(&prune)
+    );
+    let out = stdout(&prune);
+    assert!(
+        out.contains("dropped"),
+        "backlog prune dropped: {out}"
+    );
+}
