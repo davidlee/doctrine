@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed8d2a55171b09700e1161c272f59"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SL-094: stale-closure pattern with CSS transform wrappers"
+summary = "When wiring event handlers that read/write CSS transforms on a DOM wrapper element that gets recreated on re-render, avoid capturing viewport state in handler closures. Read the current transform from the element's style.transform on each event via parseTransform() instead."
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "8014a1a2da9177fa8e4d34c3912ec8f7788dc642"
+tree = "323bed0dba8b2f6363480245d6dd732065ce9a50"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "8014a1a2da9177fa8e4d34c3912ec8f7788dc642"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
