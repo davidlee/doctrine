@@ -1,0 +1,79 @@
+id    = 71
+slug  = "inquisition-sl-094-design-semantic-graph-zoompancrop"
+title = "Inquisition: SL-094 design — semantic graph zoom/pan/crop"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-094"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected: wheel zoom works uniformly across browsers — Observed: deltaY factor 0.002 assumes Chrome-scale deltas, breaking Firefox (~30x slower) and trackpads"
+detail = "design.md Wheel (zoom) section: newK = clamp(k * (1 - deltaY * 0.002), minK, maxK). WheelEvent.deltaMode is not checked. Chrome emits pixels (deltaMode=0, ~100/tick), Firefox emits lines (deltaMode=1, ~3/tick), Safari uses different scaling. Without normalizing via deltaMode, the zoom will be unusably slow in Firefox and unpredictable across trackpads. Domain_map risk R3 already flags this: 'Wheel event delta varies across browsers/trackpads — step factor 0.002 may need tuning' — the design does not address it. Standard fix: normalize to pixels using deltaMode, cap delta magnitude to avoid inertial-scroll spikes."
+disposition = "fix-now"
+response = "Conceded. The design's wheel handler must normalize deltaY using WheelEvent.deltaMode before applying the scale factor. Standard normalization: let delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY; then apply the 0.002 factor (or a tuned constant) to the normalized delta. Additionally, cap abs(delta) to a maximum (e.g., 40px) to guard against inertial-scroll spikes from trackpads. Add to the design's 'Wheel (zoom)' section and to verification VT-4. The domain_map risk R3 already flagged this — the design must address it."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected: drag-pan stops cleanly and never accumulates stale handlers — Observed: mousemove/mouseup listeners added to document on each mousedown with no stale-cleanup, leaking on off-window release"
+detail = "design.md Drag (pan) section: 'mousedown on .graph-area: record origin, add mousemove/mouseup on document' / 'mouseup: remove listeners, remove grabbing class'. If the user drags to the OS edge and releases outside the browser viewport, the mouseup event may be dropped. On the next mousedown, a SECOND set of mousemove/mouseup listeners is added to document without removing the stale ones. Result: duplicate handlers per drag cycle, each manipulating vp.x/vp.y, producing doubled/jumpy pan. No { once: true } on mouseup, no AbortController, no guard checking if listeners are already attached. Contrast with the wheel handler which properly uses a dataset.zoomWired guard (I5). The drag path has no equivalent protection."
+disposition = "fix-now"
+response = "Conceded. The drag listener lifecycle is indeed fragile. Fix: two options. (A) Add { once: true } to the mouseup listener so even if mouseup fires outside the window, the next mousedown doesn't accumulate. The mousemove listener still needs removal on mouseup. (B) Use an AbortController: create a new AbortController per drag, pass its signal to both addEventListener calls, and abort on mouseup — this cleans both listeners in one operation regardless of whether mouseup fires on/off-window. Option A is minimal and sufficient; add to the design's 'Drag (pan)' section."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected: zoom/pan handlers are scoped to the DOT graph view only — Observed: handlers persist on .graph-area container across view mode switches, conflicting with d3.zoom on actionability view and manipulating absent .graph-transform-layer on concept-map view"
+detail = "design.md Integration: graphPane() section step 5: 'Wire wheel + mousedown handlers on .graph-area once, guarded with container.dataset.zoomWired to avoid duplicate listeners on re-render'. The dataset.zoomWired guard prevents DUPLICATE wiring across DOT re-renders but provides NO teardown when the view mode changes. Evidence from app.ts renderView(): .graph-area hosts three different renderers (graphPane for DOT, renderGraph for d3.zoom actionability, renderCmGraph for concept-map), all operating on the same container element via container.innerHTML replacement. After switching to actionability view, the semantic wheel handler still fires on .graph-area — it calls event.preventDefault() (suppressing the actionability graph's own wheel behavior), tries to read .graph-transform-layer (absent, causing errors or no-ops), and conflicts with d3.zoom which manages its own zoom layer. The design must specify: (a) handler teardown on view mode change, or (b) conditional guard checking dataset.pageMode inside the handler, or (c) scoped event delegation that only fires when .graph-transform-layer exists in the DOM."
+disposition = "fix-now"
+response = """Conceded. The handlers are wired to the .graph-area container which is shared across view modes. Fix: gate each handler with a check for the presence of .graph-transform-layer in the DOM before executing. In the wheel handler: 'const layer = container.querySelector(".graph-transform-layer"); if (!layer) return;'. In the mousedown handler: same guard before starting a drag. This is a two-line change per handler, no teardown infrastructure needed. The dataset.zoomWired guard then serves its intended purpose (prevent duplicate rewiring) and the DOM-presence gate prevents cross-mode interference. Add to the design's 'Event handling' section."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected: depth increase recenters on focus node — Observed: same-focus viewport restoration preserves old coordinates from smaller-graph geometry, potentially viewing empty space after graph grows"
+detail = "design.md Viewport rules table + D5: 'Same-focus restores exact viewport — User adjusted zoom/pan for a reason; depth changes shouldn't discard it.' D5 is a documented, conscious tradeoff. However, the edge case is undiscussed: when depth increases (e.g., 1→2), the DOT graph topology changes substantially — more nodes, different layout, different coordinate space. The old (x,y,k) was calibrated for the smaller graph's geometry. After depth increase, the same coordinates may point to empty whitespace or a completely different region of the new graph. The user increases depth expecting to SEE more context, but may instead find themselves staring at nothing and having to manually pan back to content. This is not a blocker (the tradeoff is explicit), but the design should at minimum acknowledge this edge case and note whether a re-centre-on-depth-change is a follow-up or a rejected option. The slice scope (slice-094.md) mentions 'Viewport persists across re-renders; focus-change centres with fit-floor clamp' but is silent on depth-change."
+disposition = "design-wrong"
+response = "Conceded. D5 makes a valid tradeoff (don't discard user's zoom/pan on depth change), but the design omits the edge case where prior coordinates point to empty space after graph topology changes. Fix: add a sentence to the viewport rules table or D5 acknowledging that depth change with same focus restores the prior viewport, which may place the user outside the visible graph region if the new layout shifts. Note that a re-centre-on-depth-change is a plausible follow-up but NOT required for close — the user can always pan back to content or change focus (which triggers the focus-change centre rule). This keeps D5's intent while documenting the edge case."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Expected: drag-to-pan works on touch-capable devices with a simple CSS guard — Observed: no touch-action property on .graph-area, so touch-pan gestures are claimed by browser scroll, not the pan handler"
+detail = "design.md Open questions: 'Pinch-to-zoom (touch) — deferred to follow-up. CSS cursor should switch to grab on touch devices too.' The follow-up defers pinch-to-zoom, which is reasonable. But touch-action: none (or manipulation) is a SINGLE CSS property, not a feature — it prevents the browser from claiming touch gestures as scroll, allowing the existing mousedown/mousemove pan handler (which maps to pointer events / touch events via the browser's compatibility layer) to work. Without it, touch-drag on the graph area scrolls the page — drag-to-pan is completely inoperative on any touch device, not just missing pinch. The scope (slice-094.md) says drag-to-pan is in scope. Adding touch-action: none to the .graph-area CSS is a one-line change that gates touch-pan on the existing handler; it does not require implementing pinch-to-zoom. The design should call out this single-property addition rather than bundling it with the full pinch-to-zoom follow-up."
+disposition = "fix-now"
+response = "Conceded. touch-action: none is a one-line CSS addition that enables the existing mousedown/mousemove pan handler to work on touch devices — it does not require implementing pinch-to-zoom. Add 'touch-action: none' to the .graph-area CSS rule in the design. The pinch-to-zoom follow-up remains separate: this property just stops the browser from claiming touch-drag as scroll. The scope explicitly includes drag-to-pan; this property is required to deliver that on touch devices. Add to design's 'Container mechanics' CSS block."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Expected: design addresses whether legend items live inside/outside the CSS transform wrapper — Observed: design is silent, but dimLegend() at svg.ts L82 queries svgEl.ownerDocument (global scope), so legend co-location relative to the wrapper matters"
+detail = """svg.ts dimLegend() L82: 'const items = svgEl.ownerDocument.querySelectorAll<HTMLElement>(".legend-item");'. This queries the ENTIRE document, not the SVG subtree. If .legend-item elements happen to be rendered INSIDE the .graph-transform-layer (e.g., as part of the DOT SVG), the CSS transform on the wrapper would visually move/scale them along with the graph — which is probably wrong for a legend. The design says 'CSS transform on a parent wrapper is SVG-agnostic: the SVG internals (hit-rects in svg.ts, focus/hover classes, dimLegend) are unaffected' — this is correct for hit-rects and handler wiring (both scoped to svgEl.querySelectorAll), but misleading for dimLegend which uses ownerDocument global scope. Currently legend items likely live in a sidebar outside .graph-area, but the design should explicitly confirm this and note that no legend movement is introduced by the transform wrapper."""
+disposition = "tolerated"
+response = "The design's claim that 'the SVG internals (hit-rects in svg.ts, focus/hover classes, dimLegend) are unaffected' is technically imprecise: dimLegend() uses ownerDocument (global) scope, not SVG subtree scope (svg.ts L82). However, this is functionally correct — legend items render in a sidebar div (.edge-legend) outside .graph-area, not inside the SVG, so the CSS transform wrapper cannot affect them. The claim's intent holds. Accepted as an imprecision in wording, not a design defect. No change required."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "Expected: viewport state updates only from the current render's handlers — Observed: design doesn't gate onViewportChange against the stale-render seq guard already used by graphPane()"
+detail = "render.ts graphPane() uses seq + getCurrentSeq() to discard stale async renders (L669+): 'if (seq !== opts.getCurrentSeq()) return;'. The design adds onViewportChange as a state mutation callback. The event handlers (wheel/mousedown) are wired AFTER the seq check passes (step 6 after step 3 in the design flow), so they won't be attached for discarded renders — this is correct. However, the design should explicitly note this temporal dependency: if event wiring is moved before the seq check in implementation, stale handlers could mutate state. A one-sentence note would close the gap. Practical risk: low (the seq check is already established pattern)."
+disposition = "aligned"
+response = "Behaviour is already correct. The design flow places event handler wiring (step 5) AFTER the seq check (step 3 in the async .then callback, which gates on 'seq !== opts.getCurrentSeq()'). Stale renders never reach step 5, so no stale onViewportChange callbacks are ever wired. The seq guard is an established pattern in render.ts (L669+) and the design's flow respects it implicitly. No design change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
