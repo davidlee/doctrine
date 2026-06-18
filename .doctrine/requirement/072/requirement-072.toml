@@ -4,7 +4,7 @@ version = 1
 id = 72
 slug = "explain-an-items-ordering-or-masking-from-structured-reasons"
 title = "Explain an item's ordering or masking from structured reasons"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can ask why an item is ordered or masked as it is and receive a readable account rendered from structured machine-readable reasons, not free prose."

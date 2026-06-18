@@ -4,7 +4,7 @@ version = 1
 id = 76
 slug = "report-cycle-diagnostics-on-acyclic-overlays-and-degrade-safely"
 title = "Report cycle diagnostics on acyclic overlays and degrade safely"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "When a relation kind declared acyclic contains a cycle, the derived surface reports a diagnostic and degrades rather than emitting a false topological order."

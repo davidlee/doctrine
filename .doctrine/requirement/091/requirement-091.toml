@@ -4,7 +4,7 @@ version = 1
 id = 91
 slug = "adapter-maps-doctrine-ids-to-opaque-nodes-and-re-maps-diagnostics-back"
 title = "Adapter maps doctrine ids to opaque nodes and re-maps diagnostics back"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The doctrine adapter is the sole translation layer between the registry and the core: it maps doctrine entity ids to opaque core node ids, emits the core's typed directed edges from authored outbound relations alone, supplies the node attributes doctrine policy needs, and maps core diagnostics back to doctrine ids and relation-kind names."

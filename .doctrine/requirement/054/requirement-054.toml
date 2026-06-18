@@ -4,7 +4,7 @@ version = 1
 id = 54
 slug = "order-the-backlog-by-priority"
 title = "Order the backlog by priority"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can establish a relative ordering across backlog items, recorded against durable item identities, so the set answers 'what next'."

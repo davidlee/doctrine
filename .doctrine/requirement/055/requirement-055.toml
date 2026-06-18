@@ -4,7 +4,7 @@ version = 1
 id = 55
 slug = "promote-a-backlog-item-into-a-scoped-slice"
 title = "Promote a backlog item into a scoped slice"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can promote a backlog item into a scoped slice; the new slice records the originating item and the item reflects that it has been carried into scope."

@@ -4,7 +4,7 @@ version = 1
 id = 58
 slug = "store-every-facet-as-typed-enumerated-data"
 title = "Store every facet as typed, enumerated data"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Every backlog facet is stored as typed, enumerated data; no untyped frontmatter catch-all ever holds product data."

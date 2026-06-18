@@ -4,7 +4,7 @@ version = 1
 id = 60
 slug = "capture-an-epistemic-or-governance-record-of-a-given-kind"
 title = "Capture an epistemic or governance record of a given kind"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A contributor records an assumption, decision, question, or constraint by kind and title; the system reserves a kind-correct id, seeds the kind's default lifecycle state and typed facets, and writes an empty relation seam."

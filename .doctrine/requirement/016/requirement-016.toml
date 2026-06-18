@@ -4,7 +4,7 @@ version = 1
 id = 16
 slug = "reserve-collision-free-durable-memory-identity"
 title = "Reserve collision-free durable memory identity"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Each memory is minted a durable identity that is stable for its whole life and collision-free across independent clones without a central allocator."

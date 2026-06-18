@@ -4,7 +4,7 @@ version = 1
 id = 30
 slug = "keep-the-projection-disposable-and-never-a-source-of-truth"
 title = "Keep the projection disposable and never a source of truth"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The projected surface is always derived and disposable — it can be deleted and regenerated from authoritative governance with no loss — and never becomes the place a governance fact lives."

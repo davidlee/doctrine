@@ -4,7 +4,7 @@ version = 1
 id = 28
 slug = "preserve-a-maintainer-owned-governance-pointer-layer-across-regeneration"
 title = "Preserve a maintainer-owned governance pointer layer across regeneration"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The tool seeds a maintainer-owned governance pointer layer for a project once, then only reads it — folding its content into the surface while preserving maintainer edits across every regeneration."

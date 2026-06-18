@@ -4,7 +4,7 @@ version = 1
 id = 53
 slug = "carry-kind-specific-facets-including-the-risk-facet"
 title = "Carry kind-specific facets including the risk facet"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A backlog item carries the descriptive facet fields its kind defines, including the risk facet (likelihood, impact, origin, controls), within the single shared entity."

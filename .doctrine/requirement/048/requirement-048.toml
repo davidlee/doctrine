@@ -4,7 +4,7 @@ version = 1
 id = 48
 slug = "provision-self-contained-from-shipped-defaults"
 title = "Provision self-contained from shipped defaults"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "A project with no Doctrine knowledge and no special configuration is provisioned correctly from the tool's shipped defaults alone, VCS-agnostically."

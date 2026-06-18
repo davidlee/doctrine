@@ -4,7 +4,7 @@ version = 1
 id = 17
 slug = "suppress-untrustworthy-memory-from-agent-context-while-preserving-audit"
 title = "Suppress untrustworthy memory from agent context while preserving audit"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Memory that cannot be trusted is withheld from any agent-facing recall while remaining recoverable for audit, and every recall outcome carries an explicit trust standing."

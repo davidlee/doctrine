@@ -4,7 +4,7 @@ version = 1
 id = 34
 slug = "detect-the-target-agent-or-stop-and-ask"
 title = "Detect the target agent or stop and ask"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "When no target agent is named, the system targets the owned agent if its presence is detected, and otherwise stops and asks for an explicit target rather than guessing a foreign agent."

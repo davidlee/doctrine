@@ -4,7 +4,7 @@ version = 1
 id = 40
 slug = "reserve-decision-identity-collision-free-under-concurrent-local-agents"
 title = "Reserve decision identity collision-free under concurrent local agents"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Concurrent agents sharing one working tree can each reserve a decision identity without colliding, without a lock, daemon, or central authority."

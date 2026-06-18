@@ -4,7 +4,7 @@ version = 1
 id = 62
 slug = "transition-a-record-through-a-kind-valid-lifecycle-state"
 title = "Transition a record through a kind-valid lifecycle state"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A contributor moves a record to another state in its kind's lifecycle vocabulary; the change is atomic and edit-preserving, and states outside that kind's vocabulary are rejected."

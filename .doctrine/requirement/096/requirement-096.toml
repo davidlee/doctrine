@@ -4,7 +4,7 @@ version = 1
 id = 96
 slug = "doctrine-authors-typed-dep-and-seq-dependency-edges"
 title = "Doctrine authors typed dep and seq dependency edges"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Doctrine authors two optional typed edge kinds feeding the graph: a hard dep (dependency/blocked) edge and a soft seq (sequencing/priority preference) edge carrying an int rank. They are enrichment, never required capture — an item with no authored edge still surveys by derived consequence + fallback (PRD-011 §4). Actionability and blocking derive from these authored edges; reference and lineage edges (specs/slices/requirements/drift/supersedes/descends_from) remain consequence inputs only. The authored edge schema (the new relation kinds + rank) is PRD-009 capture surface (OQ-007), consumed here, not minted in this spec. The adapter supplies each seq edge a clock-free, stable authoring ordinal as age for deterministic eviction; the contract on age is only that it be total and stable across recomputes, the derivation being an adapter-slice concern."

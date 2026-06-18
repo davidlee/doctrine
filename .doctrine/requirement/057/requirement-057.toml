@@ -4,7 +4,7 @@ version = 1
 id = 57
 slug = "mutate-a-backlog-item-atomically-and-edit-preservingly"
 title = "Mutate a backlog item atomically and edit-preservingly"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Every mutation of a backlog item is atomic and edit-preserving, round-tripping the file without dropping comments or unknown keys."

@@ -4,7 +4,7 @@ version = 1
 id = 237
 slug = "rank-actionable-work-across-all-admitted-kinds-via-status-relation-synthesis"
 title = "Rank actionable work across all admitted kinds via status-relation synthesis"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The derived surface ranks actionable work across all admitted kinds in one comparable view, deriving actionability per item as a synthesis of the item's own lifecycle status (workable vs terminal, per-kind mapping is policy) and its admitted graph relations (unblocked vs gated). No kind is barred as a kind."

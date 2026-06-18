@@ -4,7 +4,7 @@ version = 1
 id = 260
 slug = "decompose-a-product-spec-into-a-single-parent-acyclic-hierarchy"
 title = "Decompose a product spec into a single-parent acyclic hierarchy"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A product spec can record a single parent product spec, marking it a child in a single-parent acyclic decomposition."

@@ -4,7 +4,7 @@ version = 1
 id = 39
 slug = "advance-a-decision-through-its-status-lifecycle"
 title = "Advance a decision through its status lifecycle"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A decision can move from proposed to a terminal standing — accepted, rejected, superseded, or deprecated — as an authored act that preserves its rationale."

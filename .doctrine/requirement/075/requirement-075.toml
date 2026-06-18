@@ -4,7 +4,7 @@ version = 1
 id = 75
 slug = "exclude-terminal-and-promoted-items-from-default-active-output"
 title = "Exclude terminal items of any admitted kind from default active output"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A derived priority query excludes terminal items of any admitted kind — and promoted backlog items — from default active output, including them only when explicitly requested."

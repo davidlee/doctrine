@@ -4,7 +4,7 @@ version = 1
 id = 69
 slug = "address-every-record-by-a-durable-kind-stable-identity"
 title = "Address every record by a durable, kind-stable identity"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Every record is addressable by a durable id whose kind prefix and number are permanent; a reader or agent resolves a record only by id, never by slug, and can trust its kind is stable."

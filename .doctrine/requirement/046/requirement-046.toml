@@ -4,7 +4,7 @@ version = 1
 id = 46
 slug = "maintain-the-version-control-ignore-boundary"
 title = "Maintain the version-control ignore boundary"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Provisioning keeps the project's version-control ignore boundary correct so Doctrine's disposable, private, and derived files stay out of version control."

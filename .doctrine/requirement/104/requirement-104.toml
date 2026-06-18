@@ -4,7 +4,7 @@ version = 1
 id = 104
 slug = "escalate-a-model-level-inadequacy-discovered-during-reconciliation"
 title = "Escalate a model-level inadequacy discovered during reconciliation"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "When reconciliation finds the spec or governance model itself inadequate — not a single instance of drift — the divergence is escalated for redesign rather than absorbed by editing the instance."

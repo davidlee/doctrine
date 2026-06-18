@@ -4,7 +4,7 @@ version = 1
 id = 255
 slug = "derive-observed-vt-coverage-status-from-a-real-command-run"
 title = "Derive observed VT coverage status from a real command run"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

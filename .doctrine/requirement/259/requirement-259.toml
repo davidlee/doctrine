@@ -4,7 +4,7 @@ version = 1
 id = 259
 slug = "label-a-product-spec-with-its-product-level"
 title = "Label a product spec with its product level"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A product spec can record a single product level from the closed set domain|capability|feature|story."

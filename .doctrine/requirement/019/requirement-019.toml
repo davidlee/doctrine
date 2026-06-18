@@ -4,7 +4,7 @@ version = 1
 id = 19
 slug = "reserve-a-durable-collision-free-identity-for-any-entity-kind"
 title = "Reserve a durable collision-free identity for any entity kind"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A caller can reserve the next free identity in a namespace for any numbered entity kind as a durable, permanent claim, decoupled from whether the entity's contents exist yet."

@@ -4,7 +4,7 @@ version = 1
 id = 33
 slug = "route-each-agent-to-direct-placement-or-delegated-install"
 title = "Route each agent to direct placement or delegated install"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Each target agent is routed to one of two paths: the agent whose layout doctrine owns is installed by direct placement, while every other agent is delegated to the universal external installer."

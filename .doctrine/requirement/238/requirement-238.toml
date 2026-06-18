@@ -4,7 +4,7 @@ version = 1
 id = 238
 slug = "actionability-synthesises-a-per-kind-status-class-partition-with-relation-blocking-uniformly-across-kinds"
 title = "Actionability synthesises a per-kind status-class partition with relation-blocking, uniformly across kinds"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The policy computes actionability uniformly across every admitted kind as `actionable = eligible ∧ ¬blocked` (SPEC-001 D12): `eligible` is the status half — each admitted kind's lifecycle statuses partition into a policy-owned workable|terminal status-class table, an item being eligible iff its status is workable; `¬blocked` is the relations half — no unresolved dep blocker and no firing trigger mask. The core stays kind-agnostic; the partition is policy data, not core truth."

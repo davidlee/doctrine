@@ -4,7 +4,7 @@ version = 1
 id = 15
 slug = "advance-a-memory-through-lifecycle-and-verification-standing"
 title = "Advance a memory through lifecycle and verification standing"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A memory can advance through its lifecycle standing and, independently, through its verification standing as it is checked against reality."

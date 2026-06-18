@@ -4,7 +4,7 @@ version = 1
 id = 257
 slug = "keep-the-verification-command-contract-project-agnostic"
 title = "Keep the verification command contract project-agnostic"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

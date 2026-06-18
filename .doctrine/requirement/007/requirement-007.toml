@@ -4,7 +4,7 @@ version = 1
 id = 7
 slug = "declare-a-specification-for-an-evergreen-capability"
 title = "Declare a specification for an evergreen capability"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can declare a specification under a subtype, reserving its identity and scaffolding its durable home and prose body seeded for the canonical sections."

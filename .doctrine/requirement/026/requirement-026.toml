@@ -4,7 +4,7 @@ version = 1
 id = 26
 slug = "establish-the-orientation-surface-in-an-agent-harnesss-session-start"
 title = "Establish the orientation surface in an agent harness's session start"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The tool wires the orientation surface into a given agent harness's session-start context so future sessions arrive oriented without manual action."

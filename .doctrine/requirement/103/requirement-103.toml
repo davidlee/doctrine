@@ -4,7 +4,7 @@ version = 1
 id = 103
 slug = "gate-slice-closure-on-reconciled-coherence-of-owning-specs"
 title = "Gate slice closure on reconciled coherence of owning specs"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Closing a change confirms its owning specs are reconciled and carry no outstanding drift; an unreconciled change does not reach a terminal status."

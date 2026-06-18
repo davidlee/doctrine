@@ -4,7 +4,7 @@ version = 1
 id = 80
 slug = "preserve-the-richer-engine-consumption-seam"
 title = "Preserve the richer-engine consumption seam"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The graph view and doctrine policy are shaped so a future richer engine can consume the same adapter output and emit additional channels without changing authored backlog storage."

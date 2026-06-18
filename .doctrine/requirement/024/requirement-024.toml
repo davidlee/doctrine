@@ -4,7 +4,7 @@ version = 1
 id = 24
 slug = "hold-claims-as-coordination-only-references-never-content"
 title = "Hold claims as coordination-only references, never content"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "A claim references an entity only by a namespaced name and never stores its bytes, keeping the primitive blind to entity meaning and free of entity content."

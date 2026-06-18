@@ -4,7 +4,7 @@ version = 1
 id = 41
 slug = "preserve-recorded-rationale-across-status-transitions"
 title = "Preserve recorded rationale across status transitions"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "A decision's recorded reasoning survives every change of standing intact, so the why is always recoverable after the fact."

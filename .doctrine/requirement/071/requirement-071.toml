@@ -4,7 +4,7 @@ version = 1
 id = 71
 slug = "advise-next-actionable-work-with-reasons"
 title = "Advise next actionable work with reasons"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can ask what to consider next and receive a short advisory candidate list, each entry carrying its derived reason; the command mutates nothing."

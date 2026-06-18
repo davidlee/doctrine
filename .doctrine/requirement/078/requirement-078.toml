@@ -4,7 +4,7 @@ version = 1
 id = 78
 slug = "keep-derived-outputs-disposable-and-never-authored-as-truth"
 title = "Keep derived outputs disposable and never authored as truth"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Derived priority, actionability, blockers, reverse references, and explanations are either ephemeral or stored only as disposable cache; they are never authored as backlog truth."

@@ -4,7 +4,7 @@ version = 1
 id = 43
 slug = "provision-doctrines-files-into-a-project"
 title = "Provision Doctrine's files into a project"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can provision Doctrine's working files into a target project, creating the directories it needs and writing the files it ships."

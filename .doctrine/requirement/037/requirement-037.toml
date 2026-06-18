@@ -4,7 +4,7 @@ version = 1
 id = 37
 slug = "record-a-new-decision-as-a-durable-project-global-artefact"
 title = "Record a new decision as a durable project-global artefact"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can record a new decision, reserving its project-global identity and materialising its durable record seeded for authoring context, decision, consequences, verification, and references."

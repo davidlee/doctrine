@@ -4,7 +4,7 @@ version = 1
 id = 99
 slug = "establish-observed-coverage-evidence-for-the-requirements-a-change-touches"
 title = "Establish observed coverage evidence for the requirements a change touches"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "At audit, the observed coverage of each requirement a change touches is established as evidence — planned, in-progress, verified, failed, or blocked — distinct from the requirement's authored status."

@@ -4,7 +4,7 @@ version = 1
 id = 8
 slug = "record-a-functional-or-quality-requirement-as-a-membered-peer-entity"
 title = "Record a functional or quality requirement as a membered peer entity"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can record a functional or quality requirement, reserving it as a peer entity and binding it to a spec as a labelled member in one operation."

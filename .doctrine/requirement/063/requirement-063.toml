@@ -4,7 +4,7 @@ version = 1
 id = 63
 slug = "survey-and-filter-records-by-kind-status-and-tag"
 title = "Survey and filter records by kind, status, and tag"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator surveys the records as a set and narrows them by kind, status, and tag, seeing at a glance what is open or held versus settled."

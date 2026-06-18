@@ -4,7 +4,7 @@ version = 1
 id = 90
 slug = "graph-core-is-a-standalone-product-neutral-crate"
 title = "Graph core is a standalone product-neutral crate"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The generic graph evaluation core is built as its own workspace member crate that doctrine depends on by path; its manifest declares no dependency on doctrine or any product crate, and it carries no doctrine or product vocabulary, so it can be published externally later without reshaping its API or the doctrine adapter."

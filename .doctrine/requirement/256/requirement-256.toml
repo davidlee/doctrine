@@ -4,7 +4,7 @@ version = 1
 id = 256
 slug = "provide-a-production-write-and-withdraw-path-for-observed-coverage-entries"
 title = "Provide a production write and withdraw path for observed coverage entries"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

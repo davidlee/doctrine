@@ -4,7 +4,7 @@ version = 1
 id = 4
 slug = "reserve-slice-identity-collision-free-under-concurrent-local-agents"
 title = "Reserve slice identity collision-free under concurrent local agents"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Concurrent agents sharing one working tree can each reserve a slice identity without colliding, without a lock, daemon, or central authority."

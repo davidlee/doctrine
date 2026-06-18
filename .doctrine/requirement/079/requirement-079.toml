@@ -4,7 +4,7 @@ version = 1
 id = 79
 slug = "keep-the-graph-core-generic-and-independently-testable"
 title = "Keep the graph core generic and independently testable"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The graph core operates over opaque node IDs and typed directed edges, free of doctrine entity, time, scheduling, commitment, urgency, or external-product vocabulary, and is testable independently of doctrine policy and file persistence."

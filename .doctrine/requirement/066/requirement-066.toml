@@ -4,7 +4,7 @@ version = 1
 id = 66
 slug = "supersede-a-record-with-another-record"
 title = "Supersede a record with another record"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A record can be superseded by another record — of the same or, along the allowed matrix, a different kind — when the successor becomes the authoritative continuation of the predecessor; the supersession is recorded both ways so the lineage of an aged or replaced claim, choice, question, or rule stays traceable."

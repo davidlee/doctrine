@@ -4,7 +4,7 @@ version = 1
 id = 2
 slug = "survey-slices-by-identity-with-lifecycle-standing"
 title = "Survey slices by identity with lifecycle standing"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can survey the project's slices ordered by identity, each showing its lifecycle standing, alias, and title, and can narrow the survey to one lifecycle stage."
