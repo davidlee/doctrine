@@ -1,0 +1,51 @@
+id      = 1
+slug    = "reconcile-sl-101"
+title   = "reconcile SL-101"
+status = "done"
+approval = "approved"
+updated = "2026-06-18"
+
+# A Revision (REV, ADR-013) is a first-class change-axis entity: a pending
+# revise-intent against authored governance/spec truth plus a staged delta payload.
+# Lifecycle (proposed→started→done; abandoned from any non-terminal) is moved by
+# `revision status REV-N <state>`. `approval` is orthogonal — lifecycle transitions
+# are approval-blind; the apply checkpoint (PHASE-05) consults it. The prose
+# rationale + before/after excerpts live in the sister `revision-NNN.md`.
+
+# change rows — the typed `revises` payload (the touched-entity set; the rows ARE
+# the edges, members.toml precedent). Authored by `revision change add` (PHASE-03),
+# NOT by hand and NEVER by `doctrine link`. A fresh `revision new` writes none:
+#   [[change]]
+#   target  = "ADR-006"   # durable peer id (the FK / anchor)
+#   action  = "modify"    # modify | retire | move | status | introduce | create
+#   primary = true        # display/headline hint; at most one, optional
+
+[relationships]
+needs = []
+after = []
+
+[[change]]
+target = "SPEC-020"
+action = "modify"
+primary = false
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-007"
+member_of = "SPEC-020"
+new_statement = "Define a reusable ValueFacet with a single finite f64 magnitude parsed from an optional [value] TOML table"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-008"
+member_of = "SPEC-020"
+new_statement = "Validate a present [value]: value required, finite; absent parses clean"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-009"
+member_of = "SPEC-020"
+new_statement = "Resolve the project-wide value unit from doctrine.toml [value].unit, defaulting to magic_beans"

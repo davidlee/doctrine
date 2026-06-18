@@ -13,6 +13,9 @@ mechanism (the `<entity>-<id>.{toml,md}` identity pair, typed facet tables,
 edit-preserving writes, catalog hydration) lives in the parent container and is used
 here unchanged; this spec carries only what is specific to the estimate facet:
 its model, normalization, validation, unit resolution, display, and graph exposure.
+It also covers the **Value facet**: a single `f64` magnitude parsed from an optional
+`[value]` table, with project-wide unit resolution from `[value].unit` defaulting to
+`magic_beans`.
 
 PRD-014 owns the *what* and *why* (the meaning of attention burden, the optionality
 contract, the full non-goal list). This spec is the *how* and does not restate that
@@ -57,7 +60,7 @@ values are rejected at normalization rather than admitted and flagged downstream
 ### Project-wide unit resolution
 
 The estimation unit is read from project config `doctrine.toml [estimation].unit`
-(the same config surface as `[conduct]`), defaulting to `high_caffeine_hours` when
+(the same config surface as `[conduct]`), defaulting to `espresso_shots` when
 unconfigured. The unit is project-wide; the facet schema carries no entity-local
 unit field in v1.
 
@@ -73,11 +76,11 @@ that round-trips.
 Rendering is a pure function over the normalized model and the resolved unit:
 
 ```text
-present:   Estimate: 2-8 high_caffeine_hours
+present:   Estimate: 2-8 espresso_shots
 absent:    Estimate: none recorded
-verbose:   Estimate: 2-8 high_caffeine_hours
+verbose:   Estimate: 2-8 espresso_shots
            Attention spread: 4x          (upper / lower)
-           Attention width: 6 high_caffeine_hours   (upper - lower)
+           Attention width: 6 espresso_shots   (upper - lower)
 lower==0:  Attention spread: ratio unavailable      (width still shown)
 ```
 
@@ -109,6 +112,28 @@ No dispatch, execute, audit, or close predicate reads estimate presence. The
 guarantee is **structural** — the absence of any such read — and is proven by that
 absence, not by a passing workflow run. A missing estimate is never a validation
 error and can never block, fatally warn, or refuse any workflow.
+
+### The `ValueFacet` model and parse seam
+
+A single reusable `ValueFacet` carries one finite `f64` magnitude, `value`. It is
+parsed from an optional `[value]` TOML table via the same facet seam as the Estimate
+facet. The model, its normalization, and its rendering are **pure**; only the
+project-config read and hydration sit in the imperative shell. Integer and float
+authoring both normalize to finite `f64`; non-finite values (`NaN`, `±Infinity`)
+are rejected at the parse boundary.
+
+### Value validation
+
+A *present* `[value]` requires the `value` field present and finite — missing or
+non-finite produces a hard parse error. There is no range validation (the Value
+facet carries a single magnitude with no ordering constraint). An *absent*
+`[value]` parses clean.
+
+### Value unit resolution
+
+The value unit is read from `doctrine.toml [value].unit`, defaulting to
+`magic_beans` when unconfigured. The unit is project-wide; the facet schema carries
+no entity-local unit field in v1.
 
 ## Concerns
 
@@ -155,3 +180,8 @@ error and can never block, fatally warn, or refuse any workflow.
 - **D4 — Display classifies nothing by default.** Spread (ratio/width) is derived
   and shown only in verbose/review views; the default render emits no
   wide/risky/split verdict (PRD-014 principle).
+- **D5 — Value is a sibling facet, not a sub-facet of Estimate.** The Value facet
+  is a separate model (`ValueFacet`, one `f64` magnitude) with its own parse path
+  and config section. It shares only the architectural pattern (leaf module,
+  custom Deserialize, `#[serde(flatten)] _extra` forward-compat); no code is
+  abstracted across the two.

@@ -98,3 +98,29 @@ correctly dropped `Eq`). Both are delegated to `/reconcile` as per-slice
   the shared reader is decoupled from estimation validity. Regression test added
   (`dtoml::tests::malformed_estimation_confidence_does_not_block_config_read`).
   Commits `8598dbca` (fix) + `a50f7092` (fmt) on `candidate/101/review-001`.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- **design.md §3.3 (RV-085 F-3):** `resolve_confidence` signature corrected from
+  bare `(f64, f64)` → `anyhow::Result<(f64, f64)>` to match the implemented (and
+  correct) `Result` return.
+- **design.md §6.1 (RV-085 F-4):** `Eq` dropped from `SliceDoc` derive; one-line
+  note added ("Eq dropped — f64 facets are PartialEq but not Eq"). Impl already
+  correct.
+
+### REVs completed
+
+- **REV-001** (`reconcile-sl-101`): **done** — SPEC-020 amended with two changes:
+  - Default estimation unit `high_caffeine_hours` → `espresso_shots` (RV-082 F-1)
+    in responsibilities, prose, and acceptance criteria.
+  - Value facet coverage added (RV-082 F-2): `ValueFacet` model, validation, and
+    unit resolution (`magic_beans`) in responsibilities, MD prose, and D5 decision;
+    new requirements FR-007/FR-008/FR-009 introduced.
+  Rationale in `revision-001.md`.
+
+### Withdrawn / tolerated
+
+- None — all four RV-085 findings were `verified` with `fix-now` or `verified`
+  dispositions and are now resolved.

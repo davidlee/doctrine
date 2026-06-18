@@ -106,7 +106,7 @@ pub(crate) fn resolve_unit(cfg: &EstimationConfig) -> String;
 
 /// Resolve the default confidence bounds. Pure. Each bound falls back to its
 /// default when absent; validated: finite, in [0.0, 1.0], lower < upper.
-pub(crate) fn resolve_confidence(cfg: &EstimationConfig) -> (f64, f64);
+pub(crate) fn resolve_confidence(cfg: &EstimationConfig) -> anyhow::Result<(f64, f64)>;
 ```
 
 ### 3.4 Custom Deserialize for EstimateFacet
@@ -214,7 +214,8 @@ Add after `[conduct]` block:
 ### 6.1 `SliceDoc` (`src/slice.rs`)
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+// Eq dropped — f64 facets are PartialEq but not Eq.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 struct SliceDoc {
     id: u32,
     slug: String,
