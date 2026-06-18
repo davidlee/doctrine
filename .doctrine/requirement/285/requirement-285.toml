@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 285
+slug = "expose-value-metadata-to-graph-tooling-through-a-stable-contract"
+title = "Expose value metadata to graph tooling through a stable contract"
+status = "pending"
+kind = "functional"
+
+description = "Catalog/graph hydration exposes each valued node's metadata through a stable, policy-agnostic contract, so a consumer can aggregate or weigh value against cost without doctrine-specific project-management semantics."
+tags = []
+acceptance_criteria = [
+  "For each valued node, hydration exposes entity id, entity kind, the value magnitude, the project value unit, the node's relations/graph edges, and lifecycle state where available.",
+  "The exposed contract carries no aggregation, traversal, cost-vs-value, or interpretation policy.",
+  "A consumer can build aggregation and cost-vs-value primitives over the exposed metadata without understanding doctrine project-management semantics.",
+]

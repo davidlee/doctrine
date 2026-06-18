@@ -1,0 +1,18 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 282
+slug = "validate-a-present-value-and-accept-its-absence"
+title = "Validate a present value and accept its absence"
+status = "pending"
+kind = "functional"
+
+description = "When [value] is present it must be structurally valid; when absent the entity is valid. Optional means omittable, not malformed."
+tags = []
+acceptance_criteria = [
+  "A present value validates only when the value field is present and finite.",
+  "Missing value, NaN, +Infinity, and -Infinity are each hard validation errors.",
+  "There is no range or ordering check — a single magnitude has nothing to validate against.",
+  "An absent [value] passes validation.",
+  "A malformed present value is rejected loudly, never silently repaired.",
+]

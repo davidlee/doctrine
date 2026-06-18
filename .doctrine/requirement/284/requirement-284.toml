@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 284
+slug = "surface-values-in-detailed-display"
+title = "Surface values in detailed display"
+status = "pending"
+kind = "functional"
+
+description = "Detailed entity display shows the value when present and a fixed phrase when absent; the value facet has no derived spread (a single magnitude) and is never classified as high or low."
+tags = []
+acceptance_criteria = [
+  "Detailed display shows 'Value: <n> <unit>' when present, using the normalized compact magnitude rather than preserved TOML formatting.",
+  "Detailed display shows 'Value: none recorded' when absent.",
+  "Normal display never classifies a value as high, low, or worthwhile.",
+]

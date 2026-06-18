@@ -7,10 +7,10 @@ title = "Configure a project-wide estimation unit with a default"
 status = "pending"
 kind = "functional"
 
-description = "The estimation unit is read from project config [estimation].unit and defaults to high_caffeine_hours when unconfigured; the unit is project-wide, never entity-local."
+description = "The estimation unit is read from project config [estimation].unit and defaults to espresso_shots when unconfigured; the unit is project-wide, never entity-local."
 tags = []
 acceptance_criteria = [
   "With [estimation].unit configured, estimates are interpreted and displayed in that unit.",
-  "With [estimation].unit omitted, the unit defaults to high_caffeine_hours.",
+  "With [estimation].unit omitted, the unit defaults to espresso_shots.",
   "No entity carries its own estimate unit in v1.",
 ]

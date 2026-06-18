@@ -7,8 +7,11 @@ title = "Define a reusable ValueFacet with a single finite f64 magnitude parsed 
 status = "pending"
 kind = "functional"
 
-# description — optional one-line summary (queryable). Omitted by default (None);
-# the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "A single reusable ValueFacet carrying one finite f64 magnitude is parsed from an optional [value] table via the same kind-agnostic facet seam as the Estimate facet; integer or float authoring normalizes to finite f64, non-finite is rejected at the parse boundary."
 tags = []
-acceptance_criteria = []
+acceptance_criteria = [
+  "An optional [value] table parses into one shared ValueFacet model carrying value as f64.",
+  "A magnitude authored as a TOML integer or float normalizes to a finite f64.",
+  "NaN, +Infinity, and -Infinity are rejected at the parse boundary, never carried inward.",
+  "The model is defined once on the shared facet seam, not specialised per entity kind.",
+]

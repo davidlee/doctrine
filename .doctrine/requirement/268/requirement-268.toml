@@ -3,14 +3,14 @@ version = 1
 
 id = 268
 slug = "the-estimate-schema-is-forward-compatible"
-title = "The estimate schema is forward-compatible"
+title = "The estimate and value schemas are forward-compatible"
 status = "pending"
 kind = "quality"
 
-description = "The v1 two-bound schema is forward-compatible: future optional fields (e.g. mode, distribution) can extend the facet without invalidating any estimate authored under v1."
+description = "The v1 schemas (two bounds; one magnitude) are forward-compatible: future optional fields (e.g. mode, distribution, confidence) can extend a facet without invalidating any estimate or value authored under v1."
 tags = []
 acceptance_criteria = [
-  "A v1-valid estimate (lower/upper only) remains valid under any future facet extension.",
-  "Adding optional richer fields does not require migrating existing estimates.",
-  "v1 persists no inferred mode or distribution and does not pretend two bounds uniquely determine a distribution.",
+  "A v1-valid estimate (lower/upper only) and a v1-valid value (single magnitude) remain valid under any future facet extension.",
+  "Adding optional richer fields does not require migrating existing estimates or values.",
+  "v1 persists no inferred mode or distribution and does not pretend two bounds or one magnitude uniquely determine a distribution.",
 ]

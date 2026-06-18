@@ -3,14 +3,14 @@ version = 1
 
 id = 267
 slug = "the-estimate-facet-is-reusable-and-kind-agnostic"
-title = "The estimate facet is reusable and kind-agnostic"
+title = "The estimate and value facets are reusable and kind-agnostic"
 status = "pending"
 kind = "quality"
 
-description = "The estimate facet is a single reusable, kind-agnostic schema attachable to any TOML-backed addressable entity; it is not slice-specific, so later adoption by other kinds is mechanical."
+description = "The estimate and value facets are each a single reusable, kind-agnostic schema attachable to any TOML-backed addressable entity; neither is slice-specific, so later adoption by other kinds is mechanical."
 tags = []
 acceptance_criteria = [
-  "The estimate model is defined once and shared, not duplicated or specialised per entity kind.",
-  "Attaching the facet to a new entity kind requires wiring the kind's parse/hydrate path, not remodelling the estimate schema.",
-  "No part of the schema assumes a slice-specific shape.",
+  "Each facet model is defined once and shared, not duplicated or specialised per entity kind.",
+  "Attaching a facet to a new entity kind requires wiring the kind's parse/hydrate path, not remodelling its schema.",
+  "No part of either schema assumes a slice-specific shape.",
 ]

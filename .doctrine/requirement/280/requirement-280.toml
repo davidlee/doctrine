@@ -7,8 +7,10 @@ title = "Resolve the project-wide value unit from doctrine.toml [value].unit, de
 status = "pending"
 kind = "functional"
 
-# description — optional one-line summary (queryable). Omitted by default (None);
-# the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "The value unit is read from doctrine.toml [value].unit, defaulting to magic_beans when unconfigured; the unit is project-wide, with no entity-local unit field in v1."
 tags = []
-acceptance_criteria = []
+acceptance_criteria = [
+  "With [value].unit configured, the resolved unit is that value.",
+  "With [value].unit omitted, the resolved unit defaults to magic_beans.",
+  "The facet schema exposes no entity-local value unit field.",
+]
