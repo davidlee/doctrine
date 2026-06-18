@@ -837,12 +837,12 @@ mod tests {
         write(
             &root,
             ".doctrine/adr/002/adr-002.toml",
-            // SL-048 PHASE-04 (OD-3): supersedes/superseded_by/tags stay TYPED in a
-            // `[relationships]` table preceding the arrays; only `related` migrates.
+            // SL-095 PHASE-02: `supersedes` is now a `[[relation]]` row.
             "id = 2\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nsupersedes = [\"ADR-001\"]\nsuperseded_by = [\"ADR-009\"]\n\
+             [relationships]\nsuperseded_by = [\"ADR-009\"]\n\
              tags = [\"layering\"]\n\
+             [[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-001\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-004\"\n",
         );
         write(&root, ".doctrine/adr/002/adr-002.md", "body\n");
@@ -1661,13 +1661,14 @@ mod tests {
             "slice reader emits exactly its table labels"
         );
 
-        // --- ADR (governance): supersedes (typed) + related (tier-1) ---
+        // --- ADR (governance): supersedes + related (both tier-1 after SL-095) ---
         write(
             &root,
             ".doctrine/adr/001/adr-001.toml",
             "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nsupersedes = [\"ADR-002\"]\nsuperseded_by = []\ntags = []\n\
+             [relationships]\nsuperseded_by = []\ntags = []\n\
+             [[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-002\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-003\"\n",
         );
         write(&root, ".doctrine/adr/001/adr-001.md", "a\n");

@@ -9,8 +9,9 @@ created = "2026-06-08"
 updated = "2026-06-11"
 
 [relationships]
-# Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.
-# Authored-but-inert: present so the shape is stable when those land.
-supersedes    = []   # ADR ids this one replaces (F1 `adr supersede`)
+# The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
+# SL-048). Author them with `doctrine link ADR-007 supersedes|related <target>`.
+# `doctrine inspect ADR-007` renders them. `superseded_by` (ADR-004) and `tags` stay typed.
 superseded_by = []   # set on the old ADR by F1; reverse link is derived
 tags          = []   # free-form classification
+

@@ -169,8 +169,6 @@ fn gov_rows(g: &GovKind, metas: &[Meta]) -> Vec<GovRow> {
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
 struct Relationships {
     #[serde(default)]
-    supersedes: Vec<String>,
-    #[serde(default)]
     superseded_by: Vec<String>,
     #[serde(default)]
     tags: Vec<String>,
@@ -233,16 +231,26 @@ fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, Strin
 /// stored reverse field. Pure read, used only by `validate` to report drift between the
 /// stored `superseded_by` and the reciprocal derived from `supersedes` in-edges — it
 /// NEVER rewrites (the reseat precedent). `g` selects the governance kind (ADR/POL/STD).
+///
+/// SL-095 PHASE-02: `supersedes` is now a tier-1 relation, so it is read from the
+/// `[[relation]]` block, NOT the typed `Doc`. `read_block` is used (NOT `tier1_edges`)
+/// so `validate` can see illegal rows. `superseded_by` is still read from the typed `Doc`.
 pub(crate) fn supersession_pair(
     g: &GovKind,
     root: &Path,
     id: u32,
 ) -> anyhow::Result<(Vec<String>, Vec<String>)> {
-    let (doc, _text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
-    Ok((
-        doc.relationships.supersedes,
-        doc.relationships.superseded_by,
-    ))
+    use crate::relation::{RelationDoc, RelationLabel, read_block};
+    let (doc, toml_text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    let relation_doc: RelationDoc = toml::from_str(&toml_text)
+        .with_context(|| format!("failed to parse relations for {} {id}", g.stem))?;
+    let (edges, _illegal) = read_block(&g.kind, &relation_doc);
+    let supersedes = edges
+        .into_iter()
+        .filter(|e| e.label == RelationLabel::Supersedes)
+        .map(|e| e.target)
+        .collect();
+    Ok((supersedes, doc.relationships.superseded_by))
 }
 
 /// A governance entity's authored outbound relations (SL-046 §5.2). Emits
@@ -252,28 +260,17 @@ pub(crate) fn supersession_pair(
 /// from `in_edges`) and NEVER `tags` (free-text classification, not entity refs).
 /// Reads via the shared `read_doc` reader (no new TOML parse). Shared by ADR / POL /
 /// STD via the caller-supplied `g`. An empty axis emits nothing.
+///
+/// SL-095 PHASE-02: `supersedes` is now a tier-1 relation, read from `[[relation]]`
+/// with `related` via the shared `tier1_edges` seam.
 pub(crate) fn relation_edges(
     g: &GovKind,
     root: &Path,
     id: u32,
 ) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
-    use crate::relation::{RelationEdge, RelationLabel, tier1_edges};
-    let (doc, toml_text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
-    // OD-3 split: `supersedes` stays TYPED (storage-excluded from the migration), so
-    // it is emitted from the typed field; `related` migrated to `[[relation]]`, so it
-    // is read generically. Canonical order is supersedes → related (RELATION_RULES).
-    let mut edges = Vec::new();
-    edges.extend(
-        doc.relationships
-            .supersedes
-            .iter()
-            .map(|t| RelationEdge::new(RelationLabel::Supersedes, t.clone())),
-    );
-    // `read_block` for a governance source emits only `related` (its sole tier-1
-    // migrated label — `supersedes` is read above from the typed field and a gov
-    // `[[relation]]` row carries only `related`).
-    edges.extend(tier1_edges(&g.kind, &toml_text)?);
-    Ok(edges)
+    use crate::relation::tier1_edges;
+    let (_doc, toml_text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    tier1_edges(&g.kind, &toml_text)
 }
 
 /// Render the readable whole for `Table` mode: an identity header, the flat
@@ -285,7 +282,16 @@ pub(crate) fn relation_edges(
 /// the struct); only `related` is reconstructed from the migrated `[[relation]]` block
 /// (passed in as `related`). The axis render order is unchanged (`supersedes` →
 /// `superseded_by` → `related` → `tags`), so output is byte-identical across the migration.
-fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String {
+///
+/// SL-095 PHASE-02: `supersedes` is now passed in like `related` (read from
+/// `[[relation]]`), not a field on `Doc`.
+fn format_show(
+    g: &GovKind,
+    doc: &Doc,
+    supersedes: &[String],
+    related: &[String],
+    body: &str,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
         "{} — {}\n",
@@ -299,14 +305,14 @@ fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String
     ));
 
     let rel = &doc.relationships;
-    if !rel.supersedes.is_empty()
+    if !supersedes.is_empty()
         || !rel.superseded_by.is_empty()
         || !related.is_empty()
         || !rel.tags.is_empty()
     {
         parts.push("\nrelationships:\n".to_string());
         for (label, refs) in [
-            ("supersedes", &rel.supersedes),
+            ("supersedes", &supersedes.to_vec()),
             ("superseded_by", &rel.superseded_by),
             ("related", &related.to_vec()),
             ("tags", &rel.tags),
@@ -334,7 +340,16 @@ fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String
 /// all four axes present, `[]` when empty). `serde_json` sorts object keys, so the
 /// emitted `relationships` key order (`related`, `superseded_by`, `supersedes`,
 /// `tags`) is unchanged across the migration.
-fn show_json(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> anyhow::Result<String> {
+///
+/// SL-095 PHASE-02: `supersedes` is now passed in like `related` (read from
+/// `[[relation]]`), not a field on `Doc`, and spliced back in.
+fn show_json(
+    g: &GovKind,
+    doc: &Doc,
+    supersedes: &[String],
+    related: &[String],
+    body: &str,
+) -> anyhow::Result<String> {
     let mut map = serde_json::Map::new();
     map.insert(
         "kind".to_string(),
@@ -348,6 +363,7 @@ fn show_json(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> anyhow::
         .get_mut("relationships")
         .and_then(serde_json::Value::as_object_mut)
     {
+        rel.insert("supersedes".to_string(), serde_json::json!(supersedes));
         rel.insert("related".to_string(), serde_json::json!(related));
     }
     map.insert(g.stem.to_string(), doc_value);
@@ -454,17 +470,27 @@ pub(crate) fn run_show(
     reference: &str,
     format: Format,
 ) -> anyhow::Result<()> {
+    use crate::relation::RelationLabel;
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let id = parse_ref(g, reference)?;
     let (doc, toml_text, body) = read_doc(g, &root.join(g.kind.dir), id)?;
-    // OD-3: only `related` migrated to `[[relation]]`; read it generically.
-    let related: Vec<String> = crate::relation::tier1_edges(&g.kind, &toml_text)?
-        .into_iter()
-        .map(|e| e.target)
+
+    // SL-095 (D4): both `supersedes` and `related` now come from tier1_edges.
+    let edges = crate::relation::tier1_edges(&g.kind, &toml_text)?;
+    let supersedes: Vec<String> = edges
+        .iter()
+        .filter(|e| e.label == RelationLabel::Supersedes)
+        .map(|e| e.target.clone())
         .collect();
+    let related: Vec<String> = edges
+        .iter()
+        .filter(|e| e.label == RelationLabel::Related)
+        .map(|e| e.target.clone())
+        .collect();
+
     let out = match format {
-        Format::Table => format_show(g, &doc, &related, &body),
-        Format::Json => show_json(g, &doc, &related, &body)?,
+        Format::Table => format_show(g, &doc, &supersedes, &related, &body),
+        Format::Json => show_json(g, &doc, &supersedes, &related, &body)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -998,7 +1024,7 @@ mod tests {
         assert_eq!(doc.slug, "use-rust");
         assert_eq!(doc.status, "proposed");
         // the inert relationships table parses as data (empty by default).
-        assert!(doc.relationships.supersedes.is_empty());
+        assert!(doc.relationships.superseded_by.is_empty());
         // the md prose body is read verbatim.
         assert!(body.contains("ADR-001: Use Rust"));
         assert!(body.contains("## Context"));
@@ -1014,14 +1040,21 @@ mod tests {
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
             relationships: Relationships {
-                supersedes: vec!["ADR-003".into()],
                 superseded_by: vec![],
                 tags: vec!["lang".into()],
             },
         };
         // SL-048: `related` is now passed in (read from `[[relation]]`), not a field.
+        // SL-095: `supersedes` is now also passed in.
+        let supersedes = vec!["ADR-003".to_string()];
         let related = vec!["ADR-004".to_string()];
-        let out = format_show(&ADR_KIND, &doc, &related, "# ADR-007: Use Rust\n\nbody.\n");
+        let out = format_show(
+            &ADR_KIND,
+            &doc,
+            &supersedes,
+            &related,
+            "# ADR-007: Use Rust\n\nbody.\n",
+        );
         assert!(out.contains("ADR-007 — Use Rust"), "identity: {out}");
         assert!(out.contains("use-rust · accepted"), "flat fields: {out}");
         assert!(out.contains("created 2026-06-01 · updated 2026-06-08"));
@@ -1047,7 +1080,7 @@ mod tests {
         .unwrap();
         let (doc, _toml_text, body) = read_doc(&ADR_KIND, &adr_root(root), 1).unwrap();
 
-        let out = show_json(&ADR_KIND, &doc, &[], &body).unwrap();
+        let out = show_json(&ADR_KIND, &doc, &[], &[], &body).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(parsed["kind"], "adr");
         assert_eq!(parsed["adr"]["id"], 1);
@@ -1055,6 +1088,7 @@ mod tests {
         assert_eq!(parsed["adr"]["status"], "proposed");
         // OQ-2: relationships are included (toml-as-data is faithful). SL-048: the
         // `related` axis is reconstructed from `[[relation]]` and spliced back in.
+        // SL-095: `supersedes` is also spliced back in.
         assert!(parsed["adr"]["relationships"]["supersedes"].is_array());
         assert!(parsed["adr"]["relationships"]["related"].is_array());
         assert!(
@@ -1169,8 +1203,8 @@ mod tests {
         assert!(!body.contains("created = \"2099-01-01\""));
         // toml_edit preserved the inert table and its hand-authored comments.
         assert!(body.contains("[relationships]"));
-        assert!(body.contains("# Reserved."));
-        assert!(body.contains("supersedes"));
+        assert!(body.contains("# The `supersedes` and `related` axes are uniform"));
+        assert!(!body.contains("supersedes    = []"));
     }
 
     // --- the I5 no-op guard — an unchanged status writes nothing ---
