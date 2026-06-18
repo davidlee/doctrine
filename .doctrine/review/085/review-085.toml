@@ -1,0 +1,52 @@
+id    = 85
+slug  = "reconciliation-review-of-sl-101"
+title = "reconciliation review of SL-101"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-101"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "dtoml::parse() eagerly runs resolve_confidence()? — couples all config reads to estimation validity (design §3.3 'no runtime effect')"
+detail = '''Expected (design §3.3): confidence bounds are 'purely informational until consumed' — 'No runtime effect in this slice'. Expected (PHASE-03 EX-4): existing conduct + verification tests unaffected (behaviour-preservation gate). Observed: src/dtoml.rs parse() calls crate::estimate::resolve_confidence(&doc.estimation)? — the ? propagates the error, so a malformed [estimation] table (e.g. lower_confidence=0.5, upper_confidence=0.3, or out-of-range, or non-finite) makes dtoml::parse() return Err. dtoml::parse() is the SHARED reader for conduct (src/conduct.rs:138), verification (src/verify.rs:146), and coverage_store (src/coverage_store.rs:202). Therefore a bad [estimation] confidence config now fails doctrine conduct reads, verification config loads, and coverage config loads — coupling unrelated config reads to estimation-config validity. This is both a design divergence (§3.3 'no runtime effect' violated) and a behaviour-preservation surface (PHASE-03 EX-4's intent: existing paths unaffected). Tests stay green only because no existing test loads an invalid estimation config. Concrete repro: parse('[estimation]\nlower_confidence=0.5\nupper_confidence=0.3') returns Err, propagating to conduct::parse/verify::load_config/coverage_store::load_config.'''
+disposition = "fix-now"
+response = "Code fix within audit scope (dtoml.rs only; no spec/governance edit). Remove the eager 'resolve_confidence(&doc.estimation)?' from parse() — the design §3.3 is correct ('no runtime effect'); the impl was wrong to propagate confidence validation into the shared config reader. Confidence-bounds validation belongs to the consumer that needs them (a later slice), not to every doctrine.toml read. Restores the behaviour-preservation intent of PHASE-03 EX-4."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "dtoml::parse() eagerly calls resolve_unit() and discards the result — dead computation, misleading"
+detail = "Expected: resolve_unit is 'pure over config — the file read is the shell's job' (design §3.3/§4.3); it returns String and never errors. Observed: src/dtoml.rs parse() runs 'let _ = crate::estimate::resolve_unit(&doc.estimation);' and 'let _ = crate::value::resolve_unit(&doc.value);' — both compute a String and discard it. The 'let _ =' discards make these pure no-ops with no effect, yet their presence in parse() implies unit resolution has a side effect or validates something. It misleads readers and adds pointless work to every doctrine.toml read. Either remove both lines (resolve_unit has no validation role — it cannot fail), or, if eager validation is genuinely desired, that belongs to a dedicated validate step, not silently discarded calls."
+disposition = "fix-now"
+response = "Code fix within audit scope. Remove both 'let _ = ...resolve_unit(...)' lines from parse() — resolve_unit returns String, never errors, and the result is discarded. They are dead computation that misleads readers. Same edit region as F-1."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "design §3.3 resolve_confidence signature is (f64,f64) but docstring says 'validated' — impl correctly returns Result"
+detail = "Expected (design §3.3): 'pub(crate) fn resolve_confidence(cfg: &EstimationConfig) -> (f64, f64);' — a bare tuple. But the same docstring says 'validated: finite, in [0.0, 1.0], lower < upper', which a bare tuple cannot report. The design signature is internally inconsistent. Observed (src/estimate.rs:71): impl returns 'anyhow::Result<(f64, f64)>' — the only sensible way to honor the 'validated' promise. The impl is correct; the design signature is wrong. Design-doc fix needed: update §3.3 signature to Result<(f64,f64)> to match the implemented (and correct) behaviour. This is a design-wrong disposition — delegated to /reconcile via the design.md write surface."
+disposition = "verified"
+response = "Design-doc fix delegated to /reconcile (per-slice direct edit on design.md §3.3). The impl is correct (Result<(f64,f64)>); the design signature '(f64,f64)' is internally inconsistent with its own 'validated' docstring. See Reconciliation Brief."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "design §6.1 shows SliceDoc deriving Eq, but f64 facets make Eq impossible — impl correctly dropped Eq"
+detail = "Expected (design §6.1): '#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)] struct SliceDoc'. Observed (src/slice.rs:989): impl derives only 'PartialEq' (Eq dropped) because SliceDoc now carries Option<EstimateFacet> and Option<ValueFacet>, whose f64 fields are PartialEq but not Eq (f64 is not Eq due to NaN). The Rust compiler refuses Eq on a struct containing f64. The impl is correct and necessary; the design doc is wrong. Design-doc fix needed: update §6.1 derive list to drop Eq and note why (f64 facets). Verified no code depends on SliceDoc: Eq — grep for SliceDoc Eq/== usage finds none. Design-wrong disposition — delegated to /reconcile."
+disposition = "verified"
+response = "Design-doc fix delegated to /reconcile (per-slice direct edit on design.md §6.1). The impl is correct (Eq dropped — f64 is not Eq); the design §6.1 derive list still shows Eq. No code depends on SliceDoc: Eq (grep confirms). See Reconciliation Brief."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
