@@ -40,12 +40,25 @@ Depends on PHASE-02 for:
 - `Relationships` struct already cleaned up
 - Templates already updated
 
+Gates on SL-097 extraction complete (`src/supersede.rs` exists with ADR+RECORD arms) —
+the `.after` edge ensures the extracted module is ready before POL/STD arms land.
+
+**Read/write disconnect window.** Between PHASE-02 (readers on `[[relation]]`) and
+PHASE-03 (verb writes to `[[relation]]`), a `doctrine supersede` would write to the
+now-removed typed `supersedes` array while readers look at `[[relation]]` — the edge
+would be invisible. This is harmless in practice: all governance `supersedes` arrays
+are empty, and no supersede operations are expected between phases. The EN-3 criterion
+documents this. If a supersede were accidentally run, it would be a no-op (empty array
+→ empty array); the edge is simply not observed until PHASE-03's write path is active.
+
 ### SL-097 coexistence
 
-Both slices touch `src/supersede.rs`. Either merge order works. If SL-097 lands
-first, PHASE-03 adds POL/STD arms + `StorageTarget` to the already-extracted module.
-If SL-095 lands first, SL-097 extracts the policy code (including POL/STD arms) to
-the new module.
+SL-095 carries `after = [{ to = "SL-097", rank = 0 }]` — SL-097 lands first,
+extracting `SupersedePolicy` + `supersede_policy()` from `adr.rs` into
+`src/supersede.rs` with ADR+RECORD arms. PHASE-03 adds POL/STD arms and the
+`StorageTarget` discriminant to the already-extracted module. The `.after`
+edge is a soft sequence — no hard gate, but the plan assumes the extraction
+module exists before PHASE-03 begins.
 
 ## Risk sequence
 

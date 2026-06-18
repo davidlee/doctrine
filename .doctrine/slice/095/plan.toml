@@ -75,10 +75,12 @@ name      = "Extend `doctrine supersede` to POL/STD with `[[relation]]` writes"
 objective = "Add `Superseded` variant to PolicyStatus and StandardStatus, extend `SupersedePolicy` (in `src/supersede.rs`) to POL and STD with `StorageTarget::RelationRow`, and refactor `run_supersede` to dispatch on `StorageTarget` — governance writes `[[relation]]` rows via `append_edge`, typed `superseded_by` carve-out unchanged."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 complete (governance readers switched to `[[relation]]`)" },
+  { id = "EN-2", text = "SL-097 extraction complete — `src/supersede.rs` exists with `SupersedePolicy` + `supersede_policy()` + `StorageTarget` enum (ADR+RECORD arms present)" },
+  { id = "EN-3", text = "no `doctrine supersede` operations have been run between PHASE-02 and this phase (write path still targets typed array while readers have migrated; all governance supersedes arrays are empty so this is a no-op constraint in practice)" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "`PolicyStatus` and `StandardStatus` enums carry `Superseded` variant" },
-  { id = "EX-2", text = "`supersede_policy()` returns `Some` for POL and STD" },
+  { id = "EX-2", text = "`supersede_policy()` returns `Some` for POL and STD (arms in `src/supersede.rs`)" },
   { id = "EX-3", text = "`SupersedePolicy` carries `storage: StorageTarget` discriminant" },
   { id = "EX-4", text = "`doctrine supersede ADR-NEW ADR-OLD` writes `[[relation]] label=\"supersedes\"` on NEW" },
   { id = "EX-5", text = "`doctrine supersede POL-NEW POL-OLD` succeeds (new arm)" },

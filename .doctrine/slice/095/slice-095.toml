@@ -1,13 +1,13 @@
 id = 95
 slug = "bed-in-relations"
 title = "Bed in remaining relation gaps: slice related edges + governance supersedes migration + supersede verb"
-status = "design"
+status = "ready"
 created = "2026-06-18"
 updated = "2026-06-18"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = []                      # slice→work soft sequence: { to, rank }
+after = [{ to = "SL-097", rank = 0 }]  # SL-097 extracts src/supersede.rs; SL-095's POL/STD arms land there
 
 [[relation]]
 label = "specs"
