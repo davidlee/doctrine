@@ -12,23 +12,22 @@ Substantive Work > is gated by > Routing Gate
 Routing Gate > chooses > Governing Skill
 Routing Gate > enforces > No Code Without Approved Plan
 Routing Gate > authority is > Boot Snapshot
-Routing Gate > leans on > Memory Retrieval
-Governing Skill > wraps > Doctrine CLI
+Routing Gate > leans on > Memory
 
 # ── Origins: where work comes from ──
-Idea or Problem > captured as > Backlog Item
-Backlog Item > promotes to > Slice
-External Issue > feeds > Backlog
 User Intent > becomes > Slice
-Relation Graph > drives > Survey
-Survey > ranks > Eligible Entity
-Next > filters to > Actionable Entity
+Idea or Problem > captured as > Backlog Item
+Backlog > holds > Backlog Item
+Backlog Item > promotes to > Slice
+Dependency Graph > drives > Survey
+Survey > prioritises > Actionable Entity
 Actionable Entity > re-enters > Routing Gate
 
 # ── The slice lifecycle (explicit state machine) ──
 Slice > begins as > Proposed
 Proposed > advances to > Design
 Design > stress-tested by > Inquisition
+Design > produces > Design Document
 Design > locks before > Plan
 Plan > gates to > Ready
 Ready > advances to > Started
@@ -38,83 +37,53 @@ Reconcile > advances to > Done
 Audit Finding > may return to > Started
 Reconcile > may return to > Audit
 Reconcile > may escalate to > Design
-Slice > may abandon to > Abandoned
 
 # ── Inside a phase ──
 Phase > executes during > Started
-Phase > planned via > Phase Plan
 Phase > built through > TDD Loop
-Phase > verified against > Entry & Exit Criteria
 
-# ── Human gates & the conduct axis ──
+# ── Human gates ──
 Ready > is a > Human Gate
 Reconcile > is a > Human Gate
-Conduct Axis > is orthogonal to > Slice Lifecycle
-Conduct Axis > declares > Conduct Actor
-Conduct Axis > declares > Autonomy
-Conduct Actor > ranges over > Agent, Self, Peer, Team
-Autonomy > ranges over > Auto, Draft, Gate
 
 # ── Execution postures during Started ──
 Started > conducted as > Solo
 Started > conducted as > Dispatch
-Solo > driven by > Single Agent
 Dispatch > isolates via > Worktree Fork
-Dispatch > spawns > Worker
-Orchestrator > integrates > Worker Output
 
 # ── Specifications & the truth model ──
-PRD > defines > Product Intent
-Tech Spec > defines > Architecture
+PRD > is a > Spec
 Tech Spec > descends from > PRD
 Requirement > descends from > Spec
 Spec > owns > Normative Truth
 Coverage > records > Observed Truth
 Audit Finding > records > Observed Truth
 Normative Truth > may diverge from > Observed Truth
-Divergence > is called > Drift
 Drift > reconciled by > Reconcile
 Drift > never resolved by > Precedence
 Reconcile > sole authors > Reconciled Status
 Slice > governed by > Spec
 
-# ── Governance kinds & change axes ──
+# ── Governance & change axes ──
 Slice > changes > Codebase
 Revision > changes > Spec
 Architectural Decision > recorded as > ADR
-Slice-Scoped Decision > lives in > Design Document
-Newer ADR > supersedes > Older ADR
+ADR > governs > Slice
 
 # ── Membership: each kind answers a different question ──
 Backlog Item > answers > what to do?
 ADR > answers > what was decided?
 Knowledge Record > answers > what do we know?
 Memory > answers > what to retrieve?
-Policy > answers > what is required?
-Standard > answers > what is conventional?
 
-# ── Relating entities (the graph substrate) ──
-Needs > authors > Blocking Prerequisite
-After > authors > Soft Sequence
-Link > authors > Relation Edge
-Blocking Prerequisite > feeds > Relation Graph
-Soft Sequence > feeds > Relation Graph
-Relation Edge > feeds > Relation Graph
-
-# ── Mid-flight support & conduct postures ──
+# ── Mid-flight support ──
 Consult > resolves > Tradeoff
-Canon > loads > Governance
-Record Memory > captures > Durable Gotcha
-Notes > records > Progress
+Record Memory > enriches > Memory
 Handover > transfers > Context
-Pairing > is a > Conduct Posture
-Walkthrough > is a > Conduct Posture
-Conduct Posture > overlays > Governing Skill
 
 # ── External interaction ──
-GitHub > hosts > Repository
 GitHub Issue > feeds > Backlog
-GitHub PR > is > External Review
+GitHub PR > reviewed by > Peer
 Peer > performs > Review
 Team > coordinates > Dispatch
 """
