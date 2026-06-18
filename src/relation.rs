@@ -1064,7 +1064,10 @@ mod tests {
                 &["SL", "ISS", "IMP", "CHR", "RSK", "IDE"],
             ),
             (RelationLabel::Requirements, &["SL"]),
-            (RelationLabel::Supersedes, &["SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON"]),
+            (
+                RelationLabel::Supersedes,
+                &["SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON"],
+            ),
             (RelationLabel::DescendsFrom, &["SPEC"]),
             (RelationLabel::Parent, &["SPEC"]),
             (RelationLabel::Members, &["PRD", "SPEC"]),
@@ -1276,14 +1279,9 @@ mod tests {
                         // contents check.
                         match r.target {
                             TargetSpec::Kinds(ks) => {
-                                let got: Vec<&str> =
-                                    ks.iter().map(|k| k.prefix).collect();
-                                let want: Vec<&str> =
-                                    RECORD.iter().map(|k| k.prefix).collect();
-                                assert_eq!(
-                                    got, want,
-                                    "record supersedes → Kinds(RECORD)"
-                                );
+                                let got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+                                let want: Vec<&str> = RECORD.iter().map(|k| k.prefix).collect();
+                                assert_eq!(got, want, "record supersedes → Kinds(RECORD)");
                             }
                             other => panic!(
                                 "record supersedes → Kinds(RECORD), got {:?}",

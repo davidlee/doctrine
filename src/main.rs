@@ -4128,13 +4128,11 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
     } else if new_is_record && old_is_record {
         // Both records: validate matrix. from_prefix already proved Some by the
         // is_some() gate, but each arm needs a non-panicking fallback for clippy.
-        let Some(new_record_kind) =
-            crate::knowledge::RecordKind::from_prefix(new_kref.kind.prefix)
+        let Some(new_record_kind) = crate::knowledge::RecordKind::from_prefix(new_kref.kind.prefix)
         else {
             anyhow::bail!("NEW kind not a valid record kind")
         };
-        let Some(old_record_kind) =
-            crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix)
+        let Some(old_record_kind) = crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix)
         else {
             anyhow::bail!("OLD kind not a valid record kind")
         };
