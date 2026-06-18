@@ -1,7 +1,7 @@
 id = 101
 slug = "spec-020-estimate-core"
 title = "Estimate & Value facets — model, parse, validate, unit"
-status = "audit"
+status = "done"
 created = "2026-06-18"
 updated = "2026-06-18"
 
