@@ -60,6 +60,21 @@ export function applyFocusChange(
 }
 
 /**
+ * Pan a viewport by a screen-space delta. translate() is applied in the
+ * (unscaled) parent coordinate space with transform-origin 0 0, so a screen-px
+ * mouse delta maps 1:1 — it is NOT divided by k. Dividing would accelerate the
+ * pan when zoomed out (k < 1) and lag it when zoomed in (k > 1). Returns a new
+ * object; k is preserved.
+ */
+export function panViewport(
+  vp: GraphViewport,
+  dxScreen: number,
+  dyScreen: number,
+): GraphViewport {
+  return { x: vp.x + dxScreen, y: vp.y + dyScreen, k: vp.k };
+}
+
+/**
  * Clamp a viewport's scale to [minK, maxK]. Returns a new object.
  */
 export function clampViewport(
