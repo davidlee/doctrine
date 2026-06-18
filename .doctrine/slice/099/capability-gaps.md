@@ -19,13 +19,13 @@ are authored via `doctrine link` or hand-editing. But:
 The authored graph exists in storage but has no read path. This is the
 ship-in-a-bottle problem — data you can write but never read.
 
-## 2. Wikilink parser missing entirely
+## 2. Wikilink extractor missing entirely
 
 The spec's primary cross-reference mechanism:
 
 | Spec says | Doctrine has |
 |---|---|
-| Parse `[[...]]` from body, skip code blocks | No wikilink parser |
+| Parse `[[...]]` from body, skip code blocks | No wikilink extractor |
 | `links.out` (resolved) and `links.missing` (unresolved) as **derived** metadata | No link resolution |
 | `--links-to MEMORY` backlink query | No backlink command |
 | `expand_link_graph()` BFS up to depth 5 | No graph traversal |
@@ -34,6 +34,10 @@ The spec's primary cross-reference mechanism:
 `record-memory` §6 tells agents to use `[[uid]]` inline ("cheaper than
 relations"), which aligns with the spec's principle — but nothing resolves
 them into structured edges.
+
+**Clarification:** Extraction is cheap — a corpus-wide regex over 193
+memories runs in ~0.007s. No persistence of derived links needed;
+compute on-the-fly.
 
 ## 3. Verify gated on clean worktree
 
@@ -57,7 +61,7 @@ type instead.
 | `requires_reading` (prerequisite files) | — | Missing |
 | `owners` (team ownership) | — | Missing |
 | `provenance.sources` (`[{kind, ref, note}]`) | Implicit git anchor only | Missing structured provenance |
-| `links.out` / `links.missing` | — | Missing (requires link resolver) |
+| `links.out` / `links.missing` | — | Not needed — computed on-the-fly; no persistence |
 | `review_by` (scheduled review date) | — | Missing |
 
 ## 5. Skills don't encourage connection-making

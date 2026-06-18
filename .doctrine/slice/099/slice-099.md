@@ -30,25 +30,28 @@ Full gap analysis: `capability-gaps.md`.
 - (Catalog scan inclusion of memories is deferred — the user confirms the
   current exclusion is fine for its only consumer.)
 
-### 2. Wikilink parser and resolver
+### 2. Wikilink extractor (on-the-fly, no persistence)
 
-- Parse `[[target]]` and `[[target|label]]` from memory bodies, skipping
-  fenced code blocks and inline code
-- Resolve targets against the memory registry (uid, key, and shorthand
-  without `mem.` prefix)
-- Populate `links.out` (resolved) and `links.missing` (unresolved) as
-  **derived metadata** — computed, never hand-authored
-- `doctrine memory resolve-links [ID]` — resolve wikilinks for a specific
-  memory or all memories
+- Regex-extract `[[mem.<key>]]` / `[[mem_<uid>]]` from memory bodies,
+  skipping fenced code blocks and inline code. Corpus-wide extraction is
+  cheap (~0.007s at current scale) — no persisted `links.out`/
+  `links.missing` fields needed.
+- Resolve extracted targets against the memory registry (uid, key, and
+  shorthand without `mem.` prefix)
+- `doctrine memory resolve-links [ID]` — extract + resolve wikilinks for
+  a specific memory or all memories, report resolved vs dangling
 
 ### 3. Backlinks and graph expansion
 
-- `doctrine memory backlinks <ID>` — compute reverse index across all
-  memory bodies: which memories link to this one?
-- `expand_link_graph(ID, depth)` — BFS expansion from a root memory up
-  to configurable depth; output as structured nodes with depth annotation
+- `doctrine memory backlinks <ID>` — extract wikilinks from all memory
+  bodies, build reverse index, return sources that link to the target
+- `expand_link_graph(ID, depth)` — BFS from a root memory following
+  extracted wikilinks up to configurable depth; output structured nodes
+  with depth annotation
 - Integrate into `memory retrieve` as an optional `--expand N` flag for
   contextual signal expansion
+- All computed on-the-fly from body text — no persistence, no derived
+  metadata fields
 
 ### 4. Agent UX hardening
 
@@ -78,7 +81,9 @@ compatible):
 - `requires_reading` — list of file paths memory readers should read first
 - `provenance.sources` — `[{kind, ref, note}]` structured provenance
 - `review_by` — scheduled review date
-- `links.out` / `links.missing` — derived, populated by the link resolver
+
+(`links.out`/`links.missing` are NOT persisted — computed on-the-fly from
+body text; see objective 2.)
 
 ### 6. Status lifecycle
 
@@ -103,9 +108,10 @@ exclusion (visible with `--include-archived`).
 
 ## Risks & Assumptions
 
-- **Wikilink resolution performance.** Parsing all memory bodies for
-  backlinks could be expensive at scale. First implementation does
-  linear scan; index if it becomes a bottleneck.
+- **Wikilink extraction performance.** Corpus-wide regex extraction
+  is ~0.007s at current scale (193 memories). Grow linearly with
+  corpus size — re-evaluate if it ever exceeds a human-noticeable
+  threshold.
 - **Backward compatibility.** All new TOML fields are optional with
   defaults. Existing memories and queries are unaffected.
 - **Verify-on-dirty-tree.** Changing this rule has implications for
