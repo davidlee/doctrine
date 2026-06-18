@@ -92,11 +92,20 @@ pub(crate) fn remove(
 Identical pattern to existing `append`/`set_authored_status`: read `to_string`,
 parse `DocumentMut`, call core, `fs::write` only if `count > 0`.
 
-### 2.3 Source-only path resolution (refactor)
+### 2.3 No changes to existing types
 
-`resolve_dep_seq_src(root, source, target)` currently validates both source
-(work-like gate, self-edge refuse) and target (resolve, work-like gate).
-Extract the source-only half:
+`RelEdit` gains no new variant — `remove_after` takes `to` and `rank_ceiling`
+directly, not via `RelEdit`. The `RelEdit` enum serves the append code path
+exclusively. Adding a removal variant would create dead arms in every append
+caller — unnecessary.
+
+## 3. Command shell
+
+### 3.1 Source-only path resolution (refactor, `src/main.rs`)
+
+`resolve_dep_seq_src(root, source, target)` lives in `main.rs` and currently
+validates both source (work-like gate, self-edge refuse) and target (resolve,
+work-like gate). Extract the source-only half:
 
 ```rust
 /// Resolve a dep/seq source to its TOML path. Validates: canonical-ref parse,
@@ -108,16 +117,7 @@ fn resolve_dep_seq_src_path(root: &Path, source: &str) -> anyhow::Result<PathBuf
 target. `run_after_prune` calls `resolve_dep_seq_src_path` directly — no
 target to validate.
 
-### 2.4 No changes to existing types
-
-`RelEdit` gains no new variant — `remove_after` takes `to` and `rank_ceiling`
-directly, not via `RelEdit`. The `RelEdit` enum serves the append code path
-exclusively. Adding a removal variant would create dead arms in every append
-caller — unnecessary.
-
-## 3. Command shell
-
-### 3.1 Generic cross-kind (`src/main.rs`)
+### 3.2 Generic cross-kind CLI (`src/main.rs`)
 
 **CLI enum changes:**
 
@@ -185,7 +185,7 @@ then calls `dep_seq::remove`. If 0 edges removed, bails with a user-facing error
 - Reason string: `"{status}/{resolution}"` for terminal items (matching
   `classify_dangling` format), `"absent"` for missing targets.
 
-### 3.2 Backlog-specific (`src/backlog.rs`)
+### 3.3 Backlog-specific (`src/backlog.rs`)
 
 `BacklogCommand::After` gains `remove: bool` and `prune: bool` flags
 (parallel to `Command::After`). `to` becomes `Option<String>` with
