@@ -1,9 +1,9 @@
 id = 82
 slug = "dispose-doc-legacy"
 title = "Dispose of doc/* as legacy heretical practice; rehome & archive"
-status = "ready"
+status = "started"
 created = "2026-06-16"
-updated = "2026-06-17"
+updated = "2026-06-18"
 
 [relationships]
 needs = ["SL-021"]              # slice→work hard prerequisite: content must be rehomed before disposal
