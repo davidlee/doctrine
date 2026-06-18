@@ -722,7 +722,7 @@ export function graphPane(opts: GraphPaneOpts): void {
         const wrapper = document.createElement('div');
         wrapper.className = 'graph-transform-layer';
         wrapper.style.transform = `translate(${String(vp.x)}px, ${String(vp.y)}px) scale(${String(vp.k)})`;
-         
+        wrapper.dataset.minK = String(minK);
         container.removeChild(svgEl);
         wrapper.appendChild(svgEl);
         container.appendChild(wrapper);
@@ -742,7 +742,8 @@ export function graphPane(opts: GraphPaneOpts): void {
             const cx = e.clientX - rect.left;
             const cy = e.clientY - rect.top;
             const cur = parseTransform(layer.style.transform);
-            const newK = Math.max(minK, Math.min(10, cur.k * (1 - delta * 0.002)));
+            const curMinK = parseFloat(layer.dataset.minK ?? '1');
+            const newK = Math.max(curMinK, Math.min(10, cur.k * (1 - delta * 0.002)));
             const scaleRatio = newK / cur.k;
             const newX = cx - scaleRatio * (cx - cur.x);
             const newY = cy - scaleRatio * (cy - cur.y);
