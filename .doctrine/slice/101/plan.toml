@@ -20,10 +20,9 @@ dependencies = []
 [[phase]]
 id        = "PHASE-01"
 name      = "Estimate facet module"
-objective = "Implement src/estimate.rs with EstimateFacet, EstimateRaw, parse_optional, normalise, validate, EstimationConfig, resolve_unit, resolve_confidence, and full test suite (E1–E15d, E19). Pure leaf module — imports only external crates (ADR-001)."
+objective = "Implement src/estimate.rs with EstimateFacet, EstimateRaw, parse_optional, normalise, validate, EstimationConfig, resolve_unit, resolve_confidence, and full test suite (E1–E15d, E19). Pure leaf module — imports only external crates (ADR-001). Add mod estimate; to main.rs so the module compiles and tests run."
 entrance_criteria = [
   { id = "EN-1", text = "design.md §3, §3.1–3.4 approved and locked" },
-  { id = "EN-2", text = "main.rs mod estimate addition is trivial and non-blocking" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "EstimateFacet { lower: f64, upper: f64 } with custom Deserialize from [estimate] table" },
@@ -32,10 +31,11 @@ exit_criteria = [
   { id = "EX-4", text = "EstimationConfig with unit, lower_confidence, upper_confidence; resolve_unit + resolve_confidence with defaults" },
   { id = "EX-5", text = "NF-003: unknown keys tolerated (EstimateRaw _extra absorbs, dropped at normalise)" },
   { id = "EX-6", text = "All tests E1–E15d, E19 green; cargo clippy zero warnings" },
+  { id = "EX-7", text = "mod estimate; declared in main.rs (module tree wired so compilation + tests work)" },
 ]
 verification = [
   { id = "VT-1", expects = "cargo test -- estimate:: — all 17+ tests green" },
-  { id = "VT-2", expects = "cargo clippy — zero warnings in estimate.rs" },
+  { id = "VT-2", expects = "cargo clippy — zero warnings" },
   { id = "VA-1", expects = "estimate.rs imports verified: only toml, serde, anyhow, std — no doctrine deps (ADR-001 leaf)" },
 ]
 
@@ -43,7 +43,7 @@ verification = [
 [[phase]]
 id        = "PHASE-02"
 name      = "Value facet module"
-objective = "Implement src/value.rs with ValueFacet, ValueRaw, parse_optional, normalise, ValueConfig, resolve_unit, and full test suite (V1–V7). Pure leaf module — imports only external crates."
+objective = "Implement src/value.rs with ValueFacet, ValueRaw, parse_optional, normalise, ValueConfig, resolve_unit, and full test suite (V1–V7). Pure leaf module — imports only external crates. Add mod value; to main.rs so the module compiles and tests run."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete, establish estimate.rs as the pattern to follow" },
 ]
@@ -53,10 +53,11 @@ exit_criteria = [
   { id = "EX-3", text = "ValueConfig with unit; resolve_unit with default 'magic_beans'" },
   { id = "EX-4", text = "NF-003: unknown keys tolerated (ValueRaw _extra absorbs)" },
   { id = "EX-5", text = "All tests V1–V7 green; cargo clippy zero warnings" },
+  { id = "EX-6", text = "mod value; declared in main.rs (module tree wired so compilation + tests work)" },
 ]
 verification = [
   { id = "VT-1", expects = "cargo test -- value:: — all 7 tests green" },
-  { id = "VT-2", expects = "cargo clippy — zero warnings in value.rs" },
+  { id = "VT-2", expects = "cargo clippy — zero warnings" },
   { id = "VA-1", expects = "value.rs imports verified: only toml, serde, anyhow, std — no doctrine deps" },
 ]
 
@@ -84,7 +85,7 @@ verification = [
 [[phase]]
 id        = "PHASE-04"
 name      = "Entity wiring"
-objective = "Add estimate: Option<EstimateFacet> and value: Option<ValueFacet> fields to SliceDoc; add mod estimate and mod value to main.rs; verify Meta unchanged, round-trip tests (E17–E18), existing slice tests unaffected."
+objective = "Add estimate: Option<EstimateFacet> and value: Option<ValueFacet> fields to SliceDoc (mod declarations already in main.rs from PHASE-01/02); verify Meta unchanged, round-trip tests (E17–E18), existing slice tests unaffected."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01, PHASE-02, PHASE-03 complete — modules and config exist" },
 ]
