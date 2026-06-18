@@ -133,6 +133,14 @@ Procedure:
 Hard `needs` SL-099 (read-path + data-model). The verbs added here operate
 on fields SL-099 introduces.
 
+## Follow-Ups
+
+- **`edit --lifespan ""` to clear.** `--review-by ""` already clears its
+  field; `--lifespan` should match. Deferred — hand-edit TOML in v1.
+- **Scope-array append semantics.** `--path-scope`/`--glob`/`--command`
+  replace entire arrays. An append mode (e.g. `--path-scope-append`) is a
+  separate feature.
+
 ## Verification / Closure Intent
 
 - `memory status <REF> <STATE>` transitions status, refuses invalid states
