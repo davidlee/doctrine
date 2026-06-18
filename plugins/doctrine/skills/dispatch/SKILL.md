@@ -40,17 +40,14 @@ directory (KEEP the refs) → `slice status <id> audit` → `/audit` from parent
 Stage-2 integrate is `/close`'s job, post-audit — never land code pre-audit.
 
 ## Red Flags
-
 IMPORTANT: READ VERY CLOSELY
 
 **Never:** spawn without routing; let a worker write `.doctrine/`/`.claude/`;
 commit per worker; replay fork history; auto-merge conflicts; auto-adapt plan/
 design (`/consult` forks); drive on session `main`; integrate at conclude; delete
 deliverable refs; bail to inline execution.
-
-NEVER bail to inline execution - if you are about to `/execute`, STOP.
-NEVER use git like a drunk with a chainsaw - if you are about to do something potentially risky, STOP.
-
+! NEVER bail to inline execution - if you are about to `/execute`, STOP.
+! NEVER use git like a drunk with a chainsaw - if you are about to do something potentially risky, STOP.
 **Always:** route to correct arm on confirmed harness; keep context lean
 (capped reports, stat-first diffs); hold strict funnel order; pre-distill
 self-contained worker prompts; trail knowledge after the confirmed commit.
