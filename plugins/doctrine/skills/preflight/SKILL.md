@@ -87,7 +87,7 @@ Search order:
 - provided artifact(s)
 - related / linked files, documents, artifacts
 - related governance (ADRs, standards, policies) — see `/canon`
-- related specs under `doc/*`
+- related tech specs under `.doctrine/spec/tech/`
 - `/retrieve-memory`
 - the backlog (`backlog list` / `backlog show <ID>`) — is this work already
   captured, and which open items bear on it?

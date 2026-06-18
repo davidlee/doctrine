@@ -7,12 +7,12 @@ description: Use when code-changing intent has emerged and there is no governing
 
 You are converting intent into a concrete, scoped unit of change. A slice is one
 coherent change — not a project-global decision (that is an ADR) and not
-evergreen spec material (that lives under `doc/*`).
+evergreen spec material (`.doctrine/spec/`).
 
 ## Process
 
 1. **Confirm the frame.** Code-changing intent, and no governing slice already
-   covers it. Pull the constraints first: `/canon` for ADRs, `doc/*`, and
+   covers it. Pull the constraints first: `/canon` for ADRs and `.doctrine/spec/tech/`, and
    conventions; `/retrieve-memory` for subsystem gotchas on the surface you will
    touch.
 
@@ -40,7 +40,7 @@ evergreen spec material (that lives under `doc/*`).
    spec, `supersedes` a prior slice.
 
 5. **Check the altitude.** If the work is really a project-global decision →
-   `doctrine adr new`. If it is evergreen specification → author under `doc/*`.
+   `doctrine adr new`. If it is evergreen specification → author a tech spec (`doctrine spec new tech`) or a product spec (`doctrine spec new product`).
    Keep the slice to one shippable change; split if it sprawls.
 
 ## Next

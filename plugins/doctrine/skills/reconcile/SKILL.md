@@ -17,7 +17,7 @@ You write to **two surfaces** with different mechanisms (D2):
 | **Per-slice artefacts** (`design.md`, `slice-NNN.md`) | Direct edit with user agreement |
 | **Governance/spec truth** (ADRs, specs, requirements, policies, standards) | REV kind (`doctrine revision`) — typed `[[change]]` rows, approval checkpoint, apply path |
 
-Project-local documentation (`doc/*`) is **not** a doctrine feature category — edit
+Project-local documentation outside `.doctrine/` is **not** a doctrine feature category — edit
 it directly like any project file, same as per-slice artefacts.
 
 A single reconcile pass may use both surfaces — e.g. update `design.md` directly

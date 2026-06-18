@@ -19,7 +19,7 @@ source material, and research.
 
 Complete in order; each stage depends on the one before it.
 
-1. **Explore context.** Read the slice scope, related `doc/*` specs, prior art,
+1. **Explore context.** Read the slice scope, related `.doctrine/spec/tech/` specs, prior art,
    and recent commits. Run `/canon` so the governing ADRs, policies, and
    standards are in view. `/retrieve-memory` for gotchas on the surface. Then
    triage the design surface out loud: open questions that must resolve, risks
