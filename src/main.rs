@@ -617,10 +617,20 @@ enum Command {
         /// The source entity's canonical ref, e.g. `SL-060`.
         source: String,
         /// The predecessor target's canonical ref, e.g. `SL-047`.
-        target: String,
-        /// Per-edge manual tie-break rank (default 0 — a plain soft edge).
+        /// Required unless --prune is set (PHASE-03 pre-wire).
+        #[arg(required_unless_present = "prune")]
+        target: Option<String>,
+        /// Per-edge manual tie-break rank. On append: sets the new edge's rank
+        /// (default 0). On --remove: upper bound — only edges with rank ≤ N are
+        /// removed. Ignored with --prune.
         #[arg(long, default_value_t = 0)]
         rank: i32,
+        /// Remove matching after edges instead of appending.
+        #[arg(long, conflicts_with = "prune")]
+        remove: bool,
+        /// Drop every dangling after edge from the source entity.
+        #[arg(long, conflicts_with = "remove")]
+        prune: bool,
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -1543,11 +1553,21 @@ enum BacklogCommand {
         id: String,
 
         /// The predecessor ref this item should follow.
-        to: String,
+        /// Required unless --prune is set.
+        #[arg(required_unless_present = "prune")]
+        to: Option<String>,
 
         /// Per-edge rank (a manual tie-break hint; default 0).
         #[arg(long, default_value_t = 0)]
         rank: i32,
+
+        /// Remove matching after edges instead of appending.
+        #[arg(long, conflicts_with = "prune")]
+        remove: bool,
+
+        /// Drop every dangling after edge from the source item.
+        #[arg(long, conflicts_with = "remove")]
+        prune: bool,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -3721,9 +3741,14 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => backlog::run_edit(path, &id, status, resolution),
             BacklogCommand::Needs { id, prereqs, path } => backlog::run_needs(path, &id, &prereqs),
-            BacklogCommand::After { id, to, rank, path } => {
-                backlog::run_after(path, &id, &to, rank)
-            }
+            BacklogCommand::After {
+                id,
+                to,
+                rank,
+                remove,
+                prune,
+                path,
+            } => backlog::run_after(path, &id, to.as_deref(), rank, remove, prune),
             BacklogCommand::Tag {
                 id,
                 tags,
@@ -3920,8 +3945,19 @@ fn main() -> anyhow::Result<()> {
             source,
             target,
             rank,
+            remove,
+            prune,
             path,
-        } => run_after_edge(path, &source, &target, rank),
+        } => {
+            if prune {
+                run_after_prune(path, &source)
+            } else if remove {
+                // target is guaranteed Some by clap (required_unless_present="prune")
+                run_after_remove(path, &source, target.as_deref().unwrap_or(""), rank)
+            } else {
+                run_after_edge(path, &source, target.as_deref().unwrap_or(""), rank)
+            }
+        }
         Command::Status { format, json, path } => status::run(path, format, json),
         Command::Supersede { new, old, path } => run_supersede(path, &new, &old),
         Command::Map { command } => match command {
@@ -4075,6 +4111,22 @@ fn is_work_like(kind: &'static entity::Kind) -> bool {
     )
 }
 
+/// Resolve a dep/seq source to its TOML path. Validates: canonical-ref parse,
+/// work-like kind (slice or backlog). Returns the resolved path.
+fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Result<PathBuf> {
+    let (skref, sid) = integrity::parse_canonical_ref(source)?;
+    anyhow::ensure!(
+        is_work_like(skref.kind),
+        "`{source}` is a {} entity, which cannot author needs/after — only a slice or a backlog item (issue/improvement/chore/risk/idea) carries dep/seq",
+        skref.kind.prefix
+    );
+    let name = format!("{sid:03}");
+    Ok(root
+        .join(skref.kind.dir)
+        .join(&name)
+        .join(format!("{}-{name}.toml", skref.stem)))
+}
+
 /// Resolve a generic dep/seq `(SRC, TGT)` pair against the author-time gate (§5.4),
 /// returning SRC's `slice-NNN.toml`-shaped path ready for the leaf write. Rides the
 /// SAME cross-kind canonical-ref seam as `link` (`integrity::parse_canonical_ref` +
@@ -4088,12 +4140,8 @@ fn resolve_dep_seq_src(
     source: &str,
     target: &str,
 ) -> anyhow::Result<PathBuf> {
+    let toml_path = resolve_dep_seq_src_path(root, source)?;
     let (skref, sid) = integrity::parse_canonical_ref(source)?;
-    anyhow::ensure!(
-        is_work_like(skref.kind),
-        "`{source}` is a {} entity, which cannot author needs/after — only a slice or a backlog item (issue/improvement/chore/risk/idea) carries dep/seq",
-        skref.kind.prefix
-    );
     // TGT must resolve on disk — a free-text or dangling target is refused here
     // (never write an edge to a non-entity). `parse_canonical_ref` first so a
     // free-text target surfaces the canonical-ref shape error, then a dir probe.
@@ -4108,11 +4156,7 @@ fn resolve_dep_seq_src(
         !(skref.kind.prefix == tkref.kind.prefix && sid == tid),
         "a {source} edge to itself is not a dependency — self-edges are refused"
     );
-    let name = format!("{sid:03}");
-    Ok(root
-        .join(skref.kind.dir)
-        .join(&name)
-        .join(format!("{}-{name}.toml", skref.stem)))
+    Ok(toml_path)
 }
 
 /// `doctrine needs <SRC> <TGT>` (SL-060 §5.4) — append TGT to SRC's `needs` axis.
@@ -4146,6 +4190,120 @@ fn run_after_edge(
         format!(" (rank {rank})")
     };
     writeln!(std::io::stdout(), "{source} after {target}{suffix}")?;
+    Ok(())
+}
+
+/// `doctrine after <SRC> <TGT> --remove [--rank N]`
+fn run_after_remove(
+    path: Option<PathBuf>,
+    source: &str,
+    target: &str,
+    rank: i32,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let toml_path = resolve_dep_seq_src(&root, source, target)?;
+    let ceiling = if rank == 0 { None } else { Some(rank) };
+    let removed = dep_seq::remove(&toml_path, target, ceiling)?;
+    if removed == 0 {
+        anyhow::bail!("{source} has no after edge to {target}");
+    }
+    writeln!(
+        std::io::stdout(),
+        "{source} after {target} removed ({} edge{})",
+        removed,
+        if removed == 1 { "" } else { "s" }
+    )?;
+    Ok(())
+}
+
+/// `doctrine after <SRC> --prune` (SL-105 PHASE-03) — probe every `after` target
+/// of SRC for dangling edges (absent or terminal target) and remove them. Reads
+/// the `DepSeq` ONCE before any modifications (collecting dangling targets), then
+/// removes in a second pass using the shared `dep_seq::remove` leaf.
+fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let toml_path = resolve_dep_seq_src_path(&root, source)?;
+
+    // 1. Read DepSeq
+    let ds = dep_seq::read(&toml_path)?;
+
+    // 2. Probe each after-edge target: absent (dir missing) or terminal (resolved/closed) → dangling
+    let mut dropped: Vec<(String, i32, String)> = Vec::new();
+    let mut to_drop: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+    for edge in &ds.after {
+        let is_dangling = match integrity::parse_canonical_ref(&edge.to) {
+            Ok((kref, tid)) => {
+                let target_path = root
+                    .join(kref.kind.dir)
+                    .join(format!("{tid:03}"))
+                    .join(format!("{}-{tid:03}.toml", kref.stem));
+                if target_path.exists() {
+                    let body = std::fs::read_to_string(&target_path).unwrap_or_default();
+                    let val: toml::Value = match toml::from_str(&body) {
+                        Ok(v) => v,
+                        Err(_) => toml::Value::Table(toml::Table::new()),
+                    };
+                    let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                    status == "resolved" || status == "closed"
+                } else {
+                    true
+                }
+            }
+            Err(_) => true,
+        };
+
+        if is_dangling {
+            let reason = match integrity::parse_canonical_ref(&edge.to) {
+                Ok((kref2, tid2)) => {
+                    let target_path = root
+                        .join(kref2.kind.dir)
+                        .join(format!("{tid2:03}"))
+                        .join(format!("{}-{tid2:03}.toml", kref2.stem));
+                    if target_path.exists() {
+                        let body = std::fs::read_to_string(&target_path).unwrap_or_default();
+                        let val: toml::Value = match toml::from_str(&body) {
+                            Ok(v) => v,
+                            Err(_) => toml::Value::Table(toml::Table::new()),
+                        };
+                        let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                        let resolution = val.get("resolution").and_then(|s| s.as_str()).unwrap_or("");
+                        if resolution.is_empty() {
+                            status.to_string()
+                        } else {
+                            format!("{status}/{resolution}")
+                        }
+                    } else {
+                        "absent".to_string()
+                    }
+                }
+                Err(_) => "absent (unparseable ref)".to_string(),
+            };
+            dropped.push((edge.to.clone(), edge.rank, reason));
+            to_drop.insert(edge.to.clone());
+        }
+    }
+
+    if dropped.is_empty() {
+        writeln!(std::io::stdout(), "{source}: nothing to prune")?;
+        return Ok(());
+    }
+
+    // 3. Remove all edges per unique dangling target (one pass each) via shared leaf
+    for target in &to_drop {
+        // `None` ceiling → remove every edge matching the target wildcard
+        let _ = dep_seq::remove(&toml_path, target, None)?;
+    }
+
+    // 4. Report dropped edges
+    for (target, rank, reason) in &dropped {
+        writeln!(
+            std::io::stdout(),
+            "{source} after {target} (rank {rank}) dropped (dangling: {reason})"
+        )?;
+    }
     Ok(())
 }
 
