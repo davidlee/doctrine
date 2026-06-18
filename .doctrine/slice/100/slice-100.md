@@ -105,6 +105,37 @@ detected. Procedure:
 5. Produce outcomes, not notes — every reviewed item ends in verified,
    corrected, superseded, archived, or promoted
 
+**New skill: dreaming**
+
+Proactive memory corpus maintenance posture — the agent actively works the
+memory graph rather than waiting for triggers. Unlike `maintaining-memory`
+(triggered by a concrete change) or `reviewing-memory` (triggered before a
+gate), dreaming is periodic / idle-time: improve the corpus because you
+can, not because something broke.
+
+Procedure:
+1. **Validate.** Run `memory validate` corpus-wide. For each finding,
+   decide: fix it now, capture as backlog item, or note and defer.
+2. **Prune.** Identify memories past their `review_by` date, unverified
+   threads past expiry, `working`-lifespan memories older than N days.
+   Archive or retract stale ones.
+3. **Link.** For recently-recorded or recently-edited memories, run
+   suggested relations (or corpus-wide BM25 pairwise for uncapped
+   exploration). Run `doctrine link` for high-confidence matches.
+   Check for orphaned memories (no inbound edges, no outbound edges) —
+   these may need scope or relations to be findable.
+4. **Backlog grooming.** Findings from validation, pruning, or fact-checking
+   that aren't immediately fixable become backlog items (risks for
+   not-yet-surfaced issues, chores for cleanup, improvements for
+   enhancements). Don't let discoveries evaporate.
+5. **Fact-check.** Spot-check high-severity memories against current
+   code/docs. Pick a sample (e.g. top 5 by severity × staleness). Verify
+   the claim still holds. If not: correct the memory (`memory edit`),
+   supersede it, or flag it for human review (`quarantined`).
+6. **Report.** Produce a brief summary of what was done, what was found,
+   and what was deferred to the backlog. The report is the handoff — the
+   next agent shouldn't re-do the same checks.
+
 ## Non-Goals
 
 - Changing the Status enum (it already has the right variants)

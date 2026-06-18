@@ -107,7 +107,7 @@ mid-work attest-then-commit workflow.
 - `memory status <REF> <STATE>` — lifecycle transitions
 - `memory edit <REF>` — multi-field update
 - `memory tag <REF> [TAGS]... [-d REMOVE]...` — tag management
-- Skill updates (record-memory, retrieve-memory, new maintaining/reviewing)
+- Skill updates (record-memory, retrieve-memory, new maintaining/reviewing/dreaming)
 
 ## Non-Goals (out of both slices)
 
