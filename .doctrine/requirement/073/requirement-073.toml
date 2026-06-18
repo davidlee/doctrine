@@ -4,7 +4,7 @@ version = 1
 id = 73
 slug = "resolve-typed-blockers-and-blocking-over-the-relation-graph"
 title = "Resolve typed blockers and blocking over the relation graph"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can ask what blocks an item, or what an item blocks, and the system resolves typed graph reachability over the relation kinds the policy admits."

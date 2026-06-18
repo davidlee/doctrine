@@ -4,7 +4,7 @@ version = 1
 id = 20
 slug = "arbitrate-contended-allocation-so-exactly-one-holder-wins"
 title = "Arbitrate contended allocation so exactly one holder wins"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "When agents contend for the same candidate identity, exactly one wins the atomic claim and the rest recompute and retry until each lands a free identity, with no lock, daemon, or central authority."

@@ -4,7 +4,7 @@ version = 1
 id = 6
 slug = "maintain-storage-tier-integrity-between-authored-runtime-and-derived-data"
 title = "Maintain storage-tier integrity between authored, runtime, and derived data"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Authored contract data, disposable runtime progress, and derived indexes stay in their correct storage tiers; queryable data never leaks into prose."

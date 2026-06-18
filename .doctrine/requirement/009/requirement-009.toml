@@ -4,7 +4,7 @@ version = 1
 id = 9
 slug = "reassemble-a-spec-into-one-readable-whole-on-demand"
 title = "Reassemble a spec into one readable whole on demand"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can read a spec as one document, reassembled on demand from its identity, prose body, and membered requirements, with no stored copy that can go stale."

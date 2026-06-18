@@ -4,7 +4,7 @@ version = 1
 id = 70
 slug = "survey-the-backlog-in-derived-priority-order"
 title = "Survey the corpus in derived-priority order across kinds"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can survey the corpus with derived priority, returning active items across all admitted kinds ordered by the doctrine policy precedence: explicit authored priority, actionability, relation-derived consequence, kind/status, then deterministic fallback."

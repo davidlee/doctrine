@@ -4,7 +4,7 @@ version = 1
 id = 105
 slug = "author-requirement-truth-only-explicitly-with-no-derivation-path"
 title = "Author requirement truth only explicitly, with no derivation path"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Requirement truth is authored only by explicit reconciliation; no function maps coverage to authored status, and every authored-status change is attributable to a reconciliation act."

@@ -4,7 +4,7 @@ version = 1
 id = 45
 slug = "resolve-the-project-root-or-refuse-to-act"
 title = "Resolve the project root or refuse to act"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Provisioning resolves the target project's root — honouring an explicit root or discovering one by marker — and refuses to act when none can be found."

@@ -4,7 +4,7 @@ version = 1
 id = 101
 slug = "reconcile-authored-requirement-and-spec-truth-through-a-single-explicit-writer"
 title = "Reconcile authored requirement and spec truth through a single explicit writer"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An explicit writer brings requirement lifecycle status and touched spec truth to the accepted reconciled outcome; it is the sole author of reconciled truth in the loop."

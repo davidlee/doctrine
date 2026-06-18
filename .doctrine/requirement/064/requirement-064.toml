@@ -4,7 +4,7 @@ version = 1
 id = 64
 slug = "relate-a-record-to-work-and-governance-artefacts"
 title = "Relate a record to work and governance artefacts"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A contributor links a record to backlog items, risks, slices, specs, ADRs, requirements, or drift records; the record stays authoritative for its own state and the linked artefact stays authoritative for its own lifecycle."

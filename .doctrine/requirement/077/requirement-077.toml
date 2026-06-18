@@ -4,7 +4,7 @@ version = 1
 id = 77
 slug = "produce-deterministic-derived-ordering-and-explanations"
 title = "Produce deterministic derived ordering and explanations"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The same registry graph, policy version, and query options always produce the same derived ordering and explanations."

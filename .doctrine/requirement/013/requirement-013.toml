@@ -4,7 +4,7 @@ version = 1
 id = 13
 slug = "record-a-durable-unit-of-recalled-knowledge"
 title = "Record a durable unit of recalled knowledge"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator or agent can record a durable, typed, scoped, attributed unit of recalled knowledge that outlives the session that produced it."

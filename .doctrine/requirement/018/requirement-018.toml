@@ -4,7 +4,7 @@ version = 1
 id = 18
 slug = "render-recalled-knowledge-as-data-never-instruction"
 title = "Render recalled knowledge as data, never instruction"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Recalled knowledge is surfaced as attributed, quoted data that can never displace the governing instructions of the system, operator, or reading agent."

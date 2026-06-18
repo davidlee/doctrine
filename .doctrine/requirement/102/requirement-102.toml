@@ -4,7 +4,7 @@ version = 1
 id = 102
 slug = "record-a-durable-citable-reconciliation-outcome"
 title = "Record a durable, citable reconciliation outcome"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Each reconciliation produces a durable, citable record of what changed, why, and against what evidence."

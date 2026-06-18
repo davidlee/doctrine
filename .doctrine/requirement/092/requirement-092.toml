@@ -4,7 +4,7 @@ version = 1
 id = 92
 slug = "acyclicity-is-declared-per-relation-kind"
 title = "Cycle policy is per overlay: dep rejects, seq evicts"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Each typed edge overlay carries a core-configurable cycle policy — the mechanism realising REQ-076's degrade-not-false-order obligation. A dep (hard) overlay is reject-on-cycle: the cycle is invalid, surfaced as a diagnostic, and the affected query degrades to local authored priority plus stable fallback. A seq (soft) overlay is evict-on-cycle: while a cycle remains, the globally-minimal participating edge under (rank asc, then age asc) is evicted, iterated to a fixpoint, so the overlay is always acyclic and disjoint cycles each lose their own minimal edge. A cycle spanning both overlays — acyclic in each alone — is resolved by the union-cycle rule (SPEC-001 D9): dep is authoritative and the union-closing seq edge is evicted. Eviction is a build-time derived resolution that never mutates authored TOML and surfaces each evicted edge in provenance."

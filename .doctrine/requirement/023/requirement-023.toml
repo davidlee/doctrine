@@ -4,7 +4,7 @@ version = 1
 id = 23
 slug = "keep-coordination-invisible-to-the-entity-record"
 title = "Keep coordination invisible to the entity record"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Coordination bookkeeping never enters an entity's content, version history, or review surface; entities remain ordinary, visible working-tree artefacts."

@@ -4,7 +4,7 @@ version = 1
 id = 59
 slug = "record-an-items-resolution-distinct-from-its-status"
 title = "Record an item's resolution distinct from its status"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A backlog item records why it left the active flow as a `resolution` field orthogonal to `status` — status says whether it is active, resolution says why it stopped."

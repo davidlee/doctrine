@@ -4,7 +4,7 @@ version = 1
 id = 36
 slug = "keep-installation-additive-and-idempotent"
 title = "Keep installation additive and idempotent"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Installation is additive and idempotent: an existing installed skill is never overwritten, and re-running an install changes nothing already in place."

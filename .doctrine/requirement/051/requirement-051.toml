@@ -4,7 +4,7 @@ version = 1
 id = 51
 slug = "inspect-a-backlog-item-with-kind-specific-facets-and-relations"
 title = "Inspect a backlog item with kind-specific facets and relations"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can inspect a backlog item — its kind resolved from the id prefix — rendering identity, kind-specific facets, timestamps, and outbound relations."

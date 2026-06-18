@@ -4,7 +4,7 @@ version = 1
 id = 14
 slug = "recall-memories-relevant-to-a-working-context"
 title = "Recall memories relevant to a working context"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A caller can recall the memories relevant to a working context, ordered deterministically by relevance and trust, with the untrustworthy suppressed."

@@ -4,7 +4,7 @@ version = 1
 id = 67
 slug = "store-every-facet-and-evidence-entry-as-typed-data-never-an-untyped-bag"
 title = "Store every facet and evidence entry as typed data, never an untyped bag"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Every common field, kind facet, and evidence entry is enumerated, typed storage; no untyped frontmatter catch-all ever holds record data."

@@ -4,7 +4,7 @@ version = 1
 id = 31
 slug = "survey-shipped-skills-with-per-agent-install-status"
 title = "Survey shipped skills with per-agent install status"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can survey the shipped skills grouped by domain, each with its description and its install status for the detected or named agent, and can restrict the view to skills already installed."

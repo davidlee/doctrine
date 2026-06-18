@@ -4,7 +4,7 @@ version = 1
 id = 61
 slug = "inspect-a-records-identity-facets-evidence-and-relations"
 title = "Inspect a record's identity, facets, evidence, and relations"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A contributor names a record id; the system detects its kind from the prefix and renders identity, kind, lifecycle state, summary, typed facets, evidence, and relations."

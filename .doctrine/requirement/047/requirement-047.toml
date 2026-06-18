@@ -4,7 +4,7 @@ version = 1
 id = 47
 slug = "converge-non-destructively-on-repeated-provisioning"
 title = "Converge non-destructively on repeated provisioning"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Repeated provisioning converges to the same end state without overwriting existing files, re-making directories, duplicating entries, or undoing prior work."

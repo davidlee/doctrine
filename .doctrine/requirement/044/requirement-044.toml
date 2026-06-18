@@ -4,7 +4,7 @@ version = 1
 id = 44
 slug = "preview-the-full-provisioning-plan-before-any-change"
 title = "Preview the full provisioning plan before any change"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can obtain the complete set of intended provisioning actions, presented for review, without any of them being applied."

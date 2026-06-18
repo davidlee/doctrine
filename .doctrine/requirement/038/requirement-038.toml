@@ -4,7 +4,7 @@ version = 1
 id = 38
 slug = "survey-decisions-by-identity-with-their-standing"
 title = "Survey decisions by identity with their standing"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can survey the project's decisions ordered by identity, each showing its standing, alias, and title, and can narrow the survey to one status."

@@ -4,7 +4,7 @@ version = 1
 id = 52
 slug = "move-a-backlog-item-through-its-canon-status-lifecycle"
 title = "Move a backlog item through its canon status lifecycle"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An operator can move a backlog item between states in the closed canon lifecycle (open, triaged, started, resolved, closed)."

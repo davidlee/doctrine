@@ -4,7 +4,7 @@ version = 1
 id = 100
 slug = "surface-drift-between-authored-truth-and-observed-coverage-evidence"
 title = "Surface drift between authored truth and observed coverage evidence"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Divergence between a requirement's authored status (and its owning spec truth) and its observed coverage evidence is surfaced as a prompt to reconcile."

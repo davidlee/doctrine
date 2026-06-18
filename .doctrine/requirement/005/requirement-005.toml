@@ -4,7 +4,7 @@ version = 1
 id = 5
 slug = "preserve-an-audit-trail-across-the-storage-tiers"
 title = "Preserve an audit trail across the storage tiers"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "A slice's authored contract and lifecycle history remain reviewable and reconcilable against what shipped, so a change can always be audited after the fact."

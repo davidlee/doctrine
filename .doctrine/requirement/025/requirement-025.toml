@@ -4,7 +4,7 @@ version = 1
 id = 25
 slug = "project-current-governance-into-a-session-start-orientation-surface"
 title = "Project current governance into a session-start orientation surface"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The tool assembles the project's current stable governance state — routing/process orientation, accepted decisions, durable memory pointers, and the resolved invocation handle — into a single agent-readable orientation surface."

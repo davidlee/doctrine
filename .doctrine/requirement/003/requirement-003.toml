@@ -4,7 +4,7 @@ version = 1
 id = 3
 slug = "advance-a-slice-through-its-lifecycle-stages"
 title = "Advance a slice through its lifecycle stages"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A slice can move through its ordered lifecycle vocabulary from proposed intent to reconciled and closed; any value in the closed set is a valid standing."

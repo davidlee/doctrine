@@ -4,7 +4,7 @@ version = 1
 id = 56
 slug = "link-a-backlog-item-to-related-artefacts"
 title = "Link a backlog item to related artefacts"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A backlog item carries a relation seam linking it to slices, specs, and drift records, present even when empty."

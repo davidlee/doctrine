@@ -4,7 +4,7 @@ version = 1
 id = 74
 slug = "show-derived-inbound-references-computed-from-authored-outbound-edges"
 title = "Show derived inbound references computed from authored outbound edges"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Inspecting an item through the registry-backed surface shows its derived inbound references, computed from authored outbound edges alone."

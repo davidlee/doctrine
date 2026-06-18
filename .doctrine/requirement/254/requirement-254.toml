@@ -4,7 +4,7 @@ version = 1
 id = 254
 slug = "carry-a-runnable-executable-check-identity-on-vt-coverage-entries"
 title = "Carry a runnable executable check identity on VT coverage entries"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);
