@@ -1,7 +1,7 @@
 id = 94
 slug = "semantic-graph-zoom-pan-crop"
 title = "Semantic graph: zoom, pan, and crop-on-bounds for DOT/Graphviz SVG view"
-status = "audit"
+status = "reconcile"
 created = "2026-06-17"
 updated = "2026-06-18"
 
