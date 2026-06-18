@@ -1,0 +1,90 @@
+# Implementation plan for SL-102 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-102"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Display functions"
+objective = "Implement format_bound, format_estimate_normal, and format_estimate_verbose in src/estimate/display.rs; wire the sub-module; write tests per design.md §9."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "design.md approved"
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "SL-101 complete — EstimateFacet model, parse, and validation exist"
+
+[[phase.entrance_criteria]]
+id   = "EN-3"
+text = "repo compiles and existing tests pass (baseline green)"
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "src/estimate/display.rs exists with pub(crate) format_bound, format_estimate_normal, format_estimate_verbose"
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "pub(crate) mod display; declared in src/estimate.rs"
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "cargo test passes all new + existing tests"
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "cargo clippy reports zero warnings"
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "format_bound: integer values strip decimal (0→0, 2→2, 100→100), single decimal preserved (2.5→2.5, 0.1→0.1), rounding (3.75→3.8, 2.33333→2.3), epsilon noise (2.000000000001→2)"
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "format_estimate_normal present with integer bounds: lower=2 upper=8 → Estimate: 2-8 espresso_shots"
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "format_estimate_normal absent: None → Estimate: none recorded"
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "format_estimate_normal float bounds: lower=2.5 upper=8.0 → Estimate: 2.5-8 espresso_shots"
+
+[[phase.verification]]
+id      = "VT-5"
+expects = "format_estimate_verbose absent: None → empty vec"
+
+[[phase.verification]]
+id      = "VT-6"
+expects = "format_estimate_verbose normal: lower=2 upper=8 → ['  Attention spread: 4x', '  Attention width: 6 espresso_shots']"
+
+[[phase.verification]]
+id      = "VT-7"
+expects = "format_estimate_verbose lower-zero: lower=0 upper=5 → ['  Attention spread: ratio unavailable', '  Attention width: 5 espresso_shots']"
+
+[[phase.verification]]
+id      = "VT-8"
+expects = "zero-width estimate: lower=5 upper=5 — normal: Estimate: 5-5 shots, verbose: spread 1x, width 0 shots"
+
+[[phase.specs]]
+[[phase.requirements]]
