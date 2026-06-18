@@ -14,11 +14,14 @@ tags = ["estimate", "facet", "attention-burden", "validation", "normalization", 
 responsibilities = [
   "Define the reusable `EstimateFacet` model and its `[estimate]` parse seam: an optional facet read off any entity TOML into a normalized internal model whose `lower`/`upper` are finite `f64`, bound on the kind-agnostic facet seam of the entity engine (SPEC-004) rather than specialised per kind.",
   "Normalize authored bounds (TOML integer or float) to finite `f64` at the parse boundary, rejecting non-finite values, and realise the present-facet validation matrix (both bounds required, `lower >= 0`, `upper >= lower`) as a hard parse/validate error while an absent facet parses clean.",
-  "Resolve the project-wide estimation unit from `doctrine.toml [estimation].unit`, defaulting to `high_caffeine_hours`; the facet schema carries no entity-local unit.",
+  "Resolve the project-wide estimation unit from `doctrine.toml [estimation].unit`, defaulting to `espresso_shots`; the facet schema carries no entity-local unit.",
   "Preserve a valid estimate unchanged through parse -> hydrate -> catalog projection (normalized form stable, original TOML numeric formatting not retained).",
   "Render the estimate as a pure function for detailed display (present / `none recorded`) and verbose spread (attention ratio + absolute width, ratio-unavailable when `lower == 0`), classifying nothing.",
   "Expose each estimated node's metadata (id, kind, lower, upper, project unit, relations/edges, lifecycle state) through the catalog/graph hydration seam as a stable, policy-free contract that carries no aggregation, traversal, or interpretation semantics.",
   "Hold the structural non-blocking guarantee: no dispatch/execute/audit/close predicate reads estimate presence — the guarantee is the absence of such a read, not a passing run.",
+  "Define the reusable `ValueFacet` model and its `[value]` parse seam: a single finite `f64` magnitude read from an optional `[value]` TOML table, normalised and validated at the parse boundary on the same kind-agnostic facet seam as the Estimate facet.",
+  "Validate a present `[value]`: the `value` field is required and must be finite; absent `[value]` parses clean. No range validation (single magnitude, no ordering constraint).",
+  "Resolve the project-wide value unit from `doctrine.toml [value].unit`, defaulting to `magic_beans`; the facet schema carries no entity-local unit field.",
 ]
 
 [[source]]
