@@ -5,6 +5,8 @@
 .agents
 .pi
 .codex
+.dirge
+
 
 *.tmp
 *.temp

@@ -96,7 +96,7 @@
         jailPkgs = lib.optionalAttrs isLinux {
           jailed-pi = jailLib.makeJailedPi {
             profile = "specDev";
-            exposePostgres = true;
+            # exposePostgres = true;
             allowSelfAsSubagent = true;
             maxSubagentDepth = 2;
             extraPkgs = projectPkgs;
@@ -120,6 +120,15 @@
           #   extraOptions = jailEnvOptions;
           #   inherit workspaceDeps;
           # };
+          jailed-dirge = jailLib.makeJailedDirge {
+            profile = "specDev";
+            # exposePostgres = true;
+            allowSelfAsSubagent = true;
+            # maxSubagentDepth = 2;
+            extraPkgs = projectPkgs;
+            extraOptions = jailEnvOptions;
+          };
+
           bubblewrap = pkgs.bubblewrap;
         };
 
@@ -183,6 +192,11 @@
               name = "dn";
               help = "short for doctrine";
               command = "doctrine $@";
+            }
+            {
+              name = "jdi";
+              help = "jailed-dirge --yolo";
+              command = "jailed-dirge $@";
             }
             {
               name = "jpi";
