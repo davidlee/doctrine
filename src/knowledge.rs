@@ -23,7 +23,7 @@
 //! round-trip check), which is `#[cfg(test)]`-gated at each fn rather than masked
 //! by a blanket module suppression (mem.pattern.lint.dead-code-expect-vs-cfg-test):
 //! production writes go through `render_record_toml_seed` (template) +
-//! `set_record_status` (`toml_edit`).
+//! `dep_seq::set_authored_status` (`toml_edit`).
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -634,7 +634,7 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
 //
 // Test-only (`#[cfg(test)]`): this hand-emit backs VT-1's byte-stable round-trip
 // proof and has no production caller — writes go through `render_record_toml_seed`
-// (template) + `set_record_status` (toml_edit). Gated per-fn, not by a blanket
+// (template) + `dep_seq::set_authored_status` (toml_edit). Gated per-fn, not by a blanket
 // module suppression, so a future genuinely-dead symbol still trips the lint.
 // ---------------------------------------------------------------------------
 
@@ -1334,59 +1334,11 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
 // `knowledge status` — edit-preserving transition (no resolution coupling)
 // ---------------------------------------------------------------------------
 
-/// Edit-preserving status transition on one authored `record-NNN.toml` — the
-/// `backlog::set_backlog_status` / `adr::set_adr_status` precedent: `toml_edit` mutates
-/// the file in place, so the `[facet]`/`[evidence]` tables, hand-added comments, and
-/// unknown keys all survive (the file is never reserialised). NO resolution coupling
-/// (design §6) — only `status` + `updated` move. Carries the no-op guard (an unchanged
-/// status writes nothing) and the malformed-file refuse (a missing seeded `status`/
-/// `updated` would let a tail-`insert` land inside the trailing `[facet]` subtable —
-/// silent corruption; refuse instead). The date is injected by the shell. A missing
-/// record file errors (read fails) — never an implicit create.
-fn set_record_status(
-    root: &Path,
-    kind: RecordKind,
-    id: u32,
-    status: &str,
-    today: &str,
-) -> anyhow::Result<()> {
-    let name = format!("{id:03}");
-    let path = root
-        .join(kind.kind().dir)
-        .join(&name)
-        .join(format!("{RECORD_STEM}-{name}.toml"));
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("record not found at {}", path.display()))?;
-    let mut doc = text
-        .parse::<toml_edit::DocumentMut>()
-        .with_context(|| format!("Failed to parse {}", path.display()))?;
-
-    // No-op guard: unchanged status → write nothing (mtime holds).
-    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(status) {
-        return Ok(());
-    }
-
-    // Refuse a malformed (hand-edited) record: `status`/`updated` are scaffold-seeded.
-    // Their absence means a tail `insert` would append the key AFTER the trailing
-    // `[facet]`/`[evidence]` header, landing it inside that subtable (silent corruption).
-    let table = doc.as_table_mut();
-    if !table.contains_key("status") || !table.contains_key("updated") {
-        anyhow::bail!(
-            "malformed record {name}: missing seeded `status`/`updated` (regenerate via `knowledge new`)"
-        );
-    }
-    table.insert("status", toml_edit::value(status));
-    table.insert("updated", toml_edit::value(today));
-    std::fs::write(&path, doc.to_string())
-        .with_context(|| format!("Failed to write {}", path.display()))?;
-    Ok(())
-}
-
 /// `doctrine knowledge status <ID> <state>` — transition one record's status in place
 /// (design §6). Thin shell: find the root, `resolve_ref` the id to its kind, validate
 /// `<state>` ∈ `statuses(kind)` and **REFUSE a foreign-kind state** (FR-002: a DEC
-/// state on an ASM is rejected), then `set_record_status` writes `status` + `updated`
-/// (no resolution coupling). Prints the canonical id + the new state.
+/// state on an ASM is rejected), then the shared `dep_seq::set_authored_status` writes
+/// `status` + `updated` (no resolution coupling). Prints the canonical id + the new state.
 pub(crate) fn run_status(
     path: Option<PathBuf>,
     reference: &str,
@@ -1404,7 +1356,20 @@ pub(crate) fn run_status(
         );
     }
     let today = crate::clock::today();
-    set_record_status(&root, kind, id, state, &today)?;
+    let name = format!("{id:03}");
+    let record_path = root
+        .join(kind.kind().dir)
+        .join(&name)
+        .join(format!("{RECORD_STEM}-{name}.toml"));
+    let hint = format!(
+        "malformed record {name}: missing seeded `status`/`updated` \
+         — restore the missing keys and retry; the file is left untouched"
+    );
+    crate::dep_seq::set_authored_status(
+        &record_path,
+        &[("status", state), ("updated", &today)],
+        &hint,
+    )?;
     writeln!(
         io::stdout(),
         "{}: {}",

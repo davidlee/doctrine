@@ -1387,7 +1387,7 @@ fn set_backlog_status(
     // the shared authored-TOML seam. The three managed pairs prove the longest shape.
     // Hint preserved verbatim (EX-4 rewording is scoped to gov + requirement).
     let hint = format!(
-        "malformed backlog item {name}: missing seeded `status`/`resolution`/`updated` (regenerate via `backlog new`)"
+        "malformed backlog item {name}: missing seeded `status`/`resolution`/`updated` — restore the missing keys and retry; the file is left untouched"
     );
     dep_seq::set_authored_status(
         &path,
