@@ -185,6 +185,15 @@ then calls `dep_seq::remove`. If 0 edges removed, bails with a user-facing error
 - Reason string: `"{status}/{resolution}"` for terminal items (matching
   `classify_dangling` format), `"absent"` for missing targets.
 
+  **Scope caveat (see §7):** the probe handles **item→item** `after` edges
+  only — terminal statuses recognised are the backlog-item vocabulary
+  (`resolved`/`closed`). It does **not** handle cross-kind `after` edges
+  targeting slices/specs/other entities. The earlier claim that it "works
+  for both backlog items and slices" was over-optimistic: slices carry a
+  top-level `status` but use `done` (not `resolved`/`closed`), and
+  `parse_ref` rejects the `SL`/`SPEC` prefixes, so neither `--prune` nor
+  `--remove` can act on a cross-kind edge.
+
 ### 3.3 Backlog-specific (`src/backlog.rs`)
 
 `BacklogCommand::After` gains `remove: bool` and `prune: bool` flags
@@ -258,3 +267,28 @@ from the current state should be gone (once all affected entities are pruned).
   A flag on `After` is simpler: `--remove` and `--prune` are alternative modes
   of the same verb. A separate variant would duplicate `source`, `path`, and
   `--rank` (ignored on prune). `conflicts_with` ensures exactly one mode.
+
+## 7. Known shortfall: cross-kind `after` and the actionability graph
+
+**Design-significant limitation, recorded at reconcile (RV-084).** The
+actionability graph is being extended beyond backlog items to include slices
+and other entities. SL-105's `--remove`/`--prune` and the overrides-adapter
+(`render_overrides` / `OverrideReason::Dangling`) were built for the
+**item→item** case only; they do not yet cover cross-kind `after` edges, and
+slice/entity relationships do not carry the same semantics and ordering
+behaviour as item→item `after`.
+
+Concretely: `IMP-095 → SL-095` is a **valid** cross-kind `after` edge. SL-095
+is `done`; the `overrides:` footer surfaces it as
+`IMP-095 → SL-095 dropped (dangling: SL-095 absent)`, but it cannot be cleared
+by this slice's feature — `--prune` declines (`done` ∉ {`resolved`,`closed`})
+and `--remove` cannot target it (`parse_ref` rejects the `SL` prefix). The
+edge is **deliberately retained** as a reminder and incentive.
+
+**Out of scope for SL-105's lifecycle.** This is design debt for a future
+slice, tracked as **IMP-099** (extend `after`/`--prune`/`--remove` and the
+overrides-adapter across entity kinds; define ordering semantics for
+non-backlog entities). The reconcile-time detail — including the VA-1
+procedure correction (the SRC of `--prune` is the edge *holder*, not the
+resolved target) and the 14/15 in-domain edges cleared — lives in
+[`notes.md`](notes.md).

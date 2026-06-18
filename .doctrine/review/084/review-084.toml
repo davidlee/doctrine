@@ -12,6 +12,10 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-105"
 
+# Reconciliation outcome appended at reconcile (2026-06-19). Findings unchanged
+# (F-1 stays `verified`/`acknowledged` — remediation is recorded here, not by
+# mutating the finding disposition, per the reconcile skill).
+
 [[finding]]
 id = "F-1"
 status = "verified"
