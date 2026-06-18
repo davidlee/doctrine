@@ -37,8 +37,8 @@ Current state: 15 dangling `after` edges across ~12 open items (2026-06-18 scan)
 
 | Layer | File | Change |
 |-------|------|--------|
-| Leaf | `src/dep_seq.rs` | Add `remove_after` core + `remove` IO wrapper; extract `resolve_dep_seq_src_path` |
-| Command | `src/main.rs` | `Command::After`: add `--remove`/`--prune` flags, make `target` optional; wire `run_after_remove` / `run_after_prune`; refactor `resolve_dep_seq_src` to call new path helper |
+| Leaf | `src/dep_seq.rs` | Add `remove_after` core + `remove` IO wrapper |
+| Command | `src/main.rs` | `Command::After`: add `--remove`/`--prune` flags, make `target` optional; wire `run_after_remove` / `run_after_prune`; extract `resolve_dep_seq_src_path` from `resolve_dep_seq_src` |
 | Backlog command | `src/main.rs` | `BacklogCommand::After`: parallel flags + optional `to` |
 | Backlog engine | `src/backlog.rs` | Branch `run_after` on remove/prune modes |
 
