@@ -86,6 +86,9 @@ migration burden.
   pattern.
 - **No `doctrine supersede` CLI changes** — the verb surface (`supersede <NEW> <OLD>`)
   is unchanged; it already dispatches through `supersede_policy()`.
+- **No `[[relation]]` storage for record supersession yet** — records use typed
+  `[relationships]` (same as ADR today). SL-095 will migrate governance to
+  `[[relation]]`; records follow later (tracked as IMP-095 in Follow-Ups below).
 
 ## Affected Surface
 
@@ -145,3 +148,7 @@ guard for records, bounded by the matrix.
 
 - **IMP-063** — POL/STD/slice supersession (grow `superseded` vocab beyond governance)
 - **IMP-047** — trinary actionability / record gating
+- **IMP-095** — migrate record `Supersedes` from typed `[relationships]` to
+  `[[relation]]` + typed `superseded_by` carve-out, following the governance pattern
+  once SL-095 lands. Until then, records' typed storage is consistent with ADR's and
+  valid under ADR-010 D4 (verb-written LifecycleOnly).

@@ -13,17 +13,23 @@ module. Record arms join the existing ADR arm; POL/STD/slice arms join later (IM
 
 For ADR, always flip OLD to `superseded` (existing behaviour, unchanged).
 For records, only flip OLD to the kind-appropriate terminal status if OLD is
-non-terminal — `knowledge::RecordKind::is_terminal()` is the single source of truth.
-An already-`validated` assumption (e.g. hardened into a constraint) stays
-`validated`; an `open` question becomes `obsolete`. The superseded terminal mapping
-(when a flip IS needed, i.e. OLD is non-terminal):
+non-terminal — `knowledge::RecordKind::is_terminal()` is the single source of truth
+(must be added to `RecordKind`, see PHASE-01 prerequisite below).
 
-| Kind | Policy `superseded_status` |
-|------|---------------------------|
-| assumption | `obsolete` |
-| question | `obsolete` |
-| decision | `superseded` |
-| constraint | `superseded` |
+**Per-kind terminal sets** (the statuses that suppress the flip — every status
+not the seed and not a non-terminal intermediate):
+
+| Kind | Non-terminal | Terminal (→ no flip) | Flip-to (if non-terminal) |
+|------|-------------|----------------------|--------------------------|
+| assumption | held, testing | validated, invalidated, obsolete | `obsolete` |
+| decision | proposed | accepted, rejected, superseded | `superseded` |
+| question | open | answered, obsolete | `obsolete` |
+| constraint | active | waived, superseded, retired | `superseded` |
+
+These sets must be declared alongside the status vocab arrays in `src/knowledge.rs`
+(e.g. `ASSUMPTION_TERMINAL: &[&str]`) and exposed via `RecordKind::is_terminal(status: &str) -> bool`.
+An already-`validated` assumption (e.g. hardened into a constraint) stays `validated`;
+an `open` question becomes `obsolete`.
 
 ### D3 — Cross-kind gating: §6 matrix for records, same-kind for ADR
 
@@ -38,6 +44,12 @@ A new `RELATION_RULES` row between the existing RECORD `Shapes`/`Spawns` rows an
 `LifecycleOnly` link policy as governance — but `TargetSpec::Kinds(RECORD)` (not
 `SameKind`) because records admit cross-kind supersession. The pair stays in typed
 `[relationships]` storage, excluded from `[[relation]]` migration.
+
+`TargetSpec::Kinds(RECORD)` is intentionally broader than the §6 matrix — it
+structurally permits all 4×4 directed pairs, while the verb's `validate_matrix()`
+closes the gap at runtime. This is defensible because `LifecycleOnly` prevents
+hand-authored edges; the structural container says "records can supersede records",
+and the verb is the sole enforcement point for *which* crossings are legal.
 
 ### D5 — F-1 pre-flight: record templates seed `[relationships]`
 
@@ -106,9 +118,16 @@ Remove `SupersedePolicy` struct and `supersede_policy()` function. No other chan
        crate::knowledge::RecordKind::from_prefix(prefix).is_ok()
    }
    fn validate_matrix(new_prefix: &str, old_prefix: &str, new: &str, old: &str) -> anyhow::Result<()> { ... }
-   // Delegates to knowledge::RecordKind::is_terminal — never hardcodes status strings.
+   // Delegates to knowledge::RecordKind::is_terminal() — PREREQ: must be added to
+   // RecordKind with per-kind terminal sets (D2) before or within PHASE-01.
    fn is_terminal_for_kind(prefix: &str, status: &str) -> bool { ... }
    ```
+
+   **PHASE-01 prerequisite (RV-074 F-1/F-2):** Add `RecordKind::is_terminal(status: &str) -> bool`
+   to `src/knowledge.rs`, backed by per-kind terminal status slices declared alongside
+   the vocab arrays (`ASSUMPTION_TERMINAL`, `DECISION_TERMINAL`, `QUESTION_TERMINAL`,
+   `CONSTRAINT_TERMINAL`). The existing `is_hidden` predicate is NOT the terminal
+   predicate — it conflates settled with terminal and cannot serve.
 4. Extract F-D idempotency to `check_not_already_superseded()` helper
 5. Conditional status flip: only if OLD is non-terminal (preserves `validated`/`answered` nuance)
 

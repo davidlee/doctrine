@@ -12,5 +12,80 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-097"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "is_terminal delegates to non-existent API on RecordKind"
+detail = """
+The design says 'is_terminal_for_kind → delegate to knowledge::RecordKind::is_terminal() — single source of truth' (design.md line 110, handover.md line 47). No such method exists on RecordKind. The current RecordKind impl (src/knowledge.rs:94-153) has no is_terminal predicate. The nearby hide-set (is_hidden, src/knowledge.rs:193-195) has DIFFERENT semantics — 'validated' is hidden (a settled state) but per D2 must NOT be flipped (it is terminal and stays as-is). The terminal set must be explicitly defined per kind before implementation can proceed.
+
+Expected: RecordKind::is_terminal(kind, status) -> bool, or equivalent, backed by explicit per-kind terminal status sets.
+
+Observed: No such method. The hide-set conflates 'settled' with 'terminal' and cannot serve as the predicate."""
+disposition = "must-fix"
+response = "The design is correct in intent — the terminal predicate must exist and be the single source of truth. The penance is to add RecordKind::is_terminal(status: &str) -> bool backed by explicit per-kind terminal sets declared alongside the status vocab arrays (ASSUMPTION_TERMINAL etc.), consumed by is_terminal_for_kind() in the verb. This must ship before or within PHASE-01 of SL-097 — it is a blocker because the conditional status-flip is the core of D2 and is untestable without it."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Terminal-set underspecification: which statuses are terminal per kind?"
+detail = """
+D2 says 'only non-terminal predecessors are flipped; already-terminal records stay as-is' (design.md line 16-18). But the design never enumerates which statuses are terminal per kind. The status vocabularies (src/knowledge.rs lines 161-168):
+
+- Assumption: held, testing, validated, invalidated, obsolete
+- Decision: proposed, accepted, rejected, superseded
+- Question: open, answered, obsolete
+- Constraint: active, waived, superseded, retired
+
+The design's D2 table (design.md lines 19-26) only lists the 'superseded_status' (terminal status TO flip into), not the set of already-terminal statuses that suppress the flip. The example says 'validated' assumption stays validated — implying validated is terminal. But what about 'invalidated'? What about 'rejected' decisions? What about 'waived' constraints? The conditional flip is unimplementable without this enumeration.
+
+Expected: Explicit per-kind terminal status set, or a documented rule (e.g. 'every status not the seed + not a non-terminal intermediate is terminal'). Recommend adding is_terminal() to RecordKind with the terminal set declared alongside each vocab array.
+
+Observed: Terminal set not defined. Only one example (validated) given."""
+disposition = "must-fix"
+response = """
+The terminal set must be enumerated per kind. The penance: add per-kind terminal status slices alongside the vocab arrays in src/knowledge.rs. Proposed terminal sets:
+
+- Assumption: validated, invalidated, obsolete (held/testing are non-terminal)
+- Decision: accepted, rejected, superseded (proposed is non-terminal)
+- Question: answered, obsolete (open is non-terminal)
+- Constraint: waived, superseded, retired (active is non-terminal)
+
+These are the statuses NOT in the seed position, with the D2 exception that validated/superseded are terminal for kinds where they are not the catch-all terminal. The verb's is_terminal_for_kind delegates to RecordKind::is_terminal. Ship in PHASE-01."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "No tracked follow-up for record [[relation]] migration after SL-095"
+detail = """
+SL-095 will migrate governance supersedes from typed [relationships] arrays to tier-1 [[relation]] rows (IMP-064). The SL-097 handover says 'SL-095 owns the [[relation]] migration for governance; records follow later' (handover.md line 28).
+
+Once SL-095 lands, record supersedes will be the ONLY supersession edges still in typed [relationships] — an inconsistent storage pattern across the corpus. The slice's Follow-Ups section (slice-097.md lines 144-147) lists IMP-063 and IMP-047 but no IMP tracking the record [[relation]] migration.
+
+Expected: A backlog IMP item tracking the migration, or an explicit non-goal with rationale for why the inconsistency is tolerable.
+
+Observed: No tracked follow-up. Handover acknowledges the gap but nothing in the authored slice documents it."""
+disposition = "will-follow-up"
+response = "Acknowledged. The penance: add IMP-XXX to the slice's Follow-Ups section (slice-097.md) tracking the record [[relation]] migration, with a non-goal note that records deliberately follow the governance pattern until that IMP ships. This is not a blocker because both storage patterns (typed and [[relation]]) coexist today — SL-095 hasn't migrated governance yet, and when it does, the record typed pattern is still valid ADR-010 D4 storage (verb-written LifecycleOnly). The follow-up IMP is documentation of intent, not a structural dependency."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "RELATION_RULES TargetSpec::Kinds(RECORD) is structurally broader than §6 matrix"
+detail = """
+The new RELATION_RULES row (design.md lines 128-136) uses TargetSpec::Kinds(RECORD) — any record kind can be the target. But the §6 matrix forbids several cross-kind pairs: decision→question, decision→assumption, constraint→question, constraint→assumption, question→X (only question→{question,decision,constraint,assumption} allowed, which is all four — so question is fine), assumption→question (not in the matrix — assumption may be superseded by assumption, decision, constraint only).
+
+TargetSpec::Kinds(RECORD) would structurally permit a decision→question supersedes edge, which the verb's validate_matrix() would correctly refuse at runtime. But validate_relations (the structural integrity scan) would report it as valid. This is defensible because LifecycleOnly prevents hand-authored edges, but the structural layer over-promises relative to the true boundary.
+
+Expected: Either the RELATION_RULES row uses a more precise target set, or the design doc explicitly notes that the structural permissiveness is intentional and the verb is the sole enforcement point.
+
+Observed: TargetSpec::Kinds(RECORD) allows 4×4=16 directed pairs, but the §6 matrix only allows 11. The verb closes the gap, but no design discussion acknowledges it."""
+disposition = "acknowledged"
+response = "The design doc should note that TargetSpec::Kinds(RECORD) is intentionally broader than the §6 matrix — the verb's validate_matrix() is the sole enforcement point, and LifecycleOnly prevents hand-authored edges. The RELATION_RULES row defines the structural container (records can supersede records), not the runtime matrix (which crossings are legal). Add one sentence to D4 in design.md acknowledging this structural-permissiveness gap."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
