@@ -1,0 +1,40 @@
+memory_uid = "mem_019eda9446557c318b0cf2dabe1ff4d0"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "IMP-096 requirements-capture skills + IMP-097 altitude framework"
+summary = ""
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d3db01ab46943ee59297159e3bfb8e5c7c9db23f"
+ref_name = "refs/heads/main"
+checkout_state_id = "c57c284d118debd1e1e2da0c6075c78d18e6089e552c1971e2b49dfa2fbddf5d"
+base_commit = "f8f3bdf3e980c01850f22cd3e662c531798f27cc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

@@ -1,0 +1,40 @@
+memory_uid = "mem_019eda94463b72c390207c97533335c1"
+schema_version = 1
+memory_type = "concept"
+status = "active"
+title = "design-requirements.toml format and handoff points"
+summary = ""
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d3db01ab46943ee59297159e3bfb8e5c7c9db23f"
+ref_name = "refs/heads/main"
+checkout_state_id = "582ca0c52671393c2d91df0140f295791b4161abe7ae4fad0723cce5be3d538f"
+base_commit = "f8f3bdf3e980c01850f22cd3e662c531798f27cc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

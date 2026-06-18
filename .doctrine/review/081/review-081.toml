@@ -12,5 +12,68 @@ responder = "author"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-098"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "PHASE-01: /design skill — all 7 VA checks pass"
+detail = "Verified on candidate/098/review-001: numbered state list has Collect decisions (2), Ask clarifying (3), Requirements pass (4); XML block name-matches list with Adversarial review → Ask clarifying back-edge intact (E1); [[implied]] format with all five fields; prose-reference-only guidance; adversarial-review requirements vector present; guardrails for structured-prose prohibition and altitude ambiguity."
+disposition = "aligned"
+response = "Implementation confirmed via read-back verification on candidate/098/review-001. All VA checks pass. No changes needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-02: /plan skill — all 6 VA checks pass"
+detail = "Verified: sub-step 2a between step 1 and 3; plan.md ## Requirements verification example is a prose list (not pipe-table D1); plan.toml empty-in-v1 trade acknowledged; step 5 prohibition amended with authored-agent-read-narrative exception; /consult guardrail for unassigned REQ-DNN; close check named as advisory."
+disposition = "aligned"
+response = "Implementation confirmed via read-back verification on candidate/098/review-001. All VA checks pass. No changes needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-03: /audit skill — all 6 VA checks pass"
+detail = "Verified: sub-step 4a between raise/dispose and synthesis; survey output held for step 6 (G4 sequencing); #### Orphaned requirements nested under ### Governance/spec (REV); legacy-design handling as non-error; sidecar/plan.md drift flagged as a finding."
+disposition = "aligned"
+response = "Implementation confirmed via read-back verification on candidate/098/review-001. All VA checks pass. No changes needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "PHASE-04: /reconcile skill — all 7 VA checks pass"
+detail = "Verified: no-op gate amended with orphan-content-counts guardrail (C2); sub-step 4f after 4e (not at 2b C1); multi-spec sibling REQ-NNNs with traced lineage (B1); stuck=non-terminal, withdrawn=design-level retraction (E2); /consult altitude guardrail with IMP-097 reference; ### Orphan placements mapping format (multi-spec = one line per sibling)."
+disposition = "aligned"
+response = "Implementation confirmed via read-back verification on candidate/098/review-001. All VA checks pass. No changes needed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "PHASE-05: /close skill — all 6 VA checks pass"
+detail = "Verified: orphan advisory check in spec-coherence gate; read-path review-NNN.md → revision-NNN.md spelled out (E3); pass (placed/withdrawn) and refuse (stuck/absent) conditions documented; check named as advisory agent-discipline (F2); RV-ledger follow-up IMP referenced."
+disposition = "aligned"
+response = "Implementation confirmed via read-back verification on candidate/098/review-001. All VA checks pass. No changes needed."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "End-to-end coherence: REQ-D → REQ-NNN lifecycle consistent across all 5 skills"
+detail = "Verified design-to-close walkthrough (design §11a-§11e): design-requirements.toml format is consistent across all 5 skill references; plan.md verification list references REQ-DNN handles from design-requirements.toml; audit brief orphan section nests under Governance/spec (REV); reconcile 4f placement writes REV rows + records mappings in ### Orphan placements; close reads plan.md → review-NNN.md → revision-NNN.md. No broken cross-references."
+disposition = "aligned"
+response = "Implementation confirmed via read-back verification on candidate/098/review-001. All VA checks pass. No changes needed."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Dispatch evidence: all 5 phases committed to dispatch/098 with boundaries recorded"
+detail = "dispatch/098 carries 4 commits: PHASE-01 (356da55), PHASE-02+PHASE-03 (c8ac370), PHASE-04 (e00a9b0), PHASE-05 (aa0ac84). Each commit touches only the declared skill file. Boundaries recorded in .doctrine/dispatch/098/boundaries.toml. review/098 and candidate/098/review-001 projected. Candidate admitted at 5e267524."
+disposition = "aligned"
+response = "Implementation confirmed via read-back verification on candidate/098/review-001. All VA checks pass. No changes needed."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

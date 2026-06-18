@@ -1,0 +1,40 @@
+memory_uid = "mem_019eda9446217ec1a90c04bcbce930ad"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "REQ-D to REQ-NNN lifecycle — design discovery to close check"
+summary = ""
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d3db01ab46943ee59297159e3bfb8e5c7c9db23f"
+ref_name = "refs/heads/main"
+checkout_state_id = "45be63a5c8c9c7068c2919c70561ce3342e92926dec9c37e60ab478d04c2e177"
+base_commit = "f8f3bdf3e980c01850f22cd3e662c531798f27cc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
