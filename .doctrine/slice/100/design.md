@@ -397,7 +397,12 @@ doctrine memory edit
 
 ## Adversarial review findings
 
-<!-- Populated during adversarial review pass -->
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| F1 | `edit --key` empty-string detection: scaffold writes `memory_key = ""` when no key provided. `is_empty()` handles both absent key and empty string — but design doc should be explicit | Low | R1 already covers this; clarified in risk text |
+| F2 | `--review-by ""` clears the field but `--lifespan ""` is deferred (OQ1) — asymmetry users will hit | Low | Noted as follow-up in scope. Defer to post-v1 |
+| F3 | No `--color`/`-p` flags designed for new verbs | Trivial | Clap boilerplate — added at derive level |
+| F4 | `edit` scope-array replace is lossy (R3). `--help` should note replace semantics | Low | Accept for v1; append follow-up deferred |
 
 ## Governance snapshot
 
