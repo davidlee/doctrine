@@ -418,6 +418,17 @@ doctrine memory edit
 | F3 | No `--color`/`-p` flags designed for new verbs | Trivial | Clap boilerplate — added at derive level |
 | F4 | `edit` scope-array replace is lossy (R3). `--help` should note replace semantics | Low | Accept for v1; append follow-up deferred |
 
+## Inquisition (RV-086)
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| F-1 | Design claimed scaffold writes `memory_key = ""` empty-string sentinel, self-review blessed. Code: `Option<String>` — line omitted when unset; empty string fails `validate_key` | Major | R1 rewritten to `Option` model. `edit --key` refuses iff `Some`, late-binds iff `None`. Self-review F1 struck |
+| F-2 | D2 "single transaction" vs `--status` delegating to IO `set_authored_status` = second read→write + double `updated` stamp | Minor | Extracted pure `memory_status_transition(doc, state)` core via `dep_seq::apply_status`. `edit` calls it on held doc, writes once |
+| F-3 | `edit --key` cited private `validate_key` (rejects bare key); `record` uses `normalize_key` (prepends `mem.`) — divergence | Minor | Cite `normalize_key` for parity; `edit --key` and `record --key` accept identically |
+| F-4 | `--review-by` described as "replace" but scaffold template can omit `review_by` — inserting into absent key differs from replacing | Nit | Clarified: insert-or-replace; clear is no-op when `review_by` absent |
+
+Tolerated: non-atomic two-write supersede (benign ordering — relation before status); no transition-legality matrix (follows `knowledge::run_status` precedent — any → any, vocabulary-gated).
+
 ## Governance snapshot
 
 Generated from `doctrine boot` at design-lock. Relevant authorities consumed:
