@@ -33,6 +33,32 @@ Record with `doctrine memory record` (ask `--help` for the flags; see
 `.doctrine/memory/items/`; the **born git anchor is captured automatically** —
 do not hand-author it.
 
+### After recording
+
+**Suggested relations.** `record` emits suggested relations on stderr when it
+detects high-confidence matches against existing memories. Review these and
+run `doctrine link` for matches you confirm — this builds the durable graph
+edges a future agent traverses.
+
+**Graph vs body links.** Use `[[relation]]` edges for durable graph structure
+(typed, machine-traversable); use `[[mem.…]]` wikilinks in body prose for
+contextual "see also" pointers. Relations surface in `retrieve --expand`;
+wikilinks don't — they are for human readers.
+
+**`--lifespan` selection.** Pick the narrowest lifespan that fits the
+knowledge, from most to least durable:
+
+| Lifespan | Rule of thumb |
+|---|---|
+| `identity` | Never ages — subsystem identity, invariant, canonical name |
+| `semantic` | 10:1 decay — design rationale, architecture constraints |
+| `procedural` | 3:1 decay — command recipes, build steps, workflows |
+| `episodic` | Baseline — one-off findings, bug notes, session context |
+| `working` | Fast decay — transient todo, short-lived hypothesis |
+
+Defaults to `episodic` when omitted. Narrow scope + narrow lifespan together
+keep retrieval relevant.
+
 ## 3. Scope it so it will be found
 
 Scope a memory along four axes (the flags are in `--help`):
@@ -42,16 +68,27 @@ Scope a memory along four axes (the flags are in `--help`):
 - **command** — tied to a command flow (token-prefix).
 - **tag** — stable categorization; do **not** overload tags as scope.
 
-## 4. Set the risk axes (no flag yet — edit the TOML)
+## 4. Set the risk axes
 
 `record` defaults `[trust] trust_level = "medium"`, `[ranking] severity =
-"none"`, `weight = 0`. For risky or drift-prone memories, edit the scaffolded
-TOML:
+"none"`, `weight = 0`. For risky or drift-prone memories, pass the flags at
+record time or update later:
 
-- **trust_level** = confidence: `low` (inferred, unvalidated) · `medium`
+```
+doctrine memory record ... --trust high --severity critical
+```
+
+Or adjust after the fact:
+
+```
+doctrine memory edit <REF> --trust low --severity medium
+```
+
+- **`--trust`** = confidence: `low` (inferred, unvalidated) · `medium`
   (derived from reasonable context — default) · `high` (verified against code /
   specs / direct observation).
-- **severity** / **weight** = how much it matters if wrong or ignored.
+- **`--severity`** = how much it matters if wrong or ignored:
+  `critical` · `high` · `medium` · `low` · `none` (default).
 
 Calibrate honestly: creating a memory is authoring, not verification.
 

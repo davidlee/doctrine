@@ -56,6 +56,7 @@ mod standard;
 mod state;
 mod status;
 mod supersede;
+mod tag;
 mod tomlfmt;
 mod tty;
 mod verify;
@@ -1968,6 +1969,106 @@ enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
+    /// Add and/or remove tags on a memory — tags are lowercased and validated
+    /// `[a-z0-9_:-]` (colon namespacing, e.g. `area:memory`); the stored set is
+    /// sorted. At least one add or remove required.
+    Tag {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Tags to add (positional, repeatable).
+        tags: Vec<String>,
+
+        /// Tags to remove, repeatable (`-d security -d area:memory`).
+        #[arg(long = "remove", short = 'd')]
+        remove: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Transition one memory's status. `<state>` must be one of the 6 lifecycle
+    /// states (active/draft/superseded/retracted/archived/quarantined).
+    /// `--by <OTHER>` is required for superseded (records the successor relation)
+    /// and forbidden otherwise.
+    Status {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// The target status: active|draft|superseded|retracted|archived|quarantined.
+        state: String,
+
+        /// Successor reference (required for superseded, forbidden otherwise).
+        #[arg(long)]
+        by: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Edit a memory's fields in a single read→mutate→write transaction.
+    /// At least one flag required. `--status` delegates to the status-transition
+    /// core (superseded refused — use `memory status superseded --by`).
+    /// `--key` late-binds only on an unkeyed memory (immutable once recorded).
+    /// Scope arrays replace. `updated` stamped once on any change.
+    Edit {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Replace the title (non-empty after trim).
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Replace the summary (free text).
+        #[arg(long)]
+        summary: Option<String>,
+
+        /// Transition status (active|draft|retracted|archived|quarantined).
+        /// Superseded is refused — use `memory status superseded --by <OTHER>`.
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Replace the lifespan (semantic|episodic|procedural|working|identity).
+        /// An empty value leaves the existing lifespan unchanged.
+        #[arg(long)]
+        lifespan: Option<String>,
+
+        /// Set or replace the review-by date (`YYYY-MM-DD`); empty string clears.
+        #[arg(long)]
+        review_by: Option<String>,
+
+        /// Set the trust level (low|medium|high).
+        #[arg(long)]
+        trust: Option<String>,
+
+        /// Set the severity (critical|high|medium|low|none).
+        #[arg(long)]
+        severity: Option<String>,
+
+        /// Late-bind the memory key (shorthand normalized via `mem.` prefix).
+        /// Refused if the memory already has a key set.
+        #[arg(long)]
+        key: Option<String>,
+
+        /// Replace the scope.paths array (repeatable).
+        #[arg(long = "path-scope")]
+        path_scope: Vec<String>,
+
+        /// Replace the scope.globs array (repeatable).
+        #[arg(long = "glob")]
+        glob: Vec<String>,
+
+        /// Replace the scope.commands array (repeatable).
+        #[arg(long = "command")]
+        command: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Materialize the embedded global-memory corpus into the gitignored
     /// `.doctrine/memory/shipped/`, or `memory sync install` to wire the
     /// session hook. Outside a doctrine repo this is a clean no-op.
@@ -2733,6 +2834,9 @@ fn write_class(cmd: &Command) -> WriteClass {
                 None => Write("memory sync"),
                 Some(SyncCommand::Install { .. }) => Write("memory sync install"),
             },
+            MemoryCommand::Tag { .. } => Write("memory tag"),
+            MemoryCommand::Status { .. } => Write("memory status"),
+            MemoryCommand::Edit { .. } => Write("memory edit"),
             MemoryCommand::Validate { .. }
             | MemoryCommand::Show { .. }
             | MemoryCommand::List { .. }
@@ -3306,6 +3410,56 @@ fn main() -> anyhow::Result<()> {
                 memory::run_resolve_links(path, reference.as_deref())
             }
             MemoryCommand::Backlinks { reference, path } => memory::run_backlinks(path, &reference),
+            MemoryCommand::Tag {
+                reference,
+                tags,
+                remove,
+                path,
+            } => memory::run_tag(path, &reference, &tags, &remove),
+            MemoryCommand::Status {
+                reference,
+                state,
+                by,
+                path,
+            } => memory::run_status(path, &reference, &state, by.as_deref(), color),
+            MemoryCommand::Edit {
+                reference,
+                title,
+                summary,
+                status,
+                lifespan,
+                review_by,
+                trust,
+                severity,
+                key,
+                path_scope,
+                glob,
+                command,
+                path,
+            } => {
+                let fields = memory::EditFields {
+                    title,
+                    summary,
+                    status,
+                    lifespan,
+                    review_by,
+                    trust,
+                    severity,
+                    key,
+                    path_scope: if path_scope.is_empty() {
+                        None
+                    } else {
+                        Some(path_scope)
+                    },
+                    glob: if glob.is_empty() { None } else { Some(glob) },
+                    command: if command.is_empty() {
+                        None
+                    } else {
+                        Some(command)
+                    },
+                };
+                memory::run_edit(path, &reference, &fields)
+            }
             MemoryCommand::Sync {
                 command,
                 dry_run: sync_dry_run,
@@ -5721,6 +5875,33 @@ mod write_class_tests {
                 path: None,
             }),
             Some("memory sync install")
+        );
+        assert_eq!(
+            w(MemoryCommand::Status {
+                reference: String::new(),
+                state: String::new(),
+                by: None,
+                path: None,
+            }),
+            Some("memory status")
+        );
+        assert_eq!(
+            w(MemoryCommand::Edit {
+                reference: String::new(),
+                title: None,
+                summary: None,
+                status: None,
+                lifespan: None,
+                review_by: None,
+                trust: None,
+                severity: None,
+                key: None,
+                path_scope: vec![],
+                glob: vec![],
+                command: vec![],
+                path: None,
+            }),
+            Some("memory edit")
         );
     }
 

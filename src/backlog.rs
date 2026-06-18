@@ -30,6 +30,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::backlog_order::{BacklogOrder, ItemId, OrderInput, Override, OverrideReason};
+use crate::tag::normalize_tag;
 // SL-060 PHASE-02: the dep/sequence schema + the strict edit-preserving append now
 // live in the shared `dep_seq` leaf. Backlog uses the leaf TYPE (`AfterEdge`) and the
 // leaf `RelEdit`/`append` write seam; its own `read_item`/`dep_seq_for` (the one-parse
@@ -1690,31 +1691,10 @@ pub(crate) fn run_after(
 // edit-preserving set-replace write, plus the two divergent folds
 // ---------------------------------------------------------------------------
 
-/// Normalise ONE tag on the WRITE path — the single chokepoint that decides what
-/// lands in the store (cf. `resolve_slug` for authored slugs). Trim, lowercase,
-/// then validate every char is `[a-z0-9_:-]` (colon allowed for namespacing, e.g.
-/// `area:backlog`); empty after trim, or any other char, is a HARD user error
-/// (`bail!`) NAMING the offending token so the author can fix it (EX-2). DISTINCT
-/// from [`fold_filter_tag`] — the filter fold is lenient by design (§4.2).
-fn normalize_tag(raw: &str) -> anyhow::Result<String> {
-    let tag = raw.trim().to_lowercase();
-    if tag.is_empty() {
-        anyhow::bail!("empty tag `{raw}` — tags must be non-empty `[a-z0-9_:-]`");
-    }
-    if !tag
-        .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | ':' | '-'))
-    {
-        anyhow::bail!(
-            "invalid tag `{raw}` — tags must be `[a-z0-9_:-]` (lowercased, e.g. `area:backlog`)"
-        );
-    }
-    Ok(tag)
-}
-
 /// Normalise a `-t/--tag` FILTER input — the lenient, SEPARATE fold (§4.2): trim +
 /// lowercase, with NO charset reject. A filter matching nothing must succeed
-/// silently (never `bail!`), so this MUST NOT route through [`normalize_tag`]; the
+/// silently (never `bail!`), so this MUST NOT route through
+/// [`crate::tag::normalize_tag`]; the
 /// two folds diverge by design. `tags_admit` keeps its exact-match semantics — only
 /// the input is folded so `-t Security` round-trips the stored `security`.
 fn fold_filter_tag(raw: &str) -> String {
@@ -1788,7 +1768,8 @@ fn apply_tags(
 /// `doctrine backlog tag <ID> [TAGS]… [--remove/-d <TAGS>…]` — the tag-edit verb
 /// (SL-067 PHASE-01, §4.1/§4.3). Thin impure shell: find the root, `parse_ref` +
 /// `require_item` (a missing id hard-errors, never an implicit create), normalise
-/// the adds/removes through the WRITE chokepoint [`normalize_tag`], reject an
+/// the adds/removes through the WRITE chokepoint
+/// [`crate::tag::normalize_tag`], reject an
 /// add∩remove overlap (a user error), then apply the edit-preserving set-replace
 /// in place (clock injected) and print the post-state. At least one add OR remove is
 /// required (clap enforces neither alone, so the shell does — EX-1).
