@@ -1,7 +1,7 @@
 id = 105
 slug = "after-remove-and-prune"
 title = "after edge removal: --remove flag and --prune verb for dangling after edges"
-status = "plan"
+status = "audit"
 created = "2026-06-18"
 updated = "2026-06-18"
 

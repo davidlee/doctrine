@@ -1,0 +1,56 @@
+# RV-085 domain map — SL-101 Estimate & Value facets
+# Candidate surface reviewed: refs/heads/candidate/101/review-001 (tip 700c6caa)
+# — no-ff 3-way merge of review/101 (impl bundle e459259f) onto main (ec2de060).
+# notes.md merge conflict resolved (both sides kept). Audit runs against this branch.
+
+[[area]]
+name = "estimate facet module"
+purpose = "EstimateFacet, EstimateRaw, parse_optional, normalise, validate, EstimationConfig, resolve_unit, resolve_confidence, custom Deserialize, 27 tests"
+paths = ["src/estimate.rs"]
+
+[[area]]
+name = "value facet module"
+purpose = "ValueFacet, ValueRaw, parse_optional, normalise, ValueConfig, resolve_unit, custom Deserialize, 11 tests"
+paths = ["src/value.rs"]
+
+[[area]]
+name = "doctrine.toml wiring"
+purpose = "DoctrineToml gains estimation + value fields; parse() eagerly calls resolve_unit/resolve_confidence"
+paths = ["src/dtoml.rs"]
+
+[[area]]
+name = "SliceDoc entity wiring"
+purpose = "SliceDoc gains Option<EstimateFacet> + Option<ValueFacet>; Eq dropped; 3 round-trip tests; Meta unchanged"
+paths = ["src/slice.rs"]
+
+[[area]]
+name = "module tree + template"
+purpose = "mod estimate/value in main.rs; commented [estimation]/[value] in doctrine.toml.example"
+paths = ["src/main.rs", "install/doctrine.toml.example"]
+
+[[invariant]]
+text = "ADR-001 leaf purity: estimate.rs and value.rs import only toml/serde/anyhow/std — no doctrine deps (PHASE-01 VA-1, PHASE-02 VA-1)"
+
+[[invariant]]
+text = "FR-002 validation matrix: present [estimate] requires both bounds finite, lower>=0, upper>=lower; absent parses clean; no silent repair"
+
+[[invariant]]
+text = "NF-001 non-blocking: no dispatch/execute/audit/close predicate reads estimate/value presence (PHASE-04 EX-5 / VA-1 structural proof)"
+
+[[invariant]]
+text = "NF-003 forward-compat: #[serde(flatten)] _extra tolerates unknown keys at parse, drops them at normalise (not preserved)"
+
+[[invariant]]
+text = "FR-004 round-trip: valid estimate/value survive parse->serialise->parse (E17/E18, slice round-trip tests)"
+
+[[invariant]]
+text = "Behaviour-preservation gate: existing conduct/verification/slice tests stay green unchanged (PHASE-03 EX-4, PHASE-04 EX-4)"
+
+[[invariant]]
+text = "Design §3.3: confidence bounds are 'purely informational until consumed' — 'No runtime effect in this slice'"
+
+[[risk]]
+text = "dtoml::parse() is the shared reader for conduct (conduct.rs:138), verification (verify.rs:146), and coverage_store (coverage_store.rs:202). Eager validation of [estimation] confidence bounds in parse() couples all those reads to estimation-config validity — a behaviour-preservation surface the design disclaims."
+
+[[risk]]
+text = "Pre-existing main failure: tests/e2e_skills_dispatch_shrinkage.rs::dispatch_router_skill_is_shrunk fails on base ec2de060 (54 lines vs <=45). Not SL-101's bundle (untouched). Out of scope."
