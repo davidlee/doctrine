@@ -461,7 +461,9 @@ fn set_entity_status(toml_path: &Path, status: &str) {
 /// Resolve a backlog item's TOML path from kind and id.
 fn backlog_toml(root: &Path, kind: &str, id: u32) -> std::path::PathBuf {
     let name = format!("{id:03}");
-    root.join(format!(".doctrine/backlog/{kind}/{name}/backlog-{name}.toml"))
+    root.join(format!(
+        ".doctrine/backlog/{kind}/{name}/backlog-{name}.toml"
+    ))
 }
 
 // --- VT-1: after_prune_drops_resolved ---
@@ -475,9 +477,7 @@ fn after_prune_drops_resolved() {
 
     // Append two after edges (rank 0 and rank 3)
     assert!(
-        run(root, &["after", "SL-201", "SL-202"])
-            .status
-            .success(),
+        run(root, &["after", "SL-201", "SL-202"]).status.success(),
         "after rank 0"
     );
     assert!(
@@ -505,10 +505,7 @@ fn after_prune_drops_resolved() {
 
     // Verify SL-201 after array is empty
     let toml = slice_toml(root, 201);
-    assert!(
-        toml.contains("after = []"),
-        "after array empty:\n{toml}"
-    );
+    assert!(toml.contains("after = []"), "after array empty:\n{toml}");
 }
 
 // --- VT-2: after_prune_noop ---
@@ -521,11 +518,7 @@ fn after_prune_noop() {
     seed_slice(root, 204, "Delta", "delta"); // SL-204 (stays proposed)
 
     // Append edge
-    assert!(
-        run(root, &["after", "SL-203", "SL-204"])
-            .status
-            .success()
-    );
+    assert!(run(root, &["after", "SL-203", "SL-204"]).status.success());
 
     // Prune — nothing to prune (SL-204 is proposed/open, not terminal)
     let prune = run(root, &["after", "SL-203", "--prune"]);
@@ -538,10 +531,7 @@ fn after_prune_noop() {
 
     // Edge still present
     let toml = slice_toml(root, 203);
-    assert!(
-        toml.contains("SL-204"),
-        "edge still present:\n{toml}"
-    );
+    assert!(toml.contains("SL-204"), "edge still present:\n{toml}");
 }
 
 // --- VT-3: after_prune_mixed ---
@@ -555,16 +545,8 @@ fn after_prune_mixed() {
     seed_slice(root, 207, "Golf", "golf"); // SL-207 (will be resolved)
 
     // Append both edges
-    assert!(
-        run(root, &["after", "SL-205", "SL-206"])
-            .status
-            .success()
-    );
-    assert!(
-        run(root, &["after", "SL-205", "SL-207"])
-            .status
-            .success()
-    );
+    assert!(run(root, &["after", "SL-205", "SL-206"]).status.success());
+    assert!(run(root, &["after", "SL-205", "SL-207"]).status.success());
 
     // Resolve SL-207
     let sl207 = root.join(".doctrine/slice/207/slice-207.toml");
@@ -578,10 +560,7 @@ fn after_prune_mixed() {
         out.contains("SL-205 after SL-207") && out.contains("dropped"),
         "SL-207 dropped: {out}"
     );
-    assert!(
-        !out.contains("SL-206"),
-        "SL-206 NOT dropped: {out}"
-    );
+    assert!(!out.contains("SL-206"), "SL-206 NOT dropped: {out}");
 
     // Verify TOML: only SL-206 remains
     let toml = slice_toml(root, 205);
@@ -614,17 +593,11 @@ fn after_prune_absent_target() {
     let prune = run(root, &["after", "SL-208", "--prune"]);
     assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
     let out = stdout(&prune);
-    assert!(
-        out.contains("absent"),
-        "absent in reason: {out}"
-    );
+    assert!(out.contains("absent"), "absent in reason: {out}");
 
     // Edge is gone
     let toml = fs::read_to_string(&toml_path).unwrap();
-    assert!(
-        !toml.contains("SL-999"),
-        "edge to SL-999 removed:\n{toml}"
-    );
+    assert!(!toml.contains("SL-999"), "edge to SL-999 removed:\n{toml}");
 }
 
 // --- VT-4: backlog_after_prune ---
@@ -652,8 +625,5 @@ fn backlog_after_prune() {
         stderr(&prune)
     );
     let out = stdout(&prune);
-    assert!(
-        out.contains("dropped"),
-        "backlog prune dropped: {out}"
-    );
+    assert!(out.contains("dropped"), "backlog prune dropped: {out}");
 }

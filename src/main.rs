@@ -4269,7 +4269,8 @@ fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Result<()> {
                             Err(_) => toml::Value::Table(toml::Table::new()),
                         };
                         let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
-                        let resolution = val.get("resolution").and_then(|s| s.as_str()).unwrap_or("");
+                        let resolution =
+                            val.get("resolution").and_then(|s| s.as_str()).unwrap_or("");
                         if resolution.is_empty() {
                             status.to_string()
                         } else {

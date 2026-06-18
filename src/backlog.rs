@@ -1595,18 +1595,14 @@ pub(crate) fn run_after(
                             .join(format!("{tid2:03}"))
                             .join(format!("{}-{tid2:03}.toml", kref2.stem));
                         if target_path.exists() {
-                            let body =
-                                std::fs::read_to_string(&target_path).unwrap_or_default();
+                            let body = std::fs::read_to_string(&target_path).unwrap_or_default();
                             let val: toml::Value = match toml::from_str(&body) {
                                 Ok(v) => v,
                                 Err(_) => toml::Value::Table(toml::Table::new()),
                             };
-                            let status =
-                                val.get("status").and_then(|s| s.as_str()).unwrap_or("");
-                            let resolution = val
-                                .get("resolution")
-                                .and_then(|s| s.as_str())
-                                .unwrap_or("");
+                            let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                            let resolution =
+                                val.get("resolution").and_then(|s| s.as_str()).unwrap_or("");
                             if resolution.is_empty() {
                                 status.to_string()
                             } else {
