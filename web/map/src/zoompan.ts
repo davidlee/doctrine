@@ -7,7 +7,7 @@
 // callback — never a closure captured at first wire. Pure viewport math stays in
 // viewport.ts; this module owns only the impure DOM wrap + event wiring.
 
-import { fitViewport, applyFocusChange, readSvgDims, parseTransform, type GraphViewport } from './viewport';
+import { fitViewport, applyFocusChange, readSvgDims, parseTransform, panViewport, type GraphViewport } from './viewport';
 
 export interface MountZoomPanOpts {
   /** Viewport to restore — null/undefined = fit the SVG to the container. */
@@ -97,13 +97,10 @@ export function mountZoomPan(
     let origin = { x: e.clientX, y: e.clientY };
     const onMove = (me: MouseEvent): void => {
       const cur = parseTransform(layer.style.transform);
-      const dx = (me.clientX - origin.x) / cur.k;
-      const dy = (me.clientY - origin.y) / cur.k;
-      const newX = cur.x + dx;
-      const newY = cur.y + dy;
+      const next = panViewport(cur, me.clientX - origin.x, me.clientY - origin.y);
       origin = { x: me.clientX, y: me.clientY };
-      layer.style.transform = `translate(${String(newX)}px, ${String(newY)}px) scale(${String(cur.k)})`;
-      emit({ x: newX, y: newY, k: cur.k });
+      layer.style.transform = `translate(${String(next.x)}px, ${String(next.y)}px) scale(${String(next.k)})`;
+      emit(next);
     };
     const onUp = (): void => {
       container.classList.remove('grabbing');

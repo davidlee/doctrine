@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fitViewport, applyFocusChange, clampViewport, parseTransform, readSvgDims, type GraphViewport } from './viewport';
+import { fitViewport, applyFocusChange, clampViewport, parseTransform, readSvgDims, panViewport, type GraphViewport } from './viewport';
 
 // ---------------------------------------------------------------------------
 // fitViewport
@@ -197,5 +197,35 @@ describe('parseTransform', () => {
 
   it('handles translate without scale gracefully', () => {
     expect(parseTransform('translate(50px, 75px)')).toEqual({ x: 0, y: 0, k: 1 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// panViewport
+// ---------------------------------------------------------------------------
+
+describe('panViewport', () => {
+  it('adds the screen-space delta to x/y and preserves k', () => {
+    const vp: GraphViewport = { x: 10, y: 20, k: 1 };
+    expect(panViewport(vp, 5, -7)).toEqual({ x: 15, y: 13, k: 1 });
+  });
+
+  it('does NOT scale the delta by k when zoomed out (regression: pan acceleration)', () => {
+    // k < 1 (large graph fitted). A 100px mouse drag must move the layer 100px,
+    // not 100/k. The old `/k` bug multiplied the delta when zoomed out.
+    const vp: GraphViewport = { x: 0, y: 0, k: 0.5 };
+    expect(panViewport(vp, 100, 0)).toEqual({ x: 100, y: 0, k: 0.5 });
+  });
+
+  it('does NOT shrink the delta by k when zoomed in', () => {
+    const vp: GraphViewport = { x: 0, y: 0, k: 4 };
+    expect(panViewport(vp, 100, 0)).toEqual({ x: 100, y: 0, k: 4 });
+  });
+
+  it('returns a new object, leaving the input untouched', () => {
+    const vp: GraphViewport = { x: 1, y: 2, k: 3 };
+    const out = panViewport(vp, 10, 10);
+    expect(out).not.toBe(vp);
+    expect(vp).toEqual({ x: 1, y: 2, k: 3 });
   });
 });
