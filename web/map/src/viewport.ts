@@ -79,6 +79,26 @@ export function clampViewport(
  * Uses getBoundingClientRect() — not width/height attributes —
  * because Graphviz outputs in points (pt), not pixels.
  */
+/**
+ * Parse a viewport from a CSS transform string of the form
+ * `translate(Xpx, Ypx) scale(K)`. Returns identity if parsing fails.
+ * Callers pass an element's `style.transform` — the function is pure
+ * (string → viewport) for testability.
+ */
+export function parseTransform(transform: string): GraphViewport {
+  // Match: translate(Xpx, Ypx) scale(K)  — the format we write.
+  const m = /translate\(([\d.-]+)px,\s*([\d.-]+)px\)\s*scale\(([\d.-]+)\)/.exec(transform);
+  if (m?.[1] !== undefined && m[2] !== undefined && m[3] !== undefined) {
+    return { x: parseFloat(m[1]), y: parseFloat(m[2]), k: parseFloat(m[3]) };
+  }
+  return { x: 0, y: 0, k: 1 };
+}
+
+/**
+ * Read the rendered dimensions of an injected SVG element.
+ * Uses getBoundingClientRect() — not width/height attributes —
+ * because Graphviz outputs in points (pt), not pixels.
+ */
 export function readSvgDims(svgEl: SVGSVGElement): { w: number; h: number } {
   const r = svgEl.getBoundingClientRect();
   const w = r.width;

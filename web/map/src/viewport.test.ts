@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fitViewport, applyFocusChange, clampViewport, readSvgDims, type GraphViewport } from './viewport';
+import { fitViewport, applyFocusChange, clampViewport, parseTransform, readSvgDims, type GraphViewport } from './viewport';
 
 // ---------------------------------------------------------------------------
 // fitViewport
@@ -167,5 +167,35 @@ describe('readSvgDims', () => {
       getBoundingClientRect: () => ({ width: 0, height: 0 }),
     } as unknown as SVGSVGElement;
     expect(readSvgDims(mockEl)).toEqual({ w: 1, h: 1 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTransform
+// ---------------------------------------------------------------------------
+
+describe('parseTransform', () => {
+  it('parses the format we write: translate(Xpx, Ypx) scale(K)', () => {
+    expect(parseTransform('translate(100px, 200px) scale(1.5)')).toEqual({ x: 100, y: 200, k: 1.5 });
+  });
+
+  it('handles negative values', () => {
+    expect(parseTransform('translate(-50.5px, 0px) scale(0.75)')).toEqual({ x: -50.5, y: 0, k: 0.75 });
+  });
+
+  it('handles precise scale values', () => {
+    expect(parseTransform('translate(0px, 0px) scale(3.14159)')).toEqual({ x: 0, y: 0, k: 3.14159 });
+  });
+
+  it('returns identity on empty string', () => {
+    expect(parseTransform('')).toEqual({ x: 0, y: 0, k: 1 });
+  });
+
+  it('returns identity on unrecognised format', () => {
+    expect(parseTransform('matrix(1, 0, 0, 1, 0, 0)')).toEqual({ x: 0, y: 0, k: 1 });
+  });
+
+  it('handles translate without scale gracefully', () => {
+    expect(parseTransform('translate(50px, 75px)')).toEqual({ x: 0, y: 0, k: 1 });
   });
 });
