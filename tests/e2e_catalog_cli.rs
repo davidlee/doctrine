@@ -45,13 +45,14 @@ fn seed_fixture(root: &Path) {
     );
     write(root, ".doctrine/slice/003/slice-003.md", "scope\n");
 
-    // ADR-002 — governance entity with supersedes edge.
+    // ADR-002 — governance entity with supersedes edge (SL-095: [[relation]] rows).
     write(
         root,
         ".doctrine/adr/002/adr-002.toml",
         "id = 2\nslug = \"a2\"\ntitle = \"A2\"\nstatus = \"accepted\"\n\
          created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-         [relationships]\nsupersedes = [\"ADR-001\"]\n",
+         [relationships]\nsuperseded_by = []\ntags = []\n\
+         [[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-001\"\n",
     );
     write(root, ".doctrine/adr/002/adr-002.md", "body\n");
 

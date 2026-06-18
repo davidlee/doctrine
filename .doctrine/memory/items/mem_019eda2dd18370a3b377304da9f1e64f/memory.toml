@@ -1,0 +1,40 @@
+memory_uid = "mem_019eda2dd18370a3b377304da9f1e64f"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SL-095: old_policy needed for cross-kind record supersession status flips"
+summary = "When merging StorageTarget dispatch with cross-kind record supersession, the TypedArray arm must use old_policy.superseded_status (from OLD's kind) not policy.superseded_status (from NEW's kind) when flipping OLD's status."
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "19b67f0503b0384e42cf525556fb7c95cb75e922"
+ref_name = "refs/heads/main"
+checkout_state_id = "6e58f6ab503c42a49bd8cee2f239ebd06710e5ab916bd8f062ec3e3d26ca1188"
+base_commit = "e78b9275c5525ef739992f4f10cf41299fe1980a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

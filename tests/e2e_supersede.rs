@@ -79,12 +79,12 @@ fn supersede_records_all_three_surfaces_and_preserves_structure() {
 
     let new_toml = adr_toml(root, 2);
     let old_toml = adr_toml(root, 1);
-    // NEW.supersedes ∋ OLD (alignment decor preserved by toml_edit).
+    // NEW.supersedes ∋ OLD — now a [[relation]] row (SL-095).
     assert!(
-        new_toml.contains("supersedes    = [\"ADR-001\"]"),
-        "NEW.supersedes lists OLD:\n{new_toml}"
+        new_toml.contains("label = \"supersedes\"") && new_toml.contains("target = \"ADR-001\""),
+        "NEW.supersedes [[relation]] row lists OLD:\n{new_toml}"
     );
-    // OLD.superseded_by ∋ NEW (the single sanctioned reverse carve-out).
+    // OLD.superseded_by ∋ NEW (the single sanctioned reverse carve-out — still typed).
     assert!(
         old_toml.contains("superseded_by = [\"ADR-002\"]"),
         "OLD.superseded_by lists NEW:\n{old_toml}"
@@ -97,6 +97,11 @@ fn supersede_records_all_three_surfaces_and_preserves_structure() {
     // Both [relationships] blocks survive.
     assert!(new_toml.contains("[relationships]"), "NEW rel block kept");
     assert!(old_toml.contains("[relationships]"), "OLD rel block kept");
+    // NEW has [[relation]] array.
+    assert!(
+        new_toml.contains("[[relation]]"),
+        "NEW [[relation]] block present"
+    );
 }
 
 // --- VT-2: idempotent re-run is a byte-stable no-op --------------------------
@@ -154,9 +159,9 @@ fn supersede_refuses_a_different_supersessor() {
         msg.contains("already superseded by ADR-002") && msg.contains("deferred"),
         "names the prior supersessor + deferral: {msg}"
     );
-    // ADR-003 was NOT written — its supersedes stays empty.
+    // ADR-003 was NOT written — no supersedes [[relation]] row.
     assert!(
-        adr_toml(root, 3).contains("supersedes    = []"),
+        !adr_toml(root, 3).contains("label = \"supersedes\""),
         "the refused NEW wrote nothing:\n{}",
         adr_toml(root, 3)
     );
@@ -189,9 +194,9 @@ fn supersede_refuses_hand_drift_status_without_carveout() {
         drifted,
         "drift refuse does not self-heal"
     );
-    // And NEW was not written.
+    // And NEW was not written — no supersedes [[relation]] row.
     assert!(
-        adr_toml(root, 2).contains("supersedes    = []"),
+        !adr_toml(root, 2).contains("label = \"supersedes\""),
         "NEW untouched on drift refuse"
     );
 }
@@ -286,7 +291,7 @@ fn supersede_preflight_malformed_old_refuses_with_no_write_to_new() {
         "NEW untouched on pre-flight refuse"
     );
     assert!(
-        new_before.contains("supersedes    = []"),
+        !new_before.contains("label = \"supersedes\""),
         "NEW.supersedes still empty"
     );
 }
@@ -303,9 +308,8 @@ fn validate_flags_a_torn_supersession_state() {
     // Hand-induce the torn state the NEW-then-OLD write order would leave on a crash:
     // NEW.supersedes ∋ OLD, but OLD.superseded_by NOT yet written.
     let new = adr_path(root, 2);
-    let new_torn = fs::read_to_string(&new)
-        .unwrap()
-        .replace("supersedes    = []", "supersedes    = [\"ADR-001\"]");
+    let new_torn = fs::read_to_string(&new).unwrap()
+        + "\n[[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-001\"\n";
     fs::write(&new, &new_torn).unwrap();
 
     let out = run(root, &["validate"]);

@@ -3193,7 +3193,7 @@ ref = "src/main.rs"
     fn record_global_mints_an_unanchored_master_under_memory_not_items() {
         let repo = GitScratch::new();
         repo.commit("a.txt", "hello");
-        let paths = strings(&["doc/"]);
+        let paths = strings(&[".doctrine/spec/tech/"]);
         run_record(
             Some(repo.path.clone()),
             &RecordArgs {

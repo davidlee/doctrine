@@ -7,7 +7,7 @@ the gaps below are *age*, not divergent intent.
 
 ## Lineage
 - A doctrine **slice IS `spec-driver`'s delta** — same model, different
-  vocabulary (`doc/slices-spec.md` § Overview).
+  vocabulary (SPEC-014 § Overview).
 - `design.md` is the slice's in-bundle design record (≈ `spec-driver` DR).
   Authoring it up front is NOT spec-first-aspirational editing — per-slice design
   (the HOW) and evergreen specs (normative truth) are different layers.

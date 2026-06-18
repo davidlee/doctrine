@@ -1,7 +1,7 @@
 id = 97
 slug = "record-supersede-verb"
 title = "Build IMP-006 transactional supersede verb for knowledge records and wire RECORD Supersedes LifecycleOnly rule row"
-status = "reconcile"
+status = "done"
 created = "2026-06-18"
 updated = "2026-06-18"
 

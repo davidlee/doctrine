@@ -9,7 +9,7 @@ created = "2026-06-07"
 updated = "2026-06-07"
 
 [scope]
-paths = ["doc/entity-model.md", ".doctrine/spec/product/009"]
+paths = [".doctrine/spec/tech/004", ".doctrine/spec/product/009"]
 globs = []
 commands = ["backlog"]
 tags = ["backlog", "taxonomy", "entity-model"]

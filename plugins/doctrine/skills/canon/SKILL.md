@@ -15,7 +15,8 @@ meaning for it — not all of them, every time:
 - `CLAUDE.md`, `AGENTS.md` — standing instructions and conventions.
 - `.doctrine/adr/` — project-global ADRs (authored; status lives in
   `adr-nnn.toml`). List them: `doctrine adr list`. Read the relevant bodies.
-- `doc/*` — evergreen, authoritative specs.
+- `.doctrine/spec/tech/` — authoritative technical specs (the *how*).
+- `.doctrine/adr/` — authoritative decisions.
 - the governing slice's `design.md` — canon for *this* change's design intent.
 
 For subsystem-level truth (gotchas, patterns, invariants tied to files or

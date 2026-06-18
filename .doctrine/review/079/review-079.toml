@@ -1,0 +1,32 @@
+id    = 79
+slug  = "reconciliation-review-of-sl-095"
+title = "reconciliation review of SL-095"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-095"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "JSON output still includes relationships.supersedes — design D4 says it should disappear"
+detail = """
+Design D4: 'JSON surface changes: relationships.supersedes disappears from --json output.' But src/governance.rs show_json() line 366 explicitly splices supersedes back: `rel.insert("supersedes".to_string(), serde_json::json!(supersedes));` with the comment 'so the JSON shape is byte-identical to the pre-migration typed-field serialization'.
+
+The code preserves backward compatibility (splices supersedes from [[relation]] rows back into the JSON relationships object), contradicting the design's assertion that it would disappear. Plan VT-4 (PHASE-02) says 'show --json drops relationships.supersedes; downstream tests updated' — this VT expectation is not met by the code.
+
+Zero web/map consumers exist (confirmed), so this has no observable impact. The question is whether the design was aspirational (intending to drop it) and the code chose compatibility, or whether this is an implementation oversight.
+
+Evidence: `cargo run -- adr show ADR-001 --json` output includes `"supersedes": []` in the relationships block."""
+disposition = "verified"
+response = "The code intentionally splices supersedes back into JSON for backward compatibility (byte-identical shape). The design D4 was aspirational — promising a JSON change that the implementer chose not to make since zero consumers exist and preserving the existing shape is safer. Design D4 text should be updated to reflect the actual implementation: 'JSON surface unchanged — supersedes is spliced back from [[relation]] rows, preserving the byte-identical relationships object.' This goes to the reconciliation brief as a per-slice direct edit to design.md §D4."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

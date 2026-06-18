@@ -1,0 +1,40 @@
+memory_uid = "mem_019eda2fed8672d39214a5eeb3c86385"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reference-map sweeps: pre-enumerated maps are suggestive not exhaustive — always rg after"
+summary = "Design reference maps (like SL-082 §3.2 K1-K11) may miss entries. The ground truth is rg sweep results, not the pre-enumerated map. reconcile/SKILL.md:20 was missed but caught by rg."
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = ["plugins/doctrine/skills/"]
+globs = []
+commands = []
+tags = ["sweep", "design", "sl-082"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f0bf433cf638adcb42eca63430548e77fe67d014"
+ref_name = "refs/heads/main"
+checkout_state_id = "2818ac7834408f52f2321d085a7c2a13da5e4edf8742c9e10dd0a75490c121a3"
+base_commit = "dcd4974434bebd51c49decc3f4780275bc356b51"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
