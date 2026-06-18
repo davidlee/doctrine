@@ -4,7 +4,7 @@ version = 1
 id = 262
 slug = "validate-a-present-estimate-and-accept-its-absence"
 title = "Validate a present estimate and accept its absence"
-status = "active"
+status = "pending"
 kind = "functional"
 
 description = "When [estimate] is present it must be structurally valid; when absent the entity is valid. Optional means omittable, not malformed."

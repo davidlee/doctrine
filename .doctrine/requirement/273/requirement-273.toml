@@ -4,7 +4,7 @@ version = 1
 id = 273
 slug = "render-the-estimate-in-display-without-classifying-spread"
 title = "Render the estimate in display without classifying spread"
-status = "active"
+status = "pending"
 kind = "functional"
 
 description = "Display renders the estimate as a pure function: present/absent in detailed view, ratio + width in verbose view, classifying nothing."
