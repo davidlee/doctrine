@@ -9,6 +9,7 @@ import { cmNeighbourhood, buildNodeLabelList, buildRelLabelList } from './model'
 import { cmGraphToDot } from './dot';
 import { renderDot } from './api';
 import { injectHitRects, wireHandlers, type SvgHandlerOpts } from './svg';
+import { mountZoomPan } from './zoompan';
 import { escapeHtml, escapeAttr } from './render';
 import DOMPurify from 'dompurify';
 
@@ -170,6 +171,10 @@ export function renderDiagram(opts: CmDiagramOpts): void {
           },
         };
         wireHandlers(svgEl, handlerOpts);
+        // Zoom/pan + fit-to-viewport (IMP-100). Fit-on-load, no persistence —
+        // concept-map focus churn doesn't carry a viewport, so onViewportChange
+        // is omitted.
+        mountZoomPan(container, svgEl, {});
       }
     })
     .catch(() => {

@@ -7,7 +7,8 @@ import { neighbourhood, compareEdgesBySource } from './model';
 import { graphToDot } from './dot';
 import { renderDot, fetchMarkdown } from './api';
 import { injectHitRects, wireHandlers, dimLegend, type SvgHandlerOpts } from './svg';
-import { fitViewport, applyFocusChange, readSvgDims, parseTransform, type GraphViewport } from './viewport';
+import { type GraphViewport } from './viewport';
+import { mountZoomPan } from './zoompan';
 import { buildHash } from './router';
 import markdownit from 'markdown-it';
 import DOMPurify from 'dompurify';
@@ -702,82 +703,12 @@ export function graphPane(opts: GraphPaneOpts): void {
         }
         dimLegend(svgEl, edgeLabels);
 
-        // ── Zoom/pan wrapper (SL-094) ───────────────────────────────────────
-        const svgDims = readSvgDims(svgEl);
-        const cw = container.clientWidth;
-        const ch = container.clientHeight;
-        const minK = fitViewport(svgDims.w, svgDims.h, cw, ch).k;
-
-        // Compute target viewport per the rules in design.md
-        let vp: GraphViewport;
-        if (opts.initialViewport == null) {
-          vp = fitViewport(svgDims.w, svgDims.h, cw, ch);
-        } else if (opts.focusChanged === true) {
-          vp = applyFocusChange(opts.initialViewport, minK, svgDims.w, svgDims.h, cw, ch);
-        } else {
-          vp = opts.initialViewport;
-        }
-
-        // Wrap the SVG in the transform layer
-        const wrapper = document.createElement('div');
-        wrapper.className = 'graph-transform-layer';
-        wrapper.style.transform = `translate(${String(vp.x)}px, ${String(vp.y)}px) scale(${String(vp.k)})`;
-        wrapper.dataset.minK = String(minK);
-        container.removeChild(svgEl);
-        wrapper.appendChild(svgEl);
-        container.appendChild(wrapper);
-
-        // Wire zoom/pan handlers once per .graph-area lifetime
-        if (container.dataset.zoomWired !== 'true') {
-          container.dataset.zoomWired = 'true';
-
-          // Wheel → zoom
-          container.addEventListener('wheel', (e) => {
-            const layer = container.querySelector<HTMLElement>('.graph-transform-layer');
-            if (layer === null) return; // cross-mode guard
-            e.preventDefault();
-            let delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-            if (Math.abs(delta) > 40) delta = Math.sign(delta) * 40;
-            const rect = container.getBoundingClientRect();
-            const cx = e.clientX - rect.left;
-            const cy = e.clientY - rect.top;
-            const cur = parseTransform(layer.style.transform);
-            const curMinK = parseFloat(layer.dataset.minK ?? '1');
-            const newK = Math.max(curMinK, Math.min(10, cur.k * (1 - delta * 0.002)));
-            const scaleRatio = newK / cur.k;
-            const newX = cx - scaleRatio * (cx - cur.x);
-            const newY = cy - scaleRatio * (cy - cur.y);
-            layer.style.transform = `translate(${String(newX)}px, ${String(newY)}px) scale(${String(newK)})`;
-            opts.onViewportChange?.({ x: newX, y: newY, k: newK });
-          }, { passive: false });
-
-          // Mousedown → drag to pan
-          container.addEventListener('mousedown', (e) => {
-            const layer = container.querySelector<HTMLElement>('.graph-transform-layer');
-            if (layer === null) return; // cross-mode guard
-            // Don't start a pan if the user clicked on a node (handled by svg.ts)
-            if (e.target instanceof Element && e.target.closest('.doctrine-node') !== null) return;
-            e.preventDefault();
-            container.classList.add('grabbing');
-            let origin = { x: e.clientX, y: e.clientY };
-            const onMove = (me: MouseEvent): void => {
-              const cur = parseTransform(layer.style.transform);
-              const dx = (me.clientX - origin.x) / cur.k;
-              const dy = (me.clientY - origin.y) / cur.k;
-              const newX = cur.x + dx;
-              const newY = cur.y + dy;
-              origin = { x: me.clientX, y: me.clientY };
-              layer.style.transform = `translate(${String(newX)}px, ${String(newY)}px) scale(${String(cur.k)})`;
-              opts.onViewportChange?.({ x: newX, y: newY, k: cur.k });
-            };
-            const onUp = (): void => {
-              container.classList.remove('grabbing');
-              document.removeEventListener('mousemove', onMove);
-            };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp, { once: true });
-          });
-        }
+        // ── Zoom/pan wrapper (SL-094, extracted IMP-100) ────────────────────
+        mountZoomPan(container, svgEl, {
+          initialViewport: opts.initialViewport,
+          focusChanged: opts.focusChanged,
+          onViewportChange: opts.onViewportChange,
+        });
       }
     })
     .catch(() => {
