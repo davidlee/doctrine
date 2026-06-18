@@ -55,7 +55,7 @@ single tribunal.
 1. Establish the **sanctioned doctrine** relevant to the target. Prefer
    project-local sources first:
    - `CLAUDE.md`, `AGENTS.md`, `README.md`
-   - `.doctrine/adr/` (ADRs — `doctrine adr list`), `doc/*` (evergreen specs)
+   - `.doctrine/adr/` (ADRs), `.doctrine/spec/tech/` (tech specs), `.doctrine/spec/product/` (product specs)
    - the governing slice: `design.md` (canon for design intent), `plan.toml` /
      `plan.md`, the scope `slice-nnn.md`, and the EN/EX/VT acceptance criteria
    - `/canon` and `/retrieve-memory` for subsystem truth

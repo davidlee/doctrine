@@ -33,7 +33,7 @@ skill does not restate them. What follows is route-unique.
 
 - **Consult the backlog before choosing**: `backlog list` — is this intent
   already captured, and do open items bear on it?
-- Authoring evergreen specs under `doc/*` → `/spec-product`, `/spec-tech`
+- Authoring tech specs → `/spec-tech`; product specs → `/spec-product`
   (not in the boot table).
 - "There is a slice" does **not** route to `/execute` — the design, plan, and
   runtime phase sheet must exist first (the no-code-without-approved-plan gate).

@@ -24,7 +24,7 @@ field-owned, "no undispositioned findings before close" is enforced by the binar
 
 > **Reconciliation scope.** Doctrine has no specs/contracts registry or
 > `sync`/`validate` surface; reconciliation here means reconciling against
-> `design.md`, ADRs, and `doc/*`, not a spec engine.
+> `design.md`, ADRs, and `.doctrine/spec/tech/`, not a spec engine.
 
 > **Dispatched slice — review the candidate surface, not the raw evidence.** When
 > the slice was driven by `/dispatch`, `review/*` and `phase/*` are immutable
@@ -38,7 +38,7 @@ Inputs:
 
 - the slice's implemented phases and their verification evidence
 - `design.md` (canonical), `slice-nnn.md`, `plan.toml`
-- relevant ADRs and `doc/*` specs (see `/canon`)
+- relevant ADRs and tech specs (see `/canon`)
 
 ## Audit lens
 
