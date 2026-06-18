@@ -1,0 +1,40 @@
+memory_uid = "mem_019edacf8807772285610b0de376fdc5"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SL-101 design uses espresso_shots (not SPEC-020's high_caffeine_hours) as the estimation unit default, and includes a Value facet (magic_beans) with no governing spec yet. User ruled: design is forward-looking authority; SPEC-020 will be amended during reconciliation to match. Both unit names and the Value facet are sanctioned. Reconciliation must produce a Value PRD+SPEC and amend SPEC-020."
+summary = ""
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "25b13820f747cdf25c130fd481ccad45238c7e23"
+ref_name = "refs/heads/main"
+checkout_state_id = "80cce964416934c7db39454859751ad2d68db886190d0ce06dad9641254df78b"
+base_commit = "ac93dc58540d73872b25defe95802bc5fbf8d649"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

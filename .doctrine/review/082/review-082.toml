@@ -1,0 +1,103 @@
+id    = 82
+slug  = "design-review-of-sl-101"
+title = "design review of SL-101"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-101"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Default estimation unit 'espresso_shots' contradicts SPEC-020 FR-003 which mandates 'high_caffeine_hours'"
+detail = '''
+Expected (SPEC-020 FR-003, §Project-wide unit resolution): "The estimation unit is read from project config doctrine.toml [estimation].unit, defaulting to high_caffeine_hours when unconfigured."
+
+Observed (SL-101 design.md §3.3, line 76): `pub(crate) const DEFAULT_ESTIMATION_UNIT: &str = "espresso_shots";` — the slice scope (slice-101.md §FR-003) likewise states "defaulting to espresso_shots". The install template (design.md §5.2) ships `# unit = "espresso_shots"`.
+
+This is not a trivial word-choice — it is a direct contradiction. SPEC-020 is the governing tech spec for this slice (the slice-101.toml relationships table lists SPEC-020 as its sole spec). A design that overrules its own charter on a literal constant is heresy. The unit name `espresso_shots` is a whimsical placeholder with no definition in any product spec; `high_caffeine_hours` is the sanctioned term from both PRD-014 and SPEC-020.
+
+Evidence: design.md §3.3 line "DEFAULT_ESTIMATION_UNIT: &str = \"espresso_shots\"", slice-101.md §FR-003 "defaulting to espresso_shots", SPEC-020 FR-003 acceptance criteria: "With [estimation].unit omitted, the resolved unit defaults to high_caffeine_hours."
+
+Penance: Replace every occurrence of "espresso_shots" with "high_caffeine_hours" in the design, scope, and install template. Verify: grep for "espresso" returns zero hits in the slice authored files.'''
+disposition = "fix-now"
+response = "Accepted. The default unit constant in design.md §3.3, the scope document FR-003 prose, and the install template must all read high_caffeine_hours — exactly as SPEC-020 FR-003 commands. This is a three-location string replacement with zero design discussion. espresso_shots was a placeholder that escaped review; it must not survive into implementation."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "ValueFacet with unit magic_beans has no governing PRD or SPEC — a facet implemented without doctrinal authority"
+detail = """
+Expected (doctrine spec-product convention, I-2): Every implemented facet must descend from a governing PRD -> SPEC chain. SPEC-020 covers the Estimate facet exclusively — its title is "Estimation facet", its responsibilities list only EstimateFacet concerns, its requirements (REQ-269 through 277) name only estimate operations. PRD-014 is similarly scoped to estimation. No separate Value PRD or Value SPEC exists in the corpus.
+
+Observed (SL-101 design.md section 4, slice-101.md Scope): A full ValueFacet module is designed — src/value.rs (~90 lines), ValueConfig with DEFAULT_VALUE_UNIT = "magic_beans", a [value] config section in doctrine.toml, and a value: Option<ValueFacet> field on SliceDoc. The scope document introduces this as "two kind-agnostic entity facets" yet the second facet has zero doctrinal parentage.
+
+The Value facet is not in the slice's non-goals — it is in scope, consuming design effort, config surface, and entity schema space. The install template will ship [value] with unit = "magic_beans" — a whimsical unit name with no definition in any product spec, no acceptance criteria, no requirements coverage.
+
+Evidence: doctrine spec list shows no Value spec. design.md section 4 "Module: src/value.rs" details full ValueFacet, ValueRaw, ValueConfig, DEFAULT_VALUE_UNIT. slice-101.md introduces Value facet alongside Estimate. SPEC-020 mentions only "Estimate" / "estimation".
+
+Penance: Either (a) remove the Value facet from SL-101 scope entirely and file a backlog item to create governing PRD+SPEC for it before implementation, or (b) produce a governing PRD+SPEC and amend SL-101's relationships to reference it. The "two facets in one slice" claim must not stand without authority for both.
+
+Verification: Either ValueFacet is stricken from the design and scope, or a PRD+SPEC chain exists and SL-101's spec relationship includes it."""
+disposition = "tolerated"
+response = "Ruled by the User: the design is forward-looking authority. Both the estimation unit (espresso_shots) and the Value facet (magic_beans) will be amended into SPEC-020 (and a new governing PRD+SPEC for Value) during the reconciliation phase. The design stays as-is; the spec gap is consciously accepted drift that reconciliation closes. The Value facet is not a bastard — it is a vanguard."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Verification alignment table maps FR-004 and NF-003 to wrong test indices — E15/E16/E17 are swapped"
+detail = """
+Expected: The verification alignment table (design.md section 8) correctly maps each requirement to the test(s) that verify it. FR-004 (round-trip durability) should reference the round-trip tests. NF-003 (forward compatibility) should reference the unknown-key tolerance tests.
+
+Observed (design.md section 8):
+- Line "FR-004 (round-trip) | Test E16" — but E16 is the forward-compat test (estimate with mode="pert", unknown key tolerated). FR-004 should map to E17 (SliceDoc round-trip: parse -> serialize -> parse, bounds AND unknown key preserved) or E4 (zero-width estimate round-trip).
+- Line "NF-003 (forward compat) | Test E15, V7" — but E15 tests resolve_confidence defaults ((0.1, 0.9)), not forward compatibility. NF-003 should map to E16 and E17 (both test unknown key tolerance via _extra flatten).
+- Line in section 11 Risks & Assumptions: "tested in E15, V7" — E15 is again the wrong test for _extra forward-compat behaviour.
+
+The implementer reading section 8 will look at E15 for forward-compat evidence and find confidence-bound defaults. The forward-compat proof exists (E16, E17, V7) but the index points elsewhere.
+
+Evidence: design.md line 299 FR-004 maps to E16, line 302 NF-003 maps to E15, line 326 "tested in E15, V7". Test table: E15 = confidence defaults, E16 = unknown key tolerance, E17 = round-trip.
+
+Penance: Correct the verification alignment table:
+- FR-004 -> Tests E4, E17
+- NF-003 -> Tests E16, V7
+- Section 11 "tested in E15, V7" -> "tested in E16, V7"
+
+Verification: grep design.md for "E15" in the verification alignment and risks sections — none should reference forward compat or round-trip. E16 and V7 should map to NF-003."""
+disposition = "fix-now"
+response = "Accepted. The verification alignment table has FR-004 and NF-003 mapped to wrong test indices. FR-004 (round-trip durability) → E4, E17. NF-003 (forward compat) → E16, V7. Section 11 'tested in E15, V7' → 'tested in E16, V7'. Three line fixes in the design.md table."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "E17 claims unknown keys survive round-trip but EstimateFacet has no _extra field — claim contradicts struct and SPEC-020"
+detail = """
+Expected: Either (a) unknown extra keys survive round-trip through EstimateFacet, making the E17 test claim true, OR (b) the design acknowledges that v1 does NOT preserve unknown keys through serialization (matching SPEC-020 "v1 persists no inferred mode or distribution") and corrects the E17 claim.
+
+Observed (design.md):
+- Section 3.1: EstimateFacet { lower: f64, upper: f64 } — NO _extra field. The struct cannot carry unknown keys.
+- Section 3.1: EstimateRaw carries _extra: BTreeMap with #[serde(flatten)] — this absorbs unknown keys during deserialization but they are DISCARDED by normalise() when constructing EstimateFacet.
+- Section 3.4: "Unknown keys present at parse time survive round-trip through _extra (verified in E16)" — this is FALSE. _extra is on the raw struct, not the facet. The Serialize derive on EstimateFacet only emits lower and upper. Unknown keys are tolerated at parse time (the forward-compat guarantee is met) but they are NOT preserved through serialize.
+- Section 3.4: "None -> key omitted in TOML output. _extra (empty on normalised facets) -> omitted." — this acknowledges _extra is empty on normalized facets, confirming it is not preserved.
+- Test E17: "SliceDoc round-trip: valid [estimate] with unknown key | parse->serialise->parse, bounds AND unknown key preserved" — this test claim contradicts both the struct definition and the spec (SPEC-020 NF-003: "v1 persists no inferred mode or distribution"). The test will FAIL because unknown keys cannot round-trip through EstimateFacet.
+
+The forward-compat guarantee (NF-003) is actually CORRECTLY met by the #[serde(flatten)] _extra on EstimateRaw — the parser tolerates unknown keys without error. The defect is the E17 test claim and the section 3.4 prose claiming round-trip preservation, which an implementer will try (and fail) to make pass.
+
+Penance: Correct E17 to test only that parse tolerates unknown keys (not that they survive serialize). Correct section 3.4 prose to say "Unknown keys are tolerated at parse time (NF-003) but v1 does not persist them" rather than "survive round-trip." The actual behavior (tolerate at parse, strip at serialize) matches SPEC-020 and needs no code change — only the design prose and test claims need correction.
+
+Verification: E17 claim matches the struct definition and SPEC-020 NF-003."""
+disposition = "fix-now"
+response = "Accepted. E17 must test parse-tolerance only — the claim that unknown keys 'survive round-trip' is false (EstimateFacet has no _extra field) and contradicts SPEC-020 ('v1 persists no inferred mode or distribution'). Section 3.4 prose: change 'survive round-trip through _extra' to 'tolerated at parse time (NF-003); v1 does not persist extra fields.' E17: change 'bounds AND unknown key preserved' to 'bounds preserved; unknown keys tolerated at parse, not persisted (NF-003)'. No code change needed — the struct and parser already behave correctly."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
