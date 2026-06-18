@@ -1,0 +1,58 @@
+# Implementation plan for SL-107 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-107"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Port the Estimate & Value facet integration delta onto main"
+objective = """
+Hand-port candidate/101/review-001's integration delta onto current main so the \
+facet data is present, parsed, and configured for SL-102 (display) / SL-103 \
+(graph) to build on: land src/value.rs (V1–V7) as an ADR-001 pure leaf, wire \
+both facet configs into DoctrineToml and both optional facet fields into \
+SliceDoc (parsed, NOT rendered), swap estimate.rs's blanket dead-code allow for \
+item-level expect tripwires, and document the config example — all existing \
+suites green unchanged (behaviour-preservation gate). Single phase by design \
+(OQ-1): the facet types only become non-test-live once wired, so value.rs cannot \
+pass the plain-clippy gate split out on its own — see plan.md."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (D1 item-level expect, D2 narrow boundary, D3 port-don't-merge); candidate/101/review-001 readable as reference port source." },
+  { id = "EN-2", text = "main baseline gate green (`just gate` clean) — the behaviour-preservation reference point." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/value.rs present (candidate verbatim — ValueFacet, ValueConfig, present-facet validation, unit magic_beans); `mod value;` declared in src/main.rs. No main.rs drift beyond the one mod line." },
+  { id = "EX-2", text = "DoctrineToml carries `estimation: estimate::EstimationConfig` + `value: value::ValueConfig`, both `#[serde(default)]`, mirroring conduct/verification: absent tables → sub-config default, present → parsed." },
+  { id = "EX-3", text = "SliceDoc carries `estimate: Option<EstimateFacet>` + `value: Option<ValueFacet>` (`#[serde(default)]`), parsed and round-tripped; existing fixtures updated to `estimate: None, value: None`. No display/render path added (Eq dropped from derive per candidate, f64 facets)." },
+  { id = "EX-4", text = "estimate.rs blanket `#![allow(dead_code)]` removed, replaced by item-level `#[cfg_attr(not(test), expect(dead_code, …))]` on exactly the 5 residual surfaces (DEFAULT_LOWER_CONFIDENCE, DEFAULT_UPPER_CONFIDENCE, resolve_unit, resolve_confidence, parse_optional); estimate logic/tests untouched; facet types now referenced from live code (SliceDoc + dtoml)." },
+  { id = "EX-5", text = "install/doctrine.toml.example carries commented `[estimation]` / `[value]` sections documenting the unit defaults (espresso_shots / magic_beans)." },
+]
+verification = [
+  { id = "VT-1", expects = "Value facet tests V1–V7 plus candidate custom-deserialize tests green (parse absent→None, integer/float, missing→err, NaN→err, resolve_unit default, unknown-keys tolerated/not leaked)." },
+  { id = "VT-2", expects = "dtoml tests: absent `[estimation]`/`[value]` tables yield sub-config defaults; tables set parse into EstimationConfig/ValueConfig." },
+  { id = "VT-3", expects = "SliceDoc round-trip: a slice toml with `[estimate]`/`[value]` parses to Some and serialises back; absent → None; malformed facet errors at parse (validation live via the serde path)." },
+  { id = "VT-4", expects = "Behaviour-preservation: full existing suite green UNCHANGED under `just gate` (workspace) — entity-engine + slice suites are the proof; estimate E-tests stay green." },
+  { id = "VT-5", expects = "Dead-code hygiene: plain `cargo clippy` (bins/lib, NOT --all-targets) zero warnings — covers both no stray dead_code AND no `expect` firing unfulfilled (an unfulfilled expect is itself a warning)." },
+  { id = "VT-6", expects = "`doctrine spec validate` clean." },
+  { id = "VA-1", text = "Display/graph absent: `rg 'Estimate:|Value:'` over slice.rs display path returns no match; SliceDoc facet fields are parse-only (no detailed-display rendering). Agent-verified — a negative/absence check no single test asserts." },
+]
+specs             = []           # per-phase narrowing of the plan's specs
+requirements      = []
