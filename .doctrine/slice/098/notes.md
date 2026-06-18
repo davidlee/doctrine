@@ -1,35 +1,33 @@
-# SL-098 notes — design phase
+# SL-098 Notes
 
-## RV-078 Inquisition (2026-06-18)
+## RV-078 — Inquisition verdict
 
-Design arraigned before the Inquisition. Eight findings raised and resolved —
-two blockers requiring redesign before plan.
-
-### Summary of findings
+GUILTY on 8 counts (2025-07-22). Redesign in progress.
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
-| F-1 | blocker | `/design` skill already has requirements pass at state 3 — design proposes adding duplicate at sub-step 4a | design-wrong: redesign to acknowledge current state or drop §3 |
-| F-2 | blocker | REQ-DNN handle is structured metadata as prose — violates storage rule (AGENTS.md § storage model; the design's citation of doc/entity-model.md is moot — that tree is SL-082-bound for erasure) | design-wrong: define TOML facet for implied requirements |
-| F-3 | major | `plan.toml [requirements]` as dead fields corrupts storage tier model | design-wrong: move to plan.md prose or make tooling read it |
-| F-4 | major | Orphan placement depends on altitude framework that does not exist | design-wrong: add /consult guardrail + backlog dependency |
-| F-5 | major | `/plan` skill says `[requirements]` stays empty — design contradicts without acknowledging | design-wrong: acknowledge current instruction and explain change |
-| F-6 | minor | Orphan section position in reconciliation brief undefined | design-wrong: nest under Governance/spec (REV) |
-| F-7 | minor | Walkthrough scenarios assume all amendments in place — not incremental | design-wrong: add per-phase walkthroughs or dependency labels |
-| F-8 | nit | Line-number references to entity-model.md will rot | fix-now: replace with section names |
+| F-1 | blocker | Design skill already has requirements pass at state 3 | **Correct that .dirge/skills/ had it — but .dirge is transient. Plugins (authoritative) doesn't. Design now baselines plugins. Both "collect decisions" and "requirements pass" are new inserts.** |
+| F-2 | blocker | REQ-DNN structured metadata in prose | **`design-requirements.toml` sidecar. Structured data in TOML; design.md has prose reference only.** |
+| F-3 | major | plan.toml [requirements] dead fields | **Route through plan.md prose. Acknowledge plan skill constraint.** |
+| F-4 | major | Orphan placement depends on missing altitude framework | **IMP-097 created. Design uses `/consult` guardrail. Home_hint in TOML is advisory.** |
+| F-5 | major | /plan skill says [requirements] stays empty — design contradicts | **Same fix as F-3. Acknowledge explicitly in plan skill edits.** |
+| F-6 | minor | Orphan section has no defined position in brief | **Nest under Governance/spec (REV) as `#### Orphaned requirements (REV introduce)`** |
+| F-7 | minor | Walkthroughs not incremental | **Per-skill scenarios in §11 — each applies one skill edit in isolation.** |
+| F-8 | nit | Entity-model line references are rotting | **Removed. Concept cited by name not by line.** |
 
-### Key design decisions needed before plan
+## Key discovery: plugins vs .dirge
 
-1. **REQ-DNN storage**: TOML facet (`[[implied_req]]`) or continue with prose-only? Blocked on F-2 resolution.
-2. **Requirements pass placement**: Keep at state 3 (current), move to between states 4-5, or drop the /design section entirely? Blocked on F-1 resolution.
-3. **`[requirements]` in plan.toml**: Move to plan.md prose, or make tooling-read? Blocked on F-3 resolution.
-4. **Altitude assessment**: Gate on IMP-097, or proceed with `/consult` guardrail?
+`plugins/doctrine/skills/*/SKILL.md` is the authoritative source. `.doctrine/skills/`
+and `.dirge/skills/` are transient install targets. Prior SL-098 work edited
+`.dirge/skills/design/SKILL.md` — effective at runtime but not durable. All edits
+must target `plugins/doctrine/skills/`.
 
-### Backlog follow-ups
+The plugins design skill has none of the prior SL-098 changes — no "collect
+decisions," no "requirements pass," asks questions one at a time. The redesign
+proposes both as new inserts against the plugins baseline.
 
-- IMP-097: Altitude assessment framework for requirement placement (created from RV-078 F-4)
-- IMP-096: Pre-existing — requirements capture and refinement skills
+## Harvested
 
-### Memory recorded
-
-- `mem_019ed9f59a8f7f6398145b4a99c59f62`: Design staleness gotcha — skill-amendment designs must read current skill files
+- IMP-096: Requirements capture and refinement skills
+- IMP-097: Altitude assessment framework
+- Memory: design-staleness — skills at transient paths are not authoritative
