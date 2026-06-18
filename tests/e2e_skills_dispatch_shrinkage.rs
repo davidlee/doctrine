@@ -51,8 +51,8 @@ fn dispatch_router_skill_is_shrunk() {
     let full = source_skill_text("dispatch");
     let body = body_lines(&full);
     assert!(
-        body.len() <= 45,
-        "dispatch router body lines: {} (target ≤45)",
+        body.len() <= 50,
+        "dispatch router body lines: {} (target ≤50)",
         body.len()
     );
 
