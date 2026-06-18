@@ -61,7 +61,7 @@ id      = "VT-4"
 expects = "normalize_tag charset gate rejects out-of-[a-z0-9_:-] tags; add∩remove overlap rejected (not silent remove-wins); empty edit-set rejected"
 [[phase.verification]]
 id      = "VT-5"
-expects = "Malformed memory (scope.tags array absent) bails F-1 style, file untouched; shipped/ memory refused for write"
+expects = "Malformed memory (scope.tags array absent) bails 'malformed memory, restore seeded scope.tags array' with file left untouched (never tail-creates the array); shipped/ memory refused for write"
 
 [[phase.specs]]
 [[phase.requirements]]
@@ -73,7 +73,7 @@ objective = "Build memory_status_transition pure core (composes dep_seq::apply_s
 
 [[phase.entrance_criteria]]
 id   = "EN-1"
-text = "PHASE-01 complete (or independent — no code dependency on tag); baseline green"
+text = "baseline green; no code dependency on PHASE-01 (file-disjoint — tag and status touch different seams, may run in either order)"
 [[phase.entrance_criteria]]
 id   = "EN-2"
 text = "dep_seq::apply_status (pure), set_authored_status (IO), append_memory_relation, Status enum, MemoryRef confirmed in-tree"
