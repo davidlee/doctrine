@@ -39,3 +39,29 @@
 - Phase sheets materialised in coordination worktree
 - Handover rewritten with dispatch mandate, pre-distilled PHASE-02 worker prompt, and full funnel instructions
 - Note: `1ffdeb3f` (PHASE-01) was followed by `49f41684` (SL-099 fix) and `d22ab0be` (SL-099 candidate merge) on main — coordination base is `d22ab0be`
+
+## Audit complete — 2026-06-18 (RV-085)
+
+Conformance audit on `candidate/101/review-001` (tip after audit: `a50f7092`).
+4 findings raised, all terminal (verified):
+
+- **F-1 (major → fix-now):** `dtoml::parse()` eagerly ran `resolve_confidence()?`,
+  coupling the shared config reader (conduct/verification/coverage_store) to
+  estimation-config validity — violated design §3.3 "no runtime effect in this
+  slice". Fixed: removed eager call; marked v1-unused facet API with the existing
+  `#[cfg_attr(not(test), expect(dead_code))]` convention; added regression test.
+  Commits `8598dbca` + `a50f7092` on `candidate/101/review-001`.
+- **F-2 (minor → fix-now):** dead `resolve_unit` discards in `parse()` — same edit.
+- **F-3 (minor → verified):** design §3.3 `resolve_confidence` signature shows
+  bare `(f64,f64)` but docstring says "validated"; impl correctly returns
+  `Result`. → reconcile: edit design §3.3.
+- **F-4 (minor → verified):** design §6.1 `SliceDoc` derive still lists `Eq`,
+  impossible with f64 facets; impl correctly dropped `Eq`. → reconcile: edit
+  design §6.1.
+
+Evidence: 1768 bin tests pass, clippy zero, fmt clean on the candidate.
+Memory recorded: `mem.pattern.doctrine.dtoml-shared-reader`.
+
+**Handoff to /reconcile:** design.md §3.3 + §6.1 edits (per Reconciliation Brief
+in review-085.md). SPEC-020 amendments from RV-082's standing list remain the
+reconcile-stage spec work. No `blocker` outstanding.
