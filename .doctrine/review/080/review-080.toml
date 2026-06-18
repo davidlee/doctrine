@@ -1,0 +1,43 @@
+id    = 80
+slug  = "reconciliation-review-of-sl-082"
+title = "reconciliation review of SL-082"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "self-audit"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-082"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Pre-existing test failure: template_source_is_post_cut_shape_kind_specific (SL-095 ADR migration)"
+detail = "just check fails on e2e_relation_migration_storage::template_source_is_post_cut_shape_kind_specific. The ADR template still uses typed supersedes in [relationships] instead of [[relation]] rows — SL-095 migration work. Unrelated to SL-082's doc/ disposal. All 1681 unit tests pass; PHASE-01 through PHASE-05 code changes cause no regressions."
+disposition = "tolerated"
+response = "Pre-existing SL-095 template migration failure. Not introduced by SL-082. All SL-082 tests pass. The failure is tracked separately under SL-095 / IMP-095."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Design §3.2 omitted reconcile/SKILL.md doc/* reference — caught and corrected during sweep"
+detail = "The design's reference map (K1-K11) covered 8 of 9 skill files. reconcile/SKILL.md:20 contained 'Project-local documentation (`doc/*`) is not a doctrine feature category' which was not in the design. Spotted during the rg sweep and corrected to 'Project-local documentation outside `.doctrine/` is not a doctrine feature category'. No other design omissions found."
+disposition = "aligned"
+response = "Design gap caught during sweep and corrected inline. Implementation is correct; no design update needed for the current slice."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "SL-021 PHASE-05 deferred: tech spec edges and draft→active flips remain incomplete"
+detail = "SL-021 PHASE-05 (edges, validate, coverage audit) is planned but not started. The deferred work: interactions edges, SPEC-001/002 parent retrofit, draft→active flips, capability-coverage audit. This does not block SL-082 — all content is rehomed into 18 tech specs — but the corpus is in an intermediate state. The user explicitly deferred SL-021 at the time. No action for SL-082; recorded for visibility."
+disposition = "follow-up"
+response = "SL-021 PHASE-05 is deferred per user direction. Does not block SL-082. The deferred work — interactions edges, parent retrofit, draft→active flips — should be captured as a backlog item or resumed when the user chooses."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
