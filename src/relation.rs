@@ -415,6 +415,14 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
+        sources: &[SLICE, ISS, IMP, CHR, RSK, IDE],
+        label: RelationLabel::Related,
+        inbound_name: "related",
+        target: TargetSpec::AnyNumbered,
+        tier: Tier::One,
+        link: LinkPolicy::Writable,
+    },
+    RelationRule {
         sources: &[RV],
         label: RelationLabel::Reviews,
         inbound_name: "reviews",
@@ -950,10 +958,10 @@ pub(crate) fn check_target_kind(
 #[cfg(test)]
 pub(crate) fn rels_block(source: &Kind, axes: &[(&str, &[&str])]) -> String {
     let migrated = |label: RelationLabel| -> bool {
-        // Tier-1 AND link-writable-or-not-lifecycle: the migration moves a label iff
-        // it is `Tier::One` and not the OD-3-excluded gov supersedes (LifecycleOnly).
+        // Tier-1 — SL-095 migrated governance supersedes from typed to
+        // [[relation]], so the LifecycleOnly exclusion is dropped.
         lookup(source, label)
-            .map(|r| r.tier == Tier::One && r.link != LinkPolicy::LifecycleOnly)
+            .map(|r| r.tier == Tier::One)
             .unwrap_or(false)
     };
     let mut typed = String::new();
@@ -1073,7 +1081,10 @@ mod tests {
             (RelationLabel::Members, &["PRD", "SPEC"]),
             (RelationLabel::Interactions, &["SPEC"]),
             (RelationLabel::Slices, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
-            (RelationLabel::Related, &["ADR", "POL", "STD"]),
+            (
+                RelationLabel::Related,
+                &["ADR", "CHR", "IDE", "IMP", "ISS", "POL", "RSK", "SL", "STD"],
+            ),
             (RelationLabel::Reviews, &["RV"]),
             (RelationLabel::OwningSlice, &["REC"]),
             (RelationLabel::Drift, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
@@ -1259,12 +1270,19 @@ mod tests {
     fn target_spec_matches_design() {
         for r in RELATION_RULES {
             match (r.label, r.sources) {
-                // gov supersedes + gov related → SameKind.
-                (RelationLabel::Related, _) => {
-                    assert!(
-                        matches!(r.target, TargetSpec::SameKind),
-                        "related → SameKind"
-                    );
+                // gov related → SameKind; slice/backlog related → AnyNumbered.
+                (RelationLabel::Related, s) => {
+                    if s.iter().any(|k| k.prefix == "ADR") {
+                        assert!(
+                            matches!(r.target, TargetSpec::SameKind),
+                            "gov related → SameKind"
+                        );
+                    } else {
+                        assert!(
+                            matches!(r.target, TargetSpec::AnyNumbered),
+                            "slice/backlog related → AnyNumbered"
+                        );
+                    }
                 }
                 (RelationLabel::Supersedes, s) if !s.iter().any(|k| k.prefix == "SL") => {
                     // GOV supersedes is SameKind; RECORD supersedes is Kinds(RECORD).
@@ -1399,7 +1417,7 @@ mod tests {
     /// ⇒ a `RelationEdge`. An unknown label spelling ⇒ `IllegalRow` (UnknownLabel).
     #[test]
     fn read_block_rejects_illegal_source_label_pairs() {
-        // A slice authoring `related` (a governance-only label) plus a legal `specs`.
+        // A slice authoring `related` plus a legal `specs`.
         let slice_doc = RelationDoc::parse(
             "[[relation]]\nlabel = \"related\"\ntarget = \"SL-002\"\n\
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n",
@@ -1408,18 +1426,13 @@ mod tests {
         let (edges, illegal) = read_block(&SLICE_KIND, &slice_doc);
         assert_eq!(
             edge_pairs(&edges),
-            vec![(RelationLabel::Specs, "PRD-010")],
-            "the legal specs row emits an edge"
+            vec![
+                (RelationLabel::Specs, "PRD-010"),
+                (RelationLabel::Related, "SL-002"),
+            ],
+            "the legal specs and related rows emit edges"
         );
-        assert_eq!(
-            illegal,
-            vec![IllegalRow {
-                label: "related".to_string(),
-                target: "SL-002".to_string(),
-                reason: IllegalReason::IllegalForSource,
-            }],
-            "related is illegal for a slice source — a finding, not a live edge"
-        );
+        assert!(illegal.is_empty(), "related is legal for a slice source");
 
         // A backlog item authoring `governed_by` (SL·PRD·SPEC-only) plus a legal `slices`.
         let backlog_doc = RelationDoc::parse(
@@ -1653,9 +1666,11 @@ mod tests {
         let e = refusal(&SLICE_KIND, "nonsense");
         assert!(e.contains("governed_by"), "lists legal labels: {e}");
 
-        // Real label, illegal for this source (a slice cannot author `related`).
-        let e = refusal(&SLICE_KIND, "related");
-        assert!(e.contains("illegal for this source"), "{e}");
+        // A slice CAN author `related` (SL-095) — returns the Related rule.
+        match validate_link(&SLICE_KIND, "related") {
+            Ok(rule) => assert_eq!(rule.label, RelationLabel::Related),
+            Err(e) => panic!("related should be writable for a slice (SL-095): {e}"),
+        }
 
         // Governance `supersedes` is LifecycleOnly — refused, names the supersede verb.
         let e = refusal(&ADR_KIND.kind, "supersedes");
@@ -1669,6 +1684,8 @@ mod tests {
     /// VT-2 (R2-M1): the forward legal-KIND check. `governed_by` (→ ADR·POL·STD) refuses
     /// a slice target even though it would resolve; `SameKind` (gov `related`) refuses a
     /// cross-gov target; the legal kinds pass.
+    /// SL-095: a slice `related` now resolves (new BACKLOG/SLICE row); verify
+    /// `AnyNumbered` accepts any target kind.
     #[test]
     fn check_target_kind_enforces_target_kind() {
         // `RelationRule` has no Debug — unwrap the rule by hand.
@@ -1693,6 +1710,12 @@ mod tests {
             check_target_kind(related, &ADR_KIND.kind, "POL").is_err(),
             "SameKind refuses a cross-gov target"
         );
+
+        // SL-095: slice `related` targets AnyNumbered — any kind accepted.
+        let sl_related = unwrap_rule(validate_link(&SLICE_KIND, "related"));
+        assert!(check_target_kind(sl_related, &SLICE_KIND, "ADR").is_ok());
+        assert!(check_target_kind(sl_related, &SLICE_KIND, "SPEC").is_ok());
+        assert!(check_target_kind(sl_related, &SLICE_KIND, "RV").is_ok());
     }
 
     /// SL-066 VT-2: the `revises` rule. Source REV, targets the six authored-truth
@@ -1733,9 +1756,14 @@ mod tests {
     /// `None` (the X2 legality `read_block` will enforce), a legal one the rule.
     #[test]
     fn lookup_keys_on_source_and_label() {
-        // A backlog item cannot author `governed_by`; a slice cannot author `related`.
+        // A backlog item cannot author `governed_by`; a slice can author `related`.
         assert!(lookup(&ISSUE_KIND, RelationLabel::GovernedBy).is_none());
-        assert!(lookup(&SLICE_KIND, RelationLabel::Related).is_none());
+        let sl_related = lookup(&SLICE_KIND, RelationLabel::Related);
+        assert!(sl_related.is_some());
+        assert!(matches!(
+            sl_related.unwrap().target,
+            TargetSpec::AnyNumbered
+        ));
         // governed_by is legal for SL, PRD, SPEC.
         for k in [&SLICE_KIND, &PRODUCT_SPEC_KIND, &TECH_SPEC_KIND] {
             assert!(lookup(k, RelationLabel::GovernedBy).is_some());
