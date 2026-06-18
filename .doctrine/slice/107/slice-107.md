@@ -27,34 +27,51 @@ reconciled contract in SPEC-020 / PRD-014 (`specs`).
 
 ## Scope & Objectives
 
-Wire **both** facets into `main` against the reconciled SPEC-020 contract:
+**Narrow boundary** (decided with the User): SL-107 ships exactly the
+*wiring/integration foundation* SL-101 designed but never landed on `main`.
+Estimate **display** rendering is SL-102's charter (`ready`, REQ-273); estimate
+**graph** exposure is SL-103's (`proposed`, REQ-274). SL-107 does **not** touch
+either — it makes the facet *data* present, parsed, and configured so SL-102/103
+build on it.
 
-1. **Value module** — add `mod value;` + port `src/value.rs` (`ValueFacet`,
-   single finite `f64` magnitude, present-facet validation, unit `magic_beans`,
-   pure display) onto current `main`. Re-create SL-101 design §7.2 tests V1–V7.
-2. **Estimate wiring** — connect the already-present, dead `src/estimate.rs`
-   (parse seam, `[estimation].unit` resolution, validation matrix, display). This
-   is wiring, not a rewrite — the module exists.
-3. **`dtoml.rs`** — add `estimation` + `value` sub-config fields to `DoctrineToml`
-   (`#[serde(default)]`, tolerant-absent), mirroring the `conduct`/`verification`
-   shape. Re-apply the `dispatch/101` dtoml delta onto main's evolved struct.
-4. **`SliceDoc` / `slice.rs`** — two optional facet fields, detailed-display
-   rendering (`Estimate: …` / `Value: …`, present / `none recorded`; verbose
-   spread per SPEC-020).
-5. **Graph exposure** — expose both facets' metadata through the catalog/hydrate
-   seam per SPEC-020 (PRD-014 REQ-265 / REQ-285) as a policy-free contract. Confirm
-   exact scope against SPEC-020 sources during `/design`.
-6. **`install/doctrine.toml.example`** — commented `[estimation]` / `[value]`
+Port source: `candidate/101/review-001` — the orphaned-but-audit-fixed (F-1/F-2)
+tip that already embodies this exact narrow scope. `main` has diverged ~34 commits
+past the candidate base (`ec2de06`); port by hand, do not merge the branch.
+
+1. **Value module** — drop `src/value.rs` (`ValueFacet`, single finite `f64`,
+   present-facet validation, unit `magic_beans`) onto `main` + `mod value;` in
+   `main.rs` (no main drift on either; candidate version applies clean). Tests
+   V1–V7 (SL-101 design §7.2).
+2. **Estimate dead-code hygiene** — replace `estimate.rs`'s blanket
+   `#![allow(dead_code)]` with item-level `#[cfg_attr(not(test), expect(dead_code,
+   …))]` on the still-pending fns (`resolve_unit`, `resolve_confidence`,
+   `parse_optional`, the two confidence consts), citing SL-102/SL-103. The facet
+   *types* go live via wiring; the display/graph helpers stay `expect`-dead until
+   their owning slices consume them. (Logic/tests untouched — main vs candidate
+   `estimate.rs` differ *only* in this attribute treatment; both already carry
+   `espresso_shots`.)
+3. **`dtoml.rs`** — add `estimation: estimate::EstimationConfig` +
+   `value: value::ValueConfig` to `DoctrineToml` (`#[serde(default)]`, tolerant-
+   absent), mirroring `conduct`/`verification`. No main drift; candidate delta clean.
+4. **`SliceDoc` (`slice.rs`)** — two optional facet fields
+   (`estimate: Option<…>`, `value: Option<…>`), parsed via serde. **Parsed, not
+   rendered** — display is SL-102. Update the existing test fixtures
+   (`estimate: None, value: None`).
+5. **`install/doctrine.toml.example`** — commented `[estimation]` / `[value]`
    sections documenting the unit defaults.
 
-Affected surface: `src/main.rs`, `src/value.rs` (new), `src/estimate.rs`,
-`src/dtoml.rs`, `src/slice.rs`, the catalog/hydrate seam, `install/doctrine.toml.example`.
+Affected surface: `src/value.rs` (new), `src/estimate.rs`, `src/main.rs`,
+`src/dtoml.rs`, `src/slice.rs`, `install/doctrine.toml.example`.
 
 ## Non-Goals
 
+- **Display rendering** (`Estimate: …` / `Value: …` lines, verbose spread) — SL-102
+  (REQ-273). SL-107 leaves the SliceDoc fields parsed-but-unrendered.
+- **Graph / catalog-hydrate exposure** — SL-103 (REQ-274).
 - **Re-deriving the contract.** PRD-014 / SPEC-020 are reconciled and authoritative;
   this slice implements them, it does not revise them.
-- **Merging `dispatch/101*`.** Stale and conflicting; port by hand.
+- **Merging `candidate/101/review-001` or `dispatch/101*`.** Orphaned/stale and
+  conflicting; port by hand.
 - **Reopening SL-101.** Terminal (`done`); this is a fresh slice.
 - Everything SPEC-020 / PRD-014 already exclude: aggregation, cost-vs-value
   arithmetic, simulation/prediction, classification/gating, richer v1 facet fields,
@@ -71,9 +88,15 @@ Affected surface: `src/main.rs`, `src/value.rs` (new), `src/estimate.rs`,
 
 ## Verification / Closure Intent
 
-- Both facets reachable from `main`: `mod value;` present, `estimate.rs` no longer
-  dead (external refs exist), `[estimation]`/`[value]` parsed by `dtoml.rs`.
-- Facet display renders in slice detailed view; graph hydration exposes both.
-- Value tests V1–V7 + estimate tests green; **behaviour-preservation gate** — the
-  existing suites stay green unchanged.
-- `just gate` clean (workspace), `cargo clippy` zero warnings, `spec validate` clean.
+- `mod value;` present; `src/value.rs` lands with V1–V7 green.
+- `estimate.rs` blanket `#![allow(dead_code)]` gone — replaced by item-level
+  `expect(dead_code)`; the facet *types* (`EstimateFacet`, `EstimationConfig`,
+  `ValueFacet`, `ValueConfig`) are now referenced from live code (SliceDoc fields +
+  dtoml config). The `expect`s prove the display/graph helpers are the *only*
+  residual unused surface, owned by SL-102/SL-103.
+- `[estimation]`/`[value]` parsed by `dtoml.rs`; `SliceDoc` carries + round-trips
+  both optional fields (parsed, not rendered).
+- **Behaviour-preservation gate** — existing suites stay green unchanged; estimate
+  E-tests + value V-tests green.
+- `just gate` clean (workspace), plain `cargo clippy` zero warnings (the `expect`s
+  must not fire), `spec validate` clean.
