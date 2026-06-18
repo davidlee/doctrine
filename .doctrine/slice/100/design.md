@@ -111,10 +111,10 @@ Writes only if any field changed (idempotent).
 | `--summary` | root `summary` | none (free text) | replace |
 | `--status` | delegates to status verb logic | `Status::parse`; `--by` not available | same validation path as `memory status` |
 | `--lifespan` | root `lifespan` | `Lifespan::from_str` | replace; key absent if unset (remove if present) |
-| `--review-by` | `[review].review_by` | `YYYY-MM-DD` or empty `""` to clear | replace |
+| `--review-by` | `[review].review_by` | `YYYY-MM-DD` or empty `""` to clear | insert-or-replace; clear is a no-op when key absent (scaffold omits it) |
 | `--trust` | `[trust].trust_level` | `low\|medium\|high` | replace |
 | `--severity` | `[ranking].severity` | `critical\|high\|medium\|low\|none` | replace |
-| `--key` | root `memory_key` | `validate_key`; refused if already set | set once (late-binding) |
+| `--key` | root `memory_key` | `normalize_key` (prepend `mem.` + validate); refused if `Some` | set once (late-binding) iff `None` |
 | `--path-scope` | `[scope].paths` | non-empty, repeatable | **replace** entire array |
 | `--glob` | `[scope].globs` | repeatable | **replace** entire array |
 | `--command` | `[scope].commands` | repeatable | **replace** entire array |
@@ -130,10 +130,16 @@ emptiness. Enforced before any write. The supplied key is normalised through
 private `validate_key` — so `edit --key` and `record --key` accept identically
 (RV-086 F-1, F-3).
 
-**`--status` delegation:** Calls the same pure transition logic as `memory status`.
+**`--status` delegation:** To preserve the single-transaction invariant above,
+`edit` composes the **pure** `dep_seq::apply_status` over its *own held*
+`DocumentMut` — it does **not** call the IO `dep_seq::set_authored_status` (which
+would open a second read→write and stamp `updated` twice). The new
+`memory_status_transition` (module layout) is that pure core over `&mut
+DocumentMut`; both `memory status` (via the `set_authored_status` shell) and
+`edit` (inline) compose it, so the vocab gate and stamping live in one place.
 For `superseded`, the transition requires `--by` which `edit` doesn't offer →
 fails with "use `memory status superseded --by <OTHER>` to record the successor."
-All other states transition normally.
+All other states transition normally (RV-086 F-2).
 
 **`--lifespan` unset:** Passing an empty `--lifespan ""` or omitting the flag leaves
 the existing value unchanged. Explicit removal is a separate concern (non-goal for
@@ -407,7 +413,7 @@ doctrine memory edit
 
 | # | Finding | Severity | Resolution |
 |---|---|---|---|
-| F1 | `edit --key` empty-string detection: scaffold writes `memory_key = ""` when no key provided. `is_empty()` handles both absent key and empty string — but design doc should be explicit | Low | R1 already covers this; clarified in risk text |
+| F1 | ~~`edit --key` empty-string detection~~ — **superseded by RV-086 F-1**: this finding's premise was false. The scaffold does **not** write `memory_key = ""`; it omits the line (`memory_key: Option<String>`). Immutability is decided on the `Option`, not `is_empty()`. See corrected R1. | Low (was) | Corrected — the empty-string fiction is struck |
 | F2 | `--review-by ""` clears the field but `--lifespan ""` is deferred (OQ1) — asymmetry users will hit | Low | Noted as follow-up in scope. Defer to post-v1 |
 | F3 | No `--color`/`-p` flags designed for new verbs | Trivial | Clap boilerplate — added at derive level |
 | F4 | `edit` scope-array replace is lossy (R3). `--help` should note replace semantics | Low | Accept for v1; append follow-up deferred |
