@@ -1,0 +1,42 @@
+memory_uid = "mem_019edd33d3b273928001e6c867cb2de5"
+memory_key = "mem.fact.doctrine.close-integrate-required"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SL-102 close: --integrate without --trunk is a dry run"
+summary = "dispatch sync --integrate without --trunk is a dry run — code does NOT land on main. At close, --trunk is mandatory; verify with git diff after integrate."
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7980d2ade66e1ea54e4b501ff0155b7b7bb7a42b"
+ref_name = "refs/heads/main"
+checkout_state_id = "78c580f56f8d944a54334bc26685d62278aa2646f1f56d0df57ee92ff5b2674b"
+base_commit = "76e172ba357ecbcd00e8a476e514593bac53e676"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
