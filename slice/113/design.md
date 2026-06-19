@@ -52,23 +52,27 @@ crate::fsutil::write_atomic(&path, doc.to_string().as_bytes())
 | `main.rs` | 4795, 4856, 4858 | `apply_supersede` (3 writes) |
 | `map_server/routes.rs` | 412 | `handle_edit_concept_map_edge` |
 
-Two sites need error-type adaptation (non-`.with_context` wrappers):
+Two sites use non-`.with_context` error wrappers (see §6 VT-6 for analysis):
 
-- `relation.rs:784,803` — `.map_err(|e| anyhow::anyhow!(...))?` where `e`
-  becomes `anyhow::Error`, not `io::Error`. Replace with
-  `.with_context(|| format!(...))?`.
-- `map_server/routes.rs:412` — `.map_err(|e| MapServerError::ConceptMapIoError(...))?`
-  wraps the `anyhow` error through the map-server error type.
+- `relation.rs:784,803` — `.map_err(|e| anyhow::anyhow!("write {} …: {e}", ...))?`
+  becomes `.with_context(|| format!("write {} …", ...))?` (the `anyhow::Error`
+  from `write_atomic` nests under the context instead of being stringified).
+- `map_server/routes.rs:412` — `.map_err(|e| MapServerError::ConceptMapIoError(e.to_string()))?`
+  works unchanged: `e.to_string()` is valid for both `io::Error` and `anyhow::Error`.
 
 The `dep_seq.rs` shared cores back ~7 entity kinds — no per-kind duplication.
 The read→mutate step stays byte-identical; only the write primitive changes.
 
 ## §3 — Clippy guard (D3)
 
-Add `std::fs::write` to `Cargo.toml` `[lints.clippy]` `disallowed-methods`,
-gated to non-test code via crate-root `#[cfg_attr(not(test), ...)]`. Test code
-(~50 `fs::write` calls for fixture setup) is exempt — it carries no
-authored-entity corruption risk.
+Add `std::fs::write` to `clippy.toml` `disallowed-methods` (not `Cargo.toml` —
+the lint level is already `deny`; the method list lives in `clippy.toml`).
+
+Gate to non-test via `#![cfg_attr(test,
+allow(clippy::disallowed_methods))]` in `main.rs` (the binary crate root;
+no `lib.rs` exists). This exempts unit tests (~50 `fs::write` calls for
+fixture setup). Integration tests (in `tests/`) are separate crates and
+already unaffected by the crate's lint settings.
 
 Production exceptions carrying `#[expect(clippy::disallowed_methods, reason = "...")]`:
 
@@ -103,4 +107,5 @@ directory as the target so the rename never crosses a mount.
 | VT-2 | Concurrent write test (new) | Two threads `write_atomic` same file — both succeed, no panic, no stray temps. |
 | VT-3 | `dep_seq` shared-core tests | `set_authored_status`, `remove_after`, `append_string_array` exercise the write path. Stay green. |
 | VT-4 | E2E suites | Supersede, relation link/unlink, spec add-requirement, backlog tag, concept-map edge mutate — all stay green. |
-| VT-5 | Clippy gate | `just check` zero-warn — no `disallowed-methods` violations except documented `#[expect]` sites. |
+| VT-5 | Clippy gate | `just check` zero-warn — no `disallowed-methods` violations except documented `#[expect]` sites. Manual verification: introduce a bare `std::fs::write` in production code, confirm clippy fails. |
+| VT-6 | `relation.rs` & `map_server/routes.rs` error context | `relation.rs` sites shift from fresh `anyhow!("write {} …: {e}")` to `.with_context(\|\| format!("write {} …"))?` — the underlying `anyhow` error from `write_atomic` nests under the context. Functionally equivalent; no existing tests assert on the error message format for these sites. `map_server/routes.rs` uses `.to_string()` which works for both `io::Error` and `anyhow::Error` — no adaptation needed (R1 resolved). |
