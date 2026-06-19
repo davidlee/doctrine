@@ -1,0 +1,41 @@
+memory_uid = "mem_019edf8f57d2726281fcddd36d5197b1"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Worktrees share CARGO_TARGET_DIR — builds thrash, just check can be a stale-cache no-op, PATH doctrine is stale"
+summary = "Shared CARGO_TARGET_DIR across worktrees => debug binary may lag source; just check 'Finished' can be a no-op; PATH doctrine is old; verify with strings or cargo build from the worktree"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = ["just check", "cargo build", "doctrine map serve"]
+tags = ["sl-110", "build", "jail"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b4a43250244cbc4127a37aeb28711116b6c6825b"
+ref_name = "refs/heads/main"
+checkout_state_id = "2a92410a0495836d162f15d7d000ca3d0496543f80ca9308da26388bcc92bbce"
+base_commit = "26cb350a1013ffc0af2b264ee988247fe85e1427"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

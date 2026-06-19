@@ -1,7 +1,7 @@
 id = 111
 slug = "kind-registry-engine-hoist"
 title = "Hoist kind identity to a leaf kinds module to break relation layering cycles"
-status = "plan"
+status = "audit"
 created = "2026-06-19"
 updated = "2026-06-19"
 
