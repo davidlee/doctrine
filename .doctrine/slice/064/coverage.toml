@@ -1,0 +1,35 @@
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-290"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "d73f30f9cadb1712e8aa5d18168ce73b691d4509"
+attested_date = "2026-06-19"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-292"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "d73f30f9cadb1712e8aa5d18168ce73b691d4509"
+attested_date = "2026-06-19"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-294"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "d73f30f9cadb1712e8aa5d18168ce73b691d4509"
+attested_date = "2026-06-19"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-295"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "d73f30f9cadb1712e8aa5d18168ce73b691d4509"
+attested_date = "2026-06-19"

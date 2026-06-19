@@ -4,7 +4,7 @@ version = 1
 id = 287
 slug = "the-per-batch-funnel-cadence-is-a-fixed-ordered-sequence-capture-b-precond-headb-clean-delta-sb"
 title = "The per-batch funnel cadence is a fixed ordered sequence (capture B → precond HEAD==B & clean → delta S^==B single-non-merge → R-5 .doctrine/.claude belt → import non-committing → verify → branch-point guard → one coordination commit → record), report-and-halt on any breach, with knowledge recorded only after the confirmed code commit."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

@@ -8,3 +8,7 @@ updated = "2026-06-14"
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[relation]]
+label = "requirements"
+target = "REQ-289"
+
