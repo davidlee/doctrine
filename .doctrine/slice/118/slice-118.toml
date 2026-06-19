@@ -13,6 +13,10 @@ after = []                      # slice→work soft sequence: { to, rank }
 label = "specs"
 target = "SPEC-020"
 
+[[relation]]
+label = "related"
+target = "IDE-013"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload

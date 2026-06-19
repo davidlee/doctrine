@@ -1,9 +1,9 @@
 id = 104
 slug = "spec-020-estimate-hardening"
 title = "SPEC-020: Estimate hardening — NFR verification and polish"
-status = "proposed"
+status = "ready"
 created = "2026-06-18"
-updated = "2026-06-18"
+updated = "2026-06-19"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
