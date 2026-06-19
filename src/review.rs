@@ -538,9 +538,9 @@ impl fmt::Display for ReviewError {
             } => {
                 write!(
                     f,
-                    "cannot act on {finding}: current status {current} != required {required}",
-                    current = current.as_str(),
-                    required = required.as_str()
+                    "out of turn on {finding}: current status {} != required {}",
+                    current.as_str(),
+                    required.as_str()
                 )
             }
             Self::DanglingRef { target } => {
@@ -1563,12 +1563,12 @@ where
 
     // 4. STATIC role check (D-C4) — the half the wrapper owns.
     if role != verb.required_role() {
-        anyhow::bail!(
-            "`{}` is the {}'s verb; --as {} cannot assert it",
-            verb.as_str(),
-            verb.required_role().as_str(),
-            role.as_str()
-        );
+        return Err(ReviewError::RoleMismatch {
+            expected: verb.required_role(),
+            actual: role,
+            verb,
+        }
+        .into());
     }
 
     // 5. AUTHORED FIRST — the closure runs the per-finding can() + applies the
@@ -1736,7 +1736,12 @@ pub(crate) fn run_raise(
     let new_id = with_turn(&root, id, Verb::Raise, role, |doc, existing| {
         // Per-finding gate: `raise` targets a fresh (None) finding (design §5).
         if !can(Verb::Raise, None, role) {
-            anyhow::bail!("raise is the raiser's verb (--as raiser)");
+            return Err(ReviewError::RoleMismatch {
+                expected: Verb::Raise.required_role(),
+                actual: role,
+                verb: Verb::Raise,
+            }
+            .into());
         }
         Ok(append_finding(
             doc,
@@ -1897,17 +1902,27 @@ fn run_raiser_transition(
     Ok(())
 }
 
+/// The canonical required status for each verb — the state a finding must be
+/// in for the verb to act on it. Compound cases pick the first valid status.
+fn required_for(verb: Verb) -> FindingStatus {
+    match verb {
+        Verb::Dispose | Verb::Withdraw | Verb::Raise => FindingStatus::Open,
+        Verb::Verify | Verb::Contest => FindingStatus::Answered,
+    }
+}
+
 /// The per-finding gate (design §6 — the closure's half): refuse an out-of-turn
 /// write with a message naming the verb, the finding, and its current state.
 fn gate(verb: Verb, from: FindingStatus, role: Role, finding: &str) -> anyhow::Result<()> {
     if !can(verb, Some(from), role) {
-        anyhow::bail!(
-            "`{}` cannot fire on {} (status `{}`, --as {}): out of turn (design §5)",
-            verb.as_str(),
-            finding,
-            from.as_str(),
-            role.as_str()
-        );
+        // Role mismatch already caught by `with_turn` step 4; here it is always
+        // a state mismatch.
+        return Err(ReviewError::StateMismatch {
+            finding: finding.to_owned(),
+            current: from,
+            required: required_for(verb),
+        }
+        .into());
     }
     Ok(())
 }
