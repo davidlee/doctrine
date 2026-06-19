@@ -64,12 +64,34 @@ Cons:
 - Pi must resolve symlinks when loading APPEND_SYSTEM.md (it does — standard
   filesystem semantics)
 
-### 3. No hook needed (symlink makes it unnecessary)
+### 3. Regeneration trigger: pi extension on session_start
 
-The Claude harness needs a `SessionStart` hook because CLAUDE.md is a context
-file (concatenated at startup, cached until restart). Pi reads APPEND_SYSTEM.md
-fresh at every session start — the symlink means it always sees the latest
-boot.md content with zero additional mechanism.
+The symlink ensures delivery freshness, but boot.md itself must be regenerated
+when governance changes. The Claude harness gets `hooks.SessionStart: "doctrine
+boot"` — automatic per-session regeneration. Pi has no native shell-hook
+setting, but its extension system supports `session_start` events.
+
+`doctrine boot install` should generate a small pi extension at
+`.pi/extensions/doctrine-boot-refresh.ts`:
+
+```ts
+import { execSync } from "node:child_process";
+
+export default function () {
+  // Resolve doctrine relative to cwd — `doctrine boot install` writes the
+  // resolved path into the generated extension file.
+  const bin = "./target/debug/doctrine";
+  execSync(`${bin} boot`, { stdio: "inherit" });
+}
+```
+
+Registered on `session_start` via pi's standard extension loading. This is the
+pi-native equivalent of Claude's `SessionStart` hook — zero manual steps, same
+guarantee: boot.md is fresh at every session start.
+
+Alternative (simpler, but manual): no extension — the AGENTS.md sentinel guard
+says "if boot.md is stale, run `doctrine boot` and re-read." This costs an
+extra round-trip but avoids shipping an extension. Worth comparing.
 
 ### 4. Conditional installation
 
