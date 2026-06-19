@@ -12,8 +12,11 @@
  * delegates to it.
  */
 
-import { describe, it, expect } from 'vitest';
-import { hoverDetailHtml, hoverPane } from './render';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { hoverDetailHtml, hoverPane, relationshipTable } from './render';
+import { parseHash } from './router';
+import { state } from './state';
+import type { CatalogNode, Edge, Graph } from './types';
 
 const FIELDS = ['id', 'kindLabel', 'status', 'title'] as const;
 
@@ -60,5 +63,76 @@ describe('hoverPane delegation', () => {
     const container = document.createElement('div');
     hoverPane({ container, node: null });
     expect(container.innerHTML).toContain('placeholder');
+  });
+});
+
+/*
+ * RV-098 F-6 — semantic relationship-table links must round-trip through
+ * parseHash. The anchors are built from buildHash, which already returns a
+ * '#'-prefixed string; an extra '#' prefix yields '##/focus/…', which parseHash
+ * cannot match, clearing focus and emptying the table (pre-existing SL-091).
+ */
+describe('relationship table links round-trip through parseHash', () => {
+  beforeEach(() => {
+    state.depth = 1;
+    state.cmFocusNode = null;
+  });
+
+  function catalogNode(id: string): CatalogNode {
+    return {
+      id,
+      title: `${id} title`,
+      status: 'open',
+      kindPrefix: 'SL',
+      kindLabel: 'slice',
+      raw: { title: '', status: '', kind_label: '' },
+    };
+  }
+
+  const edge: Edge = {
+    id: 'e_supersedes',
+    source: 'SL-003',
+    label: 'Supersedes',
+    target: 'SL-002',
+    raw: { source: 'SL-003', label: { Validated: 'Supersedes' }, target: { Resolved: 'SL-002' } },
+  };
+
+  function graph(): Graph {
+    return {
+      nodes: new Map([['SL-003', catalogNode('SL-003')], ['SL-002', catalogNode('SL-002')]]),
+      edges: [edge],
+      incoming: new Map([['SL-002', [edge]]]),
+      outgoing: new Map([['SL-003', [edge]]]),
+      edgeById: new Map([['e_supersedes', edge]]),
+    };
+  }
+
+  function resolve(href: string): ReturnType<typeof parseHash> {
+    window.location.hash = href;
+    return parseHash();
+  }
+
+  it('source/target id-links focus the node; the relation link opens edge detail — no double hash', () => {
+    const tbody = document.createElement('tbody');
+    relationshipTable({ container: tbody, edges: [edge], graph: graph(), focusId: 'SL-003', depth: 1, viewMode: 'semantic' });
+
+    const hrefs = Array.from(tbody.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '');
+    expect(hrefs).toHaveLength(3);
+    for (const href of hrefs) {
+      expect(href.startsWith('##')).toBe(false);
+    }
+
+    const [srcHref, lblHref, tgtHref] = hrefs;
+    const src = resolve(srcHref ?? '');
+    expect(src.view).toBe('focus');
+    expect(src.id).toBe('SL-003');
+
+    const lbl = resolve(lblHref ?? '');
+    expect(lbl.view).toBe('edge');
+    expect(lbl.id).toBe('e_supersedes');
+
+    const tgt = resolve(tgtHref ?? '');
+    expect(tgt.view).toBe('focus');
+    expect(tgt.id).toBe('SL-002');
   });
 });
