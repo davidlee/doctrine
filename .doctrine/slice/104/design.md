@@ -244,3 +244,32 @@ Findings from the pre-review hostile pass, all integrated above:
 - **F6** — stated confidence is **estimate-only** (§3).
 
 Residual unknowns are OQ-1/OQ-2 (low stakes) and the F2 boundary (accepted, documented).
+
+## 12. Pending decision — scope cut (PAUSED, awaiting confirm)
+
+User challenged the design as ceremony beyond the two real deliverables. Proposed
+cut-set (verified on fact, not vibes), **awaiting explicit confirmation**:
+
+**KEEP** (real):
+- NF-001 tripwire — Tier-1 allowlist source-scan + Tier-2 `Gate` compile-guard.
+- Confidence legitimacy — REQ + SPEC-020 amendment (REV at reconcile) + fix stale
+  `expect(dead_code, reason=…)` strings.
+- One value-asymmetry test — `[value] value=-5` is accepted (FR-008 "no range
+  validation" is genuinely untested; `v5` only covers NaN-rejected).
+
+**CUT** (inert / redundant):
+- Dogfood on real entities — re-proves NF-002 (already green via graph VT-3);
+  facets sit inert until a consumer (IMP-112 / Cordage). F3 edit-preserving concern
+  dissolved (serde round-trip already proven by `slice_doc_round_trips_estimate_facet`).
+- Large-bounds test (finite f64 == finite f64), int≡float test (`e2`/`e3` cover it).
+- NF-002 / NF-003 "confirmation" rows — cross-refs to green tests; audit-time
+  citation, not work.
+- External review / inquisition — ceremony for a 1-test + spec-amend slice. Go
+  straight to `/plan`.
+
+**Open sub-decision:** Tier-2 `Gate` guard (~3 compile-time lines, only structural
+proof touching "close") — keep, or trim to Tier-1 + documented note?
+
+**On confirm:** rewrite §§3–8 + `slice-104.md` to the narrowed scope, then `/plan`
+(no external review). Until then the §§3–8 detail above describes the *un-narrowed*
+plan and is superseded by whatever cut-set is confirmed.
