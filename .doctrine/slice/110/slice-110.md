@@ -18,10 +18,12 @@ they ride one slice rather than five backlog items.
 Five UX items (design phase will root-cause each before fixing):
 
 1. **View-toggle button state desync** — the Actionability / Semantic header
-   button highlight (`view-btn--active`) does not reliably follow
-   `state.viewMode`. The active-button highlight must track the *selected* mode.
-   Surface: `app.ts` (~L536–539 highlight pass; the ISS-020 `viewModeChanged`
-   logic nearby).
+   button highlight does not reliably follow `state.viewMode`. The
+   active-button highlight must track the *selected* mode. (Design found the
+   CSS-styled class `.view-btn.active` and the code-toggled class
+   `view-btn--active` differ — unify on the BEM form + hoist the highlight past
+   the edge-detail early return.) Surface: `priority.css` / `index.html` (class
+   unify) + `app.ts` (~L536–539 highlight pass).
 
 2. **Hover tooltip on actionability nodes** — actionability-graph nodes have no
    hover affordance. Add a tooltip matching the existing "hover for details"
@@ -38,15 +40,19 @@ Five UX items (design phase will root-cause each before fixing):
    Surface: `concept-map.ts` (`renderEdgeTable`, `renderEditToggle`,
    `cm-editable-node` click handlers).
 
-5. **Left-pane selection wiring** — selecting an item in the left sidebar
-   should change *view mode*, not just focus:
+5. **Selection wiring** — selecting an item should change *view mode*, not just
+   focus:
    - choosing a **concept map** should activate **Semantic** view (today it
      does nothing visible if already in actionability mode),
    - choosing an **actionable** entity (SL/backlog with dep/seq edges) should
      **focus that element in the Actionability graph**.
-   Surface: `app.ts` `onFocus` handler / `search.ts` `onFocus` wiring /
-   `state.viewMode` transition; `isConceptMap` and actionability-eligibility
-   checks (cf. the terminal/no-edge placeholders at `app.ts` ~L446–450).
+   (Design found the universal seam is the `renderView` `focusChanged` derive —
+   the funnel *every* selection path reaches via `hashchange`, not just the
+   left-pane `onFocus` — so the rule lands once as a pure `focusTransition` and
+   covers table-rows / deep-links / back-button too.) Surface: `app.ts`
+   `renderView` focus-change derive + pure `focusTransition` in `model.ts`;
+   actionability-membership check (cf. the terminal/no-edge placeholders at
+   `app.ts` ~L446–450).
 
 ## Non-Goals
 
