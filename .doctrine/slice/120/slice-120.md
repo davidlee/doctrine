@@ -17,7 +17,7 @@ MCP server, configured via `.mcp.json`.
 ## Scope & Objectives
 
 1. **A pi extension** (TypeScript, single-file, project-local at
-   `.pi/extensions/doctrine-mcp.ts`) that on `session_start`:
+   `.pi/extensions/doctrine/mcp.ts`) that on `session_start`:
    - Reads the `doctrine` entry from `.mcp.json`
    - Spawns `doctrine serve --mcp`, negotiates the MCP handshake
      (`initialize` → `notifications/initialized`), discovers tools via
@@ -76,6 +76,6 @@ tools into pi, so the LLM can directly call doctrine's review verbs.
 
 ## Closure
 
-Verify: `.pi/extensions/doctrine-mcp.ts` exists and passes lint; `tools/list`
+Verify: `.pi/extensions/doctrine/mcp.ts` exists and passes lint; `tools/list`
 returns 10 tools; calling `doctrine_review_list` through the bridge returns
 valid review data. All 10 tools registered and callable.
