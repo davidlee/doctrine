@@ -34,7 +34,8 @@ use crate::tomlfmt::toml_string;
 
 /// What a review reviews — the facet (design §5, D-C11). The closed 7-set with
 /// **no `drift`** (D-C11 dropped it → the future Drift Ledger kind, IMP-022).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", try_from = "String", into = "String")]
 pub(crate) enum Facet {
     Scope,
     Design,
@@ -108,8 +109,8 @@ const FINDING_STATUSES: &[&str] = &["open", "answered", "contested", "verified",
 
 /// A finding's severity (design §5, raiser-owned, fixed at raise). Only
 /// `blocker` gates `/close` (D-C9b).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", try_from = "String", into = "String")]
 pub(crate) enum Severity {
     Blocker,
     Major,
@@ -141,6 +142,19 @@ impl Severity {
                 SEVERITIES.join(", ")
             )),
         }
+    }
+}
+
+impl TryFrom<String> for Severity {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::parse(&s)
+    }
+}
+
+impl From<Severity> for String {
+    fn from(s: Severity) -> Self {
+        s.as_str().to_owned()
     }
 }
 
@@ -705,6 +719,19 @@ impl Facet {
     }
 }
 
+impl TryFrom<String> for Facet {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::parse(&s)
+    }
+}
+
+impl From<Facet> for String {
+    fn from(f: Facet) -> Self {
+        f.as_str().to_owned()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Render (eager — the authored ledger toml + the `## Brief` md companion)
 // ---------------------------------------------------------------------------
@@ -775,6 +802,7 @@ fn render_review_md(canonical: &str, facet: &str, target_ref: &str) -> anyhow::R
 
 /// The bundled `review new` arguments — one struct to dodge the clippy arg-ceiling
 /// (mem.pattern.lint.cli-handler-args-struct).
+#[derive(Deserialize)]
 pub(crate) struct NewArgs {
     pub(crate) facet: Facet,
     pub(crate) target: String,
@@ -1687,6 +1715,7 @@ fn finding_status_of(existing: &[FindingRow], finding_id: &str) -> anyhow::Resul
 // ---------------------------------------------------------------------------
 
 /// Bundled `review raise` args (the clippy arg-ceiling — `cli-handler-args-struct`).
+#[derive(Deserialize)]
 pub(crate) struct RaiseArgs {
     pub(crate) reference: String,
     pub(crate) severity: Severity,
@@ -1724,6 +1753,7 @@ pub(crate) fn run_raise(
 }
 
 /// Bundled `review dispose` args.
+#[derive(Deserialize)]
 pub(crate) struct DisposeArgs {
     pub(crate) reference: String,
     pub(crate) finding: String,
@@ -2029,6 +2059,7 @@ enum CacheVerdict {
 // ---------------------------------------------------------------------------
 
 /// Bundled `review prime` args (the clippy arg-ceiling — `cli-handler-args-struct`).
+#[derive(Deserialize)]
 pub(crate) struct PrimeArgs {
     pub(crate) reference: String,
     /// `--seed`: emit git-changed candidate paths (a starting point, NOT

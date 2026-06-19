@@ -34,6 +34,7 @@ mod lifecycle;
 pub(crate) mod links;
 mod listing;
 mod map_server;
+mod mcp_server;
 mod memory;
 mod meta;
 mod plan;
@@ -509,6 +510,12 @@ enum Command {
     Knowledge {
         #[command(subcommand)]
         command: KnowledgeCommand,
+    },
+
+    /// Start the MCP stdio server (`serve --mcp`).
+    Serve {
+        #[command(flatten)]
+        args: commands::serve::ServeArgs,
     },
 
     /// Regenerate the cache-friendly governance snapshot, or `boot install` to wire it.
@@ -2801,6 +2808,10 @@ enum WriteClass {
     Hookmint(&'static str),
 }
 
+#[expect(
+    clippy::match_same_arms,
+    reason = "consecutive Read arms across different nested-match shapes; merging would degrade readability"
+)]
 fn write_class(cmd: &Command) -> WriteClass {
     use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
     match cmd {
@@ -2916,6 +2927,7 @@ fn write_class(cmd: &Command) -> WriteClass {
             KnowledgeCommand::Status { .. } => Write("knowledge status"),
             KnowledgeCommand::List { .. } | KnowledgeCommand::Show { .. } => Read,
         },
+        Command::Serve { .. } => Read,
         Command::Boot { command, .. } => match command {
             None => Write("boot"),
             Some(BootCommand::Install { .. }) => Write("boot install"),
@@ -3987,6 +3999,7 @@ fn main() -> anyhow::Result<()> {
                 knowledge::run_status(path, &id, &state, color)
             }
         },
+        Command::Serve { args } => commands::serve::run_serve(args),
         Command::Boot {
             command,
             check,
