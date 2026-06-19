@@ -556,10 +556,14 @@ pub(crate) fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, Capt
 
 /// Apply a unified-diff `patch` into the index via `git apply --3way --index`,
 /// NON-committing (SL-056 PHASE-07 import: the orchestrator commits separately,
-/// ADR-006 D7). The patch is streamed on stdin; a non-zero exit (a real conflict
-/// or malformed patch) errors. Invoked from the coordination root so the index it
-/// writes is the coordination index. Impure shell only.
-pub(crate) fn git_apply_index(root: &Path, patch: &str) -> Result<(), CaptureError> {
+/// ADR-006 D7). The patch is streamed on stdin as RAW BYTES — `git apply`
+/// requires a newline-terminated stream, so the caller must hand the diff over
+/// verbatim (via `git_bytes`, not `git_text`, whose `.trim()` would strip the
+/// trailing newline and corrupt a hunk that ends at EOF — ISS-032). A non-zero
+/// exit (a real conflict or malformed patch) errors. Invoked from the
+/// coordination root so the index it writes is the coordination index. Impure
+/// shell only.
+pub(crate) fn git_apply_index(root: &Path, patch: &[u8]) -> Result<(), CaptureError> {
     use std::io::Write as _;
     use std::process::Stdio;
 
@@ -577,7 +581,7 @@ pub(crate) fn git_apply_index(root: &Path, patch: &str) -> Result<(), CaptureErr
         .stdin
         .take()
         .ok_or_else(|| CaptureError::Git("git apply: no stdin pipe".to_owned()))?
-        .write_all(patch.as_bytes())
+        .write_all(patch)
         .map_err(|e| CaptureError::Git(format!("git apply: write stdin: {e}")))?;
     let output = child
         .wait_with_output()

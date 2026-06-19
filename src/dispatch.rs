@@ -29,12 +29,64 @@ use crate::ledger::{
 use crate::listing::render_table;
 use crate::root;
 
+/// PURE — coordination-worktree placement guard (no env/disk; CLAUDE.md split).
+///
+/// The Claude dispatch arm forks the Agent `isolation: worktree` worker off the
+/// Bash cwd's HEAD; base==B is achieved by parking the cwd in the coordination
+/// worktree before spawn. Under a harness that confines the cwd to the project
+/// root (a bubblewrap jail), a `cd` to a path OUTSIDE the root silently reverts —
+/// the worker then forks `main`, not B (ISS-031). Fail closed exactly there: an
+/// outside-root coordination dir under a Claude harness. Non-Claude arms keep
+/// their enforced outside-root worktree isolation (ADR-008) untouched.
+fn classify_coord_placement(
+    dir_inside_root: bool,
+    claude_harness: bool,
+) -> Result<(), &'static str> {
+    if claude_harness && !dir_inside_root {
+        Err("coord-outside-root-under-claude")
+    } else {
+        Ok(())
+    }
+}
+
+/// Resolve `p` to an absolute path against the CWD (best-effort; impure shell).
+fn absolutize(p: &Path) -> PathBuf {
+    if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::env::current_dir().map_or_else(|_unused| p.to_path_buf(), |cwd| cwd.join(p))
+    }
+}
+
 /// CLI entry — create or resume the dispatch coordination worktree for `slice`
 /// and emit the orchestration env contract on stdout (SL-085, design §2).
 /// Gates on `plan.toml` existence + non-empty phase list BEFORE creating the
-/// coordination worktree.
-pub(crate) fn run_setup(path: Option<PathBuf>, slice: u32, dir: &Path) -> anyhow::Result<()> {
+/// coordination worktree. `claude_harness` is the env signal read by the caller
+/// (a `CLAUDE`-prefixed var present) — passed in, not read here, so the placement
+/// guard is unit-testable independent of the test runner's own environment.
+pub(crate) fn run_setup(
+    path: Option<PathBuf>,
+    slice: u32,
+    dir: &Path,
+    claude_harness: bool,
+) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
+
+    // Placement guard (ISS-031): on the Claude arm a coordination worktree
+    // outside the project root silently produces a wrong-base spawn. Fail closed
+    // before doing any work.
+    let dir_inside_root = absolutize(dir).starts_with(absolutize(&root));
+    classify_coord_placement(dir_inside_root, claude_harness).map_err(|token| {
+        anyhow::anyhow!(
+            "{token}: coordination worktree '{}' is outside the project root '{}'. \
+             The Claude dispatch arm forks the Agent worktree off the Bash cwd's HEAD; \
+             under a cwd-confining jail a `cd` outside the root silently reverts, so the \
+             worker would fork `main` instead of base B. Use a path under the project \
+             root — convention: .dispatch/SL-{slice:03}.",
+            dir.display(),
+            root.display()
+        )
+    })?;
 
     // Plan gate: read plan.toml, require existence + non-empty phase list.
     let slice_root = root.join(".doctrine/slice");
@@ -1947,7 +1999,7 @@ mod tests {
         // No plan.toml — the gate should fail before touching git.
         let holder = tempfile::tempdir().unwrap();
         let coord = holder.path().join("coord");
-        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord);
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord, false);
         assert!(result.is_err());
         let err = format!("{}", result.unwrap_err());
         assert!(
@@ -1969,7 +2021,7 @@ mod tests {
         // Plan has zero phases.
         let holder = tempfile::tempdir().unwrap();
         let coord = holder.path().join("coord");
-        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord);
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord, false);
         assert!(result.is_err());
         let err = format!("{}", result.unwrap_err());
         assert!(
@@ -1988,9 +2040,11 @@ mod tests {
             85,
             "schema = \"doctrine.plan.overview\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n",
         );
+        // Non-Claude arm with an outside-root coord dir: outside isolation is
+        // legitimate (ADR-008), so the placement guard must NOT fire.
         let holder = tempfile::tempdir().unwrap();
         let coord = holder.path().join("coord");
-        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord);
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord, false);
         assert!(result.is_ok(), "setup must succeed; err: {result:?}");
 
         // Verify worktree exists.
@@ -2002,6 +2056,70 @@ mod tests {
         // The actual stdout capture is an integration-test concern; here we
         // verify the function doesn't panic and the worktree is real.
         assert!(coord.join(".doctrine").exists(), "provisioned");
+    }
+
+    // --- ISS-031: placement guard — outside-root coord under the Claude arm ---
+
+    #[test]
+    fn classify_coord_placement_truth_table() {
+        // Only the outside-root × Claude-harness corner fails closed.
+        assert!(classify_coord_placement(true, true).is_ok());
+        assert!(classify_coord_placement(true, false).is_ok());
+        assert!(classify_coord_placement(false, false).is_ok());
+        assert_eq!(
+            classify_coord_placement(false, true),
+            Err("coord-outside-root-under-claude")
+        );
+    }
+
+    #[test]
+    fn dispatch_setup_refuses_outside_root_under_claude() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            "schema = \"doctrine.plan.overview\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n",
+        );
+        // Outside-root coord dir + Claude harness → fail closed before any work.
+        let holder = tempfile::tempdir().unwrap();
+        let coord = holder.path().join("coord");
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord, true);
+        assert!(
+            result.is_err(),
+            "must refuse outside-root coord under Claude"
+        );
+        let err = format!("{}", result.unwrap_err());
+        assert!(
+            err.contains("coord-outside-root-under-claude"),
+            "error names the placement token; got: {err}"
+        );
+        assert!(
+            !coord.exists(),
+            "no coordination worktree created on refusal"
+        );
+    }
+
+    #[test]
+    fn dispatch_setup_allows_inside_root_under_claude() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            "schema = \"doctrine.plan.overview\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n",
+        );
+        // Inside-root coord dir is the safe convention; the guard must pass even
+        // under the Claude harness.
+        let coord = src.path().join(".dispatch/SL-085");
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord, true);
+        assert!(
+            result.is_ok(),
+            "inside-root coord must pass; err: {result:?}"
+        );
+        assert!(coord.join(".doctrine").exists(), "provisioned inside root");
     }
 
     // --- plan-next helpers ---

@@ -165,6 +165,47 @@ fn import_happy_stages_delta_uncommitted() {
     assert!(!ok, "feature.rs must not exist in the B commit");
 }
 
+// --- ISS-032: a patch whose final hunk ends at EOF must import cleanly ---
+// The diff for a fork that edits the LAST line of a newline-terminated file
+// ends on a `+` line; `git apply` rejects the stream ("corrupt patch") if the
+// trailing newline is stripped before it reaches stdin. Regression guard for
+// the `import` → `git apply` byte path (the delta is captured raw, not trimmed).
+
+#[test]
+fn import_applies_patch_ending_at_eof() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    // B carries a multi-line, newline-terminated file.
+    std::fs::write(src.path().join("multi.txt"), "l1\nl2\nl3\nl4\nl5\n").unwrap();
+    git(src.path(), &["add", "."]);
+    git(src.path(), &["commit", "-q", "-m", "seed multi"]);
+
+    let holder = tempfile::tempdir().unwrap();
+    // The fork rewrites the FINAL line — the patch's last hunk lands on EOF.
+    let base = make_fork_branch(
+        src.path(),
+        holder.path(),
+        "wkr-nl",
+        &[("multi.txt", "l1\nl2\nl3\nl4\nMODIFIED\n")],
+    );
+
+    let out = run(
+        src.path(),
+        None,
+        &["worktree", "import", "--base", &base, "--fork", "wkr-nl"],
+    );
+    assert!(
+        out.status.success(),
+        "import of a patch ending at EOF must succeed (ISS-032); stderr: {}",
+        stderr(&out)
+    );
+    let staged = git(src.path(), &["diff", "--cached", "--name-only"]);
+    assert!(
+        staged.lines().any(|l| l == "multi.txt"),
+        "delta staged in the index; got: {staged:?}"
+    );
+}
+
 // --- VT-2: each refusal golden — distinct non-zero token ---
 
 fn assert_refusal(out: &Output, token: &str) {

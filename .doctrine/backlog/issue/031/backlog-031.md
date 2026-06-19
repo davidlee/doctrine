@@ -43,6 +43,19 @@ worker commit `S^ == 0ff72b6f`, single commit, 2268 tests green).
 - Document the precondition in the dispatch-agent skill alongside the
   cd instruction.
 
+## Resolved
+
+Fail-closed targeted at the hazard, not blanket. `dispatch setup` now refuses an
+outside-root `--dir` **only when a `CLAUDE`-prefixed env signature is present**
+(the claude arm); non-Claude arms (codex/pi) keep their enforced outside-root
+worktree isolation (ADR-008) untouched — defaulting/forcing inside-root for them
+would have discarded it. The harness signal is read in `main.rs` and passed into
+`run_setup` as an input (pure/imperative split), so the pure guard
+`classify_coord_placement(dir_inside_root, claude_harness)` is unit-testable
+independent of the test runner's own (Claude) environment. Precondition documented
+in `dispatch-agent/SKILL.md` and the `/dispatch` router. `--dir` left required (no
+contract change); the skills carry the `.dispatch/SL-<n>` convention.
+
 ## Related
 
 - ISS-029 — the sibling claude-arm base hazard (missing cd instruction). This

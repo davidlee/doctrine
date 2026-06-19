@@ -773,7 +773,10 @@ pub(crate) fn run_import(path: Option<PathBuf>, base: &str, fork: &str) -> anyho
     // `--no-renames` keeps the apply view consistent with the belt's: a rename
     // is two real legs (delete + add), which `git apply` handles directly (a
     // pure-rename header carries no hunk for apply to act on).
-    let patch = git::git_text(&root, &["diff", "--no-renames", &format!("{base}..{fork}")])?;
+    // Capture the diff as RAW BYTES (not `git_text`, whose `.trim()` strips the
+    // trailing newline `git apply` requires — ISS-032). The name-only belt above
+    // can trim freely; this apply stream cannot.
+    let patch = git::git_bytes(&root, &["diff", "--no-renames", &format!("{base}..{fork}")])?;
     git::git_apply_index(&root, &patch)
         .with_context(|| format!("git apply --3way --index {base}..{fork}"))?;
 
