@@ -1,0 +1,76 @@
+# Implementation plan for SL-104 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-104"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "NF-001 structural non-blocking tripwire"
+objective = """
+Pin REQ-275's structural non-blocking guarantee with a dependency-free, two-tier \
+proof that fails the moment a facet read enters a gating path. Tier 1: a \
+source-scanning allowlist test confining the facet symbol set to the known \
+exposure files. Tier 2: a compile-time exhaustive-destructure guard on `Gate` \
+(the closure-gate input type carries no facet field). No `syn`, no SL-112 \
+coupling (design.md §4, D4)."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §4 locked: the facet symbol set, the 8-file allowlist, and the current `Gate` field set are enumerated and current on `main`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Tier 1: `tests/e2e_estimate_non_blocking.rs` scans `src/**/*.rs` for the facet symbol set (EstimateFacet, ValueFacet, EstimationConfig, ValueConfig, resolve_confidence, crate::estimate, crate::value, estimate::, value::) and asserts every matching file is in the allowlist {estimate.rs, value.rs, estimate/display.rs, dtoml.rs, catalog/{scan,graph,hydrate}.rs, slice.rs}; green on `main`." },
+  { id = "EX-2", text = "Tier 2: a `slice.rs` unit test exhaustively destructures `Gate` with no `..`; green, and provably breaks compilation if `Gate` gains an estimate/value field." },
+  { id = "EX-3", text = "`resolve_confidence` is in the scanned set → the test also proves no non-allowlist consumer exists (confidence display-only guarantee, D1)." },
+  { id = "EX-4", text = "Source root located via the compile-time manifest dir, scan kept tree-relative; CHR-014 stale-path hazard noted inline." },
+  { id = "EX-5", text = "`just gate` green (clippy zero-warn bins/lib, fmt)." },
+]
+verification = [
+  { id = "VT-1", expects = "Tier-1 test passes on `main`; during TDD, a scratch facet ref planted in a non-allowlist module makes it fail (red proof), then is removed." },
+  { id = "VT-2", expects = "Tier-2 guard passes on `main`; during TDD, a scratch estimate field added to `Gate` fails the compile (red proof), then is removed." },
+  { id = "VA-1", expects = "The residual gap (a hand-written close fn in allowlisted `slice.rs` reading `SliceDoc.estimate` evades both tiers) is recorded for audit.md — the honest boundary of the proof." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Confidence-residue cleanup + value-asymmetry test"
+objective = """
+Correct the stale `expect(dead_code, reason=…)` strings so the confidence residue \
+cites its real future consumer (IMP-112 + the confidence requirement landing at \
+SL-104 reconcile), not the false SL-102/103 citation. Pin FR-008's untested \
+"no range validation" contract for the value facet. No production-code behavior \
+change (design.md §5, §6)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (soft sequence — the phases touch disjoint files; this orders the trivial polish after the substantive proof)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The `expect(dead_code, reason=…)` strings on `mod display`, `DEFAULT_LOWER_CONFIDENCE`/`DEFAULT_UPPER_CONFIDENCE`, and `resolve_confidence` re-cite IMP-112 + the confidence requirement (descriptive; concrete REQ-NNN substituted at reconcile). No `consumed by SL-102/SL-103` mis-citation remains in estimate.rs." },
+  { id = "EX-2", text = "A `value.rs` unit test asserts a negative finite magnitude (`[value] value = -5`) parses to a valid `ValueFacet` — pinning the value/estimate validation asymmetry (value has no `>= 0` rule)." },
+  { id = "EX-3", text = "The dead-code tripwires stay armed (still `expect`, not removed) — they self-clear when IMP-112 consumes the renderers/confidence." },
+  { id = "EX-4", text = "`just gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "The value-asymmetry unit test passes (negative finite value accepted; this would have had no prior coverage — `v5` only covers NaN-rejected)." },
+  { id = "VA-1", expects = "`grep -n 'SL-102\\|SL-103' src/estimate.rs` shows no surviving dead-code reason citing those slices for confidence/display." },
+]
+specs        = []
+requirements = []
