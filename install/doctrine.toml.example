@@ -35,3 +35,11 @@
 #
 # [conduct.reconcile] # the closure gate (ADR-003 §8)
 # autonomy = "gate"
+#
+# [estimation]
+# unit = "espresso_shots"
+# lower_confidence = 0.1
+# upper_confidence = 0.9
+#
+# [value]
+# unit = "magic_beans"

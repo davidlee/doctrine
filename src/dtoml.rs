@@ -3,9 +3,10 @@
 //!
 //! One parser owns the whole `doctrine.toml` shape so the file is read once and
 //! split into its sub-configs: the `[conduct]` table ([`crate::conduct`]) and the
-//! `[verification]` table ([`crate::verify`]). Both fields `#[serde(default)]`, so
-//! an absent table parses to its sub-config's default (tolerant — the conduct
-//! precedent). Every other top-level key is ignored.
+//! `[verification]` table ([`crate::verify`]), plus the `[estimation]` and
+//! `[value]` tables. Every field is `#[serde(default)]`, so an absent table
+//! parses to its sub-config's default (tolerant — the conduct precedent). Every
+//! other top-level key is ignored.
 //!
 //! **Pure leaf (ADR-001).** The file *read* lives in the shell; [`parse`] takes
 //! owned text only.
@@ -24,10 +25,71 @@ pub(crate) struct DoctrineToml {
     /// (SL-057 PHASE-05) through the shared `coverage_store::load_config` reader.
     #[serde(default)]
     pub(crate) verification: crate::verify::VerificationConfig,
+    /// The `[estimation]` table — project-wide display/default unit + confidence
+    /// bounds for estimation facets. Parsed now; consumed by SL-102/SL-103.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
+    )]
+    #[serde(default)]
+    pub(crate) estimation: crate::estimate::EstimationConfig,
+    /// The `[value]` table — project-wide display/default unit for value facets.
+    /// Parsed now; consumed by SL-102/SL-103.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
+    )]
+    #[serde(default)]
+    pub(crate) value: crate::value::ValueConfig,
 }
 
 /// Parse a project `doctrine.toml` body into its sub-configs (PURE). The shell
 /// owns the file read; this is the ONLY `doctrine.toml` parser.
 pub(crate) fn parse(text: &str) -> anyhow::Result<DoctrineToml> {
-    Ok(toml::from_str(text)?)
+    // Design §3.3: confidence bounds are "purely informational until consumed" —
+    // no runtime effect in this slice. We deliberately do NOT eagerly validate
+    // [estimation] here: parse() is the shared reader for conduct, verification,
+    // and coverage_store config, so propagating confidence validation would
+    // couple those unrelated reads to estimation-config validity. Consumers that
+    // need the bounds call `estimate::resolve_confidence` themselves.
+    let doc: DoctrineToml = toml::from_str(text)?;
+    Ok(doc)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absent_tables_yield_defaults() {
+        let doc = parse("").unwrap();
+        assert_eq!(doc.conduct, crate::conduct::ConductConfig::default());
+        assert_eq!(
+            doc.verification,
+            crate::verify::VerificationConfig::default()
+        );
+        assert_eq!(doc.estimation, crate::estimate::EstimationConfig::default());
+        assert_eq!(doc.value, crate::value::ValueConfig::default());
+    }
+
+    #[test]
+    fn estimation_and_value_tables_parse() {
+        let doc = parse("[estimation]\nunit=\"x\"\n[value]\nunit=\"y\"").unwrap();
+        assert_eq!(doc.estimation.unit.as_deref(), Some("x"));
+        assert_eq!(doc.value.unit.as_deref(), Some("y"));
+    }
+
+    // RV-085 F-1 regression: a malformed [estimation] confidence config must NOT
+    // fail the shared config read. parse() is the reader for conduct, verification,
+    // and coverage_store; coupling those to estimation validity violates design §3.3
+    // ("no runtime effect in this slice"). Confidence validation belongs to the
+    // consumer that needs the bounds, not to every doctrine.toml read.
+    #[test]
+    fn malformed_estimation_confidence_does_not_block_config_read() {
+        let doc = parse("[estimation]\nlower_confidence=0.5\nupper_confidence=0.3\n[conduct]\n")
+            .expect("malformed estimation confidence must not block the shared config read");
+        // estimation table is still parsed (tolerated); only eager validation is gone
+        assert_eq!(doc.estimation.lower_confidence, Some(0.5));
+        assert_eq!(doc.estimation.upper_confidence, Some(0.3));
+    }
 }

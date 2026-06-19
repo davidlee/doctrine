@@ -987,7 +987,7 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
 /// show paths (`relation_edges`/`format_show`/`show_json`) reconstruct them from the
 /// raw TOML text, so this struct no longer carries a `relationships` field (slice has
 /// no typed tier-2/3 leftovers). `gate` stays typed.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, Serialize)]
 struct SliceDoc {
     id: u32,
     slug: String,
@@ -997,6 +997,10 @@ struct SliceDoc {
     updated: String,
     #[serde(default)]
     gate: Gate,
+    #[serde(default)]
+    estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(default)]
+    value: Option<crate::value::ValueFacet>,
 }
 
 // note: `gate` carries `#[serde(default)]` so a hand-trimmed file with no `[gate]`
@@ -2147,6 +2151,8 @@ mod tests {
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
             gate: Gate::default(),
+            estimate: None,
+            value: None,
         };
         // SL-048: tier-1 edges are passed in (read from `[[relation]]`), not a struct.
         let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
@@ -2231,6 +2237,8 @@ mod tests {
             created: "2026-06-01".into(),
             updated: "2026-06-01".into(),
             gate: Gate::default(),
+            estimate: None,
+            value: None,
         };
         let tier1 = Vec::new();
         let ds = DepSeq {
@@ -2284,12 +2292,98 @@ mod tests {
             created: "2026-06-01".into(),
             updated: "2026-06-01".into(),
             gate: Gate::default(),
+            estimate: None,
+            value: None,
         };
         let json = show_json(&doc, &[], &crate::dep_seq::DepSeq::default(), "# body\n").unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["slice"]["relationships"];
         assert!(rel.get("needs").is_none(), "no needs key when unauthored");
         assert!(rel.get("after").is_none(), "no after key when unauthored");
+    }
+
+    #[test]
+    fn slice_doc_round_trips_estimate_facet() {
+        let doc = SliceDoc {
+            id: 17,
+            slug: "estimate-facet".into(),
+            title: "Estimate Facet".into(),
+            status: "proposed".into(),
+            created: "2026-06-18".into(),
+            updated: "2026-06-18".into(),
+            gate: Gate::default(),
+            estimate: Some(crate::estimate::EstimateFacet {
+                lower: 2.0,
+                upper: 8.0,
+            }),
+            value: None,
+        };
+
+        let toml = toml::to_string_pretty(&doc).unwrap();
+        let parsed: SliceDoc = toml::from_str(&toml).unwrap();
+        let estimate = parsed.estimate.expect("estimate facet present");
+        assert_eq!(estimate.lower, 2.0);
+        assert_eq!(estimate.upper, 8.0);
+        assert_eq!(parsed.value, None);
+    }
+
+    #[test]
+    fn slice_doc_round_trips_value_facet() {
+        let doc = SliceDoc {
+            id: 17,
+            slug: "value-facet".into(),
+            title: "Value Facet".into(),
+            status: "proposed".into(),
+            created: "2026-06-18".into(),
+            updated: "2026-06-18".into(),
+            gate: Gate::default(),
+            estimate: None,
+            value: Some(crate::value::ValueFacet { value: 5.0 }),
+        };
+
+        let toml = toml::to_string_pretty(&doc).unwrap();
+        let parsed: SliceDoc = toml::from_str(&toml).unwrap();
+        assert_eq!(parsed.estimate, None);
+        assert_eq!(
+            parsed.value.expect("value facet present"),
+            crate::value::ValueFacet { value: 5.0 }
+        );
+    }
+
+    #[test]
+    fn slice_doc_serde_omits_absent_facets() {
+        let doc = SliceDoc {
+            id: 18,
+            slug: "no-facets".into(),
+            title: "No Facets".into(),
+            status: "proposed".into(),
+            created: "2026-06-18".into(),
+            updated: "2026-06-18".into(),
+            gate: Gate::default(),
+            estimate: None,
+            value: None,
+        };
+
+        let toml = toml::to_string_pretty(&doc).unwrap();
+        assert!(
+            !toml.contains("[estimate]"),
+            "unexpected estimate table: {toml}"
+        );
+        assert!(!toml.contains("[value]"), "unexpected value table: {toml}");
+
+        let parsed: SliceDoc = toml::from_str(&toml).unwrap();
+        assert_eq!(parsed.estimate, None);
+        assert_eq!(parsed.value, None);
+    }
+
+    #[test]
+    fn slice_doc_malformed_facet_errors_at_parse() {
+        // Validation is live via the SliceDoc serde path (VT-3): a non-finite
+        // value facet on a slice toml errors at parse, not silently carried.
+        let text = "id = 1\nslug = \"x\"\ntitle = \"X\"\nstatus = \"proposed\"\n\
+                    created = \"2026-06-18\"\nupdated = \"2026-06-18\"\n[value]\nvalue = nan\n";
+        let err = toml::from_str::<SliceDoc>(text).unwrap_err().to_string();
+        assert!(err.contains("must be finite"), "got: {err}");
     }
 
     // --- SL-028 PHASE-02: conduct shell seam (T5/T6) ---
