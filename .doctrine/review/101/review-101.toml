@@ -1,0 +1,43 @@
+id    = 101
+slug  = "reconciliation-review-of-sl-111"
+title = "reconciliation review of SL-111"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-111"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "behaviour-preservation gate holds: sole test failure is pre-existing main dirt, not an SL-111 regression"
+detail = "Expected: SL-111 (relation engine re-key + prefix single-source) preserves behaviour — relation/corpus suites stay green unchanged. Observed: on candidate cand-111-review-001 (review/111 ⊕ main), cargo test is fully green EXCEPT backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes (tests/e2e_relation_migration_storage.rs:322), which fails on .doctrine/backlog/issue/030/backlog-030.toml carrying an out-of-vocab [[relation]] label 'related' (allowed: slices/specs/drift). Classified by re-running the SAME test on a clean main checkout at 26cb350a (no SL-111): it fails IDENTICALLY. Therefore the failure is pre-existing ISS-030 corpus-data dirt, reproduces without SL-111, and is not caused by the re-key. SL-111 touched no backlog data and no migration code path."
+disposition = "aligned"
+response = "Not an SL-111 regression. The sole failing test reproduces identically on a clean main checkout (26cb350a) with no SL-111 code, so the cause is pre-existing ISS-030 corpus-data dirt ([[relation]] label 'related' in backlog-030.toml), not the relation re-key. SL-111's behaviour-preservation gate is satisfied: every relation/corpus/integration assertion is green and unchanged. The corpus-data fix is out of SL-111's remit (handover flagged ISS-030 dirt as known, leave-alone); captured here as a standing observation."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "ADR-001 cycle-break + INV-2 single-source achieved and compiler-enforced"
+detail = '''Expected (design §5.2/§9, plan EX/VA): kinds is a leaf module; relation engine consumes kinds::*; 7 relation↔command cycles gone; each command *_KIND const sources its prefix from kinds::<X>. Observed on candidate: (1) grep -E 'crate::' src/kinds.rs -> empty (leaf-clean); 20 'pub(crate) const <X>: &str' + GOV=[ADR,POL,STD]/BACKLOG=[ISS,IMP,CHR,RSK,IDE]/RECORD=[ASM,DEC,QUE,CON]; mod kinds wired in main.rs:30. (2) grep -E 'const \\w+: &Kind = &crate::\\w+::\\w*_KIND' src/relation.rs -> empty (20 hoisted aliases gone, PHASE-02 VA-1). (3) No 'prefix: "XX"' string literal remains in any command *_KIND const (PHASE-03 VA-1). just check green: cargo fmt clean, cargo clippy zero-warning. Public signatures unchanged. The &str re-type makes any stale .prefix site a compile error, so completeness is compiler-enforced.'''
+disposition = "aligned"
+response = "Verified correct, no change needed. Closure greps + just check confirm the cycle-break and single-source are achieved and compiler-enforced; design and implementation are coherent (the impl diff equals plan.toml's enumerated EX criteria)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "residual parallel prefix vocabulary in priority/partition.rs KindPartition — outside SL-111 declared scope"
+detail = "Expected: SL-111's single-source objective (INV-2) was scoped to the command *_KIND consts + the relation engine (design Scope; relation_graph + non-relation tables are Non-Goals). Observed: src/priority/partition.rs PARTITION holds its own KindPartition table re-listing all 20 prefixes as string literals ('SL','ADR',...'CON'); src/catalog/graph.rs and src/entity.rs carry EntityKey/TK prefix literals in test fixtures. None are command *_KIND consts, so EX-1 holds as scoped — but KindPartition.prefix is a genuine second copy of the now-hoisted vocabulary that a future cleanup could fold onto kinds::*. Not a defect in SL-111 (explicitly out of scope); a residual the cycle-break enables tidying later."
+disposition = "follow-up"
+response = "Captured as CHR-012. Genuinely out of SL-111's declared scope (command *_KIND consts + relation engine only; non-relation tables are Non-Goals), so EX-1 holds as scoped — not a defect. The cycle-break enables folding priority/partition.rs KindPartition.prefix onto kinds::* as owned future cleanup."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
