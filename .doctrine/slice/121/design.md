@@ -75,46 +75,91 @@ Refactor both callers onto it:
   `anyhow::Error`, so it takes the `Err` straight through — no behavioural change.)
 - `gather_fork_worktree` → delete the duplicate body, delegate.
 
-**Behaviour-preservation gate (ADR-006):** the existing suites for both callers
-must stay green **unchanged** — this is the proof the extraction is behaviour-pure.
+**Parser divergence — pick deliberately (M9).** The two existing parsers are
+**not** identical: `gather_fork_worktree` (worktree.rs:951) resets `current_path` on
+a blank line; `find_coordination_worktree` (dispatch.rs:1774) does **not**. On a
+well-formed `--porcelain` listing this never differs (a `branch` line always
+precedes the next blank), but a shared helper must choose one rule. Adopt the
+**block-reset** form (blank line clears state) — the more defensive parse — and
+prove equivalence with fixtures.
 
-### 2.2 Per-row advance
+**Behaviour-preservation gate (ADR-006):** extract a **pure** parser over the
+porcelain text with fixtures — normal, ref-absent, **detached** (no `branch` line),
+**blank-block**, and **command-failure** — and keep both callers' existing suites
+green **unchanged**. That is the proof the extraction is behaviour-pure.
+
+### 2.2 Per-row advance — classification preserved, mechanism swapped
+
+**Corrected after external review (B1/B2/B3).** The first draft claimed
+`merge --ff-only`'s own outcomes map onto `ReplayOutcome`. **That is wrong** and is
+abandoned: `replay_ref` (git.rs:942) classifies on **exact** oids — `current ==
+planned` → `NoOp`, `current == expected_old` → advance, else → `Moved` — while
+`merge --ff-only` would (a) report "already up to date" when the target is *ahead*
+of `planned` (CAS says `Moved`), and (b) fast-forward from a *rewound* ancestor that
+isn't `expected_old` (CAS refuses). And edge/`review` rows are **explicitly not
+ff-gated** (dispatch.rs `plan_edge_row` / `plan_candidate_edge_row`: *"Not ff-gated;
+the CAS still guards"*) and creation rows carry `expected_old = ZERO_OID` — routing
+those through `merge --ff-only` changes their semantics and could "repair" a
+clobbered checked-out `review/NNN` that the suites require to refuse.
+
+**The classification is therefore unchanged from `replay_ref`. The worktree-aware
+leg swaps only the *mechanism* of the advance, never the verdict.** Per row:
 
 ```
-# pre-mutation gate (§2.3) runs first, then:
+# §2.3 dirty pre-gate has already run (before the first commit_journal).
 for row in planned_rows:
-    match git::worktree_for_ref(root, &row.target_ref)? {
-        None      => replay_ref(...)                              # today's CAS, unchanged
-        Some(wt)  => ff_advance_in_worktree(root, &wt, &row.planned_new_oid)?
-    }
-    # set row.status + applied_new_oid + disposition from the outcome
+    actual = resolve(target_ref)            # ZERO_OID if absent
+    if actual == planned_new:   outcome = NoOp                      # exact, == replay_ref
+    elif actual != expected_old: outcome = Moved{actual}           # exact, == replay_ref
+    else:                       outcome = advance(row)             # actual == expected_old
+    record(row, outcome)                    # status, applied_new_oid, disposition
+# post-loop commit_journal (recoverability) unchanged; bail at end if any Moved
 ```
 
-`ff_advance_in_worktree` = `git -C <wt> merge --ff-only <planned_new>`. Its results
-map **exactly** onto the existing `ReplayOutcome` — no new result type:
+`advance(row)` — the only place the mechanism branches on checkout state:
 
-| `git merge --ff-only` result          | ReplayOutcome | journal status |
-|----------------------------------------|---------------|----------------|
-| "Already up to date."                  | `NoOp`        | Verified       |
-| fast-forwarded                         | `Applied`     | Verified       |
-| refused — `<new>` not a descendant     | `Moved`       | Failed         |
+| target checkout state | mechanism | notes |
+|---|---|---|
+| not checked out | `update_ref_cas(target, planned, expected_old)` | today's path, unchanged |
+| checked out + **fast-forward** advance (`expected_old` is an ancestor of `planned`) | `git -C <wt> merge --ff-only planned` | atomic ref+index+worktree; §2.5 race guard |
+| checked out + **non-ff** advance (edge/force) | **refuse** `integrate-nonff-checkout` | can't safely non-ff a live ref without `reset --hard` (data loss); refuse, don't desync |
 
-Why this is safe and sufficient:
-- **Atomic:** `merge --ff-only` moves ref + index + worktree together — no desync
-  window.
-- **Refuses on dirt** on its own (belt to §2.3's suspenders).
-- **Moved-target protection preserved:** integrate's `planned_new` is
-  `expected_old`+delta, so a foreign trunk advance is not an ancestor of
-  `planned_new` → ff-only refuses = `Moved`. Equivalent to the CAS exact-old guard.
+After either mechanism, **assert `target_ref == planned`** (post-condition); a
+mismatch is a `Moved`/raced outcome, not success.
+
+**Status-capturing, not `?`-erroring (B3).** `advance` returns an *outcome*
+(`Applied`/`Moved`/refusal), so a merge refusal or non-ff case sets the row to
+`Failed` and is journaled by the existing post-loop `commit_journal` — exactly as
+the CAS `Moved` path does today (dispatch.rs:1125/1137). `Err` is reserved for real
+command/invariant failures. A naive `git merge … ?` (which `git_text` turns into an
+`Err` on nonzero, git.rs:520) would abort *before* the row status is made durable —
+forbidden.
+
+Net: exact CAS semantics (B1) and edge/creation refusal semantics (B2) are
+preserved; only a checked-out **clean fast-forward** row additionally syncs its
+worktree, via git's own atomic primitive.
 
 ### 2.3 Atomicity gate (refuse-on-dirty)
 
-Before **any** ref mutation, one pass over the planned rows: for each whose target
-is checked out (`worktree_for_ref` → `Some(wt)`), assert `gather_tree_clean(wt)`.
-Any dirty → **refuse the whole integrate** with a named token
-`integrate-dirty-worktree`, zero refs moved. Fail closed; never advance row 1 then
-choke on row 2. (`merge --ff-only` would refuse per-row anyway; the pre-pass makes
-the refusal atomic across rows.)
+One pass over the planned rows: for each whose target is checked out
+(`worktree_for_ref` → `Some(wt)`), assert `gather_tree_clean(wt)`. Any dirty →
+**refuse the whole integrate** with `integrate-dirty-worktree`, zero refs moved.
+
+**Gate placement (M4).** "Before any ref mutation" must mean **before the first
+`commit_journal`** (dispatch.rs:1097) — that call advances the coordination ref
+`dispatch/<slice>` *before* any external replay. The gate runs right after row
+planning (≈dispatch.rs:1093, where all targets are known) and before that journal
+commit. Placed later, a dirty refusal would still leave pending intent committed on
+`dispatch/<slice>` — violating "zero refs moved." `dispatch/<slice>` has no live
+worktree at close (GC'd at conclude), so advancing it doesn't desync anything, but
+it is still a ref mutation the gate must precede.
+
+**The pre-gate is the dirty guarantee — not `merge --ff-only` (M5).** `merge
+--ff-only` does *not* refuse on arbitrary dirt: git aborts only changes it would
+**overwrite**; unrelated tracked dirt survives into a "dirty success." So the
+cleanliness guarantee rests on this pre-gate (`git status --porcelain
+--untracked-files=no` empty), re-checked immediately before/after the merge (§2.5),
+**not** on any ff-only invariant.
 
 `gather_tree_clean` (worktree.rs:711) currently takes `root`; it already shells
 `git status` at that path, so it generalises to any worktree path with no change —
@@ -135,6 +180,21 @@ atomicity statement (§7), not the dirty pre-gate's guarantee.
 No trunk special-casing. The probe is per-row; `edge` (`review/<slice>`) is rarely
 checked out → `None` → CAS path. Generality is free once the probe exists.
 
+### 2.5 Probe→merge race guard (M6)
+
+`worktree_for_ref` is read before `advance` runs; between them the worktree could
+detach or switch branches, after which `git -C <wt> merge --ff-only <oid>` would
+advance a *detached HEAD* or a *different branch* — not `target_ref`. Guard inside
+`advance`, in the target worktree, immediately before and after the merge:
+
+- `git -C <wt> symbolic-ref --quiet HEAD` == `target_ref` (still attached to it),
+- re-assert `gather_tree_clean(wt)` (the M5 window),
+- post-merge: `target_ref` resolves to `planned` (the §2.2 post-condition).
+
+Any mismatch → a raced `Moved` outcome (journaled `Failed`), never a silent
+wrong-ref advance. (Single-writer orchestration narrows this, but close runs in a
+live human/agent session, so the guard is not optional.)
+
 ## 3. Tree-true verify (ISS-030)
 
 Close SKILL 3a today: `git diff --stat refs/heads/main~1..refs/heads/main -- src/`
@@ -144,21 +204,30 @@ under a merge or multi-commit advance.
 Replace with two tree-true assertions:
 
 ```bash
-# (a) no phantom reverse-diff — WHOLE working tree matches trunk tip (NOT path-limited):
-git diff --quiet HEAD     # nonzero exit ⇒ DESYNC, do not proceed
+# (a) no phantom reverse-diff — TRACKED working tree matches HEAD (not path-limited):
+git diff --quiet HEAD     # nonzero exit ⇒ DESYNC, do not proceed   (untracked: ignored)
 
-# (b) delta genuinely landed — projected code == trunk code:
-git diff --stat refs/heads/candidate/<N>/close-001 refs/heads/main -- src/   # empty ⇒ landed
+# (b) delta genuinely landed — trunk tip's tree == the ADMITTED close_target tree:
+git diff --quiet <admitted_close_target_oid> refs/heads/main   # equal ⇒ landed
+#   (display only: git diff --stat <admitted_close_target_oid> refs/heads/main)
 ```
 
-(a) is the ISS-030 detector (a phantom reverse-diff makes the working tree ≠ HEAD).
-**F5:** it must **not** be path-limited — the SL-097 report showed reverse-diff
-entries across implementation files, and a `-- src/` filter would miss a desync in
-any other dir; `git diff --quiet HEAD` covers the whole tracked tree. (b) keeps the
-`-- src/` filter because it is asserting the *code* projection specifically. With §2
-the desync cannot arise, but the verify now *proves* it instead of reading a ref
-blind, and (b) proves projection against the **tree**, not a `~1` boundary. Remove
-the stale `main~1..main` form and its TODO's reliance on it.
+**(a) — F5/M8.** The ISS-030 detector: a phantom reverse-diff makes the tracked
+working tree ≠ `HEAD`. It must **not** be path-limited (SL-097's reverse-diff spanned
+implementation files beyond any one dir). Scope note (M8): `git diff --quiet HEAD`
+covers the **tracked** tree, not untracked files — correct here, since the phantom
+reverse-diff is staged/unstaged tracked content; untracked noise is deliberately out
+of the desync signal.
+
+**(b) — M7.** Compare against the **admitted `close_target` OID**, *not* the mutable
+`refs/heads/candidate/<N>/close-001` ref. Integrate targets the admitted OID
+(`plan_candidate_trunk_row`, dispatch.rs:1234); the candidate ref can move, so a
+diff against it can pass while the wrong tree landed. Diff trunk's tree to the
+admitted OID's tree (no pathspec, or the actual payload paths) with `--quiet`;
+`--stat` is display only. With §2 the desync cannot arise, but the verify now
+*proves* it against the **tree** rather than the `main~1..main` ref boundary (which
+was also wrong under a merge/multi-commit advance). Remove the stale form and its
+TODO's reliance on it.
 
 **Scope of this step.** §3 lives in the close SKILL and is therefore
 **close-to-main-specific** (`refs/heads/main`, the `close_target` candidate).
@@ -181,8 +250,10 @@ integrate: refs/heads/review/121 (no-op, already at tip)
 integrate: 2 ref(s) replayed
 ```
 
-Disposition ∈ `{ advanced+resynced, advanced+pure-ref, no-op }` for success;
-`refused-dirty` surfaces as the §2.3 named-token error, not a success line.
+Disposition ∈ `{ advanced+resynced, advanced+pure-ref, no-op }` for success.
+Refusals are not success lines: `integrate-dirty-worktree` (§2.3, whole-integrate),
+`integrate-nonff-checkout` (§2.2, a checked-out target needing a non-ff advance),
+and a raced `Moved` (§2.5) all surface as the named-token error / post-loop bail.
 
 **OQ-3 resolved:** stderr human line + the existing stdout ref-list. No `--json`
 (integrate has none; adding one is out of scope).
@@ -191,8 +262,8 @@ Disposition ∈ `{ advanced+resynced, advanced+pure-ref, no-op }` for success;
 
 | Path | Change |
 |---|---|
-| `src/git.rs` | NEW `worktree_for_ref`; NEW `ff_advance_in_worktree` (or inline `merge --ff-only` mapping to `ReplayOutcome`). |
-| `src/dispatch.rs` | `integrate` (≈1044–1161): pre-mutation dirty gate (§2.3); per-row branch in the replay loop (§2.2); per-row disposition + report (§4). `find_coordination_worktree` → delegate to `worktree_for_ref`. |
+| `src/git.rs` | NEW pure porcelain parser + `worktree_for_ref` (M9 fixtures); NEW status-capturing `ff_advance_in_worktree` (symbolic-ref + clean re-check + post-assert per §2.5; returns an outcome, never bare `?` — B3). |
+| `src/dispatch.rs` | `integrate` (≈1044–1161): dirty gate **before the first `commit_journal`** (§2.3/M4); per-row exact-CAS classify + mechanism branch (§2.2); non-ff-checkout refusal; per-row disposition + report (§4). `find_coordination_worktree` → wrapper over `worktree_for_ref` (`Err`→`"(removed)"`, F4). |
 | `src/worktree.rs` | `gather_fork_worktree` → delegate to `worktree_for_ref`; `gather_tree_clean` reused at a worktree path (no signature change). |
 | `plugins/doctrine/skills/close/SKILL.md` | step-3a verify → tree-true (§3). |
 
@@ -200,17 +271,23 @@ Disposition ∈ `{ advanced+resynced, advanced+pure-ref, no-op }` for success;
 
 New/changed evidence:
 
-- **VT — pure probe parse:** `worktree_for_ref` parses a known `worktree list
-  --porcelain` fixture: ref present (→ path), absent (→ None), detached block (no
-  `branch` line → skipped). Drives the extraction.
+- **VT — pure probe parse (M9):** the extracted pure parser over fixed `worktree
+  list --porcelain` text: ref present (→ path), absent (→ None), detached block (no
+  `branch` line → skipped), **blank-block** (state reset), **command-failure**
+  (`Err` → wrapper maps to `"(removed)"`). Drives the extraction; both callers'
+  suites stay green unchanged.
 - **VT — advance dispatch:** unit/e2e — target **not** checked out → CAS path,
-  ref moves, index untouched (no phantom diff). Target checked out + clean → ref +
-  index + worktree all at new tip; `git status` empty (the ISS-022/030
-  regression test). Target checked out + **dirty** → `integrate-dirty-worktree`
-  refusal, **zero refs moved** (atomicity).
-- **VT — outcome map:** ff-only already-up-to-date → `NoOp`; foreign trunk advance
-  → `Moved`/Failed, integrate bails *after the loop* (earlier applied rows persist
-  — F3); a re-run resumes idempotently (skips `Verified`, `NoOp`s at-target).
+  ref moves, index untouched (no phantom diff). Target checked out + clean ff → ref +
+  index + worktree all at new tip; `git status` empty (the ISS-022/030 regression
+  test). Target checked out + **dirty** → `integrate-dirty-worktree`, **zero refs
+  moved incl. `dispatch/<slice>`** (gate before first `commit_journal`, M4). Target
+  checked out + **non-ff** advance → `integrate-nonff-checkout`, ref untouched (B2).
+- **VT — exact-CAS classification (B1):** target *ahead* of `planned` → `Moved`
+  (not the ff "already up to date"); target == `planned` → `NoOp`; foreign advance
+  off `expected_old` → `Moved`/Failed, bail *after the loop* (earlier rows persist —
+  F3), re-run resumes idempotently (skips `Verified`, `NoOp`s at-target).
+- **VT — race guard (M6):** probe says checked-out, HEAD detached/switched before
+  merge → raced `Moved`, never a wrong-ref advance.
 - **VT — report:** stderr carries per-row `old..new (disposition)`; stdout
   ref-list contract preserved (regression).
 - **Behaviour-preservation:** existing `find_coordination_worktree` /
@@ -220,9 +297,10 @@ New/changed evidence:
 
 ## 7. Invariants & boundaries
 
-- **Dirty-atomicity (the guarantee we add):** the §2.3 pre-mutation pass means a
-  dirty checked-out target refuses with **zero refs moved**. This is the new
-  invariant this slice establishes.
+- **Dirty-atomicity (the guarantee we add):** the §2.3 pre-mutation pass, placed
+  **before the first `commit_journal`** (M4), means a dirty checked-out target
+  refuses with **zero refs moved** — including the coordination ref
+  `dispatch/<slice>`. This is the new invariant this slice establishes.
 - **NOT fully atomic on `Moved`/collision (F3 — honest scope).** The replay loop
   applies rows sequentially and bails *after* the loop on any `Moved` row (the
   existing `moved` vec), so a later `Moved` — or an untracked-collision ff abort
@@ -231,18 +309,19 @@ New/changed evidence:
   skips already-`Verified` rows (`fresh` guard) and `NoOp`s a row already at its
   target. The recovery model is "re-run resumes," not "all-or-nothing." We do *not*
   claim transactional atomicity across rows; only the dirty pre-gate is atomic.
-- **Leg asymmetry (F2 — accepted, documented).** The CAS leg refuses on
-  `current != expected_old` (exact); the ff-only leg refuses on
-  `planned_new not a descendant of current`. They diverge only on a **rewound**
-  target (current is a strict ancestor of `planned_new` but ≠ `expected_old`):
-  CAS refuses, ff-only would advance. Trunk rewind under a close is not a real
-  scenario; accepted, not unified.
+- **Classification asymmetry RESOLVED (was F2).** The §2.2 rewrite **removes** the
+  asymmetry: rows are classified by the *exact* `replay_ref` predicate (`current ==
+  planned` / `current == expected_old`) regardless of leg; `merge --ff-only` is only
+  the *mechanism* of an already-classified advance, plus a post-condition assert
+  (`target == planned`). The rewound-target case the first draft tolerated is now
+  caught identically to CAS — `current != expected_old` → `Moved` — and a non-ff
+  checked-out advance refuses rather than fast-forwarding.
 - **No new impurity altitude:** the advance was already an imperative side effect
   (`update-ref`); `merge --ff-only` is the same altitude, the pure layer is
   untouched (ADR-006).
 - **Idempotent replay preserved:** a re-run of a partially-journaled integrate
   still skips already-`Verified` rows (the `fresh` guard) and `NoOp`s a row at its
-  target — now true through both the CAS and ff-only legs.
+  target — true through both the CAS and the worktree-resync mechanisms.
 - **stdout ref-list is a contract:** machine-readable; only additive stderr detail.
 - **Target-ref-agnostic:** the advance keys on the target's *checkout state*
   (`worktree_for_ref`), never its *name*. `--trunk refs/heads/main` (close) and
@@ -280,4 +359,32 @@ Self-review before external challenge; findings integrated above.
   `git diff --quiet refs/heads/main -- src/` to `git diff --quiet HEAD` (whole
   tracked tree) — the SL-097 reverse-diff was not src-only.
 
-Residual: none blocking. Ready for external adversarial pass or `/plan`.
+Residual: none blocking.
+
+## 10. External adversarial pass (codex GPT-5.5)
+
+Hostile review against the source; all nine findings confirmed against `src/` and
+integrated. Summary:
+
+- **B1 (blocker) → §2.2 rewrite.** `merge --ff-only`'s outcomes do **not** map onto
+  `ReplayOutcome` (git.rs:942 classifies on exact oids). Abandoned the mapping;
+  classification is now exact-CAS, merge is mechanism-only with a post-assert.
+- **B2 (blocker) → §2.2.** Edge/`review` rows are *not ff-gated* and creation rows
+  use `expected_old = ZERO_OID`; routing them through ff-only changed semantics.
+  Now: exact classify; non-ff checked-out advance refuses (`integrate-nonff-checkout`).
+- **B3 (blocker) → §2.2.** A merge refusal must be a captured *outcome* (journaled
+  `Failed`), not a bare `?` `Err` (git.rs:520) that aborts before status is durable.
+- **M4 → §2.3/§7.** Dirty gate must run **before the first `commit_journal`**
+  (dispatch.rs:1097), which advances `dispatch/<slice>`.
+- **M5 → §2.3.** `merge --ff-only` does *not* refuse on arbitrary dirt; the pre-gate
+  is the dirty guarantee, re-checked around the merge.
+- **M6 → §2.5.** Probe→merge TOCTOU; guard `symbolic-ref HEAD == target` + clean +
+  post-assert in the target worktree.
+- **M7 → §3(b).** Verify against the **admitted `close_target` OID**, not the mutable
+  candidate ref (dispatch.rs:1234).
+- **M8 → §3(a).** `git diff --quiet HEAD` is the **tracked** tree (untracked
+  ignored) — correct for the phantom reverse-diff; wording fixed.
+- **M9 → §2.1/§6.** The two existing parsers differ on blank-line reset; adopt the
+  block-reset form; extract a pure parser with fixtures.
+
+Ready for `/plan`.
