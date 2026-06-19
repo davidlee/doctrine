@@ -38,8 +38,16 @@ vs pi *within* the subprocess arm. The two keys are orthogonal layers:
 if claude_force_subprocess_dispatch == true:
     → /dispatch-subprocess (respect preferred_subprocess_harness)
 else:
-    → env-marker inference (Claude → /dispatch-agent, codex/pi → /dispatch-subprocess)
+    → env-marker inference:
+        orchestrator is Claude  → /dispatch-agent
+        orchestrator is codex/pi → /dispatch-subprocess
 ```
+
+The orchestrator detects its own harness by the same env-marker logic used in
+`boot.rs` `resolve_harnesses`: presence of `.claude/` → Claude, otherwise
+codex/pi. In practice the orchestrator LLM knows its harness implicitly (the
+skill is read by the agent that *is* the harness), so the detection is
+self-evident at routing time.
 
 ## Code impact
 
@@ -83,6 +91,7 @@ Replace the inference-only routing prose with the config-first chain:
 | Absent key | Unit test: empty `[dispatch]` or missing key → field `false` (serde default) |
 | Absent table | Existing `absent_tables_yield_defaults` test still passes |
 | Round-trip through `dtoml::parse` | New test: populated `[dispatch]` with both keys parses correctly |
+| Combined keys | Unit test: `claude-force-subprocess-dispatch = true` + `preferred-subprocess-harness = "pi"` in same `[dispatch]` table → both fields correct |
 
 ## Design decisions
 
@@ -94,6 +103,22 @@ Replace the inference-only routing prose with the config-first chain:
 | **Separate key, not merged enum** | `preferred-subprocess-harness` owns the codex-vs-pi choice within the subprocess arm. Merging into a single three-variant enum would conflate orthogonal decisions (arm selection vs harness selection) and force every config to restate the subprocess preference even when native subagents are the default. |
 | **Default `false`** | Preserves current behaviour exactly — no project is forced to change. |
 | **No CLI flag** | Non-goal per slice scope; `worktree fork` already has its own concerns. |
+
+## Assumptions & risks
+
+- **`preferred-subprocess-harness` consumption (IMP-101 scope).** The
+  `dispatch-subprocess/SKILL.md` currently presents both spawn templates (codex
+  and pi) as separate labeled blocks with no config-driven selection prose.
+  Wiring `preferred-subprocess-harness` into that skill's routing is IMP-101's
+  responsibility. SL-117 only needs the dispatch router step 3 to *direct* the
+  orchestrator to `/dispatch-subprocess`; the sub-arm harness selection within
+  that skill is a separate, pre-existing concern.
+
+## References
+
+- **ADR-011** (D3) — Claude's `Agent` tool is the first-class subagent arm,
+  not a degraded rung. This design adds an opt-out, not a demotion.
+- **IMP-101** — landed `preferred-subprocess-harness` and `dispatch_config.rs`.
 
 ## Remaining open questions
 
