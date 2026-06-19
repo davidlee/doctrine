@@ -14,17 +14,73 @@ ref   = "SL-117"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "EXPECTED routing prose to be executable end-to-end; OBSERVED 'respect preferred-subprocess-harness' points at a dispatch-subprocess skill with no config-driven selection prose"
 detail = "design.md §Routing decision tree says '→ /dispatch-subprocess (respect preferred_subprocess_harness)'. But dispatch-subprocess/SKILL.md has two hardcoded, labeled spawn templates (codex and pi) with zero prose about selecting between them. The word 'preferred' does not appear in that file. An orchestrator arriving at that skill has no mechanical instruction for how to 'respect' the config. The design's own §Assumptions admits this is IMP-101 scope — but the routing prose still emits the instruction as if actionable. Either (a) remove the parenthetical and note the selection is IMP-101's follow-up, or (b) include a one-sentence selection rule in the step 3 prose so the orchestrator can actually choose between the two templates. As-is: routing failure."
+disposition = "fix-now"
+response = "Accepted. Will integrate into design.md and commit before proceeding to plan."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "major"
 title = "EXPECTED env-marker detection mechanism in the skill prose; OBSERVED detection paragraph lives only in design.md, not in the dispatch/SKILL.md rewrite"
 detail = "The design.md adds a paragraph: 'The orchestrator detects its own harness by the same env-marker logic used in boot.rs resolve_harnesses: presence of .claude/ → Claude, otherwise codex/pi.' This is correct but it appears only in the design document. The dispatch/SKILL.md rewrite in the design's §Code impact section contains only: 'Otherwise, route per env-marker inference: Claude orchestrators → /dispatch-agent, codex/pi orchestrators → /dispatch-subprocess.' A non-Claude agent reading this prose has no instruction for determining which branch it falls into. The detection mechanism (.claude/ presence check) must be in the skill prose the orchestrator actually reads, not just in a design doc it never sees."
+disposition = "fix-now"
+response = "Accepted. Will integrate into design.md and commit before proceeding to plan."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "EXPECTED step 3 prose to say where config lives; OBSERVED 'If claude-force-subprocess-dispatch is true' with no path to the file"
+detail = "The dispatch/SKILL.md step 3 rewrite says 'If claude-force-subprocess-dispatch is true' but never names the file. The orchestrator reads the skill, not the design doc. Fix: 'Check .doctrine/doctrine.toml → [dispatch] → claude-force-subprocess-dispatch. If true, route workers via /dispatch-subprocess...' The same gap exists for preferred-subprocess-harness (IMP-101 scope) — but SL-117 shouldn't add a second config-driven routing instruction without closing the 'from where' question for its own key."
+disposition = "fix-now"
+response = "Accepted. Will integrate into design.md and commit before proceeding to plan."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "EXPECTED combined-keys dtoml test to be placed alongside existing dispatch_table_roundtrip; OBSERVED design doesn't specify test location"
+detail = "The design's verification table lists 'Combined keys: Unit test: claude-force-subprocess-dispatch = true + preferred-subprocess-harness = pi in same [dispatch] table → both fields correct.' The existing dispatch_table_roundtrip test lives in dtoml.rs. The new combined-keys test should live there too — it proves the full [dispatch] TOML table round-trips through dtoml::parse, which the dispatch_config.rs unit tests (testing DispatchConfig directly via toml::from_str) do not. Recommend: name the test location (dtoml.rs) and reference the existing test it mirrors."
+disposition = "fix-now"
+response = "Accepted. Will integrate into design.md and commit before proceeding to plan."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "EXPECTED routing prose to include fallback for unwired preferred-subprocess-harness; OBSERVED no fallback, creating silent routing failure"
+detail = "Step 3 prose: 'route workers via /dispatch-subprocess (respect preferred_subprocess_harness for codex vs pi).' The design's §Assumptions admits dispatch-subprocess/SKILL.md has no config-driven selection prose. An orchestrator routed there with 'respect preferred_subprocess_harness' will find two undifferentiated spawn templates and no way to choose. Two mitigations: (a) include a fallback in the step 3 prose — 'respect preferred-subprocess-harness; if the subprocess skill doesn't yet consume it, default to pi' — or (b) gate claude-force-subprocess-dispatch on IMP-101 completion and refuse to route until wired. Without either, a true==true orchestrator hits a routing dead-end."
+disposition = "fix-now"
+response = "Accepted. Will integrate into design.md and commit before proceeding to plan."
+
+[[finding]]
+id = "F-6"
+status = "withdrawn"
+severity = "minor"
+title = "EXPECTED config path '.doctrine/doctrine.toml'; OBSERVED design says 'doctrine.toml'"
+detail = "User confirmed the path: .doctrine/doctrine.toml. The design's §Code impact → Other files says 'doctrine.toml — no required change'. Correct to .doctrine/doctrine.toml throughout. (The dtoml parser expects the file at the project root — verify the path is .doctrine/doctrine.toml, not doctrine.toml at root.)"
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "EXPECTED skill description to mention config-driven arm selection; OBSERVED description still says inference-only routing"
+detail = "dispatch/SKILL.md line 3 description: 'Routes to /dispatch-subprocess (codex/pi) or /dispatch-agent (claude).' This describes the current inference-only model. After SL-117, consider appending something like '…or /dispatch-agent (claude); overridable via [dispatch] claude-force-subprocess-dispatch in doctrine.toml' so the key is discoverable from the skill's own frontmatter. Not a correctness issue — the routing prose in step 3 is the authority — but frontmatter is the first thing an orchestrator reads."
+disposition = "fix-now"
+response = "Accepted. Will integrate into design.md and commit before proceeding to plan."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "EXPECTED routing prose to handle absent doctrine.toml; OBSERVED no mention of file-may-not-exist default fallback"
+detail = "doctrine.toml is not installed by default — only doctrine.toml.example ships. The routing prose should say: 'Check doctrine.toml → [dispatch] → claude-force-subprocess-dispatch. If the file doesn't exist, the default is false.' Without this, an orchestrator on a fresh repo might error out looking for a missing file rather than falling through to env-marker inference."
+disposition = "fix-now"
+response = "Accepted. Will integrate into design.md and commit before proceeding to plan."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

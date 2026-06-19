@@ -34,20 +34,19 @@ vs pi *within* the subprocess arm. The two keys are orthogonal layers:
 
 ## Routing decision tree
 
+The orchestrator checks `doctrine.toml` → `[dispatch]` →
+`claude-force-subprocess-dispatch`. If the file is absent, the default is
+`false`.
+
 ```
 if claude_force_subprocess_dispatch == true:
-    → /dispatch-subprocess (respect preferred_subprocess_harness)
+    → /dispatch-subprocess
+       (sub-arm: default to pi until preferred_subprocess_harness is wired — IMP-101)
 else:
     → env-marker inference:
-        orchestrator is Claude  → /dispatch-agent
-        orchestrator is codex/pi → /dispatch-subprocess
+        .claude/ present  → /dispatch-agent
+        otherwise          → /dispatch-subprocess
 ```
-
-The orchestrator detects its own harness by the same env-marker logic used in
-`boot.rs` `resolve_harnesses`: presence of `.claude/` → Claude, otherwise
-codex/pi. In practice the orchestrator LLM knows its harness implicitly (the
-skill is read by the agent that *is* the harness), so the detection is
-self-evident at routing time.
 
 ## Code impact
 
@@ -65,14 +64,23 @@ pub(crate) claude_force_subprocess_dispatch: bool,
 Added to `DispatchConfig`. No new enum — it's a `bool` with serde `default` (`false`).
 `SubprocessHarness` is untouched.
 
-### `.agents/skills/dispatch/SKILL.md` — step 3 prose
+### `.agents/skills/dispatch/SKILL.md` — step 3 prose + description
 
-Replace the inference-only routing prose with the config-first chain:
+**Description line** (append config mention for discoverability):
 
-> If `claude-force-subprocess-dispatch` is `true`, route workers via
-> `/dispatch-subprocess` (respect `preferred-subprocess-harness` for codex vs pi).
-> Otherwise, route per env-marker inference: Claude orchestrators →
-> `/dispatch-agent`, codex/pi orchestrators → `/dispatch-subprocess`.
+> Routes to `/dispatch-subprocess` (codex/pi) or `/dispatch-agent` (claude);
+> overridable via `[dispatch] claude-force-subprocess-dispatch` in `doctrine.toml`.
+
+**Step 3** — replace the inference-only routing prose with:
+
+> Check `doctrine.toml` → `[dispatch]` → `claude-force-subprocess-dispatch`
+> (default `false` if the file or key is absent).
+>
+> If `true`, route workers via `/dispatch-subprocess` (default to `pi` until
+> `preferred-subprocess-harness` selection is wired — IMP-101).
+>
+> Otherwise, route per env-marker inference: `.claude/` present →
+> `/dispatch-agent`; otherwise → `/dispatch-subprocess`.
 
 ### Other files — no change
 
@@ -91,7 +99,7 @@ Replace the inference-only routing prose with the config-first chain:
 | Absent key | Unit test: empty `[dispatch]` or missing key → field `false` (serde default) |
 | Absent table | Existing `absent_tables_yield_defaults` test still passes |
 | Round-trip through `dtoml::parse` | New test: populated `[dispatch]` with both keys parses correctly |
-| Combined keys | Unit test: `claude-force-subprocess-dispatch = true` + `preferred-subprocess-harness = "pi"` in same `[dispatch]` table → both fields correct |
+| Combined keys (`src/dtoml.rs`) | New test alongside `dispatch_table_roundtrip`: `claude-force-subprocess-dispatch = true` + `preferred-subprocess-harness = "pi"` in same `[dispatch]` table → both fields correct |
 
 ## Design decisions
 
@@ -110,9 +118,13 @@ Replace the inference-only routing prose with the config-first chain:
   `dispatch-subprocess/SKILL.md` currently presents both spawn templates (codex
   and pi) as separate labeled blocks with no config-driven selection prose.
   Wiring `preferred-subprocess-harness` into that skill's routing is IMP-101's
-  responsibility. SL-117 only needs the dispatch router step 3 to *direct* the
-  orchestrator to `/dispatch-subprocess`; the sub-arm harness selection within
-  that skill is a separate, pre-existing concern.
+  responsibility. SL-117's routing prose defaults to `pi` as a concrete fallback
+  until IMP-101 lands the selection logic.
+
+- **Prose-only enforcement.** The config key has no binary consumer — the
+  orchestrator LLM reads and applies it via skill prose. This is the same posture
+  as `preferred-subprocess-harness` and consistent with the dispatch framework's
+  design (config is advisory, orchestrator is the consumer).
 
 ## References
 
