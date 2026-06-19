@@ -4,57 +4,71 @@
 
 `doctrine dispatch sync --integrate` (`src/dispatch.rs::integrate`, entry
 `run_integrate`) projects a slice's journaled refs onto trunk under a
-fast-forward CAS. It is the *only* place `--integrate` runs — close step-3a,
-post-audit (see `plugins/doctrine/skills/close/SKILL.md`). Three reported defects
-share this one operation; fixing them piecemeal would re-touch the same exit path
-repeatedly, so they bundle.
+fast-forward CAS. It is the **only** place `--integrate` runs — close step-3a,
+post-audit (`plugins/doctrine/skills/close/SKILL.md`), invoked **inline in the
+user's main session, which is checked out on `main`**. The coordination worktree
+is already GC'd at `/dispatch` conclude, so by close there is no separate
+checkout-free context. Three reported defects share this one operation.
 
-This slice bundles three backlog items, all on the `sync --integrate` exit path:
+**Root cause (one bug, three faces).** Integrate advances trunk by **pure ref-CAS**
+(`replay_ref` → `git update-ref`). That is correct when nothing is checked out on
+the target. But close runs it while the session worktree owns `main`: moving the
+`main` ref out from under that live index+worktree leaves HEAD at the new commit
+while the index/worktree still hold the old tree → git renders **the inverse of
+the landed delta as staged changes** (the "phantom reverse-diff"). Confirmed by
+the recording commits: ISS-022 (079955e0) *"trunk advanced correctly but staging
+area carried reverse-diff entries … resolved with `git reset --hard`"*; ISS-030
+(3bf46b16) *"--integrate advances the main ref but not the live index/worktree …
+step-3a verify reads the ref so it misses the desync."*
 
-- **ISS-022** — after advancing trunk, the **staging area (index)** is left in a
-  stale reverse-diff state. The integrate's ref-CAS replay (`git::replay_ref`)
-  and/or the surrounding sync projection mutates the index and does not restore
-  it, leaving the working checkout dirty post-integrate.
-- **ISS-030** — integrate leaves a **stale worktree**; relatedly, close step-3a's
-  verify reads a **ref** (`git diff --stat refs/heads/main~1..main`) rather than
-  the **tree**, so it can pass on a ref that does not reflect the actual projected
-  tree. Aligns with the established invariant that sync sources the ledger from
-  the branch tip tree, not the working filesystem
-  (`mem.pattern.dispatch.sync-tree-reads-ledger-not-worktree`).
-- **IMP-078** — integrate is **silent about its trunk/worktree outcome**. Success
-  emits only `integrate: N ref(s) replayed` on stderr; the user cannot see *what*
-  moved (trunk advanced? which OID? worktree state?) without inspecting refs by
-  hand. IMP-078 declares `after: ISS-022, ISS-030` — it reports on the very state
-  the other two fix.
+- **ISS-022** — stale **index** (phantom reverse-diff) after the advance.
+- **ISS-030** — stale **worktree** (same desync); and close step-3a's verify reads
+  a **ref** (`git diff --stat main~1..main`) so it passes blind to the desync.
+- **IMP-078** — integrate is **silent**: emits only `N ref(s) replayed`, never
+  reports what advanced or that it just desynced the tree it stands in. IMP-078
+  declares `after: ISS-022, ISS-030` — it reports on the very state they fix.
 
-One theme: **`sync --integrate` must leave clean repository state (index +
-worktree) and legibly report what it did.**
+This is the `git-ref-vs-worktree-placement` hub (IMP-110 / ISS-029).
+
+One theme: **`sync --integrate` must be worktree-aware — leave clean repository
+state (index + worktree) under every placement, and legibly report what it did.**
 
 ## Scope & Objectives
 
+The fix is a **worktree-aware advance** inside integrate. Per planned row, by the
+target ref's checkout state:
+
+- **not checked out anywhere** → raw `update-ref` CAS (today's path, unchanged).
+- **checked out + tree clean** → advance the ref *and* resync that worktree's
+  index+worktree to the new tip via git's own fast-forward primitive
+  (`merge --ff-only` / `reset --keep`), atomically and refusing on conflict.
+- **checked out + tree dirty** → **refuse the whole integrate before any mutation**
+  with a named token (fail closed, atomic — never half-advance).
+
 In scope:
 
-1. **Clean index (ISS-022).** Integrate leaves the staging area in the same state
-   it found it — no residual reverse-diff. Root-cause whether `replay_ref` or the
-   sync projection step touches the index, and restore/avoid it.
-2. **Clean / consistent worktree + tree-true verify (ISS-030).** Integrate does
-   not leave a stale worktree; close step-3a verification reads the projected
-   **tree**, not just a ref boundary, so a green verify genuinely proves the code
-   delta landed.
-3. **Legible outcome (IMP-078).** On success, integrate reports the concrete
-   trunk/worktree outcome — what ref(s) advanced and to which OID, and the
-   resulting worktree disposition — not just a replay count.
+1. **Clean index + worktree (ISS-022 + ISS-030).** Integrate never leaves a
+   phantom reverse-diff: when the target is checked out, ref and tree move together
+   (clean) or it refuses (dirty). No manual `reset --hard` ritual.
+2. **Tree-true verify (ISS-030).** Close step-3a verification reads the projected
+   **tree** (compare trunk tip tree to the admitted close_target tree), not a ref
+   boundary, so a green verify genuinely proves the delta landed *and* the tree is
+   in sync.
+3. **Legible outcome (IMP-078).** On success, integrate reports per row: ref
+   `old..new`, and the worktree disposition (`resynced` / `pure-ref` /
+   `refused-dirty`) — not just a replay count.
 
 Affected surface (concrete):
 
-- `src/dispatch.rs` — `integrate` (≈1044–1161), `run_integrate` (≈131), the
-  replay loop and stderr reporting (≈1108–1160), worktree-cleanup detection
-  (`find_coordination_worktree` ≈1769).
-- `src/worktree.rs` — `git worktree remove` path (≈1408), if worktree hygiene is
-  implicated.
-- `src/git.rs` — `replay_ref` / any index-touching plumbing.
-- `plugins/doctrine/skills/close/SKILL.md` — step-3a verify (≈85), to read the
-  tree not the ref.
+- `src/dispatch.rs` — `integrate` (≈1044–1161): a pre-mutation checkout/dirty gate,
+  the replay loop, a post-advance worktree resync, and the stderr report
+  (≈1108–1160). `run_integrate` (≈131).
+- `src/git.rs` / `src/worktree.rs` — a "which worktree has ref R checked out + is it
+  clean" probe (`git worktree list --porcelain` + dirty check), and the ff-only
+  resync primitive. Reuse existing helpers where they exist (`gather_tree_clean`,
+  `find_coordination_worktree`).
+- `plugins/doctrine/skills/close/SKILL.md` — step-3a verify (≈85): tree-true
+  comparison; drop reliance on `main~1..main`.
 
 ## Non-Goals
 
@@ -77,11 +91,15 @@ _(to be completed at close)_
 
 ## Open Questions
 
-- **OQ-1** Is the stale index (ISS-022) caused inside `replay_ref` (ref-CAS
-  shouldn't touch the index) or by the surrounding sync projection's
-  index-application for orthogonal/reverse-diff classes? `/design` to root-cause.
-- **OQ-2** Worktree hygiene (ISS-030): does integrate own worktree removal, or
-  only report disposition? ADR-012 says stage-2 `--integrate` runs *after* the
-  coordination worktree is removed — clarify what "stale worktree" refers to.
+- **OQ-1** ~~Root-cause of the stale index~~ — **RESOLVED.** Pure ref-CAS advance
+  of a checked-out `main` desyncs the live index+worktree (phantom reverse-diff).
+  Confirmed from the recording commits. Not a `replay_ref`/projection index leak.
+- **OQ-2** Resync primitive: `git merge --ff-only <new>` (atomic, refuses on dirt)
+  run in the target worktree, **or** CAS `update-ref` followed by `reset --keep`?
+  `/design` to settle; leaning two-step (keep the proven CAS path, isolate the
+  resync). Either way the dirty gate runs *before* any mutation.
 - **OQ-3** Outcome-report shape (IMP-078): stderr human line vs structured
   (`--json`) — match existing dispatch reporting conventions.
+- **OQ-4** Multi-row generality: only `trunk` (`main`) is realistically checked
+  out; is the per-row checkout probe worth generalising to the `edge`
+  (`review/<slice>`) row, or special-case trunk? `/design` to decide.
