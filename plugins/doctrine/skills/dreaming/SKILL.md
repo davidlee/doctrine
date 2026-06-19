@@ -1,6 +1,8 @@
 ---
 name: dreaming
-description: Unified memory corpus maintenance — covers both reactive (change-triggered: files move, commands change, invariants shift, duplicates found) and proactive (periodic/idle-time improvement). One skill, two entry paths.
+description: >-
+  Unified memory corpus maintenance — covers both reactive (change-triggered)
+  and proactive (periodic/idle-time improvement) paths. One skill, two entries.
 ---
 
 # Dreaming
