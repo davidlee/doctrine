@@ -58,9 +58,16 @@ refuse `integrate-nonff-checkout` for a checked-out non-ff advance. Dirty pre-ga
 runs BEFORE the first commit_journal. Refusals are captured outcomes (journaled
 Failed), never bare `?`-errors. Add the per-row stderr disposition report (IMP-078)
 while preserving the stdout ref-list contract.
+
+Runs AFTER PHASE-04: integrate is already on the `with_journaled_projection`
+bracket (§2.6), so this phase rewrites only integrate's injected `apply` closure
+(the worktree-aware advance + None-leg re-probe) and emits the §4 report
+caller-side after the bracket returns — it does not re-touch the journal cycle.
+The dirty pre-gate (§2.3) is caller-side BEFORE the bracket call (M4).
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete: `worktree_for_ref` available and green." },
+  { id = "EN-2", text = "PHASE-04 complete: both callers on `with_journaled_projection`; integrate's apply closure is the verbatim `replay_ref` body, suites green (the worktree rewrite mutates only that closure)." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Dirty checked-out target → `integrate-dirty-worktree`, ZERO refs moved incl. `dispatch/<slice>` (gate before first commit_journal, M4)." },
@@ -69,6 +76,7 @@ exit_criteria = [
   { id = "EX-4", text = "Not-checked-out target → update_ref_cas as today; post-CAS re-probe resyncs or warns `raced-checkout-desync` if the ref became checked out (R2 None-leg gap)." },
   { id = "EX-5", text = "Classification is the exact replay_ref predicate on both legs; merge refusal/non-ff/race are captured outcomes journaled `Failed`, not `Err` (B1/B3)." },
   { id = "EX-6", text = "Success emits per-row stderr `ref old..new (disposition)`; the existing stdout ref-list is unchanged (IMP-078, §4)." },
+  { id = "EX-7", text = "The worktree-aware advance lands inside integrate's injected `apply` closure (PHASE-04 bracket); the journal cycle (two `commit_journal`s + the loop) is untouched. The dirty pre-gate is caller-side before the bracket; the §4 report reads `journal.rows` caller-side after it (§2.6 seam placement)." },
 ]
 verification = [
   { id = "VT-1", expects = "e2e/integration: not-checked-out advance moves ref, index untouched (no phantom diff)." },
@@ -104,6 +112,48 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "The read surface returns the committed journal trunk `planned_new_oid` from any checkout (tree-read; matches the sync-tree-reads-ledger invariant)." },
   { id = "VH-1", expects = "Human walkthrough of the revised SKILL 3a: a deliberately-desynced tracked tree makes (a) fail; a silent dry-run (no advance) makes (b) fail; a clean integrate passes both." },
+  { id = "VA-1", expects = "Agent confirms step-3a is left structured so IMP-102's future `done`-gate (refuse close when un-integrated) can bolt onto the same tree-true check without re-cutting it (IMP-102/103 seam-awareness, out of scope but design-bound)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+# Appended after PHASE-03 (never renumber); EXECUTION ORDER is PHASE-01 → PHASE-04
+# → PHASE-02 → PHASE-03, carried by PHASE-02 EN-2. A behaviour-pure refactor that
+# lands the IMP-075 fold (§2.6) BEFORE the worktree rewrite, mirroring PHASE-01's
+# "extract pure first, change behaviour after" discipline.
+id        = "PHASE-04"
+name      = "Extract with_journaled_projection (behaviour-pure journal bracket, IMP-075)"
+objective = """
+Extract the duplicated journal cycle shared by `prepare_review` and `integrate`
+(commit-pre / per-row apply loop / commit-post / collect-failures — design §2.6,
+RV-030 F-7) as a THIN bracket `with_journaled_projection` taking an injected
+`apply: FnMut(&Path, &mut Row) -> Result<Option<String>>`. Refactor BOTH callers
+onto it with their CURRENT per-row bodies VERBATIM as closures — `prepare_review`'s
+zero-oid `update_ref_cas`/`stale` body and `integrate`'s 3-way `replay_ref`/`moved`
+body, each carrying its own status writes + stdout println inside the closure and
+returning only the failure string out. NO behaviour change in either caller — this
+phase is the IMP-075 refactor in isolation; the worktree-aware advance is PHASE-02.
+Bind the `apply` contract (codex §2.6): semantic per-row refusals return
+`Ok(Some(msg))` so the post-loop recovery commit still records status; `Err` is
+reserved for fatal operational failure (B3).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §2.6 locked (thin bracket + injected closure; codex pass integrated)." },
+  { id = "EN-2", text = "`just check` green at HEAD before changes." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`with_journaled_projection(root, tip, tip_tree, journal_path, coord_ref, &mut journal, message, apply) -> Result<Vec<String>>` exists in src/dispatch.rs; it owns BOTH `commit_journal` calls and the per-row loop, nothing else." },
+  { id = "EX-2", text = "`prepare_review` refactored onto the bracket; its `apply` closure is today's `update_ref_cas`(ZERO_OID)/`stale` body verbatim (status + stdout side effects inside the closure; failure string out)." },
+  { id = "EX-3", text = "`integrate` refactored onto the bracket; its `apply` closure is today's `replay_ref`/`moved` body verbatim — NO worktree-awareness yet (that is PHASE-02)." },
+  { id = "EX-4", text = "`apply` contract enforced: semantic refusals return `Ok(Some(msg))` (recovery commit records status); `Err` only for fatal failure (B3)." },
+  { id = "EX-5", text = "Journal construction (read / append trunk+edge rows / `fresh` / candidate / `plan_*` / `pending_journal`) stays caller-side BEFORE the bracket; report-or-bail stays caller-side AFTER it. The bracket sees no construction state." },
+]
+verification = [
+  { id = "VT-1", expects = "`e2e_dispatch_sync` PREPARE path green UNCHANGED — the behaviour-preservation proof for prepare_review (ADR-006)." },
+  { id = "VT-2", expects = "`e2e_dispatch_sync` INTEGRATE path green UNCHANGED — integrate behaviour-pure pre-rewrite (the closure = verbatim replay_ref body)." },
+  { id = "VT-3", expects = "`just check` green; clippy zero warnings." },
+  { id = "VA-1", expects = "Agent confirms the closure carries ALL per-row side effects (status, applied_new_oid, stdout println) and only the failure string crosses the bracket boundary; no journal-level state is read/mutated mid-loop (the codex §2.6 thin-seam claim, proven on the diff)." },
 ]
 specs        = []
 requirements = []
