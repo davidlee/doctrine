@@ -173,6 +173,14 @@ runtime — same rule table, same lookups, same outputs.
   all four sites). If a future axis needed `dir`/`scaffold` from a `sources` entry,
   `&str` would be insufficient — not the case today.
 - **Edge** — the `SLICE` alias in the rule table renames to `SL`; no semantic change.
+- **Edge** — the rule-table *element type* change ripples into every site that reads
+  `RelationRule.sources` / `TargetSpec::Kinds(ks)` and then `.prefix` on an element.
+  These are all **mechanical accessor edits** (`|k| k.prefix == p` → `|p2| *p2 == p`;
+  `ks.iter().map(|k| k.prefix)` → `ks.iter().copied()`), no assertion or behaviour
+  change: `relation.rs` matchers + its `target_spec_matches_design` test block, and
+  **one** test reader in `relation_graph.rs:1615`. Variant-only reads
+  (`matches!(r.target, TargetSpec::Unvalidated)` at `relation_graph:361/1562/1581`)
+  are untouched.
 
 ## 6. Open Questions & Unknowns
 
@@ -197,13 +205,18 @@ placement = new leaf `kinds.rs` not `entity`/`registry`; `relation_graph` exclud
   command literals untouched (smaller diff). Rejected — leaves "SL" in two places,
   a parallel-implementation smell, and fails the slice's "command modules consume
   the hoisted constant" objective.
-- **D5 — `relation_graph.rs` excluded entirely.** Its three command-imports
-  (`:82` `backlog::dep_seq_for`, `:423` gov supersession needing `dir` +
-  `governance::supersession_pair`, `:652` `spec::interaction_types`) are
+- **D5 — `relation_graph.rs` behavioral sites excluded.** Its three
+  command-*imports* (`:82` `backlog::dep_seq_for`, `:423` gov supersession needing
+  `dir` + `governance::supersession_pair`, `:652` `spec::interaction_types`) are
   **behavior-entangled**, not pure identity — a prefix swap cannot remove them. And
   `relation_graph` contributes **zero cycles** (its edges are non-cyclic). So the
-  cycle-break is fully achieved by `relation.rs` alone; `relation_graph` rides a
+  cycle-break is fully achieved by `relation.rs` alone; those sites ride a
   contingent follow-up (§8 R1), resolved iff SL-112 classifies it engine-internal.
+  *Caveat (adversarial pass):* one **test** reader (`:1615`) reads
+  `RELATION_RULES.sources` and takes the mechanical `&str` accessor edit — that is
+  the rule-table type change rippling into a reader, **not** a behavioral change to
+  an excluded site. "Excluded" means the upward `*_KIND`/behavioral edges, not "no
+  line of `relation_graph` is touched."
 
 ## 8. Risks & Mitigations
 
@@ -219,10 +232,12 @@ placement = new leaf `kinds.rs` not `entity`/`registry`; `relation_graph` exclud
 ## 9. Quality Engineering & Validation
 
 - **Behaviour-preservation gate (primary).** The existing `relation` unit suite +
-  corpus/relation integration tests stay **green unchanged**. Test literals that
-  build `TargetSpec::Kinds(&[…])` / `sources` directly take the mechanical
-  `&Kind`→`&str` edit (grep first); tests that go through `lookup`/`tier1_edges`
-  are untouched (signatures stable).
+  corpus/relation integration tests keep **every assertion unchanged** and stay
+  green. Test/code that reads the rule table internals — the `relation.rs` matchers,
+  its `target_spec_matches_design` block, and the one `relation_graph.rs:1615` test
+  reader — take the mechanical `&Kind`→`&str` accessor edit (`|k| k.prefix` →
+  `|p| *p` / `ks.iter().copied()`); no assertion or expected value moves. Tests that
+  go through `lookup`/`tier1_edges` are untouched (signatures stable).
 - **New micro-test (`kinds.rs`).** Pin `GOV`/`BACKLOG`/`RECORD` membership to the
   documented sets (mirrors `integrity::kinds_table_*`).
 - **Closure check.** `grep -nE 'crate::\w+::\w*_KIND' src/relation.rs` → empty.
@@ -230,4 +245,34 @@ placement = new leaf `kinds.rs` not `entity`/`registry`; `relation_graph` exclud
 
 ## 10. Review Notes
 
-(Adversarial pass appended here.)
+### Internal adversarial pass (2026-06-19)
+
+Empirically swept the full ripple of the `&Kind`→`&str` rule-table element-type
+change (`grep -rn '\.sources\b|TargetSpec::Kinds|r\.target' src/`).
+
+- **A — "`relation_graph` excluded entirely" was falsifiable.** `relation_graph.rs:1615`
+  (a test) reads `r.sources … k.prefix` and needs the mechanical accessor edit.
+  *Resolution:* §5.5 / D5 / §9 corrected — "excluded" scoped to the behavioral
+  upward edges (`:82/:423/:652`), not "no line touched." One test line rides the
+  mechanical re-key. Variant-only reads (`matches!(r.target, …Unvalidated)` at
+  `:361/1562/1581`) confirmed untouched.
+- **B — in-scope test churn is mechanical, not behavioral.** Read
+  `relation.rs::target_spec_matches_design` (L1267-1403): every edit is accessor
+  shape (`ks.iter().map(|k| k.prefix)` → `.copied()`); no assertion or expected
+  set changes. §9 reworded from "green unchanged" to "every assertion unchanged."
+- **C — stale doc-comment.** `TargetSpec`/`RelationRule` justify "No `Debug`" by
+  "holds `&Kind`"; false after the swap. Flagged for update (no behaviour change).
+- **No external construction leak.** Only `relation.rs` builds `RelationRule`/
+  `TargetSpec`; all other modules read via `lookup` (stable sig) → the public type
+  change is contained. `priority/graph.rs:356` reads `r.tier`/`r.link` only — safe.
+- **Type-safety net (R3) holds.** Every stale `.prefix`-on-`&str` site is a compile
+  error, not a silent path.
+
+Doctrinal alignment: ADR-001 (downward-only, acyclic) satisfied — new edges are
+`command→kinds` and `engine→kinds`, both downward to a leaf; no cycle. `entity`
+kind-blindness and `kind-is-data-not-trait` respected (scaffold stays command-side).
+No governance conflict surfaced; no `/consult` required.
+
+### External pass
+
+(Pending — offered to user after internal integration.)
