@@ -3,16 +3,21 @@
 ## Context
 
 The 2026-06-19 architecture audit found the entity engine (`entity.rs`:
-`materialise`, `scan_ids`, `read_meta`, `LocalFs`) covers entity **creation and
-listing** — 28 modules route through it — but there is **no shared mutation
-seam**. The update path is hand-rolled per kind: read TOML → mutate in memory →
-`std::fs::write`. ~16 production modules do this directly, bypassing
-`fsutil::write_atomic` (which only 6 files use):
+`materialise`, `scan_ids`, `LocalFs`) covers entity **creation and listing** but
+has **no mutation path**. Every in-place authored update is hand-rolled per kind:
+read TOML → `toml_edit` splice → `std::fs::write(path, string)`, bypassing
+`fsutil::write_atomic` (used by only 6 files).
 
-- `dep_seq.rs:178,246,356,378` (5 sites), `concept_map.rs:1406,1421,1471,1566`
-  (4 sites), plus one each in `memory.rs`, `revision.rs`, `requirement.rs`,
-  `spec.rs`, `skills.rs`, `state.rs`, `worktree.rs`, `integrity.rs`,
-  `install.rs`, `ledger.rs`, `backlog.rs`.
+Design recount (supersedes the audit's estimate): **22 authored `fs::write` call
+sites across 11 files** —
+
+- `dep_seq.rs:178,246,356,378` (shared write-cores — `set_authored_status` alone
+  backs 7 kinds), `concept_map.rs:1491,1506,1556,1651`, `memory.rs` (3),
+  `main.rs` (3, supersede), `relation.rs` (2), and one each in `requirement.rs`,
+  `spec.rs`, `integrity.rs`, `backlog.rs`, `revision.rs`, `map_server/routes.rs`.
+- The audit missed **supersede** (`main.rs`) and the **map-server concept-map
+  route**; several "per-kind" status writes already funnel through the shared
+  `dep_seq` cores. See `design.md` §5.3 for the authoritative table.
 
 Two costs: (1) the same read→mutate→write dance is re-implemented per kind —
 genuine parallel implementation against the "no parallel implementation" rule;
@@ -21,17 +26,20 @@ TOML/MD that the existing `write_atomic` seam was built to prevent.
 
 ## Scope & Objectives
 
-- Add an engine-tier mutation/save seam (e.g. `entity::update` /
-  `entity::save_meta`) layered over `fsutil::write_atomic`, symmetric with the
-  existing create/scan surface, honouring the TOML/MD storage tiering.
-- Migrate the direct `std::fs::write` authored-file update sites onto the seam so
-  every authored mutation is atomic and goes through one code path.
-- Leave non-authored writes (runtime state, derived/regenerable artefacts) out
-  unless they trivially benefit — the design names which call sites are in scope.
+- The seam is the **existing** `fsutil::write_atomic` — no new function. The
+  call-site reality (every site holds a fully-joined path + a `String` body; the
+  per-kind `toml_edit` splice is the only bespoke part) makes the byte-write the
+  sole shared thing, and that primitive already exists in the leaf IO seam
+  (ADR-001). A new `entity::save_meta` wrapper is rejected (design D1).
+- Migrate the 22 authored `std::fs::write` sites onto `write_atomic` so every
+  authored mutation is atomic and goes through one code path. Read→mutate logic
+  stays byte-identical per kind.
+- Add a `clippy` `disallowed-methods` guard on `std::fs::write`; the deliberate
+  runtime/derived exclusions carry a documented `#[allow]` (design §5.4 / D3).
 
 Closure intent: no authored-entity update path calls `std::fs::write` directly;
-all route through the shared seam; `write_atomic` usage replaces the ad-hoc
-writes; existing suites stay green (behaviour-preservation gate).
+all route through `write_atomic`; the `clippy` guard makes it permanent; existing
+suites stay green (behaviour-preservation gate).
 
 ## Non-Goals
 
@@ -42,9 +50,10 @@ writes; existing suites stay green (behaviour-preservation gate).
 
 ## Summary
 
-Give the entity engine a shared, atomic mutation seam and migrate the ~16
-hand-rolled `fs::write` update sites onto it — closing a parallel-implementation
-smell and an interrupted-write corruption risk in one move.
+Migrate the 22 hand-rolled authored `fs::write` update sites onto the existing
+`fsutil::write_atomic` seam, guarded by `clippy` — closing a
+parallel-implementation smell and an interrupted-write corruption risk in one
+move, with no new abstraction.
 
 ## Follow-Ups
 
