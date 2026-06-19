@@ -17,5 +17,5 @@ tags = ["area:dispatch", "area:spec", "area:worktree", "docs"]
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = [{ to = "IMP-078", rank = 0 }, { to = "IMP-065", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-078", rank = 0 }, { to = "IMP-065", rank = 0 }, { to = "ISS-029", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
