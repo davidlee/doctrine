@@ -10,7 +10,7 @@ kind = "functional"
 description = "Catalog/graph hydration exposes each estimated node's metadata through a stable, policy-free contract carrying no aggregation or interpretation."
 tags = []
 acceptance_criteria = [
-  "For each estimated node, hydration exposes entity id, kind, lower, upper, the project unit, the node's relations/edges, and lifecycle state where available.",
+  "For each estimated node, hydration exposes entity id, kind, lower, upper, the project unit (a project-wide constant reachable from every node via the held graph, not duplicated per node), the node's relations/edges, and lifecycle state where available.",
   "The exposed contract carries no aggregation, traversal, or interpretation policy.",
   "The graph-facing surface uses graph-neutral vocabulary and passes the whole-word denylist (no project/task/schedule/capacity).",
 ]

@@ -135,6 +135,15 @@ The value unit is read from `doctrine.toml [value].unit`, defaulting to
 `magic_beans` when unconfigured. The unit is project-wide; the facet schema carries
 no entity-local unit field in v1.
 
+### Value graph exposure
+
+Catalog/graph hydration exposes each node's value magnitude and the project value
+unit through the **same** stable, policy-free contract as the estimate facet
+(above) — the scan-side reader carries both facets symmetrically and the catalog
+graph projects them alongside the top-level `units{estimation,value}` block. The
+value contract carries no aggregation, traversal, or interpretation policy, and its
+field vocabulary (`value`) is clear of the SPEC-001 Appendix B whole-word denylist.
+
 ## Concerns
 
 - **Failure mode — silent repair.** The one hazard is admitting a malformed present

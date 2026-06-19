@@ -110,3 +110,38 @@ accurate (design §7 pre-records these), so the brief is governance-only.
 
 ### Harvest (filed, not reconcile's)
 - **IMP-109** — single-parse refactor of the catalog scan (RV-100 F-4 `aligned`).
+
+## Reconciliation Outcome
+
+All three governance items landed via **REV-003** (`reconcile-sl-103`, `done`);
+narrative in `revision-003.md`. The audit's F-1 spec-home fork (rename SPEC-020 /
+mint a sibling spec) dissolved on inspection: SPEC-020 is titled *Estimation facet*
+and already homes both facets' requirements (FR-001..006 estimate, FR-007..009
+value) — so the value-graph-exposure REQ extends SPEC-020, no rename.
+
+### Direct edits applied
+- None to per-slice artefacts — `design.md` already faithful (brief confirmed).
+- `SL-103 → REQ-280` requirement edge added via `link` (RV-100 F-2) — slice's own
+  relation, not spec truth.
+
+### REVs completed
+- **REV-003** (`reconcile-sl-103`) — `done`. Two `[[change]]` rows, both
+  surfaced-for-manual and hand-landed:
+  - *introduce* → minted **FR-010 / REQ-286** "Expose value metadata through a
+    policy-free graph contract" in SPEC-020 (acceptance criteria + description
+    authored; matching value-graph-exposure responsibility + `### Value graph
+    exposure` prose added to spec-020.toml/.md). `SL-103 → REQ-286` bound via
+    `link`. (RV-100 F-1)
+  - *modify* REQ-274 → acceptance[0] clarified: "project unit" is a project-wide
+    constant reachable from every node via the held graph, not duplicated per node.
+    (RV-100 F-3 ratification)
+- `spec validate SPEC-020` → clean. `SL-103.requirements` = REQ-274, REQ-286,
+  REQ-280.
+
+### Withdrawn / tolerated
+- None. F-4/F-5/F-6 were `aligned` (verified clean / filed as IMP-109), no write.
+
+### Backlog
+- **CHR-011** → `resolved · done` (all three reconcile obligations discharged).
+
+Reconcile pass complete — handoff to /close.
