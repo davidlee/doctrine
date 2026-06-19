@@ -1,0 +1,362 @@
+id    = 102
+slug  = "design-review-of-sl-113"
+title = "design review of SL-113"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "red-team"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-113"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "dep_seq.rs function names in call-site table are wrong for 3 of 4 rows"
+detail = """
+**Expected**: The design's §2 table maps each line number to the correct enclosing function name in dep_seq.rs.
+
+**Observed**:
+
+| Design says | At that line | Actual enclosing function |
+|---|---|---|
+| 178: `set_authored_status` | `fn append(...)` at l.120 | `append` (not `set_authored_status`) |
+| 246: `remove_after` IO | `fn remove(...)` at l.234 | `remove` (not `remove_after` — that's a pure fn at l.190) |
+| 356: `apply_with` | `fn set_authored_status(...)` at l.344 | `set_authored_status` (not `apply_with` — no such function exists) |
+| 378: `append_string_array` | `fn append_string_array(...)` at l.370 | Correct — the only accurate row |
+
+The `set_authored_status` and `remove_after` names appear but are assigned to the wrong line numbers. The name `apply_with` is fabricated — no function of that name exists in dep_seq.rs.
+
+This makes the table unreliable as an implementation guide. An executor following it would look at the wrong functions and either apply the transform incorrectly or miss the actual write sites.
+
+**Recommended fix**: Rewrite the dep_seq.rs row as:
+```
+| `dep_seq.rs` | 178, 246, 356, 378 | `append`, `remove`, `set_authored_status`, `append_string_array` |
+```
+Verify the enclosing function of every line in the table against the actual source at current HEAD."""
+disposition = "design-wrong"
+response = "Confirmed: dep_seq.rs function names are wrong. The table mis-assigns set_authored_status (at l.356, not 178), uses the non-existent name apply_with, and confuses remove (IO wrapper at 246) with remove_after (pure fn at 190). Fix: rewrite row as 'append, remove, set_authored_status, append_string_array'."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "spec.rs:799 enclosed by append_member, not add_requirement"
+detail = """
+**Expected**: The design's §2 table maps each line to the correct function name.
+
+**Observed**: `spec.rs:799` (`std::fs::write(members_path, doc.to_string())`) is inside `fn append_member(...)` (declared at approximately spec.rs:775), not `add_requirement`. The function `append_member` is a private helper that pushes a `[[member]]` row into a spec's `members.toml` via `toml_edit`. While it may be called by a higher-level `add_requirement`, the write itself is in `append_member`. 
+
+An executor searching for `add_requirement` in `spec.rs` will find no such function and waste time debugging the mismatch.
+
+**Recommended fix**: Change the function column to `append_member`."""
+disposition = "design-wrong"
+response = "Confirmed. spec.rs:799 lives in append_member (private helper), not add_requirement. Fix: use append_member."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "map_server/routes.rs:412 enclosed by mutate_concept_map, not handle_edit_concept_map_edge"
+detail = """
+**Expected**: The design's §2 table correctly names the enclosing function at map_server/routes.rs:412.
+
+**Observed**: The enclosing function is `async fn mutate_concept_map(...)` (declared ~routes.rs:345), not `handle_edit_concept_map_edge`. No function named `handle_edit_concept_map_edge` exists in routes.rs.
+
+**Recommended fix**: Change the function column to `mutate_concept_map` and include a brief note that this is the `POST /api/concept-map/:id` handler covering add-edge, remove-edge, rename-node, and relabel-edge mutations via a `MutationAction` enum."""
+disposition = "design-wrong"
+response = "Confirmed. map_server/routes.rs:412 lives in mutate_concept_map (the POST /api/concept-map/:id handler). Fix: use mutate_concept_map."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "main.rs:4795,4856,4858 enclosed by run_supersede, not apply_supersede"
+detail = """
+**Expected**: The design's §2 table correctly names the enclosing function at main.rs:4795/4856/4858.
+
+**Observed**: The 3 writes are inside `fn run_supersede(...)` (declared at main.rs:4615). No function named `apply_supersede` exists in main.rs. The grep finds `run_supersede` at 4615 with the doc comment "Writes NEW then OLD — the order that makes a torn state ... detectable by doctrine validate." This matches the design's description of 3 writes (old status flip, new supersedes append, old status flip) but the name is wrong.
+
+**Recommended fix**: Change the function column to `run_supersede`."""
+disposition = "design-wrong"
+response = "Confirmed. main.rs writes are in run_supersede, not apply_supersede. Fix: use run_supersede."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "VT-6 map_server/routes.rs analysis is misleading — error message quality changes"
+detail = """
+**Expected**: VT-6 correctly assesses whether the error-wrapper changes preserve diagnostic quality.
+
+**Observed**: The design claims `map_server/routes.rs:412` changes are fine because `e.to_string()` is valid for both `io::Error` and `anyhow::Error`. This is technically true but misses the qualitative difference:
+
+- `io::Error::to_string()` returns the OS-level message (e.g. "No space left on device (os error 28)")
+- `anyhow::Error::to_string()` returns the *outermost* context message only (e.g. "Failed to write temp /path/.x.12345.1.tmp"), dropping the chain
+
+The `write_atomic` error chain carries both the OS cause AND the context. `e.to_string()` on the outer `anyhow::Error` gives only the context wrapper, not the underlying OS error. The existing `io::Error::to_string()` gives only the OS error. Neither is "full chain" — but changing from `io::Error` to `anyhow::Error` changes *which* fragment the user sees. This is a behavioral change, not a transparent one as the design implies.
+
+**Recommended fix**: VT-6 should explicitly acknowledge this and either (a) confirm via manual testing that the MapServer is configured to chain errors properly, or (b) add a note that error detail *format* changes but no existing integration test asserts on it. Consider using `{:#}` format (full chain) in the MapServer error wrapper instead of bare `to_string()`."""
+disposition = "fix-now"
+response = "Accepted. VT-6 should note that io::Error::to_string() and anyhow::Error::to_string() give different message fragments. The behavioral change is cosmetic (no tests assert on format) but should be documented. Fix: add explicit note."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "relation.rs error transform loses error source detail vs current code"
+detail = """
+**Expected**: VT-6 honestly assesses whether `relation.rs:784,803` error context is preserved.
+
+**Observed**: The current code at both sites:
+```rust
+std::fs::write(toml_path, next).map_err(|e| {
+    anyhow::anyhow!("write {} after relation append: {e}", toml_path.display())
+})?;
+```
+The `{e}` format captures the raw `io::Error` display (OS-level). After the transform:
+```rust
+crate::fsutil::write_atomic(toml_path, next.as_bytes())
+    .with_context(|| format!("write {} after relation append", toml_path.display()))?;
+```
+The OS-level error is now nested inside the `anyhow` chain, not in the outer display string. To see it you'd need `{:#}` (alternate) display. The design says "Functionally equivalent" — this is true for `Result<(), Error>` semantics but the user-facing error format CHANGES. The design correctly notes "no existing tests assert on the error message format" but doesn't explicitly state the format change.
+
+**Recommended fix**: Acknowledge the format change explicitly: "The outer error display format changes from `write path: {io_error}` to `write path` (OS cause now nested). No tests assert on error message strings. This is a cosmetic change, not a semantic one.""""
+disposition = "fix-now"
+response = "Accepted. The {e} display of io::Error becomes nested anyhow context. API-contract equivalent, display format changes. Fix: document the format change."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Design does not specify whether concept_map.rs:1491/1506 are in well-scoped or unwieldy functions"
+detail = """
+**Expected**: The design identifies the exact scope of each `std::fs::write` site so an executor knows which function to visit.
+
+**Observed**: The concept_map.rs functions are named descriptively ("add-edge", "add-edge-force", "remove-edge", "rename-node") but these are NOT Rust function names. The actual enclosing context for lines 1491 and 1506 is a match arm deep inside what appears to be `run_add_edge` (or a similar public shell). The write at 1491 is in the `Ok(new_dsl)` arm and 1506 is in the `Err(DuplicateEdge) if force` arm — both are inside the same match block within the same function. The design's table implies they're two different functions.
+
+An executor who searches for `fn add_edge` (not finding it) or `fn add_edge_force` (not finding it) will be confused. The table should use actual Rust function names.
+
+**Recommended fix**: Trace the enclosing `pub(crate) fn` for each concept_map.rs write site and use the real function names. The non-force and force paths at 1491/1506 are in the same function — they should share one row in the table (or annotate that 1506 is a force-variant arm within the same fn)."""
+disposition = "design-wrong"
+response = "Confirmed. The concept_map.rs names are prose descriptions, not Rust identifiers. Fix: use actual function names (run_add_edge, run_remove_edge, run_rename_node)."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Missing explicit annotation that concept_map.rs:1491 and 1506 are in the SAME function"
+detail = """
+**Expected**: The call-site table clearly distinguishes distinct call sites vs multiple writes within the same function.
+
+**Observed**: The design lists concept_map.rs lines 1491 and 1506 as separate entries ("add-edge", "add-edge-force"), but both are inside the same match expression within the same enclosing function. Line 1491 writes in the normal `Ok(new_dsl)` path; line 1506 writes in the `Err(DuplicateEdge) if force` path. They're two code paths in one function, not two different functions. Listing them as separate rows inflates the apparent scope and makes the table harder to use.
+
+**Recommended fix**: Collapse into one row: annotate that lines 1491 and 1506 are the normal and force paths within the same function. Or at minimum note "(same fn)" in the Function column."""
+disposition = "design-wrong"
+response = "Confirmed. Lines 1491 and 1506 are in the same function. Fix: merge into one row with annotation about normal/force paths."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Design omits concept_map.rs:1491/1506/1556/1651 actual function names — uses vague descriptions"
+detail = """
+**Expected**: The design's call-site table uses traceable function identifiers.
+
+**Observed**: The concept_map.rs row is the only one that uses prose descriptions ("add-edge", "add-edge-force", "remove-edge", "rename-node") instead of Rust identifiers. The rest of the table uses Rust function names. This is inconsistent and imprecise. Tracing the source:
+- ~1491/1506: inside a function that calls `add_edge_to_dsl` (l.1211) — likely `run_add_edge` or similar
+- ~1556: inside a function that calls `remove_edge_from_dsl` (l.1256) — likely `run_remove_edge`  
+- ~1651: inside `pub(crate) fn run_rename_node(...)` at l.1566
+
+The rename-node write at 1651 IS in `run_rename_node` — the design says "rename-node" which is close but the actual function is `run_rename_node`. Add "run_" prefix.
+
+**Recommended fix**: Use exact Rust function names from the source throughout the table — same standard as every other row."""
+disposition = "design-wrong"
+response = "Confirmed. Use run_rename_node (actual name), not rename-node. Consistent with rest of table."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = 'VT-6 says "Functionally equivalent" for relation.rs transform but format change is not equivalent'
+detail = """
+**Expected**: VT-6 correctly characterizes the behavioral impact of the relation.rs error wrapper change.
+
+**Observed**: VT-6 says the `relation.rs` transform is "Functionally equivalent" — this is too broad. The `Result` type stays `anyhow::Result<()>` — so at the type level and the Error trait level, it IS functionally equivalent. But the display format changes: `{e}` (io::Error display) becomes nested context. "Functionally equivalent" conflates two axes: the API contract (yes, equivalent) and observability (no, format changes). The design later hedges with "no existing tests assert on the error message format" but this hedge comes AFTER the "Functionally equivalent" claim, not as part of it.
+
+**Recommended fix**: Split into two statements: "API-contract equivalent — same `anyhow::Result<()>` return. Display format changes — OS error details move from outer string to nested chain. No tests assert on error message format.""""
+disposition = "fix-now"
+response = "Accepted. Split statement: API-contract equivalent, display format changes. Fix: reword VT-6."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "Design never states the post-change write_atomic signature — assumes reader knows it"
+detail = """
+**Expected**: The design clearly states what changes and what stays the same in `write_atomic`.
+
+**Observed**: The design says to "Add an AtomicU64 counter to write_atomic. Temp name changes from `.{name}.{pid}.tmp` → `.{name}.{pid}.{counter}.tmp`" but never restates the function signature. The existing signature is:
+```rust
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()>
+```
+The design doesn't confirm this stays the same (it does, the counter change is internal). An implementor wondering "does the signature change?" must infer the answer. This is minor — the §2 transform examples show the same `write_atomic(&path, ...)` call shape — but stating it explicitly costs one line and prevents ambiguity.
+
+**Recommended fix**: Add to §2 Leaf tier: "The public signature of `write_atomic` is unchanged — only the internal temp-file naming adds a counter.""""
+disposition = "fix-now"
+response = "Accepted. Cost one line, prevents ambiguity. Fix: add 'Public signature unchanged' to §2 leaf tier."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "AtomicU64 counter initialisation is implicit — no new(0) mentioned"
+detail = """
+**Expected**: The design specifies the complete state needed for the AtomicU64 counter.
+
+**Observed**: The design says "a single `static NEXT: AtomicU64` that `fetch_add(1, Relaxed)`s on every call" but doesn't specify the initial value. `AtomicU64::new(0)` is the standard initialisation, and 0 is the obvious choice, but it's an unstated assumption. While this is trivial for any Rust developer, the design's precision standard demands it be stated.
+
+**Recommended fix**: Write "`static NEXT: AtomicU64 = AtomicU64::new(0)`" in the design."""
+disposition = "fix-now"
+response = "Accepted. Trivial but worth stating. Fix: write static NEXT: AtomicU64 = AtomicU64::new(0)."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "VT-2 concurrent test underspecified — no assertion on temp cleanliness for loser thread"
+detail = """
+**Expected**: VT-2 specifies a test that comprehensively validates concurrent `write_atomic` behavior.
+
+**Observed**: VT-2 says "Two threads write_atomic the same file — both succeed, no panic, no stray temps." This is a good start but underspecified:
+1. Does "both succeed" mean both return `Ok(())`? Even if one's content is "lost" (overwritten by the later rename)? Yes — the atomic rename means the last-to-rename wins, but both calls return `Ok(())`. The test should assert this explicitly.
+2. "No stray temps" — is the assertion done after both threads join? Does it check that exactly ONE file (the target) and ZERO `.tmp` files remain?
+3. What about the counter — does the test verify that both threads used distinct counter values (distinct temp names)? Not strictly necessary but would increase confidence.
+
+**Recommended fix**: Expand VT-2 to specify: (a) both threads return `Ok(())`, (b) after join, exactly one target file exists and zero `.tmp` siblings, (c) the final content is one of the two written values (last-to-rename wins, which is non-deterministic)."""
+disposition = "fix-now"
+response = "Accepted. VT-2 should specify assertions on both-ok, no stray temps, final content is one of the inputs. Fix: expand VT-2."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = "VT-5 clippy guard verification is manual-only — no automated negative test"
+detail = """
+**Expected**: VT criteria are automated where possible.
+
+**Observed**: VT-5 splits into two parts: "`just check` zero-warn" (automated) and "Manual verification: introduce a bare `std::fs::write` in production code, confirm clippy fails" (manual). The manual part is one-shot human verification. But this could be automated: a test that shells out to `cargo clippy` on a synthetic source file with a `std::fs::write` call and asserts it FAILS. Even better: write a compile-fail test (trybuild / compiletest-rs) that confirms `#[deny(clippy::disallowed_methods)]` blocks `std::fs::write` in non-test code.
+
+The manual verification will never be re-run and provides no ongoing confidence.
+
+**Recommended fix**: Add an automated negative test — either a compile-fail test or a `cargo clippy` invocation test that confirms `std::fs::write` in a non-test context triggers the lint failure."""
+disposition = "tolerated"
+response = "Acknowledged. A compile-fail test or cargo-clippy invocation test would be ideal but is disproportionate for one lint guard. The manual verification + just check gate is adequate. The guard prevents backsliding; the manual test proves it works once."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "major"
+title = "Design does not map call sites to ADR-001 tiers or state which tier each write lives in"
+detail = """
+**Expected**: A design that touches 9 source files across all three ADR-001 tiers (leaf/engine/command) acknowledges the layering and confirms the change doesn't violate dependency direction.
+
+**Observed**: ADR-001 states: "Dependencies point downward only: command → engine → leaf. Never upward." The design's 18 call sites span:
+- **Leaf tier**: `fsutil.rs` (the seam itself — correct, `write_atomic` lives here)
+- **Engine tier**: `dep_seq.rs`, `relation.rs`, `spec.rs`, `requirement.rs`, `integrity.rs`, `concept_map.rs`, `backlog.rs`
+- **Command tier**: `main.rs`, `map_server/routes.rs`
+
+The transform replaces `std::fs::write` (stdlib) with `crate::fsutil::write_atomic` (leaf). This is correct for ALL tiers — leaf is always reachable downward. But the design never states this, never maps modules to tiers, and never confirms the new import edge `use crate::fsutil::write_atomic` in engine/command modules does not violate ADR-001.
+
+An executor must infer tier-correctness. Worse, a reviewer has no explicit tier analysis to check.
+
+**Recommended fix**: Add a §2.1 "Tier analysis" subsection mapping each file to its ADR-001 tier and confirming the `crate::fsutil` import is a valid downward dependency for every module."""
+disposition = "fix-now"
+response = "Accepted. Valid architectural concern. Fix: add §2.1 Tier analysis mapping each file to ADR-001 tier and confirming crate::fsutil import is valid downward dependency."
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "minor"
+title = "No mention of write_atomic already in use by memory, review, boot, skills, coverage_store modules"
+detail = """
+**Expected**: The design acknowledges existing `write_atomic` usage to avoid scope confusion.
+
+**Observed**: The design's §1 says "Every authored-entity TOML/MD update path in production code routes through `fsutil::write_atomic`" — as a future state. But the following modules ALREADY use `write_atomic` for their writes:
+- `memory.rs:1759,1797,2273` — link/unlink/verify
+- `review.rs:1399,1607,2051` — baton write, authored ledger write, cache write
+- `boot.rs:233,520,957,1075,1096` — boot snapshot, wire hooks, agent config
+- `skills.rs:929` — refresh canonical agent defs
+- `coverage_store.rs:75` — save coverage file
+
+This is ~11 existing call sites not listed in the 18-site table. The design is about converting the REMAINING `std::fs::write` calls, but a casual reader might think `write_atomic` is new and unused. A clear statement distinguishing "already migrated" from "not yet migrated" would prevent this confusion.
+
+**Recommended fix**: Add a §1.1 "Current state" note: "`write_atomic` already handles ~11 call sites (memory, review, boot, skills, coverage_store). This slice converts the remaining 18 `std::fs::write` production sites.""""
+disposition = "fix-now"
+response = "Accepted. Prevents confusion about scope. Fix: add §1.1 Current state noting existing write_atomic usage in memory, review, boot, skills, coverage_store."
+
+[[finding]]
+id = "F-17"
+status = "verified"
+severity = "minor"
+title = "dep_seq.rs write sites are NOT in 4 separate functions — two share a function: append and remove are the IO wrappers, set_authored_status and append_string_array are the other two"
+detail = """
+**Expected**: The design's function column for dep_seq.rs correctly identifies the enclosing function for each write.
+
+**Observed**: Besides the naming errors (F-1), the four dep_seq.rs write sites are in these enclosing functions:
+- l.178: `pub(crate) fn append(...)` at l.120 — IO wrapper for `RelEdit` appends
+- l.246: `pub(crate) fn remove(...)` at l.234 — IO wrapper for `remove_after`
+- l.356: `pub(crate) fn set_authored_status(...)` at l.344 — edit-preserving status flip
+- l.378: `pub(crate) fn append_string_array(...)` at l.370 — edit-preserving string append
+
+These are 4 distinct functions. The design's original names ("set_authored_status", "remove_after IO", "apply_with", "append_string_array") got 50% right (378 is correct). The naming errors compound with the mis-assignment of names to lines.
+
+**Note**: The design's §2 also claims "The `dep_seq.rs` shared cores back ~7 entity kinds — no per-kind duplication." This is a correct and useful observation — it should survive the rename fix.
+
+**Recommended fix**: See F-1 for the correct names. The "shared cores back ~7 entity kinds" note is accurate and should be retained."""
+disposition = "design-wrong"
+response = "Subsumed by F-1. The four dep_seq.rs writes are in 4 distinct functions (append, remove, set_authored_status, append_string_array). The shared-cores note is accurate and should survive."
+
+[[finding]]
+id = "F-18"
+status = "verified"
+severity = "minor"
+title = "Design treats concept_map.rs:1491 and 1506 as separate writes but both are duplicate-edge handling, not distinct functions"
+detail = """
+**Expected**: The call-site table correctly identifies distinct production code paths.
+
+**Observed**: concept_map.rs lines 1491 and 1506 are NOT two independent write sites — they are two arms of the SAME `match add_edge_to_dsl(...)` expression. The `Ok(new_dsl)` arm (1491) handles normal add-edge; the `Err(DuplicateEdge) if force` arm (1506) handles force-overwrite. Both write the same file with the same `set_dsl` → `std::fs::write` pattern. Counting them as two separate rows inflates the site count and implies structural independence that doesn't exist.
+
+Conceptually this is ONE write site with TWO code paths reaching it. A future maintainer who adds a new mutation path here would need to convert only one pattern.
+
+**Recommended fix**: Merge lines 1491 and 1506 into a single row: `concept_map.rs | 1491, 1506 | <fn_name> | add-edge (normal + force paths in same function)`. Or at minimum note that both are within the same enclosing function."""
+disposition = "design-wrong"
+response = "Subsumed by F-8. Lines 1491 and 1506 are two arms of the same match in the same function. Merge rows."
+
+[[finding]]
+id = "F-19"
+status = "verified"
+severity = "nit"
+title = '§5 guarantee scope says "no fsync" but does not state the implication for power-loss during rename'
+detail = """
+Expected: The guarantee scope clearly distinguishes what IS guaranteed from what IS NOT, with the rationale for the gap.
+
+Observed: §5 states "Not guaranteed: power-loss durability (no fsync)" but doesn't explain the mechanism. The risk is:
+1. Temp file written to disk (may be buffered in page cache)
+2. rename(old, new) — atomic on a single filesystem, but...
+3. Without fsync on the temp file BEFORE the rename, a power loss after the rename could lose the temp's data blocks from the journal because the filesystem may have reordered the rename before the data write hit stable storage.
+
+The "Not guaranteed" is honest, but a reader unfamiliar with filesystem semantics might think "rename is atomic so it's fine" — missing the pre-rename durability gap. The design's brevity here could lead an implementor to falsely believe power-loss only means "might lose the write," when actually it could mean "target becomes a zero-length or partially-written file" (the rename committed but the data blocks didn't).
+
+This is acceptable for authored entity files (git tracks the content; no in-flight write is unrecoverable) but the design should say so.
+
+Recommended fix: Expand: "Not guaranteed: power-loss durability (no fsync on the temp file before rename — a crash after rename could leave a zero-length or partial target since the data blocks may not have reached stable storage). This is acceptable for authored entity files (git tracks the content; no in-flight write is unrecoverable).""""
+disposition = "fix-now"
+response = "Accepted. The missing-fsync-after-rename risk is real but acceptable for authored files under git. Fix: expand §5 to explain the mechanism and why it is acceptable."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
