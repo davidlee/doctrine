@@ -1,0 +1,50 @@
+memory_uid = "mem_019edf27088a7ee2b19b1029c065d3f2"
+memory_key = "mem.fact.spec.no-authored-date"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Specs carry no authored date on disk"
+summary = "Specs are the only doctrine kind with no created/updated date on disk; a consumer needing a spec date must derive it (e.g. toml mtime)."
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "933927669d55ed0cb596ff0981c6962719ce6832"
+ref_name = "refs/heads/main"
+checkout_state_id = "6d312843432f8c97185039fe49812fefe22e89835dc71fc6bb0f43fa5852dc1d"
+base_commit = "3c05e903eb7d3071566cf725c7a8e43670efaae5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-026"
+
+[[source]]
+kind = "review"
+ref = "RV-099"
+

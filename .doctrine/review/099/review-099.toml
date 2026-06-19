@@ -1,0 +1,61 @@
+id    = 99
+slug  = "reconciliation-review-of-sl-026"
+title = "reconciliation review of SL-026"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-026"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "INV-7: specs emitted empty date (expected non-empty %Y-%m-%d) — the emergent ship-breaker"
+detail = 'Expected: every entity date a non-empty YYYY-MM-DD (lazyspec DocMeta.date is mandatory, parses %Y-%m-%d). Observed (pre-fix): lazyspec.rs load_spec used head.created.unwrap_or_default() and specs carry no created on disk (§5.4), so all 34 specs emitted date:"" — a hard break, caught only by live smoke over the real corpus (the dated in-memory fixtures hid it). Fix 5de8e723 injects the spec toml mtime via clock::date_of_system_time. Evidence: candidate smoke = 0/433 INV-7 violations, all 34 specs dated; new test dateless_spec_loads_a_parseable_date_from_toml_mtime loads a REAL dateless scaffold (not a dated fixture); design §5.3 + INV-7 amended to name the mtime source.'
+disposition = "aligned"
+response = "Fixed and verified at the reviewed candidate surface: spec_date injects toml mtime, 0/433 INV-7 violations over the live corpus, regression test loads a real dateless scaffold. No further change in audit scope."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Design was silent on the spec date-source (the latent gap that hid the break)"
+detail = "Expected: design §5.3 names a date-source for every emitted kind. Observed: original design named only the plan node's date (owning slice updated); specs — the one kind with no on-disk date — had no named source, so the implementation silently defaulted to empty. Reconciled during the 2026-06-19 consult: design §5.3 gained a 'Spec node date' paragraph (mtime source + the checkout-instability tradeoff), INV-7 amended (specs from mtime, never empty), IMP-108 filed for the durable schema fix. Design now matches the candidate implementation."
+disposition = "aligned"
+response = "Design reconciled during the 2026-06-19 consult (not deferred): design §5.3 'Spec node date' paragraph + INV-7 amendment now match the implementation; IMP-108 filed for the durable schema fix. Recorded in the reconciliation brief as already-applied; no further per-slice edit needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Pure/impure split preserved for the mtime read; single date formatter kept"
+detail = "Expected (ADR + slices-spec): no clock/disk in the pure layer; no parallel date formatter (clock.rs module contract). Observed: the mtime stat lives in the impure shell (load_spec → spec_date), project() signature unchanged and still takes date as injected data; clock.rs extracted one fmt_date reused by today() and the new date_of_system_time. today() output byte-identical (refactor only); behaviour-preservation holds (1913 tests green on the merged surface)."
+disposition = "aligned"
+response = "Confirmed by reading load_spec (mtime stat in the impure shell) and project() (unchanged signature, date injected as data) + clock.rs single fmt_date. Behaviour-preservation holds: 1913 tests green."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Integration health: candidate merges clean onto a +29-commit main, gate green"
+detail = "Expected: the slice (authored 29 commits behind main) integrates without conflict or regression. Observed: dispatch candidate create produced a clean no-ff 3-way merge (no content conflict, 815d0804); on that merged surface cargo test = 1913 passed / 0 failed, cargo clippy clean, INV-7 smoke 0/433. lint-js fails only on a missing node_modules in the ephemeral worktree — the slice touches zero JS (diff is all src/*.rs + .doctrine/*), an environment gap, not a slice defect."
+disposition = "aligned"
+response = "Clean 3-way merge onto +29 main (no conflict), gate green on the merged surface (1913/0, clippy clean, INV-7 0/433). lint-js gap is environmental (no node_modules in ephemeral worktree); slice touches zero JS."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "No parallel implementation: backlog.rs delta is the named PHASE-02 fixture seam, not scope creep"
+detail = "Expected (no-parallel-impl): projection rides existing readers; the largest non-lazyspec diff (backlog.rs, ~296 lines) must be justified. Observed: it promotes test_support (Fixture/FacetLit/RelLit) + ItemKind::kind() to pub(crate) so the golden corpus seeds backlog items without re-rolling TOML — the design §9 'backlog seed' gap (re-opening ISS-001). Projection reads via SL-025 APIs + SL-048 relation::tier1_edges + listing::canonical_id; no new read path."
+disposition = "aligned"
+response = "backlog.rs delta is the design §9 test_support promotion for the golden corpus, not a parallel reader; projection rides SL-025/SL-048/listing seams."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
