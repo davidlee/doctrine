@@ -19,7 +19,3 @@ tags = ["area:dispatch", "area:skills"]
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "ISS-029", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "related"
-target = "ISS-029"
