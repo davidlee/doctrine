@@ -12,5 +12,46 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-110"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Item 3 (PHASE-05): CSS-only change yields intra-row spacing parity, not the same inset/grid column alignment design EX-1 specifies"
+detail = "Design §Item 3 target: 'align the all row to the same grid/inset as the per-kind rows'; PHASE-05 EX-1: 'the all row aligns with the per-kind checkbox rows (same inset/grid)'; EX-2: touch markup ONLY if the misalignment is structural. Observed: the candidate makes .filter-toggle-all match .kind-checkbox INTRA-ROW (display:flex; align-items:baseline; input margin-right 0.2->0.3rem; flex-shrink:0) — checkbox-to-label spacing parity. But the all-toggle lives in .filter-header (display:flex; justify-content:space-between), right-floated beside the 'Filter' label, a DIFFERENT container from the left-aligned .filter-grid > .kind-checkbox rows. So the all checkbox's LEFT EDGE does not column-align with the per-kind checkboxes below. The misalignment is structural (separate container, right-float), so per EX-2 a .filter-header/index.html layout change is warranted; the worker stayed CSS-only and explicitly flagged this in the dispatch carry-forward. Whether the original defect is resolved depends on the user's visual intent: intra-row spacing (met) vs left-edge column alignment (not met). No test covers it (VH-1, visual)."
+disposition = "fix-now"
+response = "Fixed in candidate commit 0a9d1e1b. User confirmed the defect is left-edge column alignment, not intra-row spacing. Per design §Item 3 EX-2 (touch markup when the misalignment is structural), moved .filter-toggle-all out of the right-floated .filter-header to a direct .filter-area child above .filter-grid at the same left inset, matched to the .kind-checkbox box model; dropped the header's justify-content:space-between. No JS change (.toggle-all-cb is class-wired). eslint clean, vitest 337 green. Raiser-verify held pending the human dev-server visual confirmation (shares VH-1 with F-2)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "VH-1 dev-server visual acceptance outstanding for items 2, 3, 4, 5"
+detail = "Each of PHASE-02/03/04/05 carries a VH-1 (human, dev-server) acceptance criterion that automated tests cannot discharge: item2 tooltip tracks cursor + matches pane content + clears on leave; item3 all-checkbox lines up; item4 select+Edit this renames/relabels, Edit all unchanged, ambiguous same-key/different-label resolves to clicked label; item5 CM focus switches to semantic, Actionability toggle stays live with CM focused, actionable pick zooms, non-member clears prior zoom. The dispatch receipt carried these forward unverified (self-audit ran no live dev server). Tests cover the pure seams (focusTransition 133 model tests, hoverDetailHtml escape regression, cmSelectedFieldFromCell, relabel_edge) but not the wired UX. Disposition needs the human to run the dev-server walkthrough or consciously defer."
+disposition = "aligned"
+response = "VH walkthrough performed (dev server). Items 1 (toggle highlight tracks mode), 2 (actionability hover tooltip), 3 (all-checkbox alignment) PASS and are accepted. Items 4 and 5 FAILED acceptance and are tracked as dedicated findings F-4 (blocker, item-4 UX redesign) and F-5 (major, item-5 D2 reversal). This catch-all VH finding is resolved; the open work lives in F-4/F-5."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Carry-forward /simplify deviations from design: local ViewMode alias and exported highlightViewButtons"
+detail = "Two conscious minor deviations the dispatch flagged for /simplify. (1) model.ts defines a local 'type ViewMode = semantic|actionability' (design said types.ts was out of scope) — no canonical ViewMode type exists; the union is inlined across types.ts/state.ts/app.ts, so this is mild pre-existing-pattern duplication, not new debt. (2) highlightViewButtons is exported though design §Item 1 said 'module-private'; it is exported solely to enable the DOM unit test (VT-2). Neither affects behaviour; both are quality cleanups for /simplify, not conformance defects. Behaviour and acceptance are unaffected."
+disposition = "tolerated"
+response = "Conscious, behaviour-neutral deviations owned by /simplify. (1) model.ts local 'type ViewMode' duplicates the inline 'semantic|actionability' union already scattered in types.ts/state.ts/app.ts — a candidate to hoist a single shared ViewMode type, but no canonical one exists today so this introduces no new debt. (2) highlightViewButtons is exported only to drive the DOM unit test (VT-2); design said module-private. Neither affects behaviour or acceptance; /simplify can hoist the type and reassess the export. Tolerated — does not gate close."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "blocker"
+title = "PHASE-04 item-4 concept-map edit UX fails VH acceptance — implementation defects + rejection of the locked Edit this/Edit all design model"
+detail = "Live dev-server walkthrough (candidate 0a9d1e1b) surfaced 5 item-4 problems against design §Item 4 / D4. IMPLEMENTATION DEFECTS (impl != design): (a) the two edit buttons render on EVERY entity, not just concept maps — renderEditToggle is not gated to the CM view; (b) clicking a cell opens batch (edit-all) mode and does NOT highlight/select the node — design EX-1 says click = select + cmFocus, no inline input, but the select gesture is not taking effect; (c) while in edit mode, clicking a field bulk-edits — confusing. DESIGN-MODEL REJECTION (design itself wrong per user, even where impl matches): (d) the user wants an explicit per-field edit affordance — a pencil icon NEXT TO each editable field — not a single top 'Edit this' button whose 'this' referent is invisible/ambiguous (D4's Edit this/Edit all split is rejected as bad UX: too distant, unclear target); (e) the inline edit form should appear directly below the hover area, not in the table; (f) 'Edit all' is a confusing label for edit mode. Net: item 4 must be re-designed (per-field pencil affordance, in-place/below-hover inline edit, clearer mode naming) and re-implemented. The relabel_edge backend (PHASE-01) and cmSelectedFieldFromCell pure helper remain reusable. Blocker — the slice cannot close with item 4 in this state."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "Item 5 (D2): picking a non-actionable entity while on the Actionability graph should switch to Semantic — design intentionally did NOT switch"
+detail = "design §Item 5 D2 resolved that picking an id absent from the priority layout (terminal/ADR/REQ/MEM/non-actionable) is NOT auto-switched ('the user chose the mode, the placeholder is informative') and only clears stale priorityZoomId. focusTransition implements exactly that (actionability + non-member -> {actionability, null}). VH walkthrough: the user expects clicking a non-actionable entity while on the actionability graph to SWITCH TO the semantic graph (where that entity is visible), not sit on an empty actionability placeholder. This reverses D2's no-switch decision: the switch-if-undisplayable rule should treat 'absent from the actionability layout' as undisplayable -> switch to semantic. Requires a design decision change (D2) + focusTransition table update (actionability + non-member -> semantic) + model test update. Not a code-only fix — design intent changed."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
