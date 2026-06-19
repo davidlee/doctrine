@@ -56,7 +56,9 @@ pub(crate) enum ReviewOutput {
     Verified { finding_id: String, review_id: u32 },
     Contested{ finding_id: String, review_id: u32 },
     Withdrawn{ finding_id: String, review_id: u32 },
-    Showed   { json: serde_json::Value, formatted: String },
+    Showed   { id: u32, canonical: String, title: String, status: String,
+               awaiting: String, facet: String, target: String,
+               findings: Vec<FindingRow>, body: String },
     Listed   { rows: Vec<ListRow>, formatted: String },
     Status   {
         canonical: String,
@@ -64,31 +66,41 @@ pub(crate) enum ReviewOutput {
         awaiting: String,
         findings_count: usize,
         rounds: usize,
-        cache_verdict: Option<String>,
+        cache_primed: bool,
+        stale_paths: Vec<String>,
         formatted: String,
     },
-    Primed   { cache_paths: Vec<String>, stale: Vec<String> },
+    Primed   { tracked_paths: Vec<String>, areas_count: usize,
+               tracked_count: usize, invariants_count: usize, risks_count: usize },
     Unlocked { canonical: String },
 }
 ```
 
-**Why `Showed` and `Listed` carry both structured and formatted:** `run_show` and
-`run_list` already have `Format::Table`/`Format::Json` split. Rather than refactor
-that stack, each variant carries the human-formatted string *and* a structured
-payload (`json` for show, `rows: Vec<ListRow>` for list). The CLI prints
-`formatted`; MCP returns the structured field.
+**`Showed` carries structured review data** (`id`, `canonical`, `title`, `status`,
+`awaiting`, `facet`, `target`, `findings`, `body`). The CLI path (`print_review`)
+renders these fields as the existing `format_show` table; the MCP path serialises
+them as JSON. No dual-computation — each consumer formats once from the same
+structured payload. The `format` parameter (Table/Json) remains in the verb
+handler and passes through as a signal to the consumer if needed.
 
-**`ListRow` is the existing `#[derive(Serialize)]` struct** from `src/review.rs`
-(fields: `id`, `status`, `awaiting`, `facet`, `target`, `title`). It carries the
-table row data that `list_rows` already computes. The CLI path calls
-`listing::render_columns` to produce `formatted`; the MCP path serialises `rows`
-directly.
+**`Listed` carries rows + formatted.** `ListRow` is the existing
+`#[derive(Serialize)]` struct (fields: `id`, `status`, `awaiting`, `facet`,
+`target`, `title`). The list verb has no `Format` split — it always produces a
+table. The `formatted` field carries the columnar table for CLI; MCP serialises
+`rows`. The dual-carry is deliberate here, not waste.
 
-**Why `Status` carries concrete fields + formatted:** `run_status` produces a
-multiline output: canonical header, derived status/await/findings/rounds, plus
-optional cache staleness. Rather than leak internal enums, `Status` carries
-pre-rendered strings for the format-sensitive fields *and* a `formatted: String`
-for the full CLI output. MCP returns the structured fields; CLI prints `formatted`.
+**`Status` carries structured cache data.** `cache_primed: bool` signals whether a
+cache has been seeded; `stale_paths: Vec<String>` carries the drifted paths when
+stale. `Option<String>` with ambiguous `None` semantics is replaced by explicit
+structured fields. `formatted: String` carries the full CLI output for
+behaviour-preservation; MCP uses only the structured fields.
+
+**`Primed` carries structured counts.** `tracked_paths`, `areas_count`,
+`tracked_count`, `invariants_count`, `risks_count` carry the numeric summary
+that `print_review()` formats as `"{canonical} primed — N area(s), M tracked
+path(s), ..."`. The `stale: Vec<String>` field is removed — staleness is a
+*status* concern, not a *prime* concern. `cache_paths` is renamed to
+`tracked_paths` for clarity.
 
 ### D2 — `with_turn` is generic over closure return type
 
@@ -179,6 +191,35 @@ slice. The decomposition is a mechanical move of code blocks with zero
 behavioural impact. Keeping it separate from the signature refactor means each
 commit has a single, reviewable purpose.
 
+### D8 — `ReviewError` is a closed error enum
+
+Every review-engine error that the transport layer must distinguish is a named
+variant of `ReviewError`, not a free-text `anyhow::bail!` message. The MCP error
+mapper matches on the variant identity — never on string content — so error
+contract changes are caught by the compiler at every match site.
+
+```rust
+#[derive(Debug)]
+pub(crate) enum ReviewError {
+    NotFound       { reference: String },
+    RoleMismatch   { expected: Role, actual: Role, verb: Verb },
+    StateMismatch  { finding: String, current: FindingStatus, required: FindingStatus },
+    DanglingRef    { target: String },
+    LockContention { canonical: String, details: String },
+    Internal       { source: anyhow::Error },
+}
+```
+
+**Conversion:** `impl From<ReviewError> for anyhow::Error` so verb handlers can
+use `anyhow::Result<ReviewOutput>` while the MCP mapper downcasts back to the
+enum variant via `error.downcast_ref::<ReviewError>()`. Verb handlers replace
+`anyhow::bail!("role mismatch …")` with `return Err(ReviewError::RoleMismatch { …
+}.into())`. Unknown/uncategorised errors — including `std::io::Error` from disk
+ops — fall through as `Internal`.
+
+**Why not `thiserror`:** no new crate. The enum is ~20 lines of manual `Display`
++ `From` impls.
+
 ## 3. Code impact
 
 ### `src/review.rs`
@@ -191,10 +232,10 @@ commit has a single, reviewable purpose.
 | `run_verify` | `()` | `ReviewOutput::Verified` | Returns finding_id, review_id |
 | `run_contest` | `()` | `ReviewOutput::Contested` | Returns finding_id, review_id |
 | `run_withdraw` | `()` | `ReviewOutput::Withdrawn` | Returns finding_id, review_id |
-| `run_show` | `()` | `ReviewOutput::Showed` | Carries both JSON and formatted |
+| `run_show` | `()` | `ReviewOutput::Showed` | Carries structured review data |
 | `run_list` | `()` | `ReviewOutput::Listed` | Carries formatted string |
 | `run_status` | `()` | `ReviewOutput::Status` | Carries pre-rendered fields |
-| `run_prime` | `()` | `ReviewOutput::Primed` | Carries cache paths + stale |
+| `run_prime` | `()` | `ReviewOutput::Primed` | Carries tracked paths + counts |
 | `run_unlock` | `()` | `ReviewOutput::Unlocked` | Returns canonical |
 
 **`with_turn`:** signature change from `FnOnce(...) -> anyhow::Result<()>` to
@@ -216,9 +257,10 @@ engine, templates, tests.
 
 - New `Command::Serve(ServeArgs)` variant in the CLI enum
 - New `print_review(&ReviewOutput) -> anyhow::Result<()>` function — single
-  formatting pass, one match arm per variant. For dual-output variants
-  (`Showed`, `Listed`, `Status`), prints `formatted` and ignores the
-  structured field.
+  formatting pass, one match arm per variant. For `Listed`, prints `formatted`
+  and ignores `rows`. For `Showed` and `Status`, formats from the structured
+  fields. For `Primed`, formats the counts. Action variants (`Created` through
+  `Withdrawn`) are one-line `writeln!` calls.
 - 11 call sites change from `review::run_*(...)?;` to
   `let out = review::run_*(...)?; print_review(&out)?;`
 
@@ -238,7 +280,31 @@ engine, templates, tests.
 the refactor, `.unwrap()` ignores the `ReviewOutput`; `.unwrap_err()` still
 works for error cases. No test assertions change.
 
-## 4. MCP protocol mapping
+## 4. `print_review()` output contract
+
+Each `ReviewOutput` variant maps to a single stdout text line or block.
+`print_review()` is the sole consumer: one `match` arm per variant, one format.
+
+| Variant | Stdout |
+|---|---|
+| `Created` | `"Created review {id:03}: {dir}"` |
+| `Raised` | `"Raised {finding_id} on {canonical}"` |
+| `Disposed` | `"Disposed {finding_id} on {canonical} (answered)"` |
+| `Verified` | `"Verified {finding_id} on {canonical} (verified)"` |
+| `Contested` | `"Contested {finding_id} on {canonical} (contested)"` |
+| `Withdrawn` | `"Withdrew {finding_id} on {canonical} (withdrawn)"` |
+| `Showed` | Table: `"RV-{id} — {title}\n{facet} · {status} · await={awaiting}\nRV-{id} ──reviews──▶ {target}\nfindings: {count} (raiser {raiser} · responder {responder})\n\n{body}"`; JSON: `{{"kind":"review","review":{{...}},"body":"..."}}` |
+| `Listed` | Columnar table: `id`, `status`, `facet`, `target`, `title` (default columns, formatted via `listing::render_columns`) |
+| `Status` | `"{canonical} — {status} · await={awaiting} · findings {findings_count} · rounds {rounds}"`, optionally followed by `"cache: current"` or `"cache: stale ({paths})"` on a second line when a cache is primed |
+| `Primed` | `"{canonical} primed — {areas_count} area(s), {tracked_count} tracked path(s), {invariants_count} invariant(s), {risks_count} risk(s)"` |
+| `Unlocked` | If locked: `"Removing stale lock for {canonical}:"` then `"  {line}"` for each lock body line. If not locked: `"{canonical} is not locked"` |
+
+**Source of truth:** The existing `writeln!`/`write!` calls in `src/review.rs`
+(lines 581, 808, 988, 1414, 1447, 1542, 1773, 1837, 1875, 1908, 1914, 1920).
+These are the format strings that `print_review()` must reproduce behaviourally.
+Golden tests (VH-1) capture current output and assert identical reproduction.
+
+## 5. MCP protocol mapping
 
 ### Server capabilities (initialize response)
 
@@ -277,23 +343,27 @@ Returns all 10 review tools with JSON Schema parameter definitions:
 
 ### Error mapping
 
-| Condition | MCP error code | `data` payload |
+The MCP handler maps `ReviewError` variants to JSON-RPC error codes by variant
+identity — never by parsing the error string.
+
+| `ReviewError` variant | MCP code | `data` payload |
 |---|---|---|
 | Unknown tool | -32601 | `{ method: "..." }` |
 | Invalid arguments | -32602 | `{ parse_error: "..." }` |
-| Review not found | -32000 | `{ code: "NOT_FOUND", reference: "..." }` |
-| Wrong role for verb | -32000 | `{ code: "ROLE_MISMATCH", expected: "raiser", got: "responder" }` |
-| Finding not in required state | -32000 | `{ code: "STATE_MISMATCH", finding: "F-3", current: "verified", expected: "answered" }` |
-| Dangling target ref | -32000 | `{ code: "DANGLING_REF", target: "SL-099" }` |
+| `NotFound` | -32000 | `{ code: "NOT_FOUND", reference: "..." }` |
+| `RoleMismatch` | -32602 | `{ code: "ROLE_MISMATCH", expected: "...", actual: "...", verb: "..." }` |
+| `StateMismatch` | -32602 | `{ code: "STATE_MISMATCH", finding: "...", current: "...", required: "..." }` |
+| `DanglingRef` | -32000 | `{ code: "DANGLING_REF", target: "..." }` |
+| `LockContention` | -32000 | `{ code: "LOCK_CONTENTION", canonical: "..." }` |
+| `Internal` | -32000 | `{ code: "INTERNAL", message: "..." }` |
 
-All review engine errors pass through `anyhow::Error` → MCP error response with
-`-32000` (server error) and the error message in `data: { message: "..." }`.
-Structured error codes (`NOT_FOUND`, `ROLE_MISMATCH`, `STATE_MISMATCH`) are
-parsed from the error string where the engine's `anyhow::bail!` messages follow
-a predictable pattern (e.g. `"verify expects ..."` → `STATE_MISMATCH`).
-Unrecognised errors fall through with `message` only.
+`RoleMismatch` and `StateMismatch` use JSON-RPC code `-32602` (invalid params)
+because the client sent valid arguments that are semantically wrong for the
+current state — a protocol-level validation error, not a server failure.
+Unmatched `anyhow` errors (disk I/O failures, etc.) are caught by the `Internal`
+variant's catch-all mapping.
 
-## 5. Verification strategy
+## 6. Verification strategy
 
 ### VH-1 — CLI output behaviour-preserving
 
@@ -327,7 +397,7 @@ in rapid sequence, verifying no lock contention failures or stale-baton
 rejections. The existing per-review lock (ADR-007 D-C4a) should serialise these
 correctly; the test validates this under realistic agent concurrency.
 
-## 6. Risks
+## 7. Risks
 
 | Risk | Severity | Mitigation |
 |---|---|---|
@@ -336,7 +406,7 @@ correctly; the test validates this under realistic agent concurrency.
 | `Serialize` on `PathBuf` in JSON | Low | Acceptable — path is human-readable and relative to project root |
 | `with_turn` generic introduces turbofish at call sites | Low | Callers already provide closure type; compiler infers `T` from closure return |
 
-## 7. Follow-ups
+## 8. Follow-ups
 
 - **Session-scoped review context** — remember "current review" across MCP tool calls
 - **Decomposition of `src/review.rs`** — extract `src/review/{types, engine, verbs, render, cache}.rs`
