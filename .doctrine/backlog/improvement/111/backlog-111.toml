@@ -1,0 +1,21 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 111
+slug = "codex-mcp-server-registration-during-install-separate-config-surface-from-mcpjson"
+title = "Codex MCP server registration during install (separate config surface from .mcp.json)"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-19"
+updated = "2026-06-19"
+tags = ["area:cli", "area:dispatch", "area:mcp"]
+
+# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
+# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = [{ to = "CHR-013", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
