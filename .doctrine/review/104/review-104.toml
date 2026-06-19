@@ -1,0 +1,64 @@
+id    = 104
+slug  = "sl-112-reconciliation-adr-001-layering-enforcement-gate"
+title = "SL-112 reconciliation: ADR-001 layering enforcement gate"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-112"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "relation_graph missing from layering.toml [tiers]; hard-coded in load_layering()"
+detail = """
+Expected: Every unit in the production graph is classified in the authored [tiers] section of .doctrine/adr/001/layering.toml — the canonical map. Design D2: 'the map is canon — authored TOML beside its governing ADR, self-enforcing.' Storage rule: canon lives in authored files, not code.
+
+Observed: relation_graph is uniformly COMMAND (per the authored comment block '# ── relation_graph (mixed, not sub-classified) ──') but is OMITTED from the [tiers] table. The test works around this by hard-coding a fallback in load_layering() at line ~271: 'if !map.contains_key("relation_graph") { map.insert("relation_graph".into(), Tier::Command); }' with the comment 'Remove this when the authored map is fixed.'
+
+This means the authored canon is incomplete — a reader of layering.toml cannot determine relation_graph's tier without reading the test source. The gate passes, but the map is self-contradictory (comment classifies it, table doesn't)."""
+disposition = "fix-now"
+response = 'Fix the authored map: add `relation_graph = "command"` to the [tiers] section of .doctrine/adr/001/layering.toml (alongside the other command modules), then remove the hard-coded fallback in load_layering() and its FIXME comment. The comment block explaining why relation_graph is command-tier can remain as rationale.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "MixedUmbrella variant missing file field vs design §5.2"
+detail = """
+Expected (design.md §5.2 Interfaces & Contracts): 
+
+
+
+Observed (implementation, tests/architecture_layering.rs):
+
+
+
+The 'file' field was in the design type contract but dropped in implementation. The gate still works correctly — it flags the module for sub-classification, and the fix direction is identical regardless of which sub-file reached up. The implementation aggregates edges at module granularity (per-file tracking would require deeper syn analysis), so the file field was not computable at the current granularity.
+
+This is a design-impl gap with no functional harm: the MixedUmbrella assertion fires correctly for non-sub-classified modules with upward edges, and the module name is sufficient to direct the fix (sub-classify the module)."""
+disposition = "aligned"
+response = "The file field omission is a design-prose vs implementation gap with no functional harm. The MixedUmbrella assertion fires correctly at module granularity, and the module name is sufficient to direct the fix (sub-classify the module). Per-file tracking would require deeper syn analysis beyond the current scope. No change needed; the design contract was aspirational at a granularity the implementation reasonably doesn't reach."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "main module exempted from completeness check not documented in design"
+detail = """
+Expected (design.md §5.5): INV-1 — 'map keys == units'.
+
+Observed: 'main' is classified as 'command' in layering.toml [tiers], but discover_units() deliberately skips main.rs (the binary entrypoint). The StaleEntry check in assertion 1 exempts 'main' with the guard 'if key.contains("::") || key == "main" { continue; }'. This is reasonable — main.rs contains only use statements and fn main(), it's not a module in the architectural sense — but the design does not mention this exemption.
+
+No functional defect. The design's completeness invariant is stated as an exact equality; the implementation has one deliberate carve-out that the design prose should acknowledge."""
+disposition = "aligned"
+response = "The main exemption is a reasonable implementation detail. main.rs is the binary entrypoint, not a module in the architectural sense — it contains only use statements and fn main(). Excluding it from unit discovery and exempting it from the StaleEntry check is correct. The design's INV-1 should be read as 'map keys covering all architectural units == discovered units' — main is deliberately excluded from the architectural unit set. No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
