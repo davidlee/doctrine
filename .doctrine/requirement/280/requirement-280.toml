@@ -4,7 +4,7 @@ version = 1
 id = 280
 slug = "resolve-the-project-wide-value-unit-from-doctrinetoml-valueunit-defaulting-to-magic-beans"
 title = "Resolve the project-wide value unit from doctrine.toml [value].unit, defaulting to magic_beans"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The value unit is read from doctrine.toml [value].unit, defaulting to magic_beans when unconfigured; the unit is project-wide, with no entity-local unit field in v1."

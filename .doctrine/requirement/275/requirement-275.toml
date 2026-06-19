@@ -4,7 +4,7 @@ version = 1
 id = 275
 slug = "read-estimate-presence-in-no-workflow-predicate"
 title = "Read estimate presence in no workflow predicate"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "No dispatch/execute/audit/close predicate reads estimate presence; the non-blocking guarantee is structural, not run-proven."

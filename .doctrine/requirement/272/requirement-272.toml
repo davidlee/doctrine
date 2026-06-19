@@ -4,7 +4,7 @@ version = 1
 id = 272
 slug = "preserve-a-valid-estimate-through-parse-hydrate-and-catalog"
 title = "Preserve a valid estimate through parse, hydrate, and catalog"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A valid estimate survives parse -> hydrate -> catalog projection unchanged in its normalized form."
