@@ -427,7 +427,8 @@ const DOCTRINE_TOML: &str = "doctrine.toml";
 fn load_conduct(root: &Path) -> anyhow::Result<crate::conduct::ConductConfig> {
     let path = root.join(DOCTRINE_TOML);
     match fs::read_to_string(&path) {
-        Ok(text) => crate::conduct::parse(&text)
+        Ok(text) => crate::dtoml::parse(&text)
+            .map(|doc| doc.conduct)
             .with_context(|| format!("Failed to parse {}", path.display())),
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             Ok(crate::conduct::ConductConfig::default())

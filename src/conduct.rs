@@ -8,9 +8,11 @@
 //! `[conduct]` table, and the pure [`resolve`] that folds a config + a queried
 //! state into the effective posture with baked defaults.
 //!
-//! **Pure engine tier (ADR-001).** No clock / disk / rng / git here: the
-//! `doctrine.toml` *read* lives in the `slice` command shell; [`parse`] and
-//! [`resolve`] take owned/borrowed data only.
+//! **Pure engine tier (ADR-001).** No clock / disk / rng / git here, and no
+//! `crate::` production dependency (CHR-015): the `doctrine.toml` *read* lives in
+//! the `slice` command shell and aggregates through [`crate::dtoml`], which owns
+//! the sole parser; this module only defines the config shape + the pure
+//! [`resolve`], which takes borrowed data only.
 //!
 //! **Advisory, never enforced (F15).** The posture is *declared config* — what the
 //! project intends — never a runtime actor attribution or an enforcement decision.
@@ -128,16 +130,6 @@ fn baked_autonomy(state: &str) -> Autonomy {
     }
 }
 
-/// Parse a project `doctrine.toml`'s `[conduct]` table from owned text. Pure —
-/// the file *read* is the shell's job (the absent-file case never reaches here;
-/// the shell passes the default config). Tolerant (F9): a malformed `[conduct]`
-/// surfaces as an error to the caller, but absent / partial / unknown-key tables
-/// all parse to the defaults. Unknown top-level keys and unknown-state subtables
-/// are accepted and ignored by [`resolve`].
-pub(crate) fn parse(text: &str) -> anyhow::Result<ConductConfig> {
-    Ok(crate::dtoml::parse(text)?.conduct)
-}
-
 /// Resolve the effective [`Conduct`] for one lifecycle `state`. Pure, total over
 /// ANY string (incl. an out-of-vocab / drifted state — never panics): a per-state
 /// override beats the project default beats the baked default, per field
@@ -159,6 +151,15 @@ pub(crate) fn resolve(cfg: &ConductConfig, state: &str) -> Conduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a `ConductConfig` from `doctrine.toml` text by projecting the shared
+    /// [`crate::dtoml`] aggregate read. CHR-015 deleted conduct's production
+    /// `parse` wrapper (it was the lone `conduct → dtoml` back-edge / the engine
+    /// core's only cycle); the fixture path moves here. `#[cfg(test)]` edges are
+    /// out of the SL-112 layering gate's contract by construction.
+    fn parse(text: &str) -> anyhow::Result<ConductConfig> {
+        Ok(crate::dtoml::parse(text)?.conduct)
+    }
 
     // --- T1: serde of the two enums (the keyword-rename + kebab spellings) ---
 
