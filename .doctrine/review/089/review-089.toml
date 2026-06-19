@@ -1,0 +1,34 @@
+id    = 89
+slug  = "reconciliation-review-of-sl-100"
+title = "reconciliation review of SL-100"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-100"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Skills discovery tests fail: dreaming SKILL.md YAML frontmatter has unquoted colons causing parse error"
+detail = "14 skills tests fail (discover_*, materialise_*, execute_*, only_memory_*, run_install_self_*) with root cause: 'mapping values are not allowed in this context at line 2 column 88' in plugins/doctrine/skills/dreaming/SKILL.md. The description field contains colons (e.g., 'change-triggered:') that YAML interprets as mapping keys. The orchestrator's manual fix in the coordination worktree was not restaged before commit, so the fix was lost. The worker's original commit a0b93eec has the same defect. Must fix before the slice advances."
+disposition = "fix-now"
+response = "The YAML frontmatter in plugins/doctrine/skills/dreaming/SKILL.md uses an unquoted colon in its description field. Fix: use YAML block scalar syntax (>-) to avoid the colon-as-mapping-key parse error. This was the orchestrator's fix in the coordination worktree that was lost because it wasn't restaged before commit."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Design→code conformance: purity split, layering, idempotency, --key guard, --review-by clear, --lifespan deferral all hold"
+detail = "Code inspection confirms: (1) Purity split — apply_memory_tags/memory_status_transition/apply_edit all take today: &str, no clock/disk/git/rng; (2) ADR-001 — src/tag.rs uses fully-qualified anyhow:: paths, no command/engine imports; (3) --key immutability — Option guard via contains_key('memory_key') at line 2682, normalize_key at line 2801; (4) --review-by '' — removes key iff present (line 2740), no-op when absent; (5) --lifespan '' — left unchanged (line 2722, only acts when !trimmed.is_empty()); (6) edit --status superseded — refused at line 2712 with 'use memory status superseded --by'; (7) self-supersession — refused at line 2602; (8) shipped memory — rejected via resolve_memory_toml_path; (9) idempotency — set-compare in apply_memory_tags, status no-op in memory_status_transition, changed flag in apply_edit. Baseline: cargo clippy --workspace clean; cargo test passes except for the 14 skills tests (F-1)."
+disposition = "aligned"
+response = "Design-to-code conformance holds across all audited invariants: purity split, ADR-001 layering, idempotency, --key Option guard with normalize_key, --review-by insert-or-replace, --lifespan deferral, edit superseded refusal, self-supersession, shipped memory rejection. Skill prose clean — no deferred feature mentions, no TOML-edit references. Baseline clippy --workspace clean; 1837 tests pass / 0 fail (post F-1 fix)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

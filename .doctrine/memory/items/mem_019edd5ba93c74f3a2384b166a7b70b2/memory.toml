@@ -1,0 +1,43 @@
+memory_uid = "mem_019edd5ba93c74f3a2384b166a7b70b2"
+memory_key = "mem.pattern.skills.yaml-frontmatter-colons"
+schema_version = 1
+lifespan = "episodic"
+memory_type = "pattern"
+status = "active"
+title = "YAML frontmatter colons break skill SKILL.md parsing"
+summary = "Colons in YAML frontmatter description fields cause parse errors in skill discovery (14 tests fail). Use YAML block scalar (>-) or quote the value."
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["skills", "yaml", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d6f0c255232e335ae1edb5c68d56429a935ffea7"
+ref_name = "refs/heads/main"
+checkout_state_id = "dfcb71fb4da2c1cc561310faed437b131487b9d0c6828a393f3e4044718e9bce"
+base_commit = "e379a3e6fdc146c157be2de958b28684b4fb0488"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
