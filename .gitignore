@@ -6,7 +6,7 @@
 .pi
 .codex
 .dirge
-
+.mcp.json
 
 *.tmp
 *.temp
