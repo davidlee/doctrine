@@ -121,7 +121,7 @@ mod tests {
         // SL-001 → REQ-005 (resolved), ADR-002 → ADR-001 (resolved)
         seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
         seed_requirement(root, 5);
-        seed_adr(root, 2, &["ADR-001"]);
+        seed_adr(root, 2, &[("supersedes", &["ADR-001"])]);
         seed_adr(root, 1, &[]);
 
         let graph = build_graph(root);
