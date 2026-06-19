@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee00d12c570b18f106f733e22ab40"
+memory_key = "mem.fact.backlog.slug-alias-symlink"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Backlog slug aliases are tracked symlinks — trailing-slash rm follows them"
+summary = "Backlog NNN-slug entries are tracked symlinks → NNN/; rm -rf <slug>/ follows the link and deletes the target dir contents"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ebfbc0fe179f2b25ec3a648f84d24c60a82e41d3"
+ref_name = "refs/heads/main"
+checkout_state_id = "32c65aa84f6002cf4249a41853005963a195d299086af58ff9298c4d3d8bea20"
+base_commit = "b2cb5f7cdb8f895fdba3e95aca689a6a5c1a3313"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
