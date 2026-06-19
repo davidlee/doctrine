@@ -688,7 +688,7 @@ pub(crate) const REVIEW_DIR: &str = ".doctrine/review";
 /// `Kind` descriptor `integrity::KINDS` references.
 pub(crate) const REVIEW_KIND: Kind = Kind {
     dir: REVIEW_DIR,
-    prefix: "RV",
+    prefix: crate::kinds::RV,
     scaffold: review_scaffold_unused,
 };
 

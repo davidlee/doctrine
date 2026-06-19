@@ -1612,7 +1612,7 @@ mod tests {
         use crate::relation::RELATION_RULES;
         RELATION_RULES
             .iter()
-            .filter(|r| r.sources.iter().any(|k| k.prefix == prefix))
+            .filter(|r| r.sources.iter().any(|k| *k == prefix))
             .map(|r| r.label)
             .collect()
     }

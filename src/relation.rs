@@ -166,16 +166,20 @@ impl RelationLabel {
 }
 
 use crate::entity::Kind;
+use crate::kinds::{
+    ADR, ASM, BACKLOG, CHR, CM, CON, DEC, GOV, IDE, IMP, ISS, POL, PRD, QUE, REC, RECORD, REQ, REV,
+    RSK, RV, SL, SPEC, STD,
+};
 
 /// What an outbound label's target ref is allowed to resolve to — the forward-edge
-/// validation axis (design §5.2, the first of the five axes). No `Debug`: it holds
-/// `&Kind` refs and `entity::Kind` is data without a `Debug` impl (compared by
-/// `prefix`); diagnostics format the `RelationLabel`, never the `TargetSpec`.
+/// validation axis (design §5.2, the first of the five axes). The rule-table element
+/// type is `&'static str` (a `kinds::*` prefix, the canonical kind identity compared
+/// by `==`); diagnostics format the `RelationLabel`, never the `TargetSpec`.
 #[derive(Clone, Copy)]
 pub(crate) enum TargetSpec {
     /// The target must be one of an explicit set of numbered kinds (e.g.
     /// `governed_by` → ADR·POL·STD).
-    Kinds(&'static [&'static Kind]),
+    Kinds(&'static [&'static str]),
     /// The target kind must equal the source kind — governance `supersedes` and
     /// `related` (each gov kind → its own kind). One rule serves a source-set whose
     /// members each point within their own namespace (R2-M1).
@@ -220,12 +224,13 @@ pub(crate) enum LinkPolicy {
 /// the `(source ∈ sources, label)` key plus the five axes it drives —
 /// `target` (forward validation), `tier` (storage shape), `link` (verb admission),
 /// and `inbound_name` (derived-reciprocal render text, X5). `sources` is a SET so
-/// one rule serves multiple source kinds (F2 — never one row per kind). No `Debug`:
-/// it holds `&Kind` refs (no `Debug` impl); diagnostics format `label` only.
+/// one rule serves multiple source kinds (F2 — never one row per kind). Its elements
+/// are `&'static str` kind prefixes (`kinds::*`, compared by `==`); diagnostics format
+/// `label` only.
 #[derive(Clone, Copy)]
 pub(crate) struct RelationRule {
     /// The source kinds that may author this label (a set, not one row per kind).
-    pub(crate) sources: &'static [&'static Kind],
+    pub(crate) sources: &'static [&'static str],
     /// The outbound label this rule governs.
     pub(crate) label: RelationLabel,
     /// How the derived reciprocal renders on the target (`governed_by` → "governs").
@@ -240,39 +245,6 @@ pub(crate) struct RelationRule {
     pub(crate) link: LinkPolicy,
 }
 
-// Local kind aliases — leaf-layer references into the per-kind `Kind` descriptors
-// (the same statics `integrity::KINDS` indexes; compared by `prefix`, the canonical
-// identity, since `Kind` is data without `PartialEq`). No cycle (ADR-001): these are
-// `&'static` data refs, not a dependency on those modules' logic.
-const SLICE: &Kind = &crate::slice::SLICE_KIND;
-const PRD: &Kind = &crate::spec::PRODUCT_SPEC_KIND;
-const SPEC: &Kind = &crate::spec::TECH_SPEC_KIND;
-const CM: &Kind = &crate::concept_map::CONCEPT_MAP_KIND;
-const REQ: &Kind = &crate::requirement::REQUIREMENT_KIND;
-const ADR: &Kind = &crate::adr::ADR_KIND.kind;
-const POL: &Kind = &crate::policy::POLICY_KIND.kind;
-const STD: &Kind = &crate::standard::STANDARD_KIND.kind;
-const RV: &Kind = &crate::review::REVIEW_KIND;
-const REC: &Kind = &crate::rec::REC_KIND;
-const REV: &Kind = &crate::revision::REV_KIND;
-const ISS: &Kind = &crate::backlog::ISSUE_KIND;
-const IMP: &Kind = &crate::backlog::IMPROVEMENT_KIND;
-const CHR: &Kind = &crate::backlog::CHORE_KIND;
-const RSK: &Kind = &crate::backlog::RISK_KIND;
-const IDE: &Kind = &crate::backlog::IDEA_KIND;
-const ASM: &Kind = &crate::knowledge::ASSUMPTION_KIND;
-const DEC: &Kind = &crate::knowledge::DECISION_KIND;
-const QUE: &Kind = &crate::knowledge::QUESTION_KIND;
-const CON: &Kind = &crate::knowledge::CONSTRAINT_KIND;
-const RECORD: &[&Kind] = &[ASM, DEC, QUE, CON];
-
-/// Every governance kind — the source-set for `supersedes`(gov)/`related`, and the
-/// `governed_by` target-set.
-const GOV: &[&Kind] = &[ADR, POL, STD];
-/// Every backlog item kind — they share one `relation_edges` accessor, so they
-/// share `specs`/`slices`/`drift` (the backlog source-set).
-const BACKLOG: &[&Kind] = &[ISS, IMP, CHR, RSK, IDE];
-
 /// The legal-set vocabulary table (design §5.2 / ADR-010 D2). **Declared in
 /// `RelationLabel` enum-discriminant order** (R2-C1 / §5.3 X1): VT-1 pins the
 /// derived distinct-label order against the enum's `Ord`, so `inspect`'s
@@ -283,7 +255,7 @@ const BACKLOG: &[&Kind] = &[ISS, IMP, CHR, RSK, IDE];
 /// reader/writer/overlay; PHASE-03/04 consume it.
 pub(crate) const RELATION_RULES: &[RelationRule] = &[
     RelationRule {
-        sources: &[SLICE, ISS, IMP, CHR, RSK, IDE],
+        sources: &[SL, ISS, IMP, CHR, RSK, IDE],
         label: RelationLabel::Specs,
         inbound_name: "specs",
         target: TargetSpec::Kinds(&[PRD, SPEC]),
@@ -291,7 +263,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SLICE],
+        sources: &[SL],
         label: RelationLabel::Requirements,
         inbound_name: "requirements",
         target: TargetSpec::Kinds(&[REQ]),
@@ -301,10 +273,10 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
     // supersedes — two rules at one slot: SL→SL (writable) and gov→same-gov
     // (lifecycle-only, storage-excluded OD-3).
     RelationRule {
-        sources: &[SLICE],
+        sources: &[SL],
         label: RelationLabel::Supersedes,
         inbound_name: "superseded by",
-        target: TargetSpec::Kinds(&[SLICE]),
+        target: TargetSpec::Kinds(&[SL]),
         tier: Tier::One,
         link: LinkPolicy::Writable,
     },
@@ -369,7 +341,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         label: RelationLabel::Shapes,
         inbound_name: "shaped_by",
         target: TargetSpec::Kinds(&[
-            PRD, SPEC, REQ, SLICE, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON,
+            PRD, SPEC, REQ, SL, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON,
         ]),
         tier: Tier::One,
         link: LinkPolicy::Writable,
@@ -383,7 +355,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SLICE, PRD, SPEC, CM, ASM, DEC, QUE, CON],
+        sources: &[SL, PRD, SPEC, CM, ASM, DEC, QUE, CON],
         label: RelationLabel::GovernedBy,
         inbound_name: "governs",
         target: TargetSpec::Kinds(GOV),
@@ -402,7 +374,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         sources: BACKLOG,
         label: RelationLabel::Slices,
         inbound_name: "slices",
-        target: TargetSpec::Kinds(&[SLICE]),
+        target: TargetSpec::Kinds(&[SL]),
         tier: Tier::One,
         link: LinkPolicy::Writable,
     },
@@ -415,7 +387,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SLICE, ISS, IMP, CHR, RSK, IDE],
+        sources: &[SL, ISS, IMP, CHR, RSK, IDE],
         label: RelationLabel::Related,
         inbound_name: "related",
         target: TargetSpec::AnyNumbered,
@@ -434,7 +406,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         sources: &[REC],
         label: RelationLabel::OwningSlice,
         inbound_name: "owning_slice",
-        target: TargetSpec::Kinds(&[SLICE]),
+        target: TargetSpec::Kinds(&[SL]),
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
     },
@@ -477,7 +449,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
 pub(crate) fn lookup(source: &Kind, label: RelationLabel) -> Option<&'static RelationRule> {
     RELATION_RULES
         .iter()
-        .find(|r| r.label == label && r.sources.iter().any(|k| k.prefix == source.prefix))
+        .find(|r| r.label == label && r.sources.contains(&source.prefix))
 }
 
 /// One authored outbound relation: its [`RelationLabel`] and the canonical ref
@@ -621,7 +593,7 @@ pub(crate) fn read_block(
 fn canonical_position(source: &Kind, label: RelationLabel) -> Option<usize> {
     RELATION_RULES
         .iter()
-        .position(|r| r.label == label && r.sources.iter().any(|k| k.prefix == source.prefix))
+        .position(|r| r.label == label && r.sources.contains(&source.prefix))
 }
 
 /// The live-reader convenience seam (PHASE-04): parse the `[[relation]]` block out of
@@ -858,9 +830,7 @@ pub(crate) fn inbound_name(label: RelationLabel) -> &'static str {
 fn writable_labels_for(source: &Kind) -> Vec<&'static str> {
     RELATION_RULES
         .iter()
-        .filter(|r| {
-            r.link == LinkPolicy::Writable && r.sources.iter().any(|k| k.prefix == source.prefix)
-        })
+        .filter(|r| r.link == LinkPolicy::Writable && r.sources.contains(&source.prefix))
         .map(|r| r.label.name())
         .collect()
 }
@@ -931,10 +901,10 @@ pub(crate) fn check_target_kind(
 ) -> anyhow::Result<()> {
     match rule.target {
         TargetSpec::Kinds(set) => anyhow::ensure!(
-            set.iter().any(|k| k.prefix == target_prefix),
+            set.contains(&target_prefix),
             "`{}` target must be one of [{}], got a {target_prefix}",
             rule.label.name(),
-            set.iter().map(|k| k.prefix).collect::<Vec<_>>().join(", ")
+            set.to_vec().join(", ")
         ),
         TargetSpec::SameKind => anyhow::ensure!(
             target_prefix == source_kind.prefix,
@@ -1096,7 +1066,7 @@ mod tests {
             let mut got: Vec<&str> = RELATION_RULES
                 .iter()
                 .filter(|r| r.label == *label)
-                .flat_map(|r| r.sources.iter().map(|k| k.prefix))
+                .flat_map(|r| r.sources.iter().copied())
                 .collect();
             got.sort_unstable();
             got.dedup();
@@ -1272,7 +1242,7 @@ mod tests {
             match (r.label, r.sources) {
                 // gov related → SameKind; slice/backlog related → AnyNumbered.
                 (RelationLabel::Related, s) => {
-                    if s.iter().any(|k| k.prefix == "ADR") {
+                    if s.iter().any(|k| *k == "ADR") {
                         assert!(
                             matches!(r.target, TargetSpec::SameKind),
                             "gov related → SameKind"
@@ -1284,9 +1254,9 @@ mod tests {
                         );
                     }
                 }
-                (RelationLabel::Supersedes, s) if !s.iter().any(|k| k.prefix == "SL") => {
+                (RelationLabel::Supersedes, s) if !s.iter().any(|k| *k == "SL") => {
                     // GOV supersedes is SameKind; RECORD supersedes is Kinds(RECORD).
-                    if s.iter().any(|k| k.prefix == "ADR") {
+                    if s.iter().any(|k| *k == "ADR") {
                         assert!(
                             matches!(r.target, TargetSpec::SameKind),
                             "gov supersedes → SameKind"
@@ -1297,8 +1267,8 @@ mod tests {
                         // contents check.
                         match r.target {
                             TargetSpec::Kinds(ks) => {
-                                let got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
-                                let want: Vec<&str> = RECORD.iter().map(|k| k.prefix).collect();
+                                let got: Vec<&str> = ks.iter().copied().collect();
+                                let want: Vec<&str> = RECORD.iter().copied().collect();
                                 assert_eq!(got, want, "record supersedes → Kinds(RECORD)");
                             }
                             other => panic!(
@@ -1350,7 +1320,7 @@ mod tests {
             .unwrap()
             .target
         {
-            let mut got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+            let mut got: Vec<&str> = ks.iter().copied().collect();
             got.sort_unstable();
             assert_eq!(got, ["ADR", "POL", "STD"]);
         } else {
@@ -1361,7 +1331,7 @@ mod tests {
             .unwrap()
             .target
         {
-            let mut got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+            let mut got: Vec<&str> = ks.iter().copied().collect();
             got.sort_unstable();
             assert_eq!(
                 got,
@@ -1380,7 +1350,7 @@ mod tests {
             .unwrap()
             .target
         {
-            let mut got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+            let mut got: Vec<&str> = ks.iter().copied().collect();
             got.sort_unstable();
             assert_eq!(got, ["CHR", "IDE", "IMP", "ISS", "RSK"]);
         } else {
@@ -1396,7 +1366,7 @@ mod tests {
             "record supersedes → LifecycleOnly"
         );
         if let TargetSpec::Kinds(ks) = r.target {
-            let mut got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+            let mut got: Vec<&str> = ks.iter().copied().collect();
             got.sort_unstable();
             assert_eq!(got, ["ASM", "CON", "DEC", "QUE"]);
         } else {

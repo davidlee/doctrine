@@ -27,6 +27,7 @@ mod governance;
 mod input;
 mod install;
 mod integrity;
+mod kinds;
 mod knowledge;
 mod ledger;
 mod lexical;

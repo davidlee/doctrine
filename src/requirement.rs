@@ -40,7 +40,7 @@ const REQUIREMENT_DIR: &str = ".doctrine/requirement";
 /// (`REQ-007`); the file stem is `"requirement"`.
 pub(crate) const REQUIREMENT_KIND: Kind = Kind {
     dir: REQUIREMENT_DIR,
-    prefix: "REQ",
+    prefix: crate::kinds::REQ,
     scaffold: requirement_scaffold,
 };
 

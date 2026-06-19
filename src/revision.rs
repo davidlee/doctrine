@@ -208,7 +208,7 @@ pub(crate) const REV_DIR: &str = ".doctrine/revision";
 /// only to satisfy the `Kind` descriptor `integrity::KINDS` references.
 pub(crate) const REV_KIND: Kind = Kind {
     dir: REV_DIR,
-    prefix: "REV",
+    prefix: crate::kinds::REV,
     scaffold: rev_scaffold_unused,
 };
 
