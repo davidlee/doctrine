@@ -45,37 +45,19 @@ pub(crate) fn resolve_title(title: Option<String>) -> anyhow::Result<String> {
 /// limit it defends is a byte limit.
 const SLUG_MAX: usize = 100;
 
-/// An explicit `--slug` must conform to the shape `derive_slug` already
-/// guarantees: lowercase ASCII alphanumerics joined by interior `-`, no leading or
-/// trailing dash (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`). The slug is spliced straight
-/// into the `NNN-slug` symlink name (e.g. `requirement.rs`), so admitting a `/`,
-/// `.`, whitespace, or control character would let it traverse or break out of the
-/// entity directory — a path-component injection. The charset cap is the wall.
-fn slug_is_well_formed(s: &str) -> bool {
-    !s.starts_with('-')
-        && !s.ends_with('-')
-        && !s.is_empty()
-        && s.bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-}
-
-/// Resolve the slug: an explicit `--slug`, else derive it from the title. An
-/// explicit slug is validated to the slug charset (empty / over-`SLUG_MAX` /
-/// malformed bails) then taken verbatim; a title that derives to nothing
-/// (symbol-only) bails for an explicit `--slug`, and a derived slug over
-/// `SLUG_MAX` is truncated rather than left to overflow the FS name cap.
+/// Resolve the slug: an explicit `--slug`, else derive it from the title.
+/// Both paths are normalised through [`entity::derive_slug`] (IMP-005), so
+/// uppercase, spaces, underscores, edge dashes, dots, and separators are all
+/// folded to safe kebab-case. An explicit slug that normalises to empty bails;
+/// one that exceeds `SLUG_MAX` is truncated (not rejected — matching the
+/// derived path). A title that derives to nothing bails for both paths.
 pub(crate) fn resolve_slug(title: &str, slug: Option<String>) -> anyhow::Result<String> {
     if let Some(s) = slug {
-        if s.is_empty() {
-            bail!("--slug must not be empty");
+        let normalised = entity::derive_slug(&s);
+        if normalised.is_empty() {
+            bail!("--slug must not be empty after normalisation");
         }
-        if s.len() > SLUG_MAX {
-            bail!("--slug too long ({} bytes; max {SLUG_MAX})", s.len());
-        }
-        if !slug_is_well_formed(&s) {
-            bail!("--slug must be lowercase a-z, 0-9 and '-' (no leading/trailing '-'): {s:?}");
-        }
-        return Ok(s);
+        return Ok(truncate_slug(&normalised, SLUG_MAX));
     }
     let derived = entity::derive_slug(title);
     if derived.is_empty() {
@@ -162,36 +144,63 @@ mod tests {
     }
 
     #[test]
-    fn resolve_slug_rejects_a_path_hostile_explicit_flag() {
-        // F-1 (RV-008): the slug is spliced into the `NNN-slug` symlink name, so a
-        // separator / traversal / control char must never reach the filesystem.
-        for hostile in [
-            "../../etc",   // traversal
-            "a/b",         // separator
-            "..",          // parent ref
-            ".hidden",     // dot
-            "has space",   // whitespace
-            "UPPER",       // uppercase (not in derive_slug's charset)
-            "under_score", // underscore
-            "-leading",    // edge dash
-            "trailing-",   // edge dash
-            "tab\tslug",   // control
-        ] {
-            let err = resolve_slug("My Title", Some(hostile.into())).unwrap_err();
-            assert!(
-                err.to_string().contains("lowercase"),
-                "{hostile:?} must be rejected with the charset message: {err}"
-            );
-        }
+    fn resolve_slug_normalises_an_explicit_flag() {
+        // IMP-005: explicit --slug is normalised through derive_slug, matching
+        // the derived-slug path — uppercase, spaces, underscores, edge dashes,
+        // dots, and separators are all folded to safe kebab-case.
+        assert_eq!(
+            resolve_slug("My Title", Some("My Custom Slug".into())).unwrap(),
+            "my-custom-slug"
+        );
+        assert_eq!(
+            resolve_slug("My Title", Some("UPPER".into())).unwrap(),
+            "upper"
+        );
+        assert_eq!(
+            resolve_slug("My Title", Some("under_score".into())).unwrap(),
+            "under-score"
+        );
+        assert_eq!(
+            resolve_slug("My Title", Some("-leading".into())).unwrap(),
+            "leading"
+        );
+        assert_eq!(
+            resolve_slug("My Title", Some("trailing-".into())).unwrap(),
+            "trailing"
+        );
+        assert_eq!(
+            resolve_slug("My Title", Some("has space".into())).unwrap(),
+            "has-space"
+        );
+        assert_eq!(
+            resolve_slug("My Title", Some("tab\tslug".into())).unwrap(),
+            "tab-slug"
+        );
+        // Path-hostile inputs are normalised to safe values by derive_slug.
+        assert_eq!(
+            resolve_slug("My Title", Some("../../etc".into())).unwrap(),
+            "etc"
+        );
+        assert_eq!(resolve_slug("My Title", Some("a/b".into())).unwrap(), "ab");
+        assert_eq!(
+            resolve_slug("My Title", Some(".hidden".into())).unwrap(),
+            "hidden"
+        );
+        // Normalises to empty → rejected.
+        let err = resolve_slug("My Title", Some("..".into())).unwrap_err();
+        assert!(err.to_string().contains("must not be empty"));
+        let err = resolve_slug("My Title", Some("!!!".into())).unwrap_err();
+        assert!(err.to_string().contains("must not be empty"));
     }
 
     #[test]
-    fn resolve_slug_rejects_an_overlong_explicit_flag() {
+    fn resolve_slug_truncates_an_overlong_explicit_flag() {
+        // IMP-005: overlong explicit slugs are truncated, not rejected — matching
+        // the derived-slug path.
         let long = "a".repeat(SLUG_MAX + 1);
-        let err = resolve_slug("My Title", Some(long)).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("too long"), "{msg}");
-        assert!(msg.contains(&SLUG_MAX.to_string()), "{msg}");
+        let slug = resolve_slug("My Title", Some(long)).unwrap();
+        assert!(slug.len() <= SLUG_MAX, "len {}", slug.len());
+        assert!(!slug.is_empty());
     }
 
     #[test]
