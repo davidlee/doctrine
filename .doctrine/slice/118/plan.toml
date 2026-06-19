@@ -1,0 +1,111 @@
+# Implementation plan for SL-118 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-118"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Validation completeness — one complete rule per facet"
+objective = """
+Make `validate` the single complete rule for each facet so the CLI rejects exactly \
+what the parse path rejects (design §5, adversarial F1/F5). Fold finiteness into \
+`estimate::validate`; add pure `value::validate` (finite) AND call it from \
+`value::normalise`. Pure-layer change to the shared facet modules — under the \
+behaviour-preservation gate (existing suites stay green unchanged).\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; SL-101 parse/validate seams present in src/estimate.rs + src/value.rs" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "estimate::validate rejects non-finite (inf/nan) on both bounds, in addition to lower>=0 / upper>=lower" },
+  { id = "EX-2", text = "value::validate exists (finite) and is invoked by value::normalise — one rule site, no parallel impl" },
+  { id = "EX-3", text = "existing estimate/value test suites pass unchanged (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "estimate::validate rejects inf and nan on lower and upper; pre-existing valid bounds still pass (design F1, feeds VT-8 parity)" },
+  { id = "VT-2", expects = "value::validate rejects non-finite, and a non-finite [value] is rejected through value::normalise too (design F5)" },
+  { id = "VT-3", expects = "full pre-existing estimate.rs + value.rs suites green with no edits (behaviour-preservation)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "facet_write leaf — edit-preserving toml_edit writer"
+objective = """
+New ADR-001 leaf `src/facet_write.rs` (imports only toml_edit/anyhow/std). Pure \
+cores generic over table-name + scalar fields, serving both facets: `set_facet` \
+(mutate managed keys in place, alloc-if-absent, preserve non-managed siblings, \
+fail-loud on malformed-present shape, no-op guard) and `clear_facet` (remove table, \
+no-op if absent). No clock — facet writes do not bump `updated` (D1 reversed). \
+Shared `edit_in_place` envelope + `apply_set`/`apply_clear` IO wrappers \
+(read→parse→core→write-once-if-changed). Design §4.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design §4 locked; src/dep_seq.rs edit-preserving pattern available as reference" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "set_facet/clear_facet/edit_in_place/apply_set/apply_clear implemented; set mutates only managed keys and preserves siblings; malformed-present errors; no `updated`/clock touched" },
+  { id = "EX-2", text = "facet_write imports only toml_edit/anyhow/std (ADR-001 leaf — depends on no engine/command module, not on estimate/value)" },
+  { id = "EX-3", text = "module wired (`mod facet_write;`); just gate green (clippy zero warnings, fmt)" },
+]
+verification = [
+  { id = "VT-1", expects = "set_facet allocates an absent [estimate] table carrying managed keys only (design VT-1)" },
+  { id = "VT-2", expects = "set_facet overwrites present managed keys in place (design VT-2)" },
+  { id = "VT-3", expects = "idempotent no-op: a second identical set returns false; content + mtime hold (design VT-3)" },
+  { id = "VT-4", expects = "clear_facet removes the table; clear-absent returns false (design VT-4)" },
+  { id = "VT-5", expects = "golden round-trip: unrelated tables / comments / [relationships] preserved across set and clear (design VT-5)" },
+  { id = "VT-6", expects = "malformed-present fail-loud: set over `estimate = 7` and over `[[estimate]]` errors, file untouched (design VT-6, F4)" },
+  { id = "VT-7", expects = "forward-compat: set over an [estimate] AND a [value] table carrying an unknown sibling sub-key preserves it (design VT-7, IDE-013 readiness)" },
+  { id = "VT-8", expects = "layering: facet_write imports only toml_edit/anyhow/std (design VT-13, ADR-001)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "CLI verbs — estimate/value set & clear, wired end-to-end"
+objective = """
+Wire `Command::Estimate` / `Command::Value` subcommand groups (each Set/Clear) in \
+main.rs with run_* handlers. `exact: Option<f64>` (-x/--exact, conflicts_with the \
+positional bounds; handler enforces exactly-one-mode). Resolve <ID> via the \
+path-from-ref helper factored out of resolve_link_path. Command tier validates \
+(estimate::validate / value::validate) before the leaf write. Register the Write \
+class at the classification gate. Human-readable output. Design §3/§4. Then dogfood. \
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 (validate is the complete rule) and PHASE-02 (facet_write leaf) complete" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "estimate set <ID> <lower> <upper> | -x <N>, estimate clear, value set <ID> <mag>, value clear all work end-to-end; clear-absent is a friendly no-op (exit 0)" },
+  { id = "EX-2", text = "command tier validates via estimate::validate/value::validate before the leaf; CLI rejects exactly what the parse path rejects" },
+  { id = "EX-3", text = "Command::Estimate|Value registered in the Write/Read classification gate; just gate green (clippy zero warnings, fmt)" },
+]
+verification = [
+  { id = "VT-1", expects = "invalid matrix rejected with parse-equal verdicts: missing bound, negative lower, upper<lower, inf/nan, -x+positionals conflict, -x with no argument (clap), one lone positional, neither mode (design VT-8, F1/F2)" },
+  { id = "VT-2", expects = "-x N sets lower == upper == N (design VT-9)" },
+  { id = "VT-3", expects = "value set / value clear round-trip (design VT-10)" },
+  { id = "VT-4", expects = "catalog scan round-trip: set -> scan reads normalized facet; clear -> scan reads absent (design VT-11, proves catalog/graph read)" },
+  { id = "VT-5", expects = "slice typed-reader round-trip: estimate set SL-<n> then slice show / SliceDoc reads the facet back (design VT-12, the per-entity surface scan does not exercise)" },
+  { id = "VH-1", expects = "dogfood: author an estimate + value on a live entity via the verb (not by hand); list/scan read them back (design VH-1)" },
+]
+specs             = []
+requirements      = []
