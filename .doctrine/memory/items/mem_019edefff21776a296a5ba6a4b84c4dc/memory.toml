@@ -1,0 +1,42 @@
+memory_uid = "mem_019edefff21776a296a5ba6a4b84c4dc"
+memory_key = "mem.pattern.testing.shared-cargo-target-stale-binary"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Shared CARGO_TARGET_DIR causes stale binaries in integration tests spawning the binary"
+summary = ""
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "552ff780827cc576f1d869367a24f5d576b6d68b"
+ref_name = "refs/heads/main"
+checkout_state_id = "cc0ed77a6c391326dd6f980e6edcd3e2bc6be67f22aee91a319892d9bfb34ec9"
+base_commit = "69b34330999aacdf0cdf3e48bd1a46dece49405a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
