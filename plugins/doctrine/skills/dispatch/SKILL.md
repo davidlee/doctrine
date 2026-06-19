@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. Routes to `/dispatch-subprocess` (codex/pi) or `/dispatch-agent` (claude); the funnel cadence (import → verify → branch-point → one commit → record) is identical on both arms. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
+description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. Routes to `/dispatch-subprocess` (codex/pi) or `/dispatch-agent` (claude); overridable via `[dispatch] claude-force-subprocess-dispatch` in `doctrine.toml`. The funnel cadence (import → verify → branch-point → one commit → record) is identical on both arms. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
 ---
 # Dispatch (router)
 Drive a slice's phases to completion through sub-agent **workers** — you are the
@@ -12,7 +12,15 @@ orchestrator funnel."
 ## The outer loop
 1. `dispatch setup --slice <N> --dir <path>` — create/resume coordination worktree
 2. `dispatch plan-next --slice <N>` — find next actionable phase(s); plan parallel batches when file-disjoint
-3. Route to the correct arm, spawn worker(s) — [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md) for codex/pi, [`/dispatch-agent`](../dispatch-agent/SKILL.md) for claude
+3. Route to the correct arm:
+   - Check `doctrine.toml` → `[dispatch]` → `claude-force-subprocess-dispatch`
+     (default `false` if the file or key is absent).
+   - If `true`, route workers via [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)
+     (default to `pi` arm until `preferred-subprocess-harness` selection is wired — IMP-101).
+   - Otherwise, route per env-marker: `.claude/` present →
+     [`/dispatch-agent`](../dispatch-agent/SKILL.md); otherwise →
+     [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md).
+   Then spawn worker(s) per the chosen arm's template.
 4. Funnel the batch (import → verify → branch-point → one commit → record)
 5. Repeat from new HEAD until all phases done
 6. Conclude: `dispatch sync --prepare-review` → remove coord worktree → audit
