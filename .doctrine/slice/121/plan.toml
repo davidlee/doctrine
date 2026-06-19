@@ -1,0 +1,109 @@
+# Implementation plan for SL-121 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-121"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Extract worktree_for_ref (DRY probe)"
+objective = """
+Extract a single branch→worktree-path probe from the two existing duplicate
+porcelain parsers and refactor both callers onto it, behaviour-preserving. This
+is the foundation PHASE-02's advance branches on. Pure parse + thin impure shell;
+adopt the block-reset rule (design §2.1, M9).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §2.1 locked; slice in `plan`/`ready`." },
+  { id = "EN-2", text = "`just check` green at HEAD before changes." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A pure parser over `git worktree list --porcelain` text plus a `git::worktree_for_ref(root, refname) -> Result<Option<PathBuf>>` shell exist in src/git.rs." },
+  { id = "EX-2", text = "`find_coordination_worktree` (dispatch.rs) delegates to it, mapping BOTH `Ok(None)` and `Err` to the `\"(removed)\"` sentinel (F4)." },
+  { id = "EX-3", text = "`gather_fork_worktree` (worktree.rs) duplicate body deleted; delegates to the shared probe." },
+  { id = "EX-4", text = "Parser uses the block-reset rule (blank line clears state); no other behavioural change." },
+]
+verification = [
+  { id = "VT-1", expects = "Pure-parser unit tests cover: ref present → path; absent → None; detached block (no `branch` line) → skipped; blank-block → state reset; (shell) command-failure → Err." },
+  { id = "VT-2", expects = "Existing find_coordination_worktree / gather_fork_worktree / land / dispatch suites pass UNCHANGED (behaviour-preservation gate, ADR-006)." },
+  { id = "VT-3", expects = "`just check` green; clippy zero warnings." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Worktree-aware integrate advance + report"
+objective = """
+Make `integrate` worktree-aware (design §2.2–2.5, §4). Per row: exact replay_ref
+classification (unchanged), then mechanism-branch on checkout state — update_ref_cas
+when not checked out (with post-CAS re-probe), `git -C <wt> merge --ff-only` for a
+checked-out clean fast-forward (with the symbolic-ref/clean/post-assert race guard),
+refuse `integrate-nonff-checkout` for a checked-out non-ff advance. Dirty pre-gate
+runs BEFORE the first commit_journal. Refusals are captured outcomes (journaled
+Failed), never bare `?`-errors. Add the per-row stderr disposition report (IMP-078)
+while preserving the stdout ref-list contract.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `worktree_for_ref` available and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Dirty checked-out target → `integrate-dirty-worktree`, ZERO refs moved incl. `dispatch/<slice>` (gate before first commit_journal, M4)." },
+  { id = "EX-2", text = "Checked-out + clean fast-forward target → ref+index+worktree all at `planned`; `git status` empty (ISS-022/ISS-030 fixed)." },
+  { id = "EX-3", text = "Checked-out + non-ff advance → `integrate-nonff-checkout`, ref untouched (B2)." },
+  { id = "EX-4", text = "Not-checked-out target → update_ref_cas as today; post-CAS re-probe resyncs or warns `raced-checkout-desync` if the ref became checked out (R2 None-leg gap)." },
+  { id = "EX-5", text = "Classification is the exact replay_ref predicate on both legs; merge refusal/non-ff/race are captured outcomes journaled `Failed`, not `Err` (B1/B3)." },
+  { id = "EX-6", text = "Success emits per-row stderr `ref old..new (disposition)`; the existing stdout ref-list is unchanged (IMP-078, §4)." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e/integration: not-checked-out advance moves ref, index untouched (no phantom diff)." },
+  { id = "VT-2", expects = "checked-out clean ff: post-integrate `git status --porcelain` empty; index+worktree at planned tip — the ISS-022/030 regression test." },
+  { id = "VT-3", expects = "checked-out dirty: `integrate-dirty-worktree`; assert dispatch/<slice> and trunk both unmoved." },
+  { id = "VT-4", expects = "checked-out non-ff edge/creation row: `integrate-nonff-checkout`, ref unmoved (exact-old refusal preserved)." },
+  { id = "VT-5", expects = "exact-CAS classification: target ahead of planned → Moved (not ff 'already up to date'); target == planned → NoOp." },
+  { id = "VT-6", expects = "report: stderr carries per-row disposition; stdout ref-list contract preserved (regression)." },
+  { id = "VT-7", expects = "existing e2e_dispatch_sync suite green UNCHANGED." },
+  { id = "VA-1", expects = "Agent review confirms the §7 concurrency boundary holds: the three residual races are content-safe (tree only ever lands on `planned`) and reported, not silent." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Close-verify read surface + tree-true SKILL 3a"
+objective = """
+Resolve OQ-5: give the close verify a stable read of the trunk row's
+`planned_new_oid` (no transient `candidate admit` stdout dependency), then rewrite
+close SKILL.md step-3a to the tree-true checks (design §3): (a) `git diff --quiet
+HEAD` tracked-tree desync detector (not path-limited), (b) diff that read OID against
+`refs/heads/main`. Remove the stale `main~1..main` form and its TODO reliance.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: integrate report + journal trunk row land the `planned_new_oid`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A stable CLI/documented read exposes the trunk row's `planned_new_oid` (journal tree-read), usable from a shell step — not transient admit stdout." },
+  { id = "EX-2", text = "close SKILL.md step-3a uses §3(a) `git diff --quiet HEAD` (whole tracked tree) as the desync gate and §3(b) the read-surface OID vs `refs/heads/main`." },
+  { id = "EX-3", text = "The stale `git diff --stat refs/heads/main~1..main -- src/` form and its TODO reliance are removed." },
+]
+verification = [
+  { id = "VT-1", expects = "The read surface returns the committed journal trunk `planned_new_oid` from any checkout (tree-read; matches the sync-tree-reads-ledger invariant)." },
+  { id = "VH-1", expects = "Human walkthrough of the revised SKILL 3a: a deliberately-desynced tracked tree makes (a) fail; a silent dry-run (no advance) makes (b) fail; a clean integrate passes both." },
+]
+specs        = []
+requirements = []
