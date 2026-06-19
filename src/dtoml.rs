@@ -114,6 +114,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn dispatch_table_combined_keys() {
+        // SL-117: prove both dispatch keys survive the full dtoml::parse round-trip.
+        let doc =
+            parse("[dispatch]\npreferred-subprocess-harness = \"pi\"\nclaude-force-subprocess-dispatch = true\n")
+                .unwrap();
+        use crate::dispatch_config::SubprocessHarness;
+        assert_eq!(
+            doc.dispatch.preferred_subprocess_harness,
+            SubprocessHarness::Pi
+        );
+        assert!(doc.dispatch.claude_force_subprocess_dispatch);
+    }
+
     // RV-085 F-1 regression: a malformed [estimation] confidence config must NOT
     // fail the shared config read. parse() is the reader for conduct, verification,
     // and coverage_store; coupling those to estimation validity violates design §3.3
