@@ -260,7 +260,7 @@ fn slice_corpus_relationships_table_holds_only_dep_seq_keys() {
         // independence — see the note above slice_corpus_*).
         for label in &v.relation_labels {
             assert!(
-                ["specs", "requirements", "supersedes", "governed_by"].contains(&label.as_str()),
+                ["specs", "requirements", "supersedes", "governed_by", "related"].contains(&label.as_str()),
                 "{}: unexpected slice [[relation]] label `{label}`",
                 f.display()
             );
