@@ -47,7 +47,7 @@ pub(crate) struct DoctrineToml {
         not(test),
         expect(
             dead_code,
-            reason = "consumed by dispatch-config display (IMP-101 follow-up)"
+            reason = "consumed by a future dispatch-config display slice"
         )
     )]
     #[serde(default)]
@@ -92,6 +92,26 @@ mod tests {
         let doc = parse("[estimation]\nunit=\"x\"\n[value]\nunit=\"y\"").unwrap();
         assert_eq!(doc.estimation.unit.as_deref(), Some("x"));
         assert_eq!(doc.value.unit.as_deref(), Some("y"));
+    }
+
+    #[test]
+    fn dispatch_table_roundtrip() {
+        // The full round-trip through the shared dtoml::parse — not just the
+        // DispatchConfig unit tests. Prove a populated [dispatch] survives the
+        // outer TOML deserialize, and that a missing key within [dispatch]
+        // defaults to codex.
+        let doc = parse("[dispatch]\npreferred-subprocess-harness = \"pi\"\n").unwrap();
+        use crate::dispatch_config::SubprocessHarness;
+        assert_eq!(
+            doc.dispatch.preferred_subprocess_harness,
+            SubprocessHarness::Pi
+        );
+        // [dispatch] present but key absent → default (codex)
+        let doc2 = parse("[dispatch]\n").unwrap();
+        assert_eq!(
+            doc2.dispatch.preferred_subprocess_harness,
+            SubprocessHarness::Codex
+        );
     }
 
     // RV-085 F-1 regression: a malformed [estimation] confidence config must NOT
