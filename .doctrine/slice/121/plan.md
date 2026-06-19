@@ -35,8 +35,10 @@ folded into it — means PHASE-02's worktree rewrite touches only integrate's cl
 body, leaving the delicate journal/CAS cycle proven-unchanged. This is the same
 "extract pure first, change behaviour after" discipline as PHASE-01, and it is why
 the fold is cheaper than refactoring `integrate` twice (the SL-121 bundling
-rationale). The codex §2.6 pass bound the `apply` contract (refusals → `Ok(Some)`,
-`Err` only fatal — B3); EX-4 carries it. Order vs PHASE-01 is free (the bracket is
+rationale). The codex passes bound the seam: `apply` returns a structured `RowOutcome`
+(`Done{disposition} | Refused{token}`) — disposition is transient report data, not
+a `JournalRow` field (the plan-review BLOCKER) — and the contract is refusals →
+`Ok(Refused{token})`, `Err` only fatal (B3). EX-1/EX-4/VT-4 carry these. Order vs PHASE-01 is free (the bracket is
 journal-cycle, independent of the probe); both must precede PHASE-02.
 
 **PHASE-01 — DRY foundation, lowest risk.** The worktree-aware advance
@@ -63,16 +65,19 @@ itself is untouched (EX-7). The VA-1 check exists because the §7 concurrency
 boundary is a judgement a unit test cannot fully make — an agent confirms the
 residual races are content-safe and reported.
 
-**PHASE-03 last — depends on PHASE-02's journal output.** The close verify needs
-the trunk row's `planned_new_oid`, which only exists after PHASE-02 journals it;
-and the §3(b) read-surface gap (OQ-5: the admitted `close_target` OID has no stable
-close-3a command) is resolved here, against the committed journal (tree-read, the
-`sync-tree-reads-ledger-not-worktree` invariant). The SKILL doc rewrite then has a
-real OID to diff. VH-1 is human because the close skill is a human/agent-run doc
-step, not an automated path. VA-1 holds the IMP-102/103 seam-awareness: both stay
-out of scope, but the tree-true step-3a must be cut so IMP-102's later `done`-gate
-(refuse close when un-integrated) bolts onto the same check without re-cutting it —
-the design-bound coordination from the SL-121↔IMP-075 fold.
+**PHASE-03 last — by sequencing choice, not hard data dependency.** The trunk
+row's `planned_new_oid` is *pre-existing* integrate output (any `--trunk` run
+journals it) — PHASE-02 does not introduce it (codex plan review). What PHASE-03
+builds is its OWN work: the §3(b) read-surface gap (OQ-5 — the admitted
+`close_target` OID has no stable close-3a command) resolved against the committed
+journal (tree-read, the `sync-tree-reads-ledger-not-worktree` invariant), then the
+SKILL 3a rewrite to the tree-true checks. It runs last because the close verify
+should reflect the *fixed* integrate, not because it is blocked on PHASE-02 data.
+VH-1 is human because the close skill is a human/agent-run doc step, not an
+automated path. VA-1 is a *present* structural check (not a prediction about a
+future diff): step-3a's tree-true verify reads only the durable trunk-row OID +
+`HEAD`, decoupled from close-only candidate/admit transients — which is also what
+leaves the IMP-102 `done`-gate seam bolt-on-able (out of scope, design-bound).
 
 ## Notes
 
