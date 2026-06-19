@@ -1,7 +1,7 @@
 id = 113
 slug = "entity-mutation-seam"
 title = "Shared entity mutation seam over atomic write"
-status = "proposed"
+status = "plan"
 created = "2026-06-19"
 updated = "2026-06-19"
 

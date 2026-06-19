@@ -1,0 +1,69 @@
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-113"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Harden write_atomic"
+objective = "Add process-global AtomicU64 counter to write_atomic temp-naming, add concurrent-write test (VT-2), keep existing test green unchanged. This is the single change to the leaf tier (ADR-001) — everything else builds on it."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked — D4 (AtomicU64 counter) resolved" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "write_atomic temp name is `.{name}.{pid}.{counter}.tmp`" },
+  { id = "EX-2", text = "Existing VT-1 test stays green (behaviour-preservation gate)" },
+  { id = "EX-3", text = "VT-2 concurrent test passes — two threads write_atomic same path, both Ok(()), no stray temps" },
+  { id = "EX-4", text = "write_atomic internal fs::write carries #[expect(clippy::disallowed_methods)] so it survives PHASE-03's guard" },
+]
+verification = [
+  { id = "VT-1", expects = "write_atomic_creates_then_overwrites_leaving_no_temp — unchanged, green" },
+  { id = "VT-2", expects = "New test — 2 threads write_atomic same path; after join: both Ok(()), exactly 1 target file, 0 .tmp siblings, content is one of the two inputs" },
+]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Migrate 18 call sites to write_atomic"
+objective = "Replace every production std::fs::write on authored entity TOML/MD files with crate::fsutil::write_atomic. Mechanical transform: std::fs::write(path, doc.to_string()) → write_atomic(path, doc.to_string().as_bytes()) with matching error context. Two sites (relation.rs, map_server/routes.rs) need error-wrapper adaptation per design §6 VT-6. Existing test suites must stay green (behaviour-preservation gate)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — write_atomic counter is live and tested" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All 18 production std::fs::write calls on authored entity files replaced with write_atomic" },
+  { id = "EX-2", text = "relation.rs:784,803 error wrappers adapted (map_err → with_context)" },
+  { id = "EX-3", text = "map_server/routes.rs:412 error wrapper unchanged (e.to_string() works for both types)" },
+  { id = "EX-4", text = "relation.rs and map_server/routes.rs error display format change documented (VT-6)" },
+  { id = "EX-5", text = "just check zero-warn (residual violations: only the 2 exceptions in PHASE-03)" },
+]
+verification = [
+  { id = "VT-3", expects = "dep_seq unit tests (append, remove, set_authored_status, append_string_array) — green" },
+  { id = "VT-4", expects = "E2E suites: supersede, relation link/unlink, spec add-requirement, backlog tag, concept-map edge mutate — all green" },
+  { id = "VT-6", expects = "Error-wrapper format change documented: relation.rs OS error nests in anyhow chain instead of outer string; map_server/routes.rs changes from io::Error OS message to anyhow::Error context message. Cosmetic, not semantic — no tests assert on error message format" },
+]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Install clippy guard"
+objective = "Add std::fs::write to clippy.toml disallowed-methods, gate to non-test via #![cfg_attr] in main.rs, add #[expect] on the two production exceptions (fsutil.rs write_atomic itself, ledger.rs store). Verify just check zero-warn and confirm the guard fires on a deliberate violation."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — zero bare std::fs::write on authored entities remaining in production code" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "clippy.toml disallowed-methods includes std::fs::write with documented reason" },
+  { id = "EX-2", text = "main.rs has #![cfg_attr(test, allow(clippy::disallowed_methods))] — unit tests exempt" },
+  { id = "EX-3", text = "fsutil.rs write_atomic carries #[expect(clippy::disallowed_methods, reason = \"canonical temp-file write before atomic rename\")]" },
+  { id = "EX-4", text = "ledger.rs:408 store() carries #[expect(clippy::disallowed_methods, reason = \"runtime journal manifest, not an authored entity\")]" },
+  { id = "EX-5", text = "just check zero-warn — no disallowed-methods violations except the two documented #[expect] sites" },
+  { id = "EX-6", text = "Manual verification: introduce a bare std::fs::write in production code, confirm just check fails" },
+]
+verification = [
+  { id = "VT-5", expects = "just check zero-warn — no disallowed-methods violations except documented #[expect] sites" },
+  { id = "VH-1", expects = "Manual verification: add bare std::fs::write to production code, confirm clippy fails (one-shot, guard proves itself)" },
+]
