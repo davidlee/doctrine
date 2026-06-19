@@ -8,6 +8,7 @@ status = "active"
 kind = "tech"
 category = "reconciliation"
 c4_level = "component"
+parent = "SPEC-004"
 descends_from = "PRD-013"
 tags = ["reconciliation", "coverage", "drift", "rec-record", "two-tier-truth", "staleness-reuse", "closure-gate"]
 responsibilities = [

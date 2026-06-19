@@ -8,6 +8,7 @@ status = "active"
 kind = "tech"
 category = "prioritisation"
 c4_level = "container"
+parent = "SPEC-003"
 descends_from = "PRD-011"
 tags = ["priority", "actionability", "cross-kind", "graph", "backlog", "crate-boundary", "policy-adapter", "explanation"]
 responsibilities = [
