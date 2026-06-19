@@ -62,12 +62,12 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "`relation.rs` declares no `crate::<cmd>::*_KIND` alias; `RelationRule.sources` and `TargetSpec::Kinds` are `&'static [&'static str]`, populated from `kinds::*` (incl. GOV/BACKLOG/RECORD)." },
-  { id = "EX-2", text = "The 4 matchers (L477/621/858/927) and 2 test readers (`sources_match_shipped_accessors` L1096, `target_spec_matches_design` L1267-1403) take the mechanical accessor edit (`|k| k.prefix == p` → `|p| *p == p`; `.map(|k| k.prefix)` → `.copied()`); no assertion or expected value moves." },
+  { id = "EX-2", text = "The 4 matchers (~L480/624/862/934) and 2 test readers (`sources_match_shipped_accessors` ~L1099, `target_spec_matches_design` ~L1275-1399) take the mechanical accessor edit (`|k| k.prefix == source.prefix` → `|k| *k == source.prefix`; `.map(|k| k.prefix)` → `.copied()`); no assertion or expected value moves. (Lines drift; the `&str` re-type makes every stale `.prefix` site a compile error — completeness is compiler-enforced, not line-cited.)" },
   { id = "EX-3", text = "Public signatures `lookup`/`tier1_edges`/`rels_block` unchanged (still `&Kind`); stale `&Kind`-justified doc-comments on `TargetSpec`/`RelationRule` (the \"No Debug\" note) corrected." },
 ]
 verification = [
   { id = "VT-1", expects = "Relation unit suite + corpus/relation integration tests green with every assertion unchanged (behaviour-preservation gate)." },
-  { id = "VA-1", expects = "Closure check: `grep -nE 'crate::\\w+::\\w*_KIND' src/relation.rs` → empty. The 7 cycles are gone." },
+  { id = "VA-1", expects = "Closure check: `grep -nE 'const \\w+: &Kind = &crate::\\w+::\\w*_KIND' src/relation.rs` → empty (20 hoisted aliases gone, 7 cycles broken). The broader `grep -nE 'crate::\\w+::\\w*_KIND'` still matches `#[cfg(test)]` `*_KIND` imports (L1015-1025, L1727) — load-bearing because public sigs stay `&Kind`; legitimate dev-dep edges, acyclic for SL-112 (design §9)." },
 ]
 specs        = []
 requirements = []
