@@ -356,6 +356,15 @@ pub(crate) fn run_check(path: Option<PathBuf>) -> anyhow::Result<()> {
 /// gitignored (the absolute exec path belongs out of git, §5.3/D6).
 const SETTINGS_REL: &str = ".claude/settings.local.json";
 
+/// The project-root `.mcp.json` Claude Code reads for project-scoped MCP servers
+/// (CHR-013). Unlike `SETTINGS_REL` this is a committed, team-shared file — it
+/// carries the doctrine MCP server registration (`doctrine serve --mcp`).
+const MCP_REL: &str = ".mcp.json";
+
+/// The `mcpServers` key doctrine registers its server under in `.mcp.json` — the
+/// client-side alias, so its tools surface as `mcp__doctrine__review_*`.
+const MCP_SERVER_KEY: &str = "doctrine";
+
 /// The `SessionStart` matcher token — fires on a fresh session and on `/clear`
 /// (`clear` firing a `SessionStart` hook is already witnessed; the OR-token is
 /// confirmed live at closure, §6/PHASE-06).
@@ -812,6 +821,7 @@ fn install_refresh(
         Harness::Codex => Ok(RefreshReport {
             hook: RefreshOutcome::None,
             baseref: BaseRefOutcome::NotApplicable,
+            mcp: RefreshOutcome::None,
         }),
         Harness::Claude => {
             // The hook merge writes first; the baseRef step reads the SAME settings
@@ -820,7 +830,10 @@ fn install_refresh(
             // rides BESIDE the owner-locked HookSpec merge core, never through it.
             let hook = install_claude_hook(root, &HookSpec::boot(exec), dry_run)?;
             let baseref = install_baseref(root, dry_run)?;
-            Ok(RefreshReport { hook, baseref })
+            // `.mcp.json` registration (CHR-013) — a SEPARATE project-root file,
+            // not the settings file; its own narrow-path merge core.
+            let mcp = install_mcp(root, exec, dry_run)?;
+            Ok(RefreshReport { hook, baseref, mcp })
         }
     }
 }
@@ -830,6 +843,9 @@ fn install_refresh(
 struct RefreshReport {
     hook: RefreshOutcome,
     baseref: BaseRefOutcome,
+    /// The `.mcp.json` doctrine server registration outcome (CHR-013); codex
+    /// carries `None` (no `.mcp.json` wiring on the import-only arm).
+    mcp: RefreshOutcome,
 }
 
 /// What the `worktree.baseRef="head"` install did, for reporting (SL-064 §8.3).
@@ -933,6 +949,124 @@ fn install_baseref(root: &Path, dry_run: bool) -> anyhow::Result<BaseRefOutcome>
     let path = root.join(SETTINGS_REL);
     let existing = fs::read_to_string(&path).ok();
     let plan = plan_baseref(existing.as_deref());
+    if let (Some(json), false) = (&plan.new_json, dry_run) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        fsutil::write_atomic(&path, json.as_bytes())?;
+    }
+    Ok(plan.outcome)
+}
+
+// ---------------------------------------------------------------------------
+// `.mcp.json` doctrine MCP server registration (CHR-013).
+// ---------------------------------------------------------------------------
+
+/// A planned `.mcp.json` merge: the outcome plus the new JSON to write (`None`
+/// when no write is needed). Mirrors `HookPlan` / `BaseRefPlan`.
+struct McpPlan {
+    outcome: RefreshOutcome,
+    new_json: Option<String>,
+}
+
+fn mcp_fallback() -> McpPlan {
+    McpPlan {
+        outcome: RefreshOutcome::PrintedFallback,
+        new_json: None,
+    }
+}
+
+/// The canonical server entry doctrine writes under `mcpServers.doctrine`:
+/// `{ "command": "<exec>", "args": ["serve", "--mcp"] }`. The command is the
+/// absolute exec path (stamped like the hooks), so a project without `doctrine`
+/// on the harness PATH still resolves it.
+fn desired_mcp_entry(exec: &Path) -> Value {
+    serde_json::json!({
+        "command": exec.display().to_string(),
+        "args": ["serve", "--mcp"],
+    })
+}
+
+/// Whether `entry` is doctrine's own MCP server entry — the command's file name
+/// is `doctrine` AND the args are exactly `["serve", "--mcp"]`. Robust to a
+/// space-bearing exec path. A foreign command or customised args is NOT ours, so
+/// a deliberate user override under the `doctrine` key is never clobbered.
+fn is_doctrine_mcp_entry(entry: &Value) -> bool {
+    let is_doctrine = entry
+        .get("command")
+        .and_then(Value::as_str)
+        .is_some_and(|c| Path::new(c).file_name() == Some(OsStr::new("doctrine")));
+    let args_ok = entry
+        .get("args")
+        .and_then(Value::as_array)
+        .is_some_and(|a| matches!(a.as_slice(), [s, m] if s == "serve" && m == "--mcp"));
+    is_doctrine && args_ok
+}
+
+/// PURE planner for the `mcpServers.doctrine` entry in `.mcp.json` (CHR-013).
+/// Sets the nested key WITHOUT disturbing sibling servers or unrelated keys
+/// (mutates a `serde_json::Value` at the narrow path). Absent ⇒ write; ours and
+/// current ⇒ no-op; ours with a stale exec path ⇒ refresh; a foreign-shaped
+/// `doctrine` entry, a non-object `mcpServers`, or malformed JSON ⇒ leave
+/// untouched (no clobber). Rides BESIDE the hook merge core.
+fn plan_mcp(existing_json: Option<&str>, exec: &Path) -> McpPlan {
+    let command = exec.display().to_string();
+    let mut value: Value = match existing_json.map(str::trim) {
+        None | Some("") => Value::Object(Map::new()),
+        Some(text) => match serde_json::from_str(text) {
+            Ok(parsed) => parsed,
+            Err(_) => return mcp_fallback(),
+        },
+    };
+    let Some(obj) = value.as_object_mut() else {
+        return mcp_fallback();
+    };
+    let servers = obj
+        .entry("mcpServers")
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(servers) = servers.as_object_mut() else {
+        // `mcpServers` present but not an object ⇒ malformed; never clobber.
+        return mcp_fallback();
+    };
+    let outcome = match servers.get(MCP_SERVER_KEY) {
+        None => RefreshOutcome::Wired(command),
+        Some(entry) if is_doctrine_mcp_entry(entry) => {
+            if entry.get("command").and_then(Value::as_str) == Some(command.as_str()) {
+                return McpPlan {
+                    outcome: RefreshOutcome::None,
+                    new_json: None,
+                };
+            }
+            RefreshOutcome::Refreshed(command)
+        }
+        // A `doctrine` key that is not our shape is a deliberate user entry.
+        Some(_foreign) => return mcp_fallback(),
+    };
+    servers.insert(MCP_SERVER_KEY.to_string(), desired_mcp_entry(exec));
+    match serde_json::to_string_pretty(&value) {
+        Ok(json) => McpPlan {
+            outcome,
+            new_json: Some(json),
+        },
+        Err(_) => mcp_fallback(),
+    }
+}
+
+/// The snippet printed when `.mcp.json` carries a foreign/malformed `doctrine`
+/// entry that can't be merged automatically — the full `mcpServers` block to add.
+fn mcp_fallback_snippet(exec: &Path) -> String {
+    let block = serde_json::json!({ "mcpServers": { MCP_SERVER_KEY: desired_mcp_entry(exec) } });
+    serde_json::to_string_pretty(&block).unwrap_or_else(|_| exec.display().to_string())
+}
+
+/// Register the doctrine MCP server in the project-root `.mcp.json`, writing only
+/// on change (unless `dry_run`). Reads → [`plan_mcp`] → atomic write, mirroring
+/// [`install_baseref`]. Rides beside the hook installer in the Claude arm.
+fn install_mcp(root: &Path, exec: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome> {
+    let path = root.join(MCP_REL);
+    let existing = fs::read_to_string(&path).ok();
+    let plan = plan_mcp(existing.as_deref(), exec);
     if let (Some(json), false) = (&plan.new_json, dry_run) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -1065,6 +1199,34 @@ pub(crate) fn wire(
                     BaseRefOutcome::AlreadyHead
                     | BaseRefOutcome::PrintedFallback
                     | BaseRefOutcome::NotApplicable => {}
+                }
+                // MCP registration leg (CHR-013): report a fresh wire or a stale
+                // refresh; a foreign/malformed `.mcp.json` entry prints the manual
+                // snippet. None (current, or codex) stays silent.
+                match report.mcp {
+                    RefreshOutcome::Wired(cmd) => {
+                        writeln!(
+                            stdout,
+                            "  {tag}{}: registered MCP server in {MCP_REL}: {cmd} serve --mcp",
+                            harness_label(h)
+                        )?;
+                    }
+                    RefreshOutcome::Refreshed(cmd) => {
+                        writeln!(
+                            stdout,
+                            "  {tag}{}: refreshed MCP server in {MCP_REL}: {cmd} serve --mcp",
+                            harness_label(h)
+                        )?;
+                    }
+                    RefreshOutcome::PrintedFallback => {
+                        writeln!(
+                            stdout,
+                            "  {}: {MCP_REL} has a foreign or malformed 'doctrine' entry — register manually:",
+                            harness_label(h)
+                        )?;
+                        writeln!(stdout, "{}", mcp_fallback_snippet(exec))?;
+                    }
+                    RefreshOutcome::None => {}
                 }
             }
             Err(e) => writeln!(stdout, "  {}: refresh failed: {e:#}", harness_label(h))?,
@@ -2334,26 +2496,45 @@ mod tests {
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
         let settings = root.join(SETTINGS_REL);
+        let mcp = root.join(MCP_REL);
 
         // dry-run plans a wire but writes nothing.
         let out = install_refresh(&Harness::Claude, root, exec, true).unwrap();
         assert!(matches!(out.hook, RefreshOutcome::Wired(_)));
         assert!(matches!(out.baseref, BaseRefOutcome::Set));
+        assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         assert!(!settings.exists(), "dry-run must not write settings");
+        assert!(!mcp.exists(), "dry-run must not write .mcp.json");
 
         // real run creates the file with the hook AND the baseRef key.
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
         assert!(matches!(out.hook, RefreshOutcome::Wired(_)));
         assert!(matches!(out.baseref, BaseRefOutcome::Set));
+        assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         let json = fs::read_to_string(&settings).unwrap();
         assert_eq!(commands(&json), vec!["/abs/doctrine boot".to_string()]);
         let parsed: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
+        // ...and registers the MCP server in .mcp.json.
+        let mcp_json: Value = serde_json::from_str(&fs::read_to_string(&mcp).unwrap()).unwrap();
+        assert_eq!(
+            mcp_json["mcpServers"]["doctrine"]["command"],
+            Value::String("/abs/doctrine".into())
+        );
+        assert_eq!(
+            mcp_json["mcpServers"]["doctrine"]["args"],
+            serde_json::json!(["serve", "--mcp"])
+        );
 
-        // codex is import-only — no hook, no file, no baseRef.
+        // a second real run is idempotent — no MCP change.
+        let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
+        assert!(matches!(out.mcp, RefreshOutcome::None));
+
+        // codex is import-only — no hook, no settings/baseRef, no .mcp.json.
         let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert!(matches!(out.hook, RefreshOutcome::None));
         assert!(matches!(out.baseref, BaseRefOutcome::NotApplicable));
+        assert!(matches!(out.mcp, RefreshOutcome::None));
     }
 
     // --- SL-064 PHASE-08 T4 / VT-1: worktree.baseRef="head" installer ---
@@ -2429,6 +2610,114 @@ mod tests {
             plan.new_json.is_none(),
             "malformed file must not be clobbered"
         );
+    }
+
+    // --- CHR-013: `.mcp.json` doctrine server registration (Claude arm) ---
+
+    fn mcp_exec() -> PathBuf {
+        PathBuf::from("/abs/doctrine")
+    }
+
+    #[test]
+    fn plan_mcp_writes_entry_when_absent() {
+        // Empty/absent .mcp.json ⇒ Wired, with the nested server entry written.
+        let plan = plan_mcp(None, &mcp_exec());
+        assert!(matches!(plan.outcome, RefreshOutcome::Wired(_)));
+        let parsed: Value =
+            serde_json::from_str(&plan.new_json.expect("a write is planned")).unwrap();
+        assert_eq!(
+            parsed["mcpServers"]["doctrine"]["command"],
+            Value::String("/abs/doctrine".into())
+        );
+        assert_eq!(
+            parsed["mcpServers"]["doctrine"]["args"],
+            serde_json::json!(["serve", "--mcp"])
+        );
+    }
+
+    #[test]
+    fn plan_mcp_idempotent_when_current() {
+        let existing =
+            r#"{"mcpServers":{"doctrine":{"command":"/abs/doctrine","args":["serve","--mcp"]}}}"#;
+        let plan = plan_mcp(Some(existing), &mcp_exec());
+        assert!(matches!(plan.outcome, RefreshOutcome::None));
+        assert!(plan.new_json.is_none(), "no write when already current");
+    }
+
+    #[test]
+    fn plan_mcp_refreshes_stale_exec_path() {
+        // Our entry by shape, but a stale command path ⇒ Refreshed (rewrite command).
+        let existing =
+            r#"{"mcpServers":{"doctrine":{"command":"/old/doctrine","args":["serve","--mcp"]}}}"#;
+        let plan = plan_mcp(Some(existing), &mcp_exec());
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let parsed: Value = serde_json::from_str(&plan.new_json.unwrap()).unwrap();
+        assert_eq!(
+            parsed["mcpServers"]["doctrine"]["command"],
+            Value::String("/abs/doctrine".into())
+        );
+    }
+
+    #[test]
+    fn plan_mcp_preserves_foreign_servers() {
+        // A sibling MCP server under mcpServers must survive our write intact.
+        let existing = r#"{"mcpServers":{"other":{"command":"/x/other","args":["go"]}}}"#;
+        let plan = plan_mcp(Some(existing), &mcp_exec());
+        assert!(matches!(plan.outcome, RefreshOutcome::Wired(_)));
+        let parsed: Value = serde_json::from_str(&plan.new_json.unwrap()).unwrap();
+        assert_eq!(
+            parsed["mcpServers"]["other"]["command"],
+            Value::String("/x/other".into())
+        );
+        assert_eq!(
+            parsed["mcpServers"]["doctrine"]["command"],
+            Value::String("/abs/doctrine".into())
+        );
+    }
+
+    #[test]
+    fn plan_mcp_foreign_doctrine_key_not_clobbered() {
+        // A `doctrine` key that is NOT our shape (foreign command / customised args)
+        // is a deliberate user entry — leave it untouched, surface a snippet.
+        let existing = r#"{"mcpServers":{"doctrine":{"command":"/x/tool","args":["run"]}}}"#;
+        let plan = plan_mcp(Some(existing), &mcp_exec());
+        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(
+            plan.new_json.is_none(),
+            "foreign entry must not be clobbered"
+        );
+    }
+
+    #[test]
+    fn plan_mcp_malformed_left_untouched() {
+        let plan = plan_mcp(Some("{ not json"), &mcp_exec());
+        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(
+            plan.new_json.is_none(),
+            "malformed file must not be clobbered"
+        );
+    }
+
+    #[test]
+    fn plan_mcp_non_object_servers_left_untouched() {
+        let existing = r#"{"mcpServers":[1,2,3]}"#;
+        let plan = plan_mcp(Some(existing), &mcp_exec());
+        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(plan.new_json.is_none());
+    }
+
+    #[test]
+    fn is_doctrine_mcp_entry_recognises_only_our_shape() {
+        let ours: Value =
+            serde_json::json!({"command":"/nix/store/a b/doctrine","args":["serve","--mcp"]});
+        assert!(is_doctrine_mcp_entry(&ours));
+        // foreign command file name
+        let foreign: Value = serde_json::json!({"command":"/x/tool","args":["serve","--mcp"]});
+        assert!(!is_doctrine_mcp_entry(&foreign));
+        // doctrine command but customised args
+        let custom: Value =
+            serde_json::json!({"command":"/x/doctrine","args":["serve","--mcp","--port","9"]});
+        assert!(!is_doctrine_mcp_entry(&custom));
     }
 
     // --- T6 (SL-018): the generalized seam carries a SEPARATE `memory sync` hook.
