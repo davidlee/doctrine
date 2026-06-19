@@ -1,0 +1,63 @@
+# Implementation plan for SL-108 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-108"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Update dispatch-subprocess skill with pi RPC spawn arm"
+objective = "Add the pi RPC spawn arm to dispatch-subprocess/SKILL.md alongside the existing codex exec arm, matching the design.md template exactly. Bump the e2e shrinkage test cap from ≤25 to ≤40."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and amended per RV-090 inquisition" },
+  { id = "EN-2", text = "pi v0.79.6 available in jail" }
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch-subprocess/SKILL.md contains pi RPC spawn arm matching design.md template" },
+  { id = "EX-2", text = "codex exec arm preserved unchanged" },
+  { id = "EX-3", text = "e2e_skills_dispatch_shrinkage body-line cap ≤40" }
+]
+verification = [
+  { id = "VT-1", expects = "e2e_skills_dispatch_shrinkage test passes with updated cap" }
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "E2e exercise — full cadence validation"
+objective = "Exercise the full fork→marker→spawn→agent_end→import→commit cadence with a pi RPC worker to validate the integration end-to-end."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — skill doc updated, shrinkage test green" }
+]
+exit_criteria = [
+  { id = "EX-1", text = "pi RPC worker spawned in forked worktree completes with agent_end" },
+  { id = "EX-2", text = "worker produces a clean delta" },
+  { id = "EX-3", text = "import funnel runs to completion" },
+  { id = "EX-4", text = "no extension_ui_request dialogs blocked the run" }
+]
+verification = [
+  { id = "VA-1", expects = "fork a worktree, spawn pi RPC worker with self-contained prompt, validate agent_end + clean delta + import success" },
+  { id = "VA-2", expects = "spawn template copied from skill into shell produces a running pi worker" },
+  { id = "VA-3", expects = "extraction fallback ladder exercised: synthetic agent_end payloads (no assistant messages, tool-call-only turn) produce correct status" },
+  { id = "VA-4", expects = "timeout enforcement: worker hung >300s is killed (exit 124), orchestrator handles gracefully" }
+]
+specs             = []
+requirements      = []
