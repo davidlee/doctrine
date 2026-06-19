@@ -1,0 +1,52 @@
+id    = 103
+slug  = "reconciliation-review-of-sl-118"
+title = "reconciliation review of SL-118"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-118"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Pre-existing e2e failure on candidate: relation_rows_of_one_label_are_contiguous — not SL-118's bundle"
+detail = "Expected: cargo test is fully green on the candidate surface (cand-118-review-001 at d1fa743b). Observed: tests/e2e_relation_migration_storage.rs::relation_rows_of_one_label_are_contiguous panics on .doctrine/slice/101/slice-101.toml carrying non-contiguous [[relation]] rows — ISS-030 corpus-data dirt (same failure reproduces on a clean main checkout with no SL-118 code). SL-118 touched no relation or migration code paths. Classified as pre-existing, not a regression."
+disposition = "aligned"
+response = "Not an SL-118 regression. The sole failing test reproduces identically on a clean main checkout (b7ed17b2) with no SL-118 code, so the cause is pre-existing ISS-030 corpus-data dirt. SL-118's bundle is clean: 1994 tests pass in the main binary, clippy zero-warning. The corpus-data fix is out of scope."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Output format drifts from design §3 sketch: colon placement and unit display"
+detail = "Design §3 sketches output format as: 'estimate set SL-118: lower=1 upper=3 (espresso_shots)' / 'no estimate on SL-118'. Implementation produces: 'estimate set: SL-118 lower=1 upper=3' / 'no estimate to clear: SL-118'. The colon moved from after the ID to after the verb, and unit display (espresso_shots) is not implemented. The implementation is clear and functional; the design sketch is suggestive, not a precise contract. Unit display would couple the handler to the doctrine.toml config read path — a non-trivial feature the design sketches but does not require (no VT pins output format)."
+disposition = "aligned"
+response = "The design §3 output sketches are suggestive framing, not a binding contract — no VT pins output format strings. The implementation's output ('estimate set: SL-118 lower=1 upper=3') is clear and consistent with the verb shape. Unit display (espresso_shots) would require coupling the handler to the config read path, introducing a dependency the design does not require. Tolerated as intentional simplification."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "ADR-001 layering + behaviour-preservation gate holds: 1994 tests green, clippy zero-warning"
+detail = "Expected (design VT-13, plan PHASE-01 EX-3, PHASE-02 EX-2, PHASE-03 EX-3): facet_write imports only toml_edit/anyhow/std (ADR-001 leaf); just gate green; pre-existing suites unchanged. Observed on candidate (cand-118-review-001, d1fa743b): (1) grep 'use crate::' src/facet_write.rs → empty — leaf-clean, no engine/command/estimate/value deps. (2) cargo clippy → zero warnings. (3) cargo test → 1994 passed in main binary, all sub-binaries green (except the unrelated e2e, F-1). (4) Pre-existing estimate/value test suites pass unchanged (estimate.rs 31 tests, value.rs 15 tests — 4 new PHASE-01 tests added, zero existing tests modified). (5) cargo fmt clean."
+disposition = "aligned"
+response = "Verified correct, no change needed. The ADR-001 leaf property is compiler-enforced; clippy zero-warning, fmt clean, and behaviour-preservation gate is satisfied."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "VT coverage completeness: all 13 design VTs + VH-1 dogfood are pinned by tests on the candidate"
+detail = "Expected: every design VT (VT-1 through VT-13) and VH-1 (dogfood) is exercised on the candidate surface. Observed: VT-1 (estimate::validate finite x4 tests), VT-2 (value::validate x3 tests), VT-3 (behaviour-preservation — 1994 tests green, 0 estimate/value tests modified), VT-1 through VT-8 (facet_write — 17 tests covering alloc, overwrite, no-op, clear, golden round-trip, scalar + AoT errors, forward-compat both facets, layering-all-public-fns exercise), VT-8 through VT-12 (CLI — 16 tests: invalid matrix, -x point, value round-trip + negative + inf/nan rejection, catalog scan round-trip, typed-reader round-trip). VH-1 (dogfood): [estimate] lower=3.0 upper=3.0 authored on SL-118 via the verb itself — present on cand-118-review-001's slice-118.toml. 1994 tests green, clippy zero-warning."
+disposition = "aligned"
+response = "All design VTs and VH-1 are pinned by concrete tests on the candidate surface. Coverage is complete; no missing verification."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
