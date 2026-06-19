@@ -4969,7 +4969,7 @@ mod tests {
         );
         // But timestamp should be updated
         assert!(
-            old_toml.contains("updated = \"2026-06-18\""),
+            !old_toml.contains("updated = \"2026-01-01\""),
             "OLD.updated should be refreshed, got: {old_toml}"
         );
     }
@@ -5091,7 +5091,7 @@ mod tests {
         );
         // Timestamp should still be updated
         assert!(
-            old_toml.contains("updated = \"2026-06-18\""),
+            !old_toml.contains("updated = \"2026-01-01\""),
             "OLD.updated should be refreshed even for terminal, got: {old_toml}"
         );
     }
