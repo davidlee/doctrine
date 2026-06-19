@@ -1,0 +1,72 @@
+id    = 105
+slug  = "reconciliation-review-of-sl-119"
+title = "reconciliation review of SL-119"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-119"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "plan_append_system uses symlink_metadata — refinement over Path::exists()"
+detail = """
+Expected (design.md §3): plan_append_system checks link_path.exists() (which follows symlinks). A dangling symlink appears absent, causing unnecessary ReplaceLink action.
+
+Observed: Implementation uses std::fs::symlink_metadata(&link_path).is_err() instead. This correctly detects the symlink entry regardless of target existence. This is a design refinement, not a deviation — the implementation handles the dangling-symlink window better than the design specified.
+
+Impact: Positive — avoids false ReplaceLink during the brief window between install creating the symlink and the first doctrine boot populating boot.md."""
+disposition = "aligned"
+response = "Implementation matches design; no change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "BOOT_REF_GUARD phrasing uses 'system prompt or preceding messages' — matches VA-1"
+detail = """
+Expected (plan.toml PHASE-01 VA-1): Guard text says 'context (system prompt or preceding messages)', not bare 'system prompt'.
+
+Observed: BOOT_REF_GUARD reads: 'anywhere in your context (system prompt or preceding messages)' — matches the VA-1 requirement exactly.
+
+Impact: None — the guard text conforms to the agent-check criterion. pi's APPEND_SYSTEM.md delivers content into the system prompt; the guard covers both delivery paths."""
+disposition = "aligned"
+response = "Implementation matches design; no change needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "All 85 boot tests pass — behaviour-preservation gate satisfied"
+detail = """
+Expected: All existing boot tests must pass (behaviour-preservation baseline per EN-2).
+
+Observed: cargo test -p doctrine -- boot: 85 passed, 0 failed. The 67 pre-existing boot tests all pass. 18 new tests added across phases (1 sentinel + 3 guard + 8 symlink + 10 extension — total 22, minus 4 guard test replacements).
+
+Impact: None — the gate is fully satisfied."""
+disposition = "aligned"
+response = "Implementation matches design; no change needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "parse_harness now rejects --agent codex (old name) — user-facing break"
+detail = """
+Expected (plan.toml PHASE-01 EX-4): Harness::Codex renamed to Harness::Pi — no remaining Codex variant references.
+
+Observed: parse_harness now accepts 'pi'/'PI' (case-insensitive) and rejects 'codex'. harness_label returns 'pi'. resolve_harnesses looks for .pi/ directory (not .codex/). All 14 Harness::Pi references in dispatch branch are correct. Zero Harness::Codex references remain.
+
+Impact: --agent codex is no longer accepted. This is intentional per design decision 'Harness::Codex renamed to Harness::Pi'. Users with scripts using --agent codex need to update to --agent pi."""
+disposition = "aligned"
+response = "Implementation matches design; no change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
