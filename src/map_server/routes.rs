@@ -562,6 +562,49 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert!(parsed.get("nodes").is_some(), "missing nodes key");
         assert!(parsed.get("edges").is_some(), "missing edges key");
+        // SL-103 PHASE-03: the sealed graph contract always carries top-level
+        // `units` (graph-neutral `estimation`/`value` keys).
+        let units = parsed.get("units").expect("missing units key");
+        assert!(
+            units.get("estimation").is_some(),
+            "missing units.estimation"
+        );
+        assert!(units.get("value").is_some(), "missing units.value");
+    }
+
+    /// SL-103 PHASE-03 VT-6: `GET /api/graph` serves the SAME sealed contract as
+    /// `CatalogGraph` — a faceted slice surfaces per-node `estimate`/`value`
+    /// with graph-neutral field names, alongside top-level `units`.
+    #[tokio::test]
+    async fn graph_serves_facets_and_units_end_to_end() {
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        crate::catalog::test_helpers::write(
+            &root_path,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s1\"\ntitle = \"S1\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [estimate]\nlower = 2\nupper = 8\n\n[value]\nvalue = 5\n",
+        );
+        crate::catalog::test_helpers::write(
+            &root_path,
+            ".doctrine/slice/001/slice-001.md",
+            "scope\n",
+        );
+        let app = super::super::tests::test_app(&root_path).await;
+
+        let (status, _headers, body) = send(&app, json_req("GET", "/api/graph", None)).await;
+        assert_eq!(status, 200);
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        let units = parsed.get("units").expect("missing units key");
+        assert_eq!(units["estimation"], "espresso_shots");
+        assert_eq!(units["value"], "magic_beans");
+
+        let node = &parsed["nodes"]["SL-001"];
+        assert_eq!(node["estimate"]["lower"], 2.0);
+        assert_eq!(node["estimate"]["upper"], 8.0);
+        assert_eq!(node["value"]["value"], 5.0);
     }
 
     #[tokio::test]
@@ -1222,6 +1265,8 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "Assumption",
                 memory_type: Some("assumption".to_string()),
+                estimate: None,
+                value: None,
             },
         );
         let priority_graph = crate::priority::graph::build(root_path).expect("priority graph");
