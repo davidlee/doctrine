@@ -1,0 +1,41 @@
+memory_uid = "mem_019edeb71fbe7982869dc8d19bc541e0"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SL-109 print_review location pattern: in leaf module for test access"
+summary = "print_review() in review.rs (not main.rs) so golden tests call it. Returns String not writes stdout. Format-only fields (#[serde(skip)]) keep JSON clean for MCP. SL-109."
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "23448480a924706df41fc3962da291039378b0b1"
+tree = "8544a6e664da887345030fef24a6ee6d7d276c88"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "23448480a924706df41fc3962da291039378b0b1"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
