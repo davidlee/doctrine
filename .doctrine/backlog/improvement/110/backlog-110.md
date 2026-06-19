@@ -80,11 +80,11 @@ auto-resolve.
 
 `doctrine worktree import` applies a worker's single delta `S` onto the
 coordination branch:
-- `git diff B..S` → pipe to `git apply --3way --index` (non-committing)
+- `git diff B..S` captured as RAW BYTES (`git_bytes`, not `git_text`) → piped to
+  `git apply --3way --index` (non-committing). The raw capture preserves the
+  trailing newline `git apply` requires (ISS-032/ISS-026, fixed).
 - Refuses if `S^ != B` (wrong base — worker forked off wrong commit)
 - Refuses if delta touches `.doctrine/` or `.claude/` (R-5 belt)
-- **Known bug (ISS-026):** piped diff to `git apply` drops trailing newline →
-  `corrupt patch at <stdin>:N`. Workaround: diff to file, apply from file.
 
 ### Projection (`dispatch sync`)
 
@@ -112,6 +112,14 @@ worktree` forks off the **Bash tool's cwd HEAD**, not the session root
 worktree before every spawn — Bash cwd HEAD == B, so the worker forks exactly
 the intended base. Park Bash cwd in the coord tree for the full drive loop;
 serial dependent phases self-base automatically.
+
+**Placement precondition (ISS-031):** the cd above only takes effect if the
+coordination worktree lives **inside the project root** (convention
+`.dispatch/SL-<n>`). Under a cwd-confining jail a `cd` to an outside sibling
+silently reverts to the root — the worker then forks `main`, not B. `dispatch
+setup` now fails closed on the claude arm (CLAUDE-prefixed env present) when
+`--dir` resolves outside the root; non-claude arms keep their enforced
+outside-root isolation (ADR-008).
 
 **Identity — SubagentStart stamp (best-effort, fail-open):** A matcher-scoped,
 sync-blocking `SubagentStart` hook runs `doctrine worktree marker
@@ -273,6 +281,12 @@ integrate's actual trunk push under CAS (`mem_019ec66a43ee`).
   session root. The skill never instructed `cd` into the coord tree before
   spawn → workers forked off `main` instead of B. Fixed by adding
   pre-spawn cd instruction to `dispatch-agent/SKILL.md`.
+- **ISS-031 (FIXED):** the cd is necessary but not sufficient — the coord
+  worktree must live INSIDE the project root, else the cd silently reverts under
+  a jail and the worker forks `main`. `dispatch setup` now fails closed on the
+  claude arm (CLAUDE env present) for an outside-root `--dir`; use
+  `.dispatch/SL-<n>`. The whole ISS-029/030/031/032 family is one distinction:
+  git ref vs working-tree placement.
 - `baseRef: "head"` in `.claude/settings.local.json` is honoured against
   Bash cwd HEAD — base is controllable by placement, not ref-redirect
   (`mem_019ec6142d3b`).
@@ -295,9 +309,11 @@ integrate's actual trunk push under CAS (`mem_019ec66a43ee`).
 
 ### Import & git
 
-- **ISS-026:** `worktree import` pipes diff to `git apply` → drops trailing
-  newline → `corrupt patch at <stdin>:N`. Workaround: diff to file, apply from
-  file.
+- **ISS-026 / ISS-032 (FIXED):** `worktree import` dropped the diff's trailing
+  newline before `git apply` → `corrupt patch at <stdin>:N` whenever the final
+  hunk ends at EOF. `git_text`'s `.trim()` was the culprit; import now captures
+  raw bytes via `git_bytes`. ISS-026 (SL-103) and ISS-032 (SL-111) are the same
+  bug; ISS-026 closed duplicate. No more diff-to-file workaround needed.
 - **IMP-043:** Import re-anchor (`--allow-reanchor`) — 3-way onto moved
   coordination HEAD with computable path-disjointness. Deferred.
 - Under rtk (git proxy), `git diff` is stat-proxied — use `git checkout` to
@@ -397,10 +413,12 @@ marker) is the agnostic floor every harness reaches.
 | ISS-011 | issue | SubagentStart hook merge keys identity on command only — stale matcher never heals |
 | ISS-022 | issue | dispatch sync --integrate left staging area in stale reverse-diff state |
 | ISS-024 | issue | candidate create: stray .doctrine/slice/ dirs break corpus-scanner tests |
-| ISS-026 | issue | worktree import: piped diff drops trailing newline → corrupt patch |
+| ISS-026 | issue | (CLOSED dup of ISS-032) worktree import drops trailing newline → corrupt patch |
 | ISS-028 | issue | worker-marker confinement refuses CLI writes in fork, breaking tests |
 | ISS-029 | issue | (FIXED) missing cd-into-coord-tree instruction — workers forked off main (after ISS-030) |
 | ISS-030 | issue | dispatch sync --integrate leaves stale worktree; close verify reads ref not tree |
+| ISS-031 | issue | (FIXED) coord worktree outside root → claude worker forks main; setup fails closed under CLAUDE env |
+| ISS-032 | issue | (FIXED) worktree import strips trailing newline; capture raw bytes via git_bytes |
 | IMP-004 | improvement | Jail dispatch isolation spike: per-worktree target and bwrap confinement |
 | IMP-043 | improvement | import verb: moved-HEAD re-anchor (--allow-reanchor) |
 | IMP-052 | improvement | orchestrator post-spawn marker check: abort unstamped worker fork |
