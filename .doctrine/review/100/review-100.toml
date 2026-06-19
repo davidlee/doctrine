@@ -1,0 +1,70 @@
+id    = 100
+slug  = "reconciliation-review-of-sl-103"
+title = "reconciliation review of SL-103"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-103"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Value graph exposure widens SL-103 past REQ-274 (estimate-only) with no requirement homing it (design D1/§7)"
+detail = "D1 carries the value facet onto the graph alongside estimate; FR-006 (REQ-274) names estimate only, and REQ-278/279/280 govern the value model/validation/unit (SL-101), not its graph projection. Confirmed on candidate/103/review-001: graph.rs/hydrate.rs/scan.rs project value symmetrically with estimate; the contract ships value with no REQ tracing it. Design §7 declares this deliberate traced-pending scope, not an oversight. Reconcile obligation: author a value-graph-exposure REQ (sibling to REQ-274), choose its spec home (SPEC-020 is titled 'Estimate graph exposure' — rename/extend vs own spec), bind SL-103. Already tracked CHR-011. The CLI cannot mint an un-homed REQ, so this is correctly deferred to reconcile, not fixable in audit scope."
+disposition = "verified"
+response = "Observation confirmed; remediation is reconcile's, not audit's (CLI cannot mint an un-homed REQ). Recorded in the reconciliation brief (Governance/REV): author value-graph-exposure REQ sibling to REQ-274, choose spec home (SPEC-020 rename/extend vs own), bind SL-103. Tracked CHR-011."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "SL-103 not yet traced to REQ-280 (value unit resolution), which §5.4 realises"
+detail = "scan_catalog's resolve_units (hydrate.rs) resolves the value unit via value::resolve_unit into the top-level Units block — realising REQ-280 (value unit resolution). SL-103's relationships list specs SPEC-020 + requirements REQ-274 only; no edge to REQ-280. Design §7 flags this as a reconcile trace obligation. Verified-pending: add the SL-103 → REQ-280 requirement edge at reconcile. Tracked in CHR-011."
+disposition = "verified"
+response = "Confirmed §5.4 realises REQ-280. Reconciliation brief (Governance/REV): add SL-103 → REQ-280 requirement edge at reconcile. Tracked CHR-011."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "D2 satisfies REQ-274 'project unit' by top-level reachability, not literal per-node duplication — needs ratification"
+detail = "REQ-274 (FR-006) enumerates 'project unit' among per-estimated-node fields. D2 carries units as ONE top-level Catalog/CatalogGraph block (units{estimation,value}), not a per-node field, on the rationale that units are project-wide constants reachable from every node via the graph the consumer holds. Sound and DRY, but it interprets REQ-274's 'per node' as reachability rather than literal placement. Design §7 (RV-094 F-5) asks to ratify REQ-274's intent at reconcile rather than assume it. Verified: confirm REQ-274 intent is satisfied by reachability at reconcile."
+disposition = "verified"
+response = "Confirmed D2 satisfies REQ-274 'project unit' by reachability. Reconciliation brief (Governance): ratify REQ-274 intent at reconcile (units project-wide constant, reachable per-node via the held graph) rather than assume; no code change."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "read_facets does a second per-entity TOML parse + carries a benign divergent-read window (D3/§5.1, RV-094 F-6)"
+detail = "read_facets (scan.rs) re-reads and re-parses each entity TOML to pull [estimate]/[value], a second parse after status_and_title_for already parsed it; and on a vanished/garbled file between the two reads it returns absent rather than re-diagnose (the status read is the authority next scan). Both are conscious design choices: D3 rules the extra parse negligible on a tooling surface, RV-094 F-6 rules the divergent-read window benign. Code matches the ratified design — aligned. The design itself records 'the cleaner fix is to read each entity TOML ONCE and derive status/title/facets from one table; recorded for reconcile, out of scope here.' Capturing that as a backlog improvement at harvest."
+disposition = "aligned"
+response = "Code matches the RV-094-ratified design (D3 extra parse negligible; F-6 divergent-read window benign — status read re-diagnoses next scan). No fix-now. The design-recorded cleaner fix (read each entity TOML once, derive status/title/facets from one table) is durable improvement work → filed IMP at harvest."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "VA-1 (deferred from dispatch): no dispatch/execute/audit/close predicate reads facet presence — verified clean"
+detail = "NF-001 structural non-blocking, deferred from dispatch as agent-attested. Verified by absence: EstimateFacet/ValueFacet are referenced only in estimate.rs/value.rs (defs), catalog/{scan,hydrate,graph}.rs (SL-103 projection), estimate/display.rs (SL-102, still dead-code-expected), and slice.rs (SL-101 show path). No dispatch/execute/audit/close lifecycle predicate reads .estimate/.value or their presence. The facets are pure additive projection data; no gate consumes them."
+disposition = "aligned"
+response = "VA-1 verified clean by absence — no dispatch/execute/audit/close predicate reads facet presence. Deferred-from-dispatch attestation discharged."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "VA-2 (deferred from dispatch): contract field names clear of SPEC-001 whole-word denylist — verified clean"
+detail = "SPEC-001 Appendix B (per spec-020.md:105-106) forbids standalone project/task/schedule/capacity. Contract field names shipped: units, estimation, value, estimate, lower, upper. None match the denylist (whole-word). Graph contract vocabulary is graph-neutral. Confirmed on the serialized JSON shape test (graph.rs graph_contract_json_shape_is_graph_neutral, routes.rs graph_serves_facets_and_units_end_to_end)."
+disposition = "aligned"
+response = "VA-2 verified clean — units/estimation/value/estimate/lower/upper all clear of the SPEC-001 whole-word denylist. Deferred-from-dispatch attestation discharged."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
