@@ -1,7 +1,7 @@
 id = 108
 slug = "pi-dispatch-worker"
 title = "pi dispatch worker integration via RPC mode"
-status = "ready"
+status = "done"
 created = "2026-06-19"
 updated = "2026-06-19"
 

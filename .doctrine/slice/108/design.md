@@ -29,19 +29,26 @@ fork_env="$(doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worke
   || { echo "fork failed: $?" >&2; exit 1; }
 cp AGENTS.md "$D/" \
   || { echo "AGENTS.md copy failed: $?" >&2; exit 1; }
+PI_FIFO=$(mktemp -u) && mkfifo "$PI_FIFO"
+{ printf '%s\n' \
+    '{"type":"set_auto_retry","enabled":false}' \
+    '{"type":"prompt","message":"<pre-distilled prompt>"}'
+  sleep 300  # keep fifo write end open until timeout kills pi
+} > "$PI_FIFO" &
 timeout 300 env -C "$D" DOCTRINE_WORKER=1 $fork_env \
   pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
      --no-extensions --no-skills --no-themes \
      --offline --approve --tools read,bash,edit,write,grep,find,ls \
-  <<'PI_MSGS'
-{"type":"request","method":"set_auto_retry","params":{"enabled":false}}
-{"type":"prompt","message":"<pre-distilled prompt>"}
-PI_MSGS
+  < "$PI_FIFO"
+rm -f "$PI_FIFO"
 ```
 
-`<<'PI_MSGS'` is a bash heredoc with quoted delimiter (no variable expansion);
-the dispatch jail uses bash. Non-bash orchestrators replace with
-`printf '%s\n' '<json1>' '<json2>' | pi …`.
+**Why a named pipe (fifo) instead of a heredoc:** pi v0.79.6 RPC mode exits
+immediately on stdin EOF — if stdin closes before the model responds, pi exits
+without emitting `agent_end`. The named pipe keeps the write end open (via
+`sleep 300`) so pi stays alive until the model responds. `mktemp -u` generates a
+unique name; `rm -f` cleans up after exit. Non-bash orchestrators replace with
+their platform's fifo / pipe-open idiom.
 
 **Flag rationale:**
 
@@ -50,13 +57,14 @@ the dispatch jail uses bash. Non-bash orchestrators replace with
 | `--mode rpc` | Structured JSONL protocol; `agent_end` gives typed completion signal with full message array |
 | `--thinking off` | Workers implement code changes; extended reasoning is wasteful. Overridable per-phase for reasoning-heavy tasks |
 | `--session-dir "$D/.pi-session"` | Session colocated with fork; inspectable during the batch if worker fails; GC'd with fork |
-| `--no-extensions` | No project-local extension surface — prevents `extension_ui_request` dialog hazards in RPC mode |
+| `--no-extensions` | No project-local extension surface — prevents `extension_ui_request` dialog hazards in RPC mode. Note: installed packages (e.g. pi-subagents) may still emit fire-and-forget widget events; extraction pipelines should ignore unknown event types |
 | `--no-skills` | No doctrine skill corpus in context; the boot sector references skills the worker won't have (pi handles missing skill references gracefully) |
 | `--no-themes` | Unnecessary in headless mode |
 | `--offline` | Suppress startup version check + package update checks — no network needed |
 | `--approve` | The orchestrator trusts its own worker; no trust hang. Projects with stricter trust may override |
 | `--tools read,bash,edit,write,grep,find,ls` | pi's default is `read,write,edit,bash` — `grep`,`find`,`ls` are explicitly enabled. Structured tools reduce turn-count vs raw bash calls |
-| `set_auto_retry` (RPC) | Disabled — the orchestrator owns retries, not the harness. Sent as the first RPC message before the prompt |
+| `set_auto_retry` (RPC) | Disabled — the orchestrator owns retries, not the harness. Sent as the first RPC message before the prompt. Format: `{"type":"set_auto_retry","enabled":false}` (direct command type, not `request` wrapper) |
+| `sleep 300` (fifo keepalive) | Keeps the fifo write end open so pi stays alive during model execution. 300s matches the `timeout` duration — pi exits naturally when the model responds too; the sleep is a safety upper bound |
 
 **Timeout:** `timeout 300` enforces a 300s wall-clock deadline inclusive of all
 retry attempts. On expiry: `timeout` sends SIGTERM to pi (grace); if the process
