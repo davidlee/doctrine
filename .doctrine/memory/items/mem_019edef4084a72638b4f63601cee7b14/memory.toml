@@ -1,0 +1,42 @@
+memory_uid = "mem_019edef4084a72638b4f63601cee7b14"
+memory_key = "mem.pattern.mcp.serve-path-long-flag"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "MCP serve uses --path not -p: integration test spawns must use long form"
+summary = ""
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["mcp", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a178c8de5195d62754d06863a4311380ba5a4553"
+ref_name = "refs/heads/main"
+checkout_state_id = "c86067040c3d3d1bee7aeb6c4af736f1dc56a93cf30222e7c8c2c86783d2f050"
+base_commit = "44c68ec6d7778d71364e957ed4b99dbfa03e8100"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "minor"
+weight = 0
+

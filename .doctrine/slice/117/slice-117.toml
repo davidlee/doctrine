@@ -1,7 +1,7 @@
 id = 117
 slug = "dispatch-worker-harness-select"
 title = "dispatch: preferred worker harness for arm selection (subagent vs subprocess)"
-status = "proposed"
+status = "done"
 created = "2026-06-19"
 updated = "2026-06-19"
 
