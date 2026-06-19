@@ -26,6 +26,8 @@ Do not stash. *never* checkout or otherwise discard uncommitted work.
 Assume multiple agents are working in the same repository, and use `/worktree` 
 or `/dispatch` accordingly.
 
+commit as soon as work is coherent; git add specifies paths, don't use -A unless asked.
+
 ---
 
 ## storage model (the storage rule)
