@@ -1,7 +1,7 @@
 id = 112
 slug = "layering-enforcement-engine-crate"
 title = "Enforce ADR-001 layering: engine crate extraction + dependency fitness gate"
-status = "reconcile"
+status = "done"
 created = "2026-06-19"
 updated = "2026-06-19"
 
