@@ -34,10 +34,15 @@ dropped node, never a failed scan.
 
 ## 3. Decisions
 
-- **D1 — Expose estimate AND value.** The slice's FR-006 names estimate only, but
-  the generic scan-side reader carries both facets naturally and a symmetric
-  contract is more coherent than a near-identical follow-up for value.
-  *Governance: value graph exposure has no requirement — see §7 Open / governance.*
+- **D1 — Expose estimate AND value.** The slice's FR-006 (REQ-274) names estimate
+  only, but the generic scan-side reader carries both facets naturally and a
+  symmetric contract is more coherent than a near-identical follow-up for value.
+  *Governance: value graph exposure is **deliberate, traced-pending** scope, not
+  an oversight — no existing REQ covers it (REQ-274 is estimate-only; REQ-278/279/
+  280 govern the value **model/validation/unit**, SL-101's territory, not graph
+  exposure). The requirement is authored and given a spec home at reconcile —
+  see §7. The value unit this slice resolves (§5.4) realises REQ-280; SL-103
+  traces to it at reconcile alongside the new exposure REQ. [RV-094 F-1]*
 - **D2 — Units are a top-level block, not per-node.** The estimation/value units
   are project-wide constants (`doctrine.toml`), not properties of any node.
   Carrying them once on `Catalog`/`CatalogGraph` is DRY and avoids encoding false
@@ -56,10 +61,24 @@ dropped node, never a failed scan.
   pushes an `Error` `CatalogDiagnostic` (loud) and drops *that* facet to `None`
   (no bound coercion → no silent repair), leaving the node and the sibling facet
   intact. This mirrors the existing per-entity diagnostic+continue pattern.
+  *Contract note [RV-094 F-2]:* on the wire, a malformed-present facet is
+  **indistinguishable from an absent one** — both omit the key (`skip_serializing_if`);
+  the corruption is observable only out-of-band in the `Error` `CatalogDiagnostic`
+  stream. This is the **conscious v1 contract**: the loud diagnostic is the signal,
+  the graph stays policy-free, and "never a repaired bound" is honoured (no coercion).
+  A consumer that must distinguish the two reads the diagnostics. If a future
+  consumer needs an in-band present-but-invalid marker, that is an additive contract
+  change, not a silent one.
 - **D5 — Reuse the leaf serialisers; no new contract types.** `EstimateFacet`
   (`{lower, upper}`) and `ValueFacet` (`{value}`) already derive `Serialize`. The
   contract is those types behind `Option` with `skip_serializing_if`, plus a new
-  `Units`. No DTO duplication.
+  `Units`. No DTO duplication. *Coupling note [RV-094 F-7]:* because `/api/graph`
+  serves `CatalogGraph` raw (§6.3 F-3), these leaf structs **are** the external
+  contract — a field added to `EstimateFacet`/`ValueFacet` for internal reasons
+  changes the public wire shape. Accepted consciously: the facet structs are
+  **change-controlled contract types**, not free-to-mutate internals. A
+  serialisation-DTO seam is deferred unless/until model and contract need to
+  diverge.
 
 ## 4. Data structures (the contract)
 
@@ -146,8 +165,12 @@ fn read_facets(
     let name = format!("{id:03}");
     let path = root.join(kref.kind.dir).join(&name)
         .join(format!("{}-{name}.toml", kref.stem));
-    // The status read already validated this file parses; a vanished/garbled
-    // file here is someone else's diagnostic — return absent rather than re-report.
+    // The status read already validated this file parses; a vanished/garbled file
+    // here is a concurrent-edit window (the status read is the authority and will
+    // re-diagnose next scan). v1 returns absent rather than re-report [RV-094 F-6].
+    // NOTE: the cleaner fix is to read each entity TOML ONCE and derive
+    // status/title/facets from the one table — eliminating both this second parse
+    // (D3) and the divergent-read window. Recorded for reconcile; out of scope here.
     let Ok(text) = std::fs::read_to_string(&path) else { return (None, None) };
     let Ok(table) = text.parse::<toml::Table>() else { return (None, None) };
 
@@ -181,12 +204,18 @@ input, not a read. Stores `units` on the returned `Catalog`.
 
 ### 5.4 `scan_catalog` (signature unchanged)
 
-Resolves units in the shell, mirroring `coverage_store::load_config`:
+Resolves units in the shell, mirroring `coverage_store::load_config` **faithfully**
+— default only on `NotFound`, propagate every other read error and all parse
+errors. A swallow-all `Err(_) => default` (the prior draft) would mask permission
+/ transient-I/O faults as "no config → default units", silently mis-resolving the
+contract on a corrupt environment [RV-094 F-4]:
 
 ```rust
 let cfg = match std::fs::read_to_string(root.join("doctrine.toml")) {
-    Ok(text) => crate::dtoml::parse(&text)?,
-    Err(_) => crate::dtoml::DoctrineToml::default(),  // tolerant → defaults
+    Ok(text) => crate::dtoml::parse(&text)?,                 // parse errors propagate
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
+        crate::dtoml::DoctrineToml::default(),               // absent file → defaults
+    Err(e) => return Err(e.into()),                          // permission/I-O → loud
 };
 let units = Units {
     estimation: crate::estimate::resolve_unit(&cfg.estimation),
@@ -244,17 +273,42 @@ Existing hydrate/graph/map_server suites stay green. The additive `units` key an
 the new struct fields require updating direct construction sites
 (`map_server/routes.rs` `CatalogNode { … }`, graph/hydrate test literals) and the
 single `from_scanned` call site (`scan_catalog` — its only caller; no test invokes
-it directly) — additive contract evolution, not regression. The
-map_server HTTP view is unaffected: it maps `CatalogNode` → its own `{key,label}`
-DTO explicitly and picks no facet fields (surfacing facets in the web map is a UI
-concern, out of scope).
+it directly) — additive contract evolution, not regression.
+
+**HTTP surface — corrected [RV-094 F-3].** Two map_server endpoints, different
+exposure:
+- `/api/map` (and the rendered web view) maps `CatalogNode` → its own
+  `{key,label}` DTO explicitly and picks no facet fields — **unaffected**.
+- `/api/graph` (`map_server/routes.rs` `graph()`) serialises the whole
+  `CatalogGraph` directly (`Json(snapshot)`), so the additive top-level `units`
+  and per-node `estimate`/`value` **will surface on this endpoint**. This is
+  **accepted as in scope** (per the F-3 ruling): `/api/graph` is the Cordage-facing
+  raw-contract endpoint, and exposing the same policy-free facet contract there as
+  on `catalog graph` is coherent, not a leak. The earlier "HTTP view unaffected,
+  out of scope" claim was wrong and is retracted. The rendered *web map UI* remains
+  out of scope (it reads the `{key,label}` DTO, not the facets).
 
 ## 7. Open / governance
 
-- **Value graph exposure has no requirement.** D1 widens the slice past FR-006
-  (estimate only). Before lock/reconcile: either add a value-exposure REQ under
-  SPEC-020, or widen REQ-274's scope to both facets. Carried into reconciliation;
-  must not silently ship un-traced scope.
+- **Value graph exposure — orphan requirement, homed at reconcile [RV-094 F-1].**
+  D1 deliberately exposes value past REQ-274 (estimate-only). No existing REQ
+  covers value *graph exposure*: REQ-274 is estimate-only, and REQ-278/279/280
+  govern the value *model / validation / unit resolution* (SL-101), not its
+  projection onto the graph. This is **intentional scope**, recorded here so it
+  does not ship silently un-traced.
+  - **Reconcile obligation (the orphan):** author a value-graph-exposure
+    requirement (sibling in intent to REQ-274) and bind SL-103 to it; decide its
+    spec home then — SPEC-020 is titled "Estimate graph exposure", so value may
+    warrant a renamed/extended SPEC-020 or its own spec. *(The CLI cannot mint an
+    orphaned, un-homed requirement — `spec req add` couples reservation to a spec
+    membership — so the requirement is captured here as intent and formally minted
+    + homed during reconcile, where the spec home is chosen.)*
+  - **Also trace at reconcile:** SL-103 → REQ-280 (value unit resolution), which
+    §5.4 realises.
+- **D2 unit literalism [RV-094 F-5].** D2 satisfies REQ-274's "project unit" by
+  reachability (top-level block), not literal per-node duplication. Sound (units
+  are project-wide constants), but ratify REQ-274's intent at reconcile rather
+  than assume it.
 
 ## 8. Code impact summary
 

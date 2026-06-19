@@ -14,52 +14,66 @@ ref   = "SL-103"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "EXPECTED traced scope before lock; OBSERVED value graph-exposure implemented against no requirement (D1/OQ-1)"
 detail = "design.md §3 D1 + §7 widen the slice past FR-006/REQ-274 (estimate-only — REQ-274 title: 'Expose estimate metadata through a policy-free graph contract') to expose the value facet, with the value-exposure REQ deferred to reconcile. Verified: SPEC-020 carries REQ-278 (ValueFacet model/parse), REQ-279 (value validation), REQ-280 (value unit resolution) — these are SL-101 MODEL requirements, NOT value GRAPH exposure; no requirement covers exposing the value magnitude on the catalog/graph contract. SL-103 traces only to REQ-274 (doctrine slice show SL-103). So the premise 'value exposure has no requirement' is correct, but locking + implementing value graph exposure before any REQ exists violates 'no code without a traced requirement' (boot.md/AGENTS.md). NOTE: the unit-resolution this slice performs (§5.4) realises REQ-280 — SL-103 is also untraced to that. PENANCE before lock: author a value-graph-exposure REQ under SPEC-020 (sibling to REQ-274) and trace SL-103 to it; trace SL-103→REQ-280 (value unit, realised here); or cut value from the slice. Do NOT defer requirement authorship to reconcile."
+disposition = "design-wrong"
+response = "Design corrected (design.md D1 + §7): value graph exposure is recorded as deliberate, traced-pending scope — not a silent gap. Premise verified: REQ-274 is estimate-only; REQ-278/279/280 govern the value model/validation/unit (SL-101), NOT graph exposure — so no existing REQ fits, and codex's 'trace to 278-280' was the wrong target. Per User ruling this is a reconciliation issue: the orphan REQ is captured as intent now; minting + spec-home + SL-103 trace (and SL-103→REQ-280 for the unit) happen at reconcile (CLI cannot mint an un-homed requirement). Reconcile obligation has teeth: CHR-011. Scope is no longer silently un-traced; the blocker's concern is met at the design tier."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "major"
 title = "EXPECTED malformed-present facet to be distinguishable from absent; OBSERVED D4 collapses both to wire-absent"
 detail = "design.md §3 D4 + §5.1: a malformed present [estimate]/[value] parses to None + a loud Error CatalogDiagnostic; §4.2-4.4 serialise the facet as Option with skip_serializing_if. Result: malformed-present and genuinely-absent are INDISTINGUISHABLE on the graph contract a consumer (Cordage) reads — both omit the key. The design's own §2 promise 'never a silently repaired bound' IS honoured (D4 refuses bound coercion — confirmed vs spec-020 §Concerns 'silent repair' hazard, which is specifically about clamping/swapping bounds), so this is NOT the silent-repair heresy. The surviving defect is contract expressiveness: corruption is observable only out-of-band in the diagnostic stream, not in the contract. EXPECTED: a consumer can tell a malformed node from one with no facet. PENANCE: either accept consciously and document that malformed⇒absent+diagnostic is the v1 contract (tolerated, with rationale), or carry a present-but-invalid marker. Resolve explicitly — do not leave the conflation unstated."
+disposition = "fix-now"
+response = "Design.md D4 now states the v1 contract explicitly: malformed-present is indistinguishable from absent on the wire (both omit the key); corruption is signalled out-of-band via the loud Error CatalogDiagnostic. Conscious v1 decision — graph stays policy-free, 'never a repaired bound' honoured (no coercion). In-band present-but-invalid marker is a future additive change if a consumer needs it."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "major"
 title = "EXPECTED design's 'map_server HTTP view unaffected'; OBSERVED /api/graph returns CatalogGraph directly so new fields leak to HTTP"
 detail = "design.md §2 + §6.3 + §8 assert the map_server HTTP view is unaffected because it 'maps CatalogNode to its own {key,label} DTO and picks no facet fields', and put 'surfacing facets in the web map' out of scope. FALSE for /api/graph: src/map_server/routes.rs:156-158 graph() does 'Json(snapshot)' of state.graph (CatalogGraph) DIRECTLY — so the additive top-level 'units' and per-node estimate/value WILL appear on the /api/graph HTTP response the moment this lands. CatalogNode/CatalogGraph are already an HTTP contract, not merely an internal projection. EXPECTED: the impact summary names every surface the additive fields reach. PENANCE: correct §2/§6.3/§8 to acknowledge /api/graph emits the new fields; decide deliberately whether facet exposure on the HTTP graph endpoint is in scope (it is now de-facto in scope) or gate it out with an explicit DTO."
+disposition = "fix-now"
+response = "Design.md §6.3 corrected: the false 'HTTP view unaffected' claim retracted. Two endpoints distinguished — /api/map + web UI map to {key,label} DTO (unaffected); /api/graph serves CatalogGraph raw (routes.rs graph() = Json(snapshot)) so units + per-node facets DO surface there. Per User ruling, /api/graph facet exposure is accepted IN SCOPE (it is the Cordage-facing raw-contract endpoint). Web map UI stays out of scope."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "major"
 title = "EXPECTED doctrine.toml read to default only on NotFound (cited precedent); OBSERVED §5.4 swallows ALL read errors"
 detail = "design.md §5.4 reads doctrine.toml with 'Err(_) => DoctrineToml::default()' and cites coverage_store::load_config as the precedent. Precedent verified at src/coverage_store.rs:198-205: it defaults ONLY on ErrorKind::NotFound and PROPAGATES every other read error (permission, transient I/O) plus parse errors. The design's 'Err(_) => default' masks permission/I-O faults as 'no config → default units', silently mis-resolving units on a corrupt environment. EXPECTED: match the precedent it claims. PENANCE: 'Err(e) if e.kind()==NotFound => default; Err(e) => return Err'; propagate parse errors via '?'. One-line fix."
+disposition = "fix-now"
+response = "Design.md §5.4 corrected to mirror coverage_store::load_config faithfully: default ONLY on ErrorKind::NotFound; propagate every other read error and all parse errors. The swallow-all 'Err(_) => default' that masked permission/I-O faults is replaced."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "EXPECTED FR-006's per-node 'project unit'; OBSERVED D2 reinterprets it as a top-level block without ratifying the requirement"
 detail = "slice-103.md FR-006 / REQ-274 name a per-estimated-node contract element 'project unit'. design.md §3 D2 hoists units to a top-level Catalog/CatalogGraph block and argues FR-006 is 'satisfied — reachable from every node via the graph'. The reasoning is sound (units ARE project-wide constants, per spec-020 'the unit is project-wide') and the design is internally honest about the move — but it reinterprets the requirement's letter rather than satisfying it verbatim. EXPECTED: a contract-literalism gap is ratified by governance, not assumed. PENANCE: confirm in reconciliation that REQ-274's intent is reachability (not literal per-node duplication), or revise REQ-274's wording. Low-stakes once F-1's traceability is fixed."
+disposition = "design-wrong"
+response = "Design.md §7 now flags it: D2 satisfies REQ-274's 'project unit' by reachability (top-level block), not literal per-node duplication. Reasoning sound (units are project-wide constants per spec-020), but ratification of REQ-274's intent is explicitly routed to reconcile rather than assumed."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "EXPECTED measured/justified second parse + loud failure; OBSERVED D3 asserts 'negligible' and §5.1 read_facets returns (None,None) silently on second-read failure"
 detail = "design.md §3 D3 adds a second full TOML read+parse per entity (the status path at src/catalog/scan.rs already parses each once) and dismisses the cost as 'negligible on a tooling/map surface' with no measurement. Defensible on a small corpus, but asserted not measured. Sharper: §5.1 read_facets does 'let Ok(text)=read_to_string(..) else return (None,None)' and 'let Ok(table)=parse else return (None,None)' — a vanished/garbled file at this seam yields silent facet-absence with NO diagnostic, justified as 'someone else's diagnostic'. That assumes the status read and the facet read see the same file state; under concurrent edit they need not. EXPECTED: no silent erasure of facet data. PENANCE: read each entity TOML ONCE and derive status/title/facets from the one table (removes both the second parse AND the divergent-read window), or at minimum emit a diagnostic on second-read divergence instead of silent (None,None)."
+disposition = "tolerated"
+response = "Conscious v1 simplification, documented in design.md §5.1: read_facets returns absent on a second-read divergence (concurrent-edit window); the status read is the authority and re-diagnoses next scan. The cleaner read-once seam (one parse → status/title/facets, also closing D3's second-parse cost) is recorded in-code as the reconcile option. Accepted for v1; no silent corruption of valid data, only a narrow concurrent-edit race that self-heals."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "EXPECTED a stable external contract decoupled from internal models; OBSERVED D5 reuses EstimateFacet/ValueFacet as the wire format"
 detail = "design.md §3 D5 + §4 reuse the leaf EstimateFacet/ValueFacet structs as the serialized contract ('no new contract types', DRY). Combined with F-3 (CatalogGraph IS served directly over /api/graph), this couples the EXTERNAL graph/HTTP contract to internal facet-model evolution: any future field added to EstimateFacet for internal reasons silently changes the public contract. EXPECTED: 'stable, policy-free contract' (REQ-274) implies a deliberate seam between model and wire. PENANCE: accept consciously (document that the facet structs ARE the contract and are now change-controlled), or interpose thin serialisation DTOs at the graph projection. Tie the decision to F-3's scope call."
+disposition = "tolerated"
+response = "Accepted consciously, documented in design.md D5: because /api/graph serves CatalogGraph raw (F-3), EstimateFacet/ValueFacet ARE the external contract. Ruling: they are change-controlled contract types, not free-to-mutate internals. A serialisation-DTO seam is deferred unless/until model and contract must diverge — DRY wins at v1."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
