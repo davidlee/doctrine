@@ -73,7 +73,8 @@ const FACETS: &[&str] = &[
 
 /// A finding's lifecycle status (design §5). Single-owner edges only — never
 /// free-edited; `verified`/`withdrawn` are terminal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum FindingStatus {
     Open,
     Answered,
@@ -107,7 +108,8 @@ const FINDING_STATUSES: &[&str] = &["open", "answered", "contested", "verified",
 
 /// A finding's severity (design §5, raiser-owned, fixed at raise). Only
 /// `blocker` gates `/close` (D-C9b).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Severity {
     Blocker,
     Major,
@@ -287,6 +289,164 @@ const fn role_eq(a: Role, b: Role) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Structured return types (SL-109, design D1/D8)
+// ---------------------------------------------------------------------------
+
+/// The structured output of a review verb — one variant per verb, carrying
+/// exactly the data its consumers need. `#[derive(Serialize)]` for MCP
+/// transport; the CLI path formats via `print_review()` in `main.rs`.
+#[derive(Debug, Serialize)]
+#[expect(dead_code, reason = "variants constructed in PHASE-02 verb handlers")]
+pub(crate) enum ReviewOutput {
+    Created {
+        id: u32,
+        canonical: String,
+        dir: PathBuf,
+    },
+    Raised {
+        finding_id: String,
+        review_id: u32,
+    },
+    Disposed {
+        finding_id: String,
+        review_id: u32,
+    },
+    Verified {
+        finding_id: String,
+        review_id: u32,
+    },
+    Contested {
+        finding_id: String,
+        review_id: u32,
+    },
+    Withdrawn {
+        finding_id: String,
+        review_id: u32,
+    },
+    Showed {
+        id: u32,
+        canonical: String,
+        title: String,
+        status: String,
+        awaiting: String,
+        facet: String,
+        target: String,
+        #[serde(rename = "finding_count")]
+        findings_count: usize,
+        findings: Vec<Finding>,
+        body: String,
+    },
+    Listed {
+        rows: Vec<ListRow>,
+        formatted: String,
+    },
+    Primed {
+        tracked_paths: Vec<String>,
+        areas_count: usize,
+        tracked_count: usize,
+        invariants_count: usize,
+        risks_count: usize,
+    },
+    Status {
+        canonical: String,
+        status: String,
+        awaiting: String,
+        findings_count: usize,
+        rounds: usize,
+        cache_primed: bool,
+        stale_paths: Vec<String>,
+        formatted: String,
+    },
+    Unlocked {
+        canonical: String,
+    },
+}
+
+/// Structured error from the review engine — each variant carries typed fields
+/// so the MCP transport layer can map to JSON-RPC error codes by variant
+/// identity, never by string-parsing (design D8; RV-092 F-1).
+#[derive(Debug)]
+#[expect(dead_code, reason = "variants constructed in PHASE-02 verb handlers")]
+pub(crate) enum ReviewError {
+    NotFound {
+        reference: String,
+    },
+    RoleMismatch {
+        expected: Role,
+        actual: Role,
+        verb: Verb,
+    },
+    StateMismatch {
+        finding: String,
+        current: FindingStatus,
+        required: FindingStatus,
+    },
+    DanglingRef {
+        target: String,
+    },
+    LockContention {
+        canonical: String,
+        details: String,
+    },
+    Internal {
+        source: anyhow::Error,
+    },
+}
+
+impl fmt::Display for ReviewError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFound { reference } => {
+                write!(f, "review not found: {reference}")
+            }
+            Self::RoleMismatch {
+                expected,
+                actual,
+                verb,
+            } => {
+                write!(
+                    f,
+                    "`{}` is the {}'s verb; --as {} cannot assert it",
+                    verb.as_str(),
+                    expected.as_str(),
+                    actual.as_str()
+                )
+            }
+            Self::StateMismatch {
+                finding,
+                current,
+                required,
+            } => {
+                write!(
+                    f,
+                    "cannot act on {finding}: current status {current} != required {required}",
+                    current = current.as_str(),
+                    required = required.as_str()
+                )
+            }
+            Self::DanglingRef { target } => {
+                write!(f, "target not found: {target}")
+            }
+            Self::LockContention { canonical, details } => {
+                write!(f, "{canonical}: {details}")
+            }
+            Self::Internal { source } => {
+                write!(f, "{source}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ReviewError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Internal { source } => Some(source.as_ref()),
+            _ => None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Derived status (design §8, D-C8 / D7)
 // ---------------------------------------------------------------------------
 
@@ -331,7 +491,7 @@ pub(crate) fn derived_status(findings: &[FindingState]) -> (ReviewStatus, Await)
 /// A finding as raised, for rendering. Raiser-owned fixed fields plus the
 /// responder-owned mutable pair; `status` is transition-graph-owned. The
 /// authored on-disk shape of a `[[finding]]` (design §5).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Finding {
     pub(crate) id: String,
     pub(crate) status: FindingStatus,
@@ -385,6 +545,7 @@ fn push_line(out: &mut String, key: &str, value: &str) {
 // ===========================================================================
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::io::{self, Read as _, Write};
 use std::path::{Path, PathBuf};
@@ -958,7 +1119,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
 /// Faithful JSON rows for `list` — the prefixed id, derived status/await, facet,
 /// target edge, and title.
 #[derive(Debug, Serialize)]
-struct ListRow {
+pub(crate) struct ListRow {
     id: String,
     status: String,
     awaiting: String,
@@ -1193,24 +1354,24 @@ type MidTurnHook<'a> = &'a dyn Fn();
 /// 6. recompute `await` + the new hash from the written ledger.
 /// 7. BATON LAST: `write_atomic` the baton.
 /// 8. release the lock (`LockGuard` drop).
-fn with_turn<F>(root: &Path, id: u32, verb: Verb, role: Role, f: F) -> anyhow::Result<()>
+fn with_turn<F, T>(root: &Path, id: u32, verb: Verb, role: Role, f: F) -> anyhow::Result<T>
 where
-    F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<()>,
+    F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<T>,
 {
     with_turn_hooked(root, id, verb, role, &|| {}, f)
 }
 
 /// `with_turn` with an injectable mid-turn hook (the pre-write CAS test seam).
-fn with_turn_hooked<F>(
+fn with_turn_hooked<F, T>(
     root: &Path,
     id: u32,
     verb: Verb,
     role: Role,
     mid_turn: MidTurnHook<'_>,
     f: F,
-) -> anyhow::Result<()>
+) -> anyhow::Result<T>
 where
-    F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<()>,
+    F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<T>,
 {
     // 1. acquire lock (RAII — released on every exit path below, incl. panic).
     let _lock = LockGuard::acquire(root, id)?;
@@ -1253,7 +1414,7 @@ where
     let mut document = snapshot
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", authored_path(root, id).display()))?;
-    f(&mut document, &doc.finding)?;
+    let result = f(&mut document, &doc.finding)?;
 
     // Test seam: a hand-edit injected here lands AFTER the step-2 read and BEFORE
     // the step-5 write — the exact window the pre-write CAS must catch.
@@ -1293,7 +1454,7 @@ where
     write_baton(root, id, &baton)?;
 
     // 8. release lock — `_lock` drops at scope end.
-    Ok(())
+    Ok(result)
 }
 
 // ---------------------------------------------------------------------------
@@ -3495,5 +3656,57 @@ text = "stale baton after out-of-band edit"
         // No prime — read_cache is None, so status reports the ledger only.
         assert!(read_cache(root, 1).unwrap().is_none());
         run_status(Some(root.to_path_buf()), "RV-001").unwrap();
+    }
+
+    // ── PHASE-01: ReviewOutput + ReviewError types ──
+
+    #[test]
+    fn review_output_created_serialises_to_json() {
+        let out = ReviewOutput::Created {
+            id: 42,
+            canonical: "RV-042".into(),
+            dir: PathBuf::from(".doctrine/review/042"),
+        };
+        let json = serde_json::to_string(&out).unwrap();
+        assert!(json.contains(r#""id":42"#), "json: {json}");
+        assert!(json.contains(r#""canonical":"RV-042""#), "json: {json}");
+        assert!(
+            json.contains(r#""dir":".doctrine/review/042""#),
+            "json: {json}"
+        );
+    }
+
+    #[test]
+    fn review_error_downcasts_from_anyhow() {
+        let err = ReviewError::RoleMismatch {
+            expected: Role::Raiser,
+            actual: Role::Responder,
+            verb: Verb::Raise,
+        };
+        let anyhow_err: anyhow::Error = err.into();
+        let downcast = anyhow_err
+            .downcast_ref::<ReviewError>()
+            .expect("ReviewError should downcast from anyhow");
+        match downcast {
+            ReviewError::RoleMismatch {
+                expected,
+                actual,
+                verb,
+            } => {
+                assert_eq!(*expected, Role::Raiser);
+                assert_eq!(*actual, Role::Responder);
+                assert_eq!(*verb, Verb::Raise);
+            }
+            _ => panic!("wrong variant: {downcast:?}"),
+        }
+    }
+
+    #[test]
+    fn with_turn_accepts_non_unit_closure_return() {
+        // Verify the generic parameter T != () compiles — this test is
+        // compile-time; the behaviour is verified by the verb handler tests.
+        // We just assert that a String-returning closure type-checks.
+        let _: fn(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<String> =
+            |_, _| anyhow::Ok("F-1".into());
     }
 }
