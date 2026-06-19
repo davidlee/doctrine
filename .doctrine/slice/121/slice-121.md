@@ -94,12 +94,16 @@ _(to be completed at close)_
 - **OQ-1** ~~Root-cause of the stale index~~ — **RESOLVED.** Pure ref-CAS advance
   of a checked-out `main` desyncs the live index+worktree (phantom reverse-diff).
   Confirmed from the recording commits. Not a `replay_ref`/projection index leak.
-- **OQ-2** Resync primitive: `git merge --ff-only <new>` (atomic, refuses on dirt)
-  run in the target worktree, **or** CAS `update-ref` followed by `reset --keep`?
-  `/design` to settle; leaning two-step (keep the proven CAS path, isolate the
-  resync). Either way the dirty gate runs *before* any mutation.
-- **OQ-3** Outcome-report shape (IMP-078): stderr human line vs structured
-  (`--json`) — match existing dispatch reporting conventions.
-- **OQ-4** Multi-row generality: only `trunk` (`main`) is realistically checked
-  out; is the per-row checkout probe worth generalising to the `edge`
-  (`review/<slice>`) row, or special-case trunk? `/design` to decide.
+- **OQ-2** ~~Resync primitive~~ — **RESOLVED (design §2.2).** Exact `replay_ref`
+  classification preserved on both legs; `merge --ff-only` is the *mechanism* for a
+  checked-out clean fast-forward only; `update_ref_cas` otherwise; non-ff checked-out
+  refuses. Dirty gate before the first `commit_journal`.
+- **OQ-3** ~~Report shape~~ — **RESOLVED (§4):** stderr per-row human line + the
+  existing stdout ref-list; no `--json`.
+- **OQ-4** ~~Multi-row generality~~ — **RESOLVED (§2.4):** general per-row probe, no
+  special-casing.
+- **OQ-5** (plan-gate, design §3(b)): the close verify needs the trunk row's
+  `planned_new_oid` / admitted `close_target` OID, which has **no stable CLI read** at
+  close 3a today. `/plan` to decide the minimal read surface (a `sync` flag exposing
+  the journal trunk OID, or a documented journal `cat-file`) — the close skill must
+  not depend on capturing transient `candidate admit` stdout.
