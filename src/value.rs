@@ -96,9 +96,19 @@ fn normalise(raw: ValueRaw) -> anyhow::Result<ValueFacet> {
         .value
         .ok_or_else(|| anyhow::anyhow!("value: value is required"))?;
 
-    Ok(ValueFacet {
+    let facet = ValueFacet {
         value: toml_to_f64(&value, "value")?,
-    })
+    };
+    validate(&facet)?;
+    Ok(facet)
+}
+
+/// Validate a present value. Pure. Sentence-case error.
+pub(crate) fn validate(facet: &ValueFacet) -> anyhow::Result<()> {
+    if !facet.value.is_finite() {
+        anyhow::bail!("value: value must be finite");
+    }
+    Ok(())
 }
 
 /// Convert a `toml::Value` to `f64`. Accepts `Integer` and `Float`; rejects
@@ -221,5 +231,28 @@ mod tests {
         assert!(raw.value.is_some());
         assert!(raw._extra.contains_key("foo"));
         assert!(raw._extra.contains_key("baz"));
+    }
+
+    #[test]
+    fn validate_accepts_finite() {
+        assert!(validate(&ValueFacet { value: 3.5 }).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_infinity() {
+        let err = validate(&ValueFacet {
+            value: f64::INFINITY,
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("finite"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_rejects_nan() {
+        let err = validate(&ValueFacet { value: f64::NAN })
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("finite"), "got: {}", err);
     }
 }
