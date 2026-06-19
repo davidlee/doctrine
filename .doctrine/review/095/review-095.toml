@@ -1,0 +1,30 @@
+id    = 95
+slug  = "inquisition-sl-117-design-claude-force-subprocess-dispatch"
+title = "Inquisition: SL-117 design (claude-force-subprocess-dispatch)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-117"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "EXPECTED routing prose to be executable end-to-end; OBSERVED 'respect preferred-subprocess-harness' points at a dispatch-subprocess skill with no config-driven selection prose"
+detail = "design.md §Routing decision tree says '→ /dispatch-subprocess (respect preferred_subprocess_harness)'. But dispatch-subprocess/SKILL.md has two hardcoded, labeled spawn templates (codex and pi) with zero prose about selecting between them. The word 'preferred' does not appear in that file. An orchestrator arriving at that skill has no mechanical instruction for how to 'respect' the config. The design's own §Assumptions admits this is IMP-101 scope — but the routing prose still emits the instruction as if actionable. Either (a) remove the parenthetical and note the selection is IMP-101's follow-up, or (b) include a one-sentence selection rule in the step 3 prose so the orchestrator can actually choose between the two templates. As-is: routing failure."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "EXPECTED env-marker detection mechanism in the skill prose; OBSERVED detection paragraph lives only in design.md, not in the dispatch/SKILL.md rewrite"
+detail = "The design.md adds a paragraph: 'The orchestrator detects its own harness by the same env-marker logic used in boot.rs resolve_harnesses: presence of .claude/ → Claude, otherwise codex/pi.' This is correct but it appears only in the design document. The dispatch/SKILL.md rewrite in the design's §Code impact section contains only: 'Otherwise, route per env-marker inference: Claude orchestrators → /dispatch-agent, codex/pi orchestrators → /dispatch-subprocess.' A non-Claude agent reading this prose has no instruction for determining which branch it falls into. The detection mechanism (.claude/ presence check) must be in the skill prose the orchestrator actually reads, not just in a design doc it never sees."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
