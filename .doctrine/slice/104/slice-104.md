@@ -38,8 +38,7 @@ on real entities, and adds defensive edge-case coverage.
 
 - **NF-002 (REQ-276) — kind-agnostic, confirmed on real data.** Already proven by
   the generic scan read and `graph.rs` VT-3 (ADR alongside slice). Reinforce with
-  the dogfood (≥2 kinds) and a thin explicit assertion on the value pure-boundary
-  where coverage is weak.
+  the dogfood (≥2 kinds) on real data; no new mechanism.
 
 - **NF-003 (REQ-277) — forward-compat, confirmed.** Already covered for both facets
   (`e19`, `custom_deserialize_unknown_keys`, value `v7`, `*_raw_absorbs_unknown_keys`).
