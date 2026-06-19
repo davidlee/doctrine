@@ -1,0 +1,121 @@
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-109"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Structured return types"
+objective = "Define ReviewOutput and ReviewError enums with Serialize/Display/From impls; make with_turn generic over closure return type T."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and reconciled (RV-092 findings applied)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ReviewOutput enum variants compile with #[derive(Debug, Serialize)]" },
+  { id = "EX-2", text = "ReviewError enum variants compile with Display + From<anyhow::Error> impls" },
+  { id = "EX-3", text = "with_turn signature is FnOnce(…) -> anyhow::Result<T> (generic parameter added)" },
+  { id = "EX-4", text = "no change to any existing test assertion; cargo test --lib passes" },
+]
+verification = [
+  { id = "VT-1", expects = "ReviewOutput::Created serialises to JSON with id, canonical, dir fields" },
+  { id = "VT-2", expects = "ReviewError::RoleMismatch downcasts from anyhow::Error via downcast_ref" },
+  { id = "VT-3", expects = "with_turn accepts closures returning Result<String> and Result<()> (both compile)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Verb handler refactor + print_review"
+objective = "Refactor every run_* verb handler to return ReviewOutput instead of writing to stdout; add print_review() in main.rs; capture golden tests for behavioural equivalence."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — ReviewOutput and ReviewError enums exist" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "all 11 run_* functions return anyhow::Result<ReviewOutput> (the correct variant)" },
+  { id = "EX-2", text = "print_review() in main.rs formats every variant following the output contract (§4 of design.md)" },
+  { id = "EX-3", text = "11 CLI call sites in main.rs updated to call print_review" },
+  { id = "EX-4", text = "existing review tests pass unmodified (cargo test --lib review)" },
+  { id = "EX-5", text = "golden tests capture current stdout and assert print_review reproduces it identically" },
+  { id = "EX-6", text = "cargo clippy zero warnings; cargo fmt clean" },
+]
+verification = [
+  { id = "VT-1", expects = "golden test: review_new stdout matches captured 'Created review NNN: .doctrine/review/NNN'" },
+  { id = "VT-2", expects = "golden test: review_raise stdout matches 'Raised F-1 on RV-NNN'" },
+  { id = "VT-3", expects = "golden test: review_dispose stdout matches 'Disposed F-1 on RV-NNN (answered)'" },
+  { id = "VT-4", expects = "golden test: review verify/contest/withdraw produce correct past-tense messages" },
+  { id = "VT-5", expects = "golden test: review_show table format reproduces existing multi-line output" },
+  { id = "VT-6", expects = "golden test: review_list table reproduces columnar output" },
+  { id = "VT-7", expects = "golden test: review_status reproduces status header + cache line" },
+  { id = "VT-8", expects = "golden test: review_prime reproduces counts summary" },
+  { id = "VT-9", expects = "golden test: review_unlock reproduces 'Removing stale lock' / 'is not locked' messages" },
+  { id = "VT-10", expects = "legacy test suite passes: cargo test --lib (zero test changes)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "MCP server (protocol, transport, tools, serve command)"
+objective = "Implement the hand-rolled MCP server: JSON-RPC 2.0 types, stdio codec, serve loop, tool definitions with JSON Schema, handler dispatch calling run_*, and error mapping from ReviewError."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — run_* returns ReviewOutput, print_review works" },
+  { id = "EN-2", text = "ReviewError enum with From/Display impls exists (PHASE-01)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/mcp_server/protocol.rs — JSON-RPC 2.0 types (Request, Response, Error, Result) with Serialize/Deserialize" },
+  { id = "EX-2", text = "src/mcp_server/transport.rs — framed stdio codec (read JSON messages, write JSON responses)" },
+  { id = "EX-3", text = "src/mcp_server/tools.rs — 10 tool definitions with JSON Schema parameters; handler dispatch matching tool name to run_*" },
+  { id = "EX-4", text = "src/mcp_server/mod.rs — async serve() loop: read → dispatch → respond" },
+  { id = "EX-5", text = "src/commands/serve.rs — ServeArgs with --mcp --path; run_serve() wires tokio runtime" },
+  { id = "EX-6", text = "Error mapping: MCP handler downcasts anyhow::Error → ReviewError → JSON-RPC error code + data" },
+  { id = "EX-7", text = "zero new crate dependencies (serde/serde_json/tokio only)" },
+  { id = "EX-8", text = "cargo clippy zero warnings; cargo fmt clean" },
+]
+verification = [
+  { id = "VT-1", expects = "unit test: Request/Response serialise/deserialise round-trip for all JSON-RPC message types" },
+  { id = "VT-2", expects = "unit test: transport framing handles partial reads, multiple messages in one chunk" },
+  { id = "VT-3", expects = "unit test: tool list response contains exactly 10 tools with correct names" },
+  { id = "VT-4", expects = "unit test: each tool handler calls the correct run_* and returns ReviewOutput as JSON text" },
+  { id = "VT-5", expects = "unit test: ReviewError::RoleMismatch maps to -32602 with structured data payload" },
+  { id = "VT-6", expects = "unit test: ReviewError::NotFound maps to -32000 with NOT_FOUND code" },
+  { id = "VT-7", expects = "unit test: unknown tool name returns -32601" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Integration tests"
+objective = "End-to-end integration tests: spawn doctrine serve --mcp as subprocess, drive the MCP protocol handshake and tool round-trips, verify authored state on disk matches expectations."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — MCP server functional with all 10 tools" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "MCP handshake test: initialize → tools/list → round-trip with valid JSON-RPC" },
+  { id = "EX-2", text = "mutation verb tests: new → raise → dispose → verify over MCP, verify on-disk state" },
+  { id = "EX-3", text = "read verb tests: show (table + json), list, status over MCP, verify output structure" },
+  { id = "EX-4", text = "error path tests: unknown tool, invalid args, role mismatch, state mismatch produce correct MCP errors" },
+  { id = "EX-5", text = "prime + unlock round-trip over MCP" },
+  { id = "EX-6", text = "cargo clippy zero warnings; cargo fmt clean" },
+]
+verification = [
+  { id = "VT-1", expects = "integration test: spawn serve --mcp, send initialize, receive capabilities.tools = {}" },
+  { id = "VT-2", expects = "integration test: tools/list returns 10 tools with correct JSON Schema" },
+  { id = "VT-3", expects = "integration test: review_new over MCP creates review dir and returns Created response" },
+  { id = "VT-4", expects = "integration test: full raise → dispose → verify cycle over MCP, on-disk state correct" },
+  { id = "VT-5", expects = "integration test: review_show JSON returns valid review data" },
+  { id = "VT-6", expects = "integration test: invalid tool name returns -32601" },
+  { id = "VT-7", expects = "integration test: bad arguments to review_raise returns -32602 with parse_error" },
+  { id = "VT-8", expects = "integration test: raise as responder returns ROLE_MISMATCH error" },
+  { id = "VT-9", expects = "integration test: verify already-verified finding returns STATE_MISMATCH error" },
+]
+specs        = []
+requirements = []
