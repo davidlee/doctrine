@@ -120,12 +120,36 @@ for row in planned_rows:
 
 | target checkout state | mechanism | notes |
 |---|---|---|
-| not checked out | `update_ref_cas(target, planned, expected_old)` | today's path, unchanged |
-| checked out + **fast-forward** advance (`expected_old` is an ancestor of `planned`) | `git -C <wt> merge --ff-only planned` | atomic ref+index+worktree; §2.5 race guard |
+| not checked out | `update_ref_cas(target, planned, expected_old)` | today's path; **post-CAS re-probe** (below) |
+| checked out + **fast-forward** advance (`expected_old` is an ancestor of `planned`) | `git -C <wt> merge --ff-only planned` | ref+index+worktree together; §2.5 race guard |
 | checked out + **non-ff** advance (edge/force) | **refuse** `integrate-nonff-checkout` | can't safely non-ff a live ref without `reset --hard` (data loss); refuse, don't desync |
 
 After either mechanism, **assert `target_ref == planned`** (post-condition); a
 mismatch is a `Moved`/raced outcome, not success.
+
+**None-leg post-CAS re-probe (round-2 MAJOR).** `update_ref_cas` has no worktree
+awareness: if a ref is checked out *after* `worktree_for_ref` returned `None` but
+*before/at* the CAS, the CAS advances a now-live branch behind its index — exactly
+the ISS-022/030 desync this slice exists to kill. So after a `None`-leg `Applied`,
+**re-probe** `worktree_for_ref(target)`: if it is now `Some(wt)`, the worktree just
+desynced — resync it (clean → `reset --keep planned`) or, if dirty, surface a
+`raced-checkout-desync` warning in the report (the advance already happened; we
+cannot un-advance). This is best-effort under a genuine race; see §7 for the honest
+concurrency boundary.
+
+**Decision-time classification, not a transactional CAS on the merge leg
+(round-2 BLOCKER).** The classification (`current == planned` / `== expected_old`)
+is exact at *decision time*, but only the `update_ref_cas` leg re-checks
+`expected_old` **atomically** at write (git.rs:892). The `merge --ff-only` leg has
+no equivalent atomic expected-old guard — between classify and merge a concurrent
+writer could move the branch to an ancestor-of-`planned` (or to `planned` itself),
+after which the merge + post-assert still pass and the row is marked `Verified`,
+whereas today's `replay_ref` would report `Moved`. **The landed content is always
+`planned`** (`merge --ff-only` advances only along `planned`'s ancestry; anything
+off it refuses → `Moved`), so this is a **labeling** divergence, not a corruption,
+and it requires a concurrent *identical* advance — vanishingly rare. We therefore do
+**not** claim transactional CAS equivalence for the checked-out leg (§7); we claim
+content-correctness + an accepted, tested compatible-race window.
 
 **Status-capturing, not `?`-erroring (B3).** `advance` returns an *outcome*
 (`Applied`/`Moved`/refusal), so a merge refusal or non-ff case sets the row to
@@ -207,27 +231,31 @@ Replace with two tree-true assertions:
 # (a) no phantom reverse-diff — TRACKED working tree matches HEAD (not path-limited):
 git diff --quiet HEAD     # nonzero exit ⇒ DESYNC, do not proceed   (untracked: ignored)
 
-# (b) delta genuinely landed — trunk tip's tree == the ADMITTED close_target tree:
-git diff --quiet <admitted_close_target_oid> refs/heads/main   # equal ⇒ landed
-#   (display only: git diff --stat <admitted_close_target_oid> refs/heads/main)
+# (b) delta genuinely landed (not a silent dry-run) — read the journal's planned tip:
+#     the integrate REPORT (§4) shows the trunk row "advanced"; belt-and-braces:
+planned=$(doctrine dispatch sync --slice <N> --show-journal-trunk-oid)   # see read-surface note
+git diff --quiet "$planned" refs/heads/main     # equal ⇒ trunk holds the projected tip
 ```
 
 **(a) — F5/M8.** The ISS-030 detector: a phantom reverse-diff makes the tracked
 working tree ≠ `HEAD`. It must **not** be path-limited (SL-097's reverse-diff spanned
-implementation files beyond any one dir). Scope note (M8): `git diff --quiet HEAD`
-covers the **tracked** tree, not untracked files — correct here, since the phantom
-reverse-diff is staged/unstaged tracked content; untracked noise is deliberately out
-of the desync signal.
+implementation files beyond any one dir). Scope (M8): `git diff --quiet HEAD` covers
+the **tracked** tree, not untracked files — correct here, since the phantom
+reverse-diff is staged/unstaged tracked content.
 
-**(b) — M7.** Compare against the **admitted `close_target` OID**, *not* the mutable
-`refs/heads/candidate/<N>/close-001` ref. Integrate targets the admitted OID
-(`plan_candidate_trunk_row`, dispatch.rs:1234); the candidate ref can move, so a
-diff against it can pass while the wrong tree landed. Diff trunk's tree to the
-admitted OID's tree (no pathspec, or the actual payload paths) with `--quiet`;
-`--stat` is display only. With §2 the desync cannot arise, but the verify now
-*proves* it against the **tree** rather than the `main~1..main` ref boundary (which
-was also wrong under a merge/multi-commit advance). Remove the stale form and its
-TODO's reliance on it.
+**(b) — round-2 MAJOR (read surface).** The first revision said "diff against the
+admitted `close_target` OID," but **that OID has no stable command at close 3a**:
+`candidate admit` prints it to stdout once (dispatch.rs:652) — not captured by the
+skill — and `candidate status` shows only an abbreviated tip (dispatch.rs:733). So
+(b) rests on a **real** read surface: primarily the **integrate report** (§4), whose
+trunk-row disposition must read `advanced` (a silent dry-run — `--trunk` omitted —
+would show nothing); and, as a scriptable belt, the **trunk row's `planned_new_oid`
+read from the committed `dispatch/<slice>` journal** (tree-read, the
+`sync-tree-reads-ledger-not-worktree` invariant). **Plan-gate:** if no
+CLI surface exposes that OID, this slice adds a minimal read (e.g. a `sync
+--show-journal-trunk-oid` flag or documented `cat-file` of the journal) — the close
+skill must not depend on capturing transient admit stdout. Either way the stale
+`main~1..main` ref-boundary form is removed.
 
 **Scope of this step.** §3 lives in the close SKILL and is therefore
 **close-to-main-specific** (`refs/heads/main`, the `close_target` candidate).
@@ -298,9 +326,25 @@ New/changed evidence:
 ## 7. Invariants & boundaries
 
 - **Dirty-atomicity (the guarantee we add):** the §2.3 pre-mutation pass, placed
-  **before the first `commit_journal`** (M4), means a dirty checked-out target
+  **before the first `commit_journal`** (M4), means a target dirty *at gate time*
   refuses with **zero refs moved** — including the coordination ref
-  `dispatch/<slice>`. This is the new invariant this slice establishes.
+  `dispatch/<slice>`. This is the new invariant this slice establishes. It covers
+  **pre-existing** dirt only; see the concurrency boundary below.
+- **Concurrency boundary (honest scope — round-2).** This slice does not introduce a
+  worktree-placement lock; under genuine concurrent writers on the target, three
+  residual races remain, all **content-safe** (the tree never lands on anything but
+  `planned`), differing only in labeling/cleanliness reporting:
+  1. *Dirt introduced during/after a merge* — caught only post-advance, so it is a
+     **raced failure after advance**, not "zero refs moved." (Not the pre-existing
+     case the gate guarantees.)
+  2. *Checked-out merge leg vs a compatible concurrent advance* — can mark
+     `Verified` where `replay_ref` would say `Moved` (decision-time classify, no
+     atomic expected-old on the merge; §2.2). Content is still `planned`.
+  3. *None-leg ref checked out between probe and CAS* — re-probe + best-effort
+     resync / `raced-checkout-desync` warning (§2.2); cannot be un-advanced.
+  These are documented and **tested**, not silently tolerated. Eliminating them
+  needs a real placement lock — out of scope (a follow-up if close ever runs under
+  true multi-writer contention).
 - **NOT fully atomic on `Moved`/collision (F3 — honest scope).** The replay loop
   applies rows sequentially and bails *after* the loop on any `Moved` row (the
   existing `moved` vec), so a later `Moved` — or an untracked-collision ff abort
@@ -347,8 +391,10 @@ Self-review before external challenge; findings integrated above.
   `--untracked-files=no` lets an untracked file collide; `merge --ff-only` aborts
   per-row. Accepted: surfaced as a `Moved`-class failure, gate deliberately not
   widened. Folded into §7 honest atomicity.
-- **F2 — leg asymmetry** (→ §7): CAS exact-old vs ff-only descendant differ only on
-  a rewound target. Accepted, documented, not unified.
+- **F2 — leg asymmetry** (→ §7): **superseded/RESOLVED by the round-2 §2.2 rewrite.**
+  Classification is now the exact `replay_ref` predicate on *both* legs (not
+  ff-derived), so the rewound-target asymmetry is gone; the only residual is the
+  decision-time-vs-atomic-write race, accepted under §7's concurrency boundary.
 - **F3 — atomicity overclaim** (→ §7, §6): original "atomic-or-nothing" was false
   for mid-loop `Moved`. Rewritten to the honest guarantee (dirty pre-gate atomic;
   `Moved`/collision idempotent-resume, pre-existing).
@@ -387,4 +433,29 @@ integrated. Summary:
 - **M9 → §2.1/§6.** The two existing parsers differ on blank-line reset; adopt the
   block-reset form; extract a pure parser with fixtures.
 
-Ready for `/plan`.
+### Round 2 (codex GPT-5.5, on the revised design)
+
+One real gap, three invariant-honesty corrections, one implementability fix, one
+stale-text — all integrated:
+
+- **R2-BLOCKER → §2.2/§7.** Merge leg has no atomic expected-old recheck (the CAS
+  leg does, git.rs:892). Dropped the "exact CAS equivalence" claim for the
+  checked-out leg; content is always `planned`, only labeling can race under a
+  concurrent *identical* advance. Accepted + tested (§7 boundary).
+- **R2-MAJOR → §2.2.** `None`-leg `update_ref_cas` could advance a ref checked out
+  *after* the probe → recreates the original desync. Added a post-CAS re-probe +
+  best-effort resync / `raced-checkout-desync` warning.
+- **R2-MAJOR → §7.** Dirty-clean guarantee covers *pre-existing* dirt only;
+  concurrent dirt is a raced-failure-after-advance. Invariant narrowed.
+- **R2-MAJOR → §3(b).** The admitted `close_target` OID has **no stable close-3a read
+  command** (`candidate admit` stdout uncaptured; `candidate status` abbreviated).
+  Rebased (b) on the integrate report + the journal's `planned_new_oid`; added a
+  plan-gate to expose that OID via a real CLI surface if none exists.
+- **R2-MINOR → §9.** Stale F2 "not unified" text corrected to RESOLVED.
+
+R2 confirmed sound on: non-ff-checkout refusal (no real close path needs a
+checked-out non-ff edge advance — close only drives `--trunk refs/heads/main`);
+status/recoverability parity across legs.
+
+Residual: concurrency races are documented + tested, not eliminated (no placement
+lock — out of scope). Ready for `/plan`.
