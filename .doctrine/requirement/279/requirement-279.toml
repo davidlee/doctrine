@@ -4,7 +4,7 @@ version = 1
 id = 279
 slug = "validate-a-present-value-value-required-finite-absent-parses-clean"
 title = "Validate a present value: value required, finite; absent parses clean"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A present [value] requires the value field present and finite — missing or non-finite is a hard parse error; there is no range validation (single magnitude, no ordering constraint). An absent [value] parses clean."

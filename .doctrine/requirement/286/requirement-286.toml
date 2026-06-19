@@ -4,7 +4,7 @@ version = 1
 id = 286
 slug = "expose-value-metadata-through-a-policy-free-graph-contract"
 title = "Expose value metadata through a policy-free graph contract"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Catalog/graph hydration exposes each node's value magnitude and project value unit through the same stable, policy-free contract as the estimate facet, carrying no aggregation or interpretation."

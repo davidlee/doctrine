@@ -4,7 +4,7 @@ version = 1
 id = 278
 slug = "define-a-reusable-valuefacet-with-a-single-finite-f64-magnitude-parsed-from-an-optional-value-toml"
 title = "Define a reusable ValueFacet with a single finite f64 magnitude parsed from an optional [value] TOML table"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A single reusable ValueFacet carrying one finite f64 magnitude is parsed from an optional [value] table via the same kind-agnostic facet seam as the Estimate facet; integer or float authoring normalizes to finite f64, non-finite is rejected at the parse boundary."
