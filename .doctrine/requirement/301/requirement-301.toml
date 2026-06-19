@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 301
+slug = "a-spent-isolation-unit-is-reaped-only-when-its-result-provably-landed-in-durable-git-state-never-on"
+title = "A spent isolation unit is reaped only when its result provably landed in durable git state, never on a disposable receipt; concurrent dispatch of the same slice is refused at creation."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

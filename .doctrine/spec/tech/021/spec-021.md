@@ -12,9 +12,10 @@ branch-point check, the born-frame git seam — each cited here by its `REQ-NNN`
 This spec owns the *process that wields them*: the **funnel cadence** (the order of
 acts and the halt discipline), the **routing and concurrency decision logic**, the
 **per-harness altitude contract**, the **two-stage integration projection**, and the
-**load-bearing operational gotchas** that recur across real dispatch runs. It carries
-**no descent** — like its parent, no PRD owns dispatch (ADR-006 frames worktree as a
-policy-agnostic framework; ADR-006/ADR-011/ADR-012 are the governing decisions).
+**load-bearing operational gotchas** that recur across real dispatch runs. It descends
+from **PRD-015** (the product intent for concurrent isolated dispatch) through its parent
+container SPEC-012; ADR-006 (policy-agnostic worktree posture), ADR-011 (harness-agnostic
+spawn), and ADR-012 (integration topology) are the governing decisions.
 
 The container's keystone (SPEC-012) is that *the funnel is enforced CLI mechanism, not
 prose an LLM may skip*. The complement this spec records is the irreducibly-prose

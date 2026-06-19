@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 299
+slug = "each-completed-slice-yields-reviewable-individually-integrable-surfaces-per-phase-and-per-slice"
+title = "Each completed slice yields reviewable, individually-integrable surfaces per phase and per slice, materialised without writing trunk."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

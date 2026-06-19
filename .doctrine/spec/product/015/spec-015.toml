@@ -1,0 +1,18 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 15
+slug = "dispatch-worktree-product"
+title = "Dispatch & worktree"
+status = "active"
+kind = "product"
+category = "dispatch"
+tags = ["dispatch", "worktree", "isolation", "sole-writer", "concurrency", "integration", "crash-recovery", "harness-agnostic"]
+responsibilities = [
+  "Let concurrent units of work proceed without corrupting shared authored state or each other — each unit runs in isolation, and only a sole writer funnels results into durable state.",
+  "Guarantee that no isolated worker writes doctrine-authored state, and that the coordination/runtime tier never leaks across the isolation boundary.",
+  "Produce reviewable, individually-integrable surfaces for each phase and slice, and gate integration on audit — never auto-publishing to trunk.",
+  "Make progress crash-safe: durable coordination state means a crash is equivalent to a resume, with no lost reasoning about what landed.",
+  "Stay harness-agnostic: the capability works across orchestrating harnesses, requiring no harness-specific command, and states honestly what each harness can enforce.",
+  "Stay policy-agnostic: name the coordination roles and guarantees, bind no branching policy — the consuming project chooses the topology (ADR-006).",
+]

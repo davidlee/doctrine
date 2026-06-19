@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 296
+slug = "each-dispatched-unit-of-work-runs-in-isolation-a-private-working-tree-provisioned-per-run-with-the"
+title = "Each dispatched unit of work runs in isolation — a private working tree provisioned per run — with the coordination/runtime tier absent by construction, so nothing shared-mutable can be corrupted."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

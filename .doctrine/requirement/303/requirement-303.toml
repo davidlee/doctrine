@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 303
+slug = "harness-agnosticism-the-isolationfunnel-guarantee-holds-across-orchestrating-harnesses-with-no"
+title = "Harness-agnosticism: the isolation+funnel guarantee holds across orchestrating harnesses with no harness-specific command required as a mandatory element, and each harness's enforcement altitude is stated honestly rather than silently assumed uniform."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

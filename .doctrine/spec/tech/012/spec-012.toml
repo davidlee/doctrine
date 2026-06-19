@@ -9,6 +9,7 @@ kind = "tech"
 category = "dispatch"
 c4_level = "container"
 parent = "SPEC-003"
+descends_from = "PRD-015"
 tags = ["dispatch", "worktree", "isolation", "sole-writer", "provision", "branch-point", "git-seam", "concurrency"]
 responsibilities = [
   "Provision a worktree fork through `worktree provision` as the sole copy path: a pure `select_copies` core copies only allowlisted (`.worktreeinclude`) gitignored files and physically drops every coordination/runtime-tier path even under a broad `**` glob.",

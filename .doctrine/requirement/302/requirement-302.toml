@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 302
+slug = "crash-safety-the-run-is-recoverable-from-committed-coordination-state-alone-a-crash-mid"
+title = "Crash-safety: the run is recoverable from committed coordination state alone — a crash mid-coordination is equivalent to a resume, with no lost or double-applied delta and no progress dependent on the coordinator's in-memory context."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
