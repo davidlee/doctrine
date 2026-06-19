@@ -56,10 +56,17 @@ No display wiring (deferred — IMP-112).
 - **D4 — NF-001 proof is structural and dependency-free.** Two tiers, no `syn`, no
   coupling to SL-112 (proposed, unstarted — its syn-based dependency-fitness gate is
   the *future* consolidation home for this rule, not a prerequisite):
-  - **Tier 1 (dispatch / execute / audit):** a source-scanning integration test
-    asserts the pure gating modules carry **zero** facet symbols.
+  - **Tier 1 (allowlist confinement):** a source-scanning integration test asserts
+    facet symbols appear **only** in the known exposure files (+ tests) — any other
+    file referencing a facet trips the test. Robust against a *forgotten* gating
+    module (a denylist would require enumerating every gating module correctly).
   - **Tier 2 (close):** a compile-time exhaustive-destructure guard on `Gate` —
     if `Gate` ever grows an `estimate`/`value` field the test fails to compile.
+  - **Residual gap (documented, not hidden):** `slice.rs` is allowlisted (it carries
+    `SliceDoc`'s facet fields), so a hand-written close fn reading `SliceDoc.estimate`
+    directly would evade both tiers. Tier 2 covers the *typed* gate input; the
+    hand-written-bypass case is mitigated by review + the `audit.md` argument, not by
+    the test. This is the honest boundary of the structural proof.
 
 - **D5 — NF-002 / NF-003 are confirmed, not rebuilt.** Both are already covered by
   SL-101/103 tests; SL-104 reinforces with real-data dogfood (NF-002) and
@@ -88,10 +95,16 @@ bullet (confidence-band resolution); one `### Confidence band resolution`
 subsection under "Project-wide unit resolution"; the REQ added to `members.toml`.
 Mirrors REV-002's mechanics.
 
+**Confidence is estimate-only** — the value facet is a single point magnitude and
+carries no band. The `[value]` config has no confidence fields.
+
 **Code touch this slice:** no behavior change. Only the stale
 `expect(dead_code, reason=…)` strings on `resolve_confidence`,
-`DEFAULT_*_CONFIDENCE`, and `mod display` are corrected to cite C-REQ + IMP-112.
-The dead-code tripwire stays armed (self-clears when IMP-112 consumes it).
+`DEFAULT_*_CONFIDENCE`, and `mod display` are corrected. **REQ-id sequencing
+(F5):** C-REQ has no allocated id until reconcile, so the `expect` reasons cite
+IMP-112 + a descriptive phrase ("the confidence requirement, SL-104 reconcile") now;
+reconcile rewrites them to the concrete `REQ-NNN`. The dead-code tripwire stays armed
+(self-clears when IMP-112 consumes it).
 
 ## 4. NF-001 — structural non-blocking tripwire
 
@@ -100,19 +113,25 @@ source-scanning integration-test precedent (`e2e_relation_migration_storage.rs`,
 `e2e_skills_dispatch_shrinkage.rs` use `CARGO_MANIFEST_DIR`); plus a unit guard in
 `src/slice.rs` (Tier 2, needs `pub(crate)` `Gate`).
 
-**Tier 1 — denylist scan.** Assert the pure gating modules — `dispatch.rs`,
-`dispatch_config.rs`, `lifecycle.rs`, `reconcile.rs`, `review.rs`, `governance.rs`
-— contain **zero** facet symbols. Symbol set is precise (not bare words, which
-collide with `toml::Value`):
+**Tier 1 — allowlist confinement.** Scan all of `src/**/*.rs` for the facet symbol
+set; assert every file that matches is in the **allowlist** — the known exposure
+surface:
 
 ```
-EstimateFacet · ValueFacet · EstimationConfig · ValueConfig · resolve_confidence
-crate::estimate · crate::value · estimate:: · value::
+allowlist: estimate.rs · value.rs · estimate/display.rs · dtoml.rs
+           catalog/scan.rs · catalog/graph.rs · catalog/hydrate.rs · slice.rs
+symbols (precise — not bare words, which collide with toml::Value):
+   EstimateFacet · ValueFacet · EstimationConfig · ValueConfig · resolve_confidence
+   crate::estimate · crate::value · estimate:: · value::
 ```
 
-`resolve_confidence` is in the set → this also discharges the confidence
-"no-consumer" negative test (D1's display-only guarantee). A future predicate that
-reads a facet must name one of these in a gating module → the test fails.
+Any *new* file naming a facet fails the test → forces a conscious decision: is this
+a legitimate exposure site, or a gating read that must not exist? `resolve_confidence`
+is in the symbol set → its absence from every non-allowlist file also discharges the
+confidence "no-consumer" negative test (D1's display-only guarantee). The allowlist
+is robust where a denylist is not: it needs no enumeration of gating modules — a
+gating predicate that reads a facet *necessarily* appears as a non-allowlisted (or,
+for `slice.rs`, see the residual-gap note above) referrer.
 
 **Tier 2 — `Gate` type confinement.** The closure gate's input is `Gate` (+ lifecycle
 status + requirement set); `Gate` carries no facet field. A unit test in `slice.rs`:
@@ -148,6 +167,12 @@ All valid facets. **Verify each:** `slice show`/`adr show` parse clean; the enti
 still `list`s; `catalog`/graph projects the facet + `units` block; `2`-authored
 bounds normalize to `2.0` and round-trip stable.
 
+**F3 — edit-preserving survival (must-verify, not assume):** after a `doctrine slice
+status` transition on the faceted SL-104, confirm the `[estimate]`/`[value]` tables
+are **retained** in the rewritten toml. If the status-write path drops unknown or
+unserialized tables, the dogfood facet vanishes silently — this is a real failure
+mode for a "carried on a live slice" claim, so it is an explicit verification step.
+
 ## 6. Edge-case tests
 
 - **Large finite bounds** — `lower=1e9, upper=5e9` parse/validate/round-trip.
@@ -168,7 +193,7 @@ bounds normalize to `2.0` and round-trip stable.
 | Surface | Evidence |
 |---|---|
 | NF-001 (REQ-275) | `tests/e2e_estimate_non_blocking.rs` (Tier 1) + `Gate` destructure guard (Tier 2) green; structural argument in `audit.md` |
-| NF-002 (REQ-276) | dogfood ≥2 kinds + value pure-boundary assertion; existing graph VT-3 cross-ref |
+| NF-002 (REQ-276) | dogfood ≥2 kinds; existing graph VT-3 cross-ref (kind-agnostic scan already proven — no new mechanism) |
 | NF-003 (REQ-277) | existing forward-compat tests cross-ref (no new mechanism) |
 | C-REQ (confidence) | negative test (no `resolve_confidence` consumer) folded into Tier 1; SPEC-020 amendment + REQ at reconcile (REV, D2) |
 | Dogfood | `show`/`list`/`catalog` green on real faceted entities; diff review |
@@ -200,3 +225,22 @@ At reconcile: the confidence REQ + SPEC-020 amendment (via REV).
   non-semantic estimate on an ADR, swap the second kind for another slice and prove
   kind-agnosticism via the existing graph VT-3 alone. Resolved-by-default: keep ADR,
   comment it.
+
+## 11. Internal adversarial pass (integrated)
+
+Findings from the pre-review hostile pass, all integrated above:
+
+- **F1** — Tier-1 flipped denylist → **allowlist** confinement (§4): robust against a
+  forgotten gating module; needs no correct enumeration of gating modules.
+- **F2** — Tier-2 residual gap named honestly (§4): a hand-written close fn in the
+  allowlisted `slice.rs` reading `SliceDoc.estimate` evades both tiers; mitigated by
+  review + `audit.md`, not claimed as covered.
+- **F3** — dogfood **edit-preserving survival** added as an explicit verification step
+  (§5): the facet must survive a `slice status` write.
+- **F4** — dropped the vague "value pure-boundary assertion" (§8): redundant, NF-002
+  already covered.
+- **F5** — `expect`-string REQ-id sequencing pinned (§3): descriptive now, concrete
+  `REQ-NNN` at reconcile.
+- **F6** — stated confidence is **estimate-only** (§3).
+
+Residual unknowns are OQ-1/OQ-2 (low stakes) and the F2 boundary (accepted, documented).
