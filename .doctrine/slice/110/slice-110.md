@@ -92,9 +92,10 @@ Five UX items (design phase will root-cause each before fixing):
 - **OQ-2** Item 4 interaction → **resolved**: cell click = select (node cell
   focuses the node); explicit **Edit this** (selected field) / **Edit all**
   buttons. Relation "Edit this" adds a scoped backend `relabel_edge` mutation.
-- **OQ-3** Item 5 "actionable" / mode switch → **resolved**: `requiredMode`
-  predicate, switch-if-undisplayable, applied in the `goto` selection handler
-  (not a render-time derive — see design D1).
+- **OQ-3** Item 5 "actionable" / mode switch → **resolved**: pure
+  `focusTransition` (wrapping `requiredMode`), applied as a `focusChanged`-gated
+  derive in the `renderView` funnel that every selection path reaches via
+  `hashchange` — not in `goto` (see design D1).
 
 ## Verification / Closure Intent
 

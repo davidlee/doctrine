@@ -18,13 +18,15 @@ Everything below leans on two new pure functions, extracted so the behaviour is
 unit-testable and not duplicated (`no parallel implementation`, pure/imperative
 split — both clock/DOM-free):
 
-- **`focusTransition(current, node, isActionabilityMember)` →
-  `{ viewMode, priorityZoomId }`** (in `model.ts`). The whole item-5 rule as one
-  pure table (see Item 5). Wraps the inner **`requiredMode(node)` →
-  `'semantic' | null`** check (a CM can render *only* in the semantic graph →
-  `'semantic'`; every other kind → `null`, no forced mode). Applied at
-  **focus-change** in `renderView`, gated on `focusChanged` — not on every render
-  (see D1), not in `goto`.
+- **`focusTransition(current, node, isActionabilityMember, currentPriorityZoomId)`
+  → `{ viewMode, priorityZoomId }`** (in `model.ts`). The whole item-5 rule as one
+  pure table (see Item 5). Takes the current zoom id so it can return a concrete
+  `priorityZoomId` for the "leave it alone" rows (it cannot express "unchanged"
+  without it). Wraps the inner **`requiredMode(node)` → `'semantic' | null`**
+  check off `node.kind` (`types.ts` Node carries `kind: string`; a CM kind renders
+  *only* in the semantic graph → `'semantic'`; every other kind → `null`, no
+  forced mode). Applied at **focus-change** in `renderView`, gated on
+  `focusChanged` — not on every render (see D1), not in `goto`.
 
 - **`hoverDetailHtml(node)` → `string`** (in `render.ts`, exported). The inner
   markup of the hover-details pane, factored out of `hoverPane` so the new
@@ -64,7 +66,7 @@ mode:
 if (focusChanged) {
   const node = state.graph.nodes.get(state.focusId ?? '')
   const member = actionabilityNodeIds.has(state.focusId ?? '')   // from state.actionabilityView
-  const t = focusTransition(state.viewMode, node, member)
+  const t = focusTransition(state.viewMode, node, member, state.priorityZoomId)
   state.viewMode = t.viewMode
   if (t.priorityZoomId !== state.priorityZoomId) {
     state.priorityZoomId = t.priorityZoomId
@@ -81,13 +83,14 @@ Pure transition (DOM/clock-free, in `model.ts`):
 | `requiredMode(node)==='semantic'` (CM) | `'semantic'` | `null` |
 | actionability + member | `'actionability'` | `node.id` |
 | actionability + **non-member** | `'actionability'` | `null` *(clears stale)* |
-| else (semantic, non-CM) | `current` | unchanged |
+| else (semantic, non-CM) | `current` | `currentPriorityZoomId` *(echo)* |
 
 ```ts
 function focusTransition(
   current: ViewMode,
   node: Node | undefined,
   isActionabilityMember: boolean,
+  currentPriorityZoomId: string | null,
 ): { viewMode: ViewMode; priorityZoomId: string | null }
 ```
 
@@ -188,8 +191,8 @@ Selection and editing split into a select gesture + two scoped buttons:
   CM graph (existing `cmFocus` highlight + neighbourhood filter); the relation
   cell selects that edge. Selection is plain navigation — no inline input on click.
 - **Edit this** → inline-edit *only the currently-selected field*:
-  - node cell → `rename_node` (exists; keyed by `from_key`/`to_key`, renames that
-    node across every row),
+  - node cell → `rename_node` (exists; submits `old_label`/`new_label` —
+    **label-based**, `routes.rs:48`; renames that label everywhere it appears),
   - relation cell → `relabel_edge` (**new** backend op, below).
 
   Enter commits, Esc cancels. Disabled when nothing is selected.
@@ -197,11 +200,13 @@ Selection and editing split into a select gesture + two scoped buttons:
   form), unchanged.
 
 New transient state:
-- `cmSelectedField: { kind: 'node'; key: string } | { kind: 'rel'; from_label:
-  string; rel: string; to_label: string } | null`. The **rel identity is
-  labels, not derived keys** — the DSL and its mutations match line labels, so
-  the write identity must be the labels carried on `CmEdge` (`from_label`,
-  `to_label`), never `from_key`/`to_key` (keys collide across distinct labels).
+- `cmSelectedField: { kind: 'node'; key: string; label: string } | { kind: 'rel';
+  from_label: string; rel: string; to_label: string } | null`. **Both identities
+  carry labels, not just derived keys** — every CM mutation (`rename_node`,
+  `add/remove/relabel_edge`) is label-based, and distinct labels can derive the
+  same key, so the clicked cell's label must be captured from the `CmEdge`
+  (`from_label`/`to_label`) at select time. The node `key` is retained for the
+  `cmFocus` highlight; the `label` is what the rename submits as `old_label`.
 - `editingField: 'node' | 'rel' | null` — drives a single-input render arm
   **independent of** `editing`. Today every editable arm is gated `&& editing`;
   the single-field arm renders one input when `editingField !== null` *without*
@@ -225,14 +230,27 @@ pub(crate) fn relabel_edge_in_dsl(
 ```
 
 Errors: reuse `EmptyField` and `EdgeNotFound` (from remove) **plus
-`DuplicateEdge { line }`** (from `add_edge_to_dsl`). Relabelling
-`A > old > B` to `new` can produce a `(A, new, B)` triple that already exists on
-another line; without the guard `parse_dsl` then emits `DuplicateEdge` and skips
-the duplicate, leaving the stored DSL invalid. So before committing the rewrite,
-run the **same duplicate check `add_edge_to_dsl` uses** for the resulting triple;
-on collision return `DuplicateEdge { line }`. No relabel-to-itself special case
-(old_rel == new_rel resolves to the existing line → no-op or `EdgeNotFound`-clean,
-matching add/remove semantics).
+`DuplicateEdge { line }`**. Relabelling `A > old > B` to `new` can produce a
+`(from_key, new_rel, to_key)` triple that already exists on another line; without
+a guard `parse_dsl` then emits `DuplicateEdge` and skips the duplicate, leaving
+the stored DSL invalid.
+
+The guard must be **key-based**, not the label check `add_edge_to_dsl` currently
+uses. `parse_dsl` defines duplicate identity by `(from_key, rel, to_key)`
+(`concept_map.rs:421`), but `add_edge_to_dsl`'s own dup check compares *labels*
+(`e.from_label == source …`, `:1235`) — so two distinct labels deriving the same
+key (`User Story` vs `User-Story`) slip a label check and collide only at parse.
+`relabel_edge_in_dsl` therefore: (1) trim and reject empty fields; (2) **if
+`old_rel == new_rel` after trim, return the DSL unchanged** (no-op, no false
+collision); (3) find the label-matched line (`source`/`old_rel`/`target`), else
+`EdgeNotFound`; (4) scan the *parsed* edges for an existing
+`(derive_node_key(source), new_rel, derive_node_key(target))` triple **excluding
+the matched line**; on hit return `DuplicateEdge { line }`; (5) rewrite the `rel`
+segment of the matched line.
+
+> Observed pre-existing gap: `add_edge_to_dsl`'s label-based dup check has the
+> same key-collision blind spot. Out of scope here (slice touches only the new
+> op) — flagged as a backlog candidate, not fixed in SL-110.
 
 This is the only backend change in the slice (a deliberate, scoped exception to
 the frontend-only posture — see slice §Non-Goals).
@@ -248,7 +266,8 @@ the frontend-only posture — see slice §Non-Goals).
   `renderEdgeTable` gains a select-on-click path and a single-field-edit arm
   gated on `editingField` (independent of `editing`).
 - `app.ts` — wire the two buttons; route cell selection to `cmFocus` (nodes) /
-  `cmSelectedField` (rel); `handleRelabelEdge` calling `mutateConceptMap`.
+  `cmSelectedField` (carrying the clicked `label` for both kinds);
+  `handleRelabelEdge` calling `mutateConceptMap`.
 - `concept-map.css` — selected-cell affordance, two-button layout, pencil icon.
 
 ## Item 3 — filter sidebar `[ ] all` checkbox alignment
@@ -267,16 +286,17 @@ CSS-only: align the "all" row to the same grid/inset as the per-kind rows in
 - **`focusTransition`** — `model.test.ts` table: CM → `{semantic, null}`;
   actionability + member → `{actionability, id}`; actionability + non-member →
   `{actionability, null}` (clears stale); semantic + non-CM → `{current,
-  unchanged}`; `undefined` node → safe (no throw, no forced mode). This is the
-  whole item-5 behaviour; only the 2-line membership wiring in `renderView` is
-  manual.
+  currentPriorityZoomId}` (echoes the passed zoom id); `undefined` node → safe (no
+  throw, no forced mode). This is the whole item-5 behaviour; only the 2-line
+  membership wiring in `renderView` is manual.
 - **`hoverDetailHtml`** — `render` unit test: returns markup containing id,
   title, kindLabel, status; asserts **unsafe chars are escaped** in every field
   (regression test for the old raw injection); `hoverPane` delegates to it.
 - **`relabel_edge_in_dsl`** — Rust unit tests: relabel-persists (200);
-  `EdgeNotFound` (404); `EmptyField` (400); **`DuplicateEdge` when the new triple
-  already exists** (mirrors `add_edge`'s dup test); plus a `routes.rs` handler
-  test for the new action.
+  `EdgeNotFound` (404); `EmptyField` (400); **`DuplicateEdge` by key-collision**
+  (target `(from_key,new_rel,to_key)` exists under a *different label spelling* —
+  the case the label check misses); **`old_rel == new_rel` → DSL unchanged**
+  (no-op, no false collision); plus a `routes.rs` handler test for the new action.
 - **Item 1** — `highlightViewButtons` toggles `view-btn--active` for the matching
   data-view (DOM unit test); a render-pass test confirms the class survives the
   edge-detail early return.
@@ -316,9 +336,9 @@ CSS-only: align the "all" row to the same grid/inset as the per-kind rows in
   `title`), so it is not byte-identical to the old pane markup.
 - **D4 — item 4 click = select, not edit.** Per user: a cell click
   navigates/selects; editing is an explicit button. Keeps accidental edits out;
-  clear scoped (Edit this) vs bulk (Edit all) split. The rel write identity is
-  labels (`from_label`/`rel`/`to_label`), matching the label-based DSL — never
-  derived keys.
+  clear scoped (Edit this) vs bulk (Edit all) split. Both write identities (node
+  and rel) carry **labels**, matching the label-based DSL mutations — never
+  derived keys alone (keys collide across distinct label spellings).
 
 ## Review integration
 
@@ -336,6 +356,16 @@ findings verified against code before disposition.
 | F7 | minor | single-field edit vs global `editing` flag underspecified (codex symbol names were wrong) | **accepted, narrowed** — `editingField` arm specified independent of `editing` |
 | F8 | minor | `renderCmHoverPane` is a separate hover renderer | **accepted** — `hoverDetailHtml` scoped catalog/actionability only (D3) |
 | F9 | major | pure seams thin; item 5 punted to manual | **accepted** — `focusTransition` is a pure table test covering all item-5 cases |
+
+Second pass (Codex, against the integrated revision):
+
+| # | sev | finding | disposition |
+|---|---|---|---|
+| G1 | blocker | relabel "use add_edge's dup check" insufficient — add_edge checks labels, parse dedups by key; collision corrupts DSL | **accepted** — guard is key-based (`derive_node_key`), excludes matched line; pre-existing add_edge gap flagged for backlog |
+| G2 | major | relabel-to-itself underspecified | **accepted** — `old_rel == new_rel` → DSL unchanged, before the dup scan |
+| G3 | major | `focusTransition` can't express "unchanged zoom" — no current zoom arg | **accepted** — signature takes `currentPriorityZoomId`, echoes it |
+| G4 | major | node selection key-only repeats the collision class; `rename_node` is label-based | **accepted** — `cmSelectedField` node carries `label`; submits `old_label` |
+| G5 | minor | slice-110.md OQ-3 still says "applied in `goto`… not render-time" | **accepted** — OQ-3 reworded to the `renderView` `focusChanged` funnel |
 
 ## Open questions — resolved
 
