@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee083a8ce7ab0966576a6693b5a58"
+memory_key = "mem.pattern.dispatch.trunk-ref-unpushed-local"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch worktree branches off trunk (origin/HEAD default), not HEAD — local-only plans fail"
+summary = "dispatch setup needs DOCTRINE_TRUNK_REF=main when slice plan exists only in local unpushed commits"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d8a9c5a2b1c84b2b10bb1c17927364ec1570b8c3"
+ref_name = "refs/heads/loop/proposals-2026-06-20"
+checkout_state_id = "3ac4c9dffffa804b41052f523073ceb2686800c0303985a03a60323c1a2a4ef8"
+base_commit = "32d1e6e6724c810a13bd209d6c562dd414083098"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
