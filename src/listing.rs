@@ -121,6 +121,7 @@ impl fmt::Debug for Filter {
 /// seam, A-3). One struct rather than a long positional argument list keeps the
 /// call site self-documenting and the seam stable as flags accrete.
 #[derive(Debug, Default, Deserialize)]
+#[serde(default)]
 pub(crate) struct ListArgs {
     /// Substring filter on slug+title (case-insensitive).
     pub(crate) substr: Option<String>,

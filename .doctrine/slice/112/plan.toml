@@ -1,0 +1,114 @@
+# Implementation plan for SL-112 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-112"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Classify-first spike & go/no-go"
+objective = """
+Build the `syn` production-graph extractor and use it to author the authoritative
+layer map, measure the real boundary, and make the go/no-go call — BEFORE building
+the gate (design D7). Add `syn` (dev-dep). Implement `discover_units` +
+`extract_edges` (skip `#[cfg(test)]`, literal `crate::` path nodes only, doc-comment
+links excluded — the regex probe's F-5 blind spot must not recur). Author
+`.doctrine/adr/001/layering.toml`: every discovered unit classified
+most-knowing-wins, mixed umbrellas (`catalog`, `priority`, …) sub-classified to
+`top::sub`, each with a one-line rationale; `[[accepted_violation]]` enumerating
+every genuine upward edge (reason + follow-up); `[tangle_baseline]` per-tier
+cyclic-edge counts (engine = 0 post-CHR-015). Decide go/no-go: small upward baseline
++ meaningful engine core ⇒ go; mostly-baseline ⇒ `/consult`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; slice status = plan." },
+  { id = "EN-2", text = "SL-111 done (production engine graph acyclic); CHR-015 done (engine tangle 0)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`syn` dev-dep landed (centralized in [workspace.dependencies], reason comment); `discover_units`/`extract_edges` produce the production graph (cfg(test) + doc-comment links excluded)." },
+  { id = "EX-2", text = "`.doctrine/adr/001/layering.toml` authored: every discovered unit classified (most-knowing-wins; catalog/priority sub-classified) with a one-line rationale; `[[accepted_violation]]` enumerates every genuine upward edge with reason + follow-up; `[tangle_baseline]` records per-tier cyclic-edge counts." },
+  { id = "EX-3", text = "go/no-go decided and justified — go iff the upward baseline is small and the engine core is meaningful; a mostly-baseline result is routed to /consult, not auto-advanced." },
+]
+verification = [
+  { id = "VT-1", expects = "extractor is deterministic and excludes a `#[cfg(test)]`-scoped `crate::<command>` fixture edge AND a `///` intra-doc-link fixture edge (proves the cfg(test)/F-5 handling that grounds the measurement)." },
+  { id = "VA-1", expects = "agent audits layering.toml completeness: every src unit present (no Unclassified/StaleEntry against the discovered set), mixed umbrellas sub-classified, a rationale per unit, upward baseline enumerated with follow-ups." },
+  { id = "VH-1", expects = "User accepts the go decision (the D7 go/no-go is a human gate)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Build the gate"
+objective = """
+Wrap the PHASE-01 extractor into `tests/architecture_layering.rs`: the pure
+`check(units, edges, map, accepted, base)` verdict implementing all four assertions
+— (1) completeness, (2) cross-tier direction modulo frozen `ACCEPTED_VIOLATIONS`,
+(3) `MixedUmbrella` forcing (a non-sub-classified module whose file reaches above its
+tier fails), (4) per-tier cyclic-edge ratchet (`Σ` same-tier edges inside non-trivial
+SCCs ≤ frozen baseline, monotonic-down). Load `layering.toml` relative to runtime CWD
+with the package-root pre-flight probe (D4). Build the thin impure shell over the pure
+core (CLAUDE.md split). Prove the gate bites.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 go decision = go; layering.toml authored and baselines frozen." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`tests/architecture_layering.rs` exists: pure `check()` implements all four assertions; shell loads layering.toml relative to runtime CWD with the package-root pre-flight probe." },
+  { id = "EX-2", text = "the real-graph gate is green under the frozen baselines and runs under `just gate` (test-all)." },
+  { id = "EX-3", text = "gate proven to bite: a hand-introduced real upward edge in non-test code fails `just gate` naming the offending edge (recorded, then reverted)." },
+]
+verification = [
+  { id = "VT-1", expects = "real-graph gate asserts zero violations against the production graph under the authored baselines." },
+  { id = "VT-2", expects = "pure `check()` bite-tests over synthetic inputs: upward edge (not accepted) → UpwardEdge; accepted upward edge → []; new edge inside an existing same-tier SCC → TangleGrew; a module file reaching above its tier, not sub-classified → MixedUmbrella; accepted-absent → StaleAccepted; src-only → Unclassified; map-only → StaleEntry." },
+  { id = "VT-3", expects = "fixtures: a `#[cfg(test)]`-scoped path and a `///` doc-link path each produce NO edge." },
+  { id = "VA-1", expects = "agent performs EX-3 (hand-introduce a real upward edge) and confirms `just gate` fails naming the edge, then reverts." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Overturn + record ADR-001 (governance co-requisite)"
+objective = """
+Make ADR-001 stop contradicting the shipped gate — a co-requisite for close (design
+D5/F-5), authored as a REV at reconcile (ADR-013: governance changes route through a
+Revision; not a bare hand-edit). Content: overturn the "explicitly rejected homegrown
+module-graph test" stance with rationale (the cycles arrived; `syn` de-brittles);
+record the fitness gate as now-enforcement; replace the stale per-module prose tier
+table with tier *definitions* + a pointer to `.doctrine/adr/001/layering.toml` as the
+authoritative assignment; state rule 1 hard-gated, rule 2 a non-increasing cyclic-edge
+ratchet with the command tangle openly unmet-and-tracked, rule 3 deferred; reclassify
+`input` as engine.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 gate green and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-001 amended: rejection overturned with rationale; gate recorded as now-enforcement; prose tier table replaced by definitions + layering.toml pointer; rule-2 ratchet + command-tangle-unmet recorded; `input` reclassified engine." },
+  { id = "EX-2", text = "the amendment is landed through a REV at reconcile (ADR-013 governance path), not a raw hand-edit of accepted governance." },
+]
+verification = [
+  { id = "VA-1", expects = "agent confirms ADR-001 no longer contradicts the shipped gate: rejection overturned, pointer present, rule-2 recorded as ratcheted/unmet-tracked, input = engine; no stale prose tier table remains." },
+  { id = "VH-1", expects = "User accepts the governance amendment (overturning an accepted ADR's stance)." },
+]
+specs        = []
+requirements = []

@@ -59,12 +59,17 @@ fn tools() -> Vec<McpTool> {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "facet": { "type": "string", "description": "Filter by facet" },
-                    "target": { "type": "string", "description": "Filter by target regex" },
+                    "substr": { "type": "string", "description": "Case-insensitive substring filter over slug + title" },
+                    "regexp": { "type": "string", "description": "Regex over canonical-id + slug + title" },
                     "status": {
                         "type": "array",
                         "items": { "type": "string" },
                         "description": "Filter by status: active | done"
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Tag filter (OR within the axis)"
                     }
                 },
                 "required": []
@@ -269,8 +274,17 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             review::run_new(Some(root.to_path_buf()), &args)
         }
         "review_list" => {
-            let args: crate::listing::ListArgs = serde_json::from_value(arguments)
-                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            // Hand-extract the optional filter axes (matching the other read verbs)
+            // rather than serde-deserializing the clap-mirror `ListArgs`, whose
+            // non-`Option` fields are serde-required and reject every MCP call (ISS-033).
+            let fields = ExtractFields::from_value(arguments, &[]);
+            let args = crate::listing::ListArgs {
+                substr: fields.opt_str_field("substr"),
+                regexp: fields.opt_str_field("regexp"),
+                status: fields.vec_str_field("status"),
+                tags: fields.vec_str_field("tags"),
+                ..Default::default()
+            };
             review::run_list(Some(root.to_path_buf()), args)
         }
         "review_show" => {
@@ -380,6 +394,20 @@ impl ExtractFields {
             .get(name)
             .and_then(|v| v.as_str())
             .map(str::to_owned)
+    }
+
+    /// Extract a string array (missing or non-array ⇒ empty vec; non-string
+    /// members dropped). Mirrors the missing-tolerant `*_str_field` posture.
+    fn vec_str_field(&self, name: &str) -> Vec<String> {
+        self.inner
+            .get(name)
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -552,6 +580,35 @@ mod tests {
         assert!(names.contains(&"review_withdraw"));
         assert!(names.contains(&"review_status"));
         assert!(names.contains(&"review_prime"));
+    }
+
+    // ISS-033: review_list must accept its advertised (all-optional) arg shapes —
+    // empty `{}` and a `status` filter — rather than rejecting every call -32602.
+
+    #[test]
+    fn review_list_empty_args_succeeds() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req("review_list", json!({}));
+        let resp = dispatch(&req, &root);
+        assert!(
+            resp.error.is_none(),
+            "review_list {{}} errored: {:?}",
+            resp.error
+        );
+        assert!(resp.result.is_some());
+    }
+
+    #[test]
+    fn review_list_status_filter_succeeds() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req("review_list", json!({ "status": ["done"] }));
+        let resp = dispatch(&req, &root);
+        assert!(
+            resp.error.is_none(),
+            "review_list status filter errored: {:?}",
+            resp.error
+        );
+        assert!(resp.result.is_some());
     }
 
     // VT-7: unknown tool name returns -32601
