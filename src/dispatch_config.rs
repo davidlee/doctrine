@@ -35,9 +35,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_is_codex() {
-        let cfg = DispatchConfig::default();
-        assert_eq!(cfg.preferred_subprocess_harness, SubprocessHarness::Codex);
+    fn empty_config_defaults_to_codex() {
+        // Documented invariant: an absent or empty config yields codex for
+        // backward compatibility. Both the Rust Default derive and the TOML
+        // deserialize default must agree.
+        assert_eq!(
+            DispatchConfig::default().preferred_subprocess_harness,
+            SubprocessHarness::Codex
+        );
+        let doc: DispatchConfig = toml::from_str("").unwrap();
+        assert_eq!(doc.preferred_subprocess_harness, SubprocessHarness::Codex);
     }
 
     #[test]
@@ -45,12 +52,6 @@ mod tests {
         let doc: DispatchConfig =
             toml::from_str("preferred-subprocess-harness = \"pi\"\n").unwrap();
         assert_eq!(doc.preferred_subprocess_harness, SubprocessHarness::Pi);
-    }
-
-    #[test]
-    fn absent_key_defaults_to_codex() {
-        let doc: DispatchConfig = toml::from_str("").unwrap();
-        assert_eq!(doc.preferred_subprocess_harness, SubprocessHarness::Codex);
     }
 
     #[test]
