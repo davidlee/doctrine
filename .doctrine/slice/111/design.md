@@ -8,7 +8,7 @@
 
 The relation engine reaches **up** into command-tier modules for kind identity,
 violating ADR-001 (`leaf ← engine ← command, no cycles`). `relation.rs:247-274`
-declares 21 `const X: &Kind = &crate::<cmd>::*_KIND` aliases; every owning command
+declares 20 `const X: &Kind = &crate::<cmd>::*_KIND` aliases; every owning command
 module imports `relation::tier1_edges` back → **7 confirmed cycles**. Break the
 cycles by inverting ownership: the engine should borrow kind identity from a tier
 *below* it, not reach up.
@@ -22,7 +22,7 @@ cannot compile while these cycles exist.
 command module that declares it:
 
 ```rust
-const SLICE: &Kind = &crate::slice::SLICE_KIND;     // …21 of these (L247-266)
+const SLICE: &Kind = &crate::slice::SLICE_KIND;     // …20 of these (L247-266)
 const GOV:     &[&Kind] = &[ADR, POL, STD];          // 3 groupings (L271-274)
 const BACKLOG: &[&Kind] = &[ISS, IMP, CHR, RSK, IDE];
 const RECORD:  &[&Kind] = &[ASM, DEC, QUE, CON];
@@ -62,8 +62,12 @@ seam). Therefore only **identity** — the prefix — is hoisted.
 
 - **Hoist identity, not behaviour.** The engine needs the prefix; it does not need
   the scaffold. Move the minimum.
-- **Prefix is identity; `&str` is its honest type.** No new wrapper type buys a
-  consumer anything today (rejected alternative D2).
+- **Prefix is identity; `&str` is the right type *for this slice*.** The relation
+  engine compares by prefix only, so no wrapper or richer struct buys an in-scope
+  consumer anything (D2). This is a deliberately **narrow** interface, not a claim
+  that `&str` is the permanent end-state — the leaf identity module is expected to
+  *widen* (→ `KindCore { dir, prefix, … }`) when SL-112 brings an engine-side
+  consumer that needs more than the prefix (§8 R4).
 - **One authority for the literal.** `kinds.rs` owns each prefix string; both the
   relation table *and* the command `Kind.prefix` field consume it.
 - **Zero caller churn.** Public relation signatures keep `&Kind` and read `.prefix`
@@ -171,21 +175,27 @@ runtime — same rule table, same lookups, same outputs.
   same symbol), not merely asserted.
 - **ASM-1** — every relation consumer compares kinds by `prefix` only (verified:
   all four sites). If a future axis needed `dir`/`scaffold` from a `sources` entry,
-  `&str` would be insufficient — not the case today.
+  `&str` would be insufficient — not the case in-scope; that need is what triggers
+  the widening to `KindCore` (§8 R4), a planned extension, not a re-discovery.
 - **Edge** — the `SLICE` alias in the rule table renames to `SL`; no semantic change.
 - **Edge** — the rule-table *element type* change ripples into every site that reads
   `RelationRule.sources` / `TargetSpec::Kinds(ks)` and then `.prefix` on an element.
   These are all **mechanical accessor edits** (`|k| k.prefix == p` → `|p2| *p2 == p`;
   `ks.iter().map(|k| k.prefix)` → `ks.iter().copied()`), no assertion or behaviour
-  change: `relation.rs` matchers + its `target_spec_matches_design` test block, and
-  **one** test reader in `relation_graph.rs:1615`. Variant-only reads
+  change. The complete reader set (re-swept, external pass §10): `relation.rs`
+  matchers (L477/621/858/927), **two** `relation.rs` test blocks —
+  `sources_match_shipped_accessors` (L1060, reads `.sources…k.prefix` at L1096) and
+  `target_spec_matches_design` (L1267-1403) — and **one** test reader in
+  `relation_graph.rs:1615`. Variant-only reads
   (`matches!(r.target, TargetSpec::Unvalidated)` at `relation_graph:361/1562/1581`)
   are untouched.
 
 ## 6. Open Questions & Unknowns
 
-None blocking. (Resolved during design: representation = `&str` not a wrapper;
-placement = new leaf `kinds.rs` not `entity`/`registry`; `relation_graph` excluded.)
+None blocking. (Resolved during design: representation = `&str` for this slice
+(narrow by scope; widening to `KindCore` deferred — §8 R4, D2/D3); placement = new
+leaf `kinds.rs` not `entity`/`registry`; `relation_graph` behavioral edges excluded
+— SL-112-contingent, D5.)
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -193,14 +203,32 @@ placement = new leaf `kinds.rs` not `entity`/`registry`; `relation_graph` exclud
   by design) or `registry` (rejected — that is the FK-index seed, a semantic
   mismatch). A dedicated single-responsibility module is the cohesive home and the
   natural SL-112 crate member.
-- **D2 — `&str` prefix constants, not a `KindId` newtype.** *Alt:* `struct
-  KindId(&'static str)` for nominal typing / future `dir`. Rejected — no consumer
-  needs more than the prefix today; the codebase already treats prefix-as-`&str`
-  as the identity idiom (`relation_graph:652`). "As simple as possible."
-- **D3 — Keep the full `Kind` consts in the command tier.** Forced, not chosen:
-  `scaffold: fn` couples each `Kind` to its command module. Hoisting the full
-  `Kind` is impossible without dragging scaffold logic down (out of proportion,
-  behaviour-gate risk) — see §2.
+- **D2 — `&str` prefix constants for this slice, not a `KindId` newtype.** *Alt:*
+  `struct KindId(&'static str)` for nominal typing. Rejected on idiom grounds — the
+  codebase already treats prefix-as-`&str` as the identity idiom
+  (`relation_graph:651`); a table-only newtype adds boundary friction (wrap/unwrap
+  at every bare-`&str` comparison site) for marginal nominal gain, and no in-scope
+  consumer needs more than the prefix. **This is narrow by *scope*, not a product
+  position** (User, 2026-06-19): the leaf identity interface is expected to widen
+  once it proves out. The widening target is not the newtype but a richer identity
+  struct (D3, §8 R4) — so `KindId` would be a throwaway intermediate. Accepted cost:
+  if/when widening lands, the `&str` table re-keys to the richer type — mechanical
+  and compile-enforced (R4).
+- **D3 — Keep the full `Kind` consts in the command tier; hoist *only* prefix now,
+  not a `KindCore` identity split.** Two separable claims:
+  - *The full `Kind` cannot hoist (forced).* `scaffold: fn` couples each `Kind` to
+    its command module; an engine-tier `const Kind` would recreate the upward edge
+    and violate memory `kind-is-data-not-trait`. This is genuinely forced — see §2.
+  - *A leaf `KindCore { dir, prefix }` split is deferred, not impossible (chosen).*
+    `Kind`'s only non-fn fields are `dir`+`prefix` (`entity.rs`), and identity-only
+    consumers already exist (`integrity::KindRef` composes `&Kind` for dir+prefix+
+    stem; `relation_graph:430` reads `g.kind.dir`). So a `KindCore` the command
+    `Kind` *embeds* and the engine borrows is structurally live. Deferred because
+    this slice's engine consumer (`relation`) compares **prefix only** — hoisting
+    `dir` reads nothing in-scope and would re-expand into the just-narrowed
+    `relation_graph` work. It becomes the right move when SL-112 places
+    `relation_graph` engine-side (then `dir` needs a non-command source); recorded
+    as the widening trajectory (§8 R4, D2).
 - **D4 — Single-source the prefix via `Kind.prefix = kinds::X`.** *Alt:* leave
   command literals untouched (smaller diff). Rejected — leaves "SL" in two places,
   a parallel-implementation smell, and fails the slice's "command modules consume
@@ -209,9 +237,15 @@ placement = new leaf `kinds.rs` not `entity`/`registry`; `relation_graph` exclud
   command-*imports* (`:82` `backlog::dep_seq_for`, `:423` gov supersession needing
   `dir` + `governance::supersession_pair`, `:652` `spec::interaction_types`) are
   **behavior-entangled**, not pure identity — a prefix swap cannot remove them. And
-  `relation_graph` contributes **zero cycles** (its edges are non-cyclic). So the
-  cycle-break is fully achieved by `relation.rs` alone; those sites ride a
-  contingent follow-up (§8 R1), resolved iff SL-112 classifies it engine-internal.
+  `relation_graph` contributes **zero cycles** (verified external pass: no command
+  module imports `relation_graph` back; its only inbound refs are `main` and an
+  `integrity` comment). So **the 7 confirmed `relation.rs` cycles are fully broken
+  by `relation.rs` alone.** This is *not* the same as "SL-112 is fully unblocked":
+  ADR-001 is directional, so if SL-112 classifies `relation_graph` engine-side, its
+  `:82/:423/:652` upward edges are still illegal and need their own resolution (the
+  `KindCore` widening, §8 R4, supplies the leaf `dir` that `:423` wants). Those
+  sites ride a contingent follow-up (§8 R1), resolved iff SL-112 classifies
+  `relation_graph` engine-internal.
   *Caveat (adversarial pass):* one **test** reader (`:1615`) reads
   `RELATION_RULES.sources` and takes the mechanical `&str` accessor edit — that is
   the rule-table type change rippling into a reader, **not** a behavioral change to
@@ -228,14 +262,25 @@ placement = new leaf `kinds.rs` not `entity`/`registry`; `relation_graph` exclud
   structural by §5.3; the existing relation suite re-exercises every rule.
 - **R3 (missed matcher site)** — a `.prefix` comparison left keyed on the old type.
   *Mit:* the type change makes every stale site a **compile error**; no silent path.
+- **R4 (narrow-interface re-key)** — `&str` is narrow by scope (D2/D3); the leaf
+  identity module is expected to widen to `KindCore { dir, prefix, … }` once SL-112
+  brings an engine-side `relation_graph` that needs `dir` from a non-command source.
+  At that point the `&str` rule table re-keys to the richer type — "pay twice"
+  (external pass). *Mit:* the re-key is **mechanical and compile-enforced** (same
+  type-safety net as R3), and the alternative (build `KindCore` now) would re-expand
+  into the deliberately-cut `relation_graph` scope and hoist `dir` no in-scope
+  consumer reads. Accepted: pay the small mechanical re-key later rather than carry
+  out-of-scope `dir` plumbing now. SL-112's design must consume this as its starting
+  identity shape so the widening is planned, not accidental.
 
 ## 9. Quality Engineering & Validation
 
 - **Behaviour-preservation gate (primary).** The existing `relation` unit suite +
   corpus/relation integration tests keep **every assertion unchanged** and stay
   green. Test/code that reads the rule table internals — the `relation.rs` matchers,
-  its `target_spec_matches_design` block, and the one `relation_graph.rs:1615` test
-  reader — take the mechanical `&Kind`→`&str` accessor edit (`|k| k.prefix` →
+  its `sources_match_shipped_accessors` (L1096) and `target_spec_matches_design`
+  blocks, and the one `relation_graph.rs:1615` test reader — take the mechanical
+  `&Kind`→`&str` accessor edit (`|k| k.prefix` →
   `|p| *p` / `ks.iter().copied()`); no assertion or expected value moves. Tests that
   go through `lookup`/`tier1_edges` are untouched (signatures stable).
 - **New micro-test (`kinds.rs`).** Pin `GOV`/`BACKLOG`/`RECORD` membership to the
@@ -273,6 +318,46 @@ Doctrinal alignment: ADR-001 (downward-only, acyclic) satisfied — new edges ar
 kind-blindness and `kind-is-data-not-trait` respected (scaffold stays command-side).
 No governance conflict surfaced; no `/consult` required.
 
-### External pass
+### External pass — codex/GPT-5.5 (2026-06-19)
 
-(Pending — offered to user after internal integration.)
+Hostile source-verified review (read-only). Five charges put; dispositions:
+
+- **Ripple completeness — ACCEPTED (design was wrong).** The internal sweep missed
+  a reader: `relation.rs:1096` (`sources_match_shipped_accessors`, L1060) does
+  `r.sources.iter().map(|k| k.prefix)` — a third in-file mechanical reader, distinct
+  from `target_spec_matches_design`. Loud compile-fail, not silent, but §10/§5.5/§9
+  claimed a complete sweep. *Fix:* reader set corrected in §5.5/§9; this is now the
+  authoritative inventory (matchers L477/621/858/927 + two test blocks + the one
+  `relation_graph:1615` line).
+- **D3 "cannot hoist" overclaimed — ACCEPTED (rationale honesty).** True that the
+  full `Kind` can't hoist (scaffold-coupled); false that bare `&str` is therefore
+  forced. A `KindCore { dir, prefix }` split is structurally live (identity-only
+  consumers already exist: `integrity::KindRef`, `relation_graph:430` reads `dir`).
+  *Fix:* D3 split into forced-claim + chosen-claim; the `KindCore` alternative is
+  named and **deferred by scope**, not dismissed as impossible.
+- **D2 `&str` a tactical patch / dead-end — ACCEPTED as framing, kept as decision.**
+  Narrow by scope, not a product position (User steer 2026-06-19: wide interface is
+  the likely destination once the minimal hoist proves out). The dead-end "pay
+  twice" risk is real but **contingent** on SL-112 classifying `relation_graph`
+  engine-side and wanting leaf `dir`. *Fix:* recorded as R4 (widening trajectory,
+  mechanical re-key) + D2 reframed. `KindId` newtype still rejected (idiom friction,
+  and the real widening target is `KindCore`, not a newtype).
+- **D5 SL-112-unblock overclaim — ACCEPTED (wording).** Zero-cycles-today confirmed
+  by the reviewer (no inverse imports). But "cycle-break fully achieved" conflated
+  *breaking the 7 confirmed `relation.rs` cycles* (true) with *unblocking the engine
+  crate* (contingent on `relation_graph`'s classification). *Fix:* D5 now separates
+  the two claims explicitly.
+- **D4 single-source compile risk — REFUTED (reviewer concurs SOUND).** No `match`/
+  const-context where `prefix: kinds::X` fails or changes meaning; consumers compare
+  runtime strings. The one const-pattern wrinkle (`TargetSpec::Kinds(RECORD)` unstable
+  in patterns, L1295) pre-exists and is unrelated to the `kinds::X` re-point.
+- **Count slop — ACCEPTED.** "21 aliases" → 20 (§1/§2).
+
+No new blocker. All accepted findings were rationale/inventory corrections or a
+recorded contingent risk (R4); none changes the chosen mechanism (prefix-only `&str`
+hoist for this slice). Reviewer ran no `cargo check` (read-only jail) — the
+behaviour-preservation gate (§9) remains the implementation-time proof.
+
+Doctrinal alignment unchanged: ADR-001 satisfied; `kind-is-data-not-trait` and
+`entity` kind-blindness respected; R4 widening is forward-compatible with SL-112,
+not a conflict.
