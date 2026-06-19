@@ -1,0 +1,42 @@
+memory_uid = "mem_019edf571a5c78c29ad7f36ae41d0aa6"
+memory_key = "mem.fact.rust.parse-dsl-dup-edge-to-diagnostics"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "parse_dsl collapses duplicate edge triples into diagnostics, not edges"
+summary = "parse_dsl drops duplicate (from_key,rel,to_key) triples into diagnostics, not edges"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = ["src/concept_map.rs"]
+globs = []
+commands = []
+tags = ["sl-110", "concept-map"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0e8d2d6c2495b9fa816f06f258c448ffcaa69950"
+ref_name = "refs/heads/main"
+checkout_state_id = "b3068cd05245453c9eb51bc5a17904acf60c6724f34831bc22c58de82f600d63"
+base_commit = "945318989a8030eec16297c104e23e467a3f8f87"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
