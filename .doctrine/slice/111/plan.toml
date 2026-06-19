@@ -1,0 +1,100 @@
+# Implementation plan for SL-111 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-111"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Leaf kinds module"
+objective = """
+Establish the leaf-tier module `src/kinds.rs` owning the kind-identity vocabulary:
+20 canonical prefix consts (`pub(crate) const SL: &str = "SL"` …) plus the three
+relation groupings `GOV`/`BACKLOG`/`RECORD` (`&[&str]`). Depends on nothing
+in-crate (ADR-001 leaf). No dependents yet — this phase only introduces and pins
+the vocabulary; the engine and command consumers wire in PHASE-02/03.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (slice status `plan`); the 20 prefixes + GOV/BACKLOG/RECORD membership enumerated in design §5.2." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/kinds.rs` exists and is wired (`mod kinds;`): 20 `pub(crate) const <X>: &str` prefixes + `GOV`/`BACKLOG`/`RECORD: &[&str]` built from those consts. No `crate::` reference in the module — leaf-clean." },
+  { id = "EX-2", text = "GOV/BACKLOG/RECORD membership pinned by a unit test mirroring `integrity::kinds_table_*`, asserting each grouping equals its documented set (INV-1)." },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test kinds` — the membership test passes; GOV=[ADR,POL,STD], BACKLOG=[ISS,IMP,CHR,RSK,IDE], RECORD=[ASM,DEC,QUE,CON]." },
+  { id = "VT-2", expects = "`cargo build` green — module compiles standalone with no in-crate dependency." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Re-key relation engine onto kinds"
+objective = """
+Invert the relation engine's kind-identity ownership: re-key `RELATION_RULES`
+element type from `&'static Kind` to `&'static str`, drop the 20
+`const X: &Kind = &crate::<cmd>::*_KIND` aliases (relation.rs:247-266), and source
+`sources`/`TargetSpec::Kinds` from `kinds::*`. Breaks the 7 confirmed
+relation↔command cycles (ADR-001). Public fn signatures stay `&Kind` — zero caller
+churn. Mechanical, compile-enforced; behaviour-preserving.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — `kinds::*` prefix vocabulary + groupings available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`relation.rs` declares no `crate::<cmd>::*_KIND` alias; `RelationRule.sources` and `TargetSpec::Kinds` are `&'static [&'static str]`, populated from `kinds::*` (incl. GOV/BACKLOG/RECORD)." },
+  { id = "EX-2", text = "The 4 matchers (L477/621/858/927) and 2 test readers (`sources_match_shipped_accessors` L1096, `target_spec_matches_design` L1267-1403) take the mechanical accessor edit (`|k| k.prefix == p` → `|p| *p == p`; `.map(|k| k.prefix)` → `.copied()`); no assertion or expected value moves." },
+  { id = "EX-3", text = "Public signatures `lookup`/`tier1_edges`/`rels_block` unchanged (still `&Kind`); stale `&Kind`-justified doc-comments on `TargetSpec`/`RelationRule` (the \"No Debug\" note) corrected." },
+]
+verification = [
+  { id = "VT-1", expects = "Relation unit suite + corpus/relation integration tests green with every assertion unchanged (behaviour-preservation gate)." },
+  { id = "VA-1", expects = "Closure check: `grep -nE 'crate::\\w+::\\w*_KIND' src/relation.rs` → empty. The 7 cycles are gone." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Single-source command prefixes"
+objective = """
+Remove the parallel prefix literal: re-point each command `*_KIND` const's
+`prefix:` field to `kinds::<X>` (~20 consts) so the literal lives in exactly one
+place, satisfying the slice's "command modules consume the hoisted constant"
+objective and the no-parallel-implementation rule (INV-2 becomes structural).
+Ripple the one `relation_graph.rs:1615` test reader (the rule-table type change,
+not a behavioral edit). `integrity::KINDS` inherits transparently — untouched.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (`kinds::*` available) and PHASE-02 complete (relation engine re-keyed, cycles broken)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every command `*_KIND` const reads `prefix: kinds::<X>` (slice, spec ×2, concept_map, requirement, adr, policy, standard, review, rec, revision, backlog ×5, knowledge ×4); no string-literal prefix remains in a command kind const." },
+  { id = "EX-2", text = "`relation_graph.rs:1615` test reader takes the mechanical `&str` accessor edit; variant-only reads (`:361/1562/1581`) untouched." },
+  { id = "EX-3", text = "`integrity::KINDS` unchanged — inherits the re-pointed `prefix` via its referencing view." },
+]
+verification = [
+  { id = "VT-1", expects = "Full suite green (`cargo test`); INV-2 holds structurally (each command const reads the `kinds::` symbol)." },
+  { id = "VA-1", expects = "No parallel copy: each hoisted prefix appears once — `grep` finds no `prefix: \"<XX>\"` string literal beside a `kinds::` const in a command module." },
+  { id = "VA-2", expects = "`just gate` green — clippy zero-warning, fmt clean." },
+]
+specs        = []
+requirements = []
