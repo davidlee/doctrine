@@ -79,7 +79,31 @@ Affected surface: `src/value.rs` (new), `src/estimate.rs`, `src/main.rs`,
 
 ## Summary
 
-(Filled at close — rollup of what shipped vs the design.)
+Shipped the full integration delta, single phase (PHASE-01), exactly to the
+narrow boundary. Hand-port of `candidate/101/review-001` onto `main` (D3 — port,
+not merge), 6 files / +436:
+
+- `src/value.rs` (NEW pure leaf) + `mod value;`; V1–V7 + deserialize green.
+- `dtoml.rs` `estimation`/`value` `#[serde(default)]` config fields (no eager
+  validation); `SliceDoc` +2 optional facet fields, **parsed not rendered** —
+  the four facet types now referenced from live code.
+- `estimate.rs` blanket `#![allow(dead_code)]` → item-level `expect(dead_code)`.
+- `install/doctrine.toml.example` commented `[estimation]`/`[value]`.
+
+Verified (audit RV-088, independent re-run): `just gate` **2194 pass / 0 fail**
+(+20 additive, behaviour-preservation held); plain `cargo clippy` clean, no
+`expect` fires; `spec validate` corpus clean; VA-1 no display path.
+
+**Deviation from plan (EX-4, tolerated).** Plan said *exactly 5* item-level
+expects; shipped **6** — a 6th module-level `expect` on `pub(crate) mod display;`
+covering three unconsumed renderers SL-102 landed on `main` *after* EX-4 was
+authored. Consulted + approved (Option 1); zero edits to SL-102's `display.rs`
+(D2 boundary intact); self-clearing (fires unfulfilled when SL-102 wires display
+in); recorded as `mem.pattern.lint.module-decl-expect-propagates`.
+
+**Standing obligation (not this slice):** SL-102 (display) / SL-103 (graph) must
+remove the relevant `expect`s as they consume the helpers — tracked by the
+tripwires themselves. Contract (PRD-014 / SPEC-020, REV-002) unchanged.
 
 ## Follow-Ups
 
