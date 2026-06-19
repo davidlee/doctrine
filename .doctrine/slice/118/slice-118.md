@@ -10,34 +10,38 @@ table to an entity is hand-editing its `*.toml`. No `doctrine` verb writes facet
 values; the only authored-TOML write seams today are edges (`link`/`needs`/`after`,
 via the edit-preserving append in `src/dep_seq.rs`).
 
-This slice closes that gap: a CLI verb that authors / edits / clears the
-`[estimate]` facet on an entity through the existing parse/validate matrix and an
-edit-preserving write. Paired with IMP-112 (wire display onto the `show` path), it
-is what makes the facet usable by a human rather than a contract proven only in
-tests.
+This slice closes that gap: CLI verbs that author / edit / clear the `[estimate]`
+**and `[value]`** facets on an entity through the existing parse/validate matrix and
+an edit-preserving write. Paired with IMP-112 (wire display onto the `show` path),
+it is what makes the facets usable by a human rather than a contract proven only in
+tests. Full design: `design.md`.
 
 ## Scope & Objectives
 
-- A CLI write verb that **sets** an entity's `[estimate]` bounds (`lower`, `upper`)
-  on its identity TOML, allocating the table if absent and updating it if present.
-- All writes route through the **existing** `EstimateFacet` normalization +
-  validation matrix (finite, `lower >= 0`, `upper >= lower`) — the CLI rejects
-  exactly what parse rejects; no second validation implementation.
-- **Edit-preserving** write — ride the `toml_edit` seam pattern in `src/dep_seq.rs`
-  (preserve unrelated tables/formatting); do not rewrite the whole file.
-- A **clear/unset** path that removes the `[estimate]` table cleanly (absent facet
-  parses clean per SPEC-020).
+- `estimate` / `value` subcommand groups (`set` / `clear`) — see `design.md` §3 for
+  the surface (`estimate set <ID> <lower> <upper>` / `-x <N>` point / `clear`;
+  `value set <ID> <magnitude>` / `clear`).
+- All writes route through the **existing** pure parse/validate (estimate matrix:
+  finite, `lower >= 0`, `upper >= lower`; value: finite) — the CLI rejects exactly
+  what parse rejects; no second validation implementation. A thin `value::validate`
+  is added for symmetry.
+- **Edit-preserving** `toml_edit` write in a new ADR-001 leaf `src/facet_write.rs`
+  (one core generic over table-name + scalar fields, serving both facets); preserve
+  unrelated tables/formatting; alloc-the-table-if-absent (safe — a whole-table
+  append is position-independent).
+- A **clear/unset** path removing the facet table cleanly (absent facet parses clean
+  per SPEC-020); clear-when-absent is a friendly no-op.
 - Target resolution via the same canonical-ref seam the edge verbs use
   (`SL-NNN`, `ADR-NNN`, …) — kind-agnostic, matching the facet's kind-agnostic seam.
 
 ## Non-Goals
 
 - **Display / `show` wiring** — that is IMP-112; formatters already exist.
-- **Value facet authoring** — symmetric but separate; see open question O3. Default
-  out unless design folds it in cheaply.
 - **Confidence authoring** — `lower_confidence`/`upper_confidence` are unspec'd
-  until SL-104's confidence legitimization lands; this verb does not author them
-  (see O4).
+  until SL-104's confidence legitimization lands; this verb does not author them.
+- **Change history / time-series** — IDE-013. This slice is history-*ready* (the
+  edit-preserving writer preserves unknown facet sub-keys; a VT pins it), not
+  history-*bearing*.
 - New validation semantics, aggregation, gating — none. Pure authoring of existing
   model.
 
@@ -49,20 +53,16 @@ tests.
 - `src/dep_seq.rs` — reference pattern for the edit-preserving append (reuse, don't
   duplicate).
 
-## Open Questions (for /design)
+## Resolved Decisions (was Open Questions — see design.md §3/§7)
 
-- **O1 — verb shape.** `doctrine estimate set <ID> --lower N --upper N` (facet-named
-  verb) vs a generic `doctrine facet set <ID> estimate ...` seam anticipating value
-  / future facets. Tension: YAGNI vs the symmetric value facet arriving next.
-- **O2 — write-seam reuse.** Generalize the `dep_seq.rs` edit-preserving append into
-  a shared facet-table writer, or a bespoke estimate writer alongside it? Honour
-  "no parallel implementation."
-- **O3 — value facet.** Fold `[value]` authoring into the same verb now (symmetric,
-  cheap) or defer to a sibling slice?
-- **O4 — confidence.** Once SL-104 legitimizes confidence, does this verb grow
-  `--lower-confidence`/`--upper-confidence`, or is that a later increment?
-- **O5 — partial update.** Does `set` require both bounds every call, or allow
-  updating one (re-validating the merged pair)?
+- **O1 — verb shape** → subcommand groups (`estimate`/`value` × `set`/`clear`),
+  positional bounds, `-x` point flag.
+- **O2 — write seam** → new ADR-001 leaf `src/facet_write.rs` (cohesion + naming
+  honesty); no code duplicated (cores are operation-specific).
+- **O3 — value facet** → folded in (symmetric, one generic core).
+- **O4 — confidence** → out (blocked on SL-104).
+- **O5 — partial update** → `set` is a full-facet replace (both bounds always);
+  validation needs both anyway.
 
 ## Verification / Closure Intent
 
@@ -71,6 +71,10 @@ tests.
 - CLI rejects the full invalid matrix (missing bound, negative, `upper < lower`,
   non-finite) with the same verdicts as parse.
 - Edit-preserving: unrelated tables/relations on the target TOML survive a `set`.
-- Dogfood: author an estimate on a live entity via the verb, not by hand.
+- Dogfood: author an estimate + value on a live entity via the verb, not by hand.
 
 ## Follow-Ups
+
+- **IDE-013** — estimate/value change history (time-series). Deferred from this
+  slice; SL-118 ships history-ready (forward-compat preserving writer + VT-7).
+- **IMP-112** — wire estimate display onto the `show` path (the rendering pair).
