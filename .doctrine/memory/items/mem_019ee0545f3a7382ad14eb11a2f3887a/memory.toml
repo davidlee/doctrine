@@ -1,0 +1,45 @@
+memory_uid = "mem_019ee0545f3a7382ad14eb11a2f3887a"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "syn-based Rust layering enforcement gate (SL-112)"
+summary = ""
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = ["tests/architecture_layering.rs"]
+globs = []
+commands = []
+tags = ["layering", "rust", "gate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "94ec3b5c9161ef9657ec466705bea7cafedbc32a"
+ref_name = "refs/heads/main"
+checkout_state_id = "e3a72c7dfbe94193422640c18d161b2f150006a2c2217cc010ff3b7bb78a35b2"
+base_commit = "89440043847a072b8d2fffa7762e36b8525cb6ec"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "112"
+
