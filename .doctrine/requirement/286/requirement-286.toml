@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 286
+slug = "expose-value-metadata-through-a-policy-free-graph-contract"
+title = "Expose value metadata through a policy-free graph contract"
+status = "pending"
+kind = "functional"
+
+description = "Catalog/graph hydration exposes each node's value magnitude and project value unit through the same stable, policy-free contract as the estimate facet, carrying no aggregation or interpretation."
+tags = []
+acceptance_criteria = [
+  "For each node carrying a value facet, hydration exposes the value magnitude and the project value unit through the same catalog/graph contract as the estimate facet.",
+  "The exposed value contract carries no aggregation, traversal, or interpretation policy.",
+  "The graph-facing value vocabulary passes the whole-word denylist (no project/task/schedule/capacity).",
+]

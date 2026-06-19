@@ -22,6 +22,7 @@ responsibilities = [
   "Define the reusable `ValueFacet` model and its `[value]` parse seam: a single finite `f64` magnitude read from an optional `[value]` TOML table, normalised and validated at the parse boundary on the same kind-agnostic facet seam as the Estimate facet.",
   "Validate a present `[value]`: the `value` field is required and must be finite; absent `[value]` parses clean. No range validation (single magnitude, no ordering constraint).",
   "Resolve the project-wide value unit from `doctrine.toml [value].unit`, defaulting to `magic_beans`; the facet schema carries no entity-local unit field.",
+  "Expose each node's value magnitude and project value unit through the same catalog/graph hydration seam and policy-free contract as the estimate facet, carrying no aggregation, traversal, or interpretation semantics.",
 ]
 
 [[source]]
