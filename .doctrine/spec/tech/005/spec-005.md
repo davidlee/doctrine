@@ -43,11 +43,10 @@ The ADR identity TOML carries `id`, `slug`, `title`, `status`, and `created` /
 `updated` dates. Its relations follow the **cross-corpus relation contract
 specified in SPEC-018** (governed by ADR-010, composing ADR-004's outbound-only
 rule) — this spec does not re-tell that model. The ADR's own surface within it: a
-typed `[relationships]` table holding the supersession pair `supersedes` /
-`superseded_by` (the ADR-004 §5 reverse carve-out, verb-written, never hand-authored
-on both sides) and free-text `tags`; the `related` axis is a tier-1 `[[relation]]`
-edge (migrated in SL-048). The supersession pair stays typed pending the
-transactional supersede verb ([[IMP-006]]).
+typed `[relationships]` table holding free-text `tags`; the supersession pair
+`supersedes` / `superseded_by` (the ADR-004 §5 reverse carve-out, verb-written,
+never hand-authored on both sides) and the `related` axis live as tier-1
+`[[relation]]` edges (migrated in SL-048 and SL-095, verb landed in SL-062).
 
 ### Prose render contract
 
@@ -62,9 +61,9 @@ prose headings as a write-once scaffold, never parsing their structure.
 - **Lockstep vocabulary.** The status known-set must mirror the status enum
   exactly; an out-of-vocab status would otherwise be silently accepted or wrongly
   rejected.
-- **Inert seam stability.** The `[relationships]` table is reserved shape, not
-  behaviour; it must round-trip untouched through a status transition until a
-  supersession verb wires it.
+- **Inert seam stability.** The `[relationships]` table carries only `tags` now; the
+  supersession pair migrated to `[[relation]]` and is verb-written. The table must
+  round-trip untouched through a status transition.
 
 ## Hypotheses
 
@@ -78,8 +77,4 @@ prose headings as a write-once scaffold, never parsing their structure.
 - **D1 — metadata in TOML, prose has no frontmatter.** The ADR body is pure prose;
   identity and lifecycle live in the sister TOML, consistent with the storage rule
   the parent container realises.
-- **D2 — relations follow the SPEC-018 contract; the supersession seam stays typed
-  and inert.** `related` migrated to the tier-1 `[[relation]]` block (SL-048); the
-  supersession pair + `tags` remain a typed `[relationships]` table, inert until the
-  transactional supersede verb ([[IMP-006]]) wires them. The cross-corpus model,
-  vocabulary, and validation policy live in SPEC-018, not here.
+- **D2 — relations follow the SPEC-018 contract; supersession lives as `[[relation]]` edges.** `related` and the supersession pair `supersedes` / `superseded_by` all live as tier-1 `[[relation]]` edges (migrated in SL-048 and SL-095, with the transactional supersede verb landed in SL-062); `tags` remain in the typed `[relationships]` table. The cross-corpus model, vocabulary, and validation policy live in SPEC-018, not here.

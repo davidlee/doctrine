@@ -5,10 +5,10 @@ id = 81
 slug = "memory-record-cli-lacks-trust-and-severity-flags-audit-a-3"
 title = "memory record CLI lacks --trust and --severity flags (audit A-3)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-16"
-updated = "2026-06-16"
+updated = "2026-06-19"
 tags = ["area:cli", "area:memory"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
