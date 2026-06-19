@@ -27,6 +27,7 @@ mod governance;
 mod input;
 mod install;
 mod integrity;
+mod kinds;
 mod knowledge;
 mod lazyspec;
 mod ledger;
