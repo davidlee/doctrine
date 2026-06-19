@@ -42,20 +42,20 @@ label = "requirements"
 target = "REQ-277"
 
 [[relation]]
-label = "governed_by"
-target = "ADR-001"
-
-[[relation]]
-label = "governed_by"
-target = "ADR-004"
-
-[[relation]]
 label = "requirements"
 target = "REQ-278"
 
 [[relation]]
 label = "requirements"
 target = "REQ-279"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-004"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
