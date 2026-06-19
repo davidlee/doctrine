@@ -197,6 +197,12 @@ fn toml_to_f64(value: &toml::Value, name: &str) -> anyhow::Result<f64> {
 
 /// Validate a present estimate. Pure. Violations produce sentence-case errors.
 pub(crate) fn validate(facet: &EstimateFacet) -> anyhow::Result<()> {
+    if !facet.lower.is_finite() {
+        anyhow::bail!("estimate: lower must be finite");
+    }
+    if !facet.upper.is_finite() {
+        anyhow::bail!("estimate: upper must be finite");
+    }
     if facet.lower < 0.0 {
         anyhow::bail!("estimate: lower must be >= 0");
     }
@@ -453,6 +459,46 @@ mod tests {
         };
         let err = validate(&f).unwrap_err().to_string();
         assert!(err.contains("upper must be >= lower"));
+    }
+
+    #[test]
+    fn validate_rejects_inf_lower() {
+        let f = EstimateFacet {
+            lower: f64::INFINITY,
+            upper: 1.0,
+        };
+        let err = validate(&f).unwrap_err().to_string();
+        assert!(err.contains("finite"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_rejects_inf_upper() {
+        let f = EstimateFacet {
+            lower: 1.0,
+            upper: f64::INFINITY,
+        };
+        let err = validate(&f).unwrap_err().to_string();
+        assert!(err.contains("finite"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_rejects_nan_lower() {
+        let f = EstimateFacet {
+            lower: f64::NAN,
+            upper: 1.0,
+        };
+        let err = validate(&f).unwrap_err().to_string();
+        assert!(err.contains("finite"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_rejects_nan_upper() {
+        let f = EstimateFacet {
+            lower: 1.0,
+            upper: f64::NAN,
+        };
+        let err = validate(&f).unwrap_err().to_string();
+        assert!(err.contains("finite"), "got: {}", err);
     }
 
     // ---- Custom Deserialize direct ----
