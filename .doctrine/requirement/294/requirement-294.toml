@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 294
+slug = "the-orchestrator-never-widens-a-workers-source-delta-when-integrating-it-stages-exact-declared"
+title = "The orchestrator never widens a worker's source delta when integrating: it stages exact declared paths (never git add -A / commit -a), substitutes the checkout-import idiom when git apply patches corrupt or stat-proxy, and re-anchors onto a moved HEAD only on a per-path byte-identical disjointness proof."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

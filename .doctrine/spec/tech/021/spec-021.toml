@@ -1,0 +1,42 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 21
+slug = "dispatch-orchestrator-process"
+title = "Dispatch orchestrator process"
+status = "active"
+kind = "tech"
+category = "dispatch"
+c4_level = "component"
+parent = "SPEC-012"
+tags = ["dispatch", "worktree", "orchestrator", "funnel", "cadence", "routing", "harness-altitude", "integration-sync", "gotchas"]
+responsibilities = [
+  "Carry the per-batch funnel cadence as a fixed ordered contract — capture `B` pre-spawn, then precondition → delta-check → R-5 `.doctrine/`/`.claude/` belt → import (non-committing) → verify → branch-point guard → one coordination commit → record — with report-and-halt on any breach and knowledge trailing only the confirmed code commit (ADR-006 D7). The verbs themselves are SPEC-012's; this owns their ordering and the halt discipline.",
+  "Decide the dispatch arm deterministically: `doctrine.toml [dispatch] claude-force-subprocess-dispatch` first, then the env-marker (`.claude/` presence) selects `/dispatch-agent` (claude `Agent` tool) vs `/dispatch-subprocess` (codex/pi); a self-belief↔env-marker mismatch refuses naming the cause, never blind-spawns (ADR-011 D3).",
+  "Govern the concurrency decision — parallel *execution* of file-disjoint phases is first-class, parallel *landing* is not: v1 lands one worker per base under the stationary-head precondition, and serial-dependent phases self-base by advancing coordination HEAD to phase N's integrated tip before spawning N+1 (SL-056 §7c, SL-064 §7c).",
+  "Own coordination-tree placement and lifecycle: an always-on, markerless `dispatch/<slice>` worktree provisioned per run via `worktree coordinate`, created *inside* the project root (the jail cwd-revert hazard), with Bash cwd parked there for the whole drive loop; concurrent same-slice dispatch refused at creation; worktree-life < branch-life (ADR-012 D1, SL-064 §2, ISS-029).",
+  "State per-harness enforcement altitude as a uniform contract with honest non-uniform reach: codex/pi pin base explicitly (`fork --base B`), catch worker-on-main via the `DOCTRINE_WORKER` env leg, baseline-verify pre-dispatch, and reach the bwrap OS floor; claude attains base==B by placement (cwd==coordination tree + `baseRef='head'`) plus the post-spawn `verify-worker` ancestor check, with marker-only identity, no pre-dispatch baseline-verify, and a fail-open SubagentStart stamp (ADR-011 D2/D3/D5/D6).",
+  "Drive the two-stage, audit-gated integration projection: stage-1 `dispatch sync --prepare-review` materialises `review/<slice>` + `phase/<slice>-NN` and a CAS journal committed before any ref mutation (no trunk write); audit runs from the parent/root against the prepared refs; stage-2 `dispatch sync --integrate` is opt-in, fast-forward-only, expected-tip-CAS, and reports — never auto-resolves — a moved/non-ff target (ADR-012 D4/D5, SL-064 §4).",
+  "Encode the load-bearing operational gotchas as durable constraints the orchestrator must honour: read git through failure-tolerant idioms under output-rewriting proxies (rtk) — printed-output checks or `rtk proxy`, never a chained exit code; substitute the checkout-import idiom when `git apply` patches corrupt or stat-proxy; never widen a delta (`git add -A`/`commit -a` forbidden); re-anchor onto a moved HEAD only on a per-path byte-identical disjointness proof; the combined-tree project verify is the real gate; record durable memory on trunk, never inside a fork branch.",
+]
+
+[[source]]
+language = "markdown"
+identifier = "plugins/doctrine/skills/dispatch/SKILL.md"
+
+[[source]]
+language = "markdown"
+identifier = "plugins/doctrine/skills/dispatch-agent/SKILL.md"
+
+[[source]]
+language = "markdown"
+identifier = "plugins/doctrine/skills/dispatch-subprocess/SKILL.md"
+
+[[source]]
+language = "markdown"
+identifier = "plugins/doctrine/skills/worktree/SKILL.md"
+
+[[source]]
+language = "rust"
+identifier = "src/dispatch.rs"
+module = "doctrine::dispatch"

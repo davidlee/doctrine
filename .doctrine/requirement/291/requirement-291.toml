@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 291
+slug = "per-harness-enforcement-altitude-is-a-uniform-contract-with-honest-non-uniform-reach-codexpi-pin"
+title = "Per-harness enforcement altitude is a uniform contract with honest non-uniform reach: codex/pi pin base explicitly, catch worker-on-main via the DOCTRINE_WORKER env leg, and baseline-verify pre-dispatch; claude attains base==B by placement (cwd==coordination tree, baseRef=head) plus the post-spawn verify-worker ancestor check, with marker-only identity, no pre-dispatch baseline-verify, and a fail-open SubagentStart stamp."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
