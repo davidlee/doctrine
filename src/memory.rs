@@ -122,7 +122,10 @@ impl Status {
             "retracted" => Self::Retracted,
             "archived" => Self::Archived,
             "quarantined" => Self::Quarantined,
-            other => bail!("unknown status {other:?}"),
+            other => bail!(
+                "unknown status {other:?} (known: {})",
+                MEMORY_STATUSES.join(", ")
+            ),
         })
     }
 
@@ -2394,6 +2397,490 @@ fn validate_relation_target(root: &Path, target: &str) -> Result<()> {
     bail!("target '{target}' not found")
 }
 
+// ---------------------------------------------------------------------------
+// SL-100 PHASE-01 — memory tag (scope.tags set algebra)
+// ---------------------------------------------------------------------------
+
+/// Pure write core: apply a tag add/remove SET edit to a held `&mut DocumentMut`
+/// on the memory `scope.tags` path. No disk, no clock — the shell injects `today`.
+///
+/// - **F-1 strict refuse**: the `scope.tags` array absent → the memory is
+///   malformed (a well-formed file seeds `scope.tags = []`); `bail!`, never
+///   tail-create — the file is left untouched.
+/// - **Set algebra**: `new = (current ∪ adds) ∖ removes`, stored SORTED.
+/// - **No-op guard (set-compare)**: if `set(new) == set(current)`, return
+///   `Ok(false)` with NO mutation (content + mtime hold). Set-compare (not
+///   ordered-vec) is REQUIRED so an idempotent re-add against an UNSORTED
+///   hand-authored store does not spuriously write + stamp `updated`.
+/// - Else replace `scope.tags` with the fresh SORTED array and stamp
+///   `updated = today` at the root, returning `Ok(true)`.
+pub(crate) fn apply_memory_tags(
+    doc: &mut toml_edit::DocumentMut,
+    adds: &BTreeSet<String>,
+    removes: &BTreeSet<String>,
+    today: &str,
+) -> Result<bool> {
+    // Navigate scope → tags array; bail if absent (F-1).
+    let scope = doc
+        .as_table()
+        .get("scope")
+        .and_then(toml_edit::Item::as_table)
+        .with_context(|| {
+            "malformed memory, restore seeded scope.tags array — the file is left untouched"
+                .to_string()
+        })?;
+    let array = scope
+        .get("tags")
+        .and_then(toml_edit::Item::as_array)
+        .with_context(|| {
+            "malformed memory, restore seeded scope.tags array — the file is left untouched"
+                .to_string()
+        })?;
+
+    let current: BTreeSet<String> = array
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+
+    let mut new: BTreeSet<String> = current.clone();
+    new.extend(adds.iter().cloned());
+    for r in removes {
+        new.remove(r);
+    }
+
+    // Set-compare no-op guard.
+    if new == current {
+        return Ok(false);
+    }
+
+    // Full sorted-array replace, preserving the doc outside the array.
+    let mut fresh = toml_edit::Array::new();
+    for tag in &new {
+        fresh.push(tag.as_str());
+    }
+
+    // Navigate to the mutable scope table inside the doc.
+    let scope_mut = doc["scope"].as_table_mut().context(
+        "malformed memory, restore seeded scope.tags array — the file is left untouched",
+    )?;
+    scope_mut.insert("tags", toml_edit::value(fresh));
+
+    // Stamp `updated` at root.
+    doc["updated"] = toml_edit::value(today);
+    Ok(true)
+}
+
+/// `doctrine memory tag <REF> [TAGS]… [-d TAGS]…` — the tag-edit verb for
+/// memories (SL-100 PHASE-01). Thin impure shell:
+/// `resolve_memory_toml_path` → validate → overlap reject →
+/// `apply_memory_tags` → write back → print.
+pub(crate) fn run_tag(
+    path: Option<PathBuf>,
+    reference: &str,
+    adds: &[String],
+    removes: &[String],
+) -> Result<()> {
+    if adds.is_empty() && removes.is_empty() {
+        anyhow::bail!("`memory tag` needs at least one tag to add or remove (-d)");
+    }
+
+    let add_set: BTreeSet<String> = adds
+        .iter()
+        .map(|t| crate::tag::normalize_tag(t))
+        .collect::<Result<_>>()?;
+    let remove_set: BTreeSet<String> = removes
+        .iter()
+        .map(|t| crate::tag::normalize_tag(t))
+        .collect::<Result<_>>()?;
+
+    // Overlap reject: a tag in both add and remove is contradictory.
+    let overlap: Vec<&String> = add_set.intersection(&remove_set).collect();
+    if let Some(first) = overlap.first() {
+        anyhow::bail!("tag `{first}` is in both add and remove (pick one)");
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mref = MemoryRef::parse(reference)?;
+    let toml_path = resolve_memory_toml_path(&root, &mref)?;
+
+    let text = fs::read_to_string(&toml_path)
+        .with_context(|| format!("memory not found at {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    let changed = apply_memory_tags(&mut doc, &add_set, &remove_set, &crate::clock::today())?;
+    if changed {
+        fs::write(&toml_path, doc.to_string())
+            .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    }
+
+    // Print the post-state tag list, re-derived from the doc.
+    let final_tags: Vec<String> = doc
+        .as_table()
+        .get("scope")
+        .and_then(toml_edit::Item::as_table)
+        .and_then(|s| s.get("tags"))
+        .and_then(toml_edit::Item::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let listed = if final_tags.is_empty() {
+        "(none)".to_string()
+    } else {
+        final_tags.join(", ")
+    };
+    writeln!(io::stdout(), "Tagged {reference}: {listed}")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SL-100 PHASE-02 — memory status: pure transition core + IO shell
+// ---------------------------------------------------------------------------
+
+/// Pure core: apply a status transition on a held [`toml_edit::DocumentMut`].
+///
+/// Vocab-gates through [`Status::parse`] (refuses unknown states with the
+/// known-vocab list), then delegates to [`crate::dep_seq::apply_status`] with the
+/// managed keys `status` + `updated`. Returns `true` if the document changed,
+/// `false` if it was already that status (idempotent no-op).
+///
+/// Reused by both `run_status` (the IO shell) and `run_edit` (which composes
+/// this over its own held doc for single-transaction semantics, PHASE-03).
+pub(crate) fn memory_status_transition(
+    doc: &mut toml_edit::DocumentMut,
+    state: &str,
+    today: &str,
+) -> anyhow::Result<bool> {
+    // Vocab gate: refuse unknown states with the known-vocab list.
+    Status::parse(state)?;
+
+    let hint = "malformed memory: missing seeded `status`/`updated` — \
+         restore the missing keys and retry; the file is left untouched"
+        .to_string();
+
+    crate::dep_seq::apply_status(doc, &[("status", state), ("updated", today)], &hint)
+}
+
+/// `doctrine memory status <REF> <STATE> [--by <OTHER>]` — transition one memory's
+/// status in place. Thin shell: resolve the memory path (rejects shipped/), validate
+/// `--by` semantics (required for superseded, forbidden otherwise, self-supersession
+/// refused), write the `superseded_by` relation FIRST for superseded, then read→
+/// pure-core→write-once. Prints the canonical uid + the new state.
+pub(crate) fn run_status(
+    path: Option<PathBuf>,
+    reference: &str,
+    state: &str,
+    by: Option<&str>,
+    color: bool,
+) -> anyhow::Result<()> {
+    // Validate --by semantics before touching the filesystem.
+    if state == "superseded" {
+        if by.is_none() {
+            anyhow::bail!("status superseded requires --by <OTHER> to record the successor");
+        }
+    } else if by.is_some() {
+        anyhow::bail!("--by is only valid with status superseded");
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mref = MemoryRef::parse(reference)?;
+    let toml_path = resolve_memory_toml_path(&root, &mref)?;
+
+    // Resolve the main ref to its uid for self-supersession check and output.
+    let main_uid = resolve_inspect_uid(&root, reference)?;
+
+    // If --by given: resolve target uid, self-supersession check, write relation
+    // BEFORE flipping status (relation-first ordering — if status-write fails later,
+    // no orphaned superseded status without the successor link).
+    if let Some(by_ref) = by {
+        let by_uid = resolve_inspect_uid(&root, by_ref)?;
+        if main_uid == by_uid {
+            anyhow::bail!("refusing self-supersession: a memory cannot supersede itself");
+        }
+        append_memory_relation(&toml_path, "superseded_by", &by_uid)?;
+    }
+
+    // Read TOML fresh (append_memory_relation may have modified it) → pure core →
+    // write back if changed.
+    let text = fs::read_to_string(&toml_path)
+        .with_context(|| format!("memory not found at {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    let today = crate::clock::today();
+    let changed = memory_status_transition(&mut doc, state, &today)?;
+    if changed {
+        fs::write(&toml_path, doc.to_string())
+            .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    }
+
+    writeln!(
+        io::stdout(),
+        "{}: {}",
+        main_uid,
+        crate::listing::status_colored(state, color)
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SL-100 PHASE-03 — memory edit (multi-field)
+// ---------------------------------------------------------------------------
+
+/// The edit flags bundle — every field optional; at least one must be `Some`.
+#[derive(Debug, Default)]
+pub(crate) struct EditFields {
+    pub(crate) title: Option<String>,
+    pub(crate) summary: Option<String>,
+    pub(crate) status: Option<String>,
+    pub(crate) lifespan: Option<String>,
+    pub(crate) review_by: Option<String>,
+    pub(crate) trust: Option<String>,
+    pub(crate) severity: Option<String>,
+    pub(crate) key: Option<String>,
+    pub(crate) path_scope: Option<Vec<String>>,
+    pub(crate) glob: Option<Vec<String>>,
+    pub(crate) command: Option<Vec<String>>,
+}
+
+impl EditFields {
+    fn has_any(&self) -> bool {
+        self.title.is_some()
+            || self.summary.is_some()
+            || self.status.is_some()
+            || self.lifespan.is_some()
+            || self.review_by.is_some()
+            || self.trust.is_some()
+            || self.severity.is_some()
+            || self.key.is_some()
+            || self.path_scope.is_some()
+            || self.glob.is_some()
+            || self.command.is_some()
+    }
+}
+
+/// Pure core: apply field edits to a held [`toml_edit::DocumentMut`].
+///
+/// For each `Some(field)`: navigate to the TOML path and set/insert the value.
+/// `--status` delegates to [`memory_status_transition`] (no double stamp).
+/// `--key` late-binds iff `memory_key` is absent (`Option` guard), normalized
+/// via [`normalize_key`]. Scope arrays replace. `updated` stamped ONCE at root
+/// if any field changed. Returns `true` iff any field changed.
+pub(crate) fn apply_edit(
+    doc: &mut toml_edit::DocumentMut,
+    fields: &EditFields,
+    today: &str,
+) -> anyhow::Result<bool> {
+    let mut changed = false;
+
+    // --key immutability: check BEFORE any write.
+    if fields.key.is_some() && doc.contains_key("memory_key") {
+        anyhow::bail!("key already set; memory_key is immutable once recorded.");
+    }
+
+    // --title: non-empty after trim → replace.
+    if let Some(ref t) = fields.title {
+        let trimmed = t.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("--title must not be empty");
+        }
+        let existing = doc.get("title").and_then(|v| v.as_str()).unwrap_or("");
+        if existing != trimmed {
+            doc["title"] = toml_edit::value(trimmed);
+            changed = true;
+        }
+    }
+
+    // --summary: replace (free text).
+    if let Some(ref s) = fields.summary {
+        let existing = doc.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+        if existing != s {
+            doc["summary"] = toml_edit::value(s.as_str());
+            changed = true;
+        }
+    }
+
+    // --status: delegates to memory_status_transition (composes on held doc).
+    // superseded refused — edit doesn't offer --by.
+    if let Some(ref state) = fields.status {
+        if state == "superseded" {
+            anyhow::bail!("use `memory status superseded --by <OTHER>` to record the successor.");
+        }
+        if memory_status_transition(doc, state, today)? {
+            changed = true;
+        }
+    }
+
+    // --lifespan: Lifespan::from_str, replace. Empty "" → leave existing value unchanged.
+    if let Some(ref raw) = fields.lifespan {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            let _: Lifespan = Lifespan::from_str(trimmed)?;
+            let existing = doc.get("lifespan").and_then(|v| v.as_str()).unwrap_or("");
+            if existing != trimmed {
+                doc["lifespan"] = toml_edit::value(trimmed);
+                changed = true;
+            }
+        }
+        // empty → leave unchanged (clear is deferred follow-up)
+    }
+
+    // --review-by: YYYY-MM-DD insert-or-replace; "" → clear (remove key).
+    if let Some(ref raw) = fields.review_by {
+        let trimmed = raw.trim();
+        let review = doc["review"].as_table_mut().with_context(|| {
+            "malformed memory: missing [review] table — the file is left untouched".to_string()
+        })?;
+        if trimmed.is_empty() {
+            // Clear: remove key iff present.
+            if review.contains_key("review_by") {
+                review.remove("review_by");
+                changed = true;
+            }
+        } else {
+            let existing = review
+                .get("review_by")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if existing != trimmed {
+                review.insert("review_by", toml_edit::value(trimmed));
+                changed = true;
+            }
+        }
+    }
+
+    // --trust: low|medium|high → replace.
+    if let Some(ref raw) = fields.trust {
+        let trimmed = raw.trim().to_lowercase();
+        match trimmed.as_str() {
+            "low" | "medium" | "high" => {}
+            other => anyhow::bail!("unknown trust level {other:?} (known: low, medium, high)"),
+        }
+        let trust = doc["trust"].as_table_mut().with_context(|| {
+            "malformed memory: missing [trust] table — the file is left untouched".to_string()
+        })?;
+        let existing = trust
+            .get("trust_level")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if existing != trimmed {
+            trust.insert("trust_level", toml_edit::value(trimmed.as_str()));
+            changed = true;
+        }
+    }
+
+    // --severity: critical|high|medium|low|none → replace.
+    if let Some(ref raw) = fields.severity {
+        let trimmed = raw.trim().to_lowercase();
+        match trimmed.as_str() {
+            "critical" | "high" | "medium" | "low" | "none" => {}
+            other => anyhow::bail!(
+                "unknown severity {other:?} (known: critical, high, medium, low, none)"
+            ),
+        }
+        let ranking = doc["ranking"].as_table_mut().with_context(|| {
+            "malformed memory: missing [ranking] table — the file is left untouched".to_string()
+        })?;
+        let existing = ranking
+            .get("severity")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if existing != trimmed {
+            ranking.insert("severity", toml_edit::value(trimmed.as_str()));
+            changed = true;
+        }
+    }
+
+    // --key: late-bind iff memory_key absent. Normalized via normalize_key.
+    if let Some(ref raw) = fields.key {
+        let normalized = normalize_key(raw)?;
+        doc.insert("memory_key", toml_edit::value(normalized.as_str()));
+        changed = true;
+    }
+
+    // --path-scope: replace entire array.
+    if let Some(ref paths) = fields.path_scope {
+        let scope = doc["scope"].as_table_mut().with_context(|| {
+            "malformed memory: missing [scope] table — the file is left untouched".to_string()
+        })?;
+        let mut arr = toml_edit::Array::new();
+        for p in paths {
+            arr.push(p.as_str());
+        }
+        scope.insert("paths", toml_edit::value(arr));
+        changed = true;
+    }
+
+    // --glob: replace entire array.
+    if let Some(ref globs) = fields.glob {
+        let scope = doc["scope"].as_table_mut().with_context(|| {
+            "malformed memory: missing [scope] table — the file is left untouched".to_string()
+        })?;
+        let mut arr = toml_edit::Array::new();
+        for g in globs {
+            arr.push(g.as_str());
+        }
+        scope.insert("globs", toml_edit::value(arr));
+        changed = true;
+    }
+
+    // --command: replace entire array.
+    if let Some(ref commands) = fields.command {
+        let scope = doc["scope"].as_table_mut().with_context(|| {
+            "malformed memory: missing [scope] table — the file is left untouched".to_string()
+        })?;
+        let mut arr = toml_edit::Array::new();
+        for c in commands {
+            arr.push(c.as_str());
+        }
+        scope.insert("commands", toml_edit::value(arr));
+        changed = true;
+    }
+
+    // Stamp `updated` ONCE at root if any field changed.
+    if changed {
+        doc["updated"] = toml_edit::value(today);
+    }
+
+    Ok(changed)
+}
+
+/// `doctrine memory edit <REF> [flags]` — multi-field edit verb (SL-100 PHASE-03).
+/// Thin impure shell: resolve → validate → read → `apply_edit` → write if changed.
+pub(crate) fn run_edit(
+    path: Option<PathBuf>,
+    reference: &str,
+    fields: &EditFields,
+) -> anyhow::Result<()> {
+    if !fields.has_any() {
+        anyhow::bail!("`memory edit` requires at least one flag");
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mref = MemoryRef::parse(reference)?;
+    let toml_path = resolve_memory_toml_path(&root, &mref)?;
+
+    let text = fs::read_to_string(&toml_path)
+        .with_context(|| format!("memory not found at {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    let changed = apply_edit(&mut doc, fields, &crate::clock::today())?;
+    if changed {
+        fs::write(&toml_path, doc.to_string())
+            .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    }
+
+    writeln!(io::stdout(), "Edited memory {reference}")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2437,14 +2924,14 @@ trust_level = "medium"
 severity = "high"
 weight = 8
 
-[[relation]]
-rel = "supersedes"
-to = "mem_018e000000000000000000000000000b"
-
 [[source]]
 kind = "code"
 ref = "src/main.rs"
 note = "entrypoint"
+
+[[relation]]
+rel = "supersedes"
+to = "mem_018e000000000000000000000000000b"
 "#
         )
     }
@@ -5340,6 +5827,888 @@ weight = 0
         assert_eq!(scores.len(), 2);
         assert!(scores[0].1 > 0, "doc1 score should be > 0: {:?}", scores);
         assert!(scores[1].1 > 0, "doc2 score should be > 0: {:?}", scores);
+    }
+
+    // --- SL-100 PHASE-01: memory tag ---------------------------------------
+
+    /// Convenience: `&[&str]` → `Vec<String>` for run_tag args.
+    fn s(xs: &[&str]) -> Vec<String> {
+        xs.iter().map(|x| (*x).to_string()).collect()
+    }
+
+    /// Write a full `items/<uid>/memory.toml` (and body) from `full_toml()`
+    /// substituting `uid` into the scaffold. Convenience for tag test fixtures.
+    fn write_memory_fixture(items: &Path, uid: &str) {
+        write_memory_full(items, uid, &full_toml().replace(UID, uid), "body");
+    }
+
+    /// VT-2: apply_memory_tags set algebra — union/minus over scope.tags,
+    /// sorted output, changed=true.
+    #[test]
+    fn apply_memory_tags_add_remove_sorted() {
+        let adds: BTreeSet<String> = ["security", "cli"].iter().map(|s| s.to_string()).collect();
+        let removes: BTreeSet<String> = ["architecture"].iter().map(|s| s.to_string()).collect();
+        // full_toml has scope.tags = ["cli", "architecture"]
+        let mut doc = full_toml().parse::<toml_edit::DocumentMut>().unwrap();
+        let changed = apply_memory_tags(&mut doc, &adds, &removes, "2026-06-10").unwrap();
+        assert!(changed, "should be a real change");
+        let tags: Vec<String> = doc["scope"]["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        assert_eq!(tags, vec!["cli", "security"], "sorted: cli < security");
+        assert_eq!(
+            doc["updated"].as_str().unwrap(),
+            "2026-06-10",
+            "updated stamped"
+        );
+    }
+
+    /// VT-2/VT-3: remove-only yields correct set, changed=true.
+    #[test]
+    fn apply_memory_tags_remove_only() {
+        let removes: BTreeSet<String> = ["architecture"].iter().map(|s| s.to_string()).collect();
+        let mut doc = full_toml().parse::<toml_edit::DocumentMut>().unwrap();
+        let changed =
+            apply_memory_tags(&mut doc, &BTreeSet::new(), &removes, "2026-06-10").unwrap();
+        assert!(changed, "removing existing tag is a change");
+        let tags: Vec<String> = doc["scope"]["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        assert_eq!(tags, vec!["cli"]);
+    }
+
+    /// VT-3: idempotent no-op — re-adding an existing tag returns false,
+    /// no write, doc unchanged.
+    #[test]
+    fn apply_memory_tags_idempotent_re_add() {
+        let adds: BTreeSet<String> = ["cli"].iter().map(|s| s.to_string()).collect();
+        let toml_text = full_toml();
+        let mut doc = toml_text.parse::<toml_edit::DocumentMut>().unwrap();
+        let changed = apply_memory_tags(&mut doc, &adds, &BTreeSet::new(), "2026-06-10").unwrap();
+        assert!(!changed, "re-adding existing tag is no-op");
+        // Verify updated not stamped (still original).
+        assert_eq!(
+            doc["updated"].as_str().unwrap(),
+            "2026-06-04",
+            "updated not re-stamped on no-op"
+        );
+    }
+
+    /// VT-3: idempotent remove-absent — removing an absent tag returns false.
+    #[test]
+    fn apply_memory_tags_idempotent_remove_absent() {
+        let removes: BTreeSet<String> = ["zzz"].iter().map(|s| s.to_string()).collect();
+        let mut doc = full_toml().parse::<toml_edit::DocumentMut>().unwrap();
+        let changed =
+            apply_memory_tags(&mut doc, &BTreeSet::new(), &removes, "2026-06-10").unwrap();
+        assert!(!changed, "removing absent tag is no-op");
+    }
+
+    /// VT-3: idempotent no-op against unsorted hand-authored store —
+    /// set-compare holds, no write.
+    #[test]
+    fn apply_memory_tags_no_op_on_unsorted_hand_store() {
+        // Hand-author an unsorted scope.tags = ["b", "a"] — set is {a,b}.
+        let toml = r#"
+memory_uid = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Test"
+summary = ""
+created = "2026-06-04"
+updated = "2026-06-04"
+
+[scope]
+tags = ["b", "a"]
+"#;
+        let mut doc = toml.parse::<toml_edit::DocumentMut>().unwrap();
+        // Re-add "a" (already in set).
+        let adds: BTreeSet<String> = ["a"].iter().map(|s| s.to_string()).collect();
+        let changed = apply_memory_tags(&mut doc, &adds, &BTreeSet::new(), "2026-06-10").unwrap();
+        assert!(!changed, "no-op on unsorted hand store");
+        // updated not stamped.
+        assert_eq!(doc["updated"].as_str().unwrap(), "2026-06-04");
+    }
+
+    /// VT-5: malformed memory (scope.tags array absent) bails with clear error.
+    #[test]
+    fn apply_memory_tags_refuses_missing_scope_tags() {
+        let no_tags = r#"
+memory_uid = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "NoTags"
+summary = ""
+created = "2026-06-04"
+updated = "2026-06-04"
+
+[scope]
+paths = ["src/main.rs"]
+"#;
+        let mut doc = no_tags.parse::<toml_edit::DocumentMut>().unwrap();
+        let adds: BTreeSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
+        let err = apply_memory_tags(&mut doc, &adds, &BTreeSet::new(), "2026-06-10").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("malformed memory") && msg.contains("scope.tags"),
+            "error names scope.tags: {msg}"
+        );
+    }
+
+    /// VT-5: malformed memory (scope key absent entirely) bails.
+    #[test]
+    fn apply_memory_tags_refuses_missing_scope_table() {
+        let no_scope = r#"
+memory_uid = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "NoScope"
+summary = ""
+created = "2026-06-04"
+updated = "2026-06-04"
+"#;
+        let mut doc = no_scope.parse::<toml_edit::DocumentMut>().unwrap();
+        let adds: BTreeSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
+        let err = apply_memory_tags(&mut doc, &adds, &BTreeSet::new(), "2026-06-10").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("malformed memory") && msg.contains("scope.tags"),
+            "error names scope.tags: {msg}"
+        );
+    }
+
+    /// VT-4/VT-3: run_tag end-to-end — add and remove tags, sorted output text.
+    #[test]
+    fn run_tag_end_to_end_add_and_remove() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        write_memory_fixture(&items, UID);
+        // full_toml has tags: ["cli", "architecture"]
+
+        run_tag(
+            Some(root.to_path_buf()),
+            UID,
+            &s(&["security"]),
+            &s(&["architecture"]),
+        )
+        .unwrap();
+
+        let toml_text = std::fs::read_to_string(items.join(UID).join("memory.toml")).unwrap();
+        assert!(
+            toml_text.contains("tags = [\"cli\", \"security\"]"),
+            "sorted tags: {toml_text}"
+        );
+    }
+
+    /// VT-4: run_tag overlap reject — same tag in add and remove.
+    #[test]
+    fn run_tag_rejects_overlap() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        write_memory_fixture(&items, UID);
+
+        let err = run_tag(Some(root.to_path_buf()), UID, &s(&["X"]), &s(&["x"]));
+        assert!(err.is_err(), "overlap rejected");
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("x"), "error names the overlapping tag: {msg}");
+    }
+
+    /// VT-4: run_tag requires at least one edit.
+    #[test]
+    fn run_tag_requires_at_least_one_edit() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        write_memory_fixture(&items, UID);
+
+        let err = run_tag(Some(root.to_path_buf()), UID, &[], &[]);
+        assert!(err.is_err(), "empty edit-set rejected");
+    }
+
+    /// VT-4: run_tag validates charset via normalize_tag.
+    #[test]
+    fn run_tag_rejects_bad_charset() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        write_memory_fixture(&items, UID);
+
+        let before = std::fs::read_to_string(items.join(UID).join("memory.toml")).unwrap();
+        let err = run_tag(Some(root.to_path_buf()), UID, &s(&["a@b"]), &[]);
+        assert!(err.is_err(), "bad charset rejected");
+        let after = std::fs::read_to_string(items.join(UID).join("memory.toml")).unwrap();
+        assert_eq!(before, after, "file untouched on reject");
+    }
+
+    /// VT-5: run_tag refuses shipped/ memory.
+    #[test]
+    fn run_tag_refuses_shipped_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let shipped = root.join(MEMORY_SHIPPED_DIR);
+        write_memory_full(&shipped, UID, &full_toml(), "body");
+
+        let err = run_tag(Some(root.to_path_buf()), UID, &s(&["security"]), &[]);
+        assert!(err.is_err(), "shipped memory refused for write");
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("shipped"), "error mentions shipped: {msg}");
+    }
+
+    /// VT-1: Existing backlog tag tests pass (behaviour-preservation gate).
+    /// This is a point-affirmation that `crate::tag::normalize_tag` produces
+    /// the same results the inline `backlog::normalize_tag` produced.
+    #[test]
+    fn normalize_tag_extracted_yields_same_results() {
+        assert_eq!(crate::tag::normalize_tag("Security").unwrap(), "security");
+        assert_eq!(
+            crate::tag::normalize_tag("  Area:Backlog ").unwrap(),
+            "area:backlog"
+        );
+        assert_eq!(crate::tag::normalize_tag("a_b-1:c").unwrap(), "a_b-1:c");
+        assert!(crate::tag::normalize_tag("a b").is_err());
+        assert!(crate::tag::normalize_tag("   ").is_err());
+    }
+
+    // -- SL-100 PHASE-02: memory status ------------------------------------
+
+    /// VT-1: memory_status_transition — each of the 6 states transitions
+    /// and stamps updated; idempotent re-transition returns false.
+    #[test]
+    fn memory_status_transition_all_six_states_and_idempotent() {
+        for (i, state) in MEMORY_STATUSES.iter().enumerate() {
+            let today = format!("2026-06-{:02}", 10 + i);
+            // Start from a doc with a DIFFERENT status to guarantee change.
+            let seed = full_toml().replace("status = \"active\"", "status = \"draft\"");
+            let mut doc = seed.parse::<toml_edit::DocumentMut>().unwrap();
+
+            // Transition to the state.
+            let changed = memory_status_transition(&mut doc, state, &today).unwrap();
+            // Only "draft" (already set) is a no-op — all others change.
+            if *state == "draft" {
+                assert!(
+                    !changed,
+                    "already-draft transition to draft should be no-op"
+                );
+                assert_eq!(doc["updated"].as_str().unwrap(), "2026-06-04");
+                continue;
+            }
+            assert!(changed, "transition from draft to {state} should change");
+            assert_eq!(doc["status"].as_str().unwrap(), *state);
+            assert_eq!(doc["updated"].as_str().unwrap(), today);
+
+            // Re-transition to the same state — idempotent no-op.
+            let changed2 = memory_status_transition(&mut doc, state, "2026-06-99").unwrap();
+            assert!(!changed2, "re-transition to {state} should be no-op");
+            // updated stamp must NOT change.
+            assert_eq!(doc["updated"].as_str().unwrap(), today);
+        }
+    }
+
+    /// VT-1: status transition to same state returns false (no write).
+    #[test]
+    fn memory_status_transition_already_active_noop() {
+        let mut doc = full_toml().parse::<toml_edit::DocumentMut>().unwrap();
+        let changed = memory_status_transition(&mut doc, "active", "2026-06-10").unwrap();
+        assert!(!changed, "already active → no-op");
+    }
+
+    /// VT-2: Status::parse refuses unknown state with known-vocab list.
+    #[test]
+    fn memory_status_transition_rejects_unknown_state() {
+        let mut doc = full_toml().parse::<toml_edit::DocumentMut>().unwrap();
+        let err = memory_status_transition(&mut doc, "bogus", "2026-06-10").unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("unknown status"), "error names unknown: {msg}");
+        assert!(msg.contains("active"), "error lists known: {msg}");
+        assert!(msg.contains("quarantined"), "error lists known: {msg}");
+    }
+
+    /// VT-2: memory_status_transition on malformed doc (missing status) errors.
+    #[test]
+    fn memory_status_transition_refuses_missing_status_key() {
+        let mal = "memory_uid = \"mem_abcd\"\ntitle = \"no status\"\n";
+        let mut doc = mal.parse::<toml_edit::DocumentMut>().unwrap();
+        let err = memory_status_transition(&mut doc, "draft", "2026-06-10").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("malformed memory"),
+            "error names malformed: {msg}"
+        );
+    }
+
+    /// VT-3: status superseded --by writes relation, then flips status.
+    #[test]
+    fn run_status_superseded_with_by_writes_relation_and_flips_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+
+        // Two memories: the dead one (superseded) and the successor.
+        let dead_uid = UID;
+        let succ_uid = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8";
+
+        write_memory_fixture(&items, dead_uid);
+        write_memory_fixture(&items, succ_uid);
+
+        run_status(
+            Some(root.to_path_buf()),
+            dead_uid,
+            "superseded",
+            Some(succ_uid),
+            false,
+        )
+        .unwrap();
+
+        let toml_text = std::fs::read_to_string(items.join(dead_uid).join("memory.toml")).unwrap();
+        assert!(
+            toml_text.contains("status = \"superseded\""),
+            "status flipped: {toml_text}"
+        );
+        assert!(
+            toml_text.contains("superseded_by"),
+            "relation row present: {toml_text}"
+        );
+        assert!(
+            toml_text.contains(succ_uid),
+            "relation target is successor: {toml_text}"
+        );
+    }
+
+    /// VT-3: re-supersession is idempotent no-op.
+    #[test]
+    fn run_status_duplicate_supersession_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+
+        let dead_uid = UID;
+        let succ_uid = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8";
+
+        write_memory_fixture(&items, dead_uid);
+        write_memory_fixture(&items, succ_uid);
+
+        // First supersession.
+        run_status(
+            Some(root.to_path_buf()),
+            dead_uid,
+            "superseded",
+            Some(succ_uid),
+            false,
+        )
+        .unwrap();
+
+        let after_first =
+            std::fs::read_to_string(items.join(dead_uid).join("memory.toml")).unwrap();
+
+        // Second supersession — same args.
+        run_status(
+            Some(root.to_path_buf()),
+            dead_uid,
+            "superseded",
+            Some(succ_uid),
+            false,
+        )
+        .unwrap();
+
+        let after_second =
+            std::fs::read_to_string(items.join(dead_uid).join("memory.toml")).unwrap();
+        assert_eq!(after_first, after_second, "second supersession is a no-op");
+    }
+
+    /// VT-4: superseded without --by refused.
+    #[test]
+    fn run_status_superseded_without_by_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        write_memory_fixture(&items, UID);
+
+        let err = run_status(Some(root.to_path_buf()), UID, "superseded", None, false);
+        assert!(err.is_err(), "superseded without --by refused");
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("requires --by"), "error mentions --by: {msg}");
+    }
+
+    /// VT-4: --by on non-superseded refused.
+    #[test]
+    fn run_status_by_on_non_superseded_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        let succ_uid = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8";
+        write_memory_fixture(&items, UID);
+        write_memory_fixture(&items, succ_uid);
+
+        let err = run_status(
+            Some(root.to_path_buf()),
+            UID,
+            "draft",
+            Some(succ_uid),
+            false,
+        );
+        assert!(err.is_err(), "--by on non-superseded refused");
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("--by"), "error mentions --by: {msg}");
+    }
+
+    /// VT-4: self-supersession refused.
+    #[test]
+    fn run_status_self_supersession_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        write_memory_fixture(&items, UID);
+
+        let err = run_status(
+            Some(root.to_path_buf()),
+            UID,
+            "superseded",
+            Some(UID),
+            false,
+        );
+        assert!(err.is_err(), "self-supersession refused");
+        let msg = format!("{}", err.unwrap_err());
+        assert!(
+            msg.contains("self-supersession"),
+            "error mentions self-supersession: {msg}"
+        );
+    }
+
+    /// VT-4: shipped/ memory refused for write.
+    #[test]
+    fn run_status_refuses_shipped_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let shipped = root.join(MEMORY_SHIPPED_DIR);
+        write_memory_full(&shipped, UID, &full_toml(), "body");
+
+        let err = run_status(Some(root.to_path_buf()), UID, "draft", None, false);
+        assert!(err.is_err(), "shipped memory refused for write");
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("shipped"), "error mentions shipped: {msg}");
+    }
+
+    /// VT-1: basic status transition (non-superseded) stamps updated, idempotent.
+    #[test]
+    fn run_status_active_to_draft_and_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        write_memory_fixture(&items, UID);
+        // full_toml has status = "active"
+
+        run_status(Some(root.to_path_buf()), UID, "draft", None, false).unwrap();
+
+        let toml_text = std::fs::read_to_string(items.join(UID).join("memory.toml")).unwrap();
+        assert!(
+            toml_text.contains("status = \"draft\""),
+            "status flipped: {toml_text}"
+        );
+        assert!(
+            toml_text.contains("updated = "),
+            "updated stamped: {toml_text}"
+        );
+
+        // Re-transition to draft — idempotent.
+        let mtime_before = std::fs::metadata(items.join(UID).join("memory.toml"))
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        run_status(Some(root.to_path_buf()), UID, "draft", None, false).unwrap();
+
+        let mtime_after = std::fs::metadata(items.join(UID).join("memory.toml"))
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert_eq!(
+            mtime_before, mtime_after,
+            "idempotent no-op preserves mtime"
+        );
+    }
+
+    // -- SL-100 PHASE-03: memory edit --------------------------------------
+
+    /// A minimal, well-formed memory.toml document with all seed keys.
+    fn edit_fixture() -> toml_edit::DocumentMut {
+        let toml = format!(
+            r#"
+memory_uid = "{uid}"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Skinny CLI"
+summary = "CLI delegates to domain logic."
+created = "2026-06-04"
+updated = "2026-06-04"
+
+[scope]
+paths = ["src/main.rs"]
+globs = ["src/**/*.rs"]
+commands = ["doctrine slice"]
+tags = ["cli"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "local_root"
+repo_id_confidence = "low"
+
+[git]
+anchor_kind = "none"
+commit = ""
+tree = ""
+ref_name = ""
+checkout_state_id = ""
+base_commit = ""
+verified_sha = ""
+
+[review]
+verification_state = "unverified"
+review_by = "2026-07-01"
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "low"
+weight = 0
+"#,
+            uid = UID
+        );
+        toml.parse::<toml_edit::DocumentMut>().unwrap()
+    }
+
+    #[test]
+    fn apply_edit_changes_title() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            title: Some("New Title".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        assert_eq!(doc["title"].as_str(), Some("New Title"));
+        assert_eq!(doc["updated"].as_str(), Some("2026-06-05"));
+    }
+
+    #[test]
+    fn apply_edit_idempotent_title_returns_false() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            title: Some("Skinny CLI".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(!changed);
+        // updated NOT stamped on no-op
+        assert_eq!(doc["updated"].as_str(), Some("2026-06-04"));
+    }
+
+    #[test]
+    fn apply_edit_title_empty_rejected() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            title: Some("   ".to_string()),
+            ..Default::default()
+        };
+        let err = apply_edit(&mut doc, &fields, "2026-06-05").unwrap_err();
+        assert!(err.to_string().contains("must not be empty"));
+    }
+
+    #[test]
+    fn apply_edit_changes_summary() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            summary: Some("New summary".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        assert_eq!(doc["summary"].as_str(), Some("New summary"));
+    }
+
+    #[test]
+    fn apply_edit_status_delegates_to_transition() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            status: Some("draft".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        assert_eq!(doc["status"].as_str(), Some("draft"));
+        assert_eq!(doc["updated"].as_str(), Some("2026-06-05"));
+    }
+
+    #[test]
+    fn apply_edit_status_superseded_refused() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            status: Some("superseded".to_string()),
+            ..Default::default()
+        };
+        let err = apply_edit(&mut doc, &fields, "2026-06-05").unwrap_err();
+        assert!(err.to_string().contains("memory status superseded --by"));
+    }
+
+    #[test]
+    fn apply_edit_lifespan_replaces() {
+        let mut doc = edit_fixture();
+        // Add a lifespan first
+        doc.insert("lifespan", toml_edit::value("episodic"));
+        let fields = EditFields {
+            lifespan: Some("identity".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        assert_eq!(doc["lifespan"].as_str(), Some("identity"));
+    }
+
+    #[test]
+    fn apply_edit_lifespan_empty_unchanged() {
+        let mut doc = edit_fixture();
+        doc.insert("lifespan", toml_edit::value("episodic"));
+        let fields = EditFields {
+            lifespan: Some("".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(!changed);
+        assert_eq!(doc["lifespan"].as_str(), Some("episodic"));
+    }
+
+    #[test]
+    fn apply_edit_lifespan_whitespace_unchanged() {
+        let mut doc = edit_fixture();
+        doc.insert("lifespan", toml_edit::value("episodic"));
+        let fields = EditFields {
+            lifespan: Some("   ".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(!changed);
+    }
+
+    #[test]
+    fn apply_edit_review_by_set() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            review_by: Some("2026-08-01".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        let review = doc["review"].as_table().unwrap();
+        assert_eq!(review["review_by"].as_str(), Some("2026-08-01"));
+    }
+
+    #[test]
+    fn apply_edit_review_by_clear_removes_key() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            review_by: Some("".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        let review = doc["review"].as_table().unwrap();
+        assert!(!review.contains_key("review_by"));
+    }
+
+    #[test]
+    fn apply_edit_review_by_clear_noop_when_absent() {
+        let mut doc = edit_fixture();
+        // Remove review_by first
+        doc["review"].as_table_mut().unwrap().remove("review_by");
+        let fields = EditFields {
+            review_by: Some("".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(!changed);
+    }
+
+    #[test]
+    fn apply_edit_trust_replaces() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            trust: Some("high".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        let trust = doc["trust"].as_table().unwrap();
+        assert_eq!(trust["trust_level"].as_str(), Some("high"));
+    }
+
+    #[test]
+    fn apply_edit_trust_unknown_refused() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            trust: Some("bogus".to_string()),
+            ..Default::default()
+        };
+        let err = apply_edit(&mut doc, &fields, "2026-06-05").unwrap_err();
+        assert!(err.to_string().contains("unknown trust level"));
+    }
+
+    #[test]
+    fn apply_edit_severity_replaces() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            severity: Some("critical".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        let ranking = doc["ranking"].as_table().unwrap();
+        assert_eq!(ranking["severity"].as_str(), Some("critical"));
+    }
+
+    #[test]
+    fn apply_edit_severity_unknown_refused() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            severity: Some("bogus".to_string()),
+            ..Default::default()
+        };
+        let err = apply_edit(&mut doc, &fields, "2026-06-05").unwrap_err();
+        assert!(err.to_string().contains("unknown severity"));
+    }
+
+    #[test]
+    fn apply_edit_key_late_binds_when_absent() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            key: Some("pattern.cli".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        assert_eq!(doc["memory_key"].as_str(), Some("mem.pattern.cli"));
+    }
+
+    #[test]
+    fn apply_edit_key_refused_when_already_set() {
+        let mut doc = edit_fixture();
+        doc.insert("memory_key", toml_edit::value("mem.existing.key"));
+        let fields = EditFields {
+            key: Some("pattern.cli".to_string()),
+            ..Default::default()
+        };
+        let err = apply_edit(&mut doc, &fields, "2026-06-05").unwrap_err();
+        assert!(err.to_string().contains("key already set"));
+    }
+
+    #[test]
+    fn apply_edit_key_refused_before_any_other_write() {
+        let mut doc = edit_fixture();
+        doc.insert("memory_key", toml_edit::value("mem.existing.key"));
+        // --title + --key — key refusal must happen first, so title is not changed.
+        let fields = EditFields {
+            title: Some("New Title".to_string()),
+            key: Some("pattern.cli".to_string()),
+            ..Default::default()
+        };
+        let err = apply_edit(&mut doc, &fields, "2026-06-05").unwrap_err();
+        assert!(err.to_string().contains("key already set"));
+        // Title unchanged
+        assert_eq!(doc["title"].as_str(), Some("Skinny CLI"));
+        // updated not stamped
+        assert_eq!(doc["updated"].as_str(), Some("2026-06-04"));
+    }
+
+    #[test]
+    fn apply_edit_path_scope_replaces_array() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            path_scope: Some(vec!["src/x.rs".to_string(), "src/y.rs".to_string()]),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        let scope = doc["scope"].as_table().unwrap();
+        let arr = scope["paths"].as_array().unwrap();
+        let vals: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+        assert_eq!(vals, vec!["src/x.rs", "src/y.rs"]);
+    }
+
+    #[test]
+    fn apply_edit_glob_replaces_array() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            glob: Some(vec!["*.rs".to_string()]),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        let scope = doc["scope"].as_table().unwrap();
+        let arr = scope["globs"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn apply_edit_command_replaces_array() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            command: Some(vec!["cargo build".to_string()]),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        let scope = doc["scope"].as_table().unwrap();
+        let arr = scope["commands"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn apply_edit_multi_field_atomic_update() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            title: Some("New Title".to_string()),
+            lifespan: Some("identity".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(changed);
+        assert_eq!(doc["title"].as_str(), Some("New Title"));
+        assert_eq!(doc["lifespan"].as_str(), Some("identity"));
+        // updated stamped ONCE
+        assert_eq!(doc["updated"].as_str(), Some("2026-06-05"));
+    }
+
+    #[test]
+    fn apply_edit_multi_field_noop_when_unchanged() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            title: Some("Skinny CLI".to_string()),
+            summary: Some("CLI delegates to domain logic.".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(!changed);
+    }
+
+    #[test]
+    fn apply_edit_status_identity_noop() {
+        let mut doc = edit_fixture();
+        let fields = EditFields {
+            status: Some("active".to_string()),
+            ..Default::default()
+        };
+        let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
+        assert!(!changed);
     }
 }
 
