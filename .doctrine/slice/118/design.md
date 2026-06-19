@@ -48,10 +48,13 @@ doctrine value    clear <ID>
 ```
 
 - `Command::Estimate` / `Command::Value` subcommand groups (each `Set`/`Clear`).
-- `estimate set` positionals `[lower] [upper]` are **optional at clap**; `-x/--exact`
-  is a flag. The handler enforces **exactly one mode**: both positionals XOR `-x`
-  (clap cannot cleanly express both-or-neither-XOR-flag) — violation is a
-  parse-equal error. `-x N` ⇒ `lower = upper = N` (zero-width valid, SL-101 e4).
+- `estimate set` positionals `[lower] [upper]` are **optional at clap**;
+  `exact: Option<f64>` (`-x/--exact <N>` — an option taking exactly one value, **not
+  a bool flag**, adversarial F2) with `conflicts_with_all = [lower, upper]`. The
+  handler enforces the remaining rule — **exactly one mode present**: `exact`, or
+  *both* positionals; neither (or one lone positional) is a parse-equal error.
+  `-x N` ⇒ `lower = upper = N` (zero-width valid, SL-101 e4). `-x` with no argument
+  is a clap error (VT-8).
 - `<ID>` is positional-first, kind-agnostic (any entity with the facet seam).
 - Output: `estimate set SL-118: lower=1 upper=3 (espresso_shots)` /
   `estimate cleared SL-118` / `no estimate on SL-118` (clear-absent no-op).
@@ -60,43 +63,44 @@ doctrine value    clear <ID>
 
 ADR-001 leaf: imports only `toml_edit` / `anyhow` / `std`; depends on no engine or
 command module (verified by §9 layering test). Pure cores generic over
-table-name + scalar fields — **one core serves both facets**:
+table-name + scalar fields — **one core serves both facets**. No clock: facet
+writes do **not** bump `updated` (D1 reversed, §7) — so no `today` injection:
 
 ```rust
-/// Alloc-if-absent / replace the named facet table to exactly `fields`; bump
-/// top-level `updated`. Returns `true` iff the document changed. Pure: no disk,
-/// no clock — `today` injected. A whole-table append is position-independent, so
-/// alloc-if-absent is corruption-safe (unlike a scalar tail-insert).
-fn set_facet(doc: &mut DocumentMut, table: &str, fields: &[(&str, f64)], today: &str) -> bool
+/// Mutate ONLY the named managed keys of the `[table]` facet, allocating the
+/// table if absent and preserving every non-managed sibling key/sub-table.
+/// Returns `true` iff the document changed. Pure: no disk, no clock.
+/// Errors if `[table]` is present but not a standard table (e.g. `estimate = 7`
+/// or `[[estimate]]`) — fail-loud, never silently overwrite a malformed shape.
+fn set_facet(doc: &mut DocumentMut, table: &str, fields: &[(&str, f64)]) -> anyhow::Result<bool>
 
-/// Remove the named facet table if present; bump `updated`. No-op (false) if
-/// absent. Pure.
-fn clear_facet(doc: &mut DocumentMut, table: &str, today: &str) -> bool
+/// Remove the `[table]` facet if present. No-op (false) if absent. Pure.
+fn clear_facet(doc: &mut DocumentMut, table: &str) -> bool
 
 /// Shared read→parse→core→write-once-if-changed envelope (the ~5 lines reused by
 /// both verbs and both facets).
-fn edit_in_place(path: &Path, f: impl FnOnce(&mut DocumentMut) -> bool) -> anyhow::Result<bool>
+fn edit_in_place(path: &Path, f: impl FnOnce(&mut DocumentMut) -> anyhow::Result<bool>) -> anyhow::Result<bool>
 
 // IO wrappers
-fn apply_set(path, table, fields, today) -> Result<bool>
-fn apply_clear(path, table, today) -> Result<bool>
+fn apply_set(path, table, fields) -> Result<bool>
+fn apply_clear(path, table) -> Result<bool>
 ```
 
-- Fields written via `toml_edit::value(f)` — never string-spliced (sidesteps the
-  splice-escape footgun; values are `f64` so no escaping needed anyway).
-- **No-op guard**: if the table already equals target, write nothing (content +
-  mtime hold) → `false`. `updated` bumps **only on change**. (Value-equality
-  compare: a hand-authored `lower = 2` (int) equal to a `2.0` set is a no-op — the
-  int is left un-normalized; harmless, the read path normalizes.)
-- **`updated` safety (adversarial A-1):** facets are kind-agnostic, so the target
-  may be a kind whose TOML lacks a top-level `updated` key. The bump
-  **`insert`s only if `updated` is already present** (a seeded scalar — safe to
-  replace); if absent it is **skipped, never inserted** (a tail-insert would land
-  inside a trailing subtable = corruption, the F-1 hazard). The facet write still
-  succeeds.
-- `set_facet` inserts only the named keys — **sibling keys/sub-tables in
-  `[estimate]` are left verbatim** (the forward-compat guarantee, §6).
-- `[estimate]`/`[value]` author the table as an explicit (non-implicit) table.
+- **Mutate-in-place, not replace (adversarial F4):** `set_facet` inserts/overwrites
+  only the managed keys (`lower`/`upper` or `value`); **every non-managed sibling
+  key or sub-table in `[estimate]` is left verbatim** — this is the forward-compat
+  guarantee (§6, VT-7). Alloc-if-absent creates the table carrying just the managed
+  keys. A whole-table append is position-independent → corruption-safe.
+- **Malformed-present fail-loud (F4):** if the `estimate`/`value` key exists but is
+  not a standard table (`estimate = 7`, `[[estimate]]`), `set_facet` errors rather
+  than clobbering — surfaces hand-edit corruption instead of papering over it
+  (the house F-1 stance).
+- Fields written via `toml_edit::value(f)` — never string-spliced (values are
+  `f64`; no escaping needed).
+- **No-op guard**: if the managed keys already equal target, write nothing
+  (content + mtime hold) → `false`. (Value-equality: a hand-authored `lower = 2`
+  (int) equal to a `2.0` set is a no-op — the int is left un-normalized; harmless,
+  the read path normalizes.)
 
 ### Command tier (`main.rs`)
 
@@ -105,18 +109,29 @@ fn apply_clear(path, table, today) -> Result<bool>
   `resolve_link_path`), then validate, then call the leaf.
 - **Validation stays in the command tier** (the leaf must not depend on
   `estimate`/`value` — ADR-001): build `EstimateFacet`/`ValueFacet`, call
-  `estimate::validate` / new `value::validate`, *then* `facet_write::apply_set`.
-  The CLI rejects exactly what parse rejects.
+  `estimate::validate` / `value::validate`, *then* `facet_write::apply_set`. For
+  the CLI to reject **exactly** what parse rejects, `validate` must be the
+  *complete* rule (see §5, adversarial F1 — finiteness must move into `validate`).
 - Register the Write class at `main.rs` (~L3047):
   `Command::Estimate { .. } | Command::Value { .. } => Write("estimate"/"value")`.
 
-## 5. Validation reuse (D2)
+## 5. Validation reuse — one complete rule per facet (D2, adversarial F1+F5)
 
-- estimate: build `EstimateFacet { lower, upper }`, finite-checked at f64 parse of
-  the CLI args, then `estimate::validate` (the one matrix, no second impl).
-- value: add a thin pure `value::validate(&ValueFacet) -> Result<()>` (finite) so
-  the verb and the parse path share one rule (symmetry with estimate; currently
-  finite lives only inside `normalise`).
+The pre-review claim "CLI rejects exactly what parse rejects" was **false**: clap's
+`f64` parser accepts `inf`/`nan`, and `estimate::validate` (`src/estimate.rs:199`)
+checks only `lower >= 0` / `upper >= lower` — **no finiteness**. Finiteness lives
+only in the parse-path `toml_to_f64`. So `estimate set X inf inf` would pass the
+command-tier validate and only be dropped later by the catalog read. Fix:
+
+- **Move finiteness into `validate`.** `estimate::validate` gains finite checks on
+  both bounds; `estimate::normalise` already calls `validate`, so the parse path is
+  unaffected (belt-and-suspenders with `toml_to_f64`). `validate` is now the single
+  complete rule, shared by CLI and parse.
+- **`value::validate` must be wired, not parallel (F5).** Add pure
+  `value::validate(&ValueFacet)` (finite) **and call it from `value::normalise`**
+  before returning — exactly as `estimate::normalise` calls `estimate::validate`.
+  Without that wiring it would be a second rule site (violating no-parallel-impl);
+  with it, one rule serves CLI + parse.
 
 ## 6. Forward-compat — history-ready, not history-bearing (IDE-013)
 
@@ -126,19 +141,42 @@ unspec'd-residue debt pattern SL-104 is paying down, and a premature wire-shape
 lock. It wants its own REQ in SPEC-020, routed like the confidence legitimization.
 
 SL-118 ships history-**ready** for free: the edit-preserving writer (§4) touches
-only the managed keys, so any future `[estimate]` sub-key (e.g. a `history` array)
-**survives every `set`**. §9 VT-7 pins this. `clear` removes the whole facet table
-(history with it) — a retention decision left to IDE-013.
+only the managed keys, so any future `[estimate]`/`[value]` sub-key (e.g. a
+`history` array) **survives every `set`**. §9 VT-7 pins this on **both** facets.
+`clear` removes the whole facet table (history with it) — a retention decision left
+to IDE-013.
+
+### Read-surface honesty (adversarial F6)
+
+Facets are authorable on **any** kind, and that is **not** write-only data: the
+catalog scan reads both facets kind-agnostically (`src/catalog/scan.rs:198`
+`read_facets`), feeding the graph projection and map (SL-103) — the kind-agnostic
+read surface SPEC-020 NF-002 defines. What is *slice-only* today is the **typed
+per-entity reader** (`SliceDoc` carries `estimate`/`value`) and the `show` display
+(IMP-112, slice-first). So an estimate on an ADR/RV is read by graph/map, not by
+that entity's `show`, until a generic cross-kind facet read/show contract lands.
+This slice does not narrow authoring to slices — but it does not *claim*
+per-entity-show readability for non-slice kinds either (acceptance proof split
+accordingly, §9).
 
 ## 7. Decisions
 
-- **D1** — `set`/`clear` bump top-level `updated = today` (provenance; matches the
-  status seam), behind the no-op guard so an unchanged write never bumps. **Yes.**
-- **D2** — add thin `value::validate` for symmetry. **Yes.**
+- **D1 — REVERSED (adversarial F3).** Facet writes do **not** bump `updated`.
+  Empirical: `updated` is **not uniformly seeded** — the `review` (RV) kind has no
+  `updated` field. A blunt "skip if absent" masks corruption on kinds that *do*
+  seed it; a blunt "refuse if absent" wrongly rejects RV; distinguishing them
+  couples the writer to per-kind seed metadata. Not worth it: the facet is a
+  side-table, the catalog/graph read ignores `updated`, and git + the conventional
+  commit already record provenance. `updated` stays the status seam's job. This also
+  removes clock injection from the leaf entirely (pure, no `today`).
+- **D2** — `value::validate` is added **and wired into `value::normalise`** (F5), so
+  it is one rule, not a parallel one. `estimate::validate` gains finiteness (F1).
 - **D3** — `<ID>` positional-first; bounds positional after it. **Yes.**
 - **D4** — clear-when-absent is a friendly no-op (exit 0), not an error. **Yes.**
 - **D5** — unresolved / non-existent `<ID>` → `bail` via `parse_canonical_ref` +
   existence check (never write a file for a non-entity).
+- **D6 — `exact` is `Option<f64>`**, not a bool flag (F2); `conflicts_with` the
+  positionals, handler enforces exactly-one-mode.
 
 ## 8. Risks
 
@@ -151,9 +189,8 @@ only the managed keys, so any future `[estimate]` sub-key (e.g. a `history` arra
   magnitude positional (`-- -5` also works). Estimate bounds are `>= 0`, so a
   negative there is rejected regardless — acceptable as a clap-level error; VT-8
   asserts rejection, not the message.
-- **R2 — `updated` coupling.** Bumping `updated` couples facet-write to the date
-  inject. Mitigation: `today` already threaded for the status seam; no-op guard
-  prevents spurious bumps.
+- **R2 — RESOLVED by D1 reversal.** No `updated` bump → no date inject, no
+  per-kind seed-presence logic, no corruption-masking. The leaf is fully pure.
 - **R3 — leaf-naming.** A new `facet_write.rs` rather than extending `dep_seq.rs`;
   accepted for cohesion + naming honesty (§O2). No shared code is duplicated (the
   cores are operation-specific; only the IO envelope is shared, and it lives here).
@@ -161,30 +198,35 @@ only the managed keys, so any future `[estimate]` sub-key (e.g. a `history` arra
 ## 9. Verification
 
 Leaf unit (pure, `facet_write`):
-- **VT-1** `set_facet` allocates an absent `[estimate]` table.
-- **VT-2** `set_facet` replaces present bounds.
+- **VT-1** `set_facet` allocates an absent `[estimate]` table (managed keys only).
+- **VT-2** `set_facet` overwrites present managed keys in place.
 - **VT-3** idempotent no-op: second identical `set` returns `false`, content+mtime
   hold.
 - **VT-4** `clear_facet` removes the table; clear-absent returns `false`.
 - **VT-5** golden round-trip: unrelated tables / comments / `[relationships]`
   preserved across `set` and `clear`.
-- **VT-6** `updated` bumps only on change (no-op set does not bump); a target
-  whose TOML lacks `updated` is written without it (A-1: no insert, no corruption).
-- **VT-7** forward-compat: a `set` over an `[estimate]` table carrying an unknown
-  sub-key (`history`-shaped) **preserves** that sub-key (IDE-013 readiness).
+- **VT-6** malformed-present fail-loud (F4): `set_facet` over `estimate = 7` and
+  over `[[estimate]]` **errors**, file untouched.
+- **VT-7** forward-compat (F7): a `set` over an `[estimate]` **and** a `[value]`
+  table carrying an unknown sibling sub-key (`history`-shaped) **preserves** it
+  (IDE-013 readiness).
 
 Command tier:
 - **VT-8** invalid matrix rejected with parse-equal verdicts: missing bound,
-  negative lower, `upper < lower`, non-finite, `-x` + positionals conflict, neither
-  mode supplied.
+  negative lower, `upper < lower`, **non-finite `inf`/`nan` (F1 parity)**, `-x` +
+  positionals conflict, **`-x` with no argument (clap, F2)**, one-lone-positional,
+  neither mode supplied.
 - **VT-9** `-x N` sets `lower == upper == N`.
 - **VT-10** `value set` / `value clear` round-trip; `value::validate` rejects
-  non-finite.
+  non-finite **via `normalise` too** (one rule, F5).
 - **VT-11** round-trip via catalog scan: `set` → scan reads the normalized facet;
-  `clear` → scan reads absent.
+  `clear` → scan reads absent. (Proves the **catalog/graph** read only.)
+- **VT-12** typed-reader round-trip on a **slice**: `estimate set SL-<n> …` →
+  `slice show` / `SliceDoc` reads the facet back (the per-entity read surface
+  catalog scan does not exercise, F7). Once IMP-112 lands this extends to display.
 
 Architecture:
-- **VT-12** layering `#[test]`: `facet_write` imports only `toml_edit`/`anyhow`/
+- **VT-13** layering `#[test]`: `facet_write` imports only `toml_edit`/`anyhow`/
   `std` (ADR-001). (Folds into SL-112's fitness gate if landed; else a local
   source-scan.)
 
