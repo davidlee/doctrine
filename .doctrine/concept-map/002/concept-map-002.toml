@@ -5,7 +5,6 @@ status = "draft"
 created = "2026-06-18"
 updated = "2026-06-18"
 description = "The core doctrine workflow at conceptual altitude: how work originates and is prioritised, the slice lifecycle state machine with its human gates and closure seam, the normative/observed truth model that makes reconciliation doctrinal, the conduct axis, the governance change-axes, and the support ecosystem — for agents and especially human users."
-
 dsl = """
 # ── Entry: route before you act ──
 Substantive Work > is gated by > Routing Gate
@@ -117,5 +116,4 @@ Conduct Posture > overlays > Governing Skill
 GitHub Issue > feeds > Backlog
 GitHub PR > reviewed by > Peer
 Peer > performs > Review
-Team > coordinates > Dispatch
-"""
+Team > coordinates > Dispatch"""
