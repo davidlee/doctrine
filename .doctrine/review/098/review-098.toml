@@ -41,17 +41,30 @@ response = "Conscious, behaviour-neutral deviations owned by /simplify. (1) mode
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "PHASE-04 item-4 concept-map edit UX fails VH acceptance — implementation defects + rejection of the locked Edit this/Edit all design model"
 detail = "Live dev-server walkthrough (candidate 0a9d1e1b) surfaced 5 item-4 problems against design §Item 4 / D4. IMPLEMENTATION DEFECTS (impl != design): (a) the two edit buttons render on EVERY entity, not just concept maps — renderEditToggle is not gated to the CM view; (b) clicking a cell opens batch (edit-all) mode and does NOT highlight/select the node — design EX-1 says click = select + cmFocus, no inline input, but the select gesture is not taking effect; (c) while in edit mode, clicking a field bulk-edits — confusing. DESIGN-MODEL REJECTION (design itself wrong per user, even where impl matches): (d) the user wants an explicit per-field edit affordance — a pencil icon NEXT TO each editable field — not a single top 'Edit this' button whose 'this' referent is invisible/ambiguous (D4's Edit this/Edit all split is rejected as bad UX: too distant, unclear target); (e) the inline edit form should appear directly below the hover area, not in the table; (f) 'Edit all' is a confusing label for edit mode. Net: item 4 must be re-designed (per-field pencil affordance, in-place/below-hover inline edit, clearer mode naming) and re-implemented. The relabel_edge backend (PHASE-01) and cmSelectedFieldFromCell pure helper remain reusable. Blocker — the slice cannot close with item 4 in this state."
+disposition = "fix-now"
+response = "Re-designed (D4→D5/D6, commit 8d0c3dfd): per-cell hover pencils + '[ ] edit all' scope checkbox (single vs all-matching) + always-on per-row delete + add-edge form below the hover area; buttons-everywhere fixed by deleting renderEditToggle and rendering inside the isCm-gated edge table. Re-implemented: PHASE-06 backend ops rename_node_occurrence/relabel_rel_all (6c3378f6), PHASE-07 per-cell pencil + edit-all scope frontend (3e93e1ac). Op-selection is the pure cmEditOp(cell, editAll) matrix; payload assembly + checkbox→state→submit wiring verified by inspection and unit tests. VH re-walk accepted (1a): edit-all is a pure scope toggle with no edit-time UI delta by design; one-vs-all is visible on a repeated relation with no node focused. Impl conforms to D5/D6. Resolved."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Item 5 (D2): picking a non-actionable entity while on the Actionability graph should switch to Semantic — design intentionally did NOT switch"
 detail = "design §Item 5 D2 resolved that picking an id absent from the priority layout (terminal/ADR/REQ/MEM/non-actionable) is NOT auto-switched ('the user chose the mode, the placeholder is informative') and only clears stale priorityZoomId. focusTransition implements exactly that (actionability + non-member -> {actionability, null}). VH walkthrough: the user expects clicking a non-actionable entity while on the actionability graph to SWITCH TO the semantic graph (where that entity is visible), not sit on an empty actionability placeholder. This reverses D2's no-switch decision: the switch-if-undisplayable rule should treat 'absent from the actionability layout' as undisplayable -> switch to semantic. Requires a design decision change (D2) + focusTransition table update (actionability + non-member -> semantic) + model test update. Not a code-only fix — design intent changed."
+disposition = "fix-now"
+response = "D2 reversed (commit 8d0c3dfd): on the actionability graph, focusing a non-member now switches to Semantic (where the entity is visible) and clears the stale priorityZoomId; focusTransition simplified to (actionability+member→{actionability,id}; actionability+non-member→{semantic,null}; semantic→{semantic,echo}). Implemented PHASE-08 (ce11f2cb) with model.test.ts updated. VH re-walk accepted: focusing a non-actionable entity on the actionability graph switches to semantic. Resolved."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Relationship-table links double-hash the URL (##/focus/…) → parseHash fails, focus clears, table empties"
+detail = "Expected: clicking any relationship-table link (source/target id-link or relation label) navigates focus like a graph node-click. Observed: the table empties and the URL shows a double hash (##/focus/SL-003). Root cause: buildHash already returns a #-prefixed string (router.ts:89 '#/${view}/${id}'), but the five table anchor sites prepend another '#' (render.ts 356,361,439,452,461: '#' + buildHash(...)), yielding '##/focus/…'. parseHash does hash.slice(1) then matches ^/focus|^/edge (router.ts:35,39,67); '#/focus/…' fails all patterns → falls through to {view:'focus', id:null} → focus cleared, semantic table neighbourhood derives empty. setFocus (router.ts:107, used by graph/list clicks via goto) sets location.hash=buildHash(...) WITHOUT the extra '#', so those paths work — explaining why graph-click works but every table link breaks. PRE-EXISTING: buildHash + all five anchors introduced together in 0d4f549e (SL-091); surfaced now by the SL-110 item-5 focus-navigation VH walk. Fix-now in SL-110: drop the redundant '#' + at the 5 sites. Scope expansion accepted by user (blocks F-5 VH, in-theme with item-5)."
+disposition = "fix-now"
+response = """Fixed in commit b0d12a3d: dropped the redundant "'#' +" prefix at the five render.ts anchor sites (356,361,439,452,461) — buildHash already returns a '#'-prefixed string, so the prefix produced '##/focus/…' which parseHash (hash.slice(1)+^/focus|^/edge) could not match, clearing focus and emptying the relationship table. Added render.test.ts round-trip test (red→green); web gates green (vitest 340, tsc, eslint 0). VH re-walk accepted: table id-links navigate focus, relation label → edge detail (intended). Pre-existing since SL-091 (0d4f549e), surfaced by the SL-110 item-5 focus-navigation VH walk. Resolved."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
