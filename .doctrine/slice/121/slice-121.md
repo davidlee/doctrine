@@ -128,11 +128,11 @@ _(to be completed at close)_
   close 3a today. `/plan` to decide the minimal read surface (a `sync` flag exposing
   the journal trunk OID, or a documented journal `cat-file`) — the close skill must
   not depend on capturing transient `candidate admit` stdout.
-- **OQ-6** (IMP-075 fold, design): does the extracted `with_journaled_projection`
-  cleanly wrap the new worktree-aware exit path — i.e. does the checkout/dirty
-  gate + post-advance resync live *inside* the projection seam, or compose around
-  it? The extraction boundary must hold for both callers (`prepare_review`, which
-  is pure-ref by placement, and `integrate`, which now resyncs a checked-out tree)
-  without leaking integrate-only concerns into `prepare_review`. Design to settle
-  the seam before plan re-locks. Behaviour-preservation gate: `prepare_review`'s
-  existing suite stays green unchanged.
+- **OQ-6** ~~(IMP-075 fold): where does the worktree-aware exit path sit relative to
+  the extracted `with_journaled_projection`?~~ — **RESOLVED (design §2.6): thin
+  bracket + injected apply closure.** The bracket owns only commit-pre / per-row
+  `apply` / commit-post / collect-failures; the integrate-only worktree pieces
+  compose **around** it — dirty gate before the call, resync inside integrate's
+  closure, report after. `prepare_review`'s closure is its existing zero-oid-CAS
+  body unchanged, so its suite is the behaviour-preservation proof; no
+  integrate-only concern leaks into it.

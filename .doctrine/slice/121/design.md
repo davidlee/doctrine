@@ -1,7 +1,8 @@
 # SL-121 Design — dispatch sync --integrate: worktree-aware clean exit + legible outcome
 
 > Governed by ADR-012 (dispatch integration topology), ADR-006 (worktree posture,
-> pure/imperative split). Bundles ISS-022, ISS-030, IMP-078.
+> pure/imperative split), ADR-001 (module layering). Bundles ISS-022, ISS-030,
+> IMP-078, **IMP-075** (journal-cycle extraction — §2.6).
 
 ## 1. Problem & root cause
 
@@ -219,6 +220,77 @@ Any mismatch → a raced `Moved` outcome (journaled `Failed`), never a silent
 wrong-ref advance. (Single-writer orchestration narrows this, but close runs in a
 live human/agent session, so the guard is not optional.)
 
+### 2.6 Journal-cycle extraction (IMP-075) — the thin bracket
+
+`prepare_review` (dispatch.rs:934) and `integrate` (dispatch.rs:1044) share a
+byte-for-byte journal cycle: `commit_journal` (intent, parent `tip`) → per-row
+apply loop → `commit_journal` (applied status, parent `journal_commit`) → collect
+failures → report-or-bail (RV-030 F-7). Only the per-row apply differs:
+`prepare_review` does zero-oid creation CAS (`update_ref_cas(…, ZERO_OID)`,
+collects `stale`); `integrate` does 3-way replay (`replay_ref`, collects `moved`)
+— and that apply is exactly where §2.2's worktree-aware mechanism branch lands.
+SL-121 rewrites the integrate apply *and* this slice extracts the shared cycle, so
+both edit the same body; folding them means the extraction is shaped by the new
+apply in one pass rather than re-touching the cycle twice.
+
+**Shape — the bracket owns the boilerplate; the per-row move is an injected
+closure.** OQ-6 settled **thin** (compose around, not a fat generic bracket):
+
+```rust
+/// Journal the planned intent onto `coord_ref` BEFORE any external ref mutation,
+/// apply each row via `apply`, then re-journal applied status (recoverability).
+/// `apply` mutates `row.status`/`applied_new_oid` in place and returns Some(msg)
+/// for a refused/moved row (collected, journaled Failed) or None on success. Err
+/// is reserved for real command/invariant failure — the pre-commit already made
+/// intent durable (B3 status-capturing, not `?`-erroring).
+fn with_journaled_projection(
+    root: &Path, tip: &str, tip_tree: &str, journal_path: &str, coord_ref: &str,
+    journal: &mut Journal, message: &str,
+    mut apply: impl FnMut(&Path, &mut Row) -> anyhow::Result<Option<String>>,
+) -> anyhow::Result<Vec<String>> {
+    let journal_commit =
+        commit_journal(root, tip_tree, tip, journal_path, coord_ref, journal, message)?;
+    let mut failures = Vec::new();
+    for row in &mut journal.rows {
+        if let Some(msg) = apply(root, row)? { failures.push(msg); }
+    }
+    commit_journal(root, tip_tree, &journal_commit, journal_path, coord_ref, journal, message)?;
+    Ok(failures)
+}
+```
+
+**Seam placement — the three integrate-only worktree pieces stay caller-side, do
+not enter the bracket:**
+
+- **Dirty pre-gate (§2.3)** runs in `integrate` **before** the call — consistent
+  with M4 (before the first `commit_journal`, which the bracket now owns). A dirty
+  refusal returns before the bracket starts ⇒ zero refs moved, incl.
+  `dispatch/<slice>`.
+- **Per-row advance (§2.2)** — incl. the None-leg post-CAS re-probe/resync and the
+  ff-merge leg — **is** integrate's injected `apply` closure. `prepare_review`'s
+  closure is its existing zero-oid-CAS match body, verbatim.
+- **Report (§4)** reads `journal` rows' recorded disposition **after** the bracket
+  returns — integrate-side; `prepare_review` keeps its `"N ref(s) created"` line.
+
+**Why thin (not fat).** `prepare_review`'s targets (`review/<slice>`,
+`phase/<slice>-NN`) are created under zero-oid CAS and are **never checked out**, so
+worktree-awareness is dead weight there. A fat bracket owning probe/gate/resync
+would (a) push integrate-only concerns into `prepare_review`, (b) widen the
+behaviour-preservation surface (§6), and (c) contradict §2.3's whole-integrate
+(not per-row) refuse. Thin keeps `prepare_review` behaviourally identical — its
+closure is unchanged code — so its suite is the proof.
+
+**Behaviour-preservation gate (ADR-006/006).** `prepare_review`'s existing suite
+(`e2e_dispatch_sync` prepare path) stays green **unchanged** — the proof the
+extraction is behaviour-pure for the non-integrate caller. `integrate`'s behaviour
+*does* change (worktree-aware), so its evidence is the §6 new VTs, not the
+green-unchanged gate.
+
+**Layering (ADR-001).** `with_journaled_projection` is an engine-internal
+higher-order helper in `dispatch.rs` (same module as both callers); no new
+cross-module edge, no leaf↔command cycle. The closure runs `git::*` plumbing at
+the impurity altitude integrate already occupies — pure layer untouched.
+
 ## 3. Tree-true verify (ISS-030)
 
 Close SKILL 3a today: `git diff --stat refs/heads/main~1..refs/heads/main -- src/`
@@ -291,7 +363,7 @@ and a raced `Moved` (§2.5) all surface as the named-token error / post-loop bai
 | Path | Change |
 |---|---|
 | `src/git.rs` | NEW pure porcelain parser + `worktree_for_ref` (M9 fixtures); NEW status-capturing `ff_advance_in_worktree` (symbolic-ref + clean re-check + post-assert per §2.5; returns an outcome, never bare `?` — B3). |
-| `src/dispatch.rs` | `integrate` (≈1044–1161): dirty gate **before the first `commit_journal`** (§2.3/M4); per-row exact-CAS classify + mechanism branch (§2.2); non-ff-checkout refusal; per-row disposition + report (§4). `find_coordination_worktree` → wrapper over `worktree_for_ref` (`Err`→`"(removed)"`, F4). |
+| `src/dispatch.rs` | NEW `with_journaled_projection` thin bracket (§2.6, IMP-075): commit-pre / per-row `apply` closure / commit-post / collect failures. `prepare_review` + `integrate` both refactored onto it; `prepare_review`'s closure = its existing zero-oid-CAS body (behaviour-pure). `integrate` (≈1044–1161): dirty gate **before** the bracket (§2.3/M4); the injected `apply` closure carries per-row exact-CAS classify + mechanism branch (§2.2) + non-ff-checkout refusal + None-leg re-probe; report from journal **after** the bracket (§4). `find_coordination_worktree` → wrapper over `worktree_for_ref` (`Err`→`"(removed)"`, F4). |
 | `src/worktree.rs` | `gather_fork_worktree` → delegate to `worktree_for_ref`; `gather_tree_clean` reused at a worktree path (no signature change). |
 | `plugins/doctrine/skills/close/SKILL.md` | step-3a verify → tree-true (§3). |
 
@@ -318,6 +390,12 @@ New/changed evidence:
   merge → raced `Moved`, never a wrong-ref advance.
 - **VT — report:** stderr carries per-row `old..new (disposition)`; stdout
   ref-list contract preserved (regression).
+- **Behaviour-preservation (IMP-075, §2.6):** `prepare_review` refactored onto the
+  thin bracket with its apply closure = today's zero-oid-CAS body ⇒ the
+  `e2e_dispatch_sync` **prepare** path stays green **unchanged** — the proof the
+  extraction is behaviour-pure for the non-integrate caller. (`integrate`'s
+  behaviour intentionally changes; its evidence is the worktree VTs above, not this
+  gate.)
 - **Behaviour-preservation:** existing `find_coordination_worktree` /
   `gather_fork_worktree` / `e2e_dispatch_sync` suites green **unchanged**.
 - **VH — close 3a:** the revised verify block catches a deliberately-desynced tree
@@ -458,4 +536,34 @@ checked-out non-ff edge advance — close only drives `--trunk refs/heads/main`)
 status/recoverability parity across legs.
 
 Residual: concurrency races are documented + tested, not eliminated (no placement
-lock — out of scope). Ready for `/plan`.
+lock — out of scope).
+
+### IMP-075 fold (2026-06-20, post-lock re-design)
+
+Architect loop proposal 0018 flagged IMP-075 (`with_journaled_projection`
+extraction) as refactoring the **same `integrate` body** SL-121 rewrites; folded
+in to avoid double-touching the cycle (see slice scope + §2.6). OQ-6 (extraction
+seam) settled **thin bracket + injected apply closure** — the worktree-aware
+pieces stay caller-side (dirty gate before, resync inside integrate's closure,
+report after), so `prepare_review` is behaviourally unchanged and its suite is the
+behaviour-preservation proof. IMP-102 / IMP-103 remain out-of-scope followups
+(`related: SL-121`); §2.6/§3 leave the close-step-3a seam and `--help` surface in a
+state those can later bolt onto without re-cutting. Adversarial pass on §2.6 below.
+
+**§2.6 self-review:**
+- *Closure capture vs the dirty gate ordering.* The gate must observe the **same**
+  checked-out targets the bracket will mutate. Both read `journal.rows` after row
+  planning; the gate iterates targets before the call, the bracket iterates the
+  identical `&mut journal.rows` inside — no divergence, gate strictly precedes the
+  first `commit_journal` (M4 preserved). ✓
+- *`apply` returning `Some(msg)` vs `Err`.* The bracket collects `Some(msg)` as a
+  journaled `Failed` and still runs the post-commit (durability); only a real
+  command failure `?`-aborts — identical to today's split (B3). prepare_review's
+  `stale` and integrate's `moved` both become the returned `Vec<String>`. ✓
+- *Does the bracket hide the `fresh`/row-append or candidate logic?* No — journal
+  construction (read, append trunk/edge rows, `pending_journal`) stays caller-side
+  **before** the bracket; the bracket starts at the first `commit_journal`. The
+  caller still owns what to journal; the bracket owns the commit/apply/commit
+  dance. Clean boundary, no leakage. ✓
+
+Residual: none blocking. Ready for `/plan`.
