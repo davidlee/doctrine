@@ -21,32 +21,40 @@ posture for subprocess dispatch workers.
 
 ### Spawn template (pi arm)
 
+The orchestrator writes AGENTS.md into the fork before spawning (pi does not discover
+it from a parent directory — the fork is not under the project root):
+
 ```sh
 fork_env="$(doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker)" \
   || { echo "fork failed: $?" >&2; exit 1; }
+cp AGENTS.md "$D/"
 env -C "$D" DOCTRINE_WORKER=1 PI_OFFLINE=1 $fork_env \
-  pi --mode rpc --no-session --session-dir "$D/.pi-session" \
+  pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
      --no-extensions --no-skills --no-themes \
      <<< '{"type":"prompt","message":"<pre-distilled prompt>"}'
 ```
+
+`<<<` is bash syntax; the dispatch jail uses bash. Non-bash orchestrators
+replace with `echo '{"type":"prompt",…}' | pi …`.
 
 **Flag rationale:**
 
 | Flag | Reason |
 |---|---|
 | `--mode rpc` | Structured JSONL protocol; `agent_end` gives typed completion signal with full message array |
-| `--no-session` | Ephemeral worker life; `--session-dir` colocated with fork for post-mortem debug |
-| `--session-dir "$D/.pi-session"` | Session survives fork lifecycle; inspectable during the batch if worker fails; GC'd with fork |
+| `--thinking off` | Workers implement code changes; extended reasoning is wasteful. Overridable per-phase for reasoning-heavy tasks |
+| `--session-dir "$D/.pi-session"` | Session colocated with fork; inspectable during the batch if worker fails; GC'd with fork (no `--no-session` — it suppresses `--session-dir`) |
 | `--no-extensions` | No project-local extension surface — prevents `extension_ui_request` dialog hazards in RPC mode |
 | `--no-skills` | No doctrine skill corpus in context; the boot sector references skills the worker won't have (pi handles missing skill references gracefully) |
 | `--no-themes` | Unnecessary in headless mode |
 | `PI_OFFLINE=1` | Suppress startup version check + package update checks — no network needed |
 
-**Not passed:** `--no-context-files`. The fork worktree gets AGENTS.md on disk
-(provisioned by the orchestrator, or by the `coordinate` verb during fork setup).
-pi auto-discovers it from cwd; the boot sector (`@.doctrine/state/boot.md`)
-dereferences governance and memory pointers. The worker gets project conventions
-without the orchestrator spending tokens to inline them.
+**Not passed:** `--no-context-files`. The orchestrator `cp`s AGENTS.md into the
+fork after creation. pi auto-discovers it from cwd; the boot sector
+(`@.doctrine/state/boot.md`) dereferences governance and memory pointers. The
+worker gets project conventions without the orchestrator spending tokens to
+inline them. `doctrine worktree fork --worker` does not provision AGENTS.md
+(it is not in `.worktreeinclude`).
 
 ### Tool profile
 
@@ -59,9 +67,9 @@ faster and lower decision cost. `ls` is marginal but costs nothing to include.
 ### Print mode (documented alternative)
 
 ```sh
+cp AGENTS.md "$D/"
 env -C "$D" DOCTRINE_WORKER=1 PI_OFFLINE=1 $fork_env \
-  pi -p --no-extensions --no-skills --no-themes \
-     --no-session --session-dir "$D/.pi-session" \
+  pi -p --thinking off --no-extensions --no-skills --no-themes \
      "<pre-distilled prompt>" 2>&1
 ```
 
@@ -76,13 +84,17 @@ isn't needed.
 The orchestrator reads JSONL from pi's stdout, discards all events except
 `agent_end`. From `agent_end.messages` it extracts:
 
-1. **Outcome:** last assistant message text → worker summary/findings
-2. **Errors:** any `toolResult` message with `isError: true`
+1. **Outcome:** `messages.findLast(m => m.role === 'assistant')?.content.find(c => c.type === 'text')?.text` — the worker's final summary
+2. **Errors:** any `toolResult` message with `isError: true` — worker hit a problem
 3. **Dirty check:** presence of tool calls → worker touched files (funnel delta-check confirms authoritatively)
 
 No custom extension or filter. The `agent_end` event is the single integration
 point. Intermediate events (`message_update`, `tool_execution_update`) are
 discarded — the orchestrator doesn't steer workers mid-execution.
+
+**Timeout:** the orchestrator should impose a deadline on worker completion.
+`auto_retry_start` events signal transient failures; if the worker hasn't emitted
+`agent_end` within the deadline, abort and report.
 
 **Why RPC over print mode:** `-p` gives unstructured text output with no way to
 separate the worker's final summary from streaming chatter. RPC's `agent_end`
@@ -90,15 +102,24 @@ event carries typed messages in machine-readable form.
 
 ### D2 — Filesystem-native context, not prompt-inlined
 
-The fork worktree carries AGENTS.md on disk (provisioned during fork setup). pi
-auto-discovers it at startup. The boot sector dereferences governance, routing
-table, and memory signposts. The worker prompt is lean:
+The orchestrator writes (`cp`) AGENTS.md into the fork after creation. pi
+auto-discovers it from cwd at startup (pi walks up from cwd; the fork is not a
+child of the project root, so AGENTS.md won't be discovered from parent
+directories — explicit copy is required). The boot sector (`@.doctrine/state/boot.md`)
+loaded by AGENTS.md dereferences governance and memory signposts. The worker
+prompt is lean:
 
 > Implement phase N of SL-NNN. Conventions are in AGENTS.md. Run `doctrine memory find <topic>` for subsystem gotchas.
 
+The project's `.worktreeinclude` does not include AGENTS.md, so
+`doctrine worktree fork --worker` does not provision it automatically. The
+orchestrator's `cp` step is the delivery mechanism. Future: adding AGENTS.md to
+`.worktreeinclude` would make this automatic, but that's a project-local config
+choice, not a framework requirement.
+
 **Why not inline conventions in the prompt:** burns orchestrator tokens every
-batch. The orchestrator already provisions the fork — adding AGENTS.md to the
-provision payload is zero marginal cost.
+batch. The orchestrator already provisions the fork — copying AGENTS.md is zero
+marginal cost.
 
 **Why `--no-skills`:** the boot text references skills the worker won't have (the
 doctrine skill corpus is orchestrator-only). pi handles missing SKILL.md
@@ -145,11 +166,12 @@ need adjustment. For doctrine's own repo, no changes needed.
 
 ## Code impact
 
-**Zero code changes.** This is a skill documentation change + an e2e exercise.
+One test cap bump; one skill documentation change; one e2e exercise.
 
 | File | Change |
 |---|---|
 | `.agents/skills/dispatch-subprocess/SKILL.md` | Add pi RPC spawn arm alongside `codex exec` |
+| `tests/e2e_skills_dispatch_shrinkage.rs` | Bump `dispatch-subprocess` body-line cap from ≤25 to ≤35 to accommodate the pi arm |
 | (exercise only) fork worktree | e2e validation of fork→marker→spawn→agent_end→import→commit |
 
 No CLI verbs, no binary changes, no extension development. The existing
@@ -169,7 +191,7 @@ No VT tests — no code changes.
 
 ## Open questions (resolved in design)
 
-- Session hygiene → D4: colocated with fork, `--no-session` + `--session-dir`
+- Session hygiene → D4: colocated with fork, `--session-dir` only (dropped `--no-session` — it suppresses session-dir)
 - Tool profile → full built-in set (read, bash, edit, write, grep, find, ls)
 - Trust gate → D5: probe confirms no hang; project-config-dependent, ok for v1
 - Harness selection → D3: `[dispatch] preferred_subprocess_harness` in doctrine.toml (deferred to IMP-101)
