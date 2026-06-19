@@ -353,12 +353,12 @@ export function relationshipTable(opts: RelationshipTableOpts): void {
       const tr = document.createElement('tr');
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', () => {
-        window.location.hash = '#' + buildHash('focus', node.id, opts.depth);
+        window.location.hash = buildHash('focus', node.id, opts.depth);
       });
 
       const idCell = document.createElement('td');
       const idLink = document.createElement('a');
-      idLink.href = '#' + buildHash('focus', node.id, opts.depth);
+      idLink.href = buildHash('focus', node.id, opts.depth);
       idLink.textContent = node.id;
       idCell.appendChild(idLink);
       tr.appendChild(idCell);
@@ -436,7 +436,7 @@ export function relationshipTable(opts: RelationshipTableOpts): void {
 
     const srcCell = document.createElement('td');
     const srcA = document.createElement('a');
-    srcA.href = '#' + buildHash('focus', edge.source, depth);
+    srcA.href = buildHash('focus', edge.source, depth);
     srcA.textContent = edge.source;
     srcCell.appendChild(srcA);
     tr.appendChild(srcCell);
@@ -449,7 +449,7 @@ export function relationshipTable(opts: RelationshipTableOpts): void {
 
     const labelCell = document.createElement('td');
     const labelA = document.createElement('a');
-    labelA.href = '#' + buildHash('edge', edge.id, depth);
+    labelA.href = buildHash('edge', edge.id, depth);
     labelA.className = 'edge-id-link';
     labelA.textContent = edge.label;
     labelA.title = 'Edge: ' + edge.id;
@@ -458,7 +458,7 @@ export function relationshipTable(opts: RelationshipTableOpts): void {
 
     const tgtCell = document.createElement('td');
     const tgtA = document.createElement('a');
-    tgtA.href = '#' + buildHash('focus', edge.target, depth);
+    tgtA.href = buildHash('focus', edge.target, depth);
     tgtA.textContent = edge.target;
     tgtCell.appendChild(tgtA);
     tr.appendChild(tgtCell);
