@@ -237,25 +237,39 @@ apply in one pass rather than re-touching the cycle twice.
 closure.** OQ-6 settled **thin** (compose around, not a fat generic bracket):
 
 ```rust
+/// Per-row result the apply closure hands back. Transient REPORT data — NOT a
+/// `JournalRow` field (the row schema, ledger.rs, carries only the oids + status;
+/// both NoOp and Applied persist as `Verified`, so disposition cannot be recovered
+/// from the row after the fact — codex plan review BLOCKER). The bracket collects
+/// these and returns them; the *caller* renders §4 and the bail from the vec.
+enum RowOutcome {
+    Done { disposition: Disposition },   // success — caller maps to the §4 line
+    Refused { token: String },           // semantic refusal/moved — journaled Failed
+}
+// `Disposition` grows by phase: PHASE-04 has { Created, NoOp, Applied } (today's
+// match arms, verbatim — behaviour-pure); PHASE-02 ADDS integrate's worktree
+// variants { AdvancedResynced, AdvancedPureRef, RacedDesync } to integrate's
+// closure ONLY — the bracket signature is stable across both phases.
+
 /// Journal the planned intent onto `coord_ref` BEFORE any external ref mutation,
 /// apply each row via `apply`, then re-journal applied status (recoverability).
-/// `apply` mutates `row.status`/`applied_new_oid` in place and returns Some(msg)
-/// for a refused/moved row (collected, journaled Failed) or None on success. Err
-/// is reserved for real command/invariant failure — the pre-commit already made
-/// intent durable (B3 status-capturing, not `?`-erroring).
+/// `apply` mutates `row.status`/`applied_new_oid` in place and returns a
+/// `RowOutcome`. `Err` is reserved for fatal command/invariant failure (B3): the
+/// recovery commit only runs if `apply` returns `Ok`, so a semantic refusal MUST
+/// be `Ok(Refused{token})`, never `?` — else applied status never persists.
 fn with_journaled_projection(
     root: &Path, tip: &str, tip_tree: &str, journal_path: &str, coord_ref: &str,
     journal: &mut Journal, message: &str,
-    mut apply: impl FnMut(&Path, &mut Row) -> anyhow::Result<Option<String>>,
-) -> anyhow::Result<Vec<String>> {
+    mut apply: impl FnMut(&Path, &mut Row) -> anyhow::Result<RowOutcome>,
+) -> anyhow::Result<Vec<RowOutcome>> {
     let journal_commit =
         commit_journal(root, tip_tree, tip, journal_path, coord_ref, journal, message)?;
-    let mut failures = Vec::new();
+    let mut outcomes = Vec::with_capacity(journal.rows.len());
     for row in &mut journal.rows {
-        if let Some(msg) = apply(root, row)? { failures.push(msg); }
+        outcomes.push(apply(root, row)?);
     }
     commit_journal(root, tip_tree, &journal_commit, journal_path, coord_ref, journal, message)?;
-    Ok(failures)
+    Ok(outcomes)
 }
 ```
 
@@ -265,12 +279,15 @@ the recovery `commit_journal` runs **strictly after** the loop
 is recorded. Therefore `apply` MUST return `Err` **only for fatal operational
 failure** (a git command/invariant breaking). Every **semantic per-row refusal**
 sets `row.status` (`Failed`) — and `applied_new_oid` where meaningful — and returns
-`Ok(Some(msg))`, so the post-loop commit still durably records it (B3). This binds
-SL-121's per-row integrate refusals routed *through the closure*: a
+`Ok(RowOutcome::Refused{token})`, so the post-loop commit still durably records it
+(B3). This binds SL-121's per-row integrate refusals routed *through the closure*: a
 **non-ff-checkout** refusal (§2.2) and a **raced `Moved`** (§2.5) are
-`Ok(Some(token))`, never `?`. (The **whole-integrate dirty refusal**, §2.3, is
+`Ok(Refused{token})`, never `?`. (The **whole-integrate dirty refusal**, §2.3, is
 different: it bails **caller-side before the bracket**, so nothing is journaled —
-an `Err`/bail there is correct and the `apply` contract does not apply.)
+an `Err`/bail there is correct and the `apply` contract does not apply.) **This
+contract is load-bearing and must be pinned by a test** that inspects the committed
+`dispatch/<slice>` journal after a refusal and asserts the row persisted `Failed`
+(not lost to an early `Err`) — §6.
 
 **Seam placement — the three integrate-only worktree pieces stay caller-side, do
 not enter the bracket:**
@@ -282,8 +299,10 @@ not enter the bracket:**
 - **Per-row advance (§2.2)** — incl. the None-leg post-CAS re-probe/resync and the
   ff-merge leg — **is** integrate's injected `apply` closure. `prepare_review`'s
   closure is its existing zero-oid-CAS match body, verbatim.
-- **Report (§4)** reads `journal` rows' recorded disposition **after** the bracket
-  returns — integrate-side; `prepare_review` keeps its `"N ref(s) created"` line.
+- **Report (§4)** is rendered **after** the bracket returns, from the collected
+  `Vec<RowOutcome>` it hands back (NOT from `journal.rows` — disposition is not a
+  row field; codex BLOCKER) — integrate-side; `prepare_review` ignores dispositions
+  and keeps its `"N ref(s) created"` line, bailing on any `Refused` token.
 
 **Why thin (not fat).** `prepare_review`'s targets (`review/<slice>`,
 `phase/<slice>-NN`) are created under zero-oid CAS and are **never checked out**, so
@@ -366,7 +385,15 @@ integrate: 2 ref(s) replayed
 Disposition ∈ `{ advanced+resynced, advanced+pure-ref, no-op }` for success.
 Refusals are not success lines: `integrate-dirty-worktree` (§2.3, whole-integrate),
 `integrate-nonff-checkout` (§2.2, a checked-out target needing a non-ff advance),
-and a raced `Moved` (§2.5) all surface as the named-token error / post-loop bail.
+and a raced `Moved` / `raced-checkout-desync` (§2.5/§2.2) all surface as the
+named-token error / post-loop bail.
+
+**Disposition home (codex BLOCKER).** These dispositions are **not** recoverable
+from a `JournalRow` (ledger.rs: oids + status only — NoOp and Applied both persist
+`Verified`). They live in the transient `RowOutcome` the §2.6 `apply` closure
+returns; the bracket collects `Vec<RowOutcome>`; integrate renders this report from
+that vec after the bracket. The named tokens above are the exact strings the
+implementation MUST emit — pinned by §6 VTs, not paraphrased.
 
 **OQ-3 resolved:** stderr human line + the existing stdout ref-list. No `--json`
 (integrate has none; adding one is out of scope).
@@ -403,6 +430,12 @@ New/changed evidence:
   merge → raced `Moved`, never a wrong-ref advance.
 - **VT — report:** stderr carries per-row `old..new (disposition)`; stdout
   ref-list contract preserved (regression).
+- **VT — `apply` contract persistence (codex plan review):** on a semantic refusal
+  routed through the closure (a `Refused` outcome — e.g. integrate non-ff-checkout,
+  or a prepare-review stale ref), read the **committed** `dispatch/<slice>` journal
+  (`git show dispatch/<slice>:.doctrine/dispatch/<slice>/journal.toml`, tree-read)
+  and assert the row persisted `status = Failed` — proving the post-loop recovery
+  commit ran, not an early `Err` abort (B3). One test per caller.
 - **Behaviour-preservation (IMP-075, §2.6):** `prepare_review` refactored onto the
   thin bracket with its apply closure = today's zero-oid-CAS body ⇒ the
   `e2e_dispatch_sync` **prepare** path stays green **unchanged** — the proof the
@@ -589,4 +622,17 @@ else a `?` aborts before the recovery commit (B3). **Integrated** into §2.6 (th
 `apply` contract paragraph), with the §2.3 whole-integrate dirty refusal explicitly
 exempted (it bails before the bracket). No blocker/major.
 
-Residual: none blocking. Ready for `/plan`.
+**Codex pass on the PLAN (2026-06-20, GPT-5.5, read-only vs design+src).** Verdict
+**blocker** — one real design gap surfaced and fixed here:
+- **BLOCKER (disposition home) → §2.6/§4.** `JournalRow` (ledger.rs) carries only
+  oids+status; NoOp and Applied both persist `Verified`, so §4's disposition
+  vocabulary cannot be read back from `journal.rows`. **Fixed:** `apply` returns a
+  transient `RowOutcome { Done{disposition} | Refused{token} }`; the bracket
+  collects `Vec<RowOutcome>`; the caller renders §4 from it. No journal-schema
+  change. `apply` signature changed from `Result<Option<String>>` accordingly.
+- The remaining findings (apply-contract has no proving VT; report vocabulary too
+  vague; PHASE-03 EN over-states the PHASE-02 dependency; dirty-refusal VT too weak;
+  PHASE-03 VA-1 unfalsifiable) are **plan-level** — addressed in `plan.toml`, not
+  here. The §6 `apply`-contract persistence VT above is the design-level half.
+
+Residual: none blocking. Ready for `/plan` re-lock (plan fixes below).
