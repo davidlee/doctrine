@@ -154,18 +154,15 @@ A future authored mutation reaching for `fs::write` then fails the gate.
 - **E1 (borrow lifetime).** `write_atomic(p, doc.to_string().as_bytes())` — the
   `String` temporary lives to end of statement; the `as_bytes()` borrow is valid.
   No allocation-count change vs `fs::write` (which also materialised the String).
-- **E2 (`catalog/test_helpers.rs:16`).** Uses `fs::write`. If compiled into the
-  lib (not `#[cfg(test)]`-gated) it trips the new lint → needs an `#[allow]`.
-  Plan-time gating check (see OQ-1 resolution / Q at §6).
+- **E2 (`catalog/test_helpers.rs:16`) — CLOSED.** The module header declares
+  "Compiles only under `#[cfg(test)]`"; `catalog/mod.rs` pulls it in for tests.
+  The gate (no `--all-targets`) does not lint it → no `#[allow]` needed.
 
 ## 6. Open Questions & Unknowns
 
 - **OQ-1 (phase split).** One phase, or shared-cores (`dep_seq`/`relation`)
   before per-kind/command sites? Work is mechanical and behaviour-gated; lean
   **one phase**. Deferred to `/plan`.
-- **Q (test-helper gating).** Confirm `catalog/test_helpers.rs` is `#[cfg(test)]`
-  / test-only at phase-plan; if lib-compiled, add an `#[allow]` (E2). Cheap
-  check, not a design risk.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -199,7 +196,15 @@ A future authored mutation reaching for `fs::write` then fails the gate.
 - **R3 — missed authored site.** The slice scope itself undercounted (missed
   supersede + map-server). Mitigate: the `clippy` guard surfaces any remaining
   authored `fs::write` at gate time — a missed site fails the build, not silently
-  ships.
+  ships. The complete pre-test-module `fs::write` sweep (29 sites = 22 authored +
+  5 runtime/derived + `fsutil` internal + 1 `cfg(test)` helper) confirms the
+  `#[allow]` inventory (§5.4) is exhaustive — no production site is unaccounted.
+- **R4 — orphan temp in a committed tree — NOT A RISK.** A crash mid-write could
+  leave `write_atomic`'s `.{name}.{pid}.tmp` sibling in a committed authored dir.
+  Two independent reasons it is moot: (a) `.gitignore` carries `*.tmp`, which
+  matches the temp name; (b) `write_atomic` already writes committed authored
+  trees today (`review.rs:1598`, `coverage_store.rs:75`, `memory.rs:1759/1797/
+  2273`, `skills.rs:929`) — this slice introduces no new exposure.
 
 ## 9. Quality Engineering & Validation
 
@@ -216,4 +221,27 @@ A future authored mutation reaching for `fs::write` then fails the gate.
 
 ## 10. Review Notes
 
-(internal adversarial pass + optional external/inquisition recorded here)
+### Internal adversarial pass (2026-06-19)
+
+- **Precedent confirms D1.** `write_atomic` is already the authored-mutation seam
+  in `review.rs`, `coverage_store.rs`, `memory.rs`, `skills.rs`. `memory.rs` is
+  **half-migrated** — atomic at `1759/1797/2273`, raw `fs::write` at
+  `2514/2618/2876`. The inconsistency *within one file* is direct evidence the
+  migration is right and the guard (D3) is what prevents the split recurring.
+  The `doc.to_string().as_bytes()` transform (§5.2) is the established in-tree
+  idiom (`memory.rs:2273`), not a new shape.
+- **R4 (orphan temp) attacked and dismissed** — `*.tmp` gitignored + pre-existing
+  usage (see §8 R4).
+- **E2 (test-helper lint) attacked and closed** — `cfg(test)`-only, gate skips it
+  (see §5.5 E2).
+- **`#[allow]` inventory proven exhaustive** by the full 29-site sweep (§8 R3).
+- **Layering re-checked.** All callers (incl. `main`, `map_server/routes`) →
+  `fsutil` is downward (command/engine → leaf); no new edge, no cycle (ADR-001).
+- **Guard precision.** `disallowed-methods` on `std::fs::write` matches both
+  `fs::write` and `std::fs::write` spellings (resolved-path match); it does **not**
+  touch `File::write_all` (the `entity.rs` create path) — correct, that path is a
+  separate seam and out of scope.
+
+### External / inquisition
+
+(pending user choice — see handoff)
