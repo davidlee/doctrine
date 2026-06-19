@@ -1,13 +1,13 @@
 import './style.css'
 
-import type { Edge, ConceptMap, CmEdge } from './types'
+import type { Edge, ConceptMap, CmEdge, CmCell } from './types'
 import { state } from './state'
 import { normalizeGraph, resolveFocus, setActionabilityView, neighbourhood, cmNeighbourhood, compareEdgesBySource, focusTransition } from './model'
 import { parseHash, buildHash, setFocus } from './router'
 import { ApiError, fetchGraph, fetchActionabilityGraph, refreshGraph, fetchHealth, fetchConceptMap, mutateConceptMap } from './api'
 import { elements, el, cacheElements, escapeHtml, focusHeader, setPageMode, relationshipTable, hoverPane, markdownPane, graphPane, edgeDetail } from './render'
 import { renderFilteredEntities, wireFilters, wireSearch, wireDepthButtons, wireRefresh } from './search'
-import { renderDiagram, renderEdgeTable, renderAddEdgeForm, renderDiagnostics, renderEditToggle, cmSelectedFieldFromCell } from './concept-map'
+import { renderDiagram, renderEdgeTable, renderAddEdgeForm, renderDiagnostics, cmEditOp, cmCellEndpoint } from './concept-map'
 import { renderGraph } from './priority'
 import { applyFocusHighlight } from './svg'
 
@@ -599,18 +599,6 @@ function renderView(): void {
     state.cmFocusNode = null
   }
 
-  renderEditToggle({
-    header: focusHeaderEl,
-    editing: state.editingConceptMap,
-    hasSelection: state.cmSelectedField !== null,
-    onEditThis: startEditSelectedField,
-    onToggle: () => {
-      state.editingConceptMap = !state.editingConceptMap
-      if (!state.editingConceptMap) state.editingNode = null
-      renderView()
-    },
-  })
-
   if (isCm) {
     renderCmEdgeTable()
     renderCmAddEdgeForm()
@@ -685,10 +673,6 @@ function renderCmGraph(container: HTMLElement): void {
     seq,
     getCurrentSeq: () => state.graphRenderSeq,
     onClick: (key) => {
-      if (state.editingConceptMap) {
-        startRenameNode(key)
-        return
-      }
       const cmData = state.conceptMapCache.get(state.focusId ?? '')
       let label = key
       if (cmData !== undefined) {
@@ -721,20 +705,14 @@ function renderCmEdgeTable(): void {
     cm: cmCache,
     focusKey: state.cmFocusNode?.key ?? null,
     depth: state.depth,
-    editing: state.editingConceptMap,
-    editingNode: state.editingNode,
-    selectedField: state.cmSelectedField,
-    editingField: state.editingField,
+    editAll: state.cmEditAll,
+    editingCell: state.cmEditingCell,
+    onToggleEditAll: handleToggleEditAll,
+    onPencil: handlePencil,
+    onNodeClick: handleNodeClick,
+    onSubmitEdit: handleSubmitCellEdit,
+    onCancelEdit: handleCancelCellEdit,
     onRemoveEdge: handleRemoveEdge,
-    onRenameNode: startRenameNode,
-    onSelectCell: handleSelectCell,
-    onSubmitRename: handleRenameNodeSubmit,
-    onSubmitRelabel: handleRelabelEdge,
-    onCancelRename: () => {
-      state.editingNode = null
-      state.editingField = null
-      renderView()
-    },
   })
 }
 
@@ -747,7 +725,6 @@ function renderCmAddEdgeForm(): void {
   renderAddEdgeForm({
     container: document.querySelector<HTMLElement>('.cm-add-edge-form'),
     cm: cmCache,
-    editing: state.editingConceptMap,
     onSubmit: handleAddEdge,
   })
 }
@@ -759,10 +736,6 @@ function renderCmAddEdgeForm(): void {
 export function renderCmDiagnostics(): void {
   const p = document.querySelector<HTMLElement>('.cm-diagnostics-panel')
   if (p === null) return
-  if (state.editingConceptMap) {
-    p.classList.add('u-hidden')
-    return
-  }
   const c = state.conceptMapCache.get(state.focusId ?? '')
   renderDiagnostics({
     container: p,
@@ -941,51 +914,89 @@ function handleRemoveEdge(source: string, rel: string, target: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// startRenameNode — enter rename mode (module-private)
+// handleToggleEditAll — flip the edit-all SCOPE toggle (not a mode)
 // ---------------------------------------------------------------------------
 
-function startRenameNode(key: string): void {
-  if (!state.editingConceptMap) return
-
-  const cm = state.conceptMapCache.get(state.focusId ?? '')
-  if (cm === undefined) return
-
-  let label = key
-  for (const node of cm.nodes) {
-    if (node.key === key) {
-      label = node.label
-      break
-    }
-  }
-
-  state.editingNode = { key, label }
+function handleToggleEditAll(checked: boolean): void {
+  state.cmEditAll = checked
   renderCmEdgeTable()
 }
 
 // ---------------------------------------------------------------------------
-// handleRenameNodeSubmit — submit rename mutation (module-private)
+// handlePencil — a cell's pencil was clicked → begin inline editing
 // ---------------------------------------------------------------------------
 
-function handleRenameNodeSubmit(newLabel: string): void {
-  const oldLabel = state.editingNode?.label ?? ''
-  state.editingNode = null
-  // Single-field ('Edit this') node path also clears the field/selection.
-  if (state.editingField === 'node') {
-    state.editingField = null
-    state.cmSelectedField = null
-  }
+function handlePencil(edge: CmEdge, cell: CmCell): void {
+  state.cmEditingCell = { from_label: edge.from_label, rel: edge.rel, to_label: edge.to_label, cell }
+  renderCmEdgeTable()
+}
 
-  const nt = newLabel.trim()
-  if (nt === '') {
-    showCmFormError('New label must not be empty')
+// ---------------------------------------------------------------------------
+// handleNodeClick — plain node-cell click → cmFocus highlight (rel is inert)
+// ---------------------------------------------------------------------------
+
+function handleNodeClick(edge: CmEdge, cell: 'from' | 'to'): void {
+  const key = cell === 'from' ? edge.from_key : edge.to_key
+  const label = cell === 'from' ? edge.from_label : edge.to_label
+  if (state.cmFocusNode?.key !== key) {
+    state.cmFocusNode = { key, label }
+  }
+  window.location.hash = buildHash('focus', state.focusId ?? '', state.depth)
+  renderView()
+}
+
+// ---------------------------------------------------------------------------
+// handleCancelCellEdit — Esc out of an inline cell edit
+// ---------------------------------------------------------------------------
+
+function handleCancelCellEdit(): void {
+  state.cmEditingCell = null
+  renderCmEdgeTable()
+}
+
+// ---------------------------------------------------------------------------
+// handleSubmitCellEdit — commit an inline cell edit through the (cell × scope)
+// matrix op. The pure cmEditOp selector chooses the op; this shell assembles
+// the label-based payload per routes.rs and submits via mutateConceptMap.
+// ---------------------------------------------------------------------------
+
+function handleSubmitCellEdit(value: string): void {
+  const editing = state.cmEditingCell
+  state.cmEditingCell = null
+  if (editing === null) {
     refreshCmView()
     return
+  }
+
+  const v = value.trim()
+  if (v === '') {
+    showCmFormError(editing.cell === 'rel' ? 'Relation must not be empty' : 'New label must not be empty')
+    refreshCmView()
+    return
+  }
+
+  const op = cmEditOp(editing.cell, state.cmEditAll)
+  const { from_label, rel, to_label, cell } = editing
+  let payload: Record<string, string>
+  switch (op) {
+    case 'rename_node_occurrence':
+      payload = { source: from_label, rel, target: to_label, cell: cmCellEndpoint(cell as 'from' | 'to'), new_label: v }
+      break
+    case 'rename_node':
+      payload = { old_label: cell === 'to' ? to_label : from_label, new_label: v }
+      break
+    case 'relabel_edge':
+      payload = { source: from_label, old_rel: rel, new_rel: v, target: to_label }
+      break
+    case 'relabel_rel_all':
+      payload = { old_rel: rel, new_rel: v }
+      break
   }
 
   const cm = state.conceptMapCache.get(state.focusId ?? '')
   const baseHash = cm !== undefined ? cm.dslHash : undefined
 
-  mutateConceptMap(state.focusId ?? '', 'rename_node', { old_label: oldLabel, new_label: nt }, baseHash)
+  mutateConceptMap(state.focusId ?? '', op, payload, baseHash)
     .then((data) => {
       updateConceptMapCache(data as Record<string, unknown>)
       refreshCmView()
@@ -999,90 +1010,11 @@ function handleRenameNodeSubmit(newLabel: string): void {
         } catch {
           /* fallback */
         }
-        showCmFormError('Rename would collide with existing node \'' + (typeof body.existing_label === 'string' ? body.existing_label : '') + '\'')
+        const existing = typeof body.existing_label === 'string' ? body.existing_label : ''
+        showCmFormError(existing !== '' ? 'Edit would collide with existing node \'' + existing + '\'' : 'Edit would create a duplicate edge')
       } else {
         handleMutationError(err)
       }
-      refreshCmView()
-    })
-}
-
-// ---------------------------------------------------------------------------
-// handleSelectCell — single-click selects a cell (plain navigation)
-// ---------------------------------------------------------------------------
-
-function handleSelectCell(edge: CmEdge, cell: 'from' | 'rel' | 'to'): void {
-  const selected = cmSelectedFieldFromCell(edge, cell)
-  state.cmSelectedField = selected
-  state.editingField = null
-
-  // A node cell also cmFocus-es that node (reuse the existing highlight + path).
-  if (selected.kind === 'node') {
-    if (state.cmFocusNode !== null && state.cmFocusNode.key === selected.key) {
-      // already focused — keep focus, just (re)select.
-    } else {
-      state.cmFocusNode = { key: selected.key, label: selected.label }
-    }
-    window.location.hash = buildHash('focus', state.focusId ?? '', state.depth)
-  }
-  renderView()
-}
-
-// ---------------------------------------------------------------------------
-// startEditSelectedField — 'Edit this': inline-edit the selected field only
-// ---------------------------------------------------------------------------
-
-function startEditSelectedField(): void {
-  const sel = state.cmSelectedField
-  if (sel === null) return
-
-  if (sel.kind === 'node') {
-    state.editingField = 'node'
-    state.editingNode = { key: sel.key, label: sel.label }
-  } else {
-    state.editingField = 'rel'
-    state.editingNode = null
-  }
-  renderView()
-}
-
-// ---------------------------------------------------------------------------
-// handleRelabelEdge — submit relabel_edge mutation for the selected rel cell
-// ---------------------------------------------------------------------------
-
-function handleRelabelEdge(newRel: string): void {
-  const sel = state.cmSelectedField
-  const wasRel = sel !== null && sel.kind === 'rel' ? sel : null
-  state.editingField = null
-  state.cmSelectedField = null
-
-  if (wasRel === null) {
-    refreshCmView()
-    return
-  }
-
-  const nr = newRel.trim()
-  if (nr === '') {
-    showCmFormError('Relation must not be empty')
-    refreshCmView()
-    return
-  }
-
-  const cm = state.conceptMapCache.get(state.focusId ?? '')
-  const baseHash = cm !== undefined ? cm.dslHash : undefined
-
-  mutateConceptMap(
-    state.focusId ?? '',
-    'relabel_edge',
-    { source: wasRel.from_label, old_rel: wasRel.rel, new_rel: nr, target: wasRel.to_label },
-    baseHash,
-  )
-    .then((data) => {
-      updateConceptMapCache(data as Record<string, unknown>)
-      refreshCmView()
-    })
-    .catch((err: unknown) => {
-      handleMutationError(err)
       refreshCmView()
     })
 }
