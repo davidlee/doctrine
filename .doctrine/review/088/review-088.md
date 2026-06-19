@@ -93,3 +93,25 @@ spec/governance change and no per-slice canon edit is required.**
 
 Hand-off to `/reconcile`: a clean brief — confirm the rollup, no write surfaces to
 touch beyond the close-time summary.
+
+## Reconciliation Outcome
+
+Brief was clean — no write surfaces.
+
+### Direct edits applied
+- *(none)* — design.md / plan.toml accurate to intent.
+
+### REVs completed
+- *(none)* — PRD-014 / SPEC-020 (REV-002) authoritative and unchanged; `spec
+  validate` corpus clean. SL-107 implements the reconciled contract, does not
+  revise it.
+
+### Withdrawn / tolerated
+- RV-088 F-4: tolerated — EX-4 5→6 expect-surface deviation; consulted,
+  self-clearing, recorded as `mem.pattern.lint.module-decl-expect-propagates`.
+  Rationale in the finding disposition + `## Synthesis`. No write warranted.
+
+The only pending action is the 5→6 note in the slice `## Summary`, which `/close`
+fills at the close-time rollup (not a reconcile write surface).
+
+Reconcile pass complete — handoff to /close.
