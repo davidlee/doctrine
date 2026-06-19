@@ -1,0 +1,87 @@
+# Implementation plan for SL-103 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-103"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Scan-side facet read"
+objective = "Read [estimate]/[value] off every entity TOML kind-agnostically in the scan shell, with per-facet malformed isolation, and carry both onto ScannedEntity. The read mechanism only — no hydrate/graph projection yet (design §5.1–5.2, D3, D4)."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (RV-094 reconciled, all findings terminal); SL-101 leaf seams estimate::parse_optional / value::parse_optional exist with the assumed signatures." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ScannedEntity carries estimate: Option<EstimateFacet> and value: Option<ValueFacet>; read_facets + the generic parse_facet helper are implemented in scan.rs and scan_entities populates the two fields after the existing status/title/outbound reads." },
+  { id = "EX-2", text = "A malformed present facet pushes an Error CatalogDiagnostic (carrying entity dir, key, field, leaf message) and drops THAT facet to None — no bound coercion — leaving the node and the sibling facet intact (D4 per-facet isolation)." },
+]
+verification = [
+  { id = "VT-1", expects = "read_facets on a faceted entity returns (Some, Some); on a non-faceted entity returns (None, None) with no diagnostic." },
+  { id = "VT-2", expects = "A malformed [estimate] (e.g. upper < lower) alongside a valid [value] on the same entity → an Error diagnostic pushed, estimate None, value still Some (per-facet isolation, design VT-4 at the read tier)." },
+  { id = "VT-3", expects = "[estimate] authored on a non-slice TOML (e.g. an ADR) is read by read_facets — proving the kind-agnostic read, not slice-only (design VT-6 at the read tier)." },
+  { id = "VT-4", expects = "Existing src/catalog/scan.rs suite stays green unchanged — the facet read is additive (behaviour preservation)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Hydrate + units resolution"
+objective = "Carry facets ScannedEntity → CatalogEntity; introduce the top-level Units block resolved once in the shell from doctrine.toml (NotFound-tolerant only) and store it on Catalog — keeping from_scanned pure (design §5.3–5.4, D2, D5; RV-094 F-4)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: ScannedEntity carries estimate/value off the scan read." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CatalogEntity carries estimate/value behind Option with skip_serializing_if; a new Units { estimation, value } struct exists; Catalog carries units; from_scanned takes units as an input param, projects se.estimate/se.value onto numbered entities (memory entities → None), and performs NO disk read (stays pure)." },
+  { id = "EX-2", text = "scan_catalog resolves Units in the shell by reading doctrine.toml, defaulting ONLY on ErrorKind::NotFound and propagating every other read error and all parse errors (mirrors coverage_store::load_config faithfully — RV-094 F-4); the sole from_scanned call site is updated." },
+]
+verification = [
+  { id = "VT-1", expects = "from_scanned copies estimate/value onto each numbered CatalogEntity; memory entities carry None." },
+  { id = "VT-2", expects = "Unit resolution: configured [estimation].unit / [value].unit surface on Units; absent config → defaults espresso_shots / magic_beans (design VT-3)." },
+  { id = "VT-3", expects = "doctrine.toml absent (NotFound) → default Units; a non-NotFound read error and a parse error each propagate as Err rather than silently defaulting (RV-094 F-4)." },
+  { id = "VT-4", expects = "Existing hydrate suite stays green; updated construction sites compile and pass (additive contract evolution, not regression)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Graph projection + contract sealing"
+objective = "Project estimate/value/units onto CatalogNode/CatalogGraph; remove the now-fulfilled dead-code expects; seal and verify the end-to-end JSON contract on both `catalog graph` and /api/graph (design §5.5–5.6, §6; RV-094 F-3/F-7)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: Catalog carries units and per-entity facets." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CatalogNode carries estimate/value (skip_serializing_if); CatalogGraph carries units; from_catalog projects both facets and copies catalog.units; every direct construction site is updated (map_server/routes.rs CatalogNode literal, graph/hydrate test literals)." },
+  { id = "EX-2", text = "The now-fulfilled #[expect(dead_code)] is removed from estimate/value parse_optional + resolve_unit and from dtoml DoctrineToml::{estimation,value}; SL-102-owned symbols (confidence consts, resolve_confidence, estimate::display) keep their expects; `just check` / clippy is zero-warning (no unfulfilled-expect)." },
+]
+verification = [
+  { id = "VT-1", expects = "Faceted slice → graph node carries estimate{lower,upper} + value{value}; top-level units resolved (design VT-1)." },
+  { id = "VT-2", expects = "Non-faceted entity → node present; estimate/value keys omitted entirely (skip_serializing_if, design VT-2)." },
+  { id = "VT-3", expects = "End-to-end malformed estimate → node carried with estimate None, Error diagnostic present, and a valid sibling [value] still present on the graph node (design VT-4 e2e)." },
+  { id = "VT-4", expects = "Round-trip durability: normalized bounds are identical across scan → catalog → graph (design VT-5, FR-004 tie)." },
+  { id = "VT-5", expects = "Kind-agnostic end-to-end: [estimate] on a non-slice TOML surfaces on its graph node (design VT-6 e2e)." },
+  { id = "VT-6", expects = "Contract JSON shape: serializing the graph yields units, nodes[*].estimate|value, edges keys with graph-neutral field names; the same shape is emitted on /api/graph (Json(CatalogGraph), RV-094 F-3) — design VT-7." },
+  { id = "VA-1", expects = "Agent attests structural non-blocking: no dispatch/execute/audit/close predicate reads facet presence — proven by absence of such a read, not a passing run (design NF-001)." },
+  { id = "VA-2", expects = "Agent confirms every contract field name (units/estimate/value/lower/upper/estimation) is clear of the SPEC-001 whole-word denylist (no project/task/schedule/capacity)." },
+  { id = "VT-7", expects = "Existing hydrate / graph / map_server suites stay green (behaviour preservation across the shared projection machinery)." },
+]
+specs        = []
+requirements = []
