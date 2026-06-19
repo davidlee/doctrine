@@ -1,9 +1,9 @@
 id = 100
 slug = "memory-lifecycle-and-agent-ux"
 title = "Memory lifecycle verbs and agent UX hardening"
-status = "ready"
+status = "done"
 created = "2026-06-18"
-updated = "2026-06-18"
+updated = "2026-06-19"
 
 [relationships]
 needs = ["SL-099"]                      # slice→work hard prerequisite
