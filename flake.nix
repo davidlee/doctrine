@@ -60,6 +60,8 @@
           bun
           typescript
           typescript-language-server
+
+          graphviz
         ];
 
         jailEnvOptions = with jailLib.combinators; [
