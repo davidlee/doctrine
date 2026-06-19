@@ -1,325 +1,408 @@
-# Design SL-112: Machine-check ADR-001 layering via a `syn` dependency-fitness test
+# Design SL-112: Machine-check ADR-001 layering via a `syn` dependency-fitness gate
 
 <!-- Reference forms (.doctrine/glossary.md § reference forms): entity ids padded
-     (SL-111, ADR-001, ADR-013); doc-local refs bare — OQ-1 (§6), D1 (§7),
-     R1 (§8), VT-1 (§9). -->
+     (SL-111, ADR-001, ADR-013, CHR-015); doc-local refs bare — OQ-1 (§6),
+     D1 (§7), R1 (§8), VT-1/F-1 (§9/§10). -->
 
 ## 1. Design Problem
 
-ADR-001 (`leaf ← engine ← command, no cycles`) is **review-only**. It has no
-automated gate, and the 2026-06-19 architecture audit confirmed the drift the ADR
-itself predicted: cycles between the relation engine and the command tier (broken
-by SL-111). ADR-001 named two escalations once cycles recur — promoting the engine
-to its own crate, and a fitness function. We are past the trigger.
+ADR-001 (`leaf ← engine ← command, no cycles`) is **review-only**. The 2026-06-19
+architecture audit confirmed the drift the ADR predicted: engine→command cycles
+(broken by SL-111). ADR-001 named two escalations — an engine crate, and a fitness
+function. We are past the trigger.
 
-The leverage is **durability**: once SL-111 makes the production graph acyclic, a
-gate stops the drift re-growing the moment a future change reintroduces an upward
-edge. Without it every structural fix decays back under review-only pressure.
+The leverage is **durability**: a gate stops the boundary re-eroding the moment a
+future change reintroduces an upward edge. This slice lands the **fitness gate
+now**; the engine **crate split is deferred** to a follow-on slice (User,
+2026-06-19) — the layer map this slice authors is the de-risking artefact the
+later cut consumes (§8 R1).
 
-This slice lands the **fitness test now**; the engine **crate split is deferred**
-to a follow-on slice (User, 2026-06-19) — the layer map this slice records is the
-de-risking artefact the later cut consumes (§8 R1).
+The design pass surfaced that the real graph is more tangled than SL-111's closure
+implied (§2 / §10). That reshaped the gate from "assert the graph is clean" into
+**"freeze the current boundary and ratchet it"** — a hard directional gate plus a
+numeric tangle ratchet where a hard gate is not yet achievable.
 
-## 2. Current State
+## 2. Current State (measured, design probe 2026-06-19)
 
-- **Production graph is acyclic** post-SL-111. Verified: the remaining
-  `relation → slice/adr/spec/…` upward edges are **all `#[cfg(test)]`-only**
-  (`relation.rs:985+`, inside `mod tests` at `:967`) — out of the bins/lib graph
-  ADR-001 governs. `just gate` runs `cargo clippy` bins/lib-only (no
-  `--all-targets`), so the gate's altitude already excludes test code.
-- **No automated enforcement.** ADR-001 § Verification records the rule as
-  review-enforced *now*, the crate boundary *later*, and **explicitly rejects** a
-  "homegrown module-graph unit test" as "brittle toil." This slice reopens that
-  rejection (§7 D5).
-- **The ADR's per-module tier table is stale** — it lists ~16 modules; `src/` now
-  has ~63 top-level modules. The table is queried/derived data living in prose,
-  which the storage rule forbids; it drifted exactly as that rule predicts.
-- **No dependency tooling in the jail** (`cargo-deny`/`cargo-modules` absent);
-  adding one is a flake change requiring User sign-off — out of scope.
+Empirical probe of the production `crate::` graph (regex preview; the authoritative
+`syn` graph is PHASE-01). Key facts — several correct earlier assumptions:
+
+- **The whole graph is NOT acyclic.** SL-111 made the **engine tier** acyclic and
+  broke the engine→command *upward* cycles; it never made the whole graph acyclic.
+  An earlier draft of this design wrongly claimed it did.
+- **Engine core is essentially a clean DAG.** Among
+  `entity/registry/relation/meta/state/plan`: only `meta→entity`, `state→plan`,
+  `status→meta` — all downward, **zero back-edges**. The one real core cycle is
+  **`conduct ↔ dtoml`** → captured as **CHR-015** (out of scope here; the tangle
+  ratchet pins it from growing, §5).
+- **Command tier is heavily cyclic** — a large intra-tier SCC (`adr↔governance`,
+  `backlog↔integrity`, `plan`/`slice` neighbourhood, …) plus many 2-cycles. Normal
+  for a CLI verb layer; **cohesion per verb is fine** (audit). This is *intra-tier*
+  — not a layering-direction violation, and out of scope to *resolve* (Non-Goals).
+- **Leaf tier is clean** — `{clock, root, fsutil, kinds, git}` import only leaves.
+- **ADR-001's tier table is wrong, not merely stale.** It lists `input` as
+  leaf/seam, but `input` imports `entity`+`meta` (engine) → `input` is **engine**
+  (F-6). The prose table also predates ~47 modules.
+- **`relation_graph` + `integrity` reach up into command modules in production**
+  (`relation_graph` → `governance/adr/policy/standard/backlog/spec` inline calls;
+  `integrity` → 11 command shells via the `*_KIND` view). Neither is imported by
+  any engine-core module, so both classify cleanly as **command-tier**, making
+  those reaches *intra-command* (legal), not upward (F-1, F-3).
+- **`state → install`** is a genuine engine→command upward edge — ADR-001's own
+  documented wart ("install … doubling as a utility provider"); Non-Goals say
+  *classify, don't resolve* (F-2).
+- **Doc-comment intra-doc links are a false-edge source** — `git → retrieve` was a
+  rustdoc `///` link, not a code edge (F-5). The `syn` AST walk dodges these (doc
+  comments are string attributes, not path nodes); a regex gate would not.
+- **No dependency tooling in the jail** (`cargo-deny`/`cargo-modules`); adding one
+  is a flake change needing User sign-off — out of scope.
 
 ## 3. Forces & Constraints
 
-- **ADR-001** — the rule under enforcement; dependencies point downward only, no
-  cycles. The gate is its first machine check.
+- **ADR-001** — the rule under enforcement. Rule 1 (downward only) is achievable
+  and hard-gated; rule 2 (no cycles) is *comprehensively violated intra-command*
+  today and unfixable in scope → enforced as a **non-increasing ratchet**, not
+  abandoned (§7 D3). Rule 3 (engine purity) deferred (§7 D3b).
 - **Storage rule** (AGENTS.md) — queried/derived data is structured, never prose.
-  The per-module tier assignment must be structured data, not an ADR prose table.
+  The per-module tier assignment must be a structured artefact, not an ADR table.
 - **ADR-001's own brittleness objection** — a source-parsing test was rejected as
-  brittle. A credible gate must *answer* that: `syn` (the canonical Rust AST
-  parser) replaces fragile regex/brace-tracking, and the verdict logic is pure +
-  unit-tested.
+  "brittle toil." The gate must *answer* that: `syn` (canonical AST) over
+  regex/brace-tracking, verdict logic pure + unit-tested (§7 D6).
 - **`just gate` integration** — `gate` runs `test-all` (`cargo test --workspace`).
-  A `cargo test` rides that for free; no new gate wiring.
-- **Pure/imperative split** (CLAUDE.md, slices-spec § Architecture) — the impure
-  fs+`syn` walk is a thin shell; the decision logic is a pure function.
-- **No parallel implementation / write less code** (CLAUDE.md) — one gate, one
-  authoritative layer map, no second classifier.
+  A `cargo test` rides it for free; no new wiring.
+- **Pure/imperative split** (CLAUDE.md) — impure fs+`syn` walk is a thin shell; the
+  verdict is a pure function.
+- **No parallel implementation / write less code** — one gate, one authoritative
+  map + baselines; no second classifier.
 - **ADR-013** — governance dependency routes through a Revision; the ADR-001
-  amendment is written via a REV at reconcile, not hand-edited as the design step.
+  amendment is authored via a REV at reconcile, not hand-edited as the design step.
 - **CHR-014** — source-reading tests that bake `env!("CARGO_MANIFEST_DIR")` go
-  stale under a shared `CARGO_TARGET_DIR` across dispatch worktrees (§7 D4).
+  stale under a shared `CARGO_TARGET_DIR` across worktrees (§7 D4).
+- **Gate value is unproven until classification** — the worth of the gate is the
+  count of genuine upward edges it will catch in future; unknown until the map
+  exists, and classification is judgement-laden + gameable (§4, §7 D7, §8 R3).
 
 ## 4. Guiding Principles
 
-- **Gate the rule that is actually drifting.** Enforce ADR-001 rules 1 (downward)
-  and 2 (acyclic); leave rule 3 (engine purity) to the convention the audit found
-  well-honored (§7 D3).
-- **Robust, not brittle.** Parse with `syn`, not regex — the gate's credibility is
-  the whole point, and ADR-001 rejected the brittle version for cause.
-- **Govern the production graph only.** Same altitude as `clippy`/`just gate`; the
-  `#[cfg(test)]` upward edges are out of contract, not violations.
-- **The map is canon, in one place, self-enforcing.** A single reviewed `const`
-  table; a module absent from it (or absent from `src/`) fails the gate.
-- **Pure core, thin shell.** All verdict logic in a pure fn, unit-tested with
-  synthetic inputs — including a negative self-test so the gate cannot pass
-  vacuously.
+- **Classify-first, then decide.** PHASE-01 produces the real `LAYER_MAP` + counts
+  the upward baseline + measures per-tier tangle, *before* committing to build the
+  gate. Small upward baseline + meaningful engine core → proceed; mostly-baseline →
+  the gate is a fig leaf and we reconsider (§7 D7). The biggest risk becomes a
+  cheap early checkpoint, not a bet.
+- **Classify by what a module *knows*, not by what makes the gate green.** Each
+  ambiguous module gets a one-line tier rationale authored *before* seeing green. A
+  module that is "command" only because that legalises an edge is a smell (§8 R3).
+- **Hard-gate what you can; ratchet what you cannot.** Cross-tier direction is
+  hard-gated. Intra-tier cycles (unfixable in scope) are pinned by a numeric
+  monotonic-down ratchet — frozen, never allowed to grow.
+- **Govern the production graph only.** Same altitude as `clippy`/`just gate`;
+  `#[cfg(test)]` edges and doc-comment links are out of contract by construction.
+- **The map is canon, in one place, self-enforcing.** One reviewed `const` table; a
+  module absent from it (or absent from `src/`) fails the gate.
+- **Pure core, thin shell, prove it bites.** All verdict logic pure + unit-tested,
+  including negative self-tests so the gate cannot pass vacuously.
 
 ## 5. Proposed Design
 
 ### 5.1 System Model
 
-A new integration test `tests/architecture_layering.rs` is the gate. It runs under
-`cargo test` (hence `just gate` via `test-all`). It has two halves:
+`tests/architecture_layering.rs` is the gate, run under `cargo test` (hence
+`just gate` via `test-all`). Impure shell → pure verdict:
 
 ```
-  src/**/*.rs ──syn parse, skip cfg(test)──▶ (modules, edges)   [impure shell]
-                                                   │
-                                                   ▼
-        const LAYER_MAP ──▶ check_layers(modules, edges, map) ──▶ Vec<Violation>   [pure]
-                                                   │
-                              empty ⇒ pass    │    non-empty ⇒ panic! naming each edge/module
+  src/**/*.rs ──syn parse; skip cfg(test); path-nodes only──▶ (modules, edges)   [shell]
+                                                                   │
+   LAYER_MAP, ACCEPTED_VIOLATIONS, TANGLE_BASELINE                 ▼
+        └────────────────────────────────▶ check(...) ──▶ Vec<Violation>   [pure]
+                                                  │
+                       empty ⇒ pass    │    non-empty ⇒ panic! naming each item
 ```
 
-The shell reads source relative to **runtime CWD** (cargo sets the test process's
-working directory to the package root per invocation — a runtime property), *not*
-the compile-time `env!("CARGO_MANIFEST_DIR")`. A reused binary under a shared
-target dir therefore still reads the worktree it was *run* in (§7 D4, sidesteps
-CHR-014). A cheap pre-flight asserts `./src` and `./Cargo.toml` exist with a clear
+Three assertions:
+1. **Completeness (forcing)** — every discovered top-level module is in `LAYER_MAP`,
+   and vice-versa.
+2. **Cross-tier direction (hard)** — every edge `s→t` with `tier(t) > tier(s)` is a
+   violation, *unless* listed in `ACCEPTED_VIOLATIONS`. The accepted set is frozen
+   and may not grow.
+3. **Per-tier tangle (numeric ratchet)** — for each tier, `tangle(tier) ≤
+   TANGLE_BASELINE[tier]`, where `tangle = Σ(SCC_size − 1)` over non-trivial
+   intra-tier SCCs (orientation-free; `0` ⇔ acyclic). Monotonic-down only.
+
+The shell reads `src/` relative to **runtime CWD** (cargo sets the test process CWD
+to the package root per invocation), *not* compile-time `env!` (§7 D4, sidesteps
+CHR-014). A pre-flight asserts `./src` + `./Cargo.toml` exist with a clear
 "run from package root" message.
 
 ### 5.2 Interfaces & Contracts
 
 ```rust
-// pure core — all logic here, no IO
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Tier { Leaf = 0, Engine = 1, Command = 2 }   // ordinal = altitude
 
-const LAYER_MAP: &[(&str, Tier)] = &[
-    // leaf
+const LAYER_MAP: &[(&str, Tier)] = &[ /* authored PHASE-01; ~68 modules */
     ("clock", Tier::Leaf), ("root", Tier::Leaf), ("fsutil", Tier::Leaf),
-    ("input", Tier::Leaf), ("git", Tier::Leaf), ("kinds", Tier::Leaf), /* … */
-    // engine
+    ("kinds", Tier::Leaf), ("git", Tier::Leaf),
     ("entity", Tier::Engine), ("registry", Tier::Engine), ("relation", Tier::Engine),
-    ("meta", Tier::Engine), ("state", Tier::Engine), ("plan", Tier::Engine), /* … */
-    // command
-    ("slice", Tier::Command), ("adr", Tier::Command), ("memory", Tier::Command),
-    ("boot", Tier::Command), ("mcp_server", Tier::Command), ("main", Tier::Command), /* … */
+    ("meta", Tier::Engine), ("state", Tier::Engine), ("plan", Tier::Engine),
+    ("input", Tier::Engine), /* F-6: was mis-listed leaf */ /* … */
+    ("slice", Tier::Command), ("integrity", Tier::Command), /* F-3 */
+    ("relation_graph", Tier::Command), /* F-1 */ ("install", Tier::Command), ("main", Tier::Command), /* … */
+];
+
+// Frozen baseline of pre-existing genuine upward edges. Small, enumerated, each
+// annotated with a follow-up. MAY shrink, MUST NOT grow.
+const ACCEPTED_VIOLATIONS: &[(&str, &str, &str)] = &[
+    ("state", "install", "ADR-001 install-as-utility wart; resolve via helper extraction (follow-up)"),
+    // … any others PHASE-01 surfaces, each with a reason + follow-up id
+];
+
+// Per-tier tangle ceiling, frozen at PHASE-01 measurement. MAY shrink, MUST NOT grow.
+const TANGLE_BASELINE: &[(Tier, u32)] = &[
+    (Tier::Leaf, 0), (Tier::Engine, /* conduct↔dtoml ⇒ 1, CHR-015 */ 1), (Tier::Command, /* measured */ 0),
 ];
 
 #[derive(Debug, PartialEq, Eq)]
 enum Violation {
-    Unclassified(String),                 // module in src/ but not in LAYER_MAP
-    StaleEntry(String),                   // LAYER_MAP key with no src/ module
-    UpwardEdge { from: String, to: String, from_tier: Tier, to_tier: Tier },
-    Cycle(Vec<String>),                   // SCC with size > 1
+    Unclassified(String),                 // src module not in LAYER_MAP
+    StaleEntry(String),                   // LAYER_MAP key with no src module
+    UpwardEdge { from: String, to: String, from_tier: Tier, to_tier: Tier },  // not in ACCEPTED
+    StaleAccepted { from: String, to: String },   // ACCEPTED entry no longer an edge → prune it
+    TangleGrew { tier: Tier, baseline: u32, actual: u32 },
 }
 
 /// Pure. No IO. The entire verdict.
-fn check_layers(
+fn check(
     modules: &BTreeSet<String>,
     edges: &BTreeSet<(String, String)>,
     map: &[(&str, Tier)],
+    accepted: &[(&str, &str, &str)],
+    tangle_baseline: &[(Tier, u32)],
 ) -> Vec<Violation>;
 ```
 
 Shell (impure, thin):
 
 ```rust
-fn discover_modules(src: &Path) -> BTreeSet<String>;      // top-level .rs + dirs under src/
-fn extract_edges(src: &Path) -> BTreeSet<(String,String)>; // syn walk, cfg(test)-skipped
+fn discover_modules(src: &Path) -> BTreeSet<String>;        // top-level .rs + dirs under src/
+fn extract_edges(src: &Path) -> BTreeSet<(String, String)>; // syn walk; cfg(test)-skipped; path nodes only
 ```
 
 ### 5.3 Data, State & Ownership
 
-- **`LAYER_MAP` owns the tier assignment.** One authority; ADR-001 carries the tier
-  *definitions* + rule and points here (§7 D2). No prose per-module table survives.
-- **Module = first path component under `src/`.** `relation.rs` → `relation`;
-  `catalog/scan.rs` → `catalog`; `mcp_server/foo.rs` → `mcp_server`. Subdir files
-  inherit the dir's tier; **intra-module edges are ignored** (matches ADR-001:
-  tier is a property of a module, module-level).
-- **Edge = (owning-module, target-module)** where target = first segment after
-  `crate::`. Deduped; self-edges dropped.
-- **No runtime state.** `LAYER_MAP` is `const`; the rest is per-run local.
+- **`LAYER_MAP` owns the tier assignment** (one authority; ADR-001 carries the rule
+  + tier *definitions* and points here, §7 D2). No prose per-module table survives.
+- **`ACCEPTED_VIOLATIONS` owns the frozen upward-edge baseline** — small, enumerated,
+  each with a reason + follow-up. `StaleAccepted` forces pruning once an edge dies
+  (the ratchet tightens automatically).
+- **`TANGLE_BASELINE` owns the per-tier cycle ceiling** — frozen numbers; `TangleGrew`
+  fires on any increase. Lowering them as cycles die is the intended maintenance.
+- **Module = first path component under `src/`** (`catalog/scan.rs` → `catalog`);
+  subdir files inherit; **intra-module edges ignored** (ADR-001: tier is module-level).
+- **Edge = (owning-module, first-segment-after-`crate::`)**; deduped, self-edges
+  dropped.
+- **No runtime state**; `const` data + per-run locals.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-`check_layers`:
+`check`:
+1. Completeness: `LAYER_MAP` keys vs discovered `modules` → `Unclassified` /
+   `StaleEntry`.
+2. Direction: for each cross-tier edge `tier(t) > tier(s)`: if not in `accepted` →
+   `UpwardEdge`. Any `accepted` entry not present in `edges` → `StaleAccepted`.
+3. Tangle: for each tier, build the same-tier subgraph, Tarjan SCC, `tangle =
+   Σ(size−1)` over non-trivial SCCs; if `> baseline` → `TangleGrew`.
+4. Return all violations; the `#[test]` panics with a formatted report if non-empty.
 
-1. `modules` from `discover_modules`. Assert `LAYER_MAP` keys == `modules`
-   (`Unclassified` for src-not-in-map, `StaleEntry` for map-not-in-src) — the
-   forcing function in both directions.
-2. For each `(s, t)` in `edges` with both classified: if `tier(t) > tier(s)` →
-   `UpwardEdge`.
-3. Tarjan SCC over `(modules, edges)`; every SCC of size > 1 → `Cycle` (catches
-   same-tier cycles rules 1+2 would miss).
-4. Return all violations. The `#[test]` panics with a formatted report listing each
-   offending edge/module if non-empty.
-
-`extract_edges`: per `src/**/*.rs`, `syn::parse_file`; walk items with a `Visit`
-impl that **does not recurse into `#[cfg(test)]`-attributed items/mods**; collect
-every `Path` whose leading segment is `crate` (covers `use` trees and inline path
-exprs); map to `(owning_module, first_seg_after_crate)`.
+`extract_edges`: per `src/**/*.rs`, `syn::parse_file`; a `Visit` impl that **does
+not recurse into `#[cfg(test)]`-attributed items/mods** and collects only **path
+nodes** (`ItemUse` trees + `ExprPath`/`TypePath`/`PatPath`) whose leading segment
+is `crate` — *not* doc-comment or string content (F-5). Map each to
+`(owning_module, first_seg_after_crate)`.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1** — `LAYER_MAP` keys are exactly the discovered top-level modules. Drift
-  either way is a violation, so the map cannot silently rot as the ADR table did.
-- **INV-2** — the production graph stays a DAG with downward-only cross-tier edges.
-  This is the property the gate exists to pin; green today (SL-111), red on
-  regression.
-- **ASM-1** — cargo sets the test process CWD to the package root. **Load-bearing**
-  (§7 D4); the pre-flight probe converts a violated assumption into a clear failure
-  rather than a mis-read tree. Confirmed empirically at execution (OQ-2 → resolved
-  by probe).
-- **ASM-2** — `use crate::X` / `crate::X::…` paths capture the cross-module edges
-  that matter; a re-export laundering an edge through a third module is possible but
-  not present and not worth modelling now (§8 R2).
-- **Edge — `#[cfg(test)]` upward edges are not violations.** The `Visit` skip keeps
-  `relation`'s test imports of `slice::SLICE_KIND` out of scope by construction.
-- **Edge — `mod foo { … }` inline vs `mod foo;` file.** Both resolve to the same
-  top-level module name; the walk keys on the *file's* top-level path component, so
-  inline submodules inherit correctly.
-- **Edge — paths like `crate::catalog::scan::f`** count as an edge to `catalog`
-  (first segment only); deeper segments are intra-module and ignored.
+- **INV-1** — `LAYER_MAP` keys == discovered modules (the map cannot silently rot as
+  the ADR table did).
+- **INV-2** — every cross-tier edge points down, modulo the frozen `ACCEPTED`
+  baseline; the gate pins this going forward.
+- **INV-3** — `tangle(tier)` never exceeds its frozen baseline (intra-tier cohesion
+  may not worsen).
+- **ASM-1** — cargo sets the test CWD to the package root (load-bearing; the
+  pre-flight probe converts a violated assumption into a clear failure). Confirmed
+  empirically PHASE-01.
+- **ASM-2** — `crate::` path nodes capture the edges that matter; a re-export or
+  macro-body edge could evade `syn` (§8 R2) — not present, not modelled now.
+- **Edge — `#[cfg(test)]` upward edges / doc-link paths are not violations** (Visit
+  skip + path-nodes-only handle both by construction: F-5, the `relation` test
+  edges).
+- **Edge — deep paths** (`crate::catalog::scan::f`) count as one edge to `catalog`.
+- **Edge — `relation_graph`/`integrity` reaches** become intra-command (legal) under
+  their command-tier classification — *not* baselined.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 — exact tier for the ambiguous ~20 modules** (`install`-as-utility wart
-  ADR-001 flagged, plus `integrity`, `governance`, `value`, `lifecycle`, `conduct`,
-  `links`, `dep_seq`, `projection`, `coverage*`, …). **Non-blocking**: resolved at
-  execution by the gate itself — it will not go green until `LAYER_MAP` is
-  self-consistent with the real edges, so authoring the map *is* the classification
-  work, and a misclassification surfaces as a concrete `UpwardEdge`, not a judgement
-  call. `install` is classified where its edges land; the wart is *recorded*, not
-  *resolved* (slice Non-Goals).
-- **OQ-2 — CHR-014 footgun.** *Resolved* (§5.1/D4): CWD-relative read + probe;
-  `env!` dropped.
-- **OQ-3 — rule 3 (engine purity).** *Deferred* (Q4-A, §7 D3); the impure-leaf
-  refinement (tag `git`/`clock` impure, forbid engine→impure-leaf) is the named
-  follow-up (§8 R3).
+- **OQ-1 — exact tier for the ambiguous ~20** (`governance`, `value`, `lifecycle`,
+  `conduct`, `links`, `dep_seq`, `projection`, `coverage*`, `dtoml`, …). Resolved in
+  PHASE-01 by classifying *by what each knows*, with a rationale, then letting the
+  gate confirm consistency. Not a downstream blocker.
+- **OQ-2 — CHR-014 footgun.** *Resolved* (§5.1 / D4): CWD-relative read + probe.
+- **OQ-3 — rule 3 (engine purity).** *Deferred* (§7 D3b); impure-leaf refinement is
+  the named follow-up.
+- **OQ-4 — final tangle metric.** `Σ(SCC_size−1)` proposed; PHASE-01 may add a
+  secondary readout (largest-SCC / 2-cycle count) for diagnostics. Mechanism fixed,
+  metric tunable.
+- **OQ-5 — magnitude of the upward baseline.** *Unknown until PHASE-01* — and it is
+  the go/no-go input (§7 D7, §8 R6).
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D1 — Fitness test now; engine crate split deferred to a follow-on slice.**
-  *Alt A:* crate split now (compiler-enforced, strongest). Rejected for *this*
-  slice — heaviest path: severing every engine→command edge incl. `relation`'s test
-  constants, large mechanical churn, Med risk, and it needs the authoritative layer
-  map anyway. *Alt B:* both at once. Rejected — couples a durable cheap win to a
-  large risky move. **Chosen:** land the durable gate cheaply; the `LAYER_MAP` this
-  slice authors is the crate split's de-risking input (§8 R1). Matches the slice's
-  own follow-up note and ADR-001's "gate now, crate boundary when it settles."
-- **D2 — Tier map as a central Rust `const LAYER_MAP`, not prose, per-module
-  marker, or TOML.** *Alt — per-module `//! Tier:` marker:* best cohesion but no
-  single survey point and 63 annotations; *Alt — TOML data file:* language-neutral
-  but adds a file + parse + IO for no gain (readers here read Rust). *Alt — ADR
-  prose table:* the status quo that drifted; forbidden by the storage rule.
-  **Chosen:** one greppable, compile-checked, reviewed table the gate reads with no
-  IO; ADR-001 holds the rule + tier definitions and points at it as the
-  authoritative assignment. Surveyable *and* self-enforcing (INV-1).
-- **D3 — Enforce ADR-001 rules 1 (downward) + 2 (acyclic) only; rule 3 (engine
-  purity) deferred.** *Alt:* also gate purity (flag engine use of impure seams +
-  `std::fs`/`process`/`SystemTime`). Rejected for scope — the audit found rule 3
-  *well-honored* ("clock seam… date/uid pattern is real"), full purity detection is
-  fuzzy with false-positive risk, and the directional/cyclic rule is the one that
-  actually drifted. The cheap **impure-leaf refinement** (tag `git`/`clock` impure,
-  forbid `engine→impure-leaf` in the same edge framework) is recorded as the follow-up
-  (§8 R3), to be picked up "maybe later" (User, 2026-06-19).
-- **D4 — Read `src/` relative to runtime CWD, not `env!("CARGO_MANIFEST_DIR")`.**
-  *Alt:* `env!` (idiomatic). Rejected — `env!` bakes the path at compile time, so a
-  reused test binary under a shared `CARGO_TARGET_DIR` reads a stale worktree
-  (CHR-014). Cargo sets the test CWD to the package root per invocation (runtime),
-  so a CWD-relative read tracks the worktree actually run. A pre-flight probe
-  (ASM-1) makes the cargo guarantee a loud failure if ever violated. Sidesteps
-  CHR-014 for this test without solving it globally.
-- **D5 — Amend ADR-001 in place (reverse its "rejected" stance); the write routes
-  through a REV at reconcile.** *Alt — follow-on ADR:* rejected — fragments the
-  layering canon; this *is* ADR-001's own "Later — crate graph" plan maturing plus
-  a reversal of its homegrown-test rejection (justified: the cycles arrived, so the
-  cost/benefit flipped, and `syn` removes the brittleness that grounded the
-  rejection). ADR-001 § Verification gains the fitness test as *now*-enforcement,
-  its stale per-module prose table is replaced by tier definitions + a `LAYER_MAP`
-  pointer, and the crate split stays the named future escalation. Per ADR-013 the
-  governance write is a REV authored at `/reconcile`; this design records intent.
-- **D6 — `syn` as a test-only dev-dependency.** *Alt:* regex line-scan, no dep.
-  Rejected — regex cannot cleanly skip `#[cfg(test)]` scope (brace-tracking is the
-  brittleness ADR-001 named) and catches `crate::` in strings/comments. `syn` is
-  centralized in `[workspace.dependencies]` with a reason comment and added to this
-  crate's `[dev-dependencies]` only — **zero shipped-binary weight**.
+- **D1 — Fitness gate now; engine crate split deferred.** *Alt:* crate split now
+  (strongest, compiler-enforced) — rejected for this slice: heaviest, needs the
+  authoritative map anyway, blocked by the very cycles below. *Alt:* both — rejected
+  (couples a cheap durable win to a large risky move). **Chosen:** land the gate;
+  `LAYER_MAP` de-risks the later cut (§8 R1).
+- **D2 — Central Rust `const` map, not prose / per-module marker / TOML.** *Alts:*
+  per-module `//! Tier:` (best cohesion, no survey point, 68 annotations); TOML
+  (language-neutral, adds parse+IO for no gain); ADR prose table (the status quo
+  that drifted; storage-rule-forbidden). **Chosen:** one greppable, compile-checked,
+  reviewed table the gate reads with no IO; ADR-001 holds rule + definitions and
+  points at it.
+- **D3 — Enforce rule 1 *hard*; rule 2 as a *non-increasing tangle ratchet*.** The
+  probe showed rule 2 is comprehensively violated intra-command and unfixable in
+  scope. *Alt — gate global acyclicity (SCC size 1 everywhere):* unviable — you
+  cannot baseline a ~33-node SCC as "debt." *Alt — ignore intra-tier cycles
+  entirely:* rejected (false confidence; the blob festers — User). **Chosen:** hard
+  directional gate + per-tier `Σ(SCC−1)` ratchet frozen at today's numbers,
+  monotonic-down. Rule 2 is *enforced as "may not worsen,"* not abandoned.
+- **D3b — Rule 3 (engine purity) deferred.** Audit found it well-honored; full
+  purity detection is fuzzy. The impure-leaf refinement (tag `git`/`clock` impure,
+  forbid engine→impure-leaf in the same framework) is the recorded follow-up.
+- **D4 — Read `src/` relative to runtime CWD, not `env!`.** `env!` bakes the path at
+  compile time → reused binary under shared target reads a stale worktree (CHR-014).
+  Cargo's per-invocation CWD = package root tracks the worktree actually run; the
+  probe (ASM-1) makes the guarantee loud if violated.
+- **D5 — Amend ADR-001 in place; write via REV at reconcile.** *Alt — follow-on ADR:*
+  rejected (fragments layering canon). This *is* ADR-001's own "Later — crate graph"
+  plan maturing + a justified reversal of its homegrown-test rejection (cycles
+  arrived; `syn` removes the brittleness that grounded it). The amendment: rule 1
+  machine-enforced; rule 2 enforced as a ratchet with the command tangle openly
+  recorded as unmet-and-tracked; stale prose table → tier definitions + `LAYER_MAP`
+  pointer; crate split named as the future escalation; `input` reclassified engine.
+- **D6 — `syn` as a test-only dev-dependency.** *Alt:* regex (no dep) — rejected:
+  cannot cleanly skip `#[cfg(test)]`, and false-positives on `crate::` in
+  doc-comments/strings (F-5) — the brittleness ADR-001 named. `syn` centralized in
+  `[workspace.dependencies]` with a reason; `[dev-dependencies]` only → zero
+  shipped-binary weight.
+- **D7 — Classify-first spike as PHASE-01, gating gate construction.** The gate's
+  value is unknown until the upward baseline is counted, and classification is
+  gameable. PHASE-01 authors `LAYER_MAP` (with per-module rationale) + measures the
+  upward baseline and per-tier tangle; a small baseline + meaningful engine core is
+  the **go** condition for PHASE-02. Converts the top risk into a cheap checkpoint.
+- **D8 — `ACCEPTED_VIOLATIONS` + `TANGLE_BASELINE` as frozen, prune-forced
+  baselines.** Pre-existing debt is enumerated/counted and frozen, not silently
+  tolerated: `StaleAccepted`/`StaleEntry`/`TangleGrew` force the baselines to tighten
+  as debt dies and forbid growth. The ratchet, not a blanket waiver.
 
 ## 8. Risks & Mitigations
 
-- **R1 (deferred crate split orphaned)** — landing only the test could leave the
-  crate boundary indefinitely unmet. *Mit:* the slice's Follow-Ups name the crate
-  split as a successor slice seeded by `LAYER_MAP`; ADR-001 keeps the crate boundary
-  as the named escalation. The test is not a *replacement* for the boundary, it is
-  the interim gate + the map that de-risks it.
+- **R1 (deferred crate split orphaned)** — landing only the gate could leave the
+  boundary unmet. *Mit:* slice Follow-Ups name the crate split seeded by `LAYER_MAP`;
+  ADR-001 keeps it as the named escalation. The gate is the interim ratchet + the
+  de-risking map, not a replacement.
 - **R2 (edge laundering / dynamic reach)** — a re-export or macro could route an
-  upward edge the `use crate::` walk misses (ASM-2). *Mit:* not present today;
-  `syn` sees the literal `crate::` path in `use` *and* expression position, so only
-  re-export laundering evades it, which the human/`/inquisition` layer still
-  catches. Modelling it now is speculative scope.
-- **R3 (rule 3 gap)** — engine purity stays review-only. *Mit:* audit found it
-  well-honored; the impure-leaf refinement is a recorded cheap follow-up (§7 D3),
-  not a silent omission.
-- **R4 (false green from a parser miss)** — a bug in `extract_edges` could under-
-  report edges and pass vacuously. *Mit:* the pure `check_layers` is unit-tested
-  with synthetic inputs incl. a known upward edge and a 2-cycle (VT-2); and an EX
-  check hand-introduces a real upward edge and asserts `just gate` fails naming it
-  (§9). The gate is proven to *bite*, not merely to be green.
-- **R5 (`LAYER_MAP` authoring churn)** — classifying ~63 modules is the bulk of the
-  work and a classification can be wrong. *Mit:* INV-1 + the gate make every error a
-  concrete failure (an `UpwardEdge` or an `Unclassified`), not a silent mistake; the
-  map converges against the real graph rather than against judgement.
+  upward edge `syn` misses (ASM-2). *Mit:* not present; `syn` sees literal `crate::`
+  in use + expr/type position; re-export laundering still caught by review /
+  `/inquisition`. Modelling now is speculative.
+- **R3 (classify-to-green)** — tiers chosen to pass, not by what a module knows,
+  yields a meaningless green. *Mit:* PHASE-01 authors a per-module rationale *before*
+  green (§4, D7); a module classified solely to legalise an edge is flagged.
+- **R4 (false green from a parser miss)** — `extract_edges` under-reporting passes
+  vacuously. *Mit:* pure `check` unit-tested with synthetic upward edge + 2-cycle +
+  unclassified + tangle-grew (VT-2); EX-1 hand-introduces a real upward edge and
+  asserts `just gate` fails naming it. The gate is proven to *bite*.
+- **R5 (ratchet rot / false confidence)** — baselines never shrink; the ADR reads
+  "enforced" while the command blob festers. *Mit:* `ACCEPTED`/tangle entries cite
+  follow-ups; `StaleAccepted` + monotonic-down force tightening; ADR-001 amendment
+  states plainly that rule 2 is unmet-and-tracked, not satisfied.
+- **R6 (gate value unknown)** — the upward baseline could be so large the gate is a
+  fig leaf (OQ-5). *Mit:* PHASE-01 is the go/no-go (D7); a mostly-baseline result
+  re-routes to `/consult` rather than auto-proceeding.
 
 ## 9. Quality Engineering & Validation
 
-- **VT-1 (real-graph gate, primary).** `tests/architecture_layering.rs` builds the
-  production graph and asserts zero violations. Green now (SL-111 left it acyclic);
-  red on any future upward/cyclic edge or unclassified module. Runs under
-  `just gate` (`test-all`).
-- **VT-2 (bite-proof, pure unit tests).** `check_layers` over synthetic inputs:
-  legal set → `[]`; injected upward edge → one `UpwardEdge`; injected 2-cycle →
-  `Cycle`; src-only module → `Unclassified`; map-only key → `StaleEntry`. Guards
-  R4.
-- **VT-3 (cfg(test) exclusion).** A fixture asserting a `#[cfg(test)]`-scoped
-  `crate::<command>` path produces **no** edge — pins the production-only contract
-  (ASM, the `relation` test edges).
-- **EX-1 (evidence the gate fails closed).** Hand-introduce a real upward edge
-  (engine module `use`s a command module in non-test code) → `just gate` fails
-  naming the edge; revert. Recorded, not committed.
-- **EX-2** — `LAYER_MAP` keys == discovered modules (drop/add a module → red).
-- **EX-3** — ADR-001 updated: fitness test recorded as now-enforcement, stale prose
-  tier table replaced by definitions + `LAYER_MAP` pointer (written via REV at
-  reconcile, D5).
-- **EN-1** — SL-111 done (production graph acyclic). **EN-2** — `syn` dev-dep
-  landed, `just gate` green.
+- **VT-1 (real-graph gate, primary).** `tests/architecture_layering.rs` asserts zero
+  violations against the production graph. Green at PHASE-02 close (under the authored
+  baselines); red on any future upward edge, accepted-set growth, tangle increase, or
+  unclassified module. Runs under `just gate`.
+- **VT-2 (bite-proof, pure unit tests).** `check` over synthetic inputs: legal → `[]`;
+  upward edge (not accepted) → `UpwardEdge`; upward edge in `accepted` → `[]`;
+  `accepted` entry absent from edges → `StaleAccepted`; intra-tier 2-cycle over
+  baseline → `TangleGrew`; src-only → `Unclassified`; map-only → `StaleEntry`.
+- **VT-3 (cfg(test) exclusion).** Fixture: a `#[cfg(test)]`-scoped `crate::<command>`
+  path produces **no** edge (pins the production-only contract; the `relation` test
+  edges).
+- **VT-4 (doc-link exclusion).** Fixture: a `crate::X` reference inside a `///`
+  intra-doc link produces **no** edge (F-5; the `git→retrieve` class).
+- **EX-1** — hand-introduce a real upward edge (engine module `use`s a command module
+  in non-test code) → `just gate` fails naming it; revert. Recorded, not committed.
+- **EX-2** — `LAYER_MAP` keys == discovered modules (add/drop a module → red).
+- **EX-3** — ADR-001 updated (rule 1 enforced; rule 2 ratcheted/tracked; table →
+  definitions + `LAYER_MAP` pointer; `input` reclassified), written via REV at
+  reconcile (D5).
+- **EN-1** — PHASE-01 go condition met (small upward baseline, meaningful engine core).
+  **EN-2** — `syn` dev-dep landed, `just gate` green.
+- **Phases.** PHASE-01 classify-first spike (author `LAYER_MAP` + rationale; measure
+  upward baseline + per-tier tangle; **go/no-go**). PHASE-02 build the gate (shell +
+  pure `check` + VT-1..4, EX-1..2) against the PHASE-01 baselines. PHASE-03 ADR-001
+  amendment via REV (reconcile).
 - **`just gate`** green (clippy zero-warning, fmt, `test-all`).
 
 ## 10. Review Notes
 
-### Internal adversarial pass (pending)
+### Internal adversarial pass (2026-06-19) — integrated
 
-To run after this draft locks (design § Adversarial review): attack the
-production-only scope (does skipping `#[cfg(test)]` hide a *real* upward edge that
-only `cfg(test)` exercises but ships?), the CWD assumption (ASM-1 — confirm cargo's
-guarantee empirically, not by docs), the `syn` path-collection completeness
-(macro-generated paths, `crate::` in `macro_rules!` bodies), and the
-`LAYER_MAP`-as-canon claim against the storage rule (is a Rust `const` "structured"
-enough, or does canon want the map in `.doctrine`?).
+Empirical probe of the production `crate::` graph (regex preview, doc-links +
+trailing test mods stripped). Findings, all integrated above:
+
+- **F-1 — `relation_graph` has production upward reaches** (`governance/adr/policy/
+  standard/backlog/spec`, inline calls). Not imported by engine-core → classified
+  **command-tier**; reaches become intra-command (legal). Also confirms the `syn`
+  walk must collect **expression-position** paths, not just `use` trees.
+- **F-2 — `state → install`** is a real engine→command edge (ADR-001's wart). Non-Goals
+  say classify-don't-resolve → seeded into `ACCEPTED_VIOLATIONS` with a follow-up.
+- **F-3 — `integrity` reaches 11 command shells** (`*_KIND` view). Not imported by
+  engine-core → **command-tier**; reaches become intra-command.
+- **F-4 — the whole graph is not acyclic** (large intra-command SCC + many 2-cycles;
+  engine core clean but `conduct↔dtoml` → CHR-015). Overturned the approved
+  "no cycles (SCC size 1)" check → **hard directional gate + per-tier tangle ratchet**
+  (D3); §2 corrected. Confirmed with the User as the only sane path; ratchet-by-count
+  added at the User's prompt to keep rule 2 enforced-as-non-increasing rather than
+  abandoned.
+- **F-5 — doc-comment intra-doc links are false edges** (`git→retrieve`). `syn`
+  path-nodes-only dodges them (VT-4); reinforces D6 over a regex gate.
+- **F-6 — `input` is engine, not leaf** (imports `entity`+`meta`). ADR-001's table is
+  *wrong*, not just stale → reclassified; amendment notes it.
+
+Process: this pass also exposed that the **gate's value is unproven until
+classification** and that classification is **gameable** → PHASE-01 classify-first
+go/no-go (D7) + the per-module-rationale guard (R3).
 
 ### Doctrinal alignment
 
-ADR-001 — the gate *implements* it; rules 1+2 enforced, rule 3 deferred with a
-recorded follow-up (no silent narrowing). ADR-013 — the ADR-001 amendment routes
-through a REV at reconcile (D5), not a hand-edit. Storage rule — the tier
-assignment moves from prose (forbidden) to a reviewed `const` (D2). Pure/imperative
-split honored (§5.1). No governance conflict surfaced; no `/consult` required.
+ADR-001 — the gate *implements* it: rule 1 hard-enforced; rule 2 enforced as a
+non-increasing ratchet with the command tangle openly recorded as unmet-and-tracked
+(no silent narrowing); rule 3 deferred with a named follow-up. ADR-013 — the ADR-001
+amendment routes through a REV at reconcile (D5). Storage rule — tier assignment
+moves from prose (forbidden) to a reviewed `const` (D2). Pure/imperative split
+honored (§5.1). The rule-2 reframing is a governance reinterpretation confirmed with
+the User (the ADR-001 authority); no unresolved governance conflict, no `/consult`
+outstanding (the F-4 fork was raised and decided).
+
+### External pass — pending
+
+To run at the User's election after this draft locks: attack the production-only
+scope (could a `cfg(test)`-only edge mask a shipping one?), the CWD guarantee
+(ASM-1, confirm empirically), `syn` path-collection completeness (macro bodies),
+the `LAYER_MAP`-as-canon claim vs the storage rule (is a Rust `const` "structured"
+enough, or does canon want the map in `.doctrine`?), and whether the tangle ratchet
+meaningfully constrains or just records.
