@@ -117,8 +117,9 @@ const KIND_PRECEDENCE: [ItemKind; 5] = [
 
 impl ItemKind {
     /// The engine `Kind` for this item kind — the single source of its tree +
-    /// prefix + scaffold.
-    const fn kind(self) -> &'static Kind {
+    /// prefix + scaffold. `pub(crate)` so the lazyspec loader composes a backlog
+    /// item's tree dir + tier-1 edge vocabulary off the single source (SL-026).
+    pub(crate) const fn kind(self) -> &'static Kind {
         match self {
             ItemKind::Issue => &ISSUE_KIND,
             ItemKind::Improvement => &IMPROVEMENT_KIND,
@@ -1922,6 +1923,157 @@ fn render_overrides(
 }
 
 // ---------------------------------------------------------------------------
+// Test support (SL-026 PHASE-02)
+// ---------------------------------------------------------------------------
+
+/// Promoted backlog fixture builder — the SINGLE source of the backlog-NNN.toml
+/// fixture literal (SL-027 DRY'd it; re-rolling it re-opens the closed ISS-001
+/// debt). Promoted to `pub(crate)` in place so a later golden-corpus phase can
+/// seed the same TOML via `crate::backlog::test_support::write_fixture(...)`
+/// without dragging `ItemKind`/`RiskFacet`/the borrowed `Fixture` across a module
+/// boundary. The backlog suite drives it through these items unchanged.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::ItemKind;
+    use std::fs;
+    use std::path::Path;
+
+    /// A backlog-NNN.toml fixture spec — the single source of the test fixture
+    /// literal. `'a` (not `'static`) because `write_related` passes borrowed
+    /// `slices`/`specs`. `facet`/`rels` absent → that block is omitted.
+    pub(crate) struct Fixture<'a> {
+        pub(crate) kind: ItemKind,
+        pub(crate) id: u32,
+        pub(crate) slug: &'a str,
+        pub(crate) title: &'a str,
+        pub(crate) status: &'a str,
+        pub(crate) resolution: &'a str,
+        pub(crate) tags: &'a [&'a str],
+        pub(crate) facet: Option<FacetLit<'a>>,
+        pub(crate) rels: Option<RelLit<'a>>,
+    }
+
+    pub(crate) struct FacetLit<'a> {
+        pub(crate) likelihood: &'a str,
+        pub(crate) impact: &'a str,
+        pub(crate) origin: &'a str,
+        pub(crate) controls: &'a [&'a str],
+    }
+
+    pub(crate) struct RelLit<'a> {
+        pub(crate) slices: &'a [&'a str],
+        pub(crate) specs: &'a [&'a str],
+        pub(crate) needs: &'a [&'a str],
+        pub(crate) after: &'a [AfterLit<'a>],
+        pub(crate) triggers: &'a [TriggerLit<'a>],
+    }
+
+    pub(crate) struct AfterLit<'a> {
+        pub(crate) to: &'a str,
+        pub(crate) rank: i32,
+    }
+
+    pub(crate) struct TriggerLit<'a> {
+        pub(crate) globs: &'a [&'a str],
+        pub(crate) note: &'a str,
+    }
+
+    /// The sole list-literal quoting: `[] → ""`, `["a","b"] → "\"a\", \"b\""`.
+    pub(crate) fn toml_list(xs: &[&str]) -> String {
+        xs.iter()
+            .map(|x| format!("\"{x}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// `after` array-of-inline-tables literal: each edge `{ to = "X", rank = N }`.
+    pub(crate) fn toml_after(xs: &[AfterLit<'_>]) -> String {
+        xs.iter()
+            .map(|e| format!("{{ to = \"{}\", rank = {} }}", e.to, e.rank))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// `triggers` array-of-inline-tables literal: each `{ globs = [...], note = "" }`.
+    pub(crate) fn toml_triggers(xs: &[TriggerLit<'_>]) -> String {
+        xs.iter()
+            .map(|t| {
+                format!(
+                    "{{ globs = [{}], note = \"{}\" }}",
+                    toml_list(t.globs),
+                    t.note
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// The sole fixture TOML literal: core head + optional `[facet]` + optional
+    /// `[relationships]`. Segments concatenate (each `""` when absent) rather than
+    /// `push_str(&format!(..))`, honouring the repo string-build convention.
+    pub(crate) fn render_fixture_toml(f: &Fixture<'_>) -> String {
+        let head = format!(
+            "id = {}\nslug = \"{}\"\ntitle = \"{}\"\nkind = \"{}\"\n\
+             status = \"{}\"\nresolution = \"{}\"\n\
+             created = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = [{}]\n",
+            f.id,
+            f.slug,
+            f.title,
+            f.kind.as_str(),
+            f.status,
+            f.resolution,
+            toml_list(f.tags),
+        );
+        let facet = f.facet.as_ref().map_or_else(String::new, |x| {
+            format!(
+                "\n[facet]\nlikelihood = \"{}\"\nimpact = \"{}\"\norigin = \"{}\"\ncontrols = [{}]\n",
+                x.likelihood,
+                x.impact,
+                x.origin,
+                toml_list(x.controls),
+            )
+        });
+        // SL-048 PHASE-04 (the cut): the migrated tier-1 axes (slices/specs/drift) are
+        // emitted as `[[relation]]` rows AFTER the typed `[relationships]` table (F1 —
+        // typed tables precede all arrays-of-tables). The dep/sequence axes stay typed.
+        let rels = f.rels.as_ref().map_or_else(String::new, |x| {
+            format!(
+                "\n[relationships]\nneeds = [{}]\nafter = [{}]\ntriggers = [{}]\n",
+                toml_list(x.needs),
+                toml_after(x.after),
+                toml_triggers(x.triggers),
+            )
+        });
+        let mut relation_rows = String::new();
+        if let Some(x) = f.rels.as_ref() {
+            for s in x.slices {
+                relation_rows.push_str(&format!(
+                    "\n[[relation]]\nlabel = \"slices\"\ntarget = \"{s}\"\n"
+                ));
+            }
+            for s in x.specs {
+                relation_rows.push_str(&format!(
+                    "\n[[relation]]\nlabel = \"specs\"\ntarget = \"{s}\"\n"
+                ));
+            }
+        }
+        format!("{head}{facet}{rels}{relation_rows}")
+    }
+
+    /// The sole path/dir/write: render the fixture and lay it under its kind tree.
+    pub(crate) fn write_fixture(root: &Path, f: Fixture<'_>) {
+        let name = format!("{:03}", f.id);
+        let dir = root.join(f.kind.kind().dir).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(format!("backlog-{name}.toml")),
+            render_fixture_toml(&f),
+        )
+        .unwrap();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -2353,139 +2505,13 @@ tags = []
 
     // --- PHASE-03: the `backlog list` survey (visibility / filter / order) ---
 
-    /// A backlog-NNN.toml fixture spec — the single source of the test fixture
-    /// literal. `'a` (not `'static`) because `write_related` passes borrowed
-    /// `slices`/`specs`. `facet`/`rels` absent → that block is omitted.
-    struct Fixture<'a> {
-        kind: ItemKind,
-        id: u32,
-        slug: &'a str,
-        title: &'a str,
-        status: &'a str,
-        resolution: &'a str,
-        tags: &'a [&'a str],
-        facet: Option<FacetLit<'a>>,
-        rels: Option<RelLit<'a>>,
-    }
-
-    struct FacetLit<'a> {
-        likelihood: &'a str,
-        impact: &'a str,
-        origin: &'a str,
-        controls: &'a [&'a str],
-    }
-
-    struct RelLit<'a> {
-        slices: &'a [&'a str],
-        specs: &'a [&'a str],
-        needs: &'a [&'a str],
-        after: &'a [AfterLit<'a>],
-        triggers: &'a [TriggerLit<'a>],
-    }
-
-    struct AfterLit<'a> {
-        to: &'a str,
-        rank: i32,
-    }
-
-    struct TriggerLit<'a> {
-        globs: &'a [&'a str],
-        note: &'a str,
-    }
-
-    /// The sole list-literal quoting: `[] → ""`, `["a","b"] → "\"a\", \"b\""`.
-    fn toml_list(xs: &[&str]) -> String {
-        xs.iter()
-            .map(|x| format!("\"{x}\""))
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-
-    /// `after` array-of-inline-tables literal: each edge `{ to = "X", rank = N }`.
-    fn toml_after(xs: &[AfterLit<'_>]) -> String {
-        xs.iter()
-            .map(|e| format!("{{ to = \"{}\", rank = {} }}", e.to, e.rank))
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-
-    /// `triggers` array-of-inline-tables literal: each `{ globs = [...], note = "" }`.
-    fn toml_triggers(xs: &[TriggerLit<'_>]) -> String {
-        xs.iter()
-            .map(|t| {
-                format!(
-                    "{{ globs = [{}], note = \"{}\" }}",
-                    toml_list(t.globs),
-                    t.note
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-
-    /// The sole fixture TOML literal: core head + optional `[facet]` + optional
-    /// `[relationships]`. Segments concatenate (each `""` when absent) rather than
-    /// `push_str(&format!(..))`, honouring the repo string-build convention.
-    fn render_fixture_toml(f: &Fixture<'_>) -> String {
-        let head = format!(
-            "id = {}\nslug = \"{}\"\ntitle = \"{}\"\nkind = \"{}\"\n\
-             status = \"{}\"\nresolution = \"{}\"\n\
-             created = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = [{}]\n",
-            f.id,
-            f.slug,
-            f.title,
-            f.kind.as_str(),
-            f.status,
-            f.resolution,
-            toml_list(f.tags),
-        );
-        let facet = f.facet.as_ref().map_or_else(String::new, |x| {
-            format!(
-                "\n[facet]\nlikelihood = \"{}\"\nimpact = \"{}\"\norigin = \"{}\"\ncontrols = [{}]\n",
-                x.likelihood,
-                x.impact,
-                x.origin,
-                toml_list(x.controls),
-            )
-        });
-        // SL-048 PHASE-04 (the cut): the migrated tier-1 axes (slices/specs/drift) are
-        // emitted as `[[relation]]` rows AFTER the typed `[relationships]` table (F1 —
-        // typed tables precede all arrays-of-tables). The dep/sequence axes stay typed.
-        let rels = f.rels.as_ref().map_or_else(String::new, |x| {
-            format!(
-                "\n[relationships]\nneeds = [{}]\nafter = [{}]\ntriggers = [{}]\n",
-                toml_list(x.needs),
-                toml_after(x.after),
-                toml_triggers(x.triggers),
-            )
-        });
-        let mut relation_rows = String::new();
-        if let Some(x) = f.rels.as_ref() {
-            for s in x.slices {
-                relation_rows.push_str(&format!(
-                    "\n[[relation]]\nlabel = \"slices\"\ntarget = \"{s}\"\n"
-                ));
-            }
-            for s in x.specs {
-                relation_rows.push_str(&format!(
-                    "\n[[relation]]\nlabel = \"specs\"\ntarget = \"{s}\"\n"
-                ));
-            }
-        }
-        format!("{head}{facet}{rels}{relation_rows}")
-    }
-
-    /// The sole path/dir/write: render the fixture and lay it under its kind tree.
-    fn write_fixture(root: &Path, f: Fixture<'_>) {
-        let name = format!("{:03}", f.id);
-        let dir = root.join(f.kind.kind().dir).join(&name);
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(
-            dir.join(format!("backlog-{name}.toml")),
-            render_fixture_toml(&f),
-        )
-        .unwrap();
-    }
+    // SL-026 PHASE-02: the fixture builder (`Fixture`/`write_fixture`/
+    // `render_fixture_toml` + the `*Lit` literals + `toml_*` helpers) was promoted
+    // to the `pub(crate) mod test_support` submodule above, so a later golden-corpus
+    // phase can seed the same backlog TOML through `crate::backlog::test_support::*`
+    // (it stays the SOLE source of the fixture literal — re-rolling it re-opens the
+    // closed ISS-001 debt). The backlog suite drives it via this glob import.
+    use super::test_support::*;
 
     /// Write a complete `backlog-NNN.toml` directly under a kind's tree — a true
     /// unit fixture (the `meta::tests::write_meta_toml` precedent) that lets a
