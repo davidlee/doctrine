@@ -1,0 +1,50 @@
+memory_uid = "mem_019eddf0157d7ff0a0cc275a5e8c0611"
+memory_key = "mem.pattern.design.timeout-spec-must-be-concrete"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Design-stage timeout specifications must be concrete: value + mechanism + abort"
+summary = "Design-stage timeout specs must include concrete value, enforcement mechanism, and abort semantics — 'should' is not a decision"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["design", "dispatch"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "86b4360169a77fbb3874306ccbf61ecb199ce66d"
+ref_name = "refs/heads/main"
+checkout_state_id = "3f8d56c503f6fb2a412c5333999fc05f33ec5922344dfe324f960b10bf7577ba"
+base_commit = "e0f7199f21a078c476f28019306afaec87e84e57"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-108"
+
+[[source]]
+kind = "review"
+ref = "RV-090"
+
