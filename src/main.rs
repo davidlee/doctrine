@@ -27,6 +27,7 @@ mod input;
 mod install;
 mod integrity;
 mod knowledge;
+mod lazyspec;
 mod ledger;
 mod lexical;
 mod lifecycle;
@@ -494,6 +495,12 @@ enum Command {
     Spec {
         #[command(subcommand)]
         command: SpecCommand,
+    },
+
+    /// Export the doctrine corpus to an external interchange format.
+    Export {
+        #[command(subcommand)]
+        command: ExportCommand,
     },
 
     /// Capture and survey backlog work-intake items (issue / improvement /
@@ -2762,6 +2769,16 @@ enum MapCommand {
 }
 
 #[derive(Subcommand)]
+enum ExportCommand {
+    /// Emit the corpus as a single lazyspec Brief (JSON) on stdout (SL-026).
+    Lazyspec {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 enum SkillsCommand {
     /// List available skills and their install status.
     List {
@@ -2901,6 +2918,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             SpecCommand::List { .. } | SpecCommand::Show { .. } | SpecCommand::Validate { .. } => {
                 Read
             }
+        },
+        // Export is read-only (RO proof): load + serialize, no mutation path.
+        Command::Export { command } => match command {
+            ExportCommand::Lazyspec { .. } => Read,
         },
         Command::Backlog { command } => match command {
             BacklogCommand::New { .. } => Write("backlog new"),
@@ -3915,6 +3936,19 @@ fn main() -> anyhow::Result<()> {
                     path,
                 } => spec::run_req_list(path, &spec_ref, list.into_list_args(color)),
             },
+        },
+        Command::Export { command } => match command {
+            ExportCommand::Lazyspec { path } => {
+                // Impure shell only: resolve root + read the clock/version at the
+                // boundary, then hand pure data to `run_export_lazyspec`.
+                use std::io::Write;
+                let root = crate::root::find(path, &crate::root::default_markers())?;
+                let now = crate::clock::now_timestamp()?;
+                let version = env!("CARGO_PKG_VERSION");
+                let json = lazyspec::run_export_lazyspec(&root, &now, version)?;
+                writeln!(std::io::stdout(), "{json}")?;
+                Ok(())
+            }
         },
         Command::Backlog { command } => match command {
             BacklogCommand::New {

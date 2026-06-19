@@ -321,7 +321,7 @@ mod tests {
     fn seed_fixture(root: &Path) {
         seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
         seed_slice(root, 3, &[]);
-        seed_adr(root, 2, &["ADR-001"]);
+        seed_adr(root, 2, &[("supersedes", &["ADR-001"])]);
         seed_requirement(root, 5);
     }
 
