@@ -3482,26 +3482,43 @@ fn main() -> anyhow::Result<()> {
                 raiser,
                 responder,
                 path,
-            } => review::run_new(
-                path,
-                &review::NewArgs {
-                    facet,
-                    target,
-                    phase,
-                    title,
-                    raiser,
-                    responder,
-                },
-            ),
+            } => {
+                use std::io::Write;
+                let out = review::run_new(
+                    path,
+                    &review::NewArgs {
+                        facet,
+                        target,
+                        phase,
+                        title,
+                        raiser,
+                        responder,
+                    },
+                )?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
+            }
             ReviewCommand::List { list, path } => {
-                review::run_list(path, list.into_list_args(color))
+                use std::io::Write;
+                let out = review::run_list(path, list.into_list_args(color))?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
             }
             ReviewCommand::Show {
                 reference,
                 format,
                 json,
                 path,
-            } => review::run_show(path, &reference, if json { Format::Json } else { format }),
+            } => {
+                use std::io::Write;
+                let out =
+                    review::run_show(path, &reference, if json { Format::Json } else { format })?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
+            }
             ReviewCommand::Raise {
                 reference,
                 severity,
@@ -3510,8 +3527,9 @@ fn main() -> anyhow::Result<()> {
                 role,
                 path,
             } => {
+                use std::io::Write;
                 let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
-                review::run_raise(
+                let out = review::run_raise(
                     path,
                     &review::RaiseArgs {
                         reference,
@@ -3520,7 +3538,10 @@ fn main() -> anyhow::Result<()> {
                         detail,
                     },
                     role,
-                )
+                )?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
             }
             ReviewCommand::Dispose {
                 reference,
@@ -3530,8 +3551,9 @@ fn main() -> anyhow::Result<()> {
                 role,
                 path,
             } => {
+                use std::io::Write;
                 let role = review::parse_role(role.as_deref(), review::Role::Responder)?;
-                review::run_dispose(
+                let out = review::run_dispose(
                     path,
                     &review::DisposeArgs {
                         reference,
@@ -3540,7 +3562,10 @@ fn main() -> anyhow::Result<()> {
                         response,
                     },
                     role,
-                )
+                )?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
             }
             ReviewCommand::Verify {
                 reference,
@@ -3549,8 +3574,12 @@ fn main() -> anyhow::Result<()> {
                 role,
                 path,
             } => {
+                use std::io::Write;
                 let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
-                review::run_verify(path, &reference, &finding, note.as_deref(), role)
+                let out = review::run_verify(path, &reference, &finding, note.as_deref(), role)?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
             }
             ReviewCommand::Contest {
                 reference,
@@ -3559,8 +3588,12 @@ fn main() -> anyhow::Result<()> {
                 role,
                 path,
             } => {
+                use std::io::Write;
                 let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
-                review::run_contest(path, &reference, &finding, note.as_deref(), role)
+                let out = review::run_contest(path, &reference, &finding, note.as_deref(), role)?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
             }
             ReviewCommand::Withdraw {
                 reference,
@@ -3568,24 +3601,46 @@ fn main() -> anyhow::Result<()> {
                 role,
                 path,
             } => {
+                use std::io::Write;
                 let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
-                review::run_withdraw(path, &reference, &finding, role)
+                let out = review::run_withdraw(path, &reference, &finding, role)?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
             }
-            ReviewCommand::Status { reference, path } => review::run_status(path, &reference),
+            ReviewCommand::Status { reference, path } => {
+                use std::io::Write;
+                let out = review::run_status(path, &reference)?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
+            }
             ReviewCommand::Prime {
                 reference,
                 seed,
                 from,
                 path,
-            } => review::run_prime(
-                path,
-                &review::PrimeArgs {
-                    reference,
-                    seed,
-                    from,
-                },
-            ),
-            ReviewCommand::Unlock { reference, path } => review::run_unlock(path, &reference),
+            } => {
+                use std::io::Write;
+                let out = review::run_prime(
+                    path,
+                    &review::PrimeArgs {
+                        reference,
+                        seed,
+                        from,
+                    },
+                )?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
+            }
+            ReviewCommand::Unlock { reference, path } => {
+                use std::io::Write;
+                let out = review::run_unlock(path, &reference)?;
+                let rendered = review::print_review(&out);
+                write!(std::io::stdout(), "{rendered}")?;
+                Ok(())
+            }
         },
         Command::Rec { command } => match command {
             RecCommand::New {

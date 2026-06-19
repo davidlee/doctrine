@@ -296,7 +296,6 @@ const fn role_eq(a: Role, b: Role) -> bool {
 /// exactly the data its consumers need. `#[derive(Serialize)]` for MCP
 /// transport; the CLI path formats via `print_review()` in `main.rs`.
 #[derive(Debug, Serialize)]
-#[expect(dead_code, reason = "variants constructed in PHASE-02 verb handlers")]
 pub(crate) enum ReviewOutput {
     Created {
         id: u32,
@@ -335,17 +334,22 @@ pub(crate) enum ReviewOutput {
         findings_count: usize,
         findings: Vec<Finding>,
         body: String,
+        #[serde(skip)]
+        formatted: String,
     },
     Listed {
         rows: Vec<ListRow>,
         formatted: String,
     },
     Primed {
+        canonical: String,
         tracked_paths: Vec<String>,
         areas_count: usize,
         tracked_count: usize,
         invariants_count: usize,
         risks_count: usize,
+        #[serde(skip)]
+        is_seed: bool,
     },
     Status {
         canonical: String,
@@ -359,7 +363,108 @@ pub(crate) enum ReviewOutput {
     },
     Unlocked {
         canonical: String,
+        #[serde(skip)]
+        formatted: String,
     },
+}
+
+/// Format a [`ReviewOutput`] for CLI human consumption — the single formatting
+/// pass, one match arm per variant, following the output contract (§4 design.md).
+/// Returns the formatted string; the caller writes it to stdout.
+pub(crate) fn print_review(out: &ReviewOutput) -> String {
+    match out {
+        ReviewOutput::Created {
+            id,
+            canonical: _,
+            dir,
+        } => {
+            format!("Created review {:03}: {}\n", id, dir.display())
+        }
+        ReviewOutput::Raised {
+            finding_id,
+            review_id,
+        } => {
+            format!("Raised {} on {}\n", finding_id, canonical_id(*review_id))
+        }
+        ReviewOutput::Disposed {
+            finding_id,
+            review_id,
+        } => {
+            format!(
+                "Disposed {} on {} (answered)\n",
+                finding_id,
+                canonical_id(*review_id)
+            )
+        }
+        ReviewOutput::Verified {
+            finding_id,
+            review_id,
+        } => {
+            format!(
+                "Verified {} on {} (verified)\n",
+                finding_id,
+                canonical_id(*review_id)
+            )
+        }
+        ReviewOutput::Contested {
+            finding_id,
+            review_id,
+        } => {
+            format!(
+                "Contested {} on {} (contested)\n",
+                finding_id,
+                canonical_id(*review_id)
+            )
+        }
+        ReviewOutput::Withdrawn {
+            finding_id,
+            review_id,
+        } => {
+            format!(
+                "Withdrew {} on {} (withdrawn)\n",
+                finding_id,
+                canonical_id(*review_id)
+            )
+        }
+        ReviewOutput::Showed { formatted, .. }
+        | ReviewOutput::Listed { formatted, .. }
+        | ReviewOutput::Status { formatted, .. } => formatted.clone(),
+        ReviewOutput::Primed {
+            canonical,
+            tracked_paths,
+            areas_count,
+            tracked_count,
+            invariants_count,
+            risks_count,
+            is_seed,
+        } => {
+            if *is_seed {
+                let mut s = format!(
+                    "# {canonical} prime --seed: {} git-changed candidate(s) — curate into a domain_map (not authority)\n",
+                    tracked_paths.len()
+                );
+                for path in tracked_paths {
+                    s.push_str(path);
+                    s.push('\n');
+                }
+                s
+            } else {
+                format!(
+                    "{canonical} primed — {areas_count} area(s), {tracked_count} tracked path(s), {invariants_count} invariant(s), {risks_count} risk(s)\n"
+                )
+            }
+        }
+        ReviewOutput::Unlocked {
+            canonical,
+            formatted,
+        } => {
+            if formatted.is_empty() {
+                format!("{canonical} is not locked\n")
+            } else {
+                formatted.clone()
+            }
+        }
+    }
 }
 
 /// Structured error from the review engine — each variant carries typed fields
@@ -684,7 +789,7 @@ pub(crate) struct NewArgs {
 /// `[target].ref` is validated up front (design §7): a dangling / unknown-prefix
 /// ref is refused BEFORE any id is claimed, so a bad edge never mints an entity.
 /// The empty-ledger RV is the real `Active`/await=`Raiser` state (D-C8).
-pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<()> {
+pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
     // Forward-edge validation (design §7): refuse a dangling / unknown target
@@ -739,12 +844,11 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<(
         .eid
         .numeric_id()
         .context("review kind must yield a numeric id")?;
-    writeln!(
-        io::stdout(),
-        "Created review {id:03}: {}",
-        out.dir.display()
-    )?;
-    Ok(())
+    Ok(ReviewOutput::Created {
+        id,
+        canonical: canonical_id(id),
+        dir: out.dir,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -956,18 +1060,48 @@ pub(crate) fn run_show(
     path: Option<PathBuf>,
     reference: &str,
     format: Format,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let review_root = root.join(REVIEW_DIR);
     let id = parse_ref(reference)?;
     let doc = read_review(&review_root, id)?;
     let body = read_brief(&review_root, id)?;
-    let out = match format {
+    let (status, awaiting) = doc.derived();
+    let formatted = match format {
         Format::Table => format_show(&doc, &body),
         Format::Json => show_json(&doc, &body)?,
     };
-    write!(io::stdout(), "{out}")?;
-    Ok(())
+    let canonical = canonical_id(id);
+    let title = doc.title.clone();
+    let facet = doc.review.facet.clone();
+    let target = edge_label(&doc);
+    let findings_count = doc.finding.len();
+    let findings: Vec<Finding> = doc
+        .finding
+        .iter()
+        .map(|fr| Finding {
+            id: fr.id.clone(),
+            status: parse_finding_status(&fr.status),
+            severity: Severity::parse(&fr.severity).unwrap_or(Severity::Major),
+            title: fr.title.clone(),
+            detail: fr.detail.clone(),
+            disposition: fr.disposition.clone(),
+            response: fr.response.clone(),
+        })
+        .collect();
+    Ok(ReviewOutput::Showed {
+        id,
+        canonical,
+        title,
+        status: status.as_str().to_owned(),
+        awaiting: awaiting.as_str().to_owned(),
+        facet,
+        target,
+        findings_count,
+        findings,
+        body,
+        formatted,
+    })
 }
 
 /// Read the `review-NNN.md` brief body (the prose companion).
@@ -1092,7 +1226,7 @@ fn key(d: &ReviewDoc) -> listing::FilterFields {
 /// `review list` rows as a string — the compute half of [`run_list`]. No hide-set
 /// (an RV is either Active or Done; both are listed), sorted by id, each row
 /// carrying its derived status.
-fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
+fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<(String, Vec<ListRow>)> {
     listing::validate_statuses(&args.status, REVIEW_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
@@ -1107,13 +1241,14 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
             (d, status, awaited)
         })
         .collect();
-    match format {
+    let formatted = match format {
         Format::Table => {
             let sel = listing::select_columns(&REVIEW_COLUMNS, REVIEW_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel, render))
+            listing::render_columns(&rows, &sel, render)
         }
-        Format::Json => listing::json_envelope("review", &json_rows(&rows)),
-    }
+        Format::Json => listing::json_envelope("review", &json_rows(&rows))?,
+    };
+    Ok((formatted, json_rows(&rows)))
 }
 
 /// Faithful JSON rows for `list` — the prefixed id, derived status/await, facet,
@@ -1143,11 +1278,10 @@ fn json_rows(rows: &[ReviewRow]) -> Vec<ListRow> {
 
 /// `doctrine review list` — list reviews by id with derived status, facet, and
 /// the `reviews`-edge target.
-pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
+pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let mut out = io::stdout();
-    write!(out, "{}", list_rows(&root, args)?)?;
-    Ok(())
+    let (formatted, rows) = list_rows(&root, args)?;
+    Ok(ReviewOutput::Listed { rows, formatted })
 }
 
 // ===========================================================================
@@ -1563,17 +1697,29 @@ pub(crate) struct RaiseArgs {
 /// `doctrine review raise <RV-NNN> --severity --title --detail [--as raiser]` —
 /// append a fresh `open` finding (design §5). Append-only; `raise` is the raiser's
 /// and is NOT await-blocked (it may fire even while `await=Responder`, D7/§8).
-pub(crate) fn run_raise(path: Option<PathBuf>, args: &RaiseArgs, role: Role) -> anyhow::Result<()> {
+pub(crate) fn run_raise(
+    path: Option<PathBuf>,
+    args: &RaiseArgs,
+    role: Role,
+) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
-    with_turn(&root, id, Verb::Raise, role, |doc, existing| {
+    let new_id = with_turn(&root, id, Verb::Raise, role, |doc, existing| {
         // Per-finding gate: `raise` targets a fresh (None) finding (design §5).
         if !can(Verb::Raise, None, role) {
             anyhow::bail!("raise is the raiser's verb (--as raiser)");
         }
-        let new_id = append_finding(doc, existing, args.severity, &args.title, &args.detail);
-        writeln!(io::stdout(), "Raised {} on {}", new_id, canonical_id(id))?;
-        Ok(())
+        Ok(append_finding(
+            doc,
+            existing,
+            args.severity,
+            &args.title,
+            &args.detail,
+        ))
+    })?;
+    Ok(ReviewOutput::Raised {
+        finding_id: new_id,
+        review_id: id,
     })
 }
 
@@ -1592,7 +1738,7 @@ pub(crate) fn run_dispose(
     path: Option<PathBuf>,
     args: &DisposeArgs,
     role: Role,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
     with_turn(&root, id, Verb::Dispose, role, |doc, existing| {
@@ -1605,13 +1751,11 @@ pub(crate) fn run_dispose(
             Some(&args.disposition),
             Some(&args.response),
         );
-        writeln!(
-            io::stdout(),
-            "Disposed {} on {} (answered)",
-            args.finding,
-            canonical_id(id)
-        )?;
         Ok(())
+    })?;
+    Ok(ReviewOutput::Disposed {
+        finding_id: args.finding.clone(),
+        review_id: id,
     })
 }
 
@@ -1624,7 +1768,7 @@ pub(crate) fn run_verify(
     finding: &str,
     note: Option<&str>,
     role: Role,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(reference)?;
     run_raiser_transition(
@@ -1635,7 +1779,11 @@ pub(crate) fn run_verify(
         finding,
         note,
         role,
-    )
+    )?;
+    Ok(ReviewOutput::Verified {
+        finding_id: finding.to_owned(),
+        review_id: id,
+    })
 }
 
 /// `doctrine review contest <RV-NNN> --finding F-n [--as raiser] [--note …]` — the
@@ -1647,7 +1795,7 @@ pub(crate) fn run_contest(
     finding: &str,
     note: Option<&str>,
     role: Role,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(reference)?;
     run_raiser_transition(
@@ -1658,7 +1806,11 @@ pub(crate) fn run_contest(
         finding,
         note,
         role,
-    )
+    )?;
+    Ok(ReviewOutput::Contested {
+        finding_id: finding.to_owned(),
+        review_id: id,
+    })
 }
 
 /// `doctrine review withdraw <RV-NNN> --finding F-n [--as raiser]` — the raiser
@@ -1668,7 +1820,7 @@ pub(crate) fn run_withdraw(
     reference: &str,
     finding: &str,
     role: Role,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(reference)?;
     run_raiser_transition(
@@ -1679,7 +1831,11 @@ pub(crate) fn run_withdraw(
         finding,
         None,
         role,
-    )
+    )?;
+    Ok(ReviewOutput::Withdrawn {
+        finding_id: finding.to_owned(),
+        review_id: id,
+    })
 }
 
 /// The shared shell for the three raiser status-only transitions
@@ -1700,14 +1856,6 @@ fn run_raiser_transition(
         gate(verb, from, role, finding)?;
         let table = finding_table_mut(doc, finding)?;
         apply_transition(table, to, None, None);
-        writeln!(
-            io::stdout(),
-            "{} {} on {} ({})",
-            verb_past(verb),
-            finding,
-            canonical_id(id),
-            to.as_str()
-        )?;
         Ok(())
     })?;
     // Handoff chatter (D10) — appended to the baton AFTER the turn's baton write,
@@ -1735,7 +1883,11 @@ fn gate(verb: Verb, from: FindingStatus, role: Role, finding: &str) -> anyhow::R
 }
 
 /// The past-tense label for a verb's success line.
-fn verb_past(verb: Verb) -> &'static str {
+#[expect(
+    dead_code,
+    reason = "used by print_review in main.rs via pub(crate) export"
+)]
+pub(crate) fn verb_past(verb: Verb) -> &'static str {
     match verb {
         Verb::Raise => "Raised",
         Verb::Dispose => "Disposed",
@@ -1897,7 +2049,7 @@ pub(crate) struct PrimeArgs {
 ///   conduct (it mutates no authored ledger) but it ACQUIRES THE PER-REVIEW LOCK
 ///   to serialize the cache write against a concurrent prime/status (§9). It runs
 ///   neither the baton nor the CAS — only the lock around the cache write.
-pub(crate) fn run_prime(path: Option<PathBuf>, args: &PrimeArgs) -> anyhow::Result<()> {
+pub(crate) fn run_prime(path: Option<PathBuf>, args: &PrimeArgs) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
     // The review must exist (the cache is a review's learned model) — fail early
@@ -1931,16 +2083,15 @@ pub(crate) fn run_prime(path: Option<PathBuf>, args: &PrimeArgs) -> anyhow::Resu
     cache.hashes = baseline.hashes().clone();
     write_cache(&root, id, &cache)?;
 
-    writeln!(
-        io::stdout(),
-        "{} primed — {} area(s), {} tracked path(s), {} invariant(s), {} risk(s)",
-        canonical_id(id),
-        cache.areas.len(),
-        cache.tracked_paths().len(),
-        cache.invariants.len(),
-        cache.risks.len(),
-    )?;
-    Ok(())
+    Ok(ReviewOutput::Primed {
+        canonical: canonical_id(id),
+        tracked_paths: cache.tracked_paths(),
+        areas_count: cache.areas.len(),
+        tracked_count: cache.tracked_paths().len(),
+        invariants_count: cache.invariants.len(),
+        risks_count: cache.risks.len(),
+        is_seed: false,
+    })
 }
 
 /// Validate a supplied `domain_map` (§9): at least one area, every area named, every
@@ -1979,7 +2130,7 @@ fn validate_domain_map(cache: &Cache) -> anyhow::Result<()> {
 /// the reviewer to curate from (§9, T-a). It is not authority and writes nothing.
 /// Reuses the `git.rs` impure seam (`git_text`); the reviewer pares this down to
 /// the load-bearing set.
-fn emit_seed_candidates(root: &Path, id: u32) -> anyhow::Result<()> {
+fn emit_seed_candidates(root: &Path, id: u32) -> anyhow::Result<ReviewOutput> {
     let porcelain = crate::git::git_text(root, &["status", "--porcelain", "--untracked-files=all"])
         .context("git status for prime --seed candidates")?;
     let mut paths: Vec<String> = Vec::new();
@@ -1995,17 +2146,16 @@ fn emit_seed_candidates(root: &Path, id: u32) -> anyhow::Result<()> {
     }
     paths.sort();
     paths.dedup();
-    let mut out = io::stdout();
-    writeln!(
-        out,
-        "# {} prime --seed: {} git-changed candidate(s) — curate into a domain_map (not authority)",
-        canonical_id(id),
-        paths.len()
-    )?;
-    for path in &paths {
-        writeln!(out, "{path}")?;
-    }
-    Ok(())
+    let tracked_count = paths.len();
+    Ok(ReviewOutput::Primed {
+        canonical: canonical_id(id),
+        tracked_paths: paths,
+        areas_count: 0,
+        tracked_count,
+        invariants_count: 0,
+        risks_count: 0,
+        is_seed: true,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -2017,7 +2167,7 @@ fn emit_seed_candidates(root: &Path, id: u32) -> anyhow::Result<()> {
 /// authored conduct (no authored mutation), but it acquires the lock to serialize
 /// the baton write against a concurrent verb. When a warm-cache is primed, it also
 /// reports the cache staleness signal (`current`/`stale`, §9 — a signal, not a gate).
-pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Result<()> {
+pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(reference)?;
     let _lock = LockGuard::acquire(&root, id)?;
@@ -2033,54 +2183,73 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         ..prior
     };
     write_baton(&root, id, &rebuilt)?;
-    let mut out = io::stdout();
-    writeln!(
-        out,
-        "{} — {} · await={} · findings {} · rounds {}",
+
+    let mut formatted = format!(
+        "{} — {} · await={} · findings {} · rounds {}\n",
         canonical_id(id),
         status.as_str(),
         awaited.as_str(),
         doc.finding.len(),
         rebuilt.rounds
-    )?;
-    // Warm-cache staleness — an optimization SIGNAL, never a gate (§9, T-b). Only
-    // reported when a cache has been primed; unprimed reviews say nothing.
+    );
+
+    let mut cache_primed = false;
+    let mut stale_paths: Vec<String> = Vec::new();
     if let Some(cache) = read_cache(&root, id)? {
+        cache_primed = true;
         match cache_staleness(&root, &cache)? {
-            CacheVerdict::Current => writeln!(out, "cache: current")?,
+            CacheVerdict::Current => {
+                formatted.push_str("cache: current\n");
+            }
             CacheVerdict::Stale(paths) => {
-                writeln!(out, "cache: stale ({})", paths.join(", "))?;
+                let joined = paths.join(", ");
+                stale_paths = paths;
+                formatted.push_str("cache: stale (");
+                formatted.push_str(&joined);
+                formatted.push_str(")\n");
             }
         }
     }
-    Ok(())
+
+    Ok(ReviewOutput::Status {
+        canonical: canonical_id(id),
+        status: status.as_str().to_owned(),
+        awaiting: awaited.as_str().to_owned(),
+        findings_count: doc.finding.len(),
+        rounds: usize::try_from(rebuilt.rounds).unwrap_or(0),
+        cache_primed,
+        stale_paths,
+        formatted,
+    })
 }
 
 /// `doctrine review unlock <RV-NNN>` — the escape hatch for a stale lock left by a
 /// hard kill (`-9`, which RAII cannot cover, design §6/R-b). Removes the lockfile;
 /// its `pid`/`acquired` body aids the operator's "is this really stale?" judgement
 /// (printed before removal).
-pub(crate) fn run_unlock(path: Option<PathBuf>, reference: &str) -> anyhow::Result<()> {
+pub(crate) fn run_unlock(path: Option<PathBuf>, reference: &str) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(reference)?;
+    let canonical = canonical_id(id);
     let lock = lock_path(&root, id);
     match fs::read_to_string(&lock) {
         Ok(body) => {
-            writeln!(
-                io::stdout(),
-                "Removing stale lock for {}:",
-                canonical_id(id)
-            )?;
+            let mut formatted = format!("Removing stale lock for {canonical}:\n");
             for line in body.lines() {
-                writeln!(io::stdout(), "  {line}")?;
+                formatted.push_str("  ");
+                formatted.push_str(line);
+                formatted.push('\n');
             }
             fs::remove_file(&lock).with_context(|| format!("remove lock {}", lock.display()))?;
-            Ok(())
+            Ok(ReviewOutput::Unlocked {
+                canonical,
+                formatted,
+            })
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            writeln!(io::stdout(), "{} is not locked", canonical_id(id))?;
-            Ok(())
-        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(ReviewOutput::Unlocked {
+            canonical,
+            formatted: String::new(),
+        }),
         Err(e) => Err(e).with_context(|| format!("read lock {}", lock.display())),
     }
 }
@@ -3708,5 +3877,301 @@ text = "stale baton after out-of-band edit"
         // We just assert that a String-returning closure type-checks.
         let _: fn(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<String> =
             |_, _| anyhow::Ok("F-1".into());
+    }
+
+    // ------------------------------------------------------------------
+    // PHASE-02 — golden tests: capture current stdout and assert
+    // print_review() reproduces it identically (VT-1..VT-10)
+    // ------------------------------------------------------------------
+
+    /// Golden: `print_review(&Unlocked)` with no lock produces "RV-001 is not locked".
+    #[test]
+    fn golden_print_unlocked_not_locked() {
+        let out = ReviewOutput::Unlocked {
+            canonical: "RV-001".into(),
+            formatted: String::new(),
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "RV-001 is not locked\n");
+    }
+
+    /// Golden: `run_unlock` on a review that is not locked returns Unlocked
+    /// with empty formatted, and print_review renders correctly.
+    #[test]
+    fn golden_run_unlock_not_locked() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let out = run_unlock(Some(root.to_path_buf()), "RV-001").unwrap();
+        match &out {
+            ReviewOutput::Unlocked {
+                canonical,
+                formatted,
+            } => {
+                assert_eq!(canonical, "RV-001");
+                assert!(formatted.is_empty());
+            }
+            _ => panic!("expected Unlocked, got {out:?}"),
+        }
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "RV-001 is not locked\n");
+    }
+
+    /// Golden: `print_review(&Created)` produces "Created review 001: <dir>".
+    #[test]
+    fn golden_print_created() {
+        let out = ReviewOutput::Created {
+            id: 1,
+            canonical: "RV-001".into(),
+            dir: PathBuf::from(".doctrine/review/001"),
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Created review 001: .doctrine/review/001\n");
+    }
+
+    /// Golden: `run_new` creates a review and returns Created with correct fields.
+    #[test]
+    fn golden_run_new() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_slice_target(root, 42);
+        let out = run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-042")).unwrap();
+        match &out {
+            ReviewOutput::Created { id, canonical, dir } => {
+                assert_eq!(*id, 1);
+                assert_eq!(canonical, "RV-001");
+                assert!(dir.to_string_lossy().contains("001"));
+            }
+            _ => panic!("expected Created, got {out:?}"),
+        }
+        let rendered = print_review(&out);
+        assert!(rendered.starts_with("Created review 001: "));
+    }
+
+    /// Golden: `print_review(&Raised)` produces "Raised F-1 on RV-001".
+    #[test]
+    fn golden_print_raised() {
+        let out = ReviewOutput::Raised {
+            finding_id: "F-1".into(),
+            review_id: 1,
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Raised F-1 on RV-001\n");
+    }
+
+    /// Golden: `run_raise` on a fresh RV returns Raised with the finding_id.
+    #[test]
+    fn golden_run_raise() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let out = run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "test finding"),
+            Role::Raiser,
+        )
+        .unwrap();
+        match &out {
+            ReviewOutput::Raised {
+                finding_id,
+                review_id,
+            } => {
+                assert_eq!(finding_id, "F-1");
+                assert_eq!(*review_id, 1);
+            }
+            _ => panic!("expected Raised, got {out:?}"),
+        }
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Raised F-1 on RV-001\n");
+    }
+
+    /// Golden: `print_review(&Disposed)` produces "Disposed F-1 on RV-001 (answered)".
+    #[test]
+    fn golden_print_disposed() {
+        let out = ReviewOutput::Disposed {
+            finding_id: "F-1".into(),
+            review_id: 1,
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Disposed F-1 on RV-001 (answered)\n");
+    }
+
+    /// Golden: `run_dispose` on a raised finding returns Disposed.
+    #[test]
+    fn golden_run_dispose() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "test"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let out = run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        match &out {
+            ReviewOutput::Disposed {
+                finding_id,
+                review_id,
+            } => {
+                assert_eq!(finding_id, "F-1");
+                assert_eq!(*review_id, 1);
+            }
+            _ => panic!("expected Disposed, got {out:?}"),
+        }
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Disposed F-1 on RV-001 (answered)\n");
+    }
+
+    /// Golden: `print_review(&Verified)`.
+    #[test]
+    fn golden_print_verified() {
+        let out = ReviewOutput::Verified {
+            finding_id: "F-1".into(),
+            review_id: 1,
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Verified F-1 on RV-001 (verified)\n");
+    }
+
+    /// Golden: `print_review(&Contested)`.
+    #[test]
+    fn golden_print_contested() {
+        let out = ReviewOutput::Contested {
+            finding_id: "F-1".into(),
+            review_id: 1,
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Contested F-1 on RV-001 (contested)\n");
+    }
+
+    /// Golden: `print_review(&Withdrawn)`.
+    #[test]
+    fn golden_print_withdrawn() {
+        let out = ReviewOutput::Withdrawn {
+            finding_id: "F-1".into(),
+            review_id: 1,
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Withdrew F-1 on RV-001 (withdrawn)\n");
+    }
+
+    /// Golden: `run_verify` end-to-end.
+    #[test]
+    fn golden_run_verify() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "test"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        let out = run_verify(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            None,
+            Role::Raiser,
+        )
+        .unwrap();
+        let rendered = print_review(&out);
+        assert_eq!(rendered, "Verified F-1 on RV-001 (verified)\n");
+    }
+
+    /// Golden: `run_show` returns Showed with formatted output.
+    #[test]
+    fn golden_run_show() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Table).unwrap();
+        let rendered = print_review(&out);
+        // The show output is a multi-line table. Check key lines are present.
+        assert!(rendered.contains("RV-001 — "), "show: {rendered}");
+        assert!(rendered.contains("design · "), "show: {rendered}");
+        assert!(rendered.contains("──reviews──▶"), "show: {rendered}");
+    }
+
+    /// Golden: `run_list` returns Listed with formatted table output.
+    #[test]
+    fn golden_run_list() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let out = run_list(
+            Some(root.to_path_buf()),
+            ListArgs {
+                substr: None,
+                regexp: None,
+                case_insensitive: false,
+                status: Vec::new(),
+                tags: Vec::new(),
+                all: false,
+                format: Format::Table,
+                json: false,
+                columns: None,
+                render: listing::RenderOpts {
+                    color: false,
+                    term_width: None,
+                },
+            },
+        )
+        .unwrap();
+        match &out {
+            ReviewOutput::Listed { rows, formatted } => {
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].id, "RV-001");
+                // The formatted table contains the review data.
+                assert!(formatted.contains("RV-001"), "list: {formatted}");
+            }
+            _ => panic!("expected Listed, got {out:?}"),
+        }
+        let rendered = print_review(&out);
+        assert!(rendered.contains("RV-001"), "list: {rendered}");
+    }
+
+    /// Golden: `run_status` returns Status with correct fields.
+    #[test]
+    fn golden_run_status() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let out = run_status(Some(root.to_path_buf()), "RV-001").unwrap();
+        let formatted = match &out {
+            ReviewOutput::Status {
+                canonical,
+                status,
+                cache_primed,
+                formatted,
+                ..
+            } => {
+                assert_eq!(canonical, "RV-001");
+                assert_eq!(status, "done");
+                assert!(!cache_primed);
+                assert!(formatted.contains("RV-001 — "), "status: {formatted}");
+                assert!(formatted.contains("done · "), "status: {formatted}");
+                formatted.clone()
+            }
+            _ => panic!("expected Status, got {out:?}"),
+        };
+        let rendered = print_review(&out);
+        assert_eq!(rendered, formatted);
+    }
+
+    /// Golden: `run_show` with JSON format returns Showed with JSON-formatted string.
+    #[test]
+    fn golden_run_show_json() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Json).unwrap();
+        let rendered = print_review(&out);
+        assert!(rendered.contains("\"kind\""), "show json: {rendered}");
+        assert!(rendered.contains("\"review\""), "show json: {rendered}");
     }
 }
