@@ -21,12 +21,129 @@ dependencies = []
 # are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
 # reference forms): EN-1 entry, EX-1 exit, and verification by mode —
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
 [[phase]]
 id        = "PHASE-01"
-name      = ""
-objective = ""
-entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
-exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
-specs             = []           # per-phase narrowing of the plan's specs
-requirements      = []
+name      = "Wire format + pure projection core"
+objective = """
+Land the locked wire schema and the pure mapping. New `src/lazyspec.rs`: the \
+serde structs (Brief/BriefMeta/Entity/Relation/TypeDef with the `type`/`virtual` \
+renames, design §5.2), the `Corpus` data struct (§5.1), and the total, \
+side-effect-free `project(corpus, now, version) -> Brief` (§5.3) — status map \
+(per-kind, total, default→draft incl. the PhaseRollup total()/anomalies() plan \
+rule, RV-093 F-1), edge map (one total RelationLabel→RelationType fn, default→\
+related-to), id-sorted ordering, inline body assembly. No I/O, no loaders — the \
+mapping is unit-tested over hand-built Corpus values. Module-level \
+`#![expect(dead_code, reason="wired in PHASE-04")]` (R3, self-clearing).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (RV-093 sealed); slice status `plan`." },
+  { id = "EN-2", text = "lazyspec wire strings confirmed from `../lazyspec/src/engine/document.rs` (Status 7, RelationType 4, date %Y-%m-%d) — OQ-3." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/lazyspec.rs` defines Brief/BriefMeta/Entity/Relation/TypeDef + Corpus; serde renames `type`/`virtual` emit correctly." },
+  { id = "EX-2", text = "`project(corpus, now, version)` is pure (no clock/disk/git/rng), total over status + edge labels (default arms present), and sorts entities by id / types by name." },
+  { id = "EX-3", text = "plan-status derives through `PhaseRollup::total()`+`anomalies()` — a malformed phase suppresses `complete` (RV-093 F-1)." },
+  { id = "EX-4", text = "`just check` green; zero clippy warnings under repo denials; dead_code held by self-clearing module expect, no bare allow." },
+]
+verification = [
+  { id = "VT-1", expects = "unit tests over in-memory Corpus assert status totality incl. the unknown/drift `draft` default (INV-6) and the four-string edge vocab incl. the default arm (INV-2)." },
+  { id = "VT-2", expects = "tests assert INV-1 (validate_ignore always true), INV-4 (no REQ entity), INV-5 (PLAN-NNN synthetic id), INV-7 (date is %Y-%m-%d incl. synthetic plan node)." },
+  { id = "VT-3", expects = "plan-rollup test: a corpus phase set with a missing_toml does NOT map to `complete`; an all-completed clean set does." },
+  { id = "VT-4", expects = "ordering test: shuffled Corpus input yields identically-ordered entities[]/types[] (idempotence, §5.3)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Test-support fixture seam"
+objective = """
+Build the fixture infra the golden corpus needs, riding existing seams (no \
+parallel impl, §9). Promote SL-027's `write_fixture`/`Fixture` from `backlog.rs` \
+`#[cfg(test)]` to `pub(crate)` test-support (ideally into `catalog::test_helpers` \
+beside `seed_slice`/`seed_adr`/`seed_requirement`/`relation_rows`); add a small \
+`seed_spec` writer (+members+interactions); generalise `seed_adr` to author a \
+non-`supersedes` edge (RV-093 F-2) — or, if disproportionate, confine the golden \
+ADR edges to `supersedes` and record that. No new hand-rolled `backlog-NNN.toml` \
+or `created=…` head literal (re-opening ISS-001 is forbidden, R7).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged: Corpus shape known (fixtures build toward it)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`write_fixture`/`Fixture` reachable as `pub(crate)` test-support; backlog corpus seeded through it, no re-rolled TOML literal." },
+  { id = "EX-2", text = "`seed_spec` seeds a PRD + tech-spec with members + interactions over a temp tree, loadable by the real readers." },
+  { id = "EX-3", text = "ADR generic-edge gap resolved: `seed_adr` authors a non-supersedes edge, OR a recorded decision confines golden ADR edges to supersedes." },
+  { id = "EX-4", text = "behaviour-preservation gate: pre-existing backlog + spec suites stay green unchanged; `just check` green." },
+]
+verification = [
+  { id = "VT-1", expects = "a fixture round-trip test: seeded spec/backlog/adr tree loads back through the real loaders into the expected entities." },
+  { id = "VA-1", expects = "agent confirms no `created=…` / `backlog-NNN.toml` head literal was hand-rolled and the promotion did not fork SL-027's builder (no parallel impl)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Impure shell — visibility widening + corpus loader"
+objective = """
+Assemble the impure read shell. Widen `spec::render`/`read_members`/\
+`read_interactions` to `pub(crate)` (§5.1, behaviour-preservation gate edit on \
+`spec.rs`). Write `load_corpus(root)` composing the existing readers \
+(slices, specs+members+reqs, adrs, backlog, per-slice plan.md + `state::\
+PhaseRollup`) plus per-entity outbound edges via `relation::tier1_edges` and \
+typed spec edges via the spec readers — into the PHASE-01 `Corpus`. Inject `now` \
+(RFC3339), `version` (CARGO_PKG_VERSION), `project` (root basename). Bodies per \
+OQ-4 resolution: raw prose-tier `.md` for slice/adr/backlog; specs both-tier via \
+`render()`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 Corpus + project landed; PHASE-02 fixture seam available for loader tests." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`spec::render`/`read_members`/`read_interactions` are `pub(crate)`; existing spec suite green unchanged (behaviour-preservation gate)." },
+  { id = "EX-2", text = "`load_corpus(root)` returns a Corpus assembled only from existing readers + `relation::tier1_edges` — no new read logic, no per-kind edge reach-in (D7)." },
+  { id = "EX-3", text = "impurity confined to the shell: clock/disk/git stay out of `project`; `now`/`version`/`project` injected as data." },
+  { id = "EX-4", text = "`just check` green; zero clippy warnings." },
+]
+verification = [
+  { id = "VT-1", expects = "loader test over a PHASE-02-seeded tree: `load_corpus` yields a Corpus whose entities + outbound edges match the seeded fixtures (slice/spec/adr/backlog/plan)." },
+  { id = "VA-1", expects = "agent confirms ADR-001 layering held (forward edges, no cycle) and the loader composes existing readers rather than re-implementing reads." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "export lazyspec command + conformance + golden"
+objective = """
+Wire the deliverable and pin it. New top-level `Export` command enum with a \
+`Lazyspec` variant (`src/main.rs`), `doctrine export lazyspec [--path <root>]` → \
+`load_corpus` → `project` → `serde_json::to_string_pretty` → stdout, exit 0 \
+(§5.2). Clears PHASE-01's dead_code expect (R3 self-clearing). Land the drift \
+canary: table-driven conformance over kinds AND fields (R2 — surface not just \
+envelope) asserting INV-1..7, the keyword renames, four-string edge vocab, seven \
+status wire strings incl. the unknown→`draft` default, the date-only form, \
+id-sorted ordering, and REQ-absent-but-in-spec-body; plus a value-compared \
+golden Brief over a fixture corpus. Field-map check vs the brief's DocMeta map. \
+RO proof (pure read + serialize, no mutation path).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01/02/03 merged: structs+project, fixture seam, and load_corpus all green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine export lazyspec` emits conformant Brief JSON on stdout, exit 0; dead_code expect removed (structs now wired)." },
+  { id = "EX-2", text = "golden-file test: a minimal seeded corpus → expected Brief JSON, value-compared; deterministic via injected `now`/`version`." },
+  { id = "EX-3", text = "table-driven conformance asserts INV-1..7 across kinds and fields (surface-level, R2), incl. every emitted RelationType (default arm) and the unknown-status default." },
+  { id = "EX-4", text = "field-map check: every emitted field has a lazyspec DocMeta home (brief §3)." },
+  { id = "EX-5", text = "`just check` + `just gate` green; zero clippy warnings; format clean." },
+]
+verification = [
+  { id = "VT-1", expects = "conformance suite (table-driven over kinds+fields) green: INV-1..7, renames, edge vocab, status wire strings incl. default, date-only, ordering, REQ-absence-with-body-presence." },
+  { id = "VT-2", expects = "golden-file test green; a deliberate schema change to a wire field flips it red (drift canary, R1)." },
+  { id = "VT-3", expects = "command integration test: `export lazyspec` over a seeded tree exits 0 and stdout parses as the expected Brief." },
+  { id = "VA-1", expects = "RO proof — agent confirms the command path is read + serialize only, no mutation surface (§9)." },
+]
+specs        = []
+requirements = []
