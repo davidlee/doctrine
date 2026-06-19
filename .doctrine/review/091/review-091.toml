@@ -1,0 +1,77 @@
+id    = 91
+slug  = "reconciliation-review-of-sl-108"
+title = "reconciliation review of SL-108"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-108"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Spawn template fails silently: heredoc closes stdin before model responds — expected pi RPC worker to complete, observed silent exit without agent_end"
+detail = """
+pi v0.79.6 RPC mode exits immediately when stdin closes (EOF), even with an in-flight model call. The design.md and SKILL.md spawn template both use a bash heredoc (<<'PI_MSGS') which closes stdin after delivering the JSONL content. This silently fails: pi accepts the prompt (success response), echoes the user message (message_start/message_end events), then exits without emitting agent_end or any model response events. The session file confirms the model DID respond — events never reached stdout.
+
+Evidence: 12 separate RPC spawn attempts with heredoc/pipe approaches. The model response landed in the session file at ~/.pi/agent/sessions/--workspace-doctrine--/2026-06-19T04-34-11-651Z_*.jsonl but no agent_end on stdout. Only the named-pipe (fifo) approach with delayed close produced a complete agent_end event.
+
+Impact: design.md §D1 spawn template, design.md §Spawn template (pi arm), and plugins/doctrine/skills/dispatch-subprocess/SKILL.md §Spawn — pi arm all need amendment. VA-2 (template copied from skill produces running worker) fails.
+
+Workaround: named pipe (fifo) with delayed close, or use pi -p (print mode) instead of --mode rpc.
+
+Related memory: mem_019ede2f6b487d02b160a07dea4759c6"""
+disposition = "verified"
+response = "Confirmed: pi v0.79.6 RPC mode exits when stdin closes. The heredoc approach in both design.md §Spawn template (pi arm) and plugins/doctrine/skills/dispatch-subprocess/SKILL.md §Spawn — pi arm is incompatible with pi's stdin lifecycle. Fix requires amending the spawn template in both files to either use a named-pipe pattern or switch to pi -p (print mode). Delegated to /reconcile per §4 disposition convention: spec/governance items use verified + reconciliation-brief link."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = 'set_auto_retry command format wrong in design.md and SKILL.md — expected {"type":"set_auto_retry","enabled":false}, observed {"type":"request","method":"set_auto_retry","params":{...}}'
+detail = """
+The design.md spawn template and SKILL.md both show:
+{"type":"request","method":"set_auto_retry","params":{"enabled":false}}
+
+pi v0.79.6 responds with:
+{"type":"response","command":"request","success":false,"error":"Unknown command: request"}
+
+The correct RPC format per docs/rpc.md is a direct command type:
+{"type":"set_auto_retry","enabled":false}
+
+While this error doesn't block worker execution (the prompt still processes), it means auto-retry is never actually disabled — the orchestrator's intent is silently ignored. If auto-retry is enabled by default, transient errors could trigger retries the orchestrator didn't expect.
+
+Fix: change the JSONL line in both design.md and SKILL.md to use the direct command type.
+
+Related memory: mem_019ede2f99a179d2968bfadfee2843a9"""
+disposition = "verified"
+response = 'Confirmed: design.md and SKILL.md use {"type":"request","method":"set_auto_retry",...} but pi v0.79.6 requires {"type":"set_auto_retry",...} per docs/rpc.md. Fix is a one-line format change in both files. Delegated to /reconcile alongside F-1 (they share the same spawn template block).'
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "subagent-async setWidget event emitted despite --no-extensions — expected clean output, observed extension_ui_request noise"
+detail = """
+Even with --no-extensions --no-skills --no-themes, pi v0.79.6 emits:
+{"type":"extension_ui_request","id":"...","method":"setWidget","widgetKey":"subagent-async"}
+
+This is from the pi-subagents package (installed at ~/.pi/packages/node_modules/pi-subagents). Per the RPC docs, setWidget is fire-and-forget — it doesn't block execution. However, it adds noise to the output stream:
+- Extraction pipelines that filter for known event types won't be affected
+- Pipelines that expect only known events (agent_start/turn_start/etc.) could fail
+- The event appears between message_end for the user message and message_start for the assistant response
+
+Severity minor: doesn't block execution (EX-4 passes), extraction ladder handles it gracefully. If pi-subagents is relied on for dispatch (e.g. subagent spawning), this is expected behaviour, not a bug.
+
+Recommendation: document in the skill that extension_ui_request events are expected and should be filtered/ignored by extraction pipelines."""
+disposition = "tolerated"
+response = "The subagent-async setWidget event is emitted by the pi-subagents package (installed at ~/.pi/packages/), not a user extension. As a fire-and-forget widget per the RPC Extension UI Protocol, it does not block headless execution (EX-4 passes). The extraction ladder handles unknown event types gracefully by ignoring them. Acceptable noise at current scale — no change required. Recommend documenting this expected behaviour in the skill file for future extraction pipeline authors."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

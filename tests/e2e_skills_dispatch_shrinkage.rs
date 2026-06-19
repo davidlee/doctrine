@@ -132,10 +132,7 @@ fn dispatch_subprocess_skill_is_shrunk() {
     );
 
     // Pi RPC arm (SL-108).
-    assert!(
-        full.contains("--mode rpc"),
-        "must contain pi RPC spawn arm"
-    );
+    assert!(full.contains("--mode rpc"), "must contain pi RPC spawn arm");
     assert!(
         full.contains("agent_end"),
         "must reference agent_end completion signal"

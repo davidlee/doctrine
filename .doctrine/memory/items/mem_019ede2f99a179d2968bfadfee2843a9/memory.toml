@@ -1,0 +1,42 @@
+memory_uid = "mem_019ede2f99a179d2968bfadfee2843a9"
+memory_key = "mem.fact.pi.rpc-set-auto-retry-command-format"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = 'pi v0.79.6 RPC: set_auto_retry command uses type:"set_auto_retry" not type:"request"'
+summary = "pi v0.79.6 set_auto_retry uses direct command type, not request envelope"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = ["pi --mode rpc"]
+tags = ["pi", "sl-108"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a52b5b278a3b37c985be8d3b639bd6083dfd8e9b"
+ref_name = "refs/heads/main"
+checkout_state_id = "cd0ac483d8e2138b4db3077540d904affc59e2951979c303221c2c96a20bb31a"
+base_commit = "99f81cdd0e5be127b05dfab155a852f02e59c7df"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
