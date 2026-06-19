@@ -11,8 +11,12 @@ orchestrator funnel."
 
 ## The outer loop
 1. `dispatch setup --slice <N> --dir <path>` — create/resume coordination worktree
-2. `dispatch plan-next --slice <N>` — find next actionable phase(s); plan parallel batches when file-disjoint
-3. Route to the correct arm:
+2. **Claude arm only:** `cd` into the coordination directory and park Bash cwd
+   there for the full drive loop. The Agent tool's `isolation: worktree` forks off
+   the Bash cwd HEAD — this is how base==B is achieved (`mem_019ec65ecbc7`). Step
+   out to the session root only for authored writes (slice status, memory, audit).
+3. `dispatch plan-next --slice <N>` — find next actionable phase(s); plan parallel batches when file-disjoint
+4. Route to the correct arm:
    - Check `doctrine.toml` → `[dispatch]` → `claude-force-subprocess-dispatch`
      (default `false` if the file or key is absent).
    - If `true`, route workers via [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)
