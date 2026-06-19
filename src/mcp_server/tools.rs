@@ -73,7 +73,7 @@ fn tools() -> Vec<McpTool> {
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Opt-in cap: return at most this many rows (default: all)"
+                        "description": "Cap rows to the most recent N (default: 50; 0 = all). When capped, the response carries a `total` count."
                     }
                 },
                 "required": []
@@ -290,9 +290,8 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 tags: fields.vec_str_field("tags"),
                 ..Default::default()
             };
-            let limit = fields.opt_usize_field("limit");
-            review::run_list(Some(root.to_path_buf()), args)
-                .map(|out| project_list_limit(out, limit))
+            let cap = effective_cap(fields.opt_usize_field("limit"));
+            review::run_list(Some(root.to_path_buf()), args).map(|out| project_list_cap(out, cap))
         }
         "review_show" => {
             let reference = arguments
@@ -479,20 +478,41 @@ fn project_show_summary(out: ReviewOutput) -> ReviewOutput {
     }
 }
 
-/// Truncate a `Listed` output's rows to an opt-in `limit` (IMP-113 #3). A `None`
-/// limit (the default) passes everything through — the cap is agent-requested,
-/// never a silent engine cap. Non-`Listed` outputs pass through.
-fn project_list_limit(out: ReviewOutput, limit: Option<usize>) -> ReviewOutput {
-    match (out, limit) {
+/// The lean default row cap for `review_list` when the caller names none (IMP-114).
+const DEFAULT_REVIEW_LIST_LIMIT: usize = 50;
+
+/// Resolve the effective row cap from the `limit` argument: absent ⇒ the lean
+/// default; explicit `0` ⇒ unbounded (the "all" escape hatch — zero rows is never
+/// a useful request, so the sentinel is free); explicit `n` ⇒ `n` (IMP-114).
+fn effective_cap(limit: Option<usize>) -> Option<usize> {
+    match limit {
+        None => Some(DEFAULT_REVIEW_LIST_LIMIT),
+        Some(0) => None,
+        Some(n) => Some(n),
+    }
+}
+
+/// Cap a `Listed` output to the most recent `cap` rows (the tail — highest ids),
+/// stamping `total` with the pre-truncation count so the omission is never silent
+/// (IMP-114). A `None` cap, or a list already within the cap, passes through with
+/// `total` left `None`. Non-`Listed` outputs pass through.
+fn project_list_cap(out: ReviewOutput, cap: Option<usize>) -> ReviewOutput {
+    match (out, cap) {
         (
             ReviewOutput::Listed {
                 mut rows,
                 formatted,
+                ..
             },
             Some(n),
-        ) => {
-            rows.truncate(n);
-            ReviewOutput::Listed { rows, formatted }
+        ) if rows.len() > n => {
+            let total = rows.len();
+            rows = rows.split_off(total - n);
+            ReviewOutput::Listed {
+                rows,
+                total: Some(total),
+                formatted,
+            }
         }
         (other, _) => other,
     }
@@ -705,6 +725,7 @@ mod tests {
     fn listed_and_status_omit_formatted_in_json() {
         let listed = ReviewOutput::Listed {
             rows: vec![],
+            total: None,
             formatted: "RENDERED TABLE".to_owned(),
         };
         let v = serde_json::to_value(&listed).unwrap();
@@ -712,6 +733,11 @@ mod tests {
         assert!(
             v["Listed"].get("formatted").is_none(),
             "Listed leaked formatted: {v}"
+        );
+        // total is absent when the list is complete (IMP-114).
+        assert!(
+            v["Listed"].get("total").is_none(),
+            "uncapped total leaked: {v}"
         );
 
         let status = ReviewOutput::Status {
@@ -766,23 +792,48 @@ mod tests {
         assert_eq!(findings[0].disposition.as_deref(), Some("tolerated"));
     }
 
-    // IMP-113 #3: limit caps rows only when set (opt-in, never a silent cap).
+    // IMP-114: effective_cap resolves the lean default / explicit / 0=all escape.
 
     #[test]
-    fn project_list_limit_caps_only_when_set() {
+    fn effective_cap_resolves_default_explicit_and_all() {
+        assert_eq!(effective_cap(None), Some(DEFAULT_REVIEW_LIST_LIMIT));
+        assert_eq!(effective_cap(Some(3)), Some(3));
+        assert_eq!(effective_cap(Some(0)), None, "0 ⇒ unbounded escape hatch");
+    }
+
+    // IMP-114: a cap keeps the most recent N (tail) and stamps total; an
+    // uncapped or within-cap list passes through with total absent.
+
+    #[test]
+    fn project_list_cap_keeps_tail_and_stamps_total() {
         let make = || ReviewOutput::Listed {
             rows: vec![row("RV-1"), row("RV-2"), row("RV-3")],
+            total: None,
             formatted: String::new(),
         };
-        let ReviewOutput::Listed { rows, .. } = project_list_limit(make(), Some(2)) else {
+
+        // Capped below len: keep the newest 2 (tail), total = 3.
+        let ReviewOutput::Listed { rows, total, .. } = project_list_cap(make(), Some(2)) else {
             panic!("expected Listed");
         };
         assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, "RV-2", "keeps the tail (most recent)");
+        assert_eq!(rows[1].id, "RV-3");
+        assert_eq!(total, Some(3), "pre-truncation count surfaced");
 
-        let ReviewOutput::Listed { rows, .. } = project_list_limit(make(), None) else {
+        // Cap at or above len: not truncated, total stays None.
+        let ReviewOutput::Listed { rows, total, .. } = project_list_cap(make(), Some(5)) else {
             panic!("expected Listed");
         };
-        assert_eq!(rows.len(), 3, "no limit passes everything through");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(total, None, "within-cap ⇒ no total");
+
+        // Unbounded (None): everything, total None.
+        let ReviewOutput::Listed { rows, total, .. } = project_list_cap(make(), None) else {
+            panic!("expected Listed");
+        };
+        assert_eq!(rows.len(), 3);
+        assert_eq!(total, None);
     }
 
     fn sample_finding() -> crate::review::Finding {

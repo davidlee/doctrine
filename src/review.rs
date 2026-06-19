@@ -353,6 +353,11 @@ pub(crate) enum ReviewOutput {
     },
     Listed {
         rows: Vec<ListRow>,
+        /// Pre-truncation row count, set MCP-side only when an output cap dropped
+        /// rows (IMP-114). `None` (absent on the wire) ⇒ the rows are complete —
+        /// keeps uncapped lists and the CLI path byte-unchanged.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total: Option<usize>,
         #[serde(skip)]
         formatted: String,
     },
@@ -1311,7 +1316,11 @@ fn json_rows(rows: &[ReviewRow]) -> Vec<ListRow> {
 pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (formatted, rows) = list_rows(&root, args)?;
-    Ok(ReviewOutput::Listed { rows, formatted })
+    Ok(ReviewOutput::Listed {
+        rows,
+        total: None,
+        formatted,
+    })
 }
 
 // ===========================================================================
@@ -4173,7 +4182,9 @@ text = "stale baton after out-of-band edit"
         )
         .unwrap();
         match &out {
-            ReviewOutput::Listed { rows, formatted } => {
+            ReviewOutput::Listed {
+                rows, formatted, ..
+            } => {
                 assert_eq!(rows.len(), 1);
                 assert_eq!(rows[0].id, "RV-001");
                 // The formatted table contains the review data.
