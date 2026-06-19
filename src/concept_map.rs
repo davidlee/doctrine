@@ -1302,6 +1302,91 @@ pub(crate) fn remove_edge_from_dsl(
 }
 
 // ---------------------------------------------------------------------------
+// Pure: relabel_edge_in_dsl
+// ---------------------------------------------------------------------------
+
+/// Rewrite the relation segment of the first edge matching
+/// `(source, old_rel, target)` by label, replacing `old_rel` with `new_rel`.
+///
+/// A no-op (`old_rel == new_rel`) returns the DSL unchanged. The duplicate
+/// guard is key-based: two distinct label spellings can derive the same node
+/// key, so a label-only check would miss a collision and corrupt the DSL.
+pub(crate) fn relabel_edge_in_dsl(
+    old_dsl: &str,
+    source: &str,
+    old_rel: &str,
+    new_rel: &str,
+    target: &str,
+) -> Result<String, ConceptMapMutationError> {
+    let source = source.trim();
+    let old_rel = old_rel.trim();
+    let new_rel = new_rel.trim();
+    let target = target.trim();
+
+    if source.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("source".into()));
+    }
+    if old_rel.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("old relation".into()));
+    }
+    if new_rel.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("new relation".into()));
+    }
+    if target.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("target".into()));
+    }
+
+    // No-op short-circuit (before the dup scan, to avoid a false self-collision).
+    if old_rel == new_rel {
+        return Ok(old_dsl.to_string());
+    }
+
+    // Find the first line matching (source, old_rel, target) by label.
+    let mut matched_line: Option<usize> = None;
+    let mut lines: Vec<String> = Vec::new();
+    for (idx, line_str) in old_dsl.lines().enumerate() {
+        let m = idx + 1; // 1-based, matching parse_dsl
+        let trimmed = line_str.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            lines.push(line_str.to_string());
+            continue;
+        }
+        let segments: Vec<&str> = line_str.split(" > ").collect();
+        if segments.len() == 3 && matched_line.is_none() {
+            let ls = segments.first().map_or("", |s| s.trim());
+            let lr = segments.get(1).map_or("", |s| s.trim());
+            let lt = segments.get(2).map_or("", |s| s.trim());
+            if ls == source && lr == old_rel && lt == target {
+                matched_line = Some(m);
+                // Rewrite only the rel segment; source/target byte-unchanged.
+                let s = segments.first().copied().unwrap_or_default();
+                let t = segments.get(2).copied().unwrap_or_default();
+                lines.push([s, new_rel, t].join(" > "));
+                continue;
+            }
+        }
+        lines.push(line_str.to_string());
+    }
+
+    let Some(m) = matched_line else {
+        return Err(ConceptMapMutationError::EdgeNotFound);
+    };
+
+    // Key-based duplicate guard: distinct label spellings can derive the same
+    // key, so the new triple may collide with an existing edge on another line.
+    let source_key = derive_node_key(source);
+    let target_key = derive_node_key(target);
+    let parsed = parse_dsl(old_dsl);
+    if let Some(dup) = parsed.edges.iter().find(|e| {
+        e.from_key == source_key && e.rel == new_rel && e.to_key == target_key && e.line != m
+    }) {
+        return Err(ConceptMapMutationError::DuplicateEdge { line: dup.line });
+    }
+
+    Ok(lines.join("\n"))
+}
+
+// ---------------------------------------------------------------------------
 // Pure: rename_node_in_dsl
 // ---------------------------------------------------------------------------
 
@@ -2774,6 +2859,50 @@ mod tests {
         let dsl = make_dsl(&["A > depends on > B", "A > depends on > B"]);
         let result = remove_edge_from_dsl(&dsl, "A", "depends on", "B").unwrap();
         assert_eq!(result, "A > depends on > B"); // second line remains
+    }
+
+    // --- relabel_edge_in_dsl tests ---
+
+    #[test]
+    fn relabel_edge_persists_and_preserves_other_lines() {
+        let dsl = make_dsl(&["User > creates > Document", "Doc > relates > Note"]);
+        let result = relabel_edge_in_dsl(&dsl, "User", "creates", "makes", "Document").unwrap();
+        assert_eq!(result, "User > makes > Document\nDoc > relates > Note");
+    }
+
+    #[test]
+    fn relabel_edge_duplicate_by_key_collision() {
+        // Distinct label spellings, same derived key — a label-only check misses this.
+        let dsl = make_dsl(&["User Story > needs > Thing", "User-Story > wants > Thing"]);
+        let result = relabel_edge_in_dsl(&dsl, "User Story", "needs", "wants", "Thing");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { line: 2 })
+        ));
+    }
+
+    #[test]
+    fn relabel_edge_no_op_returns_unchanged() {
+        let dsl = make_dsl(&["User > creates > Document"]);
+        let result = relabel_edge_in_dsl(&dsl, "User", "creates", "creates", "Document").unwrap();
+        assert_eq!(result, dsl);
+    }
+
+    #[test]
+    fn relabel_edge_not_found() {
+        let dsl = make_dsl(&["User > creates > Document"]);
+        let result = relabel_edge_in_dsl(&dsl, "Ghost", "haunts", "spooks", "House");
+        assert!(matches!(result, Err(ConceptMapMutationError::EdgeNotFound)));
+    }
+
+    #[test]
+    fn relabel_edge_rejects_empty_source() {
+        let dsl = make_dsl(&["User > creates > Document"]);
+        let result = relabel_edge_in_dsl(&dsl, "", "creates", "makes", "Document");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::EmptyField(_))
+        ));
     }
 
     // --- rename_node_in_dsl tests ---

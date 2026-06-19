@@ -489,6 +489,30 @@ interface HoverPaneOpts {
   node: HoverableNode | null;
 }
 
+/**
+ * Inner markup for the hover detail of a node \u2014 shared by the side detail
+ * pane (`hoverPane`) and the on-graph actionability tooltip (priority.ts).
+ *
+ * EVERY interpolated field is escaped (`id`, `title`, `kindLabel`, `status`):
+ * the values originate from entity data and must never be injected raw.
+ */
+export function hoverDetailHtml(node: HoverableNode): string {
+  return (
+    '<div class="hover-detail-content">' +
+    '<span class="hover-detail-title">' +
+    escapeHtml(node.id) +
+    ': ' +
+    escapeHtml(node.title) +
+    '</span>' +
+    '<span class="hover-detail-meta">' +
+    escapeHtml(node.kindLabel) +
+    ' \u00b7 ' +
+    escapeHtml(node.status) +
+    '</span>' +
+    '</div>'
+  );
+}
+
 export function hoverPane(opts: HoverPaneOpts): void {
   const pane = opts.container;
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
@@ -499,20 +523,7 @@ export function hoverPane(opts: HoverPaneOpts): void {
     return;
   }
 
-  const node = opts.node;
-  pane.innerHTML =
-    '<div class="hover-detail-content">' +
-    '<span class="hover-detail-title">' +
-    node.id +
-    ': ' +
-    escapeHtml(node.title) +
-    '</span>' +
-    '<span class="hover-detail-meta">' +
-    node.kindLabel +
-    ' \u00b7 ' +
-    node.status +
-    '</span>' +
-    '</div>';
+  pane.innerHTML = hoverDetailHtml(opts.node);
 }
 
 // ---------------------------------------------------------------------------

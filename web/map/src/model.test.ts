@@ -54,6 +54,7 @@ import {
   setActionabilityView,
   cmNeighbourhood,
   compareEdgesBySource,
+  focusTransition,
 } from './model';
 
 /* ------------------------------------------------------------------ */
@@ -1550,5 +1551,52 @@ describe('cmNeighbourhood', () => {
     expect(keys).toContain('n1');
     expect(keys).toContain('n2');
     expect(keys).toContain('n3');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  focusTransition (SL-110 — focus-change drives the view)            */
+/* ------------------------------------------------------------------ */
+
+describe('focusTransition', () => {
+  it('CM node forces semantic mode and clears zoom', () => {
+    const node = makeCatalogNode({ id: 'CM-001', kindPrefix: 'CM' });
+    const t = focusTransition('actionability', node, false, 'SL-007');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: null });
+  });
+
+  it('CM node forces semantic even when already semantic', () => {
+    const node = makeCatalogNode({ id: 'CM-002', kindPrefix: 'CM' });
+    const t = focusTransition('semantic', node, false, 'SL-007');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: null });
+  });
+
+  it('actionability + member zooms to the node', () => {
+    const node = makeCatalogNode({ id: 'SL-005', kindPrefix: 'SL' });
+    const t = focusTransition('actionability', node, true, null);
+    expect(t).toEqual({ viewMode: 'actionability', priorityZoomId: 'SL-005' });
+  });
+
+  it('actionability + non-member clears stale zoom', () => {
+    const node = makeCatalogNode({ id: 'REQ-010', kindPrefix: 'REQ' });
+    const t = focusTransition('actionability', node, false, 'SL-009');
+    expect(t).toEqual({ viewMode: 'actionability', priorityZoomId: null });
+  });
+
+  it('semantic + non-CM echoes the passed mode and zoom (leave alone)', () => {
+    const node = makeCatalogNode({ id: 'SL-005', kindPrefix: 'SL' });
+    const t = focusTransition('semantic', node, false, 'SL-003');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: 'SL-003' });
+  });
+
+  it('undefined node is safe — no throw, no forced mode', () => {
+    expect(() => focusTransition('semantic', undefined, false, null)).not.toThrow();
+    const t = focusTransition('semantic', undefined, false, 'SL-001');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: 'SL-001' });
+  });
+
+  it('undefined node under actionability + non-member clears zoom', () => {
+    const t = focusTransition('actionability', undefined, false, 'SL-001');
+    expect(t).toEqual({ viewMode: 'actionability', priorityZoomId: null });
   });
 });

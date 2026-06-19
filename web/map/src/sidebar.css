@@ -55,6 +55,8 @@
   }
 
   .filter-toggle-all {
+    display: flex;
+    align-items: baseline;
     font-size: 0.75rem;
     color: var(--muted);
     cursor: pointer;
@@ -62,8 +64,9 @@
   }
 
   .filter-toggle-all input {
-    margin-right: 0.2rem;
+    margin-right: 0.3rem;
     vertical-align: middle;
+    flex-shrink: 0;
   }
 
   .filter-grid {

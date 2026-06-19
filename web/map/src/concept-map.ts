@@ -4,7 +4,7 @@
 // dot (cmGraphToDot), api (renderDot), svg (injectHitRects, wireHandlers),
 // render (escapeHtml, escapeAttr).
 
-import type { ConceptMap } from './types';
+import type { ConceptMap, CmEdge, CmSelectedField } from './types';
 import { cmNeighbourhood, buildNodeLabelList, buildRelLabelList } from './model';
 import { cmGraphToDot } from './dot';
 import { renderDot } from './api';
@@ -36,10 +36,18 @@ export interface CmEdgeTableOpts {
   depth: number;
   editing: boolean;
   editingNode: { key: string; label: string } | null;
+  /** The cell selected by a single click (plain navigation affordance). */
+  selectedField?: CmSelectedField | null;
+  /** Which selected field is being inline-edited; renders a single input, independent of `editing`. */
+  editingField?: 'node' | 'rel' | null;
   onRemoveEdge?: (source: string, rel: string, target: string) => void;
   onRenameNode?: (key: string) => void;
   onSubmitRename?: (label: string) => void;
   onCancelRename?: () => void;
+  /** A cell was single-clicked: (edge, which cell). Plain selection, no input. */
+  onSelectCell?: (edge: CmEdge, cell: 'from' | 'rel' | 'to') => void;
+  /** Inline single-field commit (Enter) for the 'rel' relabel path. */
+  onSubmitRelabel?: (value: string) => void;
 }
 
 export interface CmAddEdgeFormOpts {
@@ -129,6 +137,28 @@ function formatDiagnostic(d: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
+// Pure: cell-selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the label-carrying CmSelectedField from a clicked edge + cell.
+ *
+ * Pure. Captures the clicked cell's LABEL as it appears on the edge — distinct
+ * labels can derive the same key (`User Story` vs `User-Story`), and every CM
+ * mutation is label-based, so the label (not the key) is what a rename/relabel
+ * submits. A node cell additionally retains `key` for the `cmFocus` highlight.
+ */
+export function cmSelectedFieldFromCell(edge: CmEdge, cell: 'from' | 'rel' | 'to'): CmSelectedField {
+  if (cell === 'rel') {
+    return { kind: 'rel', from_label: edge.from_label, rel: edge.rel, to_label: edge.to_label };
+  }
+  if (cell === 'to') {
+    return { kind: 'node', key: edge.to_key, label: edge.to_label };
+  }
+  return { kind: 'node', key: edge.from_key, label: edge.from_label };
+}
+
+// ---------------------------------------------------------------------------
 // Exported render functions
 // ---------------------------------------------------------------------------
 
@@ -185,6 +215,8 @@ export function renderDiagram(opts: CmDiagramOpts): void {
 
 export function renderEdgeTable(opts: CmEdgeTableOpts): void {
   const { container, cm: cmData, focusKey, depth, editing, editingNode } = opts;
+  const selectedField: CmSelectedField | null = opts.selectedField ?? null;
+  const editingField: 'node' | 'rel' | null = opts.editingField ?? null;
 
   if (container === null) return;
 
@@ -205,6 +237,43 @@ export function renderEdgeTable(opts: CmEdgeTableOpts): void {
   const editingKey: string | null = editingNode !== null ? editingNode.key : null;
   const editingLabel: string = editingNode !== null ? editingNode.label : '';
 
+  // Single-field ('Edit this') arm — independent of `editing`. A node cell is
+  // edited via the existing rename input (gated on editingNode + editingField),
+  // a rel cell via a dedicated relabel input matching the selected edge.
+  const editingNodeCell: boolean = editingField === 'node';
+  const selNode = selectedField !== null && selectedField.kind === 'node' ? selectedField : null;
+  const selRel = selectedField !== null && selectedField.kind === 'rel' ? selectedField : null;
+  const editingRelCell: boolean = editingField === 'rel' && selRel !== null;
+
+  // A given rel cell is edited only on the FIRST edge matching the selected rel
+  // identity (a single input, even if the same triple recurs).
+  let relInputPlaced = false;
+  const isSelectedRelEdge = (edge: CmEdge): boolean =>
+    selRel !== null &&
+    edge.from_label === selRel.from_label &&
+    edge.rel === selRel.rel &&
+    edge.to_label === selRel.to_label;
+
+  // Selection affordance (no input): mark the selected cell(s).
+  const fromSelected = (edge: CmEdge): boolean => selNode !== null && edge.from_key === selNode.key && edge.from_label === selNode.label;
+  const toSelected = (edge: CmEdge): boolean => selNode !== null && edge.to_key === selNode.key && edge.to_label === selNode.label;
+
+  const nodeCellHtml = (edge: CmEdge, side: 'from' | 'to'): string => {
+    const key = side === 'from' ? edge.from_key : edge.to_key;
+    const label = side === 'from' ? edge.from_label : edge.to_label;
+    const isEditing = (editing || editingNodeCell) && editingKey !== null && key === editingKey
+      && (editing || (selNode !== null && label === selNode.label));
+    if (isEditing) {
+      return '<input type="text" class="cm-rename-input" data-key="' + escapeAttr(editingKey) + '" value="' + escapeAttr(editingLabel) + '">';
+    }
+    const selectedCls = (side === 'from' ? fromSelected(edge) : toSelected(edge)) ? ' cm-selected' : '';
+    const editableCls = editing ? ' cm-editable-node' : '';
+    return '<span class="cm-edge-cell cm-edge-label' + editableCls + selectedCls + '"'
+      + ' data-cell="' + side + '"'
+      + ' data-key="' + escapeAttr(key) + '" data-label="' + escapeAttr(label) + '">'
+      + escapeHtml(label) + '</span>';
+  };
+
   let html = '<table class="cm-edges"><thead><tr><th>Source</th><th>Relation</th><th>Target</th>';
   if (editing) html += '<th></th>';
   html += '</tr></thead><tbody>';
@@ -214,17 +283,17 @@ export function renderEdgeTable(opts: CmEdgeTableOpts): void {
   } else {
     for (const edge of edges) {
       html += '<tr class="cm-edge-row"><td>';
-      if (editingKey !== null && edge.from_key === editingKey && editing) {
-        html += '<input type="text" class="cm-rename-input" data-key="' + escapeAttr(editingKey) + '" value="' + escapeAttr(editingLabel) + '">';
+      html += nodeCellHtml(edge, 'from');
+      html += '</td><td>';
+      if (editingRelCell && !relInputPlaced && isSelectedRelEdge(edge)) {
+        relInputPlaced = true;
+        html += '<input type="text" class="cm-relabel-input" value="' + escapeAttr(edge.rel) + '">';
       } else {
-        html += '<span class="cm-edge-label' + (editing ? ' cm-editable-node" data-key="' + escapeAttr(edge.from_key) + '" data-label="' + escapeAttr(edge.from_label) : '') + '">' + escapeHtml(edge.from_label) + '</span>';
+        const relSelectedCls = isSelectedRelEdge(edge) && editingField === null ? ' cm-selected' : '';
+        html += '<span class="cm-edge-cell cm-edge-rel' + relSelectedCls + '" data-cell="rel">' + escapeHtml(edge.rel) + '</span>';
       }
-      html += '</td><td>' + escapeHtml(edge.rel) + '</td><td>';
-      if (editingKey !== null && edge.to_key === editingKey && editing) {
-        html += '<input type="text" class="cm-rename-input" data-key="' + escapeAttr(editingKey) + '" value="' + escapeAttr(editingLabel) + '">';
-      } else {
-        html += '<span class="cm-edge-label' + (editing ? ' cm-editable-node" data-key="' + escapeAttr(edge.to_key) + '" data-label="' + escapeAttr(edge.to_label) : '') + '">' + escapeHtml(edge.to_label) + '</span>';
-      }
+      html += '</td><td>';
+      html += nodeCellHtml(edge, 'to');
       html += '</td>';
       if (editing) {
         html += '<td><button class="cm-remove-btn" data-source="' + escapeAttr(edge.from_label) + '" data-rel="' + escapeAttr(edge.rel) + '" data-target="' + escapeAttr(edge.to_label) + '" title="Remove edge">✕</button></td>';
@@ -235,6 +304,26 @@ export function renderEdgeTable(opts: CmEdgeTableOpts): void {
   html += '</tbody></table>';
 
   container.innerHTML = html;
+
+  // Cell selection (plain navigation) — active whenever NOT mid edit-all and not
+  // inline-editing a field. Maps each cell back to its source edge by index.
+  const wireSelection = !editing && editingField === null;
+  if (wireSelection) {
+    const rows: NodeListOf<Element> = container.querySelectorAll('.cm-edge-row');
+    rows.forEach((row, i) => {
+      const edge = edges[i];
+      if (edge === undefined) return;
+      const cells: NodeListOf<Element> = row.querySelectorAll('.cm-edge-cell');
+      for (const cellEl of cells) {
+        cellEl.addEventListener('click', () => {
+          const cell = cellEl.getAttribute('data-cell');
+          if (cell === 'from' || cell === 'rel' || cell === 'to') {
+            opts.onSelectCell?.(edge, cell);
+          }
+        });
+      }
+    });
+  }
 
   if (editing) {
     const removeBtns: NodeListOf<Element> = container.querySelectorAll('.cm-remove-btn');
@@ -250,24 +339,40 @@ export function renderEdgeTable(opts: CmEdgeTableOpts): void {
         opts.onRenameNode?.(el.getAttribute('data-key') ?? '');
       });
     }
+  }
 
-    const renameInputs: NodeListOf<HTMLInputElement> = container.querySelectorAll('.cm-rename-input');
-    let isFirst = true;
-    for (const inp of renameInputs) {
-      if (isFirst) {
-        inp.focus();
-        isFirst = false;
-      }
-      inp.addEventListener('keydown', (ev: KeyboardEvent) => {
-        if (ev.key === 'Enter') {
-          ev.preventDefault();
-          opts.onSubmitRename?.(inp.value);
-        } else if (ev.key === 'Escape') {
-          ev.preventDefault();
-          opts.onCancelRename?.();
-        }
-      });
+  // Inline rename input (node) — Enter commits via onSubmitRename, Esc cancels.
+  const renameInputs: NodeListOf<HTMLInputElement> = container.querySelectorAll('.cm-rename-input');
+  let isFirst = true;
+  for (const inp of renameInputs) {
+    if (isFirst) {
+      inp.focus();
+      isFirst = false;
     }
+    inp.addEventListener('keydown', (ev: KeyboardEvent) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        opts.onSubmitRename?.(inp.value);
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        opts.onCancelRename?.();
+      }
+    });
+  }
+
+  // Inline relabel input (rel) — Enter commits via onSubmitRelabel, Esc cancels.
+  const relabelInput: HTMLInputElement | null = container.querySelector('.cm-relabel-input');
+  if (relabelInput !== null) {
+    relabelInput.focus();
+    relabelInput.addEventListener('keydown', (ev: KeyboardEvent) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        opts.onSubmitRelabel?.(relabelInput.value);
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        opts.onCancelRename?.();
+      }
+    });
   }
 }
 
@@ -323,18 +428,45 @@ export function renderAddEdgeForm(opts: CmAddEdgeFormOpts): void {
   }
 }
 
-export function renderEditToggle(opts: { header: HTMLElement | null; editing: boolean; onToggle?: () => void }): void {
-  const { header, editing } = opts;
+export interface CmEditToggleOpts {
+  header: HTMLElement | null;
+  /** Edit-all mode active (drives the "Edit all"/"Done" label). */
+  editing: boolean;
+  /** Is a cell currently selected? Gates the "Edit this" button. */
+  hasSelection: boolean;
+  /** "Edit this" — inline-edit the selected field. */
+  onEditThis?: () => void;
+  /** "Edit all" — toggle today's global edit-all mode. */
+  onToggle?: () => void;
+}
+
+export function renderEditToggle(opts: CmEditToggleOpts): void {
+  const { header, editing, hasSelection } = opts;
   if (header === null) return;
 
-  const existing = header.querySelector('.cm-edit-toggle');
+  const existing = header.querySelector('.cm-edit-controls');
   if (existing !== null) existing.remove();
 
-  const btn = document.createElement('button');
-  btn.className = 'cm-edit-toggle';
-  btn.textContent = editing ? 'Done' : 'Edit';
-  btn.addEventListener('click', () => {
+  const group = document.createElement('span');
+  group.className = 'cm-edit-controls';
+
+  const editThis = document.createElement('button');
+  editThis.className = 'cm-edit-toggle cm-edit-this';
+  editThis.textContent = 'Edit this';
+  editThis.title = 'Edit the selected field';
+  editThis.disabled = !hasSelection;
+  editThis.addEventListener('click', () => {
+    opts.onEditThis?.();
+  });
+  group.appendChild(editThis);
+
+  const editAll = document.createElement('button');
+  editAll.className = 'cm-edit-toggle cm-edit-all';
+  editAll.textContent = editing ? 'Done' : 'Edit all';
+  editAll.addEventListener('click', () => {
     opts.onToggle?.();
   });
-  header.appendChild(btn);
+  group.appendChild(editAll);
+
+  header.appendChild(group);
 }
