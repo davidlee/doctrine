@@ -1,9 +1,9 @@
 id = 107
 slug = "estimate-value-facet-integration"
 title = "Estimate & Value facet integration"
-status = "ready"
+status = "started"
 created = "2026-06-18"
-updated = "2026-06-18"
+updated = "2026-06-19"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
