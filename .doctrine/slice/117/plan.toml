@@ -1,0 +1,43 @@
+# Implementation plan for SL-117 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-117"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Add claude-force-subprocess-dispatch key and update routing prose"
+objective = "Add the bool config field to DispatchConfig with tests, add a combined-keys dtoml roundtrip test, and update dispatch/SKILL.md step 3 + description to consult the config before falling back to env-marker inference."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (RV-095 inquisition complete, all findings verified)" },
+  { id = "EN-2", text = "plan.md exists and slice status is `ready`" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "DispatchConfig carries claude_force_subprocess_dispatch: bool (serde default false)" },
+  { id = "EX-2", text = "dispatch_config.rs unit tests pass for parse true/false/absent" },
+  { id = "EX-3", text = "dtoml.rs combined-keys roundtrip test passes" },
+  { id = "EX-4", text = "dispatch/SKILL.md step 3 prose includes config file path, absent-file default, .claude/ detection, and pi fallback" },
+  { id = "EX-5", text = "dispatch/SKILL.md description line mentions the config override" },
+  { id = "EX-6", text = "Existing test suites remain green — no regressions" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test dispatch_config — new and existing unit tests all pass" },
+  { id = "VT-2", expects = "cargo test dtoml — combined-keys roundtrip test passes alongside existing tests" },
+  { id = "VT-3", expects = "cargo clippy — zero warnings" },
+  { id = "VA-1", expects = "dispatch/SKILL.md step 3 prose includes: doctrine.toml path, absent-file default false, .claude/ detection, pi fallback, env-marker inference" },
+  { id = "VA-2", expects = "dispatch/SKILL.md description line mentions config override" },
+]
+specs             = []
+requirements      = []

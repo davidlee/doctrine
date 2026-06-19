@@ -285,7 +285,14 @@ leaf `kinds.rs` not `entity`/`registry`; `relation_graph` behavioral edges exclu
   go through `lookup`/`tier1_edges` are untouched (signatures stable).
 - **New micro-test (`kinds.rs`).** Pin `GOV`/`BACKLOG`/`RECORD` membership to the
   documented sets (mirrors `integrity::kinds_table_*`).
-- **Closure check.** `grep -nE 'crate::\w+::\w*_KIND' src/relation.rs` → empty.
+- **Closure check.** No production-graph alias remains:
+  `grep -nE 'const \w+: &Kind = &crate::\w+::\w*_KIND' src/relation.rs` → empty
+  (the 20 hoisted aliases gone). The broader `grep -nE 'crate::\w+::\w*_KIND'`
+  intentionally still matches the `#[cfg(test)]` `*_KIND` imports (L1015-1025,
+  L1727): public signatures stay `&Kind`, so tests must construct real `Kind`
+  instances (`lookup(&SLICE_KIND, …)`). Those are legitimate dev-dependency edges —
+  acyclic for the SL-112 crate split (cargo permits dev-dep cycles) — not the
+  command-tier cycle this slice breaks.
 - **`just gate`** green (clippy zero-warning, fmt).
 
 ## 10. Review Notes
