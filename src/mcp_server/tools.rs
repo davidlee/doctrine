@@ -70,6 +70,10 @@ fn tools() -> Vec<McpTool> {
                         "type": "array",
                         "items": { "type": "string" },
                         "description": "Tag filter (OR within the axis)"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Opt-in cap: return at most this many rows (default: all)"
                     }
                 },
                 "required": []
@@ -82,7 +86,8 @@ fn tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
-                    "format": { "type": "string", "enum": ["table", "json"], "description": "Output format (default: table)" }
+                    "format": { "type": "string", "enum": ["table", "json"], "description": "Output format (default: table)" },
+                    "view": { "type": "string", "enum": ["full", "summary"], "description": "summary drops the brief body + per-finding prose, keeping the finding skeleton (default: full)" }
                 },
                 "required": ["reference"]
             }),
@@ -285,7 +290,9 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 tags: fields.vec_str_field("tags"),
                 ..Default::default()
             };
+            let limit = fields.opt_usize_field("limit");
             review::run_list(Some(root.to_path_buf()), args)
+                .map(|out| project_list_limit(out, limit))
         }
         "review_show" => {
             let reference = arguments
@@ -301,7 +308,14 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 Some("json") => crate::listing::Format::Json,
                 _ => crate::listing::Format::Table,
             };
-            review::run_show(Some(root.to_path_buf()), &reference, fmt)
+            let summary = arguments.get("view").and_then(|v| v.as_str()) == Some("summary");
+            review::run_show(Some(root.to_path_buf()), &reference, fmt).map(|out| {
+                if summary {
+                    project_show_summary(out)
+                } else {
+                    out
+                }
+            })
         }
         "review_raise" => {
             let args: review::RaiseArgs = serde_json::from_value(arguments.clone())
@@ -408,6 +422,79 @@ impl ExtractFields {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Extract an optional unsigned integer (missing or non-integer ⇒ `None`),
+    /// narrowed to `usize`. Used for the `review_list` `limit` cap.
+    fn opt_usize_field(&self, name: &str) -> Option<usize> {
+        self.inner
+            .get(name)
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|n| usize::try_from(n).ok())
+    }
+}
+
+/// Trim a `Showed` output to its summary projection (IMP-113 #2): blank the brief
+/// `body` and each finding's `detail`/`response` prose, keeping the finding
+/// skeleton (id / status / severity / title / disposition). Non-`Showed` outputs
+/// pass through. Applied MCP-side; the `run_show` engine is untouched.
+fn project_show_summary(out: ReviewOutput) -> ReviewOutput {
+    match out {
+        ReviewOutput::Showed {
+            id,
+            canonical,
+            title,
+            status,
+            awaiting,
+            facet,
+            target,
+            findings_count,
+            findings,
+            body: _,
+            formatted,
+        } => {
+            let findings = findings
+                .into_iter()
+                .map(|f| review::Finding {
+                    detail: String::new(),
+                    response: None,
+                    ..f
+                })
+                .collect();
+            ReviewOutput::Showed {
+                id,
+                canonical,
+                title,
+                status,
+                awaiting,
+                facet,
+                target,
+                findings_count,
+                findings,
+                body: String::new(),
+                formatted,
+            }
+        }
+        other => other,
+    }
+}
+
+/// Truncate a `Listed` output's rows to an opt-in `limit` (IMP-113 #3). A `None`
+/// limit (the default) passes everything through — the cap is agent-requested,
+/// never a silent engine cap. Non-`Listed` outputs pass through.
+fn project_list_limit(out: ReviewOutput, limit: Option<usize>) -> ReviewOutput {
+    match (out, limit) {
+        (
+            ReviewOutput::Listed {
+                mut rows,
+                formatted,
+            },
+            Some(n),
+        ) => {
+            rows.truncate(n);
+            ReviewOutput::Listed { rows, formatted }
+        }
+        (other, _) => other,
     }
 }
 
@@ -609,6 +696,116 @@ mod tests {
             resp.error
         );
         assert!(resp.result.is_some());
+    }
+
+    // IMP-113 #1: the human render cache must not ship on the MCP wire — `Listed`
+    // and `Status` carry a `formatted` field the structured payload already covers.
+
+    #[test]
+    fn listed_and_status_omit_formatted_in_json() {
+        let listed = ReviewOutput::Listed {
+            rows: vec![],
+            formatted: "RENDERED TABLE".to_owned(),
+        };
+        let v = serde_json::to_value(&listed).unwrap();
+        assert!(v["Listed"].get("rows").is_some());
+        assert!(
+            v["Listed"].get("formatted").is_none(),
+            "Listed leaked formatted: {v}"
+        );
+
+        let status = ReviewOutput::Status {
+            canonical: "RV-1".to_owned(),
+            status: "done".to_owned(),
+            awaiting: "none".to_owned(),
+            findings_count: 0,
+            rounds: 0,
+            cache_primed: true,
+            stale_paths: vec![],
+            formatted: "RENDERED STATUS".to_owned(),
+        };
+        let v = serde_json::to_value(&status).unwrap();
+        assert!(
+            v["Status"].get("formatted").is_none(),
+            "Status leaked formatted: {v}"
+        );
+    }
+
+    // IMP-113 #2: summary view drops the brief body + per-finding prose, keeps skeleton.
+
+    #[test]
+    fn project_show_summary_blanks_prose_keeps_skeleton() {
+        let out = ReviewOutput::Showed {
+            id: 1,
+            canonical: "RV-1".to_owned(),
+            title: "T".to_owned(),
+            status: "done".to_owned(),
+            awaiting: "none".to_owned(),
+            facet: "reconciliation".to_owned(),
+            target: "SL-1".to_owned(),
+            findings_count: 1,
+            findings: vec![sample_finding()],
+            body: "BIG BRIEF BODY".to_owned(),
+            formatted: String::new(),
+        };
+        let ReviewOutput::Showed { body, findings, .. } = project_show_summary(out) else {
+            panic!("expected Showed");
+        };
+        assert!(body.is_empty(), "body should be blanked");
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0].detail.is_empty(),
+            "detail prose should be dropped"
+        );
+        assert!(
+            findings[0].response.is_none(),
+            "response prose should be dropped"
+        );
+        // skeleton retained
+        assert_eq!(findings[0].title, "t");
+        assert_eq!(findings[0].disposition.as_deref(), Some("tolerated"));
+    }
+
+    // IMP-113 #3: limit caps rows only when set (opt-in, never a silent cap).
+
+    #[test]
+    fn project_list_limit_caps_only_when_set() {
+        let make = || ReviewOutput::Listed {
+            rows: vec![row("RV-1"), row("RV-2"), row("RV-3")],
+            formatted: String::new(),
+        };
+        let ReviewOutput::Listed { rows, .. } = project_list_limit(make(), Some(2)) else {
+            panic!("expected Listed");
+        };
+        assert_eq!(rows.len(), 2);
+
+        let ReviewOutput::Listed { rows, .. } = project_list_limit(make(), None) else {
+            panic!("expected Listed");
+        };
+        assert_eq!(rows.len(), 3, "no limit passes everything through");
+    }
+
+    fn sample_finding() -> crate::review::Finding {
+        crate::review::Finding {
+            id: "F-1".to_owned(),
+            status: crate::review::FindingStatus::Verified,
+            severity: crate::review::Severity::Minor,
+            title: "t".to_owned(),
+            detail: "long detail prose".to_owned(),
+            disposition: Some("tolerated".to_owned()),
+            response: Some("long response prose".to_owned()),
+        }
+    }
+
+    fn row(id: &str) -> crate::review::ListRow {
+        crate::review::ListRow {
+            id: id.to_owned(),
+            status: "done".to_owned(),
+            awaiting: "none".to_owned(),
+            facet: "f".to_owned(),
+            target: "t".to_owned(),
+            title: "x".to_owned(),
+        }
     }
 
     // VT-7: unknown tool name returns -32601

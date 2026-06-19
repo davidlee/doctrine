@@ -353,6 +353,7 @@ pub(crate) enum ReviewOutput {
     },
     Listed {
         rows: Vec<ListRow>,
+        #[serde(skip)]
         formatted: String,
     },
     Primed {
@@ -373,6 +374,7 @@ pub(crate) enum ReviewOutput {
         rounds: usize,
         cache_primed: bool,
         stale_paths: Vec<String>,
+        #[serde(skip)]
         formatted: String,
     },
     Unlocked {
@@ -1283,12 +1285,12 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<(String, Vec<Lis
 /// target edge, and title.
 #[derive(Debug, Serialize)]
 pub(crate) struct ListRow {
-    id: String,
-    status: String,
-    awaiting: String,
-    facet: String,
-    target: String,
-    title: String,
+    pub(crate) id: String,
+    pub(crate) status: String,
+    pub(crate) awaiting: String,
+    pub(crate) facet: String,
+    pub(crate) target: String,
+    pub(crate) title: String,
 }
 
 fn json_rows(rows: &[ReviewRow]) -> Vec<ListRow> {
