@@ -1,0 +1,43 @@
+memory_uid = "mem_019edd5da05c7052b3ec2409435f0874"
+memory_key = "mem.pattern.dispatch.cherry-pick-loses-unstaged-edits"
+schema_version = 1
+lifespan = "episodic"
+memory_type = "pattern"
+status = "active"
+title = "Dispatch orchestrator manual fixes after cherry-pick must be re-staged before commit"
+summary = "When the orchestrator cherry-picks a worker commit then manually edits files, the edits are in the working tree only — git commit picks up staged changes. Must git add after manual edits."
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2b4f84cec2d0f1abe0b121791607a95480c10070"
+ref_name = "refs/heads/main"
+checkout_state_id = "520658192fd1da468b15d6cb320acdfba1a2c203eb997cc80cdb7cd794103ba4"
+base_commit = "2ef1838724ac410b43db86d93851e431120ee8f9"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
