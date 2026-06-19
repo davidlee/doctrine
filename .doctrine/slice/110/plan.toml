@@ -169,3 +169,122 @@ verification = [
 ]
 specs        = []
 requirements = []
+
+# ─── Revision 2 rework (RV-098 F-4 blocker / F-5 major) ──────────────────────
+# Items 1, 2, 3 accepted at VH. Items 4 and 5 rejected → re-designed (design.md
+# Revision 2, D2/D5/D6). PHASE-06..08 rework them on top of candidate/110/
+# review-001. PHASE-01..05 are immutable history (shipped); these append, never
+# renumber. Closure: PHASE-06+07 resolve F-4; PHASE-08 resolves F-5.
+
+[[phase]]
+id        = "PHASE-06"
+name      = "rename_node_occurrence + relabel_rel_all backend ops (item 4 rework)"
+objective = """
+Add the two new label-based concept-map DSL ops the rev-2 item-4 matrix needs,
+both riding the `relabel_edge_in_dsl` shape (PHASE-01): label-match, key-based
+dup guard, no-op short-circuit, reused error variants. In `src/concept_map.rs`:
+`rename_node_occurrence_in_dsl { source, rel, target, cell: 'source'|'target',
+new_label }` rewrites ONE edge's named endpoint (other rows using the old label
+untouched); `relabel_rel_all_in_dsl { old_rel, new_rel }` rewrites the rel of
+EVERY line sharing it, atomic (reject the whole op if any rewrite collides — incl.
+two rewritten rows colliding with each other). Two `MutationAction` variants +
+apply arms in `src/map_server/routes.rs`. Reuse `EmptyField`/`EdgeNotFound`/
+`DuplicateEdge` — no new error variants. `relabel_edge_in_dsl` / `rename_node_in_dsl`
+unchanged (behaviour-preservation). Isolated from the frontend; unblocks PHASE-07.
+Design §Item 4 Backend, D6.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md Revision 2 locked; §Item 4 Backend specs the two new ops (D6); RV-098 F-4 open" },
+  { id = "EN-2", text = "PHASE-01 relabel_edge_in_dsl shipped as the template (label-match + key-based dup guard + no-op short-circuit)" },
+  { id = "EN-3", text = "existing concept_map.rs + routes.rs mutation suite green on candidate/110/review-001 (behaviour-preservation baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "rename_node_occurrence_in_dsl rewrites only the `cell` endpoint of the first triple-matched line; other rows using the old label are byte-unchanged" },
+  { id = "EX-2", text = "rename_node_occurrence: key-based dup guard (rewritten triple collides with another line → DuplicateEdge{line}); no triple match → EdgeNotFound; empty new_label → EmptyField; new_label == current → DSL unchanged (no-op)" },
+  { id = "EX-3", text = "relabel_rel_all_in_dsl rewrites the rel segment of every line whose rel == old_rel; old_rel == new_rel (trimmed) → DSL unchanged; empty → EmptyField" },
+  { id = "EX-4", text = "relabel_rel_all dup guard is ATOMIC: if any rewrite collides with an existing OR another rewritten triple, the whole op is rejected (DuplicateEdge{line}) — no partial write" },
+  { id = "EX-5", text = "two MutationAction variants + apply arms wired; reuse EmptyField/EdgeNotFound/DuplicateEdge, no new error variants; relabel_edge_in_dsl / rename_node_in_dsl unchanged" },
+  { id = "EX-6", text = "existing concept_map.rs + routes.rs mutation tests still green unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "rename_node_occurrence: rewrite one endpoint persists; a sibling row sharing the old label is unchanged (200)" },
+  { id = "VT-2", expects = "rename_node_occurrence: DuplicateEdge by key-collision; EdgeNotFound (404); EmptyField (400); no-op (new == current) returns the DSL unchanged" },
+  { id = "VT-3", expects = "relabel_rel_all: every line sharing old_rel has its rel rewritten (200); old_rel == new_rel → DSL unchanged (no-op)" },
+  { id = "VT-4", expects = "relabel_rel_all atomic reject: a rewrite that would make two rows collide → DuplicateEdge{line}, DSL unchanged (no partial write)" },
+  { id = "VT-5", expects = "routes.rs handler tests: both new actions deserialise + apply through the server seam" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "concept-map per-cell pencil edit + edit-all scope (item 4 frontend rework)"
+objective = """
+Rebuild the CM edit surface per D5, consuming PHASE-06. DELETE `renderEditToggle`
+(`concept-map.ts`) and its `app.ts` call (this kills the buttons-on-every-entity
+bug — F-4(a)). The edge table is the whole surface: an `[ ] edit all` checkbox
+header (a pure SCOPE toggle, `cmEditAll`, not a mode), per-cell hover-revealed
+pencils → inline `<input>` in place (Enter commits, Esc cancels) gated on
+`cmEditingCell`, always-visible per-row `✕` (remove_edge), and plain node-cell
+click → `cmFocus` highlight (relation plain-click inert). Add the pure
+`cmEditOp(cell, editAll) → op` selector over the 4-cell matrix; map frontend
+`CmCell` `'from'`/`'to'` → backend `'source'`/`'target'` for rename_node_occurrence.
+Relocate `.cm-add-edge-form` directly below `.hover-detail` (`index.html`),
+rendered unconditionally for CMs. State: ADD `cmEditAll`, `cmEditingCell`; REMOVE
+`editingConceptMap`, `cmSelectedField`, `editingField`, `editingNode` (verify no
+stray refs). `concept-map.css` affordances. Design §Item 4, D5/D6.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 complete: rename_node_occurrence + relabel_rel_all available through the server seam" },
+  { id = "EN-2", text = "design.md Revision 2 locked; §Item 4 D5/D6 + the cmEditOp(cell, editAll) matrix present; RV-098 F-4 open" },
+  { id = "EN-3", text = "existing web/map vitest suites green on candidate/110/review-001 (baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "renderEditToggle deleted + its app.ts call removed; no edit buttons render on non-CM entities (the F-4(a) buttons-everywhere bug is gone)" },
+  { id = "EX-2", text = "the `[ ] edit all` checkbox renders inside the isCm-gated edge table and toggles cmEditAll scope ONLY — it never gates which cells are editable" },
+  { id = "EX-3", text = "every cell shows a hover pencil → inline <input> in place gated on cmEditingCell; Enter commits via mutateConceptMap, Esc cancels; the input carries the full edge labels to locate the row" },
+  { id = "EX-4", text = "cmEditOp is a pure total function over the matrix: (node,off)→rename_node_occurrence, (node,on)→rename_node, (rel,off)→relabel_edge, (rel,on)→relabel_rel_all; CmCell 'from'/'to' → backend 'source'/'target' for rename_node_occurrence" },
+  { id = "EX-5", text = "plain node-cell click (not the pencil) → cmFocus highlight; relation plain-click inert; per-row ✕ (remove_edge) always visible" },
+  { id = "EX-6", text = ".cm-add-edge-form relocated directly below .hover-detail in index.html, rendered unconditionally for CMs" },
+  { id = "EX-7", text = "state adds cmEditAll + cmEditingCell, removes editingConceptMap/cmSelectedField/editingField/editingNode with NO stray references remaining" },
+  { id = "EX-8", text = "existing web/map vitest suites green unchanged (behaviour-preservation; only the deleted-state's tests, if any, are removed with it)" },
+]
+verification = [
+  { id = "VT-1", expects = "cmEditOp unit test over the full 4-cell × scope matrix (node/rel × off/on → the four ops); CmCell→backend endpoint mapping covered" },
+  { id = "VH-1", expects = "dev-server: node-cell pencil, edit-all OFF → renames just that row's endpoint; ON → renames the label everywhere; relation pencil OFF → relabels that one edge; ON → relabels every edge sharing the rel; plain node click highlights; ✕ always deletes; add-edge form sits below the hover area; no edit buttons on non-CM entities" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "focusTransition D2 reversal — non-member → Semantic (item 5 rework)"
+objective = """
+Reverse D2 per RV-098 F-5. Simplify `focusTransition` in `model.ts` to
+`(current, focusId, isActionabilityMember, currentPriorityZoomId)` — DROP the
+`requiredMode` inner and the `node` argument (the only use was its id, == focusId;
+the CM-forces-semantic case is subsumed by the non-member→semantic row since a CM
+is never an actionability member). New table: actionability+member →
+`{actionability, focusId}`; actionability+non-member → `{semantic, null}` (the
+reversal); semantic → `{semantic, currentPriorityZoomId}` (echo). The `renderView`
+focusChanged-gated derive (PHASE-02) now passes `state.focusId`, not the node.
+Update `model.test.ts` to the reversed contract — its own tests change by design;
+no other vitest suite changes. Design §Item 5, D2 (reversed).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md Revision 2 locked; §Item 5 + D2 (reversed) table present; RV-098 F-5 open" },
+  { id = "EN-2", text = "PHASE-02 shipped the focusChanged-gated derive + the original focusTransition contract (baseline this supersedes)" },
+  { id = "EN-3", text = "existing model.test.ts green on candidate/110/review-001 (baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "focusTransition signature is (current, focusId, isActionabilityMember, currentPriorityZoomId); requiredMode + node dropped; pure (no DOM/clock/rng/disk)" },
+  { id = "EX-2", text = "table: actionability+member → {actionability, focusId}; actionability+non-member → {semantic, null}; semantic → {semantic, currentPriorityZoomId}; null focusId is safe" },
+  { id = "EX-3", text = "renderView derive passes state.focusId (not the node); membership from actionabilityNodeIds; the focusChanged gate is preserved (Actionability toggle stays live with a CM focused)" },
+  { id = "EX-4", text = "model.test.ts table updated to the reversed contract; no other web/map vitest suite changes" },
+]
+verification = [
+  { id = "VT-1", expects = "model.test.ts focusTransition table: member→{actionability,focusId}; non-member→{semantic,null} (the reversal); semantic→{semantic,currentPriorityZoomId} echo; null focusId safe" },
+  { id = "VH-1", expects = "dev-server: on the actionability graph, focusing a non-member entity switches to Semantic (no empty placeholder); focusing a member zooms; Semantic focus never auto-switches; the Actionability toggle stays live" },
+]
+specs        = []
+requirements = []
