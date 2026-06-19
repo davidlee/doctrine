@@ -1,7 +1,7 @@
 id = 107
 slug = "estimate-value-facet-integration"
 title = "Estimate & Value facet integration"
-status = "audit"
+status = "reconcile"
 created = "2026-06-18"
 updated = "2026-06-19"
 
