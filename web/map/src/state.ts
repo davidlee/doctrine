@@ -30,6 +30,8 @@ export const state: AppState = {
   // Concept map editing
   editingConceptMap: false,
   editingNode: null,
+  cmSelectedField: null,
+  editingField: null,
   cmFocusNode: null,
   renderedCmFocus: null,
   cmCacheMutationSeq: 0,

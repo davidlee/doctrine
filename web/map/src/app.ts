@@ -1,13 +1,13 @@
 import './style.css'
 
-import type { Edge, ConceptMap } from './types'
+import type { Edge, ConceptMap, CmEdge } from './types'
 import { state } from './state'
-import { normalizeGraph, resolveFocus, setActionabilityView, neighbourhood, cmNeighbourhood, compareEdgesBySource } from './model'
+import { normalizeGraph, resolveFocus, setActionabilityView, neighbourhood, cmNeighbourhood, compareEdgesBySource, focusTransition } from './model'
 import { parseHash, buildHash, setFocus } from './router'
 import { ApiError, fetchGraph, fetchActionabilityGraph, refreshGraph, fetchHealth, fetchConceptMap, mutateConceptMap } from './api'
 import { elements, el, cacheElements, escapeHtml, focusHeader, setPageMode, relationshipTable, hoverPane, markdownPane, graphPane, edgeDetail } from './render'
 import { renderFilteredEntities, wireFilters, wireSearch, wireDepthButtons, wireRefresh } from './search'
-import { renderDiagram, renderEdgeTable, renderAddEdgeForm, renderDiagnostics, renderEditToggle } from './concept-map'
+import { renderDiagram, renderEdgeTable, renderAddEdgeForm, renderDiagnostics, renderEditToggle, cmSelectedFieldFromCell } from './concept-map'
 import { renderGraph } from './priority'
 import { applyFocusHighlight } from './svg'
 
@@ -39,6 +39,18 @@ const safeStorage = {
 
 function goto(id: string): void {
   setFocus(id, state.depth)
+}
+
+// ---------------------------------------------------------------------------
+// highlightViewButtons — sync the active view-toggle button to the mode
+// (exported for DOM testing — SL-110 Item 1)
+// ---------------------------------------------------------------------------
+
+export function highlightViewButtons(mode: 'semantic' | 'actionability'): void {
+  const viewBtns = document.querySelectorAll<HTMLElement>('.view-btn')
+  for (const viewBtn of viewBtns) {
+    viewBtn.classList.toggle('view-btn--active', viewBtn.getAttribute('data-view') === mode)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +292,30 @@ function renderView(): void {
     state.focusId = resolveFocus(null, state.graph)
   }
 
+  // ---- Focus-change drives the view (SL-110 Item 5) ----
+  // Every selection path funnels through renderView via the hash; a focus change
+  // forces the required view mode and zoom before anything renders.
+  const focusChanged = state.focusId !== prevFocusId
+  if (focusChanged) {
+    const actionabilityNodeIds = new Set<string>(
+      Array.isArray(state.actionabilityView?.nodes)
+        ? state.actionabilityView.nodes.map((n) => n.id)
+        : [],
+    )
+    const node = state.graph.nodes.get(state.focusId ?? '')
+    const member = actionabilityNodeIds.has(state.focusId ?? '')
+    const t = focusTransition(state.viewMode, node, member, state.priorityZoomId)
+    state.viewMode = t.viewMode
+    if (t.priorityZoomId !== state.priorityZoomId) {
+      state.priorityZoomId = t.priorityZoomId
+      state.priorityZoomPending = t.priorityZoomId !== null
+    }
+  }
+
+  // Sync the active view-toggle button to the post-switch mode, BEFORE any early
+  // return (the edge branch returns early — SL-110 Item 1).
+  highlightViewButtons(state.viewMode)
+
   // ---- Edge detail mode ----
   if (route.view === 'edge') {
     edgeDetail({
@@ -344,9 +380,8 @@ function renderView(): void {
     depthBtn.classList.toggle('depth-btn--active', dataDepth === state.depth)
   }
 
-  // View change detection
+  // View change detection (focusChanged computed earlier — SL-110 Item 5)
   const graphArea = document.querySelector<HTMLElement>('.graph-area')
-  const focusChanged = state.focusId !== prevFocusId
   const depthChanged = state.depth !== prevDepth
   // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
   const graphMissing = graphArea === null || graphArea.querySelector('svg') === null
@@ -394,9 +429,9 @@ function renderView(): void {
           initialTransform: state.priorityTransform,
           animateToZoom: state.priorityZoomPending,
           onNodeClick: (id) => {
-            // Zoom to the clicked node (re-renders via hash → focus) and update
-            // the detail pane. IMP-092.
-            state.priorityZoomId = id
+            // Zoom to the clicked node — the funnel now owns zoom: goto(id)
+            // re-renders via hash → focusChanged → focusTransition sets
+            // priorityZoomId. (SL-110 Item 5; IMP-092.)
             state.priorityZoomPending = true
             goto(id)
           },
@@ -533,11 +568,8 @@ function renderView(): void {
     if (priorityLegend !== null) priorityLegend.classList.add('u-hidden')
   }
 
-  // Highlight active view toggle button
-  const viewBtns = document.querySelectorAll<HTMLElement>('.view-btn')
-  for (const viewBtn of viewBtns) {
-    viewBtn.classList.toggle('view-btn--active', viewBtn.getAttribute('data-view') === state.viewMode)
-  }
+  // (View-toggle highlight runs early, before the edge-detail early return —
+  // see highlightViewButtons call above. SL-110 Item 1.)
 
   const isCm = state.viewMode === 'semantic' && state.focusId !== null && isConceptMap(state.focusId)
 
@@ -570,6 +602,8 @@ function renderView(): void {
   renderEditToggle({
     header: focusHeaderEl,
     editing: state.editingConceptMap,
+    hasSelection: state.cmSelectedField !== null,
+    onEditThis: startEditSelectedField,
     onToggle: () => {
       state.editingConceptMap = !state.editingConceptMap
       if (!state.editingConceptMap) state.editingNode = null
@@ -689,11 +723,16 @@ function renderCmEdgeTable(): void {
     depth: state.depth,
     editing: state.editingConceptMap,
     editingNode: state.editingNode,
+    selectedField: state.cmSelectedField,
+    editingField: state.editingField,
     onRemoveEdge: handleRemoveEdge,
     onRenameNode: startRenameNode,
+    onSelectCell: handleSelectCell,
     onSubmitRename: handleRenameNodeSubmit,
+    onSubmitRelabel: handleRelabelEdge,
     onCancelRename: () => {
       state.editingNode = null
+      state.editingField = null
       renderView()
     },
   })
@@ -930,6 +969,11 @@ function startRenameNode(key: string): void {
 function handleRenameNodeSubmit(newLabel: string): void {
   const oldLabel = state.editingNode?.label ?? ''
   state.editingNode = null
+  // Single-field ('Edit this') node path also clears the field/selection.
+  if (state.editingField === 'node') {
+    state.editingField = null
+    state.cmSelectedField = null
+  }
 
   const nt = newLabel.trim()
   if (nt === '') {
@@ -959,6 +1003,86 @@ function handleRenameNodeSubmit(newLabel: string): void {
       } else {
         handleMutationError(err)
       }
+      refreshCmView()
+    })
+}
+
+// ---------------------------------------------------------------------------
+// handleSelectCell — single-click selects a cell (plain navigation)
+// ---------------------------------------------------------------------------
+
+function handleSelectCell(edge: CmEdge, cell: 'from' | 'rel' | 'to'): void {
+  const selected = cmSelectedFieldFromCell(edge, cell)
+  state.cmSelectedField = selected
+  state.editingField = null
+
+  // A node cell also cmFocus-es that node (reuse the existing highlight + path).
+  if (selected.kind === 'node') {
+    if (state.cmFocusNode !== null && state.cmFocusNode.key === selected.key) {
+      // already focused — keep focus, just (re)select.
+    } else {
+      state.cmFocusNode = { key: selected.key, label: selected.label }
+    }
+    window.location.hash = buildHash('focus', state.focusId ?? '', state.depth)
+  }
+  renderView()
+}
+
+// ---------------------------------------------------------------------------
+// startEditSelectedField — 'Edit this': inline-edit the selected field only
+// ---------------------------------------------------------------------------
+
+function startEditSelectedField(): void {
+  const sel = state.cmSelectedField
+  if (sel === null) return
+
+  if (sel.kind === 'node') {
+    state.editingField = 'node'
+    state.editingNode = { key: sel.key, label: sel.label }
+  } else {
+    state.editingField = 'rel'
+    state.editingNode = null
+  }
+  renderView()
+}
+
+// ---------------------------------------------------------------------------
+// handleRelabelEdge — submit relabel_edge mutation for the selected rel cell
+// ---------------------------------------------------------------------------
+
+function handleRelabelEdge(newRel: string): void {
+  const sel = state.cmSelectedField
+  const wasRel = sel !== null && sel.kind === 'rel' ? sel : null
+  state.editingField = null
+  state.cmSelectedField = null
+
+  if (wasRel === null) {
+    refreshCmView()
+    return
+  }
+
+  const nr = newRel.trim()
+  if (nr === '') {
+    showCmFormError('Relation must not be empty')
+    refreshCmView()
+    return
+  }
+
+  const cm = state.conceptMapCache.get(state.focusId ?? '')
+  const baseHash = cm !== undefined ? cm.dslHash : undefined
+
+  mutateConceptMap(
+    state.focusId ?? '',
+    'relabel_edge',
+    { source: wasRel.from_label, old_rel: wasRel.rel, new_rel: nr, target: wasRel.to_label },
+    baseHash,
+  )
+    .then((data) => {
+      updateConceptMapCache(data as Record<string, unknown>)
+      refreshCmView()
+    })
+    .catch((err: unknown) => {
+      handleMutationError(err)
       refreshCmView()
     })
 }

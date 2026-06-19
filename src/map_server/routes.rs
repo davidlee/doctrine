@@ -52,6 +52,15 @@ enum MutationAction {
         #[serde(alias = "new")]
         new_label: String,
     },
+    #[serde(rename = "relabel_edge")]
+    RelabelEdge {
+        source: String,
+        #[serde(alias = "old")]
+        old_rel: String,
+        #[serde(alias = "new")]
+        new_rel: String,
+        target: String,
+    },
 }
 
 /// A pending concept-map mutation with optional optimistic concurrency hash.
@@ -332,7 +341,7 @@ async fn get_concept_map(
 }
 
 /// `POST /api/concept-map/:id` — apply a mutation (`add_edge`, `remove_edge`,
-/// `rename_node`) to the concept map's DSL.
+/// `rename_node`, `relabel_edge`) to the concept map's DSL.
 async fn mutate_concept_map(
     State(state): State<Arc<AppState>>,
     Path(id_str): Path<String>,
@@ -381,6 +390,16 @@ async fn mutate_concept_map(
             let (dsl, count) = concept_map::rename_node_in_dsl(&old_dsl, old_label, new_label)
                 .map_err(MapServerError::from)?;
             (dsl, Some(count))
+        }
+        MutationAction::RelabelEdge {
+            source,
+            old_rel,
+            new_rel,
+            target,
+        } => {
+            let dsl = concept_map::relabel_edge_in_dsl(&old_dsl, source, old_rel, new_rel, target)
+                .map_err(MapServerError::from)?;
+            (dsl, None)
         }
     };
 
@@ -1093,6 +1112,43 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["edges"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn mutate_relabel_edge_returns_200() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(
+            r#"{"action":"relabel_edge","source":"User","old_rel":"creates","new_rel":"makes","target":"Document"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        let edges = parsed["edges"].as_array().unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0]["rel"], "makes");
+    }
+
+    #[tokio::test]
+    async fn mutate_relabel_edge_accepts_old_new_aliases() {
+        let (_root, app) = seeded_cm_app("User > makes > Document").await;
+        let body = Body::from(
+            r#"{"action":"relabel_edge","source":"User","old":"makes","new":"creates","target":"Document"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        let edges = parsed["edges"].as_array().unwrap();
+        assert_eq!(edges[0]["rel"], "creates");
     }
 
     #[tokio::test]
