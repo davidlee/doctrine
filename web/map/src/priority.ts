@@ -1,6 +1,7 @@
 import { graphStratify, sugiyama } from 'd3-dag';
 import { select } from 'd3-selection';
 import { zoom as d3zoom, zoomIdentity } from 'd3-zoom';
+import { hoverDetailHtml } from './render';
 import type { ActionabilityView, ActionabilityNode } from './types';
 
 export interface LayoutNode extends ActionabilityNode {
@@ -178,6 +179,12 @@ export function renderGraph(opts: PriorityRenderOpts): void {
   // eslint-disable-next-line no-restricted-syntax
   container.innerHTML = '';
 
+  // On-graph hover tooltip — absolutely positioned, hidden until a node is
+  // hovered, content sourced from the SAME builder as the side detail pane.
+  const tooltip = document.createElement('div');
+  tooltip.className = 'priority-tooltip';
+  container.appendChild(tooltip);
+
   const bbox = layoutBBox(nodes);
 
   const svg = document.createElementNS(SVG_NS, 'svg');
@@ -283,13 +290,33 @@ export function renderGraph(opts: PriorityRenderOpts): void {
       };
     })(node.id));
 
-    // Hover classes + optional detail-pane callbacks
+    // Hover classes + optional detail-pane callbacks + on-graph tooltip
     group.addEventListener('mouseenter', () => {
       group.classList.add('priority-node--hover');
+      // eslint-disable-next-line no-restricted-syntax
+      tooltip.innerHTML = hoverDetailHtml({
+        id: node.id,
+        title: node.title,
+        kindLabel: node.kind,
+        status: node.status,
+      });
+      tooltip.classList.add('priority-tooltip--visible');
       if (opts.onNodeHoverEnter !== undefined) opts.onNodeHoverEnter(node.id);
+    });
+    group.addEventListener('mousemove', (evt: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const pad = 12;
+      let left = evt.clientX - rect.left + pad;
+      let top = evt.clientY - rect.top + pad;
+      // Keep the tooltip inside the container.
+      left = Math.min(left, Math.max(0, rect.width - tooltip.offsetWidth - pad));
+      top = Math.min(top, Math.max(0, rect.height - tooltip.offsetHeight - pad));
+      tooltip.style.left = `${String(left)}px`;
+      tooltip.style.top = `${String(top)}px`;
     });
     group.addEventListener('mouseleave', () => {
       group.classList.remove('priority-node--hover');
+      tooltip.classList.remove('priority-tooltip--visible');
       if (opts.onNodeHoverLeave !== undefined) opts.onNodeHoverLeave();
     });
 

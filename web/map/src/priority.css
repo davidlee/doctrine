@@ -20,7 +20,7 @@
     cursor: pointer;
   }
 
-  .view-btn.active {
+  .view-btn--active {
     background: var(--kind-SL);
     border-color: var(--kind-SL);
     color: #fff;
