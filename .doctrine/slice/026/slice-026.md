@@ -133,6 +133,11 @@ synthetic plan children — via `doctrine export lazyspec`, reusing SL-025's rea
 - **IMP-105 — extend the node set to post-scope kinds** (`POL`/`STD`/`RV`/`REC`/`REV`/
   `CM`/knowledge). Split out at round-3 re-validation (D8); rides this slice's wire
   format. Until then those kinds' inbound edges dangle harmlessly (design §5.5).
+- **IMP-108 — authored `created`/`updated` on the spec schema.** Specs are the only
+  kind with no authored date on disk; this slice injects the spec toml mtime as the
+  lazyspec `date` (consult 2026-06-19, lossy-v1 read-only — design §5.3, INV-7). The
+  durable fix (real authored dates) is a doctrine model change, out of this slice's
+  read-only scope.
 - **Later:** selectively re-enable mutations as doctrine grows lifecycle/transition
   verbs, mapping onto lazyspec's `DocumentStore` writes.
 - **v1 limitation to revisit:** lazyspec's graph renders `Implements` only — so

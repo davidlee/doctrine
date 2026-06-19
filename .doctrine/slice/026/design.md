@@ -263,6 +263,18 @@ is therefore **hand-authored** (prefix `PLAN`, dir, icon, plural).
 the pure layer). `DocMeta.date` is mandatory and must parse `%Y-%m-%d`
 (`document.rs:11`), so the synthetic node can never ship an empty date.
 
+**Spec node `date`** = the spec toml's filesystem **mtime** (`YYYY-MM-DD`), injected
+by the impure shell (`load_spec` → `clock::date_of_system_time`); a `created` head, if
+ever added, still wins. Specs are the only emitted kind with no authored date on disk
+(slices/ADRs/backlog carry `created`/`updated`), so `head.created.unwrap_or_default()`
+shipped `date: ""` for every spec — a hard INV-7 break against `DocMeta.date`'s
+mandatory `%Y-%m-%d` (caught by live smoke over the real corpus, not the dated
+fixtures). mtime is an honest last-changed signal, always parseable, but
+checkout-unstable across clones — the accepted **lossy-v1, read-only** tradeoff
+(consult 2026-06-19). The correct long-term fix — authored `created`/`updated` on the
+spec schema — is a doctrine model change outside this read-only slice (tracked as
+IMP-108).
+
 **Entity & type ordering.** `project` sorts `entities[]` by canonical id and
 `types[]` by name before serialization — disk-walk order is not stable, so this is
 what makes §5.4's idempotence claim true and the golden file robust against
@@ -290,8 +302,9 @@ no mutation, no side effects beyond stdout.
   `entities: []`, `types[]` still full (manifest is static).
 - **INV-6** every emitted `status` is one of the seven verified wire strings; an
   out-of-vocab doctrine status takes the per-kind default (slice → `draft`).
-- **INV-7** every emitted `date` is `YYYY-MM-DD` (never a datetime) — incl. the
-  synthetic plan node (owning slice's `updated`).
+- **INV-7** every emitted `date` is `YYYY-MM-DD` (never a datetime, never empty) —
+  the synthetic plan node from the owning slice's `updated`; **specs from the spec
+  toml's mtime** (no authored date on disk, §5.3); all other kinds from `created`.
 - **Dangling edges:** a `related[].target` outside the emitted corpus is dropped
   silently (lazyspec's `BrokenLinkRule` is suppressed by `validate_ignore`, brief
   §6); v1 accepts this. Concrete v1 dangles: `governed_by`→`POL`/`STD` and any edge
