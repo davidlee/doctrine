@@ -1,0 +1,41 @@
+memory_uid = "mem_019edd4819ae7fe1862ebb99b3451855"
+memory_key = "mem.pattern.lint.module-decl-expect-propagates"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "expect(dead_code) on a `mod foo;` decl propagates into the submodule"
+summary = "A dead-code expect on a module declaration covers the submodule's items without editing the submodule file — respects cross-slice file boundaries; self-clears when a live consumer lands."
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = ["src/estimate.rs"]
+globs = ["src/**"]
+commands = []
+tags = ["lint", "dead-code", "clippy"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e4e6117f6ebbd8ced699ff1b9fea4a445bbfda0a"
+ref_name = "refs/heads/main"
+checkout_state_id = "5d80c6dcb3529506e3deab9822ad6928a5089256e6f3d15a3f3cefa0aead086b"
+base_commit = "d165d63fac1f100f986d9d11163c5bee4ec4e0ba"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0

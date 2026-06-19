@@ -58,6 +58,7 @@ mod status;
 mod supersede;
 mod tomlfmt;
 mod tty;
+mod value;
 mod verify;
 mod worktree;
 

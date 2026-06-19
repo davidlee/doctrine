@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `estimate` — the optional estimation facet (SL-101, SPEC-020 §3).
-#![allow(
-    dead_code,
-    reason = "lifted in PHASE-03 when dtoml.rs wires config imports"
-)]
 //!
 //! A bounded human-attention-burden claim: two finite `f64` bounds (`lower`/`upper`),
 //! parsed from an entity `[estimate]` TOML table. The facet is kind-agnostic and
@@ -18,6 +14,19 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+// SL-107 EX-4 / D1: the blanket `#![allow(dead_code)]` is gone, so the display
+// renderers (SL-102) need their own tripwire. They have no live call site until
+// the facet data carried on `SliceDoc` is rendered on the show path — owned by a
+// later slice, not SL-107 (D2 narrow boundary: SL-107 does not touch display).
+// `expect` (not `allow`) self-clears: when display is wired in, it fires
+// unfulfilled and forces removal of this attribute.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "estimate display rendering (SL-102) — no live call site until facet data is rendered on the show path"
+    )
+)]
 pub(crate) mod display;
 
 // ---------------------------------------------------------------------------
@@ -25,7 +34,15 @@ pub(crate) mod display;
 // ---------------------------------------------------------------------------
 
 pub(crate) const DEFAULT_ESTIMATION_UNIT: &str = "espresso_shots";
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
+)]
 pub(crate) const DEFAULT_LOWER_CONFIDENCE: f64 = 0.1;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
+)]
 pub(crate) const DEFAULT_UPPER_CONFIDENCE: f64 = 0.9;
 
 // ---------------------------------------------------------------------------
@@ -48,6 +65,10 @@ pub(crate) struct EstimationConfig {
 
 /// Resolve the estimation unit. Pure over config — the file read is the shell's
 /// job. Empty string falls back to default.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
+)]
 pub(crate) fn resolve_unit(cfg: &EstimationConfig) -> String {
     match &cfg.unit {
         Some(u) if !u.is_empty() => u.clone(),
@@ -57,6 +78,10 @@ pub(crate) fn resolve_unit(cfg: &EstimationConfig) -> String {
 
 /// Resolve the default confidence bounds. Pure. Each bound falls back to its
 /// default when absent; validated: finite, in [0.0, 1.0], lower < upper.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
+)]
 pub(crate) fn resolve_confidence(cfg: &EstimationConfig) -> anyhow::Result<(f64, f64)> {
     let lower = cfg.lower_confidence.unwrap_or(DEFAULT_LOWER_CONFIDENCE);
     let upper = cfg.upper_confidence.unwrap_or(DEFAULT_UPPER_CONFIDENCE);
@@ -118,6 +143,10 @@ impl<'de> Deserialize<'de> for EstimateFacet {
 /// Parse an optional `[estimate]` table. Returns `Ok(None)` absent,
 /// `Ok(Some(facet))` present+valid, `Err(_)` malformed. Bakes in validation —
 /// callers never hold an invalid facet.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "entity-facet consumers land in a later phase")
+)]
 pub(crate) fn parse_optional(
     table: Option<&toml::value::Table>,
 ) -> anyhow::Result<Option<EstimateFacet>> {
