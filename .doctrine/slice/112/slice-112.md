@@ -35,15 +35,20 @@ de-risks that later cut). The gate is a `cargo test` under `just gate`.
   **cyclic-edge count** (same-tier edges inside a non-trivial SCC) and fail on any
   increase — monotonic-down. (A bare `Σ(SCC−1)` was rejected: it misses a new bad
   edge added *inside* an existing blob — external review C1.)
-- **Encode the map as canon** — authored `layers.toml` the gate parses (structured
-  per the storage rule, not ADR prose, not a code `const`); ADR-001 carries the rule
-  + tier definitions and points at it. Classification is **most-knowing-wins** (a
-  top-level module's tier = the highest altitude of any of its non-test files); the
-  residual umbrella-heterogeneity hole is named and mitigated by SL-115/116.
-- **Overturn + amend ADR-001** (via a REV at reconcile, ADR-013 — a co-requisite,
-  ADR-001 currently *rejects* this test): rule 1 hard-gated (literal `crate::` path
-  edges); rule 2 enforced as a non-increasing cyclic-edge ratchet with the command
-  tangle openly recorded as unmet-and-tracked; rule 3 deferred; `input` reclassified.
+- **Encode the map as canon** — an authored `.doctrine/adr/001/layering.toml`
+  (companion to the governing ADR, structured per the storage rule, not ADR prose,
+  not a code `const`); ADR-001 carries the rule + tier definitions and points at it.
+  Classification is **variable-granularity most-knowing-wins**: top-level module by
+  default (tier = highest altitude of any non-test file); a mixed umbrella
+  (`catalog`, `priority`) is sub-classified, and the gate **forces** that (a
+  `MixedUmbrella` violation) so coarse granularity cannot launder a pure sub-file's
+  upward edge.
+- **Overturn + amend ADR-001 — required for closure** (via REV, ADR-013). ADR-001
+  *currently rejects* this test, so the slice cannot close until the reversal lands:
+  rule 1 hard-gated (literal `crate::` path edges); rule 2 enforced as a
+  non-increasing cyclic-edge ratchet (same-tier edges inside a non-trivial SCC; the
+  engine baseline is 0 after CHR-015) with the command tangle openly recorded as
+  unmet-and-tracked; rule 3 deferred; `input` reclassified.
 
 Closure intent: a *new* deliberate upward edge (or a new intra-tier cycle, or a
 grown baseline) fails the gate locally; `just gate` runs the check; the layer map +
@@ -73,8 +78,8 @@ is the go/no-go. Engine crate split deferred. ADR-001 amended via REV at reconci
 
 - **Engine crate split** — the compiler-enforced boundary, a later slice seeded by
   this slice's `LAYER_MAP`.
-- **CHR-015** — break the `conduct↔dtoml` engine-tier cycle (drive the engine tangle
-  baseline to 0).
+- **CHR-015** — *done*: `conduct↔dtoml` engine-tier cycle broken; engine tangle
+  baseline is 0.
 - **Rule 3 (engine purity)** — the impure-leaf refinement (tag `git`/`clock` impure,
   forbid engine→impure-leaf in the same gate framework).
 - **Burn down the baselines** — shrink `ACCEPTED_VIOLATIONS` (e.g. `state→install`
