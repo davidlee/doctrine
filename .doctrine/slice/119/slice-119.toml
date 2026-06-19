@@ -1,7 +1,7 @@
 id = 119
 slug = "pi-boot-snapshot"
 title = "Wire boot snapshot to pi via APPEND_SYSTEM.md"
-status = "design"
+status = "plan"
 created = "2026-06-19"
 updated = "2026-06-19"
 
