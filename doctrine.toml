@@ -1,0 +1,5 @@
+[dispatch]
+# Preferred subprocess harness for dispatch workers.
+# "pi"  — pi RPC mode (SL-108)
+# "codex" — codex exec (default)
+preferred-subprocess-harness = "pi"

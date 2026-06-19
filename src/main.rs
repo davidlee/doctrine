@@ -17,6 +17,7 @@ mod coverage_verify;
 mod coverage_view;
 mod dep_seq;
 mod dispatch;
+mod dispatch_config;
 mod dtoml;
 mod entity;
 mod estimate;
