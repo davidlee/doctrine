@@ -24,38 +24,42 @@ calls into the same functions.
 
 ## Scope & Objectives
 
-1. **`doctrine serve --mcp`** — a new subcommand that starts an MCP server on
-   stdio, exposing review tools only (v1 scope). The server runs until the
-   client disconnects; stateless between sessions.
+1. **Refactor `run_*` return types** — each review verb handler returns a
+   `ReviewOutput` variant enum instead of writing to `io::stdout()`. This is the
+   gating change: the review engine produces structured data; callers format it.
+   `with_turn` becomes generic over closure return type (`T` instead of `()`).
+   CLI output preserved behaviorally via `print_review()` in `main.rs`.
 
-2. **MCP tools — one per review verb:**
+2. **`doctrine serve --mcp [--path]`** — a new subcommand that starts an MCP
+   server on stdio, exposing review tools only (v1 scope). The server runs until
+   the client disconnects; resolves project root once at startup.
+
+3. **MCP tools — one per review verb:**
    - `review_new` — open a review ledger against a target entity
-   - `review_list` — list reviews, filterable
-   - `review_show` — show one review with derived status
+   - `review_list` — list reviews, filterable (returns structured rows)
+   - `review_show` — show one review with derived status (returns JSON + formatted)
    - `review_raise` — raise a finding (raiser-owned)
    - `review_dispose` — dispose a finding (responder-owned)
    - `review_verify` — verify an answered finding (raiser-owned)
    - `review_contest` — contest a disposition (raiser-owned)
    - `review_withdraw` — withdraw a finding (raiser-owned)
-   - `review_status` — report derived state + baton
+   - `review_status` — report derived state + baton + cache verdict
    - `review_prime` — seed the reviewer-context warm-cache
 
    Each tool's parameter schema is the typed equivalent of the existing CLI
-   flags — no new semantics, no new validation.
+   flags, including `--as` role overrides. No new semantics, no new validation.
 
-3. **Thin wrapper architecture.** The MCP handler calls the same `review::run_*`
+4. **Thin wrapper architecture.** The MCP handler calls the same `review::run_*`
    functions that `main.rs` calls. No duplicated validation, state mutation, or
    entity engine logic. The MCP layer is transport + parameter unmarshalling +
    result marshalling only.
 
-4. **Structured errors.** CLI error strings are mapped to MCP error codes with
-   structured `data` payloads (e.g. finding state mismatch → code + current
-   state + expected state).
+5. **Structured errors.** Review engine errors are mapped to MCP error responses
+   with typed `data` payloads (`NOT_FOUND`, `ROLE_MISMATCH`, `STATE_MISMATCH`).
 
-5. **Session-agnostic v1.** The server is stateless across tool calls — each
-   call resolves the project root from the working directory (same as the CLI
-   does). No session-scoped "current review" context in v1; that is a natural
-   follow-up.
+6. **Hand-rolled MCP protocol** — zero new crate dependencies. The tools-only
+   MCP surface (initialize, tools/list, tools/call) is ~300 lines of
+   serde + tokio codec. The project already has `serde`, `serde_json`, `tokio`.
 
 ## Non-Goals
 
@@ -74,22 +78,20 @@ calls into the same functions.
 
 ## Risks & Assumptions
 
-- **RSK-001 — MCP library dependency.** Assumption: a lightweight MCP SDK crate
-  exists (e.g. `mcp-server` or similar) that handles JSON-RPC framing and stdio
-  transport without pulling in a heavy framework. If none is suitable, the
-  protocol is simple enough to implement directly (~200 lines of serde +
-  tokio codec).
-- **RSK-002 — Visibility barriers.** The review verb handlers in `src/review.rs`
-  are `pub(crate)`; `main.rs` already calls them directly. The MCP handler will
-  live in a new module (`src/mcp_server/`) at the same crate level — no
-  visibility change needed.
-- **RSK-003 — Project root resolution.** The MCP server resolves the project
-  root from its working directory on each call, same as the CLI. If the client
-  (agent) sets cwd correctly, this is transparent. A `--path` equivalent can be
-  a follow-up.
-- **RSK-004 — Lock contention.** The review CLI uses per-review runtime locks
-  (ADR-007 D-C4a). An MCP server with concurrent tool calls would contend on the
-  same locks — same behaviour as concurrent CLI invocations; no new hazard.
+- **RSK-001 — Hand-rolled protocol correctness.** The MCP JSON-RPC framing is
+  implemented directly (~300 lines). Mitigation: integration tests (VH-3, VH-4)
+  validate the full protocol handshake and tool round-trips against real MCP
+  client expectations.
+- **RSK-002 — `Deserialize` on `Severity`/`Facet`.** These enums use custom
+  `parse` methods. A `#[serde(deserialize_with)]` bridge forwards to the
+  existing parser — no change to the enum representation.
+- **RSK-003 — Baton CAS under batch mutation.** Multiple MCP tool calls in rapid
+  sequence contend on the same per-review lock (ADR-007 D-C4a). Same behaviour
+  as concurrent CLI invocations; verified in execute phase with an agent test
+  run (VH-5).
+- **RSK-004 — `PathBuf` in serialized JSON.** `ReviewOutput::Created.dir` is a
+  `PathBuf` — serialises as a string. Acceptable for MCP transport; the path is
+  relative to the project root.
 
 ## Summary
 
