@@ -1,4 +1,5 @@
-//! SL-049 PHASE-02 (ISS-004) — `spec req add` slug escape + shared slug cap.
+//! SL-049 PHASE-02 (ISS-004) + IMP-005 — `spec req add` slug escape + shared
+//! slug cap + explicit-slug normalisation.
 //!
 //! Black-box goldens over the BUILT binary. `run_req_add` previously called
 //! `resolve_slug(&title, None)` unconditionally and `derive_slug` was
@@ -6,7 +7,8 @@
 //! name (ENAMETOOLONG). These pin the fix at the CLI seam:
 //!   * VT-1 — `--slug <short>` is taken verbatim (the escape).
 //!   * VT-2 — a formerly-aborting long title now succeeds, slug bounded, symlink made.
-//!   * VT-3 — an over-cap `--slug` errors naming the cap; nothing reserved.
+//!   * VT-3 — an over-cap `--slug` is truncated, not rejected (IMP-005).
+//!   * VT-4 — path-hostile `--slug` is normalised to safe kebab-case (IMP-005).
 //!   * VT-5 — two long titles sharing a 100-byte prefix land in distinct REQ dirs.
 //!
 //! Minting is git-anchored, so the temp root is a real `main`-on-init repo. The
@@ -181,7 +183,9 @@ fn an_overlong_title_succeeds_with_a_bounded_slug() {
 // --- VT-3: over-cap --slug errors naming the cap; nothing written -------------
 
 #[test]
-fn an_overlong_explicit_slug_errors_and_reserves_nothing() {
+fn an_overlong_explicit_slug_is_truncated_not_rejected() {
+    // IMP-005: overlong explicit --slug is truncated (matching derived-slug path),
+    // not rejected. The requirement is minted with a bounded symlink.
     let repo = Repo::new();
     host_spec(&repo);
     let long = "a".repeat(SLUG_MAX + 1);
@@ -196,25 +200,32 @@ fn an_overlong_explicit_slug_errors_and_reserves_nothing() {
         "--slug",
         &long,
     ]);
-    assert!(!out.status.success(), "over-cap --slug must fail");
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("too long"), "stderr: {stderr}");
+    ok(&out);
+    // Requirement reserved and slug bounded.
+    assert!(repo.req_dir().join("001").exists());
+    let slug = slug_of(&repo, 1);
     assert!(
-        stderr.contains(&SLUG_MAX.to_string()),
-        "stderr names the cap: {stderr}"
+        slug.len() <= SLUG_MAX,
+        "slug len {} > {SLUG_MAX}",
+        slug.len()
     );
-    // No requirement reserved (001 dir absent).
-    assert!(!repo.req_dir().join("001").exists());
+    assert!(!slug.is_empty());
 }
 
-// --- VT-4: a path-hostile --slug is refused at the CLI; nothing reserved ------
+// --- VT-4: path-hostile --slug is normalised to safe kebab-case (IMP-005) ----
 
 #[test]
-fn a_path_hostile_explicit_slug_errors_and_reserves_nothing() {
-    // F-1 (RV-008): the slug is spliced into the `requirement-NNN-slug` symlink
-    // name, so a traversal / separator / control char must be refused at the seam,
-    // never reach the filesystem. The byte-cap alone is no wall against `..`/`/`.
-    for hostile in ["../../pwn", "a/b", "..", ".hidden", "has space"] {
+fn a_path_hostile_explicit_slug_is_normalised() {
+    // IMP-005: --slug is normalised through derive_slug. Traversal / separator /
+    // control / uppercase / spaces are all folded to safe kebab-case. Only a slug
+    // that normalises to empty (e.g. "..") is still rejected.
+    for (hostile, expect_ok, expect_slug) in [
+        ("../../pwn", true, "pwn"),
+        ("a/b", true, "ab"),
+        (".hidden", true, "hidden"),
+        ("has space", true, "has-space"),
+        ("..", false, ""),
+    ] {
         let repo = Repo::new();
         host_spec(&repo);
         let out = repo.run(&[
@@ -228,17 +239,22 @@ fn a_path_hostile_explicit_slug_errors_and_reserves_nothing() {
             "--slug",
             hostile,
         ]);
-        assert!(
-            !out.status.success(),
-            "hostile --slug {hostile:?} must fail"
-        );
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        assert!(
-            stderr.contains("lowercase"),
-            "{hostile:?} carries the charset message: {stderr}"
-        );
-        // Nothing reserved, and no stray entry under the requirement dir.
-        assert!(!repo.req_dir().join("001").exists());
+        if expect_ok {
+            ok(&out);
+            let got = slug_of(&repo, 1);
+            assert_eq!(got, expect_slug, "normalised slug for {hostile:?}");
+        } else {
+            assert!(
+                !out.status.success(),
+                "hostile --slug {hostile:?} must fail"
+            );
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                stderr.contains("must not be empty"),
+                "{hostile:?} empty-after-normalisation message: {stderr}"
+            );
+            assert!(!repo.req_dir().join("001").exists());
+        }
     }
 }
 
