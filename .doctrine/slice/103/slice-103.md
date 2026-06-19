@@ -15,7 +15,10 @@ it can be exposed to the graph.
   entity id, kind, `lower`, `upper`, project unit, relations/edges, lifecycle state.
 - **Value facet exposed alongside estimate (design D1)** — the generic scan-side
   reader carries both; the contract is symmetric (`value` magnitude + value unit).
-  *No requirement covers value graph exposure yet — see Open Questions.*
+  *Deliberate traced-pending scope: no existing REQ covers value graph exposure
+  (REQ-274 is estimate-only; REQ-278/279/280 govern the value model/validation/unit,
+  not its graph projection). Requirement authored + spec-homed at reconcile — see
+  Open Questions and design §7 [RV-094 F-1].*
 - Units are a top-level `units` block on the catalog/graph (design D2), not
   per-node — they are project-wide constants, not node properties.
 - Contract is policy-free — no aggregation, traversal, or interpretation.
@@ -28,14 +31,21 @@ it can be exposed to the graph.
 - Aggregation, simulation, thresholds → PRD-014 non-goals.
 - Display rendering → SL-102.
 - Confidence bounds exposure (SL-102 display concern) — stays dead-code-expected.
-- Surfacing facets in the map_server HTTP view — UI concern, out of scope.
+- Rendering facets in the **web map UI** (`/api/map`'s `{key,label}` DTO) — UI
+  concern, out of scope. *Note [RV-094 F-3]: `/api/graph` serves `CatalogGraph`
+  raw, so it DOES surface the facet contract — that exposure is in scope; only the
+  rendered web map view is excluded.*
 
 ## Open Questions
 
-- **OQ-1 — value graph exposure traceability.** D1 widens this slice past FR-006
-  (estimate only). Before close: add a value-exposure REQ under SPEC-020, or widen
-  REQ-274's scope to both facets. Carried into reconciliation; must not ship
-  un-traced scope.
+- **OQ-1 — value graph exposure traceability [RV-094 F-1; CHR-011].** D1 widens
+  this slice past REQ-274 (estimate only). Reconciled position: this is deliberate
+  scope, not a silent gap. At reconcile — author a value-graph-exposure requirement
+  (sibling in intent to REQ-274), decide its spec home (SPEC-020 is titled "Estimate
+  graph exposure", so value may want a rename/extension or its own spec), bind
+  SL-103 to it, and also trace SL-103 → REQ-280 (value unit, realised in §5.4). The
+  CLI cannot mint an un-homed requirement, so it is captured as intent now and
+  formally minted at reconcile. Tracked: CHR-011.
 
 ## Summary
 

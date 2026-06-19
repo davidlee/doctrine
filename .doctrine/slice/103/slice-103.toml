@@ -1,9 +1,9 @@
 id = 103
 slug = "spec-020-estimate-graph"
 title = "SPEC-020: Estimate graph exposure"
-status = "proposed"
+status = "ready"
 created = "2026-06-18"
-updated = "2026-06-18"
+updated = "2026-06-19"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
