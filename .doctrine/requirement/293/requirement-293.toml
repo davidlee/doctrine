@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 293
+slug = "funnel-guards-read-git-through-failure-tolerant-idioms-under-output-rewriting-proxies-rtk"
+title = "Funnel guards read git through failure-tolerant idioms under output-rewriting proxies (rtk): existence/disjointness/landed decisions read printed output (ls-tree, --name-only, git cherry) or rtk proxy raw plumbing, never a chained exit code, and the combined-tree project verify is the real gate, not import's own fidelity check."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 288
+slug = "arm-routing-is-deterministic-doctrinetoml-dispatch-claude-force-subprocess-dispatch-forces-dispatch"
+title = "Arm routing is deterministic: doctrine.toml [dispatch] claude-force-subprocess-dispatch forces /dispatch-subprocess; otherwise the env-marker (.claude/ presence) selects /dispatch-agent vs /dispatch-subprocess; a self-belief vs env-marker mismatch refuses naming the cause and never blind-spawns."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
