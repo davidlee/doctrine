@@ -499,13 +499,6 @@ fn load_layering(path: &Path) -> Result<(LayerMap, Accepted, TangleBaseline), St
         tangle.insert(tier, count);
     }
 
-    // PHASE-01 oversight: relation_graph is uniformly COMMAND (per the authored
-    // comment in layering.toml) but the [tiers] section omits it. Add it here so
-    // the gate passes. Remove this when the authored map is fixed.
-    if !map.contains_key("relation_graph") {
-        map.insert("relation_graph".to_string(), Tier::Command);
-    }
-
     Ok((LayerMap(map), Accepted(accepted), TangleBaseline(tangle)))
 }
 
