@@ -47,3 +47,37 @@ registers `doctrine serve --mcp` with each detected harness:
   `install_claude_hook` (the merge-into-settings precedent).
 - `src/commands/serve.rs`, `src/mcp_server/mod.rs` (`ServerInfo` id
   `doctrine-mcp`), `src/mcp_server/tools.rs` (the 10 tools).
+
+## Resolution
+
+Implemented the Claude arm in `src/boot.rs`, riding beside the existing
+`install_baseref` / `install_claude_hook` merge cores (no parallel writer):
+
+- `plan_mcp` (pure) + `install_mcp` (imperative read→plan→atomic-write) register
+  `mcpServers.doctrine = { command: <abs exec>, args: ["serve","--mcp"] }` in the
+  project-root `.mcp.json` (`MCP_REL`, `MCP_SERVER_KEY`). Tools surface as
+  `mcp__doctrine__review_*`.
+- `is_doctrine_mcp_entry` ownership: command file-name `doctrine` + args exactly
+  `["serve","--mcp"]`. Absent → wire; ours+stale-path → refresh; ours+current →
+  no-op; foreign/customised `doctrine` key, non-object `mcpServers`, or malformed
+  JSON → leave untouched + print manual snippet (no clobber).
+- Wired into `install_refresh`'s Claude arm via a new `RefreshReport.mcp` field;
+  reported in `wire()`. Covers both `doctrine install` (forward-step boot wire)
+  and `doctrine boot install`. Codex arm carries `None`.
+- Decisions taken: OQ-1 `.mcp.json` (project-root, committed/team-shared — NOT
+  the gitignored `settings.local.json`); OQ-2 project-local by construction
+  (root-relative path); OQ-3 idempotent additive merge via the shared core;
+  OQ-4 stamp the absolute exec path (refreshable), matching the hook precedent.
+- Tests: 8 new in `boot::tests` (pure planner matrix + `is_doctrine_mcp_entry`)
+  plus the `install_refresh` integration test extended to assert `.mcp.json`
+  write / dry-run skip / idempotent re-run / codex skip.
+
+## Follow-up (not in this chore)
+
+- **Codex MCP registration** — deferred (user scoped this to Claude/`.mcp.json`).
+  Codex reads a separate config surface (TOML `mcp_servers` block, not
+  `.mcp.json`); wiring it is a separate item. The `Harness::Codex` arm currently
+  carries `RefreshOutcome::None` for MCP.
+- The forward-step *summary* line (`print_forward_summary`) still reads "wire
+  @-import + session hooks"; the per-harness runtime output reports the MCP
+  registration accurately. A summary-text refresh is cosmetic, left out.
