@@ -18,16 +18,16 @@ The system decomposes into these containers:
 
 - **Entity engine** (SPEC-004) — the kind-agnostic scaffolding and identity
   substrate every authored kind is materialised through.
-- **Spec composition** — the spec family, its requirement peers, membership edges,
+- **Spec composition** (SPEC-006) — the spec family, its requirement peers, membership edges,
   reassembly, and corpus validation.
-- **Memory** — the scope-aware durable-knowledge store, recorded and retrieved
+- **Memory** (SPEC-007) — the scope-aware durable-knowledge store, recorded and retrieved
   out-of-band of any one task.
-- **Id lifecycle** — next-id allocation, corpus-wide integrity, and reseat repair.
-- **Install & distribution** — the embedded sources, manifest, and templates the
+- **Id lifecycle** (SPEC-008) — next-id allocation, corpus-wide integrity, and reseat repair.
+- **Install & distribution** (SPEC-009) — the embedded sources, manifest, and templates the
   installer lays into a target repo.
-- **Skills distribution** — the routing skills shipped from `plugins/` into the
+- **Skills distribution** (SPEC-010) — the routing skills shipped from `plugins/` into the
   installed skill tree.
-- **Boot snapshot** — the cache-friendly governance projection assembled for
+- **Boot snapshot** (SPEC-011) — the cache-friendly governance projection assembled for
   session start.
 - **Dispatch & worktree** — the isolation and orchestrator-sole-writer machinery
   for concurrent work.
