@@ -12,21 +12,38 @@ the load-bearing additions; the rest is wiring and CSS.
 > guard; edge identity is label-based not key-based; the hover extraction escapes
 > all fields. See `## Review integration` for the finding-by-finding ledger.
 
+> **Revision 2 (post-VH-walkthrough, RV-098).** The dispatched implementation
+> shipped and was audited on the live dev server. Items 1, 2, 3 passed (item 3
+> needed a follow-up markup fix — landed). **Items 4 and 5 failed acceptance**
+> (RV-098 F-4 blocker, F-5 major) and are **re-designed below**:
+> - **Item 4** — the "Edit this / Edit all" top-button model is rejected. New
+>   model: per-cell **hover-revealed pencils** (inline-in-place edit), an `[ ] edit
+>   all` **checkbox at the top of the edge table** that toggles edit *scope*
+>   (single instance vs all matching), **always-visible** per-row `✕` delete, and
+>   the **add-edge form relocated directly below the hover area**. Two new backend
+>   ops back the single-instance edits (per-occurrence node rename; bulk
+>   relabel-by-rel). See the rewritten **Item 4** + **D5/D6**.
+> - **Item 5** — D2's "non-member stays in actionability" is **reversed**: picking
+>   a non-actionability entity while on the actionability graph now **switches to
+>   Semantic**. `focusTransition` simplifies (drops `requiredMode`/`node`). See the
+>   rewritten **Item 5** + **D2**.
+
 ## Cross-cutting additions (the two seams)
 
 Everything below leans on two new pure functions, extracted so the behaviour is
 unit-testable and not duplicated (`no parallel implementation`, pure/imperative
 split — both clock/DOM-free):
 
-- **`focusTransition(current, node, isActionabilityMember, currentPriorityZoomId)`
+- **`focusTransition(current, focusId, isActionabilityMember, currentPriorityZoomId)`
   → `{ viewMode, priorityZoomId }`** (in `model.ts`). The whole item-5 rule as one
-  pure table (see Item 5). Takes the current zoom id so it can return a concrete
-  `priorityZoomId` for the "leave it alone" rows (it cannot express "unchanged"
-  without it). Wraps the inner **`requiredMode(node)` → `'semantic' | null`**
-  check off `node.kind` (`types.ts` Node carries `kind: string`; a CM kind renders
-  *only* in the semantic graph → `'semantic'`; every other kind → `null`, no
-  forced mode). Applied at **focus-change** in `renderView`, gated on
-  `focusChanged` — not on every render (see D1), not in `goto`.
+  pure table (see Item 5). **Revision 2:** the signature drops `node` (and the
+  inner `requiredMode`) — the only remaining use of `node` was its id, which equals
+  the focused id, so the shell passes `focusId` directly; the CM-forces-semantic
+  case is now subsumed by the non-member→semantic rule (a CM is never an
+  actionability member). Takes the current zoom id so the semantic "leave it alone"
+  row can echo a concrete `priorityZoomId` (it cannot express "unchanged" without
+  it). Applied at **focus-change** in `renderView`, gated on `focusChanged` — not
+  on every render (see D1), not in `goto`.
 
 - **`hoverDetailHtml(node)` → `string`** (in `render.ts`, exported). The inner
   markup of the hover-details pane, factored out of `hoverPane` so the new
@@ -64,9 +81,8 @@ mode:
 ```ts
 // renderView, after route parse sets state.focusId; focusChanged = id !== prevFocusId
 if (focusChanged) {
-  const node = state.graph.nodes.get(state.focusId ?? '')
   const member = actionabilityNodeIds.has(state.focusId ?? '')   // from state.actionabilityView
-  const t = focusTransition(state.viewMode, node, member, state.priorityZoomId)
+  const t = focusTransition(state.viewMode, state.focusId, member, state.priorityZoomId)
   state.viewMode = t.viewMode
   if (t.priorityZoomId !== state.priorityZoomId) {
     state.priorityZoomId = t.priorityZoomId
@@ -76,43 +92,52 @@ if (focusChanged) {
 highlightViewButtons(state.viewMode)
 ```
 
-Pure transition (DOM/clock-free, in `model.ts`):
+Pure transition (DOM/clock-free, in `model.ts`) — **Revision 2 table** (D2
+reversed):
 
 | case | → `viewMode` | → `priorityZoomId` |
 |---|---|---|
-| `requiredMode(node)==='semantic'` (CM) | `'semantic'` | `null` |
-| actionability + member | `'actionability'` | `node.id` |
-| actionability + **non-member** | `'actionability'` | `null` *(clears stale)* |
-| else (semantic, non-CM) | `current` | `currentPriorityZoomId` *(echo)* |
+| actionability + member | `'actionability'` | `focusId` |
+| actionability + **non-member** | `'semantic'` | `null` |
+| current is semantic | `'semantic'` | `currentPriorityZoomId` *(echo)* |
 
 ```ts
 function focusTransition(
   current: ViewMode,
-  node: Node | undefined,
+  focusId: string | null,
   isActionabilityMember: boolean,
   currentPriorityZoomId: string | null,
 ): { viewMode: ViewMode; priorityZoomId: string | null }
 ```
 
-Why the `focusChanged` gate and render-time (this reverses **both** prior passes
+The rule collapses to: **on the actionability graph, focusing a member zooms to
+it; focusing anything else switches to Semantic (where it is visible) and clears
+the now-stale zoom. In Semantic, focus never auto-switches mode** (the user chose
+Semantic; the asymmetry is deliberate — see D2). Because a concept-map node is
+never an actionability member, the old `requiredMode` CM-forces-semantic case is
+subsumed by the non-member→semantic row; `requiredMode` and the `node` argument
+are removed.
+
+Why the `focusChanged` gate and render-time (this reverses **both** earlier passes
 — see D1): firing on every render made the **Actionability** toggle dead
 (first pass); scoping to `goto` missed table-rows / deep-links / back-button
 (second pass). The existing `focusChanged` machinery fires the derive **once per
 real focus change** — a toggle click or depth change re-renders without changing
-`focusId`, so the derive is skipped and the toggle stays live. The non-member
-branch clears a stale `priorityZoomId` (picking a CM, an ADR/REQ/MEM, or any item
-absent from the priority layout no longer leaves the graph zoomed to a
-now-invisible node).
+`focusId`, so the derive is skipped and the toggle stays live.
 
 `goto` reverts to trivial `setFocus(id, state.depth)`. The manual
 `priorityZoomId` set at the in-graph click site is removed — the funnel owns zoom
 now (the in-graph click changes focus → `focusChanged` → derive sets it).
 
 ### Code impact
-- `model.ts` — `focusTransition` (+ inner `requiredMode`).
-- `app.ts` — `focusChanged`-gated derive block in `renderView`; build
-  `actionabilityNodeIds` from `state.actionabilityView`; `goto` → `setFocus`;
+- `model.ts` — simplify `focusTransition` (drop `requiredMode` + `node` arg); the
+  non-member branch now returns `semantic`.
+- `app.ts` — `focusChanged`-gated derive passes `state.focusId` (not the node);
+  build `actionabilityNodeIds` from `state.actionabilityView`; `goto` → `setFocus`;
   drop the manual in-graph `priorityZoomId` set.
+- `model.test.ts` — update the `focusTransition` table tests: actionability +
+  non-member now → `{semantic, null}`; CM focus (any mode) → `semantic`; semantic
+  focus echoes the zoom; member → `{actionability, focusId}`.
 
 ## Item 1 — view-toggle button state follows mode
 
@@ -170,105 +195,118 @@ asserts escaping, not legacy bytes.
 - `graph.css` / `priority.css` — `.priority-tooltip` styling (reuse
   `hover-detail-*` rules where possible).
 
-## Item 4 — concept-map cell-select + Edit this / Edit all
+## Item 4 — concept-map per-cell pencil edit + edit-all scope
 
-### Current behavior
-One global edit flag, `editing: boolean` + `editingNode: {key,label}|null`
-(`concept-map.ts:37–38`), flips the entire edge table into edit mode: the whole
-render is gated `if (editing)` (`concept-map.ts:200, 209, 217, 229`) — every node
-label becomes a `cm-editable-node`, every row gets a ✕ remove button, and the
-add-edge form appears. Outside edit mode the table is inert. Each row is three
-fields: `[source node] · [relation] · [target node]`. The DSL behind it is
-`source_label > rel > target_label` per line; the three mutations
-(`add_edge`/`remove_edge`/`rename_node`, `routes.rs:35–55`) match lines **by
-label**, not by derived key (`remove_edge_from_dsl` compares the raw line
-segments to the passed `source`/`rel`/`target`).
+### Current behavior (shipped in PHASE-04, rejected at VH — RV-098 F-4)
+The dispatched implementation shipped the "select + Edit this / Edit all" model:
+`cmSelectedField` + `editingField` state, a `renderEditToggle` that appends two
+buttons (**Edit this** / **Edit all**) to the **focus header**, and a
+click-to-select gesture. The live walkthrough rejected it:
+- the two buttons render on **every** entity, not just concept maps —
+  `renderEditToggle` is called outside the `if (isCm)` guard (`app.ts:602` vs the
+  `if (isCm)` block at `:614`);
+- a single top **Edit this** button whose target ("this") is invisible is
+  confusing — the user wants a per-field affordance;
+- clicking a cell drops into batch edit instead of plainly selecting/highlighting;
+- "Edit all" is a confusing name for a mode, and clicking a field while in it
+  bulk-edits.
 
-### Target behavior
-Selection and editing split into a select gesture + two scoped buttons:
+The DSL is `source_label > rel > target_label` per line; all mutations match **by
+label** and dedupe by derived key (`parse_dsl`). PHASE-01 shipped `relabel_edge`
+(single edge by triple, key-based dup guard) — **retained**; it backs one cell of
+the new matrix.
 
-- **Click a cell → select that field.** A node cell also focuses that node in the
-  CM graph (existing `cmFocus` highlight + neighbourhood filter); the relation
-  cell selects that edge. Selection is plain navigation — no inline input on click.
-- **Edit this** → inline-edit *only the currently-selected field*:
-  - node cell → `rename_node` (exists; submits `old_label`/`new_label` —
-    **label-based**, `routes.rs:48`; renames that label everywhere it appears),
-  - relation cell → `relabel_edge` (**new** backend op, below).
+### Target behavior (Revision 2)
+No top buttons. The edge table is the whole edit surface:
 
-  Enter commits, Esc cancels. Disabled when nothing is selected.
-- **Edit all** → today's global edit mode (all fields editable + ✕ + add-edge
-  form), unchanged.
+- **`[ ] edit all` checkbox at the top of the edge table** — a pure **scope**
+  toggle (state `cmEditAll: boolean`). It does *not* gate which cells are editable;
+  it switches every edit between *this instance* and *all matching instances*
+  (matching = all table rows sharing the clicked label).
+- **Per-cell hover-revealed pencil.** Every cell (source node, relation, target
+  node) shows a pencil on hover. Click the pencil → that cell becomes an inline
+  `<input>` in place (Enter commits, Esc cancels). The op is chosen by
+  (cell-kind × `cmEditAll`):
 
-New transient state:
-- `cmSelectedField: { kind: 'node'; key: string; label: string } | { kind: 'rel';
-  from_label: string; rel: string; to_label: string } | null`. **Both identities
-  carry labels, not just derived keys** — every CM mutation (`rename_node`,
-  `add/remove/relabel_edge`) is label-based, and distinct labels can derive the
-  same key, so the clicked cell's label must be captured from the `CmEdge`
-  (`from_label`/`to_label`) at select time. The node `key` is retained for the
-  `cmFocus` highlight; the `label` is what the rename submits as `old_label`.
-- `editingField: 'node' | 'rel' | null` — drives a single-input render arm
-  **independent of** `editing`. Today every editable arm is gated `&& editing`;
-  the single-field arm renders one input when `editingField !== null` *without*
-  entering edit-all (no ✕, no add-edge form). `editing` (edit-all) is untouched.
+  | cell | edit all OFF (single) | edit all ON (all matching) |
+  |---|---|---|
+  | node | `rename_node_occurrence` (**new**) — rename just this row's endpoint | `rename_node` (existing) — rename that label everywhere |
+  | relation | `relabel_edge` (existing) — relabel just this edge | `relabel_rel_all` (**new**) — relabel every edge with this rel |
 
-### Backend: `relabel_edge` mutation (new)
-Add a fourth mutation. It matches the target line **by label** like
-`remove_edge_from_dsl`, but **rewrites the `rel` segment instead of dropping the
-line** — and, unlike remove, it must guard against creating a duplicate:
+- **Plain click on a node cell** (not the pencil) → `cmFocus` highlight that node
+  (existing highlight + neighbourhood filter); relation-cell plain click is inert.
+- **Always-visible per-row `✕` delete** (`remove_edge`, existing) — no longer
+  gated behind a mode.
+- **Add-edge form always visible, relocated directly below the hover area**
+  (`.hover-detail`) — moved out of the bottom-of-panel slot.
+- All of the above renders **only for concept maps** — the buttons-everywhere bug
+  is fixed by deleting `renderEditToggle` and rendering the checkbox *inside* the
+  edge table, which is already `isCm`-gated (`renderCmEdgeTable`).
 
-```rust
-// routes.rs
-#[serde(rename = "relabel_edge")]
-RelabelEdge { source: String, old_rel: String, new_rel: String, target: String },
-// apply arm → concept_map::relabel_edge_in_dsl(&old_dsl, source, old_rel, new_rel, target)
+The op-selection is a pure function (unit-testable):
 
-// concept_map.rs
-pub(crate) fn relabel_edge_in_dsl(
-    old_dsl: &str, source: &str, old_rel: &str, new_rel: &str, target: &str,
-) -> Result<String, ConceptMapMutationError>
+```ts
+type CmCell = 'from' | 'rel' | 'to'
+type CmEditOp = 'rename_node_occurrence' | 'rename_node' | 'relabel_edge' | 'relabel_rel_all'
+function cmEditOp(cell: CmCell, editAll: boolean): CmEditOp
 ```
 
-Errors: reuse `EmptyField` and `EdgeNotFound` (from remove) **plus
-`DuplicateEdge { line }`**. Relabelling `A > old > B` to `new` can produce a
-`(from_key, new_rel, to_key)` triple that already exists on another line; without
-a guard `parse_dsl` then emits `DuplicateEdge` and skips the duplicate, leaving
-the stored DSL invalid.
+New transient state (replaces `editingConceptMap` / `cmSelectedField` /
+`editingField` / `editingNode`):
+- `cmEditAll: boolean` — the scope toggle.
+- `cmEditingCell: { from_label: string; rel: string; to_label: string; cell: CmCell } | null`
+  — which cell's pencil is active (the inline input). Carries the full edge labels
+  (to locate the row) + which segment; the current label is `from_label` / `rel` /
+  `to_label` by `cell`.
+- `cmFocusNode` — retained for the node highlight (navigation).
 
-The guard must be **key-based**, not the label check `add_edge_to_dsl` currently
-uses. `parse_dsl` defines duplicate identity by `(from_key, rel, to_key)`
-(`concept_map.rs:421`), but `add_edge_to_dsl`'s own dup check compares *labels*
-(`e.from_label == source …`, `:1235`) — so two distinct labels deriving the same
-key (`User Story` vs `User-Story`) slip a label check and collide only at parse.
-`relabel_edge_in_dsl` therefore: (1) trim and reject empty fields; (2) **if
-`old_rel == new_rel` after trim, return the DSL unchanged** (no-op, no false
-collision); (3) find the label-matched line (`source`/`old_rel`/`target`), else
-`EdgeNotFound`; (4) scan the *parsed* edges for an existing
-`(derive_node_key(source), new_rel, derive_node_key(target))` triple **excluding
-the matched line**; on hit return `DuplicateEdge { line }`; (5) rewrite the `rel`
-segment of the matched line.
+### Backend ops (`concept_map.rs` + `routes.rs`)
+Four ops back the matrix; **two are new**. All match by label, guard duplicates
+key-based (`derive_node_key`), and short-circuit no-ops — same shape as
+`relabel_edge_in_dsl` (PHASE-01).
 
-> Observed pre-existing gap: `add_edge_to_dsl`'s label-based dup check has the
-> same key-collision blind spot. Out of scope here (slice touches only the new
-> op) — flagged as a backlog candidate, not fixed in SL-110.
+- **`rename_node` (existing)** — label-global rename; backs node + edit-all ON.
+- **`relabel_edge` (existing, PHASE-01)** — single edge by triple; backs relation
+  + edit-all OFF. (Spec retained in PHASE-01 history; unchanged.)
+- **`rename_node_occurrence` (new)** — rewrite **one** edge's endpoint label.
+  Inputs `{ source, rel, target, cell: 'source'|'target', new_label }`: find the
+  first line matching the triple (`EdgeNotFound` else), rewrite only the named
+  endpoint segment to `new_label` (other rows using the old label untouched),
+  empty-reject, no-op when unchanged, **key-based dup guard** (the rewritten triple
+  must not collide with another line).
+- **`relabel_rel_all` (new)** — rewrite the `rel` segment of **every** line whose
+  `rel == old_rel` to `new_rel`. Inputs `{ old_rel, new_rel }`. Empty-reject, no-op
+  when equal, **atomic** key-based dup guard: if any rewrite would collide with an
+  existing or other-rewritten triple, reject the whole op (`DuplicateEdge { line }`)
+  — no partial write.
 
-This is the only backend change in the slice (a deliberate, scoped exception to
-the frontend-only posture — see slice §Non-Goals).
+Reuse `EmptyField` / `EdgeNotFound` / `DuplicateEdge`; **no new error variants**.
+
+> Pre-existing gap (unchanged): `add_edge_to_dsl`'s dup check is label-based, not
+> key-based — distinct label spellings deriving the same key slip it. Out of
+> scope; tracked as a backlog item (see Follow-ups).
 
 ### Code impact
-- `src/concept_map.rs` — `relabel_edge_in_dsl` (remove-shaped match + add-shaped
-  duplicate guard).
-- `src/map_server/routes.rs` — `MutationAction::RelabelEdge` variant + apply arm.
-- `state.ts` / `types.ts` — `cmSelectedField` (label-based rel identity),
-  `editingField`.
-- `api.ts` — no change (`mutateConceptMap` already takes a generic action).
-- `concept-map.ts` — `renderEditToggle` → two buttons (Edit this / Edit all);
-  `renderEdgeTable` gains a select-on-click path and a single-field-edit arm
-  gated on `editingField` (independent of `editing`).
-- `app.ts` — wire the two buttons; route cell selection to `cmFocus` (nodes) /
-  `cmSelectedField` (carrying the clicked `label` for both kinds);
-  `handleRelabelEdge` calling `mutateConceptMap`.
-- `concept-map.css` — selected-cell affordance, two-button layout, pencil icon.
+- `src/concept_map.rs` — `rename_node_occurrence_in_dsl`, `relabel_rel_all_in_dsl`
+  (both ride the `relabel_edge_in_dsl` shape: label-match + key-based dup guard +
+  no-op short-circuit). `relabel_edge_in_dsl` / `rename_node_in_dsl` unchanged
+  (behaviour-preservation).
+- `src/map_server/routes.rs` — two new `MutationAction` variants + apply arms.
+- `web/map/index.html` — move `.cm-add-edge-form` to directly below `.hover-detail`.
+- `types.ts` / `state.ts` — add `cmEditAll`, `cmEditingCell`; **remove**
+  `editingConceptMap`, `cmSelectedField`, `editingField`, `editingNode`.
+- `api.ts` — no change (`mutateConceptMap` takes a generic action).
+- `concept-map.ts` — **delete** `renderEditToggle`; `renderEdgeTable` renders the
+  `[ ] edit all` checkbox header, per-cell hover pencils, always-on `✕`, the
+  inline-input arm gated on `cmEditingCell`, and node-cell plain-click → cmFocus;
+  add the pure `cmEditOp`; keep `cmSelectedFieldFromCell`'s label-capture logic
+  (re-homed onto `cmEditingCell`).
+- `app.ts` — **delete** the `renderEditToggle` call (kills buttons-everywhere);
+  wire the checkbox to `cmEditAll`, pencil clicks to `cmEditingCell`, commit to the
+  matrix op (`cmEditOp`) via `mutateConceptMap`; render the add-edge form
+  unconditionally for CMs in its new slot.
+- `concept-map.css` — hover-pencil affordance, inline-input, checkbox header,
+  always-on delete, add-form-below-hover layout.
 
 ## Item 3 — filter sidebar `[ ] all` checkbox alignment
 
@@ -283,12 +321,12 @@ CSS-only: align the "all" row to the same grid/inset as the per-kind rows in
 
 ## Verification alignment
 
-- **`focusTransition`** — `model.test.ts` table: CM → `{semantic, null}`;
-  actionability + member → `{actionability, id}`; actionability + non-member →
-  `{actionability, null}` (clears stale); semantic + non-CM → `{current,
-  currentPriorityZoomId}` (echoes the passed zoom id); `undefined` node → safe (no
-  throw, no forced mode). This is the whole item-5 behaviour; only the 2-line
-  membership wiring in `renderView` is manual.
+- **`focusTransition`** (Revision 2) — `model.test.ts` table: actionability +
+  member → `{actionability, focusId}`; actionability + non-member →
+  `{semantic, null}` (the D2 reversal); semantic focus → `{semantic,
+  currentPriorityZoomId}` (echoes the passed zoom id); `null` focusId → safe.
+  This is the whole item-5 behaviour; only the 1-line membership wiring in
+  `renderView` is manual.
 - **`hoverDetailHtml`** — `render` unit test: returns markup containing id,
   title, kindLabel, status; asserts **unsafe chars are escaped** in every field
   (regression test for the old raw injection); `hoverPane` delegates to it.
@@ -300,9 +338,14 @@ CSS-only: align the "all" row to the same grid/inset as the per-kind rows in
 - **Item 1** — `highlightViewButtons` toggles `view-btn--active` for the matching
   data-view (DOM unit test); a render-pass test confirms the class survives the
   edge-detail early return.
-- **Item 4** — select → Edit this commits a single field via `relabel_edge` /
-  `rename_node`; Edit all unchanged. Extract the pure bit if any (selected-field
-  → render-arm decision); the click/commit wiring is manual.
+- **Item 4** (Revision 2) — pure `cmEditOp(cell, editAll)` unit-tested over the
+  4-cell matrix. Rust unit tests for the two new ops: `rename_node_occurrence`
+  rewrites one endpoint and leaves other rows' use of the old label intact, with
+  key-collision `DuplicateEdge`, `EdgeNotFound`, `EmptyField`, and no-op cases;
+  `relabel_rel_all` rewrites every line sharing the rel, atomic-rejects on any
+  key-collision (no partial write), no-op when equal, plus `routes.rs` handler
+  tests for both new actions. Click/commit/pencil/checkbox wiring is manual
+  (VH-1). `relabel_edge` / `rename_node` tests stay green unchanged.
 - **Item 3** — visual.
 - **No regression** in existing `web/map` vitest suites (`dot`, `model`,
   `router`, `viewport`, `priority`) and the `routes.rs` mutation tests.
@@ -320,25 +363,48 @@ CSS-only: align the "all" row to the same grid/inset as the per-kind rows in
   so the toggle stays live. Hash-encoded mode (deep-linkable, back-button-exact)
   is more correct but needs `Route`/`parseHash`/`buildHash` + every `setFocus`
   caller + the toggle buttons rewired — out of polish scope. → Follow-up.
-- **D2 — `requiredMode` returns `null` for non-CM; `focusTransition` clears zoom
-  on non-members.** "Switch-if-undisplayable" forces a switch only when the
-  current view genuinely cannot show the focus — the semantic graph shows
-  everything, so only a CM-in-actionability is a dead-end. For actionability,
-  picking an id absent from the priority layout (terminal item, ADR/REQ/MEM,
-  non-actionable) is not auto-switched (the user chose the mode, the placeholder
-  is informative) but **does** clear any stale `priorityZoomId` so the graph isn't
-  left zoomed to an invisible node.
+- **D2 (Revision 2 — reversed) — on the Actionability graph, focusing a
+  non-member switches to Semantic.** The original D2 left a non-member focus on
+  the actionability graph (showing an informative placeholder) and only cleared
+  the stale zoom. VH rejected this: picking a non-actionable entity should take
+  you to the graph where it *is* visible (Semantic). New rule: actionability +
+  member → zoom; actionability + non-member → **switch to Semantic, clear zoom**;
+  Semantic focus never auto-switches (the user chose Semantic — the asymmetry is
+  deliberate: Semantic shows everything, so it is never a dead-end). Because a CM
+  is never an actionability member, this subsumes the old CM-forces-semantic case
+  — `requiredMode` and the `node` argument are dropped (the function needs only
+  the focused id for the zoom target).
 - **D3 — tooltip reuses `hoverDetailHtml`, escape-all.** One content source for
   the catalog/actionability pane + its tooltip; rejects a forked renderer and
   native `<title>`. Scope is catalog/actionability only — the concept-map hover
   (`renderCmHoverPane`, `concept-map.ts:56`) is deliberately different content and
   stays separate. The extraction also escapes all fields (previously only
   `title`), so it is not byte-identical to the old pane markup.
-- **D4 — item 4 click = select, not edit.** Per user: a cell click
-  navigates/selects; editing is an explicit button. Keeps accidental edits out;
-  clear scoped (Edit this) vs bulk (Edit all) split. Both write identities (node
-  and rel) carry **labels**, matching the label-based DSL mutations — never
-  derived keys alone (keys collide across distinct label spellings).
+- **D4 (Revision 2 — superseded by D5).** The original D4 (cell click = select;
+  explicit **Edit this** / **Edit all** buttons) was rejected at VH (RV-098 F-4):
+  the top buttons are distant and the "this" target is invisible. Replaced by the
+  per-cell pencil model in D5. Retained here as the rejected baseline.
+- **D5 — per-cell hover pencils; `edit all` is a scope toggle, not a mode.** Each
+  editable cell carries a hover-revealed pencil that inline-edits *that* field in
+  place — the affordance sits on the thing it edits (no ambiguous "this"). The
+  `[ ] edit all` checkbox (top of the edge table, not the focus header) flips the
+  *scope* of every edit between the single clicked instance and all rows sharing
+  that label — it never changes which cells are editable, and a plain field-click
+  never edits (node cells highlight; relations are inert). Delete affordance (`✕`)
+  and the add-edge form are **always** present (the latter relocated directly below
+  the hover area), so there is no "edit mode" to enter. Identities stay
+  **label-based** (a label can recur and distinct labels collide on key), so
+  `cmEditingCell` carries the full edge labels.
+- **D6 — two new label-based DSL ops back the single-instance edits.** The matrix
+  needs `rename_node_occurrence` (rename one endpoint occurrence) and
+  `relabel_rel_all` (relabel every edge sharing a rel); `rename_node` and
+  `relabel_edge` cover the other two cells. Both new ops ride the
+  `relabel_edge_in_dsl` shape (label-match, key-based dup guard, no-op
+  short-circuit, reused error variants); `relabel_rel_all` rejects atomically on
+  any collision (no partial write). The user accepted the expanded backend
+  exception (now three CM mutations beyond the original frontend-only posture);
+  the pre-existing `add_edge` key-collision blind-spot remains a separate backlog
+  item, not fixed here.
 
 ## Review integration
 
@@ -367,18 +433,32 @@ Second pass (Codex, against the integrated revision):
 | G4 | major | node selection key-only repeats the collision class; `rename_node` is label-based | **accepted** — `cmSelectedField` node carries `label`; submits `old_label` |
 | G5 | minor | slice-110.md OQ-3 still says "applied in `goto`… not render-time" | **accepted** — OQ-3 reworded to the `renderView` `focusChanged` funnel |
 
+Third pass — **VH walkthrough on the shipped implementation** (RV-098, live dev
+server). Items 1, 2, 3 accepted; items 4 and 5 failed and drove **Revision 2**:
+
+| # | sev | finding | disposition |
+|---|---|---|---|
+| RV-098 F-4 | blocker | item-4 Edit this/Edit all rejected: buttons on every entity (outside `isCm`), ambiguous "this", click drops to batch edit, "Edit all" confusing | **re-designed** — per-cell pencils + `edit all` scope checkbox + always-on delete + add-form below hover (D5/D6); buttons-everywhere fixed by deleting `renderEditToggle` |
+| RV-098 F-5 | major | item-5 D2: picking a non-actionable entity on the actionability graph should switch to Semantic, not sit on a placeholder | **re-designed** — D2 reversed: non-member → Semantic; `focusTransition` simplified |
+| RV-098 F-1 | major | item-3 `all` checkbox not left-aligned with per-kind rows (CSS-only got intra-row spacing only) | **fixed + verified** — markup moved out of the right-floated header (candidate `0a9d1e1b`) |
+
 ## Open questions — resolved
 
 - OQ-1 governance → slice `specs` PRD-011 (done; the actionability/priority
   product intent this view exposes).
-- OQ-2 item-4 interaction → resolved to select + Edit this / Edit all (D4).
-- OQ-3 "actionable" → resolved via membership-in-view (`isActionabilityMember`)
-  and `requiredMode`; no kind-list duplication (D2).
+- OQ-2 item-4 interaction → **Revision 2**: per-cell hover pencils + `edit all`
+  scope checkbox (D5), superseding the rejected Edit this / Edit all split (D4).
+- OQ-3 "actionable" → resolved via membership-in-view (`isActionabilityMember`);
+  **Revision 2**: a non-member focus on the actionability graph switches to
+  Semantic (D2), so no `requiredMode` kind-check is needed.
 
 ## Follow-ups
 
 - Deep-linkable view mode in the URL hash (`?view=…`) — the larger, separate want
   behind D1.
+- `add_edge_to_dsl` key-collision blind-spot (label-based dup check; distinct
+  label spellings deriving the same key slip it) — pre-existing, tracked as a
+  backlog item (D6), not fixed in SL-110.
 - Larger frontend cleanups remain their own backlog items: IMP-085
   (decomposition), IMP-086 (vendor pinning), IMP-087 (theme), IMP-089 (ARIA).
 
@@ -387,14 +467,16 @@ Second pass (Codex, against the integrated revision):
 - **ADR-001 layering** — both new functions are pure (`focusTransition` in
   `model.ts`, `hoverDetailHtml` in `render.ts`); impurity (DOM, hash, membership
   lookup) stays in the `app.ts` shell. No new cycles.
-- **Pure/imperative split** — `focusTransition`/`requiredMode`/`hoverDetailHtml`
-  take inputs, touch no clock/rng/disk/DOM. Membership is computed in the shell
-  and passed in as a bool.
+- **Pure/imperative split** — `focusTransition` / `hoverDetailHtml` / `cmEditOp`
+  take inputs, touch no clock/rng/disk/DOM; the new DSL ops
+  (`rename_node_occurrence_in_dsl`, `relabel_rel_all_in_dsl`) are pure string
+  transforms. Membership and DOM stay in the `app.ts` shell.
 - **Behaviour-preservation** — existing `web/map` vitest suites *and* the
-  `routes.rs` mutation tests stay green unchanged. `hoverPane` output changes
-  intentionally (now escaped) — its test is updated to assert escaping, not legacy
-  bytes; this is a fix, not a silent behaviour change. The `relabel_edge` add is
-  additive (new enum variant + apply arm + DSL fn) — existing mutation arms
-  untouched.
+  `routes.rs` mutation tests stay green unchanged. The two new CM ops are additive
+  (new enum variants + apply arms + DSL fns) — `relabel_edge` / `rename_node` /
+  `remove_edge` / `add_edge` arms untouched. `focusTransition`'s contract changes
+  by design (Revision 2); its own model tests update with it. Frontend state
+  removals (`editingConceptMap`/`cmSelectedField`/`editingField`) are item-4-local.
 - **No parallel implementation** — tooltip reuses the pane builder; the item-5
-  rule is one pure transition, not scattered kind-checks or per-path switch logic.
+  rule is one pure transition; the four CM edit cells route through one pure
+  `cmEditOp` selector, not scattered per-cell branching.

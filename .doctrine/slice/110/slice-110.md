@@ -34,11 +34,18 @@ Five UX items (design phase will root-cause each before fixing):
    checkbox is mis-aligned relative to the per-kind checkboxes below it.
    CSS-only fix. Surface: `sidebar.css` / the filter markup in `search.ts`.
 
-4. **Concept-map edit UX** — current edit flow is awkward. Desired:
-   - clicking a table cell focuses *that* table (inline edit of the cell),
-   - a pencil button provides explicit "edit all" (the current global toggle).
-   Surface: `concept-map.ts` (`renderEdgeTable`, `renderEditToggle`,
-   `cm-editable-node` click handlers).
+4. **Concept-map edit UX** — current edit flow is awkward. Desired (rev 2, after
+   the shipped Edit this/Edit all model was rejected at VH — RV-098 F-4):
+   - per-cell **hover-revealed pencil** → inline-edit *that* field in place;
+   - an `[ ] edit all` **checkbox at the top of the edge table** = a scope toggle
+     (single instance vs all rows sharing the label), not a mode;
+   - plain node-cell click highlights the node; **always-visible** per-row `✕`
+     delete; the **add-edge form relocated directly below the hover area**.
+   Two new label-based DSL ops back the single-instance edits
+   (`rename_node_occurrence`, `relabel_rel_all`); `rename_node` / `relabel_edge`
+   back the others. Surface: `concept-map.ts` (`renderEdgeTable`, delete
+   `renderEditToggle`), `app.ts`, `concept_map.rs` / `routes.rs`, `index.html`.
+   See design §Item 4, D5/D6.
 
 5. **Selection wiring** — selecting an item should change *view mode*, not just
    focus:
@@ -56,10 +63,10 @@ Five UX items (design phase will root-cause each before fixing):
 
 ## Non-Goals
 
-- Predominantly the exposure surface — **one scoped backend exception**: a new
-  `relabel_edge` concept-map mutation (item 4 needs it; relations are
-  display-only today). No other backend / CLI / actionability-graph *data*
-  changes.
+- Predominantly the exposure surface — **a scoped set of CM mutation
+  exceptions**: `relabel_edge` (PHASE-01, shipped) plus two new ops the rev-2
+  item-4 matrix needs (`rename_node_occurrence`, `relabel_rel_all`). No other
+  backend / CLI / actionability-graph *data* changes.
 - No broad frontend refactor (modular decomposition is IMP-085; theme toggle
   IMP-087; semantic-HTML/ARIA IMP-089; vendor pinning IMP-086). Touch only
   what each fix needs; flag larger cleanups as follow-ups rather than absorbing
@@ -70,11 +77,12 @@ Five UX items (design phase will root-cause each before fixing):
 
 - `web/map/src/app.ts` — view-toggle highlight, onFocus → mode transition (1, 5)
 - `web/map/src/render.ts`, `svg.ts` — actionability node tooltip (2)
-- `web/map/src/concept-map.ts` — cell-focus edit + pencil edit-all (4)
+- `web/map/src/concept-map.ts` — per-cell pencils, edit-all checkbox, inline edit, delete (4)
+- `web/map/index.html` — relocate `.cm-add-edge-form` below `.hover-detail` (4)
 - `web/map/src/search.ts` — filter markup, left-pane onFocus (3, 5)
-- `web/map/src/sidebar.css` (+ maybe `concept-map.css`, `graph.css`) — alignment, tooltip, pencil styling
-- `src/concept_map.rs`, `src/map_server/routes.rs` — new `relabel_edge` mutation (item 4)
-- Tests: vitest specs alongside (`app`/`model`/`router` test pattern); Rust tests in `routes.rs`/`concept_map.rs` for `relabel_edge`.
+- `web/map/src/sidebar.css` (+ `concept-map.css`, `graph.css`) — alignment, tooltip, pencil/inline-edit styling
+- `src/concept_map.rs`, `src/map_server/routes.rs` — `relabel_edge` (done) + new `rename_node_occurrence`, `relabel_rel_all` (item 4)
+- Tests: vitest specs alongside (`app`/`model`/`concept-map`/`render` pattern); Rust tests in `routes.rs`/`concept_map.rs` for the new ops.
 
 ## Risks / Assumptions
 
@@ -89,20 +97,23 @@ Five UX items (design phase will root-cause each before fixing):
 ## Open Questions (resolved in design.md)
 
 - **OQ-1** Governance linkage → **resolved**: slice `specs` PRD-011.
-- **OQ-2** Item 4 interaction → **resolved**: cell click = select (node cell
-  focuses the node); explicit **Edit this** (selected field) / **Edit all**
-  buttons. Relation "Edit this" adds a scoped backend `relabel_edge` mutation.
-- **OQ-3** Item 5 "actionable" / mode switch → **resolved**: pure
-  `focusTransition` (wrapping `requiredMode`), applied as a `focusChanged`-gated
-  derive in the `renderView` funnel that every selection path reaches via
-  `hashchange` — not in `goto` (see design D1).
+- **OQ-2** Item 4 interaction → **resolved (rev 2)**: per-cell hover pencils →
+  inline edit in place; `[ ] edit all` checkbox = scope toggle; plain node-cell
+  click highlights; always-on `✕`; add-edge form below the hover area (design D5).
+  Supersedes the rejected Edit this / Edit all model (D4). Four ops back the
+  cell×scope matrix; two are new (`rename_node_occurrence`, `relabel_rel_all`).
+- **OQ-3** Item 5 "actionable" / mode switch → **resolved (rev 2)**: pure
+  `focusTransition`, applied as a `focusChanged`-gated derive in the `renderView`
+  funnel every selection path reaches via `hashchange` (not `goto`; design D1).
+  A non-member focus on the actionability graph switches to Semantic (D2).
 
 ## Verification / Closure Intent
 
 - Each of the 5 items has an observable acceptance check (button highlight
   tracks mode; tooltip appears on hover with details parity; checkbox aligned;
-  cell-click + pencil behave as specified; left-pane selection drives the right
-  view + focus).
+  per-cell pencil inline-edits with correct single/all scope, plain click
+  highlights, delete + add-form always present; non-member pick on the
+  actionability graph switches to Semantic, member pick zooms).
 - vitest green for any extracted pure logic (mode-transition decision,
   actionable-eligibility predicate).
 - Manual walkthrough in the live dev server confirming each item.
