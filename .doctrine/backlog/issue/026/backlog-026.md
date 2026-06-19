@@ -29,5 +29,14 @@ Faithful manual equivalent — `git apply --3way --index <patch-with-newline>` i
 the coordination index after independently confirming all five import belts
 (HEAD==B, tree-clean, single non-merge commit, no `.doctrine/`/`.claude/` touch).
 
+## Resolution (duplicate)
+
+Same bug, rediscovered on SL-111 as **ISS-032** and fixed there: `git_text`'s
+`.trim()` stripped the trailing newline; `import` now captures the delta via
+`git_bytes` (raw) and `git_apply_index` streams `&[u8]` verbatim. Regression
+`import_applies_patch_ending_at_eof`. Closed as a duplicate of ISS-032 (this is
+the earlier SL-103 report; ISS-032 carries the code fix).
+
 ## Related
+- ISS-032 — the SL-111 rediscovery + the landed fix.
 - IMP-043 (import re-anchor on moved HEAD) — same verb, different concern.
