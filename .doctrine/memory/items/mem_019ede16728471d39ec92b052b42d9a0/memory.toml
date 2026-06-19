@@ -1,0 +1,45 @@
+memory_uid = "mem_019ede16728471d39ec92b052b42d9a0"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "pi v0.79.6 default tool set"
+summary = "pi v0.79.6 default built-in tool set is read, write, edit, bash only — grep/find/ls require explicit --tools flag"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["pi", "tools", "dispatch"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a4a2903861761ff77bbd9053cb626e54dc27b01b"
+ref_name = "refs/heads/main"
+checkout_state_id = "6bb812f3c61a719a3e586bdd2056bd9f0465f28db50117c943470c4733d5a720"
+base_commit = "75b27611deb2ac52b4d3b746922b59834ba97756"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-090"
+

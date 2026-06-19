@@ -1,0 +1,45 @@
+memory_uid = "mem_019ede166900749096ced5441373d753"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Design-stage timeouts must be concrete"
+summary = "Design-stage timeout specifications must be concrete: value + mechanism + abort semantics — 'should' is not a design decision"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["design", "timeout"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a4a2903861761ff77bbd9053cb626e54dc27b01b"
+ref_name = "refs/heads/main"
+checkout_state_id = "9fb5b0e713d2ebf8eb6ffba3dc00ec510169f079f4417679fb8ac638d6231202"
+base_commit = "75b27611deb2ac52b4d3b746922b59834ba97756"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-090"
+
