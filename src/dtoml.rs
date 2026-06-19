@@ -41,6 +41,17 @@ pub(crate) struct DoctrineToml {
     )]
     #[serde(default)]
     pub(crate) value: crate::value::ValueConfig,
+    /// The `[dispatch]` table — consumed by the dispatch orchestrator to select
+    /// the spawn arm (SL-108 design D3 / IMP-101).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "consumed by dispatch-config display (IMP-101 follow-up)"
+        )
+    )]
+    #[serde(default)]
+    pub(crate) dispatch: crate::dispatch_config::DispatchConfig,
 }
 
 /// Parse a project `doctrine.toml` body into its sub-configs (PURE). The shell
@@ -70,6 +81,10 @@ mod tests {
         );
         assert_eq!(doc.estimation, crate::estimate::EstimationConfig::default());
         assert_eq!(doc.value, crate::value::ValueConfig::default());
+        assert_eq!(
+            doc.dispatch,
+            crate::dispatch_config::DispatchConfig::default()
+        );
     }
 
     #[test]
