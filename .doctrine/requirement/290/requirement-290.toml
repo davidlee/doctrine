@@ -4,7 +4,7 @@ version = 1
 id = 290
 slug = "the-orchestrator-runs-on-a-dedicated-markerless-dispatchslice-coordination-worktree-provisioned-per"
 title = "The orchestrator runs on a dedicated, markerless dispatch/<slice> coordination worktree provisioned per run, created inside the project root and held across handover-resume with Bash cwd parked there; concurrent same-slice dispatch is refused at creation and the worktree is removed at conclude while the branch is kept."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

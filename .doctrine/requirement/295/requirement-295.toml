@@ -4,7 +4,7 @@ version = 1
 id = 295
 slug = "durable-memory-that-must-outlive-a-fork-is-recorded-on-the-coordination-branchtrunk-never-inside-a"
 title = "Durable memory that must outlive a fork is recorded on the coordination branch/trunk, never inside a worker fork branch, because a squash/sever orphans the git anchor."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

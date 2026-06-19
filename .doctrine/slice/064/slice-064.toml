@@ -17,6 +17,22 @@ target = "ADR-006"
 label = "governed_by"
 target = "ADR-012"
 
+[[relation]]
+label = "requirements"
+target = "REQ-290"
+
+[[relation]]
+label = "requirements"
+target = "REQ-292"
+
+[[relation]]
+label = "requirements"
+target = "REQ-294"
+
+[[relation]]
+label = "requirements"
+target = "REQ-295"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
