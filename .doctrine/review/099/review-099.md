@@ -92,3 +92,29 @@ landed plus the one follow-up. `/reconcile` should confirm, not re-edit.
 ### Follow-up work (already captured)
 - **IMP-108** — authored `created`/`updated` on the spec schema (the durable fix).
   Filed during the consult; once landed, `spec_date`'s mtime fallback can be removed.
+
+## Reconciliation Outcome
+
+The brief's per-slice edits were applied **during the 2026-06-19 consult** (the user
+authorised handling the emergent finding inline), so this reconcile pass is a
+**confirmation, not a re-write**. Inspected each target (D9 — no new discovery) and
+validated it reads true against the admitted candidate `candidate/026/review-001`.
+
+### Direct edits applied (validated, already landed — commit `e00ebf32`)
+- **design.md §5.3** — "Spec node `date`" paragraph (mtime source + checkout-instability
+  tradeoff + IMP-108 pointer). Confirmed matches `lazyspec.rs::spec_date` (created →
+  else toml mtime). (RV-099 F-1, F-2)
+- **design.md INV-7** — "never empty … specs from toml mtime". Confirmed. (F-1)
+- **slice-026.md Follow-Ups** — cites IMP-108. Confirmed.
+
+### REVs completed
+- **None.** No governance/spec change required — no ADR or REQ was modified by this
+  slice; the relevant ADRs (pure/impure split, ADR-001 layering, SL-048 relation seam,
+  SL-025 read APIs) were honoured as-is.
+
+### Follow-up / tolerated
+- **IMP-108** — durable spec-schema date fix, filed during the consult.
+- **Tolerated standing risk:** mtime checkout-instability — accepted lossy-v1
+  read-only tradeoff, recorded in design §5.3 and the synthesis; no write needed.
+
+Reconcile pass complete — handoff to /close.
