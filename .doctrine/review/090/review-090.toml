@@ -1,0 +1,88 @@
+id    = 90
+slug  = "design-review-of-sl-108"
+title = "design review of SL-108"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-108"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Tool profile claims grep/find/ls are default built-in — pi only ships read/write/edit/bash"
+detail = "Design §Tool profile claims: 'Full built-in set: read, bash, edit, write, grep, find, ls.' pi v0.79.6 README: 'By default, pi gives the model four tools: read, write, edit, and bash.' pi --help: 'pi - AI coding assistant with read, bash, edit, write tools.' Design rationale for grep/find: 'workers shouldn't burn turns doing bash grep and parsing raw output — structured tools are faster and lower decision cost.' This rationale is sound, but the spawn template passes no --tools flag, so grep/find/ls will NOT be available to the worker. Fix: either (a) pass --tools read,bash,edit,write,grep,find,ls, or (b) correct the design to document the actual four-tool default. The design says these tools are included; the template does not include them."
+disposition = "design-wrong"
+response = "Confirmed. pi v0.79.6 ships exactly four built-in tools: read, write, edit, bash. grep, find, ls are not in the default set. The design's 'Full built-in set' claim is factually incorrect. Penance: the spawn template must pass --tools read,bash,edit,write,grep,find,ls if these tools are desired, OR the design must correct the tool profile section to document the actual four-tool default and drop the grep/find/ls rationale (workers will use bash for those operations). The former is recommended — the grep/find rationale is sound and the tools are cheap to enable."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "agent_end timeout is underspecified — 'should impose a deadline' is not a design"
+detail = "D1 timeout spec in full: 'the orchestrator should impose a deadline on worker completion. auto_retry_start events signal transient failures; if the worker hasn't emitted agent_end within the deadline, abort and report.' This specifies no concrete value, no enforcement mechanism, and no recovery path. A design decision (D1) that delegates to 'should' without specifying: (a) the default timeout duration, (b) how enforcement works (timeout command? process signal? subprocess monitoring?), (c) how retries interact with the deadline (do retries extend it? reset it?), (d) what 'abort and report' concretely means (which RPC command? to where?). A hung worker retrying indefinitely behind auto_retry will stall the orchestrator. Fix: specify a default timeout (e.g. 300s), a mechanism (e.g. timeout(1) wrapping the pi subprocess), and abort semantics (send abort RPC command, then SIGTERM after grace)."
+disposition = "design-wrong"
+response = "The timeout spec is indeed a hand-wave, not a design decision. Penance: D1 must specify (a) a default timeout value — 300s (5min) is reasonable for a worker that runs cargo build + tests; (b) an enforcement mechanism — wrap the pi subprocess with timeout(1) or equivalent subprocess monitoring; (c) abort semantics — send the RPC abort command, wait a grace period (5s), then SIGTERM; (d) retry interaction — the deadline is wall-clock inclusive of retry delays (no credit for retries). The auto_retry interaction (F-4) intersects this — if auto_retry is enabled, the deadline must account for its worst-case delay budget."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "agent_end extraction path has no edge-case handling — undefined result on tool-only workers"
+detail = "D1 specifies: 'messages.findLast(m => m.role === 'assistant')?.content.find(c => c.type === 'text')?.text' as the sole extraction path. This yields undefined when: (a) no assistant messages exist (worker issued zero assistant turns — degenerate but possible if compaction swallowed them), (b) the last assistant message has no text content blocks (only thinking + toolCall blocks — a worker that requested tool calls and then stopped via 'toolUse' stop reason without a text summary). In case (b), the orchestrator would extract undefined, which provides no signal about whether the worker succeeded. The design should specify: (1) fall back to the last assistant message's first content block of any type if no text block exists, (2) return a structured status (success/partial/no_output) rather than raw undefined, (3) include tool error counts from the messages array as part of the outcome. An extraction that silently yields undefined on a successful-but-terse worker is a spec gap."
+disposition = "design-wrong"
+response = "The extraction one-liner is correct for the happy path but incomplete. Penance: D1 must specify a fallback ladder — (1) try last assistant text block (current path), (2) if undefined, try first content block of any type from last assistant message, (3) if still undefined (no assistant messages), report status 'no_output'. Additionally, the outcome struct should include error_count = messages.filter(m => m.role === 'toolResult' && m.isError).length as a separate signal. The design should specify the structured status (success/partial/no_output) rather than relying on a string-or-undefined extraction."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "auto_retry handling unspecified — retry counting, abortion, deadline interaction all silent"
+detail = "D1 mentions auto_retry_start as a signal of transient failures but the design is silent on: (a) whether the orchestrator should count retries and abort after N, (b) whether auto_retry should be disabled at spawn via the RPC set_auto_retry command (the pi RPC protocol supports set_auto_retry {enabled: false} and abort_retry), (c) how retry delays interact with the orchestrator-imposed deadline (does a 30s retry delay count against the deadline?). The design rationale for --thinking off is thoughtful; the same rigour should be applied to retry posture. A worker that auto-retries 3 times with 2s/4s/8s delays adds 14s of invisible latency. Fix: add a flag decision to the template (--no-auto-retry? disable via RPC set_auto_retry?), or specify that the orchestrator's deadline is inclusive of retry time."
+disposition = "design-wrong"
+response = "The auto_retry interaction is a real concern. pi enables auto_retry by default with 3 attempts and increasing delays — a transient provider outage adds ~14s of invisible latency plus the full retry budget. Penance: the design must add a decision on auto_retry posture. Options: (a) disable auto_retry via the RPC set_auto_retry {enabled: false} command sent after spawn (clean, the orchestrator owns retries), or (b) accept auto_retry but specify that the orchestrator deadline is inclusive of retry time, not per-attempt. The flag rationale table should include this decision. Recommend (a) — the orchestrator can re-dispatch a failed worker; pi-level retries just add latency."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Shrinkage cap bump from ≤25 to ≤35 lacks line-count justification"
+detail = "Design §Code impact: 'Bump dispatch-subprocess body-line cap from ≤25 to ≤35 to accommodate the pi arm.' Current skill has 24 body lines. Adding a second spawn arm (pi RPC template + flag rationale table + print mode alternative) will add lines — but the design does not estimate how many. ≤35 is a 40% increase over ≤25. For comparison, dispatch-agent is capped at ≤30 and the entire dispatch router at ≤50. The cap choice reads as a round number, not a calculated budget. Fix: include a projected line count for the pi-augmented skill body, or justify ≤35 by citing content that needs the space (flag rationale table, second spawn block, print-mode alternative). The SL-085 shrinkage intent was to force skills lean; an unjustified cap bump weakens that discipline."
+disposition = "design-wrong"
+response = "The cap bump lacks supporting arithmetic. Current skill body is 24 lines. The pi arm adds: spawn template block (~6 lines), flag rationale table (~6 lines), print-mode alternative (~4 lines). Projected total: ~40 lines. ≤35 is therefore tight and probably too low. Penance: either (a) provide a line-count projection for the pi-augmented skill and set the cap accordingly (likely ≤40 is more honest), or (b) justify ≤35 by trimming the flag rationale table to essentials. The cap must be calculated, not guessed — SL-085's discipline should not be eroded by a round-number bump."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Trust posture caveat admits config-dependence but offers no mitigation flag"
+detail = "D5 acknowledges trust is 'project-config-dependent' and 'If a future project adds project-local pi extensions and expects them in workers, the config posture may need adjustment.' But the design offers no concrete guidance: which pi flags enforce a posture? pi --help shows --approve ('Trust project-local files for this run') and --no-approve ('Ignore project-local files for this run'). The spawn template passes neither. A project with strict trust config could hang a worker on an approval prompt in RPC mode. The probe was in-jail with defaultProjectTrust:'ask' — this worked, but the design should specify that --no-approve or --approve be passed explicitly to make the posture deterministic across projects, rather than relying on the consuming project's pi config. Fix: add --approve to the spawn template (the orchestrator trusts its own worker) with a comment noting it can be changed per-project policy."
+disposition = "design-wrong"
+response = "The caveat is honest but the mitigation is missing. Penance: add --approve to the spawn template (the orchestrator trusts its own worker in its own fork — no approval dialogs should fire) and document that projects with stricter trust configs may replace with --no-approve. This makes the posture deterministic rather than config-relative. The flag rationale table should include this entry. The D5 probe result should be updated to confirm RPC mode with --approve still shows no trust hang (it won't — approve skips the check entirely)."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "AGENTS.md cp has no error handling — silent failure if AGENTS.md absent from orchestrator cwd"
+detail = """Spawn template line: 'cp AGENTS.md "$D/"' — no &&/|| guard, no existence check. If AGENTS.md is missing from the orchestrator's cwd (wrong working directory, deleted, renamed), cp fails with a stderr message but the spawn continues. The worker would then run without project conventions — potentially producing non-conformant code. The design rationale for D2 says 'The orchestrator writes (cp) AGENTS.md into the fork after creation' — the orchestrator should also verify the copy succeeded. Fix: add 'cp AGENTS.md "$D/" || { echo "AGENTS.md not found"; exit 1; }' or an existence guard before the fork+spawn sequence."""
+disposition = "design-wrong"
+response = """The template should fail on missing AGENTS.md, not silently continue. Penance: change 'cp AGENTS.md "$D/"' to 'cp AGENTS.md "$D/" || { echo "AGENTS.md not found in orchestrator cwd — aborting"; exit 1; }'. This is a one-line fix with zero complexity cost and prevents a class of silent misconfiguration. The design rationale already says 'The orchestrator writes (cp) AGENTS.md into the fork' — the orchestrator should also verify its own write succeeded."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "PI_OFFLINE=1 env var inconsistent with all-flag posture — use --offline instead"
+detail = "The spawn template uses PI_OFFLINE=1 (env var) alongside all flag-based controls (--mode rpc, --thinking off, --session-dir, --no-extensions, --no-skills, --no-themes). pi --help says --offline is 'same as PI_OFFLINE=1'. Using --offline would make every behaviour control a CLI flag, simplifying the template to a single uniform mechanism. The env var works identically — this is cosmetic, not functional. Fix: replace 'PI_OFFLINE=1' with '--offline' in both RPC and print-mode templates."
+disposition = "fix-now"
+response = "Cosmetic but correct — consistency of mechanism is worth the flag substitution. Replace PI_OFFLINE=1 env var with --offline flag in both RPC and print-mode templates. The env var form is functionally identical per pi --help ('same as PI_OFFLINE=1'), so this is purely stylistic. Fix during the design amendment round."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
