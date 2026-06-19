@@ -1559,44 +1559,44 @@ describe('cmNeighbourhood', () => {
 /* ------------------------------------------------------------------ */
 
 describe('focusTransition', () => {
-  it('CM node forces semantic mode and clears zoom', () => {
-    const node = makeCatalogNode({ id: 'CM-001', kindPrefix: 'CM' });
-    const t = focusTransition('actionability', node, false, 'SL-007');
-    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: null });
-  });
+  // Revision 2 (D2 reversed, RV-098 F-5): on the actionability graph a member
+  // zooms, a non-member switches to Semantic (clearing the stale zoom); Semantic
+  // focus never auto-switches (echoes the passed zoom). Signature takes focusId,
+  // not a node (the only use was its id == focusId); requiredMode is gone.
 
-  it('CM node forces semantic even when already semantic', () => {
-    const node = makeCatalogNode({ id: 'CM-002', kindPrefix: 'CM' });
-    const t = focusTransition('semantic', node, false, 'SL-007');
-    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: null });
-  });
-
-  it('actionability + member zooms to the node', () => {
-    const node = makeCatalogNode({ id: 'SL-005', kindPrefix: 'SL' });
-    const t = focusTransition('actionability', node, true, null);
+  it('actionability + member zooms to the focused id', () => {
+    const t = focusTransition('actionability', 'SL-005', true, null);
     expect(t).toEqual({ viewMode: 'actionability', priorityZoomId: 'SL-005' });
   });
 
-  it('actionability + non-member clears stale zoom', () => {
-    const node = makeCatalogNode({ id: 'REQ-010', kindPrefix: 'REQ' });
-    const t = focusTransition('actionability', node, false, 'SL-009');
-    expect(t).toEqual({ viewMode: 'actionability', priorityZoomId: null });
+  it('actionability + non-member switches to Semantic and clears zoom (the reversal)', () => {
+    const t = focusTransition('actionability', 'REQ-010', false, 'SL-009');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: null });
   });
 
-  it('semantic + non-CM echoes the passed mode and zoom (leave alone)', () => {
-    const node = makeCatalogNode({ id: 'SL-005', kindPrefix: 'SL' });
-    const t = focusTransition('semantic', node, false, 'SL-003');
+  it('semantic focus never auto-switches — echoes the passed zoom', () => {
+    const t = focusTransition('semantic', 'SL-005', false, 'SL-003');
     expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: 'SL-003' });
   });
 
-  it('undefined node is safe — no throw, no forced mode', () => {
-    expect(() => focusTransition('semantic', undefined, false, null)).not.toThrow();
-    const t = focusTransition('semantic', undefined, false, 'SL-001');
+  it('a CM (never an actionability member) on the actionability graph → Semantic, null', () => {
+    const t = focusTransition('actionability', 'CM-001', false, 'SL-007');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: null });
+  });
+
+  it('a CM focused while already Semantic just echoes the zoom (no forced clear)', () => {
+    const t = focusTransition('semantic', 'CM-002', false, 'SL-007');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: 'SL-007' });
+  });
+
+  it('null focusId on semantic is safe — echoes the zoom', () => {
+    expect(() => focusTransition('semantic', null, false, null)).not.toThrow();
+    const t = focusTransition('semantic', null, false, 'SL-001');
     expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: 'SL-001' });
   });
 
-  it('undefined node under actionability + non-member clears zoom', () => {
-    const t = focusTransition('actionability', undefined, false, 'SL-001');
-    expect(t).toEqual({ viewMode: 'actionability', priorityZoomId: null });
+  it('null focusId on actionability + non-member → Semantic, null', () => {
+    const t = focusTransition('actionability', null, false, 'SL-001');
+    expect(t).toEqual({ viewMode: 'semantic', priorityZoomId: null });
   });
 });

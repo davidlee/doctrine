@@ -302,9 +302,8 @@ function renderView(): void {
         ? state.actionabilityView.nodes.map((n) => n.id)
         : [],
     )
-    const node = state.graph.nodes.get(state.focusId ?? '')
     const member = actionabilityNodeIds.has(state.focusId ?? '')
-    const t = focusTransition(state.viewMode, node, member, state.priorityZoomId)
+    const t = focusTransition(state.viewMode, state.focusId, member, state.priorityZoomId)
     state.viewMode = t.viewMode
     if (t.priorityZoomId !== state.priorityZoomId) {
       state.priorityZoomId = t.priorityZoomId
