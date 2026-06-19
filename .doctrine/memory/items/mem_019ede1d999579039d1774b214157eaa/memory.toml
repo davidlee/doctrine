@@ -1,0 +1,45 @@
+memory_uid = "mem_019ede1d999579039d1774b214157eaa"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "dispatch-subprocess skill lives in two places"
+summary = ""
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "skills", "sl-108"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c943411f03cdd32752615ffcfb84cad5faf2d7d1"
+ref_name = "refs/heads/main"
+checkout_state_id = "4f8fa25451cfa0d62a57fddfcf2e47cb7476f2fec937706774cc89d7c4e6305d"
+base_commit = "af78d75feacfee0f18b394e94a6281a479d36d21"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-108"
+

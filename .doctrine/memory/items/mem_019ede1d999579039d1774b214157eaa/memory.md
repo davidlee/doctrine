@@ -1,0 +1,4 @@
+- The e2e_skills_dispatch_shrinkage test reads from `plugins/doctrine/skills/` (CARGO_MANIFEST_DIR), not the `.agents/` installed copy
+- Both copies must be kept in sync, but only `plugins/` is tracked in git
+- Already documented in [[mem_019eacd4b2af7a7099792cc3e1671cc5]] (Skill source-of-truth is plugins/)
+- Source: SL-108 PHASE-01 — test initially failed because only `.agents/` was updated
