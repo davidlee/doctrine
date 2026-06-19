@@ -57,12 +57,22 @@ In scope:
 3. **Legible outcome (IMP-078).** On success, integrate reports per row: ref
    `old..new`, and the worktree disposition (`resynced` / `pure-ref` /
    `refused-dirty`) — not just a replay count.
+4. **Journal-cycle extraction (IMP-075).** Extract `with_journaled_projection` —
+   the duplicated journal-commit / apply / journal cycle shared by dispatch
+   `prepare_review` and `integrate` (SL-064 RV-030 F-7). **Folded into this slice
+   because IMP-075 refactors the same `integrate` body SL-121 rewrites:** done
+   apart, the extraction and the worktree-aware exit-state rewrite re-touch the
+   same delicate CAS/replay path twice. Folded, the extraction is shaped by — and
+   lands with — the new exit-state/reporting code in one coherent pass.
+   Behaviour-preserving for `prepare_review` (the other caller); its existing
+   suite is the proof (behaviour-preservation gate).
 
 Affected surface (concrete):
 
 - `src/dispatch.rs` — `integrate` (≈1044–1161): a pre-mutation checkout/dirty gate,
   the replay loop, a post-advance worktree resync, and the stderr report
-  (≈1108–1160). `run_integrate` (≈131).
+  (≈1108–1160). `run_integrate` (≈131). **`prepare_review` and `integrate`** both
+  refactored onto the extracted `with_journaled_projection` (IMP-075).
 - `src/git.rs` / `src/worktree.rs` — a "which worktree has ref R checked out + is it
   clean" probe (`git worktree list --porcelain` + dirty check), and the ff-only
   resync primitive. Reuse existing helpers where they exist (`gather_tree_clean`,
@@ -74,8 +84,14 @@ Affected surface (concrete):
 
 - **IMP-103** (`--integrate --help` --trunk dry-run wording) — gated `after
   IMP-101` (`deliver_to` config, not landed); --trunk semantics may shift. Defer.
+  Now `related: SL-121` — a sequenced followup; the design must leave the help
+  surface in a state IMP-103 can finish cleanly, not pre-empt it.
 - **IMP-102** (close structural gate: refuse `done` when un-integrated) —
-  close-side lifecycle gate, a different surface from the sync exit path.
+  close-side lifecycle gate, a different surface from the sync exit path. Now
+  `related: SL-121` — sequenced followup. **The design must be aware:** SL-121
+  already touches close step-3a (the ISS-030 ref-vs-tree verify), so the design
+  must define the close/integrate seam such that IMP-102's `done`-gate can later
+  bolt on without re-cutting step-3a — but the gate itself stays out of scope.
 - **ISS-024** (candidate create stray `.doctrine/slice/` dirs break
   corpus-scanner) — a different verb (`candidate create`), different failure.
 - Re-deriving trunk ref / verify from `doctrine.toml [dispatch] deliver_to` — that
@@ -88,6 +104,11 @@ _(to be completed at close)_
 ## Follow-Ups
 
 - IMP-103, IMP-102, ISS-024 remain open and out of scope (see Non-Goals).
+  IMP-103 / IMP-102 are now `related: SL-121` sequenced followups the design
+  must account for (not just defer).
+- **IMP-075 folded in** (2026-06-20) — was an independent integrate-cluster
+  straggler; pulled into the bundle because it refactors the same `integrate`
+  body. Linked `slices: SL-121`; transition as folded-in at close.
 
 ## Open Questions
 
@@ -107,3 +128,11 @@ _(to be completed at close)_
   close 3a today. `/plan` to decide the minimal read surface (a `sync` flag exposing
   the journal trunk OID, or a documented journal `cat-file`) — the close skill must
   not depend on capturing transient `candidate admit` stdout.
+- **OQ-6** (IMP-075 fold, design): does the extracted `with_journaled_projection`
+  cleanly wrap the new worktree-aware exit path — i.e. does the checkout/dirty
+  gate + post-advance resync live *inside* the projection seam, or compose around
+  it? The extraction boundary must hold for both callers (`prepare_review`, which
+  is pure-ref by placement, and `integrate`, which now resyncs a checked-out tree)
+  without leaking integrate-only concerns into `prepare_review`. Design to settle
+  the seam before plan re-locks. Behaviour-preservation gate: `prepare_review`'s
+  existing suite stays green unchanged.
