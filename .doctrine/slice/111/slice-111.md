@@ -67,6 +67,12 @@ forbids and unblocks SL-112.
 ## Follow-Ups
 
 - SL-112 consumes this to land the compiler-enforced boundary.
+- **Widen the leaf identity interface (contingent on SL-112).** This slice hoists
+  only the prefix as `&str` — narrow by scope, not a product position. SL-112's
+  design must adopt `kinds` as its starting identity shape and, if it places
+  `relation_graph` engine-side, widen it to `KindCore { dir, prefix, … }` so the
+  engine can read `dir` from a non-command source (resolves the `:423` edge). The
+  `&str`→`KindCore` re-key is mechanical and compile-enforced (design §8 R4).
 - **`relation_graph` upward edges (contingent on SL-112).** Its three
   command-imports (`:82` `backlog::dep_seq_for`, `:423` gov supersession needing
   `dir` + `governance::supersession_pair`, `:652` `spec::interaction_types`) are
