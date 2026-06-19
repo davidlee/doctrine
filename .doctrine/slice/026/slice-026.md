@@ -51,13 +51,17 @@ clock/rng/git/disk in the pure layer). Composition model per
   load-bearing, from the brief.
 - **Edges flatten** to lazyspec's four `RelationType`s
   (Implements/Supersedes/Blocks/RelatedTo); exotic edges → `RelatedTo`. Reciprocity
-  is derived at projection time (ADR-004 — edges stored outbound-only).
+  is derived at projection time (ADR-004 — edges stored outbound-only). Read through
+  SL-048's unified relation seam (`relation::tier1_edges`) + a total
+  `RelationLabel → RelationType` map — *not* per-kind structs (design §5.3, D7).
 - **Composed-spec body assembled inline** from `members.toml` + `interactions.toml`.
 
 **Affected surface (concrete)**
 
-- Read: `src/spec.rs`, `src/requirement.rs`, `src/registry.rs` (composition layer).
-- New verb at the command layer, riding the SL-025 render spine.
+- Read: `src/spec.rs`, `src/requirement.rs` (composition layer), `src/relation.rs`
+  (unified edge seam, SL-048), `src/state.rs` (`PhaseRollup`).
+- New `src/lazyspec.rs` (wire structs + pure `project`) and a new `export lazyspec`
+  verb at the command layer, riding the SL-025 render spine.
 - JSON serialization (serde). Layering held: leaf ← engine ← command (ADR-001); the
   command is the impure shell, projection logic stays pure (date/uid injected).
 
@@ -73,30 +77,35 @@ clock/rng/git/disk in the pure layer). Composition model per
 ### Assumptions / Dependencies
 
 - SL-025 is landed (done + closed); its read APIs + `canonical_id` are production.
-- **SL-028 lands first.** It replaces the slice lifecycle vocabulary with a 10-state
-  FSM; the slice status mapping (design §5.3) is built on that FSM. doctrine has no
-  typed slice-dependency edge (`[relationships]` carries only
-  specs/requirements/supersedes), so this dependency is prose, not a stored edge.
-- SL-027 (done) DRY'd the backlog test-fixture builders into
-  `write_fixture`/`Fixture`; the golden corpus reuses it (promoted to a `pub(crate)`
-  test-support seam), never re-rolling backlog TOML (re-opening ISS-001).
+- **SL-028 landed (done).** Its lifecycle FSM is **9 states** (no `review`); the slice
+  status map (design §5.3) is built on that set. Slice status is a free `String` with
+  tolerated drift, so the map is total (default → `draft`).
+- **SL-048 landed (done) — relation model migrated.** Cross-kind edges moved out of
+  per-kind typed `Relationships` structs into a uniform `[[relation]]` block read via
+  `relation::tier1_edges`/`targets_for`. The projection rides that seam (design §3, §5.3).
+- SL-027 (done) DRY'd backlog test-fixtures into `write_fixture`/`Fixture`; **plus**
+  `catalog::test_helpers` (`seed_slice`/`seed_adr`/`seed_requirement`/`seed_knowledge`/
+  `relation_rows`) now exists — the golden corpus rides both, never re-rolling backlog
+  TOML (re-opening ISS-001). Gaps: a backlog seed + a spec seed (design §9).
 
 ### Risks / Open Questions
 
-Both prior open questions are **resolved in design** (see design §7):
-- **Edge → RelationType mapping** — settled (D2): `descends_from` and spec `parent`
-  → `implements` (graph-visible); interactions → `related-to`; supersedes →
-  `supersedes`; backlog `slices`/`specs`/`drift` → `related-to` (OQ-5, no axis is
-  `blocks`/`implements`).
+Prior open questions are **resolved in design** (see design §7):
+- **Edge → RelationType mapping** — settled, rebuilt on SL-048 (D7): a total
+  `RelationLabel → RelationType` map (design §5.3), default → `related-to`;
+  `descends_from`/`parent` → `implements` (graph-visible, D2); supersedes →
+  `supersedes`; everything else → `related-to`. No `blocks` in v1 (dep/seq not
+  projected).
 - **Command shape** — settled (D1): aggregate `doctrine export lazyspec`, its own
   envelope, not a `Format` variant.
+- **Node-set scope** — settled (D8): minimal v1 `{slice, spec, adr, backlog, plan}`;
+  post-scope kinds (`POL`/`STD`/`RV`/`REC`/`REV`/`CM`/knowledge) deferred to **IMP-105**.
 
 A round-2 inquisition (`inquisition.md`) verified the wire strings against lazyspec
-source (OQ-3 resolved: status lowercase/`in-progress`, relations `related-to`, date
-`%Y-%m-%d`) and surfaced two neighbour-couplings — SL-028's lifecycle vocabulary and
-SL-027's fixture builder — both integrated above. Residual risks tracked in design
-§8 (schema drift, surface-parity, dead_code leaf, synthetic-id collision, R6 SL-028
-coupling, R7 fixture re-triplication).
+source (OQ-3). A **round-3 re-validation** (2026-06-19, design §10) swept the whole
+design after ~800 commits parked: lazyspec wire strings still exact; the relation
+model (SL-048) and FSM (SL-028, 9-state) drift integrated; `catalog::test_helpers`
+adopted; new kinds deferred (IMP-105). Residual risks tracked in design §8.
 
 ## Non-Goals
 
@@ -121,6 +130,9 @@ synthetic plan children — via `doctrine export lazyspec`, reusing SL-025's rea
   must invoke `doctrine export lazyspec` — **renamed** from the brief's working
   `emit-lazyspec-brief --json` (D1, no-masquerade); the brief §7/§8 recipe still
   names the old form.
+- **IMP-105 — extend the node set to post-scope kinds** (`POL`/`STD`/`RV`/`REC`/`REV`/
+  `CM`/knowledge). Split out at round-3 re-validation (D8); rides this slice's wire
+  format. Until then those kinds' inbound edges dangle harmlessly (design §5.5).
 - **Later:** selectively re-enable mutations as doctrine grows lifecycle/transition
   verbs, mapping onto lazyspec's `DocumentStore` writes.
 - **v1 limitation to revisit:** lazyspec's graph renders `Implements` only — so

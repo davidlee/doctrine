@@ -29,15 +29,23 @@ per-kind `show_json`. **But that JSON is doctrine-native** (toml-as-data + doctr
 fields), keyed per-command, not a cross-kind aggregate in lazyspec's shape. No
 projection to an external consumer's model exists.
 
-Read APIs to reuse (no new read logic): spec composition — `spec::read_members`
-(`:458`), `read_interactions` (`:481`), the **pure** `render()` (`:337`, assembles
-spec+prose+members+interactions), `requirement::load` (`requirement.rs:222`); plus
-adr/slice/backlog loaders and `state::PhaseRollup` (`slice.rs:389` consumes it).
+Read APIs to reuse (no new read logic; cited by name — line numbers drift):
+spec composition — `spec::read_members`, `spec::read_interactions`, the **pure**
+`spec::render()` (assembles spec+prose+members+interactions), `requirement::load`;
+plus adr/slice/backlog loaders and `state::PhaseRollup`. **Edges:** the unified
+relation seam `relation::tier1_edges(kind, toml_text) -> Vec<RelationEdge>` (SL-048)
+and `relation::targets_for(edges, label)` — the same seam slice/backlog `show_json`
+already ride. (Pre-SL-048 the edges lived in per-kind typed `Relationships` structs;
+that read path is gone — see §3.)
 
-Entity inventory (prefixes confirmed from `Kind` consts): slice `SL`; spec `PRD`
-(product) + `SPEC` (tech); adr `ADR`; backlog one kind, five item prefixes
+Entity inventory (prefixes confirmed from `Kind` consts, `relation.rs`): slice `SL`;
+spec `PRD` (product) + `SPEC` (tech); adr `ADR`; backlog one kind, five item prefixes
 `ISS`/`IMP`/`CHR`/`RSK`/`IDE`; requirement `REQ`; **plan is not a reserved entity** —
-`PLAN_KIND` shares `SL` and lives inside `slice/nnn/`.
+`PLAN_KIND` shares `SL` and lives inside `slice/nnn/`. Kinds that landed after this
+slice was scoped — governance `POL`/`STD`, review `RV`, reconciliation `REC`,
+revision `REV`, concept-map `CM`, knowledge `ASM`/`DEC`/`QUE`/`CON` — are **out of
+the v1 node set** (deferred to IMP-105); their edges may appear as dangling targets
+(§5.5).
 
 ## 3. Forces & Constraints
 
@@ -62,16 +70,26 @@ Entity inventory (prefixes confirmed from `Kind` consts): slice `SL`; spec `PRD`
 - **lazyspec graph follows `Implements` only** (brief §6) — shapes the edge mapping.
 - **Repo clippy denials** — BTree not Hash; no indexing-slicing; `expect`+reason not
   bare `allow`; the string-assembly rules. (Memory cluster `mem.pattern.lint.*`.)
-- **Depends on SL-028 (lands first).** SL-028 replaces the slice lifecycle
-  vocabulary with a 10-state FSM
-  (`proposed→design→plan→ready→started→review→audit→reconcile→done` + `abandoned`);
-  the slice status mapping (§5.3) is built on **that** FSM, not the legacy 6-state
-  set. doctrine has **no typed slice-dependency edge** — the `[relationships]`
-  table carries only `specs`/`requirements`/`supersedes` (`slice.rs:572`) — so this
-  dependency is recorded in prose (here + the scope Assumptions), not as a stored
-  edge. Slice status is a free `String` with tolerated out-of-vocab drift
-  (`slice.rs:349`/`:368`), so the map must be **total** (a default arm), never a
-  partial allowlist.
+- **SL-028 lifecycle FSM (landed; done).** SL-028 replaced the slice lifecycle
+  vocabulary with a **9-state** FSM —
+  `proposed→design→plan→ready→started→audit→reconcile→done` + `abandoned` (verified
+  against `SLICE_STATUSES`, `slice.rs`; **no `review` state** — an earlier draft
+  assumed a 10th). The slice status map (§5.3) is built on that set. Slice status is
+  still a free `String` with tolerated out-of-vocab drift (`is_drifted` /
+  `SLICE_STATUSES`), so the map must be **total** (a default arm), never a partial
+  allowlist.
+- **Ride the unified relation seam (SL-048), not per-kind structs.** After this slice
+  was scoped, SL-048 migrated every cross-kind edge out of bespoke per-kind
+  `Relationships` structs into a uniform `[[relation]]` block read through one seam:
+  `relation::tier1_edges(kind, text) -> Vec<RelationEdge>` (`RelationEdge { label:
+  RelationLabel, target: String }`), with `relation::targets_for` for per-axis
+  extraction. There is still **no typed slice→slice dependency relation** (dep/seq
+  `needs`/`after` live in a separate typed `[relationships]` table, SL-060, and are
+  scheduling metadata — not projected, §5.3). The projection rides `tier1_edges`
+  uniformly across kinds (slice/spec/adr/backlog), so the edge logic is **one total
+  `RelationLabel → RelationType` map**, not per-kind reach-in — strengthening "no
+  parallel impl". Typed spec edges (`descends_from`/`parent`/`interactions`) are
+  `Tier::Typed` (bespoke files), sourced via spec's readers, not the relation block.
 - **Reuse SL-027's fixture builder (no parallel impl).** SL-027 (done) DRY'd the
   backlog test-fixture builders into `write_fixture`/`Fixture` — currently private
   to `backlog.rs`'s `#[cfg(test)] mod tests`. The golden corpus (§9) must ride it,
@@ -91,7 +109,8 @@ shape pinned.
 ```
 doctrine export lazyspec  (command, impure shell)
   │  load corpus via existing readers (slices, specs+members+reqs, adrs, backlog,
-  │     per-slice plan.md + PhaseRollup)
+  │     per-slice plan.md + PhaseRollup); per entity, outbound edges via
+  │     relation::tier1_edges(kind, toml) + typed spec edges via spec readers
   │  inject now (RFC3339), version (CARGO_PKG_VERSION), project (root basename)
   ▼
 lazyspec::project(corpus, now, version) -> Brief   (pure fn, command layer — src/lazyspec.rs)
@@ -169,23 +188,41 @@ lazyspec `RelationType` strings; nothing else may appear (verified against
 Requirements (`REQ`) are **not** nodes — inlined in spec bodies via `render()` as
 `FR-`/`NF-` labelled entries.
 
-**Edge mapping** (doctrine → lazyspec four; outbound only):
+**Edge mapping** (doctrine `RelationLabel` → lazyspec's four; outbound only). The
+projection reads each entity's tier-1 edges once via `relation::tier1_edges(kind,
+toml)` and its typed spec edges via spec readers, then maps every `RelationEdge.label`
+through **one total function** (default arm → `related-to`):
 
-| doctrine edge | lazyspec `type` | graph-visible |
-|---|---|---|
-| spec `descends_from` (tech → PRD) | implements | ✅ (D2 — lineage DAG) |
-| spec `parent` (tech decomposition) | implements | ✅ |
-| plan → slice (synthetic) | implements | ✅ |
-| spec `interactions` (tech ↔ tech) | related-to | panel |
-| adr `supersedes` | supersedes | panel |
-| slice `supersedes` (when populated) | supersedes | panel |
-| backlog `relationships.slices` (→ slice) | related-to | panel |
-| backlog `relationships.specs` (→ spec) | related-to | panel |
-| backlog `relationships.drift` (→ drift ref) | related-to | panel |
+| doctrine `RelationLabel` | source (v1-emitted) | tier | lazyspec `type` | graph-visible |
+|---|---|---|---|---|
+| `descends_from` (SPEC→PRD) | SPEC | typed | implements | ✅ (D2 — lineage DAG) |
+| `parent` (SPEC→SPEC) | SPEC | typed | implements | ✅ |
+| plan → slice (synthetic, projection-authored) | plan | — | implements | ✅ |
+| `interactions` (SPEC↔SPEC) | SPEC | typed | related-to | panel |
+| `supersedes` (SL→SL; ADR→ADR) | SL, ADR | tier-1 | supersedes | panel |
+| `specs` (→PRD/SPEC) | SL, backlog | tier-1 | related-to | panel |
+| `slices` (→SL) | backlog | tier-1 | related-to | panel |
+| `governed_by` (→ADR/POL/STD) | SL, PRD, SPEC | tier-1 | related-to | panel † |
+| `related` (→same-kind/any) | SL, ADR, backlog | tier-1 | related-to | panel |
+| `consumes` (PRD→PRD) | PRD | tier-1 | related-to | panel |
+| `drift` (→free text) | backlog | tier-1 | related-to | panel † |
+| `requirements` (SL→REQ) | SL | tier-1 | — *(dropped: REQ inlined, not a node — INV-4)* | — |
+| *any other label* | — | — | related-to *(default arm)* | panel |
 
-Backlog `Relationships` (`backlog.rs:374`) has exactly these three outbound axes,
-all reference/association links — **none maps to `implements` or `blocks`** (no
-backlog axis carries a dependency/sequence edge).
+† Target may fall outside the v1 corpus (`POL`/`STD` not emitted; `drift` is
+free-text) → dangling, dropped silently by lazyspec (§5.5; node coverage resolved by
+IMP-105).
+
+- **No `blocks` in v1.** lazyspec's fourth `RelationType` has no source in the emitted
+  set. Slice dep/seq (`needs`/`after`, the typed `[relationships]` dep_seq table,
+  SL-060) is *scheduling* metadata, not a knowledge-graph edge, and is **not
+  projected**. (A future `needs`→`blocks` mapping is plausible but needs direction
+  reconciliation — doctrine `needs` is outbound from the dependent; lazyspec `blocks`
+  is outbound from the blocker. Deferred.)
+- **`members`** (PRD/SPEC→REQ, typed) yields no edge — requirements inline into the
+  spec body, never nodes (INV-4). All other emitted edges are `Tier::One` via
+  `tier1_edges`; `descends_from`/`parent`/`interactions` are `Tier::Typed`, sourced
+  from spec's readers, not the `[[relation]]` block.
 
 **Status mapping** — doctrine status → the **wire string**, ∈ lazyspec's 7:
 `draft`/`review`/`accepted`/`in-progress`/`complete`/`rejected`/`superseded`
@@ -195,14 +232,17 @@ is **TOTAL**: slice status is a free `String` with tolerated out-of-vocab drift
 (`slice.rs:349`/`:368`), so an unknown/drifted status hits the default arm, never
 panics or invents a string.
 
-- slice — the **SL-028 FSM** (SL-028 lands first; replaces the legacy 6-state set):
+- slice — the **SL-028 FSM** (landed; 9 states, no `review`):
   `{proposed→draft, design→draft, plan→draft, ready→accepted, started→in-progress,
-  review→in-progress, audit→in-progress, reconcile→in-progress, done→complete,
-  abandoned→rejected}`. **Default (drift / unknown) → `draft`.**
+  audit→in-progress, reconcile→in-progress, done→complete, abandoned→rejected}`.
+  **Default (drift / unknown) → `draft`.**
 - spec `{draft→draft, active→accepted, deprecated→superseded, superseded→superseded}`
 - adr `{proposed→review, accepted→accepted, rejected→rejected, superseded→superseded, deprecated→superseded}`
 - backlog `{open→draft, triaged→review, started→in-progress, resolved→complete, closed→complete}`
-- plan ← `PhaseRollup`: `completed==total && total>0 → complete`; `completed>0 → in-progress`; else `draft`.
+- plan ← `PhaseRollup` (fields `planned`/`in_progress`/`completed`/`blocked`/`unknown`/
+  `missing_toml` — no single `total`): let `total = planned+in_progress+completed+
+  blocked+unknown`; `completed==total && total>0 → complete`; `completed>0 →
+  in-progress`; else `draft`.
 
 `meta`: `project` = root dir basename; `generated_at` = injected `now` (RFC3339 —
 doctrine's own meta field, not NaiveDate-parsed); `doctrine_version` =
@@ -245,7 +285,13 @@ no mutation, no side effects beyond stdout.
   synthetic plan node (owning slice's `updated`).
 - **Dangling edges:** a `related[].target` outside the emitted corpus is dropped
   silently (lazyspec's `BrokenLinkRule` is suppressed by `validate_ignore`, brief
-  §6); v1 accepts this. Option: filter to in-corpus targets at projection time.
+  §6); v1 accepts this. Concrete v1 dangles: `governed_by`→`POL`/`STD` and any edge
+  to a deferred kind (`RV`/`REC`/`REV`/`CM`/knowledge — out of the node set, IMP-105),
+  plus `drift` free-text targets. Option: filter to in-corpus targets at projection
+  time.
+- **Dep/seq not projected:** slice `needs`/`after` (typed dep_seq, SL-060) and backlog
+  `needs`/`after`/`triggers` are scheduling axes, not graph edges — excluded from
+  `related[]` (§5.3). Only `tier1_edges` + typed spec edges feed the projection.
 - **Assumption:** lazyspec degrades on a write-refusing backend except the editor
   key — that gating is piece-4 (`../lazyspec`), not this slice.
 
@@ -266,10 +312,11 @@ no mutation, no side effects beyond stdout.
   may be empty, drops structured TOML like acceptance_criteria/c4_level/risk facet) vs
   a both-tier synthesis (preserves unmapped data per the brief's "exotic data in body").
   Specs already get both tiers via `render()`. Decide per-kind in planning.
-- **OQ-5 (RESOLVED — was adversarial F7).** Backlog `Relationships` (`backlog.rs:374`)
-  has exactly three outbound axes — `slices`, `specs`, `drift` — all
-  reference/association links; **all three → `related-to`**. No axis maps to
-  `implements` or `blocks` (none is a dependency/sequence edge).
+- **OQ-5 (RESOLVED — was adversarial F7; rebuilt on SL-048).** Edge axes are no longer
+  per-kind typed structs — they are `RelationLabel` variants read uniformly via
+  `relation::tier1_edges`. The full `RelationLabel → RelationType` map is §5.3 (total,
+  default → `related-to`). Backlog's tier-1 axes resolve to `slices`/`specs`/`drift`/
+  `related` → all `related-to`; no emitted backlog axis is `implements`/`blocks`.
 - **OQ-6** `meta.project` = root dir basename is non-canonical (differs across clones);
   cosmetic for lazyspec, accept for v1.
 
@@ -299,6 +346,17 @@ no mutation, no side effects beyond stdout.
 - **D5 — Spec → two types** (product-spec/PRD, tech-spec/SPEC) — preserves doctrine's
   subtype split; both virtual, reqs inline.
 - **D6 — Emit outbound edges only** (ADR-004) — lazyspec derives reciprocity.
+- **D7 — Project edges through SL-048's unified relation seam** (`tier1_edges` +
+  one total `RelationLabel → RelationType` map), not per-kind reach-in. The edge
+  model SL-026 was scoped against (per-kind typed `Relationships` structs) no longer
+  exists; the unified seam is *more* aligned with "no parallel impl" — slice/backlog
+  `show_json` already ride it. *Alt rejected:* re-introduce per-kind edge extraction —
+  dead code path, fights the current model.
+- **D8 — Minimal v1 node set** `{slice, spec, adr, backlog, plan}` (decision (a),
+  2026-06-19). Kinds that postdate the original scope (`POL`/`STD`/`RV`/`REC`/`REV`/
+  `CM`/knowledge) are deferred to **IMP-105**; their inbound edges dangle harmlessly
+  (§5.5). *Alt rejected:* extend the node set now — scope creep on a slice already
+  long-parked; the projection was always "lossy-by-design v1".
 
 ## 8. Risks & Mitigations
 
@@ -318,10 +376,17 @@ no mutation, no side effects beyond stdout.
   asserts the exact set incl. the date-only form and the unknown-status default.
 - **R4 — Synthetic plan id collision.** *Mitigate:* `PLAN-` is unused by any real
   reservation, so `PLAN-NNN` is unique by construction; INV-5 + a test.
-- **R6 — lifecycle-vocabulary coupling (SL-028).** The slice status map consumes
-  SL-028's FSM vocabulary; SL-028 lands first. *Mitigate:* total map with a `draft`
-  default (an out-of-vocab status never breaks the wire); dependency recorded (§3 +
-  scope Assumptions); a conformance case feeds an unknown status.
+- **R6 — lifecycle-vocabulary coupling (SL-028) — DISCHARGED.** SL-028 landed (done);
+  the FSM is 9 states, no `review` (§3, §5.3 corrected). *Mitigate (retained):* total
+  map with a `draft` default (an out-of-vocab/drifted status never breaks the wire);
+  a conformance case feeds an unknown status.
+- **R8 — relation-model migration (SL-048) — DISCHARGED by riding the seam.** The
+  per-kind typed `Relationships` structs the original edge mapping read are gone;
+  edges now flow through `relation::tier1_edges` + `targets_for` (§3, §5.3, D7).
+  *Mitigate:* project through the unified seam (one total `RelationLabel` map); a
+  conformance case exercises each emitted `RelationType` incl. the default arm.
+  *Residual:* the 9 post-scope kinds are deferred (IMP-105), so some outbound edges
+  dangle — accepted under `validate_ignore` (§5.5).
 - **R7 — fixture re-triplication (SL-027 / ISS-001).** Re-rolling backlog fixture
   TOML for the golden corpus re-opens the debt ISS-001 just closed. *Mitigate:*
   reuse `write_fixture` via a promoted `pub(crate)` test-support seam (§9); no
@@ -335,14 +400,19 @@ no mutation, no side effects beyond stdout.
   status wire strings **including the unknown-status `draft` default**, the
   date-only `%Y-%m-%d` form, stable id-sorted ordering, and that a membered `REQ`
   is absent as a node yet present in its spec body.
-- **Corpus construction (SL-027 reuse, CHARGE IX).** The golden corpus is built via
-  the real loaders over a temp tree; backlog fixtures **reuse SL-027's
-  `write_fixture`/`Fixture`**, promoted to a `pub(crate)` test-support seam (a
-  `/consult`-grade visibility promotion — do not improvise at execute). slice / spec
-  (+members+reqs) / adr fixtures have **no** unified builder yet; that gap is named
-  here and shaped in planning (small per-kind writers beside the promoted backlog
-  seam). **No** new `backlog-NNN.toml` head literal is hand-rolled (re-opening
-  ISS-001 is forbidden).
+- **Corpus construction (reuse first).** The golden corpus is built via the real
+  loaders over a temp tree. Since this slice was scoped, a shared test-support seam
+  landed: **`catalog::test_helpers`** (`pub(crate)`) already ships `seed_slice`,
+  `seed_adr`, `seed_requirement`, `seed_knowledge`, and `relation_rows` (authors
+  `[[relation]]` edges — exactly what the edge-mapping conformance needs). So the
+  slice/adr/req fixture gap the round-2 inquisition named (CHARGE IX) is now **mostly
+  closed by existing infra** — ride it. Two gaps remain, shaped in planning:
+  (1) **backlog** — `seed_*` has no backlog writer yet; reuse SL-027's
+  `write_fixture`/`Fixture` (promote from `backlog.rs` tests to `pub(crate)`, ideally
+  *into* `catalog::test_helpers` beside the others — a `/consult`-grade visibility
+  move, don't improvise at execute); (2) **spec** (+members+interactions) — no
+  `seed_spec` exists; add a small writer beside the others. **No** new
+  `backlog-NNN.toml` head literal is hand-rolled (re-opening ISS-001 is forbidden).
 - **Golden fixture:** a minimal corpus → expected Brief JSON, value-compared; the
   drift canary. **Deterministic by injection** — the test passes fixed `now`+`version`
   to `project`, so `meta.generated_at`/`doctrine_version` don't make it flaky (the
@@ -405,3 +475,33 @@ slices. Ten charges; all folded in:
 
 Residual: OQ-4 (body tier, per-kind, planning) and the slice/spec/adr fixture-builder
 shape (planning). Lock gate: C-I–V + C-X folded; C-IX resolved before the golden test.
+
+### Re-validation (round 3 — 2026-06-19, parked-design drift sweep) — integrated
+
+This slice sat parked ~800 commits. A full assumption sweep against current source:
+
+- **Held exactly:** lazyspec wire strings (`document.rs` untouched since 2026-05-09,
+  predates the brief) — Status 7 / `RelationType` 4 / `date` `%Y-%m-%d` / `validate_ignore` /
+  `virtual_doc` / non-singleton `TypeDef` by default; the SL-025 read spine; the spec
+  PRD/SPEC split + private `render`/`read_members`/`read_interactions` (promotion still
+  needed, §5.1); the 5 backlog item kinds; slice status still a free `String` with
+  tolerated drift.
+- **G1 — relation model migrated (SL-048).** The per-kind typed `Relationships` structs
+  the edge mapping read are gone → rebuilt on `relation::tier1_edges` + a total
+  `RelationLabel → RelationType` map (§3, §5.3, D7, R8). New `governed_by` axis noted.
+- **G2 — FSM is 9-state, not 10.** No `review` state; phantom map arm struck (§3, §5.3,
+  R6).
+- **G3 — `catalog::test_helpers` now exists** (`seed_slice`/`seed_adr`/`seed_requirement`/
+  `seed_knowledge`/`relation_rows`) — closes most of CHARGE IX's fixture gap; §9 rewritten
+  to ride it.
+- **G4 — `PhaseRollup` field set changed** (no single `total`) — plan-status mapping
+  recomputes the sum (§5.3).
+- **G5 — new entity kinds** (`POL`/`STD`/`RV`/`REC`/`REV`/`CM`/knowledge) postdate the
+  scope → held out of the v1 node set, deferred to **IMP-105** (D8); their edges dangle
+  harmlessly (§5.5).
+
+Residual after round 3: OQ-4 (body tier, planning); the spec + backlog fixture-writer
+shape (§9, planning); the lazyspec-side question of whether an emitted `virtual: true`
+is honoured via the JSON/frontmatter path (piece-4 / `../lazyspec` concern, not this
+slice). No governance conflict surfaced; ADR-001/004 alignment re-confirmed; SL-048's
+unified seam reinforces ADR-001 layering and "no parallel impl".
