@@ -1,4 +1,4 @@
-# Hoist kind registry to engine tier to break relation layering cycles
+# Hoist kind identity to a leaf `kinds` module to break relation layering cycles
 
 ## Context
 
@@ -12,33 +12,43 @@ relation engine reaches **up** into command-tier modules for kind identity.
   `crate::concept_map::CONCEPT_MAP_KIND`, `crate::knowledge::*_KIND`,
   `crate::rec::REC_KIND`, `crate::revision::REV_KIND`. Each of those modules
   imports `relation` back → **7 confirmed cycles**.
-- `relation_graph.rs:82,423,652` has the same upward reach (backlog dep-seq,
-  governance kinds, spec interaction types). Non-cyclic today, same defect class.
+- `relation_graph.rs:82,423,652` has a *related* upward reach but is **out of
+  scope** (see Non-Goals): all three sites are behavior-entangled, not pure
+  identity (`backlog::dep_seq_for`; gov supersession needing `dir` +
+  `governance::supersession_pair`; `spec::interaction_types`), and `relation_graph`
+  contributes **zero cycles** (its edges are non-cyclic). The cycle-break is fully
+  achieved by `relation.rs` alone.
 
 Root cause: each `*_KIND` constant lives in its command verb module, so the
-engine must look up to know what kinds exist. The fix is to invert the
-dependency — the engine should own kind identity; command modules consume it.
+engine must look up to know what kinds exist. Only the **prefix** (the canonical
+kind identity, compared by `==` everywhere) is needed by the engine — the full
+`Kind` cannot move down (its `scaffold: fn` binds it to the command module). The
+fix inverts the dependency: a leaf-tier `kinds` module owns the prefix vocabulary;
+the relation engine and the command modules both consume it.
 
 This is the enabling change for SL-112 (a compiler-enforced engine crate
 boundary is impossible while these cycles exist).
 
 ## Scope & Objectives
 
-- Establish a single engine-tier home for kind identity (a leaf/engine `kinds`
-  module, or fold into `registry`/`entity`) holding the `*_KIND` constants, their
-  prefixes, and the prefix↔kind mapping.
-- Re-point `relation.rs` and `relation_graph.rs` to the engine-tier source so the
-  engine no longer imports any command module for kind identity.
-- Re-point command modules to consume the hoisted constants (re-export or import
-  from the engine tier) so existing call sites keep compiling.
-- Eliminate the 7 `relation` ↔ command cycles and the `relation_graph` upward
-  edges for kind identity. The `worktree → slice::run_phases` edge
-  (`worktree.rs:1742`) is a separate concern — out of scope here.
+- Establish a single leaf-tier home for kind identity — a new `kinds` module
+  holding the canonical prefix per kind and the relation source/target groupings
+  (`GOV`/`BACKLOG`/`RECORD`). Not `entity` (kind-blind by design) nor `registry`
+  (the FK-index seed). The full `*_KIND` consts stay in their command modules
+  (scaffold-coupled); only the prefix is hoisted.
+- Re-point `relation.rs` off every `crate::<cmd>::*_KIND` alias onto `kinds::*`;
+  re-key the `RELATION_RULES` table element type from `&'static Kind` to
+  `&'static str` (the engine compares kinds by prefix only). Public fn signatures
+  (`lookup`/`tier1_edges`/`rels_block`) stay `&Kind` — zero caller churn.
+- Re-point each command `*_KIND` const's `prefix:` field to `kinds::<X>` so the
+  prefix literal lives in exactly one place (no parallel copy).
+- Eliminate the 7 `relation` ↔ command cycles. `relation_graph` is out of scope
+  (above); the `worktree → slice::run_phases` edge is a separate concern.
 
 Closure intent: no `crate::<command_module>::*_KIND` import remains in
-`relation.rs` / `relation_graph.rs`; a dependency check (manual or the SL-112 gate
-once it exists) shows the engine tier no longer depends on the command tier for
-kinds; existing suites stay green unchanged (behaviour-preservation gate).
+`relation.rs`; a dependency check (manual or the SL-112 gate once it exists) shows
+the relation engine no longer depends on the command tier for kind identity;
+existing suites stay green unchanged (behaviour-preservation gate).
 
 ## Non-Goals
 
@@ -49,12 +59,19 @@ kinds; existing suites stay green unchanged (behaviour-preservation gate).
 
 ## Summary
 
-Invert kind identity ownership: move `*_KIND` from command modules to the engine
-tier so the relation engine stops importing upward. Breaks the cycles ADR-001
+Invert kind-identity ownership: a leaf-tier `kinds` module owns the prefix
+vocabulary; the relation engine and command modules both consume it. The engine
+stops importing command modules for kind identity. Breaks the 7 cycles ADR-001
 forbids and unblocks SL-112.
 
 ## Follow-Ups
 
 - SL-112 consumes this to land the compiler-enforced boundary.
+- **`relation_graph` upward edges (contingent on SL-112).** Its three
+  command-imports (`:82` `backlog::dep_seq_for`, `:423` gov supersession needing
+  `dir` + `governance::supersession_pair`, `:652` `spec::interaction_types`) are
+  behavior-entangled, not pure identity. Resolve **iff** SL-112's layer
+  classification places `relation_graph` inside the engine crate; if it lands
+  command-tier, these are legal lateral edges and the follow-up is moot.
 - Audit remaining upward edges (`worktree → slice`, `retrieve ↔ memory`) for
   their own slices if they persist.
