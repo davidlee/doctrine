@@ -91,3 +91,31 @@ amendment is routed through the reconciliation brief below.
   Authored as a REV per ADR-013 (governance changes route through a Revision).
 - **ADR-001 Verification section:** Amend to record the gate test as the
   enforcement mechanism (replacing the rejected stance).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **layering.toml [tiers]:** Added `relation_graph = "command"` entry.
+- **tests/architecture_layering.rs:** Removed the hard-coded `relation_graph`
+  fallback from `load_layering()` (RV-104 F-1).
+- Gate re-verified: `architecture_layering_gate` → ok.
+
+### REVs completed
+- **REV-004 (`reconcile-sl-112`):** done — ADR-001 amended:
+  - Rejection of homegrown module-graph test overturned; `syn`-based fitness
+    gate recorded as now-enforcement.
+  - Stale per-module tier table replaced with tier *definitions* + pointer
+    to `.doctrine/adr/001/layering.toml`.
+  - Rule 1 hard-gated (literal `crate::` path edges).
+  - Rule 2 changed to non-increasing cyclic-edge ratchet; command tangle
+    (120 edges) recorded as unmet-and-tracked.
+  - Rule 3 deferred (impure-leaf refinement).
+  - `input` reclassified as engine (via layering.toml pointer).
+  - Consequences negative updated: enforcement is mostly automated.
+  - Rationale in revision-004.md.
+
+### Withdrawn / tolerated
+- RV-104 F-2: aligned — `MixedUmbrella` variant drops `file` field; no
+  functional harm.
+- RV-104 F-3: aligned — `main` exempted from completeness check; reasonable
+  implementation detail.
