@@ -35,7 +35,7 @@ const STANDARD_DIR: &str = ".doctrine/standard";
 pub(crate) const STANDARD_KIND: GovKind = GovKind {
     kind: Kind {
         dir: STANDARD_DIR,
-        prefix: "STD",
+        prefix: crate::kinds::STD,
         scaffold: standard_scaffold,
     },
     stem: "standard",

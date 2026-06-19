@@ -33,7 +33,7 @@ const POLICY_DIR: &str = ".doctrine/policy";
 pub(crate) const POLICY_KIND: GovKind = GovKind {
     kind: Kind {
         dir: POLICY_DIR,
-        prefix: "POL",
+        prefix: crate::kinds::POL,
         scaffold: policy_scaffold,
     },
     stem: "policy",

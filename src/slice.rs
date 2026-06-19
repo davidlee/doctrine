@@ -37,14 +37,14 @@ const SLICE_DIR: &str = ".doctrine/slice";
 /// The top-level reserved slice kind: toml + md + slug symlink.
 pub(crate) const SLICE_KIND: Kind = Kind {
     dir: SLICE_DIR,
-    prefix: "SL",
+    prefix: crate::kinds::SL,
     scaffold: slice_scaffold,
 };
 
 /// The non-reserved design-doc sibling: one `design.md` under an existing slice.
 const DESIGN_KIND: Kind = Kind {
     dir: SLICE_DIR,
-    prefix: "SL",
+    prefix: crate::kinds::SL,
     scaffold: design_scaffold,
 };
 
@@ -53,7 +53,7 @@ const DESIGN_KIND: Kind = Kind {
 /// sub-artefact, on the transactional writer (slice-004 D1/D4).
 const PLAN_KIND: Kind = Kind {
     dir: SLICE_DIR,
-    prefix: "SL",
+    prefix: crate::kinds::SL,
     scaffold: plan_scaffold,
 };
 
@@ -61,7 +61,7 @@ const PLAN_KIND: Kind = Kind {
 /// slice (the `design.md` single-file pattern; on-demand, slice-004 D8).
 const NOTES_KIND: Kind = Kind {
     dir: SLICE_DIR,
-    prefix: "SL",
+    prefix: crate::kinds::SL,
     scaffold: notes_scaffold,
 };
 

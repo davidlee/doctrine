@@ -144,7 +144,7 @@ pub(crate) const REC_DIR: &str = ".doctrine/rec";
 /// `integrity::KINDS` references.
 pub(crate) const REC_KIND: Kind = Kind {
     dir: REC_DIR,
-    prefix: "REC",
+    prefix: crate::kinds::REC,
     scaffold: rec_scaffold_unused,
 };
 
