@@ -16,8 +16,18 @@ atomic (temp-write + rename).
 
 Two costs: (1) ~22 call sites re-spell the same non-atomic write — a
 parallel-implementation smell against "no parallel implementation"; (2)
-`std::fs::write` is non-atomic — a crash mid-write tears a committed `*.toml`,
-the corruption `write_atomic` was built to prevent.
+`std::fs::write` is non-atomic at the swap level — an interrupted userspace write
+leaves a truncated/half-written committed `*.toml` that a concurrent reader or
+the next command parses as corrupt, the failure `write_atomic` was built to
+prevent.
+
+**Scope of the guarantee (precise).** `write_atomic` is `write(tmp)` + `rename`
+— it delivers **swap-atomicity** (a reader sees old-or-new, never torn; no
+half-written authored file survives an interrupted userspace write). It is **not**
+power-loss durability: there is no `fsync` of the temp or the parent dir, so a
+kernel/power crash may still lose the most recent write (the *old* file remains
+intact — never torn). Durability is out of scope (D4); the cost being closed is
+reader-visible tearing + write duplication, not crash-durability.
 
 ## 2. Current State
 
@@ -46,8 +56,11 @@ concept-map route).
   existing downward edge. Callers (command/engine) → `fsutil` is downward and
   legal. No new module dependency, no cycle.
 - **Behaviour-preservation gate (AGENTS.md).** This touches shared machinery
-  (`dep_seq` cores, `relation`). The existing suites are the proof and must stay
-  **green unchanged** — no test edits.
+  (`dep_seq` cores, `relation`, and the `write_atomic` seam itself under D4). The
+  existing suites are the proof and must stay **green unchanged** — including
+  `write_atomic`'s single-writer test, which D4 must not perturb (VT-3 *adds* the
+  concurrency case rather than editing the existing one). No test edits to prove
+  the migration.
 - **Storage rule.** In scope = **authored** `*.toml`/`*.md` only. Runtime state
   (`state.rs` phase sheets, `ledger.rs` manifest, `worktree.rs` marker) and
   derived/install (`install.rs`, `skills.rs`) deliberately stay on `fs::write`.
@@ -71,17 +84,40 @@ concept-map route).
 
 ### 5.1 System Model
 
-No new module, no new function. The seam is the existing
-`fsutil::write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()>`. SL-113
-is a **migration** of authored byte-writes onto it, plus a **clippy guard**
-making the migration permanent.
+No new module, no new mutation abstraction. SL-113 has three moves:
+1. **Migrate** the ~22 authored byte-writes onto the existing
+   `fsutil::write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()>`.
+2. **Harden** `write_atomic`'s temp-naming so concurrent same-process writers to
+   one path do not collide (D4) — a contained change to the leaf seam itself.
+3. **Guard** with a `clippy` `disallowed-methods` rule making the migration
+   permanent.
 
 ### 5.2 Interfaces & Contracts
 
-Unchanged. `write_atomic` is the contract: write a sibling temp in the same
-directory, `rename` over the target (atomic on one filesystem); a concurrent
-reader sees old-or-new, never torn. Callers keep their existing signatures,
-return types, and error mapping.
+`write_atomic`'s signature and return type are unchanged. Its contract: write a
+sibling temp in the same directory, `rename` over the target (atomic on one
+filesystem); a concurrent reader sees old-or-new, never torn. Callers keep their
+existing signatures, return types, and error mapping.
+
+**Temp-naming hardening (D4).** Today the temp is `.{name}.{pid}.tmp`
+(`fsutil.rs:58`) — the pid disambiguates *processes* but **not** concurrent
+*threads/tasks* of one process writing the same path (the map-server, axum/tokio,
+is the one such writer). Add a process-global monotonic counter so every
+`write_atomic` call gets a distinct temp:
+
+```rust
+static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// …
+let seq = TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+let tmp = dir.join(format!(".{}.{}.{}.tmp", name.to_string_lossy(), std::process::id(), seq));
+```
+
+A counter (process-local mutable state, legal in the impure leaf seam) is chosen
+over rng to keep the seam free of an rng dependency. Distinct temps mean two
+concurrent same-path writers each rename their own bytes; the *last* rename wins
+(last-writer-wins, as with any concurrent overwrite), and neither observes a torn
+file nor a vanished-temp `rename` error. Cross-process disambiguation (the
+existing pid term) is retained.
 
 **Mechanical transform, every authored site:**
 
@@ -112,11 +148,18 @@ The 22 authored call sites (11 files):
 | `revision.rs` | 888 | (status funnels through `dep_seq`) |
 | `map_server/routes.rs` | 412 | concept-map via HTTP |
 
-**Out of scope** (stay on `fs::write`, get `#[allow]` — §5.4): `state.rs:409`,
-`ledger.rs:408`, `worktree.rs:1862`, `install.rs:586`, `skills.rs:637`.
+**Out of scope** (stay on `fs::write`, get `#[allow]` — §5.4): `state.rs:409`
+(runtime phase sheet), `ledger.rs:408` (runtime manifest), `worktree.rs:1862`
+(runtime marker), `install.rs:586` + `skills.rs:637` (derived asset unpack),
+`corpus.rs:403`/`406` (`sync_corpus` — shipped-corpus install, derived).
 
 Line numbers are an at-design snapshot; the plan re-locates by function before
-editing.
+editing. **The authored set above is the *known* starting set, not a proven-
+exhaustive hand count** — the `clippy` guard (§5.4) is the oracle: adding it and
+running `just gate` surfaces every remaining production `fs::write`, each then
+triaged by the rule *authored → migrate, runtime/derived → `#[allow]` + reason*.
+`corpus.rs` was itself a hand-count miss (caught by the external pass, §10),
+which is exactly why the guard, not the table, is authoritative.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -139,8 +182,10 @@ authored/runtime boundary in code:
 | `worktree.rs:1862` | runtime worker marker |
 | `install.rs:586` | derived asset unpack |
 | `skills.rs:637` | derived asset unpack |
+| `corpus.rs:403`, `:406` | derived — shipped-corpus sync into the items tree |
 
-A future authored mutation reaching for `fs::write` then fails the gate.
+This inventory is the *known* exclusion set; the gate confirms completeness
+(§5.3). A future authored mutation reaching for `fs::write` then fails the gate.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -148,15 +193,30 @@ A future authored mutation reaching for `fs::write` then fails the gate.
   the same branches as before; no-op-write guards (`if !changed { return }`,
   status no-op, relation `Noop`/`Absent`) are untouched, so mtime-hold semantics
   hold. `write_atomic` is invoked only where `fs::write` was.
-- **INV-2 (atomicity).** Every authored write is now temp+rename; a torn
-  authored `*.toml` is structurally impossible. Owned by `write_atomic`'s own
-  test.
+- **INV-2 (swap-atomicity, scoped).** Every authored write is now temp+rename, so
+  no reader ever sees a torn file and no interrupted *userspace* write leaves a
+  half-written authored `*.toml`. This is **not** power-loss durability — no
+  `fsync` (D4). Owned by `write_atomic`'s own test.
+- **INV-3 (concurrent same-process writers).** After D4, two threads/tasks writing
+  the same path use distinct temps; outcome is last-writer-wins with no torn file
+  and no spurious `rename`-ENOENT. Pre-D4 the shared `.{name}.{pid}.tmp` could make
+  one racer clobber/lose the other's temp — the gap the map-server route (the only
+  multi-task writer) would otherwise inherit.
 - **E1 (borrow lifetime).** `write_atomic(p, doc.to_string().as_bytes())` — the
   `String` temporary lives to end of statement; the `as_bytes()` borrow is valid.
   No allocation-count change vs `fs::write` (which also materialised the String).
 - **E2 (`catalog/test_helpers.rs:16`) — CLOSED.** The module header declares
   "Compiles only under `#[cfg(test)]`"; `catalog/mod.rs` pulls it in for tests.
   The gate (no `--all-targets`) does not lint it → no `#[allow]` needed.
+- **E3 (metadata not preserved — immaterial).** `rename`-replace yields a new
+  inode; the target's mode/ACL/xattrs/hardlinks are not carried over, and the new
+  file's mode is the temp's (`0666 & ~umask` → `0644`). Immaterial here: authored
+  doctrine files are git-tracked `0644` TOML/MD with no special mode, ACL, or
+  hardlinks, so `0644 → 0644` is a no-op; and `write_atomic` *already*
+  rename-replaces authored files today (`memory.rs:1759/1797/2273`, `review.rs:1598`,
+  `coverage_store.rs:75`) with no test observing inode/mode. A read-only target
+  becoming replaceable via a writable dir is not a regression — doctrine never
+  chmods authored files read-only.
 
 ## 6. Open Questions & Unknowns
 
@@ -184,6 +244,18 @@ A future authored mutation reaching for `fs::write` then fails the gate.
   `#[allow]` annotations convert the authored/runtime boundary from tribal
   knowledge into documented-in-code intent. *Rejected — audit-grep only:* no
   permanent regression guard.
+- **D4 — harden `write_atomic` temp uniqueness; do not add `fsync`.** The pid-only
+  temp name does not isolate concurrent same-process writers (the map-server is
+  the one such caller). Migrating its route from raw `fs::write` (concurrent →
+  torn bytes) to `write_atomic` is already strictly safer, but the shared temp
+  would let one racer's `rename` consume the other's bytes. A process-global
+  `AtomicU64` counter in the temp name closes it for all callers, contained to the
+  leaf seam (§5.2). The existing `write_atomic` test stays green **unchanged**
+  (temp still consumed by rename) — consistent with the behaviour-preservation
+  gate — plus a new concurrency test (VT-3). *`fsync` rejected:* durability was
+  never the cost in scope; adding it would change the seam's performance profile
+  for all 6+ existing callers and is a separate, measured decision. The scoped
+  claim is swap-atomicity (INV-2), stated as such.
 
 ## 8. Risks & Mitigations
 
@@ -194,17 +266,27 @@ A future authored mutation reaching for `fs::write` then fails the gate.
   `MapServerError::ConceptMapIoError(e.to_string())`; `write_atomic`'s
   `anyhow::Error` stringifies cleanly — preserved.
 - **R3 — missed authored site.** The slice scope itself undercounted (missed
-  supersede + map-server). Mitigate: the `clippy` guard surfaces any remaining
-  authored `fs::write` at gate time — a missed site fails the build, not silently
-  ships. The complete pre-test-module `fs::write` sweep (29 sites = 22 authored +
-  5 runtime/derived + `fsutil` internal + 1 `cfg(test)` helper) confirms the
-  `#[allow]` inventory (§5.4) is exhaustive — no production site is unaccounted.
+  supersede + map-server), and a hand-count of production `fs::write` is **not
+  reliable** — `corpus.rs:403/406` slipped a line-boundary sweep and was caught
+  only by the external pass (§10). Mitigate **structurally**: the `clippy` guard is
+  the oracle — adding it makes any remaining authored `fs::write` fail
+  `just gate`, so a missed site breaks the build rather than silently shipping.
+  The §5.3 table + §5.4 exclusions are the known starting set; execution reconciles
+  against the gate, not against a claimed exhaustive count.
 - **R4 — orphan temp in a committed tree — NOT A RISK.** A crash mid-write could
-  leave `write_atomic`'s `.{name}.{pid}.tmp` sibling in a committed authored dir.
-  Two independent reasons it is moot: (a) `.gitignore` carries `*.tmp`, which
+  leave `write_atomic`'s `.{name}.{pid}.{seq}.tmp` sibling in a committed authored
+  dir. Two independent reasons it is moot: (a) `.gitignore` carries `*.tmp`, which
   matches the temp name; (b) `write_atomic` already writes committed authored
   trees today (`review.rs:1598`, `coverage_store.rs:75`, `memory.rs:1759/1797/
   2273`, `skills.rs:929`) — this slice introduces no new exposure.
+- **R5 — supersede is per-file atomic, not cross-file transactional.**
+  `run_supersede` writes NEW then OLD (`main.rs:4856/4858`). `write_atomic` makes
+  each file's swap atomic but does **not** make the pair transactional — a crash
+  between the two renames still leaves NEW-written/OLD-not. This is unchanged from
+  the `fs::write` status quo (which was additionally torn-prone), so it is not a
+  regression; INV-2's atomicity language is per-file, and cross-file
+  transactionality is explicitly out of scope. Noted so the guarantee is not read
+  wider than it is.
 
 ## 9. Quality Engineering & Validation
 
@@ -215,9 +297,16 @@ A future authored mutation reaching for `fs::write` then fails the gate.
 - **VT-2 — `just gate` green** with the new disallowed-method and the `#[allow]`
   inventory. Proves no stray authored `fs::write` and that exclusions are
   explicit.
-- **VA-1 — atomicity present.** `write_atomic` owns its torn-write test in
-  `fsutil.rs`; per-site the property is "routes through the seam", verified by the
-  guard (VT-2), not by added per-site fault injection (no new signal).
+- **VA-1 — atomicity present.** `write_atomic` owns its swap test in `fsutil.rs`;
+  per-site the property is "routes through the seam", verified by the guard
+  (VT-2), not by added per-site fault injection (no new signal).
+- **VT-3 — concurrent same-path writers (D4).** New `fsutil` test: N threads each
+  `write_atomic` the same path concurrently; assert all return `Ok`, the final
+  content equals one of the written payloads (never a mix), and no `.tmp` sibling
+  remains. Knocks on the wall (drives the real seam, not a temp-name helper) and
+  proves INV-3. The pre-existing `write_atomic_creates_then_overwrites_leaving_no_temp`
+  test must remain green **unchanged** (behaviour-preservation of the single-writer
+  contract under D4).
 
 ## 10. Review Notes
 
@@ -234,7 +323,9 @@ A future authored mutation reaching for `fs::write` then fails the gate.
   usage (see §8 R4).
 - **E2 (test-helper lint) attacked and closed** — `cfg(test)`-only, gate skips it
   (see §5.5 E2).
-- **`#[allow]` inventory proven exhaustive** by the full 29-site sweep (§8 R3).
+- **`#[allow]` inventory** — known starting set; the gate is the oracle (§5.3,
+  §8 R3). *(The internal pass's "proven exhaustive by a 29-site sweep" claim was
+  refuted by the external pass — see below.)*
 - **Layering re-checked.** All callers (incl. `main`, `map_server/routes`) →
   `fsutil` is downward (command/engine → leaf); no new edge, no cycle (ADR-001).
 - **Guard precision.** `disallowed-methods` on `std::fs::write` matches both
@@ -242,6 +333,31 @@ A future authored mutation reaching for `fs::write` then fails the gate.
   touch `File::write_all` (the `entity.rs` create path) — correct, that path is a
   separate seam and out of scope.
 
-### External / inquisition
+### External adversarial pass — codex / GPT-5.5 (2026-06-20)
 
-(pending user choice — see handoff)
+Hostile review of the design + seam + call sites. Disposition:
+
+- **[accepted → D4] Concurrent same-process writers share the temp.** Codex rated
+  it a blocker on the in-scope map-server route. Downgraded (the migration is
+  strictly safer than the raw-`fs::write` status quo it replaces — torn bytes vs a
+  spurious rename error), but the gap is real in the existing seam. Closed by
+  scoping in the temp-uniqueness hardening (D4, §5.2, INV-3, VT-3).
+- **[accepted → R3/§5.3/§5.4] Inventory not hand-exhaustive.** Codex found
+  `corpus.rs:403/406` (production `sync_corpus`) missing from both tables — a real
+  miss from an interleaved-`cfg(test)` line-boundary sweep. Added to the exclusion
+  set (derived) and reframed: the `clippy` guard, not a hand count, is the oracle.
+  The internal pass's "29-site exhaustive" claim is retracted.
+- **[accepted → §1/INV-2] Atomicity overstated.** No `fsync` ⇒ swap-atomicity,
+  not power-loss durability. Scoped the claim throughout; `fsync` explicitly
+  rejected as out of scope (D4).
+- **[accepted → E3/R5] Metadata + multi-file.** Documented inode/mode
+  non-preservation as immaterial for git-tracked `0644` authored files (E3, with
+  precedent), and supersede's per-file (not cross-file) atomicity (R5).
+- **[accepted → D1 framing] "Only centralizes one syscall."** Fair — D1 centralizes
+  the byte-write *by design*; path construction / containment / multi-file
+  orchestration stay per-kind (the `unified-read ≠ unified-write` memory: a shared
+  writer needs a shared *primitive*, not a shared shape). The audit's "no mutation
+  seam" is answered at the corruption + duplication layer, not as a grand unifier;
+  broader unification would be the wrong seam.
+- **[confirmed fine] Parent-dir absence, cross-fs rename, lint alias-matching /
+  test-noise** — codex agreed these hold.

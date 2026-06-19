@@ -31,11 +31,19 @@ TOML/MD that the existing `write_atomic` seam was built to prevent.
   per-kind `toml_edit` splice is the only bespoke part) makes the byte-write the
   sole shared thing, and that primitive already exists in the leaf IO seam
   (ADR-001). A new `entity::save_meta` wrapper is rejected (design D1).
-- Migrate the 22 authored `std::fs::write` sites onto `write_atomic` so every
+- Migrate the authored `std::fs::write` sites onto `write_atomic` so every
   authored mutation is atomic and goes through one code path. Read→mutate logic
-  stays byte-identical per kind.
+  stays byte-identical per kind. The migration set is reconciled against the
+  `clippy` guard (the oracle), not a hand count (design §5.3).
+- Harden `write_atomic`'s temp-naming with a process-global counter so concurrent
+  same-process writers (the map-server) don't collide (design D4 — the one change
+  to the leaf seam; existing `write_atomic` test stays green unchanged).
 - Add a `clippy` `disallowed-methods` guard on `std::fs::write`; the deliberate
   runtime/derived exclusions carry a documented `#[allow]` (design §5.4 / D3).
+
+Guarantee scope: **swap-atomicity** (no reader-visible torn file, no half-written
+authored file from an interrupted userspace write) — *not* power-loss durability
+(no `fsync`; design D4).
 
 Closure intent: no authored-entity update path calls `std::fs::write` directly;
 all route through `write_atomic`; the `clippy` guard makes it permanent; existing
@@ -50,10 +58,11 @@ suites stay green (behaviour-preservation gate).
 
 ## Summary
 
-Migrate the 22 hand-rolled authored `fs::write` update sites onto the existing
-`fsutil::write_atomic` seam, guarded by `clippy` — closing a
-parallel-implementation smell and an interrupted-write corruption risk in one
-move, with no new abstraction.
+Migrate the ~22 hand-rolled authored `fs::write` update sites onto the existing
+`fsutil::write_atomic` seam, harden the seam's temp-naming for concurrent
+same-process writers, and lock it with a `clippy` guard — closing a
+parallel-implementation smell and a reader-visible-tearing risk in one move,
+adding no new authored-mutation abstraction.
 
 ## Follow-Ups
 
