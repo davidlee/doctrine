@@ -50,8 +50,10 @@ Five UX items (design phase will root-cause each before fixing):
 
 ## Non-Goals
 
-- No backend / CLI / actionability-graph *data* changes — this is the exposure
-  surface only.
+- Predominantly the exposure surface — **one scoped backend exception**: a new
+  `relabel_edge` concept-map mutation (item 4 needs it; relations are
+  display-only today). No other backend / CLI / actionability-graph *data*
+  changes.
 - No broad frontend refactor (modular decomposition is IMP-085; theme toggle
   IMP-087; semantic-HTML/ARIA IMP-089; vendor pinning IMP-086). Touch only
   what each fix needs; flag larger cleanups as follow-ups rather than absorbing
@@ -65,7 +67,8 @@ Five UX items (design phase will root-cause each before fixing):
 - `web/map/src/concept-map.ts` — cell-focus edit + pencil edit-all (4)
 - `web/map/src/search.ts` — filter markup, left-pane onFocus (3, 5)
 - `web/map/src/sidebar.css` (+ maybe `concept-map.css`, `graph.css`) — alignment, tooltip, pencil styling
-- Tests: vitest specs alongside (`app`/`model`/`router` test pattern) where behaviour is unit-testable.
+- `src/concept_map.rs`, `src/map_server/routes.rs` — new `relabel_edge` mutation (item 4)
+- Tests: vitest specs alongside (`app`/`model`/`router` test pattern); Rust tests in `routes.rs`/`concept_map.rs` for `relabel_edge`.
 
 ## Risks / Assumptions
 
@@ -77,17 +80,15 @@ Five UX items (design phase will root-cause each before fixing):
 - Tooltip (item 2) should reuse the details-pane content builder, not fork a
   second renderer (DRY).
 
-## Open Questions
+## Open Questions (resolved in design.md)
 
-- **OQ-1** Governance linkage: should this slice `specs` PRD-011 / SPEC-001
-  (the actionability projection it exposes), or stay an unlinked exposure-only
-  polish slice? Resolve in design.
-- **OQ-2** Item 4: does "click cell focuses that table" mean inline per-cell
-  edit, or focus-the-row-for-rename within the current edit model? Confirm the
-  exact interaction with the user during design.
-- **OQ-3** Item 5: precise definition of "actionable" for a left-pane entity —
-  kind-based (SL/backlog) or live dep/seq-edge presence? Latter is more correct
-  but needs the actionability view loaded.
+- **OQ-1** Governance linkage → **resolved**: slice `specs` PRD-011.
+- **OQ-2** Item 4 interaction → **resolved**: cell click = select (node cell
+  focuses the node); explicit **Edit this** (selected field) / **Edit all**
+  buttons. Relation "Edit this" adds a scoped backend `relabel_edge` mutation.
+- **OQ-3** Item 5 "actionable" / mode switch → **resolved**: `requiredMode`
+  predicate, switch-if-undisplayable, applied in the `goto` selection handler
+  (not a render-time derive — see design D1).
 
 ## Verification / Closure Intent
 
