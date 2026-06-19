@@ -222,7 +222,12 @@ IMP-105).
 - **`members`** (PRD/SPEC→REQ, typed) yields no edge — requirements inline into the
   spec body, never nodes (INV-4). All other emitted edges are `Tier::One` via
   `tier1_edges`; `descends_from`/`parent`/`interactions` are `Tier::Typed`, sourced
-  from spec's readers, not the `[[relation]]` block.
+  from spec's readers, not the `[[relation]]` block. `parent`/`descends_from` are read
+  from the `Spec.parent`/`Spec.descends_from` **fields** (`spec.rs:229,233`),
+  `interactions` via `read_interactions`. (RV-093 F-3: `Spec.parent` is single-valued
+  and rendered for *both* subtypes (`spec.rs:408,416`) though documented tech-only, so
+  the "SPEC→SPEC" table cell is the expected case, not a hard guarantee; the projection
+  reads the field uniformly. Product-spec parents are not expected in v1.)
 
 **Status mapping** — doctrine status → the **wire string**, ∈ lazyspec's 7:
 `draft`/`review`/`accepted`/`in-progress`/`complete`/`rejected`/`superseded`
@@ -239,10 +244,14 @@ panics or invents a string.
 - spec `{draft→draft, active→accepted, deprecated→superseded, superseded→superseded}`
 - adr `{proposed→review, accepted→accepted, rejected→rejected, superseded→superseded, deprecated→superseded}`
 - backlog `{open→draft, triaged→review, started→in-progress, resolved→complete, closed→complete}`
-- plan ← `PhaseRollup` (fields `planned`/`in_progress`/`completed`/`blocked`/`unknown`/
-  `missing_toml` — no single `total`): let `total = planned+in_progress+completed+
-  blocked+unknown`; `completed==total && total>0 → complete`; `completed>0 →
-  in-progress`; else `draft`.
+- plan ← `PhaseRollup` (`src/state.rs`): map through the canonical API, **not** a
+  hand-rolled sum (RV-093 F-1) — `PhaseRollup::total()` already sums every bucket
+  (incl `missing_toml`, `state.rs:83`) and `anomalies()` = `unknown + missing_toml`
+  (`:94`). A malformed phase must **suppress** `complete`:
+  `anomalies()==0 && total()>0 && completed==total() → complete`; else
+  `completed>0 → in-progress`; else `draft`. (A partial sum dropping `missing_toml`
+  would mis-label a plan with a missing phase `.toml` as `complete` — re-deriving
+  `total()` is also a no-parallel-impl breach.)
 
 `meta`: `project` = root dir basename; `generated_at` = injected `now` (RFC3339 —
 doctrine's own meta field, not NaiveDate-parsed); `doctrine_version` =
@@ -354,8 +363,12 @@ no mutation, no side effects beyond stdout.
   dead code path, fights the current model.
 - **D8 — Minimal v1 node set** `{slice, spec, adr, backlog, plan}` (decision (a),
   2026-06-19). Kinds that postdate the original scope (`POL`/`STD`/`RV`/`REC`/`REV`/
-  `CM`/knowledge) are deferred to **IMP-105**; their inbound edges dangle harmlessly
-  (§5.5). *Alt rejected:* extend the node set now — scope creep on a slice already
+  `CM`/knowledge) are deferred to **IMP-105**. Two distinct losses, both accepted
+  under lossy-v1 (RV-093 F-5): an included node's outbound edge *to* a deferred kind
+  dangles (suppressed by `validate_ignore`, §5.5); and the deferred kinds' own
+  outbound neighbourhoods (they source `shapes`/`spawns`/`reviews`/`owning_slice`/
+  `decision_ref`/`revises`/`contextualizes`) are simply absent — no node, no edge.
+  *Alt rejected:* extend the node set now — scope creep on a slice already
   long-parked; the projection was always "lossy-by-design v1".
 
 ## 8. Risks & Mitigations
@@ -385,8 +398,10 @@ no mutation, no side effects beyond stdout.
   edges now flow through `relation::tier1_edges` + `targets_for` (§3, §5.3, D7).
   *Mitigate:* project through the unified seam (one total `RelationLabel` map); a
   conformance case exercises each emitted `RelationType` incl. the default arm.
-  *Residual:* the 9 post-scope kinds are deferred (IMP-105), so some outbound edges
-  dangle — accepted under `validate_ignore` (§5.5).
+  *Residual:* the post-scope kinds (`POL`/`STD`/`RV`/`REC`/`REV`/`CM`/knowledge — 7
+  kinds, 10 prefixes counting knowledge's `ASM`/`DEC`/`QUE`/`CON`; RV-093 F-4) are
+  deferred (IMP-105), so some outbound edges dangle — accepted under `validate_ignore`
+  (§5.5).
 - **R7 — fixture re-triplication (SL-027 / ISS-001).** Re-rolling backlog fixture
   TOML for the golden corpus re-opens the debt ISS-001 just closed. *Mitigate:*
   reuse `write_fixture` via a promoted `pub(crate)` test-support seam (§9); no
@@ -411,7 +426,10 @@ no mutation, no side effects beyond stdout.
   `write_fixture`/`Fixture` (promote from `backlog.rs` tests to `pub(crate)`, ideally
   *into* `catalog::test_helpers` beside the others — a `/consult`-grade visibility
   move, don't improvise at execute); (2) **spec** (+members+interactions) — no
-  `seed_spec` exists; add a small writer beside the others. **No** new
+  `seed_spec` exists; add a small writer beside the others; (3) **ADR edges**
+  (RV-093 F-2) — `seed_adr` authors only a `supersedes` axis (`test_helpers.rs:61`),
+  so an ADR `related` (or any non-`supersedes`) edge in the corpus needs `seed_adr`
+  generalised — else confine the golden ADR edges to `supersedes`. **No** new
   `backlog-NNN.toml` head literal is hand-rolled (re-opening ISS-001 is forbidden).
 - **Golden fixture:** a minimal corpus → expected Brief JSON, value-compared; the
   drift canary. **Deterministic by injection** — the test passes fixed `now`+`version`
@@ -494,8 +512,11 @@ This slice sat parked ~800 commits. A full assumption sweep against current sour
 - **G3 — `catalog::test_helpers` now exists** (`seed_slice`/`seed_adr`/`seed_requirement`/
   `seed_knowledge`/`relation_rows`) — closes most of CHARGE IX's fixture gap; §9 rewritten
   to ride it.
-- **G4 — `PhaseRollup` field set changed** (no single `total`) — plan-status mapping
-  recomputes the sum (§5.3).
+- **G4 — `PhaseRollup` reused via its canonical API** (§5.3). Plan-status maps
+  through `PhaseRollup::total()` (incl `missing_toml`) + `anomalies()`. *(RV-093 F-1
+  correction: the round-3 draft wrongly claimed "no single `total`" and hand-rolled a
+  partial sum; `total()` has existed since SL-009, 2026-06-05 — the sweep went stale
+  on a method 14 days old.)*
 - **G5 — new entity kinds** (`POL`/`STD`/`RV`/`REC`/`REV`/`CM`/knowledge) postdate the
   scope → held out of the v1 node set, deferred to **IMP-105** (D8); their edges dangle
   harmlessly (§5.5).
@@ -505,3 +526,30 @@ shape (§9, planning); the lazyspec-side question of whether an emitted `virtual
 is honoured via the JSON/frontmatter path (piece-4 / `../lazyspec` concern, not this
 slice). No governance conflict surfaced; ADR-001/004 alignment re-confirmed; SL-048's
 unified seam reinforces ADR-001 layering and "no parallel impl".
+
+### Inquisition (round 4 — 2026-06-19, codex/GPT-5.5 on the round-3 surface, RV-093) — integrated
+
+A focused adversarial pass (codex per `CLAUDE.md` + source-verified) on the
+load-bearing round-3 rewrites only. The core held: the edge-map totality, the typed
+`descends_from`/`parent`/`interactions` split (sourced via spec fields/readers, **not**
+`tier1_edges` — confirmed against `relation.rs`/`spec.rs`), the 9-state status map vs
+`SLICE_STATUSES`, the `needs`→`blocks` deferral (no such `RelationLabel` exists), and
+the D8 cut — all orthodox. Five charges, all folded:
+
+- **F-1 (major) → §5.3, §10 G4.** Round-3's G4 wrongly claimed `PhaseRollup` has "no
+  single `total`" and hand-rolled a sum **excluding** `missing_toml`. `PhaseRollup::total()`
+  has existed since SL-009 (2026-06-05) and sums **including** `missing_toml`; a partial
+  sum mis-labels a plan with a missing phase `.toml` as `complete`. Plan-status now maps
+  through `total()` + `anomalies()` (a malformed phase suppresses `complete`).
+- **F-2 (minor) → §9.** `seed_adr` authors only a `supersedes` axis; the ADR generic-edge
+  gap is now named beside the backlog/spec gaps.
+- **F-3 (minor) → §5.3.** `Spec.parent`/`descends_from` are read from the **fields**
+  (subtype-agnostic; rendered for both subtypes though documented tech-only); the
+  "SPEC→SPEC" cell is the expected case, not a guarantee.
+- **F-4 (minor) → §8 R8.** "9 post-scope kinds" replaced with the explicit list (7 kinds
+  / 10 prefixes).
+- **F-5 (nit) → §7 D8.** The deferred-kind loss is now framed as two distinct losses
+  (dangling targets of included nodes + absent outbound neighbourhoods of deferred kinds),
+  both accepted under lossy-v1.
+
+No blocker; no governance conflict. Lock gate: F-1..F-5 folded (this section).

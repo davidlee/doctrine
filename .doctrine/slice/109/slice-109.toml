@@ -1,7 +1,7 @@
 id = 109
 slug = "mcp-review-server"
 title = "MCP server for review commands"
-status = "design"
+status = "started"
 created = "2026-06-19"
 updated = "2026-06-19"
 

@@ -1,0 +1,51 @@
+id    = 93
+slug  = "inquisition-round-4-codex-sl-026-round-3-re-validated-surface-edgestatus-map-phaserollup-sum"
+title = "Inquisition (round 4 / codex): SL-026 round-3 re-validated surface — edge+status map, PhaseRollup sum, fixture seam, D8 node cut"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-026"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "Expected plan-status to reuse the authoritative rollup; observed round-3 G4 falsely claims 'no single total' and hand-rolls a sum that drops missing_toml"
+detail = "design.md §5.3 (l.242) + §10 G5 (l.497) assert PhaseRollup has 'no single total' and recompute total = planned+in_progress+completed+blocked+unknown. FALSE + divergent: PhaseRollup::total() exists at src/state.rs:83 (since commit 0c2a1abc, SL-009, 2026-06-05 — 14 days BEFORE the round-3 re-validation), and it sums INCLUDING missing_toml (state.rs:89); anomalies()=unknown+missing_toml (state.rs:94). The hand-rolled sum excludes missing_toml, so a plan with completed=1,missing_toml=1 emits 'complete' in the design but is NOT complete by source semantics. Round-3's own drift sweep (G4) went stale on a method 14 days old. Violates no-parallel-impl/DRY (re-deriving an API the engine already provides) and ships a wrong 'complete' verdict into the locked design. Fix: delete the hand-rolled sum, cite PhaseRollup::total(), and define the complete-gate w.r.t. anomalies (a missing_toml/unknown phase must suppress 'complete')."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "minor"
+title = "Expected §9 to name every fixture gap; observed it overstates catalog::test_helpers ADR reuse — seed_adr seeds only supersedes"
+detail = "design.md §9 (l.405-415) says catalog::test_helpers 'mostly closes' the fixture gap and names two remaining gaps (backlog seed, spec seed). Incomplete: src/catalog/test_helpers.rs:61 seed_adr(root,id,supersedes:&[&str]) can author ONLY a supersedes axis — it cannot seed an ADR  edge or any other [[relation]] axis, unlike seed_slice (arbitrary edges, l.42). If the golden corpus needs an ADR with a non-supersedes edge, seed_adr must be generalised. Fix: §9 names the seed_adr generic-edge gap alongside the backlog/spec gaps, or notes the golden corpus confines ADR edges to supersedes."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "minor"
+title = "Expected the edge table to characterise parent accurately; observed it asserts 'parent (SPEC->SPEC)' as fact though Spec.parent renders for product specs too"
+detail = "design.md §5.3 edge table (l.199) maps 'parent (SPEC->SPEC)' -> implements. RELATION_RULES narrows Parent SOURCE to &[SPEC] (relation.rs:335-342, link/FK validation), but Spec.parent is a subtype-agnostic struct field (spec.rs:233) and render() emits it for BOTH Tech (spec.rs:408) AND Product (spec.rs:416) subtypes. The projection reads the field, not the link rule, so the 'SPEC->SPEC' assertion is imprecise. Low stakes (projection reads the field uniformly; parent is documented tech-only). Fix: state parent is read from Spec.parent (subtype-agnostic at projection), or explicitly scope product-spec parents out of v1."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "minor"
+title = "Expected the deferred-kind count to match the enumeration; observed '9 post-scope kinds' matches neither the 7 listed nor IMP-105's 10 prefixes"
+detail = "design.md §8 R8 (l.388) writes 'the 9 post-scope kinds'. The enumeration is POL/STD/RV/REC/REV/CM/knowledge = 7 kinds (knowledge as one), or 10 prefixes if knowledge splits ASM/DEC/QUE/CON (IMP-105 lists all ten). '9' matches neither. A numeral introduced/left wrong in the round-3 rewrite. Fix: replace '9' with the explicit list (or the correct count: 7 kinds / 10 prefixes)."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "nit"
+title = "Expected D8/§5.5 to frame the fidelity loss completely; observed 'inbound edges dangle harmlessly' understates that deferred kinds' whole outbound neighbourhoods are absent"
+detail = "design.md l.357/500 frame the deferred-kind loss as 'their inbound edges dangle harmlessly'. Technically correct (an emitted node's outbound edge to a deferred kind = the deferred kind's inbound edge, which dangles and is suppressed by validate_ignore). But deferred kinds also SOURCE first-class labels (relation.rs: Contextualizes/Shapes/Spawns/Reviews/OwningSlice/DecisionRef/Revises) — those whole outbound neighbourhoods are simply absent, not 'dangling'. Lossy-v1 is already disclosed (§4, D8), so this is prose-precision only. Fix (optional): one line noting v1 omits both some targets of included nodes AND all edges sourced by deferred kinds."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,0 +1,203 @@
+id    = 92
+slug  = "inquisition-on-sl-109-design-for-mcp-review-server"
+title = "Inquisition on SL-109 design for MCP review server"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-109"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "MCP error mapping from anyhow::Error by string-pattern parsing is brittle and untestable"
+detail = '''
+## Expected
+
+A structured error contract between the review engine and transport layers. When the engine rejects a verb (role mismatch, finding state, not found), it should return a typed error the MCP layer can map to JSON-RPC error codes without parsing free-text strings.
+
+## Observed
+
+Design §4 (Error mapping table) specifies: "Structured error codes (NOT_FOUND, ROLE_MISMATCH, STATE_MISMATCH) are parsed from the error string where the engine's anyhow::bail! messages follow a predictable pattern (e.g. 'verify expects ...' → STATE_MISMATCH). Unrecognised errors fall through with message only."
+
+The review engine has no structured error type. Every verb handler uses anyhow::bail! with parameterized messages:
+
+- `"\`{}\` cannot fire on {} (status \`{}\`, --as {}): out of turn (design §5)"` (src/review.rs:1565)
+- `"raise is the raiser's verb (--as raiser)" (src/review.rs:1108)
+
+## Why this is heresy
+
+1. **No regression detection.** A change to any error message string silently degrades the MCP error path to the catch-all `{ code: -32000, data: { message: "..." } }`. No test, no compilation error, no lint catches this.
+
+2. **Fragile pattern matching.** Error messages contain embedded parameters (finding IDs, status values, verb names). String-matching must either use regex (expensive, fragile) or substring matching (which can produce false positives/negatives as messages evolve).
+
+3. **Category confusion.** The design maps ALL review-engine errors to JSON-RPC code -32000 ("server error"), but `ROLE_MISMATCH` and `STATE_MISMATCH` are protocol-level validation errors — the client sent bad parameters. JSON-RPC reserves -32602 for invalid params. Lumping everything into -32000 loses the distinction between "the server is broken" and "you asked for something invalid."
+
+## Penance
+
+Add a closed error enum to the review engine (e.g. `ReviewError` with variants `NotFound`, `RoleMismatch`, `StateMismatch`, `DanglingRef`, `LockContention`, `Internal`) that carries structured fields. The MCP error mapper matches on the enum variant, not on string content.'''
+disposition = "fix-now"
+response = "The design must add a structured error enum (e.g. ReviewError with NotFound/RoleMismatch/StateMismatch/DanglingRef/LockContention/Internal variants) to the review engine before implementation. The MCP error mapper maps enum variants to JSON-RPC codes by variant identity, not by string-parsing. The engine's anyhow::bail! calls are replaced with ReviewError returns. This is gating — the implementation phase must not begin with a string-parsing error mapper."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Showed variant computes both JSON and formatted output unconditionally — wasted work"
+detail = """
+## Expected
+
+The `Showed` variant should carry either `formatted` (for CLI) or `json` (for MCP), computed conditionally based on the requested format — as the current `run_show` already does via its `Format` parameter.
+
+## Observed
+
+Design D1 defines:
+
+```rust
+Showed { json: serde_json::Value, formatted: String },
+```
+
+The design justification reads: "Rather than refactor that stack, each variant carries the human-formatted string and a structured payload."
+
+This means `run_show()` always computes BOTH formats regardless of which consumer is calling. The CLI path only needs `formatted`; the MCP path only needs `json`. Current code at `src/review.rs:794-809` shows `run_show` takes a `Format` parameter and conditionally renders only one format:
+
+```rust
+let out = match format {
+    Format::Table => format_show(&doc, &body),
+    Format::Json => show_json(&doc, &body)?,
+};
+```
+
+## Why this is heresy
+
+1. **Computational waste.** Computing `serde_json::Value` (full document serialization) on every CLI invocation is wasteful. Computing formatted text on every MCP call is wasteful. The design regresses from conditional to unconditional computation.
+
+2. **Missed refactoring opportunity.** The design itself acknowledges the format split exists ("run_show and run_list already have Format::Table/Format::Json split") but then declines to refactor it, instead opting for a dual-carry variant. This is precisely the moment to separate format concerns, not entrench them.
+
+3. **Precedent.** A `ReviewOutput` enum that carries computed output doubles as a view model, blurring the line between the engine's pure data and the consumer's presentation. The CLI's `print_review()` should own presentation; the enum should carry data.
+
+## Penance
+
+Either (a) carry structured data only in the `Showed` variant and let `print_review()` and the MCP handler each format it, or (b) make the conditional computation explicit by passing Format through to the enum construction (a minor variant of the first). The simplest correct fix: `Showed` carries the `ReviewDoc` + body strings; the consumers format."""
+disposition = "fix-now"
+response = "Accepted. The Showed variant should carry structured data (e.g. a review doc reference + body), not pre-computed dual outputs. print_review() and the MCP handler each format from the structured data. This is a small design fix, not a deep architectural change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Status variant cache_verdict as Option<String> is ambiguous and loses structured information"
+detail = """
+## Expected
+
+The `Status` variant should carry structured fields for the cache verdict — specifically a boolean `cache_stale` and an optional `stale_paths: Vec<String>`, not a pre-formatted `Option<String>` whose semantics are ambiguous.
+
+## Observed
+
+Design D1 defines:
+
+```rust
+cache_verdict: Option<String>,
+```
+
+The design text says: "Rather than leak internal enums, Status carries pre-rendered strings for the format-sensitive fields and a formatted: String for the full CLI output."
+
+The current `run_status` at `src/review.rs:1859-1892` produces either `"cache: current"` or `"cache: stale (path1, path2)"` via `CacheVerdict::Current` / `CacheVerdict::Stale(Vec<String>)`. The internal `CacheVerdict` enum is already pure and structured. Turning it into an `Option<String>` loses the structured distinction — the MCP consumer must parse the string to determine staleness, which is the same fragile pattern condemned in F-1.
+
+## Why this is heresy
+
+1. **Ambiguous semantics.** What does `None` mean? Cache not primed? Or cache current? The design doesn't specify. The current code only emits cache info when primed — so `None` likely means "unprimed." But this isn't stated.
+
+2. **String-based staleness signal.** The MCP consumer shouldn't need to parse `"cache: stale (foo, bar)"` to extract the drifted paths. This is structured data the engine already has.
+
+3. **Same anti-pattern as F-1.** The design acknowledges the internal enum exists (`CacheVerdict`) but declines to expose it, falling back to string-based signalling — the exact fragility F-1 flags for error mapping.
+
+## Penance
+
+Expose a structured `CacheVerdict` enum (or two fields: `cache_primed: bool`, `cache_stale_paths: Vec<String>`) in the `Status` variant. The `formatted` field can carry the human-readable string. The MCP path uses the structured fields."""
+disposition = "fix-now"
+response = "Accepted. The Status variant should carry a structured cache verdict: cache_primed: bool, cache_stale_paths: Vec<String>. The formatted: String field carries the human-readable output. The MCP path uses the structured fields."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "print_review() output contract is unspecified — golden tests become the spec"
+detail = """
+## Expected
+
+The `print_review()` function should be specified with a concrete output contract per variant — a table mapping each `ReviewOutput` variant to its expected stdout text. The existing `writeln!` calls scattered across 11 `run_*` functions are the source of truth the design claims to preserve "behaviorally."
+
+## Observed
+
+The design's Verification Strategy (VH-1) states: "Golden tests: capture current stdout for each verb before refactor, then assert print_review produces identical strings after refactor."
+
+The design does NOT specify:
+- What text `print_review()` emits for `ReviewOutput::Created`
+- What text `print_review()` emits for `ReviewOutput::Raised`
+- ... (none of the 11 variants are specified)
+- How the `formatted` field is selected over structured fields for dual-output variants
+
+Currently, each `run_*` function writes its own stdout via inline `writeln!`/`write!` calls (src/review.rs lines 582, 808, 988, 1414, 1448, 1543, 1774, 1837, 1875, 1909, 1914, 1920). After refactoring, `main.rs` calls `print_review()` which must reproduce all of these.
+
+## Why this is heresy
+
+1. **Golden tests become the spec.** Without a formal output contract, VH-1's golden tests are the only specification of what `print_review()` must produce. If the golden tests capture a bug in current output, the bug is enshrined.
+
+2. **No reviewable contract.** The design claims behavioral preservation but provides no artifact to review. A reviewer can't tell whether the proposed `print_review()` matches the design's intent — only whether it matches current behavior.
+
+3. **Regression risk.** During implementation, the implementer has 11 scattered `writeln!` calls to replicate in one function. Without a spec, omissions or format drift (e.g., trailing newlines, spacing, word order) are likely and will only be caught by VH-1 golden tests — which are written during execution, not design.
+
+## Penance
+
+Add a concrete output contract table to `design.md` mapping each `ReviewOutput` variant to its expected stdout text. Use the current `writeln!` calls as the source. This makes the behavioral-preservation claim reviewable and gives the implementer a direct specification."""
+disposition = "fix-now"
+response = "Accepted. Add a concrete output contract table to design.md mapping each ReviewOutput variant to its expected stdout text. Use the current writeln! calls as the source. This makes behavioral-preservation reviewable before implementation."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Primed variant carries semantically confused stale: Vec<String> field"
+detail = """
+## Expected
+
+The `Primed` variant should carry structured fields that match what `run_prime` produces: the count of areas, tracked paths, invariants, and risks — mirroring the current stdout output: `"{id} primed — N area(s), M tracked path(s), ..."`.
+
+## Observed
+
+Design D1 defines:
+
+```rust
+Primed { cache_paths: Vec<String>, stale: Vec<String> },
+```
+
+The `stale: Vec<String>` field is semantically confusing. The `prime` verb WRITES a fresh cache baseline — it does not report staleness. Staleness is reported by `review status` (which runs `cache_staleness()` to compare the stored baseline against live disk). A `Primed` variant carrying `stale` paths is a category error: you can't be "stale" from a baseline you just wrote.
+
+The design does not explain what `stale` means in this context. Possibilities:
+- Paths that differed between the OLD cache and the NEW cache? (Not staleness)
+- Paths the supplier listed but don't exist on disk? (Not staleness — that's a validation error)
+- Leftover from a copy-paste of the Status variant? (Most likely)
+
+## Why this is heresy
+
+1. **Semantic confusion.** The `stale` field in a `Primed` variant misleads consumers into thinking prime reports staleness. The MCP handler might interpret this as a staleness signal and act on it — but it's not staleness.
+
+2. **Under-specified.** The design never explains what `stale` contains for the Primed variant. Consumers of the MCP protocol can't write correct handling code against an unspecified field.
+
+3. **Copy-paste artifact.** The field appears to be a copy-paste from the Status variant's staleness reporting, suggesting the design wasn't independently reasoned for each variant.
+
+## Penance
+
+Remove `stale` from the `Primed` variant. If `cache_paths` is intended to be the tracked path set, name it `tracked_paths: Vec<String>`. Add a `tracked_count: usize` for parity with the current stdout output. If the intent was to report paths from the OLD cache that changed, either (a) drop it (not the prime verb's concern) or (b) name it `replaced_paths` and document it."""
+disposition = "fix-now"
+response = "Accepted. Remove stale from Primed variant. Replace cache_paths with tracked_paths and add an areas_count field. The stale field was a copy-paste artifact from the Status variant."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
