@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 304
+slug = "isolation-integrity-tier-exclusion-is-guaranteed-by-construction-rather-than-a-trusted-check-and"
+title = "Isolation integrity: tier exclusion is guaranteed by construction rather than a trusted check, and the sole-writer guard fails closed on ambiguity (a marker-absent linked worktree is refused, not trusted)."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

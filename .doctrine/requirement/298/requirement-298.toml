@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 298
+slug = "the-coordinator-is-the-sole-writer-it-funnels-each-delta-into-durable-state-in-a-fixed-order"
+title = "The coordinator is the sole writer: it funnels each delta into durable state in a fixed order (precondition, apply, verify, one coordination commit) and records derived knowledge only after the confirmed code commit."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

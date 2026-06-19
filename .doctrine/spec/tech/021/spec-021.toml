@@ -9,6 +9,7 @@ kind = "tech"
 category = "dispatch"
 c4_level = "component"
 parent = "SPEC-012"
+descends_from = "PRD-015"
 tags = ["dispatch", "worktree", "orchestrator", "funnel", "cadence", "routing", "harness-altitude", "integration-sync", "gotchas"]
 responsibilities = [
   "Carry the per-batch funnel cadence as a fixed ordered contract — capture `B` pre-spawn, then precondition → delta-check → R-5 `.doctrine/`/`.claude/` belt → import (non-committing) → verify → branch-point guard → one coordination commit → record — with report-and-halt on any breach and knowledge trailing only the confirmed code commit (ADR-006 D7). The verbs themselves are SPEC-012's; this owns their ordering and the halt discipline.",
