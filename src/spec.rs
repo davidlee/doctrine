@@ -43,7 +43,7 @@ use crate::tomlfmt::toml_string;
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`PRD`/`SPEC`) and from the tree dirs below.
-const SPEC_STEM: &str = "spec";
+pub(crate) const SPEC_STEM: &str = "spec";
 
 /// The product subtype: light identity, `members.toml`, no interactions. Own tree
 /// + reservation namespace.
@@ -140,7 +140,7 @@ pub(crate) enum SpecStatus {
 
 impl SpecStatus {
     /// The kebab string for `spec show` render (matches the serde rename). Pure.
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             SpecStatus::Draft => "draft",
             SpecStatus::Active => "active",
@@ -363,7 +363,7 @@ fn spec_scaffold(subtype: SpecSubtype, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<
 /// absent file and a tech spec with zero edges uniformly (VT-3). The spec's own
 /// prose body is emitted **verbatim** — never structurally parsed (D8 / storage
 /// rule); per-requirement fields come from the structured toml, not their prose.
-fn render(
+pub(crate) fn render(
     spec: &Spec,
     prose_body: &str,
     members: &[(Member, Requirement)],
@@ -505,7 +505,7 @@ fn render(
 /// Parse a spec's `members.toml` into its rows. A missing file → no members (a
 /// spec always carries the seed, but tolerance keeps callers robust). Shared by
 /// the `#members` column and `req add`'s label/order scan.
-fn read_members(members_path: &Path) -> anyhow::Result<Vec<Member>> {
+pub(crate) fn read_members(members_path: &Path) -> anyhow::Result<Vec<Member>> {
     let text = match std::fs::read_to_string(members_path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -528,7 +528,7 @@ fn member_count(spec_dir: &Path) -> anyhow::Result<usize> {
 /// → no interactions (a product spec has none — absent, not empty; §5.4), so a
 /// product spec and a tech spec with zero edges both yield `[]`. Read-only; mirrors
 /// `read_members`.
-fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction>> {
+pub(crate) fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction>> {
     let text = match std::fs::read_to_string(interactions_path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -545,7 +545,11 @@ fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction
 /// Read a spec's both tiers in one call — parse `spec-NNN.toml` into a [`Spec`]
 /// and read `spec-NNN.md` as its prose body. Mirrors [`read_slice`]'s `(parsed,
 /// raw_toml, prose_body)` signature. Errors on a missing file or malformed TOML.
-fn read_spec(subtype: SpecSubtype, root: &Path, id: u32) -> anyhow::Result<(Spec, String, String)> {
+pub(crate) fn read_spec(
+    subtype: SpecSubtype,
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<(Spec, String, String)> {
     let name = format!("{id:03}");
     let dir = root.join(subtype.kind().dir).join(&name);
     let toml_path = dir.join(format!("{SPEC_STEM}-{name}.toml"));
