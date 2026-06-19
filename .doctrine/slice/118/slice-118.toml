@@ -1,7 +1,7 @@
 id = 118
 slug = "estimate-authoring-cli"
 title = "Estimate facet authoring CLI verb"
-status = "design"
+status = "ready"
 created = "2026-06-19"
 updated = "2026-06-19"
 
