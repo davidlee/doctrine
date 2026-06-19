@@ -1,0 +1,104 @@
+# Implementation plan for SL-120 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-120"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Extension core"
+objective = "Implement .pi/extensions/doctrine/mcp.ts — spawn, MCP handshake, tool registration, tool execution, graceful shutdown"
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked and committed" },
+  { id = "EN-2", text = "pi SDK types available for tool registration" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Session start spawns doctrine serve --mcp, negotiates handshake, discovers 10 tools" },
+  { id = "EX-2", text = "Each MCP tool registered as doctrine_<name> with pass-through params" },
+  { id = "EX-3", text = "Tool calls translate to JSON-RPC tools/call, return MCP content as text" },
+  { id = "EX-4", text = "Persistent stdout reader dispatches responses by id, ignores notifications" },
+  { id = "EX-5", text = "Process crash detected via error/exit listeners, surfaced as ProcessDeadError" },
+  { id = "EX-6", text = "session_start idempotent (started guard); session_shutdown graceful (shutdown + exit + kill)" },
+  { id = "EX-7", text = "Stderr captured in 16KB byte-bounded ring buffer, appended to error messages" },
+  { id = "EX-8", text = "TimeoutError on handshake (2s), tools/list (5s), tool calls (30s)" },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: buildRequest produces valid JSON-RPC with correct id and method" },
+  { id = "VT-2", expects = "Unit: parseResponse parses valid JSON, throws on malformed" },
+  { id = "VT-3", expects = "Unit: toolPiName('review_raise') === 'doctrine_review_raise'" },
+  { id = "VT-4", expects = "Unit: stripPiPrefix('doctrine_review_raise') === 'review_raise'" },
+  { id = "VT-5", expects = "Unit: extractText filters non-text content, joins text items" },
+  { id = "VT-6", expects = "Unit: formatMcpError formats code + message + optional data" },
+  { id = "VT-7", expects = "Unit: withTimeout resolves before timeout, rejects after" },
+  { id = "VT-8", expects = "Unit: ProcessDeadError includes exit code and stderr tail" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Boot install integration"
+objective = "Extend src/boot.rs install_refresh pi arm to generate .pi/extensions/doctrine/mcp.ts with baked BIN_PATH"
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 extension file shape is known (final TS template)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "plan_mcp_extension decision function: Generate / Regenerate / NoOp / SkipForeign" },
+  { id = "EX-2", text = "install_mcp_extension imperative apply function with dry_run support" },
+  { id = "EX-3", text = "Generated file matches PHASE-01 output byte-for-byte with baked current_exe()" },
+  { id = "EX-4", text = "install_refresh pi arm calls both SL-119's and SL-120's extension installers" },
+  { id = "EX-5", text = "RefreshReport extended with mcp_extension: ExtOutcome field (default NotApplicable)" },
+  { id = "EX-6", text = "Foreign (user-modified) extension files not overwritten" },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: plan_mcp_extension NoFile → Generate" },
+  { id = "VT-2", expects = "Unit: plan_mcp_extension matching content → NoOp" },
+  { id = "VT-3", expects = "Unit: plan_mcp_extension content differs → Regenerate" },
+  { id = "VT-4", expects = "Unit: plan_mcp_extension foreign file → SkipForeign" },
+  { id = "VT-5", expects = "Unit: generated TS contains baked exec path" },
+  { id = "VT-6", expects = "Integration: doctrine boot install --agent pi creates mcp.ts" },
+  { id = "VT-7", expects = "Integration: idempotent re-run is no-op" },
+  { id = "VT-8", expects = "Behaviour-preservation: all existing boot tests stay green" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Tests & gate"
+objective = "Integration tests with live doctrine MCP server; lint and gate pass"
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 extension source complete" },
+  { id = "EN-2", text = "PHASE-02 boot generation complete" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All 10 tools register and return valid responses in integration test" },
+  { id = "EX-2", text = "Error cases covered: bad params, process crash, handshake timeout" },
+  { id = "EX-3", text = "eslint zero warnings on extension file" },
+  { id = "EX-4", text = "just check (cargo clippy) zero warnings" },
+  { id = "EX-5", text = "All existing tests green (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "Integration: spawn doctrine serve --mcp, call tools/list → 10 tools" },
+  { id = "VT-2", expects = "Integration: call doctrine_review_list via the bridge → returns rows" },
+  { id = "VT-3", expects = "Integration: call with missing required field → MCP error via bridge" },
+  { id = "VT-4", expects = "Integration: kill process mid-session → next call throws ProcessDeadError" },
+  { id = "VT-5", expects = "Integration: non-MCP binary → handshake timeout, session continues" },
+  { id = "VA-1", expects = "eslint zero warnings (lint as you go across all phases)" },
+  { id = "VA-2", expects = "just check zero warnings (cargo clippy bins/lib)" },
+  { id = "VA-3", expects = "cargo test --workspace all green (behaviour-preservation)" },
+]
+specs        = []
+requirements = []
