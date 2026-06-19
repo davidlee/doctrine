@@ -37,7 +37,10 @@ pub(crate) fn format_estimate_verbose(facet: Option<&EstimateFacet>, unit: &str)
     };
 
     let spread = if facet.lower > 0.0 {
-        format!("  Attention spread: {}x", format_bound(facet.upper / facet.lower))
+        format!(
+            "  Attention spread: {}x",
+            format_bound(facet.upper / facet.lower)
+        )
     } else {
         "  Attention spread: ratio unavailable".to_string()
     };
@@ -89,7 +92,10 @@ mod tests {
 
     #[test]
     fn vt3_format_estimate_normal_absent() {
-        assert_eq!(format_estimate_normal(None, "espresso_shots"), "Estimate: none recorded");
+        assert_eq!(
+            format_estimate_normal(None, "espresso_shots"),
+            "Estimate: none recorded"
+        );
     }
 
     #[test]
@@ -149,7 +155,10 @@ mod tests {
             upper: 5.0,
         };
 
-        assert_eq!(format_estimate_normal(Some(&facet), "shots"), "Estimate: 5-5 shots");
+        assert_eq!(
+            format_estimate_normal(Some(&facet), "shots"),
+            "Estimate: 5-5 shots"
+        );
         assert_eq!(
             format_estimate_verbose(Some(&facet), "shots"),
             vec![
