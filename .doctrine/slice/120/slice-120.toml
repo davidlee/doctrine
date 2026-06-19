@@ -1,6 +1,6 @@
 id = 120
 slug = "mcp-bridge"
-title = "Pi extension: bridge .mcp.json MCP servers as tools"
+title = "Pi extension: doctrine MCP tools in pi"
 status = "design"
 created = "2026-06-19"
 updated = "2026-06-19"
