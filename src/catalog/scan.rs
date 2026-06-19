@@ -15,9 +15,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::entity;
+use crate::estimate::{self, EstimateFacet};
 use crate::integrity;
 use crate::listing;
 use crate::relation::RelationEdge;
+use crate::value::{self, ValueFacet};
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
 use super::hydrate::CatalogKey;
@@ -130,6 +132,17 @@ pub(crate) struct ScannedEntity {
     /// its title.
     pub(crate) title: String,
     pub(crate) outbound: Vec<RelationEdge>,
+    /// The entity's optional `[estimate]` facet (SL-103 PHASE-01) — read
+    /// kind-agnostically in the scan, with per-facet malformed isolation (D4):
+    /// a malformed PRESENT estimate drops to `None` and pushes an `Error`
+    /// diagnostic, leaving the node and the sibling `value` facet intact. Now
+    /// consumed by the hydrate projection (PHASE-02 — `Catalog::from_scanned`
+    /// copies it onto each `CatalogEntity`).
+    pub(crate) estimate: Option<EstimateFacet>,
+    /// The entity's optional `[value]` facet (SL-103 PHASE-01) — read with the
+    /// same kind-agnostic, per-facet isolation as [`Self::estimate`]. Now
+    /// consumed by the hydrate projection (PHASE-02).
+    pub(crate) value: Option<ValueFacet>,
 }
 
 /// The all-kind raw scan (design §5.2 — the reusable seam factored out of
@@ -182,16 +195,114 @@ pub(crate) fn scan_entities(
                     continue;
                 }
             };
+            let (estimate, value) = read_facets(root, kref, id, diagnostics);
             out.push(ScannedEntity {
                 key: EntityKey { prefix, id },
                 kind: kref.kind,
                 status,
                 title,
                 outbound,
+                estimate,
+                value,
             });
         }
     }
     Ok(out)
+}
+
+/// Read the optional `[estimate]` / `[value]` facets off one entity's toml,
+/// kind-agnostically, with PER-FACET malformed isolation (SL-103 PHASE-01,
+/// design §5.1 / D4). Each facet parses independently: a malformed PRESENT facet
+/// pushes an `Error` diagnostic and drops THAT facet to `None` — no bound
+/// coercion, no silent repair — leaving the node and the sibling facet intact.
+///
+/// The status read ([`status_and_title_for`]) has already validated this file
+/// parses; a vanished/garbled file HERE is a concurrent-edit window — the status
+/// read is the authority and re-diagnoses next scan, so v1 returns absent rather
+/// than re-report.
+fn read_facets(
+    root: &Path,
+    kref: &integrity::KindRef,
+    id: u32,
+    diagnostics: &mut Vec<CatalogDiagnostic>,
+) -> (Option<EstimateFacet>, Option<ValueFacet>) {
+    let name = format!("{id:03}");
+    let path = root
+        .join(kref.kind.dir)
+        .join(&name)
+        .join(format!("{}-{name}.toml", kref.stem));
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return (None, None);
+    };
+    let Ok(table) = text.parse::<toml::Table>() else {
+        return (None, None);
+    };
+    let estimate = parse_facet(
+        "estimate",
+        table.get("estimate"),
+        estimate::parse_optional,
+        root,
+        kref,
+        id,
+        diagnostics,
+    );
+    let value = parse_facet(
+        "value",
+        table.get("value"),
+        value::parse_optional,
+        root,
+        kref,
+        id,
+        diagnostics,
+    );
+    (estimate, value)
+}
+
+/// Parse ONE optional facet keyed `field` off the entity's parsed toml, isolating
+/// its failure (SL-103 D4). A key PRESENT but not a TOML table is fail-loud (an
+/// `Error` diagnostic + `None`); a present table that fails `parse`'s validation
+/// likewise diagnoses and drops to `None`; absent is a silent `None`. The
+/// diagnostic carries the entity dir as `file`, the entity key, `field`, and the
+/// leaf error message verbatim. Generic over the two `parse_optional` signatures
+/// — the single dedup for both facets.
+fn parse_facet<F, T>(
+    field: &str,
+    raw: Option<&toml::Value>,
+    parse: F,
+    root: &Path,
+    kref: &integrity::KindRef,
+    id: u32,
+    diagnostics: &mut Vec<CatalogDiagnostic>,
+) -> Option<T>
+where
+    F: FnOnce(Option<&toml::value::Table>) -> anyhow::Result<Option<T>>,
+{
+    let mut push = |message: String| {
+        diagnostics.push(CatalogDiagnostic {
+            file: root.join(kref.kind.dir).join(format!("{id:03}")),
+            entity_key: Some(CatalogKey::Numbered(EntityKey {
+                prefix: kref.kind.prefix,
+                id,
+            })),
+            field: Some(field.to_string()),
+            message,
+            severity: Severity::Error,
+        });
+    };
+    match raw {
+        // Present but not a table → fail-loud, NOT silent-absent.
+        Some(v) if v.as_table().is_none() => {
+            push(format!("{field} must be a table"));
+            None
+        }
+        other => match parse(other.and_then(toml::Value::as_table)) {
+            Ok(facet) => facet,
+            Err(e) => {
+                push(e.to_string());
+                None
+            }
+        },
+    }
 }
 
 /// One entity's AUTHORED `(status, title)` for the cross-kind scan, dispatched by
@@ -784,5 +895,189 @@ mod tests {
             diags[0].entity_key.as_ref().map(|k| k.canonical()),
             Some("SL-002".to_string())
         );
+    }
+
+    // == SL-103 PHASE-01: scan-side estimate/value facet read ==
+
+    /// Seed a slice with explicit `[estimate]` / `[value]` table bodies appended
+    /// (the standard `seed_slice` writes no facets). `facets` is appended verbatim
+    /// after the meta keys, so a caller controls the exact (mal)formed shape.
+    /// NOTE: a slice's own typed read ([`crate::slice::read_slice`]) validates
+    /// `[estimate]`, so MALFORMED-facet isolation is exercised on an ADR
+    /// ([`seed_adr_with_facets`]) — a kind whose scan reads only raw relation text,
+    /// leaving `read_facets` the sole facet authority (the per-facet isolation seam).
+    fn seed_slice_with_facets(root: &Path, id: u32, facets: &str) {
+        write(
+            root,
+            &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{facets}"
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/slice/{id:03}/slice-{id:03}.md"),
+            "scope\n",
+        );
+    }
+
+    /// Seed an ADR with `facets` appended verbatim. Unlike a slice, the ADR scan
+    /// path (`governance::relation_edges` → raw `tier1_edges`; `meta::read_meta`
+    /// ignoring unknown keys) never type-checks `[estimate]`/`[value]`, so a
+    /// malformed or non-table facet survives to `read_facets` — the isolation unit.
+    fn seed_adr_with_facets(root: &Path, id: u32, facets: &str) {
+        write(
+            root,
+            &format!(".doctrine/adr/{id:03}/adr-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"a{id}\"\ntitle = \"A{id}\"\nstatus = \"accepted\"\n\
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{facets}"
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/adr/{id:03}/adr-{id:03}.md"),
+            "body\n",
+        );
+    }
+
+    /// VT-1: a faceted entity yields `(Some, Some)`; a non-faceted entity yields
+    /// `(None, None)` with NO diagnostic.
+    #[test]
+    fn read_facets_reads_present_and_absent() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001: both facets present and valid.
+        seed_slice_with_facets(
+            root,
+            1,
+            "[estimate]\nlower = 2\nupper = 8\n\n[value]\nvalue = 5\n",
+        );
+        // SL-002: no facets at all.
+        seed_slice(root, 2, &[]);
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        let sl001 = &scanned[0];
+        assert_eq!(sl001.key.canonical(), "SL-001");
+        assert_eq!(
+            sl001.estimate,
+            Some(EstimateFacet {
+                lower: 2.0,
+                upper: 8.0
+            })
+        );
+        assert_eq!(sl001.value, Some(ValueFacet { value: 5.0 }));
+
+        let sl002 = &scanned[1];
+        assert_eq!(sl002.key.canonical(), "SL-002");
+        assert!(sl002.estimate.is_none());
+        assert!(sl002.value.is_none());
+
+        // A non-faceted entity raises no facet diagnostic.
+        assert!(diags.is_empty(), "no diagnostics expected: {diags:?}");
+    }
+
+    /// VT-2: per-facet isolation — a malformed `[estimate]` (upper < lower) next
+    /// to a VALID `[value]` on the SAME entity pushes one `Error`, drops estimate
+    /// to `None`, and leaves `value == Some`. Seeded on an ADR so the malformed
+    /// facet reaches `read_facets` (a slice would reject it in its own typed read).
+    #[test]
+    fn read_facets_isolates_malformed_estimate_from_valid_value() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_adr_with_facets(
+            root,
+            1,
+            "[estimate]\nlower = 5\nupper = 2\n\n[value]\nvalue = 7\n",
+        );
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        // The node survives, with the sibling facet intact.
+        assert_eq!(scanned.len(), 1);
+        let adr = &scanned[0];
+        assert_eq!(adr.key.canonical(), "ADR-001");
+        assert!(adr.estimate.is_none(), "malformed estimate drops to None");
+        assert_eq!(
+            adr.value,
+            Some(ValueFacet { value: 7.0 }),
+            "sibling value facet stays intact"
+        );
+
+        // Exactly one Error diagnostic, for the estimate field, verbatim message.
+        assert_eq!(diags.len(), 1);
+        let d = &diags[0];
+        assert_eq!(d.severity, Severity::Error);
+        assert_eq!(d.field.as_deref(), Some("estimate"));
+        assert_eq!(
+            d.entity_key.as_ref().map(|k| k.canonical()),
+            Some("ADR-001".to_string())
+        );
+        assert!(
+            d.message.contains("upper must be >= lower"),
+            "leaf message verbatim: {}",
+            d.message
+        );
+    }
+
+    /// VT-3: a non-table facet value (`estimate = 7`) is fail-loud, NOT
+    /// silent-absent — an `Error` diagnostic + `None`. Seeded on an ADR (a slice
+    /// would reject the non-table `estimate` in its own typed read first).
+    #[test]
+    fn read_facets_present_non_table_is_fail_loud() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_adr_with_facets(root, 1, "estimate = 7\n");
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        assert_eq!(scanned.len(), 1);
+        assert!(scanned[0].estimate.is_none());
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].field.as_deref(), Some("estimate"));
+        assert!(
+            diags[0].message.contains("must be a table"),
+            "{}",
+            diags[0].message
+        );
+    }
+
+    /// VT-4: kind-agnostic read — an `[estimate]` authored on an ADR (a NON-slice
+    /// toml) is read, proving the read is corpus-wide, not slice-only.
+    #[test]
+    fn read_facets_is_kind_agnostic_reads_adr_estimate() {
+        let dir = tmp();
+        let root = dir.path();
+        // An ADR with an appended [estimate] facet.
+        write(
+            root,
+            ".doctrine/adr/001/adr-001.toml",
+            "id = 1\nslug = \"a1\"\ntitle = \"A1\"\nstatus = \"accepted\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [estimate]\nlower = 1\nupper = 3\n",
+        );
+        write(root, ".doctrine/adr/001/adr-001.md", "body\n");
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        let adr = scanned
+            .iter()
+            .find(|e| e.key.canonical() == "ADR-001")
+            .expect("ADR-001 scanned");
+        assert_eq!(
+            adr.estimate,
+            Some(EstimateFacet {
+                lower: 1.0,
+                upper: 3.0
+            }),
+            "estimate read off a non-slice kind"
+        );
+        assert!(diags.is_empty(), "no diagnostics: {diags:?}");
     }
 }
