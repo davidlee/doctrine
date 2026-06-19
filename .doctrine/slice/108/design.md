@@ -27,15 +27,21 @@ it from a parent directory — the fork is not under the project root):
 ```sh
 fork_env="$(doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker)" \
   || { echo "fork failed: $?" >&2; exit 1; }
-cp AGENTS.md "$D/"
-env -C "$D" DOCTRINE_WORKER=1 PI_OFFLINE=1 $fork_env \
+cp AGENTS.md "$D/" \
+  || { echo "AGENTS.md copy failed: $?" >&2; exit 1; }
+timeout 300 env -C "$D" DOCTRINE_WORKER=1 $fork_env \
   pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
      --no-extensions --no-skills --no-themes \
-     <<< '{"type":"prompt","message":"<pre-distilled prompt>"}'
+     --offline --approve --tools read,bash,edit,write,grep,find,ls \
+  <<'PI_MSGS'
+{"type":"request","method":"set_auto_retry","params":{"enabled":false}}
+{"type":"prompt","message":"<pre-distilled prompt>"}
+PI_MSGS
 ```
 
-`<<<` is bash syntax; the dispatch jail uses bash. Non-bash orchestrators
-replace with `echo '{"type":"prompt",…}' | pi …`.
+`<<'PI_MSGS'` is a bash heredoc with quoted delimiter (no variable expansion);
+the dispatch jail uses bash. Non-bash orchestrators replace with
+`printf '%s\n' '<json1>' '<json2>' | pi …`.
 
 **Flag rationale:**
 
@@ -43,11 +49,20 @@ replace with `echo '{"type":"prompt",…}' | pi …`.
 |---|---|
 | `--mode rpc` | Structured JSONL protocol; `agent_end` gives typed completion signal with full message array |
 | `--thinking off` | Workers implement code changes; extended reasoning is wasteful. Overridable per-phase for reasoning-heavy tasks |
-| `--session-dir "$D/.pi-session"` | Session colocated with fork; inspectable during the batch if worker fails; GC'd with fork (no `--no-session` — it suppresses `--session-dir`) |
+| `--session-dir "$D/.pi-session"` | Session colocated with fork; inspectable during the batch if worker fails; GC'd with fork |
 | `--no-extensions` | No project-local extension surface — prevents `extension_ui_request` dialog hazards in RPC mode |
 | `--no-skills` | No doctrine skill corpus in context; the boot sector references skills the worker won't have (pi handles missing skill references gracefully) |
 | `--no-themes` | Unnecessary in headless mode |
-| `PI_OFFLINE=1` | Suppress startup version check + package update checks — no network needed |
+| `--offline` | Suppress startup version check + package update checks — no network needed |
+| `--approve` | The orchestrator trusts its own worker; no trust hang. Projects with stricter trust may override |
+| `--tools read,bash,edit,write,grep,find,ls` | pi's default is `read,write,edit,bash` — `grep`,`find`,`ls` are explicitly enabled. Structured tools reduce turn-count vs raw bash calls |
+| `set_auto_retry` (RPC) | Disabled — the orchestrator owns retries, not the harness. Sent as the first RPC message before the prompt |
+
+**Timeout:** `timeout 300` enforces a 300s wall-clock deadline inclusive of all
+retry attempts. On expiry: `timeout` sends SIGTERM to pi (grace); if the process
+hasn't exited within 10s, SIGKILL. The orchestrator treats a timeout exit (code
+124) as a failed worker and proceeds to the next phase or aborts the batch per
+existing dispatch error-handling rules.
 
 **Not passed:** `--no-context-files`. The orchestrator `cp`s AGENTS.md into the
 fork after creation. pi auto-discovers it from cwd; the boot sector
@@ -58,18 +73,19 @@ inline them. `doctrine worktree fork --worker` does not provision AGENTS.md
 
 ### Tool profile
 
-Full built-in set: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`.
-
-`grep` and `find` are included because workers shouldn't burn turns doing
-`bash "grep -r pattern src/"` and parsing raw output — structured tools are
-faster and lower decision cost. `ls` is marginal but costs nothing to include.
+pi v0.79.6 default built-in set: `read`, `write`, `edit`, `bash`. The spawn
+template explicitly enables `grep`, `find`, `ls` via `--tools`. Structured tools
+are faster and lower decision-cost than raw `bash "grep -r pattern src/"` calls.
+`ls` is marginal but costs nothing to include.
 
 ### Print mode (documented alternative)
 
 ```sh
-cp AGENTS.md "$D/"
-env -C "$D" DOCTRINE_WORKER=1 PI_OFFLINE=1 $fork_env \
+cp AGENTS.md "$D/" \
+  || { echo "AGENTS.md copy failed: $?" >&2; exit 1; }
+timeout 300 env -C "$D" DOCTRINE_WORKER=1 $fork_env \
   pi -p --thinking off --no-extensions --no-skills --no-themes \
+     --offline --approve --tools read,bash,edit,write,grep,find,ls \
      "<pre-distilled prompt>" 2>&1
 ```
 
@@ -84,17 +100,28 @@ isn't needed.
 The orchestrator reads JSONL from pi's stdout, discards all events except
 `agent_end`. From `agent_end.messages` it extracts:
 
-1. **Outcome:** `messages.findLast(m => m.role === 'assistant')?.content.find(c => c.type === 'text')?.text` — the worker's final summary
-2. **Errors:** any `toolResult` message with `isError: true` — worker hit a problem
+1. **Outcome text** (fallback ladder):
+   1. Last `content` block of `type: "text"` from the last `role: "assistant"` message
+   2. First `content` block of any type from the last `role: "assistant"` message (tool-call-only turn)
+   3. `status: "no_output"` — no assistant messages at all
+2. **Errors:** any `toolResult` message with `isError: true` → worker hit a problem. Tally as `error_count`.
 3. **Dirty check:** presence of tool calls → worker touched files (funnel delta-check confirms authoritatively)
+4. **Structured outcome:** derive `status` = `"success"` (outcome text present, no errors) | `"partial"` (outcome text present with errors) | `"no_output"` (no extractable text)
 
 No custom extension or filter. The `agent_end` event is the single integration
 point. Intermediate events (`message_update`, `tool_execution_update`) are
 discarded — the orchestrator doesn't steer workers mid-execution.
 
-**Timeout:** the orchestrator should impose a deadline on worker completion.
-`auto_retry_start` events signal transient failures; if the worker hasn't emitted
-`agent_end` within the deadline, abort and report.
+**Timeout:** 300s wall-clock enforced by `timeout` in the spawn template (see
+Spawn template above). The deadline is inclusive of all auto-retry attempts — the
+orchestrator does not implement its own timer; it relies on `timeout` exit code
+124 to detect worker timeout and proceeds per existing dispatch error-handling
+rules (abort phase, report, advance to next or halt batch).
+
+**Auto-retry:** disabled via RPC `set_auto_retry {enabled: false}` sent as the
+first message before the prompt. Rationale: the orchestrator owns retry
+decisions (per-phase, per-batch policy) — the harness should not independently
+retry and hide transient failures from the orchestrator.
 
 **Why RPC over print mode:** `-p` gives unstructured text output with no way to
 separate the worker's final summary from streaming chatter. RPC's `agent_end`
@@ -156,13 +183,19 @@ adding an orchestrator funnel step.
 ### D5 — Trust posture
 
 **Probe result:** pi RPC mode in the doctrine jail accepts prompts immediately
-with `defaultProjectTrust: "ask"` — no trust hang. `PI_OFFLINE=1` suppresses
-startup network checks. No `--approve`/`--no-approve` flag needed for the default
-case.
+with `defaultProjectTrust: "ask"` — no trust hang. `--offline` suppresses
+startup network checks.
+
+The spawn template passes `--approve`: the orchestrator trusts its own worker, so
+no trust prompt gates the run. Projects with stricter trust (`always-ask` or
+per-operation approval) may remove the flag or replace it with
+`--no-approve` — the flag is explicit so the posture is visible and overridable,
+not hidden in project config.
 
 The trust behavior is **project-config-dependent**. If a future project adds
 project-local pi extensions and expects them in workers, the config posture may
-need adjustment. For doctrine's own repo, no changes needed.
+need adjustment. For doctrine's own repo, the `--approve` flag covers the
+default case.
 
 ## Code impact
 
@@ -171,7 +204,7 @@ One test cap bump; one skill documentation change; one e2e exercise.
 | File | Change |
 |---|---|
 | `.agents/skills/dispatch-subprocess/SKILL.md` | Add pi RPC spawn arm alongside `codex exec` |
-| `tests/e2e_skills_dispatch_shrinkage.rs` | Bump `dispatch-subprocess` body-line cap from ≤25 to ≤35 to accommodate the pi arm |
+| `tests/e2e_skills_dispatch_shrinkage.rs` | Bump `dispatch-subprocess` body-line cap from ≤25 to ≤40 to accommodate the pi arm (projection: ~24 existing + ~6 spawn template + ~6 flag table + ~4 print mode) |
 | (exercise only) fork worktree | e2e validation of fork→marker→spawn→agent_end→import→commit |
 
 No CLI verbs, no binary changes, no extension development. The existing
@@ -187,7 +220,11 @@ No CLI verbs, no binary changes, no extension development. The existing
 - **VA** — pi worker completes with `agent_end` containing typed messages; no
   `extension_ui_request` dialogs block the run (confirmed by `--no-extensions`).
 
-No VT tests — no code changes.
+- **VT** — `e2e_skills_dispatch_shrinkage` body-line cap ≤40: the updated
+  skill file measured line count ≤40 (projection: ~24 existing + ~6 spawn
+  template + ~6 flag table + ~4 print mode).
+
+No other VT tests — no binary CLI changes.
 
 ## Open questions (resolved in design)
 
