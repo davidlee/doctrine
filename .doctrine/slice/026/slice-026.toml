@@ -1,9 +1,9 @@
 id = 26
 slug = "lazyspec-projection"
 title = "lazyspec read-only projection"
-status = "proposed"
+status = "design"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-06-19"
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
