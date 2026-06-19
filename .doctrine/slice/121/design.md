@@ -67,7 +67,12 @@ pub(crate) fn worktree_for_ref(root: &Path, refname: &str) -> Result<Option<Path
 ```
 
 Refactor both callers onto it:
-- `find_coordination_worktree` → wrapper mapping `None` → its `"(removed)"` sentinel.
+- `find_coordination_worktree` → wrapper mapping `None` → its `"(removed)"`
+  sentinel. **F4:** the original folds *both* ref-absent **and git-command-failure**
+  into `"(removed)"` (`let Ok(out) = … else return "(removed)"`); the new helper
+  returns `Err` on git failure, so the wrapper must map `Err` → `"(removed)"` too,
+  else the green-unchanged gate breaks. (`gather_fork_worktree` already propagates
+  `anyhow::Error`, so it takes the `Err` straight through — no behavioural change.)
 - `gather_fork_worktree` → delete the duplicate body, delegate.
 
 **Behaviour-preservation gate (ADR-006):** the existing suites for both callers
@@ -115,6 +120,16 @@ the refusal atomic across rows.)
 `git status` at that path, so it generalises to any worktree path with no change —
 pass `wt`.
 
+**Untracked-collision caveat (F1).** `gather_tree_clean` uses
+`--untracked-files=no`, so an **untracked** file colliding with a projected path
+passes this gate, then `merge --ff-only` aborts on its own ("untracked working
+tree files would be overwritten"). That abort is a per-row failure, handled like
+`Moved` (§2.2) — *not* silently swallowed, and surfaced with git's own message. We
+deliberately do **not** widen the gate to `--untracked-files=normal`: untracked
+noise in the close session is common and must not block a clean ff. Consequence:
+an untracked collision on row N>1 can leave rows<N applied — folded into the honest
+atomicity statement (§7), not the dirty pre-gate's guarantee.
+
 ### 2.4 Multi-row generality
 
 No trunk special-casing. The probe is per-row; `edge` (`review/<slice>`) is rarely
@@ -129,17 +144,21 @@ under a merge or multi-commit advance.
 Replace with two tree-true assertions:
 
 ```bash
-# (a) no phantom reverse-diff — working tree matches trunk tip for code:
-git diff --quiet refs/heads/main -- src/     # nonzero exit ⇒ DESYNC, do not proceed
+# (a) no phantom reverse-diff — WHOLE working tree matches trunk tip (NOT path-limited):
+git diff --quiet HEAD     # nonzero exit ⇒ DESYNC, do not proceed
 
 # (b) delta genuinely landed — projected code == trunk code:
 git diff --stat refs/heads/candidate/<N>/close-001 refs/heads/main -- src/   # empty ⇒ landed
 ```
 
-(a) is the ISS-030 detector (a phantom reverse-diff makes working-tree ≠ main).
-With §2 it cannot arise, but the verify now *proves* it instead of reading a ref
-blind. (b) proves projection against the **tree**, not a `~1` boundary. Remove the
-stale `main~1..main` form and its TODO's reliance on it.
+(a) is the ISS-030 detector (a phantom reverse-diff makes the working tree ≠ HEAD).
+**F5:** it must **not** be path-limited — the SL-097 report showed reverse-diff
+entries across implementation files, and a `-- src/` filter would miss a desync in
+any other dir; `git diff --quiet HEAD` covers the whole tracked tree. (b) keeps the
+`-- src/` filter because it is asserting the *code* projection specifically. With §2
+the desync cannot arise, but the verify now *proves* it instead of reading a ref
+blind, and (b) proves projection against the **tree**, not a `~1` boundary. Remove
+the stale `main~1..main` form and its TODO's reliance on it.
 
 **Scope of this step.** §3 lives in the close SKILL and is therefore
 **close-to-main-specific** (`refs/heads/main`, the `close_target` candidate).
@@ -190,7 +209,8 @@ New/changed evidence:
   regression test). Target checked out + **dirty** → `integrate-dirty-worktree`
   refusal, **zero refs moved** (atomicity).
 - **VT — outcome map:** ff-only already-up-to-date → `NoOp`; foreign trunk advance
-  → `Moved`/Failed, integrate bails, no partial state.
+  → `Moved`/Failed, integrate bails *after the loop* (earlier applied rows persist
+  — F3); a re-run resumes idempotently (skips `Verified`, `NoOp`s at-target).
 - **VT — report:** stderr carries per-row `old..new (disposition)`; stdout
   ref-list contract preserved (regression).
 - **Behaviour-preservation:** existing `find_coordination_worktree` /
@@ -200,8 +220,23 @@ New/changed evidence:
 
 ## 7. Invariants & boundaries
 
-- **Atomic-or-nothing:** integrate either advances all planned rows (each pure-ref
-  or resynced) or moves nothing (dirty refusal / `Moved`). No half-advanced trunk.
+- **Dirty-atomicity (the guarantee we add):** the §2.3 pre-mutation pass means a
+  dirty checked-out target refuses with **zero refs moved**. This is the new
+  invariant this slice establishes.
+- **NOT fully atomic on `Moved`/collision (F3 — honest scope).** The replay loop
+  applies rows sequentially and bails *after* the loop on any `Moved` row (the
+  existing `moved` vec), so a later `Moved` — or an untracked-collision ff abort
+  (F1) — can leave **earlier rows applied**. This is **pre-existing** integrate
+  behaviour, unchanged here, and is safe because replay is **idempotent**: a re-run
+  skips already-`Verified` rows (`fresh` guard) and `NoOp`s a row already at its
+  target. The recovery model is "re-run resumes," not "all-or-nothing." We do *not*
+  claim transactional atomicity across rows; only the dirty pre-gate is atomic.
+- **Leg asymmetry (F2 — accepted, documented).** The CAS leg refuses on
+  `current != expected_old` (exact); the ff-only leg refuses on
+  `planned_new not a descendant of current`. They diverge only on a **rewound**
+  target (current is a strict ancestor of `planned_new` but ≠ `expected_old`):
+  CAS refuses, ff-only would advance. Trunk rewind under a close is not a real
+  scenario; accepted, not unified.
 - **No new impurity altitude:** the advance was already an imperative side effect
   (`update-ref`); `merge --ff-only` is the same altitude, the pure layer is
   untouched (ADR-006).
@@ -224,3 +259,25 @@ New/changed evidence:
 - ISS-024 (`candidate create` stray `.doctrine/slice/` dirs).
 - `--json` integrate output; deriving trunk ref from `doctrine.toml deliver_to`
   (IMP-101).
+
+## 9. Adversarial pass (internal)
+
+Self-review before external challenge; findings integrated above.
+
+- **F1 — untracked-collision** (→ §2.3): `gather_tree_clean`'s
+  `--untracked-files=no` lets an untracked file collide; `merge --ff-only` aborts
+  per-row. Accepted: surfaced as a `Moved`-class failure, gate deliberately not
+  widened. Folded into §7 honest atomicity.
+- **F2 — leg asymmetry** (→ §7): CAS exact-old vs ff-only descendant differ only on
+  a rewound target. Accepted, documented, not unified.
+- **F3 — atomicity overclaim** (→ §7, §6): original "atomic-or-nothing" was false
+  for mid-loop `Moved`. Rewritten to the honest guarantee (dirty pre-gate atomic;
+  `Moved`/collision idempotent-resume, pre-existing).
+- **F4 — refactor behaviour drift** (→ §2.1): `find_coordination_worktree` swallows
+  git failure into `"(removed)"`; wrapper must map `Err` → sentinel to keep the
+  green-unchanged gate.
+- **F5 — path-limited desync detector** (→ §3): `(a)` changed from
+  `git diff --quiet refs/heads/main -- src/` to `git diff --quiet HEAD` (whole
+  tracked tree) — the SL-097 reverse-diff was not src-only.
+
+Residual: none blocking. Ready for external adversarial pass or `/plan`.
