@@ -85,7 +85,15 @@ fn apply_clear(path, table, today) -> Result<bool>
 - Fields written via `toml_edit::value(f)` — never string-spliced (sidesteps the
   splice-escape footgun; values are `f64` so no escaping needed anyway).
 - **No-op guard**: if the table already equals target, write nothing (content +
-  mtime hold) → `false`. `updated` bumps **only on change**.
+  mtime hold) → `false`. `updated` bumps **only on change**. (Value-equality
+  compare: a hand-authored `lower = 2` (int) equal to a `2.0` set is a no-op — the
+  int is left un-normalized; harmless, the read path normalizes.)
+- **`updated` safety (adversarial A-1):** facets are kind-agnostic, so the target
+  may be a kind whose TOML lacks a top-level `updated` key. The bump
+  **`insert`s only if `updated` is already present** (a seeded scalar — safe to
+  replace); if absent it is **skipped, never inserted** (a tail-insert would land
+  inside a trailing subtable = corruption, the F-1 hazard). The facet write still
+  succeeds.
 - `set_facet` inserts only the named keys — **sibling keys/sub-tables in
   `[estimate]` are left verbatim** (the forward-compat guarantee, §6).
 - `[estimate]`/`[value]` author the table as an explicit (non-implicit) table.
@@ -137,6 +145,12 @@ only the managed keys, so any future `[estimate]` sub-key (e.g. a `history` arra
 - **R1 — clap mode ambiguity.** Optional positionals + `-x` cannot be a pure clap
   ArgGroup; the both-or-neither-XOR-flag rule is handler-enforced. Mitigation: a
   dedicated parse-equal error + VT covering each illegal combination.
+- **R4 — leading-dash positionals (adversarial A-2).** `value` magnitude may be
+  **negative** (value validates finite only, no range) — `value set SL-1 -5` has
+  clap read `-5` as an unknown flag. Mitigation: `allow_hyphen_values = true` on the
+  magnitude positional (`-- -5` also works). Estimate bounds are `>= 0`, so a
+  negative there is rejected regardless — acceptable as a clap-level error; VT-8
+  asserts rejection, not the message.
 - **R2 — `updated` coupling.** Bumping `updated` couples facet-write to the date
   inject. Mitigation: `today` already threaded for the status seam; no-op guard
   prevents spurious bumps.
@@ -154,7 +168,8 @@ Leaf unit (pure, `facet_write`):
 - **VT-4** `clear_facet` removes the table; clear-absent returns `false`.
 - **VT-5** golden round-trip: unrelated tables / comments / `[relationships]`
   preserved across `set` and `clear`.
-- **VT-6** `updated` bumps only on change (no-op set does not bump).
+- **VT-6** `updated` bumps only on change (no-op set does not bump); a target
+  whose TOML lacks `updated` is written without it (A-1: no insert, no corruption).
 - **VT-7** forward-compat: a `set` over an `[estimate]` table carrying an unknown
   sub-key (`history`-shaped) **preserves** that sub-key (IDE-013 readiness).
 
