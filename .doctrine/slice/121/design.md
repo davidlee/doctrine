@@ -259,6 +259,19 @@ fn with_journaled_projection(
 }
 ```
 
+**`apply` contract (codex §2.6 review — enforced, not just documented).** Because
+the recovery `commit_journal` runs **strictly after** the loop
+(dispatch.rs:1009/1137), a `?`-`Err` out of `apply` aborts *before* applied status
+is recorded. Therefore `apply` MUST return `Err` **only for fatal operational
+failure** (a git command/invariant breaking). Every **semantic per-row refusal**
+sets `row.status` (`Failed`) — and `applied_new_oid` where meaningful — and returns
+`Ok(Some(msg))`, so the post-loop commit still durably records it (B3). This binds
+SL-121's per-row integrate refusals routed *through the closure*: a
+**non-ff-checkout** refusal (§2.2) and a **raced `Moved`** (§2.5) are
+`Ok(Some(token))`, never `?`. (The **whole-integrate dirty refusal**, §2.3, is
+different: it bails **caller-side before the bracket**, so nothing is journaled —
+an `Err`/bail there is correct and the `apply` contract does not apply.)
+
 **Seam placement — the three integrate-only worktree pieces stay caller-side, do
 not enter the bracket:**
 
@@ -565,5 +578,15 @@ state those can later bolt onto without re-cutting. Adversarial pass on §2.6 be
   **before** the bracket; the bracket starts at the first `commit_journal`. The
   caller still owns what to journal; the bracket owns the commit/apply/commit
   dance. Clean boundary, no leakage. ✓
+
+**Codex pass on §2.6 (2026-06-20, GPT-5.5, read-only vs src/).** Verdict
+**sound-with-fixes**. Claims 1/2/3/5 confirmed against source (identical
+`commit_journal` arg shape modulo message+parent — dispatch.rs:978/1009/1097/1137;
+only loop bodies differ — :991/:1110; all journal construction strictly before the
+first commit — :977/:1061/:1077). One MINOR: bind the `apply` contract explicitly —
+per-row semantic refusals must be `Ok(Some(msg))`, `Err` reserved for fatal failure,
+else a `?` aborts before the recovery commit (B3). **Integrated** into §2.6 (the
+`apply` contract paragraph), with the §2.3 whole-integrate dirty refusal explicitly
+exempted (it bails before the bracket). No blocker/major.
 
 Residual: none blocking. Ready for `/plan`.
