@@ -1,0 +1,50 @@
+memory_uid = "mem_019edfaafcf77f83aa29228f4bc53e59"
+memory_key = "mem.pattern.web-map.buildhash-no-hash-prefix"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "web/map buildHash is already '#'-prefixed; do not prepend '#'"
+summary = "web/map: buildHash already returns a '#'-prefixed string — never prepend another '#' in href/hash assignments"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8583b652902c971e6e4edf857e4e610c6a149efa"
+ref_name = "refs/heads/main"
+checkout_state_id = "4d008cba3bb155e4e71994522e25907a0d9d3afc56c92a318177ee0cc05115c6"
+base_commit = "e30e93acac62a4d27a7f24781bd1124a1b3d0282"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-098"
+
+[[source]]
+kind = "slice"
+ref = "SL-110"
+

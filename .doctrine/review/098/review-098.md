@@ -47,3 +47,60 @@ label-matched line → key-based dup guard excluding the matched line → rel-se
 rewrite preserving source/target bytes). `focusTransition`/`requiredMode`,
 `hoverDetailHtml` (escape-all, `hoverPane` delegates), and the `renderView`
 `focusChanged`-gated derive all match D1/D2/D3/D4. Pure/imperative split holds.
+
+## Synthesis
+
+**Closure story.** Five findings from the first VH walk: F-1 (item-3 alignment,
+fixed `0a9d1e1b`), F-2 (catch-all VH, resolved into F-4/F-5), F-3 (tolerated
+/simplify nits). The two blockers of substance — F-4 (item-4 edit model rejected)
+and F-5 (item-5 D2) — were resolved by **Revision 2**: design re-authored on main
+(`8d0c3dfd` — D4→D5/D6 per-cell pencils + `edit all` scope; D2 reversed) and plan
+extended (`b4aed545` — PHASE-06/07/08), then implemented (backend `6c3378f6`,
+frontend `3e93e1ac`, D2 reversal `ce11f2cb`). The second VH walk (this pass)
+accepted F-4 (1a: edit-all is a pure scope toggle — one-vs-all visible only on a
+repeated relation with no node focused; impl conforms to D5/D6) and F-5
+(actionability→semantic switch on non-member focus).
+
+That walk surfaced **F-6** — every relationship-table link double-hashed the URL
+(`'#' + buildHash(…)` where `buildHash` already `#`-prefixes), so `parseHash`
+failed and focus cleared, emptying the table. Pre-existing since SL-091
+(`0d4f549e`); only table links broke (graph/list clicks route through `setFocus`,
+no extra prefix). Fixed `b0d12a3d` (drop the prefix at five sites + round-trip
+test). Scope-expansion into SL-110 was the user's explicit call — it blocked the
+item-5 VH and is in-theme with focus navigation.
+
+**Standing risks / tradeoffs accepted.**
+- **Edit-all observability (F-4, 1a).** Conscious: D5 makes `edit all` a silent
+  scope modifier; its effect is only visible post-submit and is masked by diagram
+  label-dedup + neighbourhood filtering. Correct per design; a future affordance
+  (affected-count / row highlight) remains a possible UX refinement, not a defect.
+- **F-3 nits tolerated** — local `ViewMode` alias + exported `highlightViewButtons`
+  (test surface); behaviour-neutral, owned by /simplify.
+
+**Gate state.** SL-110 code gates green on the candidate at `b0d12a3d`: vitest
+**340**, tsc, eslint 0, vite build, `cargo` behaviour-preservation (`--bin`, 1902).
+`just check` shows ONE unrelated red — `e2e_relation_migration_storage` panics on
+the **live main corpus** (`ISS-030`'s `backlog-030.toml` carries a `related` label
+on a dep/seq axis that must stay typed). Not SL-110 code, not on this branch;
+main-corpus data added in `cb2c96b5`. **Explicitly left untouched per user
+decision** — recorded here, not silently absorbed; triage belongs to a separate
+backlog item if pursued.
+
+## Reconciliation Brief
+
+### Per-slice (direct edit)
+- **None.** `design.md` and `plan.toml` on `main` were re-authored for Revision 2
+  (`8d0c3dfd`, `b4aed545`) ahead of implementation — design D5/D6 + reversed D2 +
+  PHASE-06/07/08 already match the shipped code. The candidate branch's copies are
+  a stale pre-fork snapshot (irrelevant; close merges code, main's authored truth
+  is current). No prose drift to reconcile.
+
+### Governance/spec (REV)
+- **None.** No ADR / spec / requirement status change. F-6 is a frontend bug fix
+  with no design impact (it makes the already-intended navigation work).
+
+### Harvest
+- Durable gotcha → memory: `buildHash` returns a `#`-prefixed string; never
+  prepend `'#'` to it in an href/hash assignment (the F-6 double-hash trap).
+- Process note: SL-091 shipped the latent broken table-link navigation undetected
+  (no link round-trip test). The F-6 round-trip test now guards it.
