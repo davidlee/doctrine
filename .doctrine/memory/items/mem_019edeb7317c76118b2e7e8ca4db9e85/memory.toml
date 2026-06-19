@@ -1,0 +1,41 @@
+memory_uid = "mem_019edeb7317c76118b2e7e8ca4db9e85"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SL-109 string-building under clippy format_push_string and unwrap deny"
+summary = "Building strings with push_str vs format_push_string clippy lint. Repo bans unwrap/expect so write!/writeln! on String can't consume fmt::Result. Use multiple push_str calls instead of push_str(&format!(...)). SL-109 PHASE-02."
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8544a6e664da887345030fef24a6ee6d7d276c88"
+ref_name = "refs/heads/main"
+checkout_state_id = "5ed68e212ed2a4a3e4158d01accbee8be3360cc1bac05940e4f23d11df4ce500"
+base_commit = "23448480a924706df41fc3962da291039378b0b1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
