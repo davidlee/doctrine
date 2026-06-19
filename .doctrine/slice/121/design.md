@@ -141,6 +141,13 @@ With §2 it cannot arise, but the verify now *proves* it instead of reading a re
 blind. (b) proves projection against the **tree**, not a `~1` boundary. Remove the
 stale `main~1..main` form and its TODO's reliance on it.
 
+**Scope of this step.** §3 lives in the close SKILL and is therefore
+**close-to-main-specific** (`refs/heads/main`, the `close_target` candidate).
+The §2 *engine* is target-agnostic (see §7), so a future PR-style integrate flow
+(integrate to a topic branch, push as a PR against main) reuses §2 unchanged but
+would supply its **own** tree-true verify against its topic ref — it is not this
+close step. SL-121 does not build that flow; it only keeps the engine general.
+
 ## 4. Legible outcome (IMP-078)
 
 Today: success → `integrate: {N} ref(s) replayed` on stderr; Applied rows print
@@ -202,6 +209,13 @@ New/changed evidence:
   still skips already-`Verified` rows (the `fresh` guard) and `NoOp`s a row at its
   target — now true through both the CAS and ff-only legs.
 - **stdout ref-list is a contract:** machine-readable; only additive stderr detail.
+- **Target-ref-agnostic:** the advance keys on the target's *checkout state*
+  (`worktree_for_ref`), never its *name*. `--trunk refs/heads/main` (close) and
+  `--trunk refs/heads/feature/x` (integrate-to-topic-branch for a PR against main)
+  traverse the **same** code: not-checked-out → CAS; checked-out-clean → ff-only
+  resync (in whichever worktree holds it); checked-out-dirty → refuse. The ff-only
+  precondition on the target is inherent integrate semantics (a *divergent* topic
+  branch refuses as `Moved`), **pre-existing** and unchanged by this slice.
 
 ## 8. Out of scope / follow-ups
 
