@@ -301,8 +301,7 @@ pub(crate) struct FindingState {
 /// The review's derived status + summarized turn (design §8, D-C8). Total over
 /// the finding-status enum; never stored (computed at `show`/`list`/`status`).
 ///
-/// - empty ⇒ `(Active, Raiser)` — the raiser goes first; empty ≠ done (the
-///   SL-009-divergence-proof case).
+/// - empty ⇒ `(Done, None)` — no findings, nothing to reconcile.
 /// - any `open`/`contested` ⇒ `(Active, Responder)` — work awaits the responder.
 /// - else any `answered` ⇒ `(Active, Raiser)` — work awaits the raiser.
 /// - all `∈ {verified, withdrawn}` ⇒ `(Done, None)`.
@@ -311,7 +310,7 @@ pub(crate) struct FindingState {
 /// exclusive gate — the turn gate is per-finding `can` (D7).
 pub(crate) fn derived_status(findings: &[FindingState]) -> (ReviewStatus, Await) {
     if findings.is_empty() {
-        return (ReviewStatus::Active, Await::Raiser);
+        return (ReviewStatus::Done, Await::None);
     }
     if findings
         .iter()
@@ -1951,8 +1950,8 @@ mod tests {
     }
 
     #[test]
-    fn derived_status_empty_is_active_raiser() {
-        assert_eq!(derived_status(&[]), (ReviewStatus::Active, Await::Raiser));
+    fn derived_status_empty_is_done_none() {
+        assert_eq!(derived_status(&[]), (ReviewStatus::Done, Await::None));
     }
 
     #[test]
@@ -2296,9 +2295,9 @@ mod tests {
     }
 
     /// VT-4 (show): a fresh empty-ledger RV renders derived status `active` with
-    /// await `raiser`, and the `reviews` edge to the target.
+    /// done status, await `none`, and the `reviews` edge to the target.
     #[test]
-    fn show_renders_empty_ledger_active_raiser_and_the_edge() {
+    fn show_renders_empty_ledger_done_and_the_edge() {
         let doc = ReviewDoc {
             id: 3,
             slug: "s".to_owned(),
@@ -2312,16 +2311,16 @@ mod tests {
         };
         let out = format_show(&doc, "## Brief\n");
         assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
-        // empty ⇒ Active, await=Raiser (PHASE-01 derived_status, D-C8).
-        assert!(out.contains("active · await=raiser"), "{out}");
+        // empty ⇒ Done, await=None.
+        assert!(out.contains("done · await=none"), "{out}");
         assert!(out.contains("RV-003 ──reviews──▶ SL-024"), "edge: {out}");
         assert!(out.contains("findings: 0"), "{out}");
     }
 
-    /// VT-4 (list): the empty-ledger RV lists with derived status `active`
-    /// (await raiser), facet, and the target edge — no stored status read.
+    /// VT-4 (list): the empty-ledger RV lists with derived status `done`
+    /// (await none), facet, and the target edge — no stored status read.
     #[test]
-    fn list_renders_derived_status_facet_and_edge() {
+    fn list_renders_empty_ledger_done_and_the_edge() {
         let doc = ReviewDoc {
             id: 5,
             slug: "s".to_owned(),
@@ -2340,7 +2339,7 @@ mod tests {
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines[0].starts_with("id"), "header: {:?}", lines[0]);
         assert!(lines[1].starts_with("RV-005"), "{:?}", lines[1]);
-        assert!(lines[1].contains("active (await raiser)"), "{:?}", lines[1]);
+        assert!(lines[1].contains("done (await none)"), "{:?}", lines[1]);
         assert!(lines[1].contains("plan"), "{:?}", lines[1]);
         // phase-scoped edge `SL-009@PHASE-02`.
         assert!(lines[1].contains("SL-009@PHASE-02"), "{:?}", lines[1]);
@@ -2403,7 +2402,7 @@ mod tests {
         assert_eq!(doc.id, 1);
         assert_eq!(doc.target.reference, "SL-024");
         assert!(doc.finding.is_empty());
-        assert_eq!(doc.derived(), (ReviewStatus::Active, Await::Raiser));
+        assert_eq!(doc.derived(), (ReviewStatus::Done, Await::None));
         let brief = read_brief(&review_root, 1).unwrap();
         assert!(brief.contains("## Brief"), "brief seeded: {brief}");
         // The `NNN-slug` alias symlink landed.

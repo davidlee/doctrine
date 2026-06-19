@@ -528,17 +528,35 @@ fn parse_agent(s: &str) -> Agent {
     }
 }
 
-/// Resolve target agents: explicit list, else auto-detect Claude, else error.
+/// Resolve target agents: explicit list, else auto-detect by marker
+/// (`.claude/` → Claude; `.codex/` or a non-Claude-alias `AGENTS.md` → codex).
+/// Mirrors `boot::resolve_harnesses` — the two must stay in sync.
 fn resolve_agents(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Agent>> {
     if !explicit.is_empty() {
         return Ok(explicit.iter().map(|s| parse_agent(s)).collect());
     }
-    if root.join(".claude").exists() {
-        return Ok(vec![Agent::Claude]);
+    let claude = root.join(".claude").exists();
+    let mut found = Vec::new();
+    if claude {
+        found.push(Agent::Claude);
     }
-    bail!(
-        "No --agent given and no .claude/ found. Pass --agent <name> (e.g. claude, codex, cursor)."
-    )
+    // AGENTS.md is "merely Claude's alias" only when Claude is detected AND
+    // AGENTS.md resolves to CLAUDE.md's inode (this repo's symlink). Otherwise a
+    // present AGENTS.md is a real codex surface.
+    let agents = root.join("AGENTS.md");
+    let agents_is_claude_alias = claude
+        && agents.exists()
+        && fs::canonicalize(&agents).ok() == fs::canonicalize(root.join("CLAUDE.md")).ok();
+    if root.join(".codex").exists() || (agents.exists() && !agents_is_claude_alias) {
+        found.push(Agent::Other("codex".into()));
+    }
+    if found.is_empty() {
+        bail!(
+            "No --agent given and no .claude/ or .codex/ (or AGENTS.md) found. \
+             Pass --agent <name> (e.g. claude, codex, cursor)."
+        );
+    }
+    Ok(found)
 }
 
 // ---------------------------------------------------------------------------
@@ -1578,6 +1596,36 @@ mod tests {
             resolve_agents(&[], dir.path()).unwrap(),
             vec![Agent::Claude]
         );
+    }
+
+    #[test]
+    fn resolve_agents_detects_codex_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".codex")).unwrap();
+        assert_eq!(
+            resolve_agents(&[], dir.path()).unwrap(),
+            vec![Agent::Other("codex".into())]
+        );
+    }
+
+    #[test]
+    fn resolve_agents_detects_agents_md() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "# Test").unwrap();
+        assert_eq!(
+            resolve_agents(&[], dir.path()).unwrap(),
+            vec![Agent::Other("codex".into())]
+        );
+    }
+
+    #[test]
+    fn resolve_agents_detects_both_claude_and_codex() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".claude")).unwrap();
+        fs::create_dir_all(dir.path().join(".codex")).unwrap();
+        let agents = resolve_agents(&[], dir.path()).unwrap();
+        assert!(agents.contains(&Agent::Claude));
+        assert!(agents.contains(&Agent::Other("codex".into())));
     }
 
     #[test]

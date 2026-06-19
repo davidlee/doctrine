@@ -37,16 +37,18 @@ export function mountZoomPan(
   callbacks.set(container, opts.onViewportChange ?? ((): void => { /* no-op */ }));
 
   const svgDims = readSvgDims(svgEl);
+  const svgW = svgDims.w;
+  const svgH = svgDims.h;
   const cw = container.clientWidth;
   const ch = container.clientHeight;
-  const minK = fitViewport(svgDims.w, svgDims.h, cw, ch).k;
+  const minK = fitViewport(svgW, svgH, cw, ch).k;
 
   // Compute target viewport per the rules in SL-094 design.md.
   let vp: GraphViewport;
   if (opts.initialViewport == null) {
-    vp = fitViewport(svgDims.w, svgDims.h, cw, ch);
+    vp = fitViewport(svgW, svgH, cw, ch);
   } else if (opts.focusChanged === true) {
-    vp = applyFocusChange(opts.initialViewport, minK, svgDims.w, svgDims.h, cw, ch);
+    vp = applyFocusChange(opts.initialViewport, minK, svgW, svgH, cw, ch);
   } else {
     vp = opts.initialViewport;
   }
@@ -55,7 +57,11 @@ export function mountZoomPan(
   const wrapper = document.createElement('div');
   wrapper.className = 'graph-transform-layer';
   wrapper.style.transform = `translate(${String(vp.x)}px, ${String(vp.y)}px) scale(${String(vp.k)})`;
+  // Store natural SVG dimensions + minK so ResizeObserver / dblclick can
+  // recompute without reading the (transformed) bounding rect.
   wrapper.dataset.minK = String(minK);
+  wrapper.dataset.svgW = String(svgW);
+  wrapper.dataset.svgH = String(svgH);
   container.removeChild(svgEl);
   wrapper.appendChild(svgEl);
   container.appendChild(wrapper);
@@ -108,5 +114,31 @@ export function mountZoomPan(
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp, { once: true });
+  });
+
+  // ResizeObserver — recompute minK when the container changes size
+  new ResizeObserver(() => {
+    const layer = container.querySelector<HTMLElement>('.graph-transform-layer');
+    if (layer === null) return;
+    const nW = parseFloat(layer.dataset.svgW ?? '0');
+    const nH = parseFloat(layer.dataset.svgH ?? '0');
+    if (nW <= 0 || nH <= 0) return;
+    const nMinK = fitViewport(nW, nH, container.clientWidth, container.clientHeight).k;
+    layer.dataset.minK = String(nMinK);
+  }).observe(container);
+
+  // Double-click → reset zoom/pan to fit
+  container.addEventListener('dblclick', (e) => {
+    // Don't reset if the user double-clicked on a node.
+    if (e.target instanceof Element && e.target.closest('.doctrine-node') !== null) return;
+    const layer = container.querySelector<HTMLElement>('.graph-transform-layer');
+    if (layer === null) return;
+    const nW = parseFloat(layer.dataset.svgW ?? '0');
+    const nH = parseFloat(layer.dataset.svgH ?? '0');
+    if (nW <= 0 || nH <= 0) return;
+    const fit = fitViewport(nW, nH, container.clientWidth, container.clientHeight);
+    layer.style.transform = `translate(${String(fit.x)}px, ${String(fit.y)}px) scale(${String(fit.k)})`;
+    layer.dataset.minK = String(fit.k);
+    emit(fit);
   });
 }
