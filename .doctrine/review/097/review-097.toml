@@ -1,0 +1,34 @@
+id    = 97
+slug  = "sl-109-reconciliation-mcp-server-for-review-commands"
+title = "SL-109 reconciliation: MCP server for review commands"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-109"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "ReviewError::LockContention defined but never constructed — lock contention falls through as Internal"
+detail = 'Design D8 defines ReviewError::LockContention { canonical, details } and the MCP error mapper handles it at tools.rs:470-480 with code LOCK_CONTENTION and canonical/details in the data payload. However, lock_guard.rs uses anyhow::bail! for lock contention failures inside with_turn_hooked (the LockGuard::acquire call at review.rs:1539). This means MCP clients receive a generic -32603 Internal error with no structured data, instead of the dedicated -32000 LOCK_CONTENTION error. The $#\[expect(dead_code)\]$ attribute on the ReviewError enum suppresses the compiler warning. Not a functional blocker — lock contention is rare in single-threaded MCP usage and the error still surfaces. Documented as follow-up in notes.md.'
+disposition = "follow-up"
+response = '''The LockContention variant exists in the enum, the MCP error mapper handles it by variant identity (tools.rs:470-480), and the unit test at tools.rs:637 verifies the mapping. The gap is that lock_guard.rs uses anyhow::bail! instead of constructing ReviewError::LockContention, so lock contention in MCP context surfaces as Internal instead of LOCK_CONTENTION. This is additive wiring, not a defect — the error still surfaces, and the $\#\[expect(dead_code)\]$ on the enum acknowledges the unused variant. Captured in notes.md as follow-up. Severity minor: lock contention is rare in single-threaded MCP usage and the structured error mapping exists even though it's not yet exercised.'''
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "ReviewError::DanglingRef defined but never constructed — dangling target falls through as Internal"
+detail = '''Design D8 defines ReviewError::DanglingRef { target } and the MCP error mapper handles it at tools.rs:461-469 with code DANGLING_REF and the target in the data payload. However, run_new (review.rs:826) uses crate::integrity::ensure_ref_resolves() which returns a generic anyhow error, not ReviewError::DanglingRef. The run_new_refuses_a_dangling_target_and_mints_nothing test at line 2796 verifies the error surfaces, but the string content is matched (contains 'not found'), not the variant identity. This means MCP clients see -32603 Internal instead of -32000 DANGLING_REF. The $#\[expect(dead_code)\]$ attribute on the ReviewError enum suppresses the compiler warning. Not a functional blocker — the error still surfaces. Documented as follow-up in notes.md.'''
+disposition = "follow-up"
+response = "The DanglingRef variant exists in the enum, the MCP error mapper handles it by variant identity (tools.rs:461-469), and the unit test at tools.rs:622 verifies the mapping. The gap is that run_new calls crate::integrity::ensure_ref_resolves() which returns a generic anyhow error instead of ReviewError::DanglingRef. The existing test run_new_refuses_a_dangling_target_and_mints_nothing (line 2796) verifies the error surfaces but matches on string content, not variant identity. This is additive wiring — the error surfaces correctly, just as Internal instead of DANGLING_REF. Captured in notes.md as follow-up. Severity minor: the structured error mapping exists even though it's not yet exercised."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
