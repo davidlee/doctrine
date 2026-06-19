@@ -4121,7 +4121,14 @@ fn main() -> anyhow::Result<()> {
                 code_end,
                 path,
             } => dispatch::run_record_boundary(path, slice, &phase, &code_start, &code_end),
-            DispatchCommand::Setup { slice, dir, path } => dispatch::run_setup(path, slice, &dir),
+            DispatchCommand::Setup { slice, dir, path } => {
+                // Read the harness signal here in the shell (ISS-031 placement
+                // guard); a `CLAUDE`-prefixed env var marks the Claude arm, whose
+                // outside-root coordination dir silently produces a wrong base.
+                let claude_harness =
+                    std::env::vars_os().any(|(k, _v)| k.to_string_lossy().starts_with("CLAUDE"));
+                dispatch::run_setup(path, slice, &dir, claude_harness)
+            }
             DispatchCommand::Candidate { command } => match command {
                 CandidateCommand::Create {
                     slice,

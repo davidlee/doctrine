@@ -60,6 +60,14 @@ High for the claude arm: every `import` of a delta whose last hunk lands on the
 final line corrupts. The funnel cannot complete via the CLI verb without the
 manual `git apply` workaround.
 
+## Resolved
+
+`worktree import` now captures the delta via `git::git_bytes` (raw, untrimmed)
+and `git_apply_index` streams `&[u8]` verbatim — the trailing newline survives.
+`git_text`'s `.trim()` is untouched (its many other callers want trimmed output).
+Regression test `import_applies_patch_ending_at_eof` (a fork rewriting a
+newline-terminated file's final line) is red on the old path, green now.
+
 ## Related
 
 - ISS-029, ISS-031 — the other two claude-arm dispatch findings from the

@@ -10,7 +10,10 @@ orchestrator and **sole writer**, they execute.
 orchestrator funnel."
 
 ## The outer loop
-1. `dispatch setup --slice <N> --dir <path>` — create/resume coordination worktree
+1. `dispatch setup --slice <N> --dir <path>` — create/resume coordination worktree.
+   On the claude arm `--dir` MUST resolve inside the project root (convention
+   `.dispatch/SL-<n>`); an outside-root dir fails closed (ISS-031 — the pre-spawn
+   `cd` silently reverts under a jail, forking `main` not B).
 2. **Claude arm only:** `cd` into the coordination directory and park Bash cwd
    there for the full drive loop. The Agent tool's `isolation: worktree` forks off
    the Bash cwd HEAD — this is how base==B is achieved (`mem_019ec65ecbc7`). Step

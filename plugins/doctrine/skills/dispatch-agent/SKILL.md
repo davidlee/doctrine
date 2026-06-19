@@ -20,6 +20,15 @@ worktree HEAD equals the Bash cwd's HEAD.
 by `dispatch setup` as `coordination_dir=`). This makes `Bash cwd HEAD == B`,
 so the worker forks exactly the intended base.
 
+**Placement precondition (ISS-031):** the coordination worktree MUST live inside
+the project root — convention `.dispatch/SL-<n>`. Under a cwd-confining jail
+(bubblewrap rooted at `/workspace/<repo>`), a `cd` to an outside sibling
+(`/workspace/<repo>-dispatch-N`) silently reverts to the project root on the next
+Bash call — the `cd` never sticks, the session stays on `main`, and the worker
+forks `main` instead of B. `dispatch setup` now fails closed on the claude arm
+when `--dir` resolves outside the root; pass `--dir .dispatch/SL-<n>`. Confirm
+placement with a bare `cd <coord> ; pwd` in a separate Bash call before trusting it.
+
 Keep the Bash cwd parked in the coord tree across the whole drive loop — serial
 dependent phases self-base: after a funnel commit advances the coord tree HEAD,
 the next spawn (still cd'd there) forks the new tip, carrying prior phases' code.
@@ -44,8 +53,11 @@ After the batch's code commit and before the knowledge commit:
 Claude-arm-only (no fork branch); skip on codex/pi.
 
 ## Red Flags
-**Never:** spawn without cd'ing into the coordination tree first (a worker forked
-off `main` is a wrong-base verdict at `verify-worker`); spawn with a
+**Never:** point `dispatch setup --dir` at an outside-root sibling on the claude
+arm (the `cd` silently reverts under a jail → worker forks `main`; the CLI now
+refuses this, but use `.dispatch/SL-<n>`); spawn without cd'ing into the
+coordination tree first (a worker forked off `main` is a wrong-base verdict at
+`verify-worker`); spawn with a
 `subagent_type` other than `dispatch-worker`; run `fork` or bwrap here (that's
 `/dispatch-subprocess`); claim parallel landing (v1 lands one per base).
 **Always:** cd into the coord tree before every spawn; pin `subagent_type` to
