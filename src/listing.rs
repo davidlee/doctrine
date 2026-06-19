@@ -27,7 +27,7 @@ use std::str::FromStr;
 use anyhow::Context;
 use comfy_table::{ContentArrangement, Table, TableComponent};
 use regex_lite::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// `SL` + `25` → `"SL-25"`; zero-padded to three digits like the citation
 /// convention (`SL-025`). The single id-form authority for prefixed kinds.
@@ -41,7 +41,7 @@ pub(crate) fn canonical_id(prefix: &str, id: u32) -> String {
 /// which would drag clap into this leaf — A-3); the command layer wires it via
 /// `#[arg(value_parser = Format::from_str)]`. `Display` is required by clap's
 /// `default_value_t` (C-6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 pub(crate) enum Format {
     /// The default human-readable surface; `--format`/`--json` opt out of it.
     #[default]
@@ -120,7 +120,7 @@ impl fmt::Debug for Filter {
 /// clap-free mirror of its `CommonListArgs` bundle (no clap types cross this
 /// seam, A-3). One struct rather than a long positional argument list keeps the
 /// call site self-documenting and the seam stable as flags accrete.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
 pub(crate) struct ListArgs {
     /// Substring filter on slug+title (case-insensitive).
     pub(crate) substr: Option<String>,
@@ -155,7 +155,7 @@ pub(crate) struct ListArgs {
 /// struct rather than a widening positional list keeps the render seam stable as
 /// axes accrete. `Default` is the plain path: `{ color: false, term_width: None }`
 /// (no colour, no terminal-width wrapping) — VT-2.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
 pub(crate) struct RenderOpts {
     /// Whether the table render may emit ANSI colour (SL-053 D3). Resolved ONCE by
     /// the impure shell; `false` keeps piped/in-process output byte-clean.
