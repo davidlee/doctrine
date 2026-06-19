@@ -104,3 +104,30 @@ backlog item if pursued.
   prepend `'#'` to it in an href/hash assignment (the F-6 double-hash trap).
 - Process note: SL-091 shipped the latent broken table-link navigation undetected
   (no link round-trip test). The F-6 round-trip test now guards it.
+
+## Reconciliation Outcome
+
+All 6 findings are terminal (`verified`); remediation landed in-flight during
+audit/Revision 2, not via reconcile-time writes.
+
+### Direct edits applied
+- **None.** `design.md` / `plan.toml` on `main` were re-authored for Revision 2
+  (`8d0c3dfd`, `b4aed545`) ahead of implementation; D5/D6 + reversed D2 +
+  PHASE-06/07/08 already match the shipped code. No prose drift to reconcile.
+
+### REVs completed
+- **None.** No ADR / spec / requirement status change. F-6 is a frontend bug fix
+  with no design impact.
+
+### Withdrawn / tolerated
+- F-3: tolerated — `/simplify`-owned, behaviour-neutral (local `ViewMode` alias;
+  `highlightViewButtons` exported for VT-2). Rationale in finding disposition.
+
+### Harvest deferred to /close
+- Durable gotcha → memory: `buildHash` returns a `#`-prefixed string; never
+  prepend `'#'` to it (the F-6 double-hash trap).
+- Process note: SL-091 shipped the latent broken table-link nav undetected; the
+  F-6 round-trip test now guards it.
+
+Reconcile pass complete — no writes to reconciled-truth surfaces required.
+Handoff to /close.
