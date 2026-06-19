@@ -28,10 +28,8 @@ export const state: AppState = {
   conceptMapCache: new Map(),
 
   // Concept map editing
-  editingConceptMap: false,
-  editingNode: null,
-  cmSelectedField: null,
-  editingField: null,
+  cmEditAll: false,
+  cmEditingCell: null,
   cmFocusNode: null,
   renderedCmFocus: null,
   cmCacheMutationSeq: 0,
