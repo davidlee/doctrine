@@ -32,12 +32,18 @@ de-risks that later cut). The gate is a `cargo test` under `just gate`.
 - **Ratchet intra-tier cycles by count.** The whole graph is *not* acyclic (the
   command tier is a large intra-tier SCC; the engine core is clean bar
   `conduct↔dtoml`). Where a hard gate is unachievable in scope, freeze a per-tier
-  tangle count (`Σ(SCC_size−1)`) and fail on any increase — monotonic-down.
-- **Encode the map as canon** — a reviewed Rust `const` the gate reads (structured,
-  not ADR prose); ADR-001 carries the rule + tier definitions and points at it.
-- **Amend ADR-001** (via a REV at reconcile, ADR-013): rule 1 machine-enforced;
-  rule 2 enforced as a non-increasing ratchet with the command tangle openly
-  recorded as unmet-and-tracked; rule 3 deferred; `input` reclassified.
+  **cyclic-edge count** (same-tier edges inside a non-trivial SCC) and fail on any
+  increase — monotonic-down. (A bare `Σ(SCC−1)` was rejected: it misses a new bad
+  edge added *inside* an existing blob — external review C1.)
+- **Encode the map as canon** — authored `layers.toml` the gate parses (structured
+  per the storage rule, not ADR prose, not a code `const`); ADR-001 carries the rule
+  + tier definitions and points at it. Classification is **most-knowing-wins** (a
+  top-level module's tier = the highest altitude of any of its non-test files); the
+  residual umbrella-heterogeneity hole is named and mitigated by SL-115/116.
+- **Overturn + amend ADR-001** (via a REV at reconcile, ADR-013 — a co-requisite,
+  ADR-001 currently *rejects* this test): rule 1 hard-gated (literal `crate::` path
+  edges); rule 2 enforced as a non-increasing cyclic-edge ratchet with the command
+  tangle openly recorded as unmet-and-tracked; rule 3 deferred; `input` reclassified.
 
 Closure intent: a *new* deliberate upward edge (or a new intra-tier cycle, or a
 grown baseline) fails the gate locally; `just gate` runs the check; the layer map +
