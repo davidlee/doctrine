@@ -26,19 +26,12 @@ pub(crate) struct DoctrineToml {
     #[serde(default)]
     pub(crate) verification: crate::verify::VerificationConfig,
     /// The `[estimation]` table — project-wide display/default unit + confidence
-    /// bounds for estimation facets. Parsed now; consumed by SL-102/SL-103.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
-    )]
+    /// bounds for estimation facets. The unit is resolved by the catalog shell
+    /// (`scan_catalog`) into the top-level `Units` block (SL-103 PHASE-02).
     #[serde(default)]
     pub(crate) estimation: crate::estimate::EstimationConfig,
     /// The `[value]` table — project-wide display/default unit for value facets.
-    /// Parsed now; consumed by SL-102/SL-103.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
-    )]
+    /// The unit is resolved by the catalog shell into `Units` (SL-103 PHASE-02).
     #[serde(default)]
     pub(crate) value: crate::value::ValueConfig,
     /// The `[dispatch]` table — consumed by the dispatch orchestrator to select
