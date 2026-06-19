@@ -31,10 +31,6 @@ pub(crate) struct ValueConfig {
 
 /// Resolve the value unit. Pure over config — the file read is the shell's job.
 /// Empty string falls back to default.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by SL-102 display / SL-103 graph")
-)]
 pub(crate) fn resolve_unit(cfg: &ValueConfig) -> String {
     match &cfg.unit {
         Some(unit) if !unit.is_empty() => unit.clone(),
@@ -78,10 +74,6 @@ impl<'de> Deserialize<'de> for ValueFacet {
 /// Parse an optional `[value]` table. Returns `Ok(None)` absent,
 /// `Ok(Some(facet))` present+valid, `Err(_)` malformed. Bakes in validation —
 /// callers never hold an invalid facet.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "entity-facet consumers land in a later phase")
-)]
 pub(crate) fn parse_optional(
     table: Option<&toml::value::Table>,
 ) -> anyhow::Result<Option<ValueFacet>> {

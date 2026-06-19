@@ -67,6 +67,20 @@ pub(crate) struct Catalog {
     pub(crate) entities: Vec<CatalogEntity>,
     pub(crate) edges: Vec<CatalogEdge>,
     pub(crate) diagnostics: Vec<CatalogDiagnostic>,
+    /// The project-wide estimation/value display units, resolved ONCE in the
+    /// shell (`scan_catalog`) from `doctrine.toml` and carried on the catalog
+    /// (SL-103 PHASE-02, design §4.4). Serialized onto the catalog; the graph
+    /// projection consumes it directly in PHASE-03.
+    pub(crate) units: Units,
+}
+
+/// The project-wide display units for the estimation and value facets, resolved
+/// once from `doctrine.toml` (SL-103 PHASE-02, design §4.4). Stored on the
+/// [`Catalog`] so every downstream consumer shares one resolution.
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct Units {
+    pub(crate) estimation: String,
+    pub(crate) value: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +104,16 @@ pub(crate) struct CatalogEntity {
     /// Memory type classification for `CatalogKey::Memory` entities;
     /// `None` for numbered entities.
     pub(crate) memory_type: Option<String>,
+    /// The entity's optional `[estimate]` facet, carried through from the scan
+    /// (SL-103 PHASE-02). Memory entities have no facets ⇒ `None`. Serialized
+    /// onto the catalog; projected onto the graph in PHASE-03.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    /// The entity's optional `[value]` facet, carried through from the scan
+    /// (SL-103 PHASE-02). Memory entities have no facets ⇒ `None`. Serialized
+    /// onto the catalog; projected onto the graph in PHASE-03.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +185,7 @@ impl Catalog {
         scanned: &[ScannedEntity],
         memory: &[MemoryCatalogRecord],
         mem_key_map: &BTreeMap<String, String>,
+        units: Units,
     ) -> Self {
         // Entity key set for O(log n) target resolution lookups.
         let key_set: BTreeSet<CatalogKey> = scanned
@@ -188,6 +213,8 @@ impl Catalog {
                 title: se.title.clone(),
                 status: se.status.clone(),
                 memory_type: None,
+                estimate: se.estimate.clone(),
+                value: se.value.clone(),
                 source: SourceSpan {
                     file: entity_dir.clone(),
                     field: None,
@@ -246,6 +273,9 @@ impl Catalog {
                 title: record.title.clone(),
                 status: Some(record.status.clone()),
                 memory_type: Some(record.memory_type.clone()),
+                // Memory entities carry no estimate/value facets.
+                estimate: None,
+                value: None,
                 source: SourceSpan {
                     file: record.path.clone(),
                     field: None,
@@ -309,6 +339,7 @@ impl Catalog {
             entities,
             edges,
             diagnostics,
+            units,
         }
     }
 }
@@ -375,9 +406,28 @@ pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
     let scanned = super::scan::scan_entities(root, &mut diagnostics)?;
     let memory = super::scan::scan_memory_entities(root, &mut diagnostics)?;
     let mem_key_map = build_memory_key_map(root);
-    let mut catalog = Catalog::from_scanned(root, &scanned, &memory, &mem_key_map);
+    let units = resolve_units(root)?;
+    let mut catalog = Catalog::from_scanned(root, &scanned, &memory, &mem_key_map, units);
     catalog.diagnostics.extend(diagnostics);
     Ok(catalog)
+}
+
+/// Resolve the project-wide [`Units`] from `<root>/doctrine.toml` (the IMPURE
+/// shell — `from_scanned` stays pure). NotFound-TOLERANT ONLY (RV-094 F-4,
+/// mirroring `coverage_store::load_config`): an ABSENT file falls to the
+/// sub-config defaults (`espresso_shots` / `magic_beans`); a parse error
+/// propagates (`?`) and EVERY other read error (permission/I-O) is returned as
+/// `Err` — never silently defaulted.
+fn resolve_units(root: &Path) -> anyhow::Result<Units> {
+    let cfg = match std::fs::read_to_string(root.join("doctrine.toml")) {
+        Ok(text) => crate::dtoml::parse(&text)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => crate::dtoml::DoctrineToml::default(),
+        Err(e) => return Err(e.into()),
+    };
+    Ok(Units {
+        estimation: crate::estimate::resolve_unit(&cfg.estimation),
+        value: crate::value::resolve_unit(&cfg.value),
+    })
 }
 
 /// Build a map of memory keys → UIDs by reading symlinks from `items/`.
@@ -878,5 +928,148 @@ mod tests {
         );
         assert!(entity_diags[0].file.to_string_lossy().contains("002"));
         assert!(entity_diags[0].message.contains("SL-002"));
+    }
+
+    // == SL-103 PHASE-02: facet carry-through + units resolution ==
+
+    fn test_units() -> Units {
+        Units {
+            estimation: "espresso_shots".to_string(),
+            value: "magic_beans".to_string(),
+        }
+    }
+
+    /// A numbered `ScannedEntity` with the given facets — bypasses the disk scan
+    /// so `from_scanned`'s carry-through is exercised in isolation (it is pure).
+    fn scanned_numbered(
+        prefix: &'static str,
+        id: u32,
+        estimate: Option<crate::estimate::EstimateFacet>,
+        value: Option<crate::value::ValueFacet>,
+    ) -> ScannedEntity {
+        ScannedEntity {
+            key: EntityKey { prefix, id },
+            kind: crate::integrity::kind_by_prefix(prefix).unwrap().kind,
+            status: Some("proposed".to_string()),
+            title: format!("{prefix}-{id}"),
+            outbound: Vec::new(),
+            estimate,
+            value,
+        }
+    }
+
+    /// VT-1: `from_scanned` copies estimate/value onto each numbered
+    /// `CatalogEntity`; memory entities carry `None`.
+    #[test]
+    fn from_scanned_carries_facets_onto_numbered_and_none_for_memory() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let est = crate::estimate::EstimateFacet {
+            lower: 2.0,
+            upper: 8.0,
+        };
+        let val = crate::value::ValueFacet { value: 5.0 };
+        let scanned = vec![
+            scanned_numbered("SL", 1, Some(est.clone()), Some(val.clone())),
+            scanned_numbered("SL", 2, None, None),
+        ];
+
+        let record = MemoryCatalogRecord {
+            uid: "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            title: "M".to_string(),
+            status: "active".to_string(),
+            memory_type: "pattern".to_string(),
+            path: root.join("mem"),
+            relations: Vec::new(),
+        };
+
+        let catalog =
+            Catalog::from_scanned(root, &scanned, &[record], &BTreeMap::new(), test_units());
+
+        let sl001 = catalog
+            .entities
+            .iter()
+            .find(|e| e.key.canonical() == "SL-001")
+            .unwrap();
+        assert_eq!(sl001.estimate, Some(est));
+        assert_eq!(sl001.value, Some(val));
+
+        let sl002 = catalog
+            .entities
+            .iter()
+            .find(|e| e.key.canonical() == "SL-002")
+            .unwrap();
+        assert!(sl002.estimate.is_none());
+        assert!(sl002.value.is_none());
+
+        let mem = catalog
+            .entities
+            .iter()
+            .find(|e| matches!(e.key, CatalogKey::Memory(_)))
+            .unwrap();
+        assert!(mem.estimate.is_none(), "memory carries no estimate facet");
+        assert!(mem.value.is_none(), "memory carries no value facet");
+
+        // The injected units are stored verbatim on the catalog.
+        assert_eq!(catalog.units.estimation, "espresso_shots");
+        assert_eq!(catalog.units.value, "magic_beans");
+    }
+
+    /// VT-2: unit resolution — configured `[estimation].unit` / `[value].unit`
+    /// surface on `Units`; an absent config falls to the defaults.
+    #[test]
+    fn resolve_units_reads_config_and_defaults() {
+        // Configured units.
+        let dir = tmp();
+        let root = dir.path();
+        write(
+            root,
+            "doctrine.toml",
+            "[estimation]\nunit = \"story_points\"\n[value]\nunit = \"gold\"\n",
+        );
+        let units = resolve_units(root).unwrap();
+        assert_eq!(units.estimation, "story_points");
+        assert_eq!(units.value, "gold");
+
+        // Present file but no unit keys → defaults.
+        let dir2 = tmp();
+        let root2 = dir2.path();
+        write(root2, "doctrine.toml", "[conduct]\n");
+        let units2 = resolve_units(root2).unwrap();
+        assert_eq!(units2.estimation, "espresso_shots");
+        assert_eq!(units2.value, "magic_beans");
+    }
+
+    /// VT-3: NotFound is tolerated (default `Units`); a NON-NotFound read error
+    /// AND a parse error each propagate as `Err` — never silently defaulted
+    /// (RV-094 F-4).
+    #[test]
+    fn resolve_units_notfound_defaults_but_other_errors_propagate() {
+        // Absent doctrine.toml (NotFound) → default units.
+        let dir = tmp();
+        let root = dir.path();
+        let units = resolve_units(root).unwrap();
+        assert_eq!(units.estimation, "espresso_shots");
+        assert_eq!(units.value, "magic_beans");
+
+        // Parse error → Err, NOT a silent default.
+        let dir2 = tmp();
+        let root2 = dir2.path();
+        write(root2, "doctrine.toml", "this is not [valid toml\n");
+        assert!(
+            resolve_units(root2).is_err(),
+            "a parse error must propagate, not default"
+        );
+
+        // A non-NotFound read error → Err. `doctrine.toml` is a DIRECTORY here,
+        // so the read fails with a kind other than NotFound.
+        let dir3 = tmp();
+        let root3 = dir3.path();
+        std::fs::create_dir(root3.join("doctrine.toml")).unwrap();
+        assert!(
+            resolve_units(root3).is_err(),
+            "a non-NotFound read error must propagate, not default"
+        );
     }
 }
