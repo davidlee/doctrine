@@ -44,7 +44,10 @@ Inputs:
    Additionally:
    * Every per-slice direct-edit item is applied to `design.md` /
      `slice-NNN.md` and recorded in the `## Reconciliation Outcome`.
-   * The RV ledger is resolved (`done · await=none`).
+   * The RV ledger is resolved (`done · await=none`). **Zero-finding reviews
+    may report `active` rather than `done` (known issue IMP-098); treat them as
+    terminal — the absence of unresolved blockers is what gates the transition,
+    not the derived status string.**
    * The reconcile outcome is recorded (REV rationale and/or RV
      `## Reconciliation Outcome`).
    No free-floating "rejected" disposition is permitted — every finding
@@ -57,14 +60,40 @@ Inputs:
    accumulate. Code and workflow edits go together or separately, whichever
    commits cleanly first.
 3a. **Dispatched slice — integrate the admitted OID (post-audit only).** If the
-   slice was driven by `/dispatch`, project the audited units now with `doctrine
-   dispatch sync --slice <N> --integrate [--trunk <ref>] [--edge <ref>]`. When a
-   candidate workflow is active this targets the immutable **admitted `close_target`
-   OID** (and `--edge` the admitted `review_surface` OID) under a fast-forward-only
-   CAS row — **never a raw `phase/*`/`review/*` tip or the mutable candidate ref**,
-   and never a close-time merge. A moved trunk refuses (admit a superseding
-   close-target candidate on the new base). This is the **only** place `--integrate`
-   runs — never at `/dispatch` conclude, only here, post-audit.
+   slice was driven by `/dispatch`, project the audited units now:
+
+   ```bash
+   # 1. Admit a close_target candidate (if not already done during /reconcile):
+   doctrine dispatch candidate create --slice <N> --label close-001 \
+     --role close_target --payload code --base refs/heads/main \
+     --source refs/heads/review/<N>
+   doctrine dispatch candidate admit --slice <N> --role close_target \
+     --candidate refs/heads/candidate/<N>/close-001 --review RV-NNN
+
+   # 2. Project onto trunk (--trunk is REQUIRED; omitting it is a dry run):
+   doctrine dispatch sync --slice <N> --integrate --trunk refs/heads/main
+   ```
+
+   When a candidate workflow is active this targets the immutable **admitted
+   `close_target` OID** (and `--edge` the admitted `review_surface` OID) under a
+   fast-forward-only CAS row — **never a raw `phase/*`/`review/*` tip or the
+   mutable candidate ref**, and never a close-time merge. A moved trunk refuses
+   (admit a superseding close-target candidate on the new base). This is the
+   **only** place `--integrate` runs — never at `/dispatch` conclude, only here,
+   post-audit.
+
+   **Verify.** After `--integrate --trunk`, confirm the slice's code delta is on
+   the target branch:
+   ```bash
+   git diff --stat refs/heads/main~1..refs/heads/main -- src/
+   ```
+   The output must include the files the slice changed. If the delta is absent,
+   integration did not project code — do **not** proceed to step 4.
+
+   > **TODO:** Once project config (`doctrine.toml [dispatch] deliver_to`) lands,
+   > the trunk ref and verification will be derived from config, not hard-coded
+   > here. The mandatory `--trunk` requirement and the verification step are a
+   > stopgap against silent dry-run integration (see SL-102 close).
 4. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
    `doctrine slice status <id> reconcile` if `/audit` didn't), then
    `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).
