@@ -255,6 +255,13 @@ integrate's actual trunk push under CAS (`mem_019ec66a43ee`).
   (IMP-078)
 - `--integrate --help` needs to clarify `--trunk` dry-run semantics
   (IMP-103)
+- **ISS-030:** `dispatch sync --integrate` leaves stale worktree when run
+  from the trunk branch — ref advances, index + worktree stay at
+  pre-integration state, creating a phantom reverse-diff. Close step 3a
+  verify reads ref not tree, so the stale tree isn't caught. Recovery:
+  `git restore --source=HEAD --staged --worktree -- src/` (not `reset
+  --hard` — preserves in-flight work). Same family as ISS-029 (git ref vs
+  working-tree placement).
 
 ---
 
@@ -392,7 +399,8 @@ marker) is the agnostic floor every harness reaches.
 | ISS-024 | issue | candidate create: stray .doctrine/slice/ dirs break corpus-scanner tests |
 | ISS-026 | issue | worktree import: piped diff drops trailing newline → corrupt patch |
 | ISS-028 | issue | worker-marker confinement refuses CLI writes in fork, breaking tests |
-| ISS-029 | issue | (FIXED) missing cd-into-coord-tree instruction — workers forked off main |
+| ISS-029 | issue | (FIXED) missing cd-into-coord-tree instruction — workers forked off main (after ISS-030) |
+| ISS-030 | issue | dispatch sync --integrate leaves stale worktree; close verify reads ref not tree |
 | IMP-004 | improvement | Jail dispatch isolation spike: per-worktree target and bwrap confinement |
 | IMP-043 | improvement | import verb: moved-HEAD re-anchor (--allow-reanchor) |
 | IMP-052 | improvement | orchestrator post-spawn marker check: abort unstamped worker fork |
