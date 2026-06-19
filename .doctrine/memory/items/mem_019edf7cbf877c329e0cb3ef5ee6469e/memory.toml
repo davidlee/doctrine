@@ -1,0 +1,54 @@
+memory_uid = "mem_019edf7cbf877c329e0cb3ef5ee6469e"
+memory_key = "mem.pattern.dispatch.claude-arm-coord-placement"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "claude-arm dispatch: place coordination worktree inside the cwd-jail; funnel workarounds"
+summary = "claude-arm dispatch under a cwd-confining jail: create the coord worktree INSIDE the primary working dir or workers fork main, not base B"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "worktree", "claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "82019c3d7dbb1fdec1258214412475e2cdf3fe43"
+ref_name = "refs/heads/main"
+checkout_state_id = "557621a4c00cf78bb83e4be95b9e017e1b639fbc4d5904e5ca78fa80c4e64039"
+base_commit = "bc7d1c849d7d49bd4cc5d731ef932ab68bde4603"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-111"
+
+[[source]]
+kind = "issue"
+ref = "ISS-031"
+
+[[source]]
+kind = "issue"
+ref = "ISS-032"
+
