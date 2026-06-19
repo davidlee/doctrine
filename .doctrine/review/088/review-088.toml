@@ -1,0 +1,61 @@
+id    = 88
+slug  = "reconciliation-review-of-sl-107"
+title = "reconciliation review of SL-107"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-107"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Behaviour-preservation: expected existing suites green unchanged; observed 2194 pass / 0 fail, +20 additive only"
+detail = "Independent full `just gate` (workspace) re-run at audit: 2194 pass / 0 fail. Port adds only the V1-V7 value tests, dtoml default-config tests, and SliceDoc round-trip/malformed tests (+20). No existing entity-engine/slice/e2e suite changed or reddened. The shared-machinery suites are the proof (AGENTS.md gate) and they stand unchanged."
+disposition = "aligned"
+response = "Confirmed. Behaviour-preservation gate holds: independent workspace gate 2194 pass / 0 fail, deltas additive only. No remediation."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "D1 dead-code tripwire: expected plain clippy clean + no expect fires; observed clean, zero fires"
+detail = "design §4 invariant. Plain `cargo clippy` (bins/lib, NOT --all-targets) finished warning-clean; no expect(dead_code) reported unfulfilled. The item-level expects on estimate.rs's residual helpers (resolve_unit/resolve_confidence/parse_optional + 2 confidence consts) and value.rs's hold — the facet TYPES went live via SliceDoc/dtoml wiring while the display/graph HELPERS stay legitimately dead until SL-102/103 consume them."
+disposition = "aligned"
+response = "Confirmed. D1 invariant held — plain clippy clean, no expect fires. Types live via wiring, helpers legitimately dead until SL-102/103. No remediation."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "D2 narrow boundary / VA-1: expected facets parsed not rendered, no display path; observed none"
+detail = "design §7 D2. `rg 'Estimate:|Value:' src/slice.rs` → only hit is serde_json::Value::Object (unrelated). SliceDoc fields are serde parse-only; no detailed-display rendering added. Display remains SL-102's charter, graph SL-103's. SL-107 ships facet DATA only."
+disposition = "aligned"
+response = "Confirmed. No facet display path; SliceDoc fields parse-only. D2 narrow boundary intact. No remediation."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Plan EX-4 deviation: expected exactly 5 item-level expects; observed 6 (added module-level expect on `mod display;`)"
+detail = "phase-sheet F-1. Plan EX-4 was written before SL-102 landed src/estimate/display.rs on main. SL-102 (now done/terminal) shipped 3 unconsumed pub(crate) renderers with NO own dead-code attrs — they compiled only by riding estimate.rs's blanket allow that EX-4 removes. Removing the blanket exposed them → would redden the D1 clippy invariant (VT-5). Resolution: one module-level cfg_attr(not(test), expect(dead_code, …)) on the `pub(crate) mod display;` decl in estimate.rs — a line SL-107 already owns; ZERO edits to display.rs, D2 boundary intact. The expect self-clears (fires unfulfilled) when SL-102 wires display in."
+disposition = "tolerated"
+response = "Accepted drift, consciously and durably. The 6th (module-level) expect extends design §4's tripwire intent onto src/estimate/display.rs — a surface SL-102 introduced AFTER plan EX-4 was authored, so EX-4's literal '5' could not have anticipated it. Consulted with User, approved Option 1; zero edits to SL-102's display.rs (D2 boundary intact); empirically verified the module-level expect propagates into the submodule and is fulfilled; recorded as memory mem.pattern.lint.module-decl-expect-propagates (high-trust, attested). The expect is self-clearing (fires unfulfilled when SL-102 wires display in), so the deviation cannot rot. Code is correct — no fix; design §4 is a historical locked artifact and the debt is tracked by the expect + memory — no canon edit warranted. Slice ## Summary records 5→6 at close."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "EN-2 baseline: expected green main baseline before port; observed initial red (unrelated date-tests), reset to clean 5e8b2a64"
+detail = "phase-sheet F-2. First `just gate` at T0 failed 2 date-dependent supersede tests (supersede_already_terminal_no_flip, supersede_question_reopening_refused) — real-clock leak (fixtures carry updated=today, assertion can't observe a refresh). Unrelated to the estimate/value port. User reset main to green+clean (HEAD→5e8b2a64) before the port proceeded; both pass post-reset. The port was built on a clean, green base — the behaviour-preservation datum is sound."
+disposition = "aligned"
+response = "Confirmed. Baseline red was unrelated (date-dependent supersede tests); User reset main to clean green 5e8b2a64 before the port. Port built on a sound behaviour-preservation datum. No remediation."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
