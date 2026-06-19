@@ -1,0 +1,121 @@
+# Implementation plan for SL-119 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-119"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Boot sentinel, AGENTS.md guard, and harness rename"
+objective = "Add the stable boot sentinel to render_boot, expand the AGENTS.md @ reference to include the sentinel guard conditional, and rename Harness::Codex to Harness::Pi throughout boot.rs."
+entrance_criteria = [
+  { id = "EN-1", text = "Design.md locked and approved" },
+  { id = "EN-2", text = "All existing boot tests pass (behaviour-preservation baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "render_boot output contains BOOT-SENTINEL HTML comment exactly once" },
+  { id = "EX-2", text = "plan_boot_import writes multi-line guard block for new and old-style @ refs" },
+  { id = "EX-3", text = "plan_boot_import detects new-style block as Present (idempotent)" },
+  { id = "EX-4", text = "Harness::Codex renamed to Harness::Pi — no remaining Codex variant references" },
+  { id = "EX-5", text = "All existing tests still pass — sentinel is additive, rename is mechanical" },
+]
+verification = [
+  { id = "VT-1", expects = "render_boot_is_byte_deterministic_and_structured asserts sentinel presence" },
+  { id = "VT-2", expects = "ensure_boot_import_* unit tests cover Create/Add/Present for new guard block" },
+  { id = "VT-3", expects = "Idempotency: re-running plan_boot_import on guard-block content returns Present" },
+  { id = "VT-4", expects = "No Harness::Codex string remains in boot.rs (rg-powered assertion)" },
+  { id = "VT-5", expects = "just check passes — workspace-wide" },
+  { id = "VA-1", expects = "Guard text says 'context (system prompt or preceding messages)', not bare 'system prompt'" },
+]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "APPEND_SYSTEM.md symlink"
+objective = "Add plan_append_system (pure decision) and install_append_system (imperative apply) — creates .pi/APPEND_SYSTEM.md → ../../.doctrine/state/boot.md symlink, with idempotency and stale-file replacement."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — Harness::Pi variant available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "plan_append_system returns correct action for all four states: dir-absent, file-absent, correct-link, wrong-link/file" },
+  { id = "EX-2", text = "install_append_system creates .pi/ dir when absent, creates/replaces/no-ops symlink correctly" },
+  { id = "EX-3", text = "Idempotent: second install is NoOp for correct symlink" },
+  { id = "EX-4", text = "Existing tests unchanged (new functions are additive)" },
+]
+verification = [
+  { id = "VT-1", expects = "plan_append_system unit: dir-absent → CreateDirAndLink" },
+  { id = "VT-2", expects = "plan_append_system unit: file-absent → CreateLink" },
+  { id = "VT-3", expects = "plan_append_system unit: correct symlink → NoOp" },
+  { id = "VT-4", expects = "plan_append_system unit: regular file at path → ReplaceLink" },
+  { id = "VT-5", expects = "plan_append_system unit: wrong-target symlink → ReplaceLink" },
+  { id = "VT-6", expects = "install_append_system integration: dry-run reports correct outcome without touching disk" },
+  { id = "VA-1", expects = "Symlink target is relative (../../.doctrine/state/boot.md), not absolute" },
+]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Pi session_start extension"
+objective = "Add plan_pi_extension (pure decision with byte-compare idempotency) and install_pi_extension (imperative apply) — generates .pi/extensions/doctrine/index.ts with baked exec path and execSync timeout."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — Harness::Pi variant available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "plan_pi_extension returns correct action for all four states: no-file, byte-match, byte-differ, foreign" },
+  { id = "EX-2", text = "install_pi_extension generates file with baked exec path, creates .pi/extensions/doctrine/ dir as needed" },
+  { id = "EX-3", text = "Idempotent: second install with same exec path is NoOp" },
+  { id = "EX-4", text = "Regenerate: changed exec path triggers overwrite" },
+  { id = "EX-5", text = "SkipForeign: user-modified file (no generated header) is left untouched" },
+  { id = "EX-6", text = "Generated TS includes timeout: 5000 on execSync call" },
+]
+verification = [
+  { id = "VT-1", expects = "plan_pi_extension unit: no file → Generate" },
+  { id = "VT-2", expects = "plan_pi_extension unit: identical content → NoOp" },
+  { id = "VT-3", expects = "plan_pi_extension unit: different exec path → Regenerate" },
+  { id = "VT-4", expects = "plan_pi_extension unit: foreign file → SkipForeign" },
+  { id = "VT-5", expects = "install_pi_extension integration: dry-run reports correct outcome" },
+  { id = "VT-6", expects = "Generated file round-trip: plan_pi_extension produces content that install_pi_extension writes, re-plan is NoOp" },
+  { id = "VA-1", expects = "Generated TS is syntactically valid (no syntax check, but manual review of template)" },
+  { id = "VA-2", expects = "Ownership marker is first line: // Generated by 'doctrine boot install' — do not edit." },
+]
+
+[[phase]]
+id        = "PHASE-04"
+name      = "RefreshReport wiring and integration"
+objective = "Extend RefreshReport with append_system and extension outcome fields, wire install_refresh pi arm to call both new install functions, update wire() reporting, and update all ~20 test call-sites with NotApplicable defaults."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — install_append_system exists" },
+  { id = "EN-2", text = "PHASE-03 complete — install_pi_extension exists" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install_refresh Harness::Pi arm calls install_append_system then install_pi_extension" },
+  { id = "EX-2", text = "wire() reports append_system and extension outcomes for pi harness" },
+  { id = "EX-3", text = "Claude arm sets AppendSystemOutcome::NotApplicable and ExtOutcome::NotApplicable" },
+  { id = "EX-4", text = "All ~20 existing test RefreshReport constructions updated with new fields" },
+  { id = "EX-5", text = "Full just check passes — all tests green, zero warnings" },
+  { id = "EX-6", text = "doctrine boot install --agent pi e2e: creates symlink + extension, reports both outcomes" },
+]
+verification = [
+  { id = "VT-1", expects = "install_refresh unit: Harness::Pi returns RefreshReport with correct outcomes" },
+  { id = "VT-2", expects = "install_refresh unit: Harness::Claude returns NotApplicable for new fields" },
+  { id = "VT-3", expects = "wire() integration: pi harness reports symlink + extension outcomes to stdout" },
+  { id = "VT-4", expects = "All existing boot tests pass (behaviour-preservation gate)" },
+  { id = "VT-5", expects = "just check passes — workspace-wide, zero clippy warnings" },
+  { id = "VA-1", expects = "doctrine boot install --agent pi (dry-run) prints expected plan without touching disk" },
+  { id = "VA-2", expects = "Full e2e: doctrine boot install --agent pi creates .pi/APPEND_SYSTEM.md symlink + .pi/extensions/doctrine/index.ts" },
+]
