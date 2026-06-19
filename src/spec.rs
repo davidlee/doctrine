@@ -49,7 +49,7 @@ pub(crate) const SPEC_STEM: &str = "spec";
 /// + reservation namespace.
 pub(crate) const PRODUCT_SPEC_KIND: Kind = Kind {
     dir: ".doctrine/spec/product",
-    prefix: "PRD",
+    prefix: crate::kinds::PRD,
     scaffold: product_spec_scaffold,
 };
 
@@ -57,7 +57,7 @@ pub(crate) const PRODUCT_SPEC_KIND: Kind = Kind {
 /// Own tree + reservation namespace (ids independent of product's).
 pub(crate) const TECH_SPEC_KIND: Kind = Kind {
     dir: ".doctrine/spec/tech",
-    prefix: "SPEC",
+    prefix: crate::kinds::SPEC,
     scaffold: tech_spec_scaffold,
 };
 

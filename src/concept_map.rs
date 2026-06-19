@@ -40,7 +40,7 @@ fn is_hidden(status: &str) -> bool {
 /// The top-level reserved concept-map kind: toml + md + slug symlink.
 pub(crate) const CONCEPT_MAP_KIND: Kind = Kind {
     dir: CONCEPT_MAP_DIR,
-    prefix: "CM",
+    prefix: crate::kinds::CM,
     scaffold: concept_map_scaffold,
 };
 

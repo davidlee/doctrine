@@ -67,35 +67,35 @@ pub(crate) enum ItemKind {
 /// The issue kind: a defect / problem to fix. Own tree + reservation namespace.
 pub(crate) const ISSUE_KIND: Kind = Kind {
     dir: ".doctrine/backlog/issue",
-    prefix: "ISS",
+    prefix: crate::kinds::ISS,
     scaffold: |c| backlog_scaffold(ItemKind::Issue, c),
 };
 
 /// The improvement kind: an enhancement to existing behaviour.
 pub(crate) const IMPROVEMENT_KIND: Kind = Kind {
     dir: ".doctrine/backlog/improvement",
-    prefix: "IMP",
+    prefix: crate::kinds::IMP,
     scaffold: |c| backlog_scaffold(ItemKind::Improvement, c),
 };
 
 /// The chore kind: maintenance with no user-visible behaviour change.
 pub(crate) const CHORE_KIND: Kind = Kind {
     dir: ".doctrine/backlog/chore",
-    prefix: "CHR",
+    prefix: crate::kinds::CHR,
     scaffold: |c| backlog_scaffold(ItemKind::Chore, c),
 };
 
 /// The risk kind: a tracked risk — the only kind carrying a `[facet]`.
 pub(crate) const RISK_KIND: Kind = Kind {
     dir: ".doctrine/backlog/risk",
-    prefix: "RSK",
+    prefix: crate::kinds::RSK,
     scaffold: |c| backlog_scaffold(ItemKind::Risk, c),
 };
 
 /// The idea kind: a speculative possibility, not yet committed work.
 pub(crate) const IDEA_KIND: Kind = Kind {
     dir: ".doctrine/backlog/idea",
-    prefix: "IDE",
+    prefix: crate::kinds::IDE,
     scaffold: |c| backlog_scaffold(ItemKind::Idea, c),
 };
 

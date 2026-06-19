@@ -30,7 +30,7 @@ const ADR_DIR: &str = ".doctrine/adr";
 pub(crate) const ADR_KIND: GovKind = GovKind {
     kind: Kind {
         dir: ADR_DIR,
-        prefix: "ADR",
+        prefix: crate::kinds::ADR,
         scaffold: adr_scaffold,
     },
     stem: "adr",

@@ -66,28 +66,28 @@ pub(crate) enum RecordKind {
 /// reservation namespace.
 pub(crate) const ASSUMPTION_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/assumption",
-    prefix: "ASM",
+    prefix: crate::kinds::ASM,
     scaffold: |c| record_scaffold(RecordKind::Assumption, c),
 };
 
 /// The decision kind: a recorded choice and its rationale.
 pub(crate) const DECISION_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/decision",
-    prefix: "DEC",
+    prefix: crate::kinds::DEC,
     scaffold: |c| record_scaffold(RecordKind::Decision, c),
 };
 
 /// The question kind: an open question whose answer shapes the work.
 pub(crate) const QUESTION_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/question",
-    prefix: "QUE",
+    prefix: crate::kinds::QUE,
     scaffold: |c| record_scaffold(RecordKind::Question, c),
 };
 
 /// The constraint kind: a standing limit on the solution space.
 pub(crate) const CONSTRAINT_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/constraint",
-    prefix: "CON",
+    prefix: crate::kinds::CON,
     scaffold: |c| record_scaffold(RecordKind::Constraint, c),
 };
 
