@@ -1,0 +1,42 @@
+memory_uid = "mem_019ede92258e795383c677a2ad066b24"
+memory_key = "mem.pattern.rust.anyhow-blanket-from-for-error-types"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "anyhow blanket From impl covers custom error types"
+summary = "anyhow's blanket From<E> for Error covers custom Error types; downcast_ref works if Error + Send + Sync + 'static"
+created = "2026-06-19"
+updated = "2026-06-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "550b787c1c9e61ab10bfbbe0c7b1cb8bd0accf05"
+ref_name = "refs/heads/main"
+checkout_state_id = "3920fff99f3803bd59905a03c4f30de371e0d79868b8e22515bb02ceadc01eb1"
+base_commit = "d002284ece32b88e2be7ceeb574ed489c378a63c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
