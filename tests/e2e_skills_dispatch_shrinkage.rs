@@ -115,11 +115,12 @@ fn dispatch_subprocess_skill_is_shrunk() {
     let full = source_skill_text("dispatch-subprocess");
     let body = body_lines(&full);
     assert!(
-        body.len() <= 25,
-        "dispatch-subprocess body lines: {} (target ≤25)",
+        body.len() <= 40,
+        "dispatch-subprocess body lines: {} (target ≤40)",
         body.len()
     );
 
+    // Codex arm preserved.
     assert!(
         full.contains("worktree fork"),
         "must contain fork spawn template"
@@ -128,6 +129,24 @@ fn dispatch_subprocess_skill_is_shrunk() {
     assert!(
         full.contains("DOCTRINE_WORKER=1"),
         "must reference self-arm"
+    );
+
+    // Pi RPC arm (SL-108).
+    assert!(
+        full.contains("--mode rpc"),
+        "must contain pi RPC spawn arm"
+    );
+    assert!(
+        full.contains("agent_end"),
+        "must reference agent_end completion signal"
+    );
+    assert!(
+        full.contains("timeout"),
+        "must reference timeout enforcement"
+    );
+    assert!(
+        full.contains("cp AGENTS.md"),
+        "must reference AGENTS.md copy"
     );
 
     assert!(
