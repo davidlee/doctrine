@@ -100,7 +100,7 @@ pub(crate) struct CatalogNode {
 ### 4.4 `Units` — top-level (hydrate.rs)
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]  // match the containers' derives
 pub(crate) struct Units {
     pub(crate) estimation: String,  // resolved; default "espresso_shots"
     pub(crate) value: String,       // resolved; default "magic_beans"
@@ -243,7 +243,8 @@ must be removed or clippy fires *unfulfilled-expect*:
 Existing hydrate/graph/map_server suites stay green. The additive `units` key and
 the new struct fields require updating direct construction sites
 (`map_server/routes.rs` `CatalogNode { … }`, graph/hydrate test literals) and the
-`from_scanned` call site — additive contract evolution, not regression. The
+single `from_scanned` call site (`scan_catalog` — its only caller; no test invokes
+it directly) — additive contract evolution, not regression. The
 map_server HTTP view is unaffected: it maps `CatalogNode` → its own `{key,label}`
 DTO explicitly and picks no facet fields (surfacing facets in the web map is a UI
 concern, out of scope).
@@ -266,6 +267,7 @@ concern, out of scope).
 - `src/estimate.rs`, `src/value.rs` — remove now-fulfilled `expect(dead_code)` on
   `parse_optional`/`resolve_unit`.
 - `src/dtoml.rs` — remove `expect(dead_code)` on `estimation`/`value` fields.
-- Test call sites for `from_scanned` / `CatalogNode` literals updated for the new
-  fields.
+- `from_scanned` call site (`scan_catalog`, its sole caller) + `CatalogNode`
+  struct literals (`map_server/routes.rs`, graph/hydrate tests) updated for the
+  new fields.
 - No change to `Meta`/list path, RV/REC readers, or the map_server HTTP view.
