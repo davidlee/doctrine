@@ -113,6 +113,17 @@ export interface EditingNode {
   label: string;
 }
 
+/**
+ * The concept-map edge-table cell the user has selected (a single click,
+ * no inline input yet). Identities carry LABELS — every CM mutation is
+ * label-based, and distinct labels can derive the same key
+ * (`User Story` vs `User-Story`) — so we capture the clicked cell's label.
+ * A node cell also retains `key` for the `cmFocus` highlight path.
+ */
+export type CmSelectedField =
+  | { kind: 'node'; key: string; label: string }
+  | { kind: 'rel'; from_label: string; rel: string; to_label: string };
+
 // Mutable application state
 export interface AppState {
   // Graph data
@@ -130,6 +141,10 @@ export interface AppState {
   // Concept map editing
   editingConceptMap: boolean;
   editingNode: EditingNode | null;
+  /** The cell selected by a single click (plain navigation, no input yet). */
+  cmSelectedField: CmSelectedField | null;
+  /** Which selected field is being inline-edited ('Edit this'), independent of editingConceptMap. */
+  editingField: 'node' | 'rel' | null;
   cmFocusNode: CmNode | null;
   renderedCmFocus: string | null;
   cmCacheMutationSeq: number;

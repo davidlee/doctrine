@@ -302,6 +302,52 @@ export function setActionabilityView(view: ActionabilityView | null): void {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Public: focus-change → view transition (SL-110 Item 5)            */
+/* ------------------------------------------------------------------ */
+
+type ViewMode = 'semantic' | 'actionability';
+
+/**
+ * A concept-map entity renders ONLY in the semantic graph, so focusing one
+ * forces semantic mode. Every other kind (and `undefined`) imposes no mode.
+ * Reuses the same CM-kind test as `isConceptMap` (kindPrefix === 'CM').
+ */
+function requiredMode(node: CatalogNode | undefined): 'semantic' | null {
+  return node?.kindPrefix === 'CM' ? 'semantic' : null;
+}
+
+/**
+ * Pure transition computed on every focus change. DOM/clock-free.
+ *
+ * | case                                  | viewMode        | priorityZoomId          |
+ * |---------------------------------------|-----------------|-------------------------|
+ * | CM node (requiredMode === 'semantic') | 'semantic'      | null                    |
+ * | actionability + member                | 'actionability' | node.id                 |
+ * | actionability + non-member            | 'actionability' | null (clears stale)     |
+ * | else (semantic, non-CM)               | current         | currentPriorityZoomId   |
+ *
+ * `currentPriorityZoomId` is echoed by the "leave alone" row, which otherwise
+ * could not express "unchanged".
+ */
+export function focusTransition(
+  current: ViewMode,
+  node: CatalogNode | undefined,
+  isActionabilityMember: boolean,
+  currentPriorityZoomId: string | null,
+): { viewMode: ViewMode; priorityZoomId: string | null } {
+  if (requiredMode(node) === 'semantic') {
+    return { viewMode: 'semantic', priorityZoomId: null };
+  }
+  if (current === 'actionability') {
+    return {
+      viewMode: 'actionability',
+      priorityZoomId: isActionabilityMember && node !== undefined ? node.id : null,
+    };
+  }
+  return { viewMode: current, priorityZoomId: currentPriorityZoomId };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Public: neighbourhood (BFS)                                       */
 /* ------------------------------------------------------------------ */
 
