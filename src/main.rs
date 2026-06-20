@@ -962,7 +962,7 @@ enum WorktreeCommand {
     /// the spawned worker worktree's HEAD descends from the base `B` it was meant
     /// to fork off. Diagnostic only — fail-loud, NEVER removes the fork. Read-classed
     /// (callable under worker-mode). Distinct token per refusal
-    /// (`no-worker-head`/`unstamped`/`wrong-base`).
+    /// (`no-worker-head`/`not-isolated`/`unstamped`/`wrong-base`/`branch-mismatch`).
     VerifyWorker {
         /// The base commit `B` the worker was meant to fork off (the
         /// orchestrator's coordination HEAD at spawn).
@@ -972,6 +972,10 @@ enum WorktreeCommand {
         /// The worker worktree to verify — the git `-C` root for every probe.
         #[arg(long)]
         dir: PathBuf,
+
+        /// The worker fork branch S — binds HEAD(--dir) == tip(S) (dir↔branch coherence).
+        #[arg(long)]
+        branch: Option<String>,
     },
 
     /// Manage the worker-mode disk marker (SL-056 §3). `--clear` removes it at the
@@ -4173,7 +4177,9 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => worktree::run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
             WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
-            WorktreeCommand::VerifyWorker { base, dir } => worktree::run_verify_worker(&base, &dir),
+            WorktreeCommand::VerifyWorker { base, dir, branch } => {
+                worktree::run_verify_worker(&base, &dir, branch.as_deref())
+            }
             WorktreeCommand::Marker {
                 clear,
                 operator,
