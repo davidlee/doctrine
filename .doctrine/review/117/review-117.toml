@@ -1,0 +1,52 @@
+id    = 117
+slug  = "inquisition-sl-129-design-entity-id-path-helper-under-hostile-scrutiny"
+title = "Inquisition: SL-129 design — entity id path helper under hostile scrutiny"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-129"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Verification gate understates the shared-engine proof"
+detail = 'Expected: SL-129 design verification must preserve SPEC-004 shared entity-engine behaviour across the actual project gate: full just check before and after the replacement pass, with existing tests left unchanged and any narrower canary count treated only as supplemental evidence. Observed: design.md lines 90-104 reduce the commit proof to "just check — zero warnings, 7 tests green", while slice-129.md lines 31-32 also names "7 existing tests" even though the justfile check target runs formatting, lint, JS lint, cargo test, build, and covers far more than seven tests. This gives /plan a false exit criterion for shared machinery. Penance: rewrite the verification section so the controlling gate is the full unchanged just check surface before and after, and remove or clearly demote the seven-test count.'
+disposition = "design-wrong"
+response = "Conceded. Before /plan, the SL-129 design must replace the seven-test wording with the full behaviour-preservation gate: unchanged just check before and after, plus no narrowing of the existing test suite. Any specific canaries belong only as extra evidence."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Kind.stem serialization can drift catalog scan JSON"
+detail = "Expected: a behaviour-preserving design that adds entity::Kind::stem must either keep serialized CLI output unchanged or explicitly accept and verify the output change. Observed: design.md lines 14-20 add stem to Kind, whose live definition in src/entity.rs derives serde::Serialize; src/catalog/hydrate.rs serializes CatalogEntity.kind as Option<&static entity::Kind>; src/main.rs emits doctrine catalog scan --json from that hydrated catalog. The design only proves path strings remain identical and does not mention this JSON surface, so just check can pass while catalog scan JSON gains a new kind.stem field. Penance: decide the contract before /plan: mark Kind.stem with serde skip or otherwise project a stable catalog kind shape, or document the deliberate JSON drift and add/update an e2e assertion for catalog scan --json."
+disposition = "design-wrong"
+response = "Conceded. The design must decide the catalog scan JSON contract before /plan. The expected fix is either to keep Kind.stem out of serialized catalog output or to name the output drift explicitly and add an e2e assertion that captures the new shape."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "rel_path lacks the stem-less sub-kind guard"
+detail = "Expected: the design either excludes stem-less sub-kinds from every Kind-consuming path helper or applies the same guard in the shared filename computation. Observed: design.md lines 23-24 say empty-stem DESIGN/PLAN/NOTES kinds are caught by a debug_assert in id_path, but lines 42-50 define rel_path without that assertion. A caller that passes a sub-kind to rel_path would compute NNN/-NNN.toml instead of failing at the same boundary. Penance: design rel_path through the same internal entity-file helper as id_path, or put the same non-empty-stem assertion on both helpers and state that release builds rely on caller exclusion plus tests."
+disposition = "design-wrong"
+response = "Conceded. The design should move id_path and rel_path through one guarded filename helper, or put the same stem assertion on both helpers and document the release-mode reliance on caller exclusion and tests."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Scope reconnaissance remains stale after design corrections"
+detail = "Expected: before /plan, SL-129 scope and design should agree on the replacement surface so the phase plan inherits one inventory. Observed: design.md line 116 corrects the count to about 85 production plus 8 test-only sites and excludes meta.rs internals, while slice-129.md lines 46-74 still describe about 93 production sites across 13 files, list more files than that count, include src/main.rs as test-only, and still name src/meta.rs in the replacement surface. Penance: reconcile slice-129.md with the design’s corrected inventory or explicitly state that the design supersedes the stale scope count before plan materialisation."
+disposition = "design-wrong"
+response = "Conceded. The slice scope must be reconciled with the design inventory before /plan, or the design must explicitly supersede the stale scope counts so phase materialisation has one replacement surface."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
