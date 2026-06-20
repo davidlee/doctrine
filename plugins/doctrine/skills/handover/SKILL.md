@@ -13,6 +13,11 @@ facts live in persisted artifacts, `notes.md` or the memory store
 (`doctrine memory`); the handover only points at them and frames the
 immediate work.
 
+Guiding principle: existing durable artifacts should already provide suitable
+context for handover. This skill is to **improve token efficiency** with
+transient guidance those durable artifacts elide - and to confirm they are in
+good condition.
+
 ## When to use
 
 - Closing out a phase or other doctrine workflow activity, before the next agent starts.
@@ -39,19 +44,26 @@ Then: STOP
 
 ## Shape (sections to emit) For Phase Handover
 
-- **Where this is** — phase status ladder + commit refs; what is DONE, what is now.
-- **The gate** — `no code without an approved plan`; first action is the phase sheet.
-- **Read before you plan** — pointers to design/plan/notes + key source `file:line`s.
-- **What the last phase built** — the surface to ride, not refork.
-- **Next-phase scope** — EX/VT restated, plus watch-outs and any seam decisions.
-- **Immediate next actions** — the literal `doctrine slice phase … in_progress`
-  command, fill the sheet, TDD, commit, flip completed.
-- **Environment notes** — build/gate/lint specifics; pre-existing dirty files to leave.
-- **Artifacts / pointers** — scope / design / plan / notes / specs.
+- **Where this is** — phase status ladder + commit refs; what is DONE, what is
+  now.
+- **Reading List** — pointers to design/plan/notes, relevant other artifacts /
+  code, key source `file:line`s. What the next agent should ingest to build
+  context efficiently.
+- **Artifacts / pointers** — scope / design / plan / notes / specs. Optional /
+  reference material.
+- **Terrain** — the surface to ride, not refork; e.g. what the last phase
+  built. Point to it described elsewhere, or summarise if it is not.
+- **Next actions** — the literal `doctrine slice phase … in_progress`
+  / other obvious and immediate next step(s).
+- **Procedure & Caveats** — risks, unknowns and open decisions. Process
+  guardrails (command, fill the sheet, TDD, commit, flip status, etc).
+- **Environment notes** — build/gate/lint specifics; pre-existing dirty files
+  to leave.
 
 ## Rules
 
-- handover is gitignored + will be deleted — never put the only copy of a durable fact here.
+- handover is gitignored + will be deleted — never put the only copy of a
+  durable fact here.
 - Link to durable artifacts, don't repeat their contents.
 - Supersede stale notes explicitly; do not leave contradictory guidance.
 - Terse. Fragments fine. Reader is an agent, not human reviewer.
