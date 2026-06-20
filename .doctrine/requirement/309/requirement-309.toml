@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 309
+slug = "the-cross-kind-write-seam-is-the-uniform-linkunlink-verb-over-generic-append-edgeremove-edge-gated"
+title = "The cross-kind write seam is the uniform `link`/`unlink` verb over generic `append_edge`/`remove_edge`, gated by the table’s `LinkPolicy` (`Writable` / `LifecycleOnly` / `TypedVerbOnly`)."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

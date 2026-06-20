@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 306
+slug = "relations-are-partitioned-into-three-storage-tiers-tier-1-uniform-relation-tier-2-constrained-or"
+title = "Relations are partitioned into three storage tiers — tier-1 uniform `[[relation]]`, tier-2 constrained-or-payload kept typed, tier-3 free-text — preserving typed guarantees rather than flattening (ADR-010)."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

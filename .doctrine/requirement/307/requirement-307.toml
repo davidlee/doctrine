@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 307
+slug = "the-legal-relation-vocabulary-has-one-code-authoritative-source-of-truth-the-relation-rules-table"
+title = "The legal relation vocabulary has one code-authoritative source of truth — the `RELATION_RULES` table (`src/relation.rs`) keyed by `(source ∈ sources, label)`, sole driver of writer, validator, the SL-046 reader, and cordage overlay allocation — pointed at, never transcribed."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
