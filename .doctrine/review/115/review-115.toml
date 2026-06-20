@@ -1,0 +1,34 @@
+id    = 115
+slug  = "reconciliation-review-of-sl-126"
+title = "reconciliation review of SL-126"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-126"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "nit"
+title = "Expected: gate comment cites design §3.2 (the gate site) — Observed: src/slice.rs:406 cites 'design §3.1' (the query)"
+detail = "src/slice.rs:406 close-integration gate comment reads 'PHASE-02, EX-1/EX-2; design §3.1'. design.md §3.1 is 'The query (new, in ledger)'; §3.2 is 'The gate site (slice::run_status)'. The gate comment should cite §3.2. Cosmetic doc reference in a code comment — zero behavioural impact; all reason tokens + the bail copy match design verbatim."
+disposition = "tolerated"
+response = "Cosmetic §-reference in a code comment (§3.1 query vs §3.2 gate). Zero behavioural/correctness impact — every Blocked reason token and the bail copy match design verbatim, and the gate logic is exactly §3.2. A repair-commit + candidate-admit cycle is disproportionate to a one-token comment fix on an otherwise-pristine dispatched slice; can ride any future slice.rs touch. Consciously accepted."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: one journal tree-reader after the DRY migration — Observed: read_journal_at_ref (new, Option) coexists with read_ledger::<Journal> (retained) at dispatch.rs:374/1092"
+detail = "design §3.3 scoped the DRY migration to the trunk-oid path only; run_show_journal_trunk_oid now consumes ledger::read_journal_at_ref and the bespoke trunk-oid read_ledger path is gone (EX-3 satisfied). But read_ledger::<Journal> survives at dispatch.rs:374 (plan_review) and :1092 (integrate replay) — funnel-time read-modify-write at the coordination ref, a different access pattern than the close-time tree-read query. Two journal tree-readers coexist. Latent consolidation opportunity, consciously out of SL-126 scope (the funnel-time RMW path carries its own behaviour-preservation risk)."
+disposition = "aligned"
+response = "Not a defect — design §3.3 deliberately scoped the DRY migration to the trunk-oid read path, which IS fully migrated (EX-3). The surviving read_ledger::<Journal> calls (plan_review, integrate replay) are funnel-time read-modify-write at the coordination ref — a distinct access pattern from the close-time tree-read query, carrying their own behaviour-preservation risk. The coexistence is intended, not drift. Future consolidation is a separate concern; recorded here, not minted (marginal value, would be backlog noise)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
