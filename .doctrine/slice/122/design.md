@@ -74,15 +74,25 @@ passive/earlier renders derived inbound). New rule row:
 | axis | value |
 |---|---|
 | `sources` | `&[REV]` |
-| `label` | `enacts` — reads "REV-005 enacts RFC-003" |
-| `target` | `TargetSpec::Kinds(&[RFC])` — REV enacts RFCs only |
-| `inbound_name` | `"enacted by"` — `inspect RFC-003` shows "enacted by: REV-005" |
+| `label` | `originates_from` — reads "REV-005 originates from RFC-003" |
+| `target` | `TargetSpec::Kinds(&[RFC])` — a REV originates from RFCs only |
+| `inbound_name` | `"precursor of"` — `inspect RFC-003` shows "precursor of: REV-005" |
 | `tier` | `Tier::One` (writable) |
-| `link` | `LinkPolicy::Writable` — `doctrine link rev-005 enacts rfc-003` |
+| `link` | `LinkPolicy::Writable` — `doctrine link rev-005 originates_from rfc-003` |
 
-Arity unbounded both ways (a REV may enact several RFCs; an RFC may be enacted
-across REVs). Verb `enacts` over realizes/implements/fulfils (governance register;
-"precursor → enactment" is the scope's own framing). **Not** `spawns` (taken:
+Arity unbounded both ways (a REV may draw on several RFCs; an RFC may precede
+several REVs).
+
+**Verb is outcome-neutral by design.** The edge means "this revision *arose from*
+this discussion" — true whether the RFC concluded yes or no. An earlier candidate
+`enacts` / "enacted by" was rejected: it smuggles a yes-outcome into the label,
+so an RFC that resolved *against* a proposal (and was formalised by a REV
+recording the "no") would falsely render "enacted by". That is the same
+governance-position leak banned from `status` (see §2), sneaking in via the
+relation. `originates_from` / "precursor of" stays honest under rejection and
+matches the scope's own word ("the precursor discussion a REV may later
+formalise"). Outcome (yes/no) lives in the RFC **body prose** and in what the REV
+records — never structurally asserted by the edge. Not `spawns` (taken:
 record→backlog).
 
 **Tier-1 over tier-2**: `enacts` is a bare citation with *no payload*. `revises`
@@ -96,10 +106,41 @@ Consequences:
 - The precursor link is **not** authored by RFC → it puts RFC in no `sources`
   set. Independent of Decision 1's `related`/`AnyNumbered` edge set.
 
-## §2 Remaining open questions (driving next)
+## §2 Lifecycle (OQ-4 — LOCKED)
 
-- OQ-4: **Lifecycle states** — status machine vs stateless. Bears on the TOML
-  schema and on whether `enacts` flips RFC status.
+**Minimal status machine**, governance-neutral terminals:
+
+```
+open (default) → resolved | withdrawn
+```
+
+- `open` — deliberation live.
+- `resolved` — discussion concluded. **Outcome-blind**: means "concluded," not
+  "concluded yes". A discussion may resolve *against*; the yes/no outcome lives in
+  the body prose, never in the status.
+- `withdrawn` — abandoned without conclusion.
+
+Rejected alternatives:
+- **Stateless** (REC-path, `meta::read_id`): leanest, but no edge expresses
+  *withdrawn* or *resolved-without-a-REV*; those are pure status facts. The
+  live/concluded/dropped distinction is real catalog signal no relation captures.
+- **`accepted` / `declined` terminals**: forbidden — they make the RFC assert a
+  governance position. `resolved` stays outcome-blind precisely to avoid this.
+- **`draft` / `superseded`**: speculative; omit. Supersession, if ever needed, is
+  an edge not a state.
+
+Reader path: an authored `status` field ⇒ RFC does **not** use REC's status-less
+`meta::read_id` scan; it follows the status-bearing read path (cf. ADR/slice).
+Transition verb `doctrine rfc status <id> <state>` (status moves via CLI, not
+hand-edit — boot rule).
+
+**Status ⊥ `originates_from`.** A REV-authored edge never flips RFC status (that
+would reintroduce the target-mutation avoided in §1 Decision 2). An RFC may be
+`resolved` then later preceded by a REV, or precede a REV while still `open`. The
+two axes are independent.
+
+## §3 Remaining open questions (driving next)
+
 - OQ-1: **Naming** — `.doctrine/rfc/` (singular, peer convention) vs user's
   `.doctrine/rfcs/`.
 - OQ-5: **ADR scope** — confirm the governing ADR + exactly what it asserts.
