@@ -12,5 +12,41 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-127"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-05 skill growth broke the dispatch-router shrinkage gate (expected ≤64 body lines, observed 74 → e2e_skills_dispatch_shrinkage red)"
+detail = "PHASE-05 added the 'Base freshness (mid-drive)' routing section (+10 lines) to plugins/doctrine/skills/dispatch/SKILL.md but did not touch tests/e2e_skills_dispatch_shrinkage.rs, whose dispatch_router_skill_is_shrunk asserts body ≤64. On the candidate surface the test fails at 74 — a behaviour-preservation-gate violation (AGENTS.md: existing suites stay green). The added prose is legitimate routing, not bloat."
+disposition = "fix-now"
+response = "Fixed within audit scope on the candidate branch (commit 3f2ac4c): raised the dispatch-router shrinkage budget 64→74 with a rationale comment citing PHASE-05's refresh-base routing section. e2e_skills_dispatch_shrinkage now green (3/3); full suite green on the candidate."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "prepare-review projected 0 phase cuts despite 5 well-formed boundaries (expected phase/127-NN refs, observed none)"
+detail = "boundaries.toml (PHASE-01..05, valid code_start/end oids) exists only in the coord WORKTREE, uncommitted; only journal.toml is tracked on dispatch/127. read_ledger reads via git::read_path_at(coord_ref,…) from the branch object-db, so plan_phases sees an empty Boundaries and projects 0 phase cuts. This is a dispatch claude-arm/framework gap (boundaries never committed to the branch), ORTHOGONAL to SL-127's design (which does not touch prepare-review's boundary projection). The review/127 bundle remains the whole cumulative delta on the correct base — only per-phase review granularity is lost."
+disposition = "tolerated"
+response = "Orthogonal to SL-127's design; the review/127 bundle is the whole cumulative delta on the correct base and is reviewable. Per-phase granularity loss captured as ISS-039 (claude-arm: commit boundaries.toml to the dispatch branch, or read_ledger worktree fallback). Tolerated for SL-127 closure."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-05 EX-2/VT-1 (retire DOCTRINE_TRUNK_REF=main from skills) satisfied vacuously — the ritual was never in the skill masters"
+detail = "git grep DOCTRINE_TRUNK_REF=main at the slice fork-point over plugins/doctrine/skills/dispatch+worktree is empty: the env-prefix ritual never lived in the skills, so EX-2's removal and VT-1's grep-clean pass trivially. The ritual's real home is 3 memories (mem_019ee083…/mem_019ee3c4…/mem_019ec912…), which correctly remain valid until SL-127 integrates (the installed binary still has the origin/HEAD-first bug). Already tracked in notes.md §Audit fodder #2."
+disposition = "tolerated"
+response = "EX-2/VT-1 are met (skills grep-clean) — vacuously, since the env-prefix ritual never lived in the skills. The ritual persists in 3 memories that correctly stay valid until SL-127 integrates (installed binary still origin/HEAD-first). Memory update is a post-integrate /close-time harvest, already tracked in notes.md §Audit fodder #2 — no slice-scope change needed now."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "PHASE-04 extracted select_guidance(GuidanceInputs) — wider than the task sketch (expected an inline RefreshBase variant)"
+detail = "The worker lifted run_status's inline next_guidance chain into a pure fn select_guidance taking precomputed git facts (FnOnce for lazy next-id). Wider than the PHASE-04 sketch, but behaviour-preserving: existing status-guidance outcomes/ordering hold and two dedicated tests (select_guidance_refresh_base_precedes_prepare_review_and_audit, select_guidance_fresh_bundle_keeps_existing_guidance) pin it. Aligns with the project's pure/imperative split ethos — a beneficial refactor."
+disposition = "aligned"
+response = "Behaviour-preserving pure-fn extraction (select_guidance over precomputed git facts), consistent with the project's pure/imperative split; ordering/outcomes pinned by two dedicated tests + existing status tests green. Beneficial refactor, no change needed."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
