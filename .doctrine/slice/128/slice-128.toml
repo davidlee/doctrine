@@ -1,7 +1,7 @@
 id = 128
 slug = "dispatch-deliver-to"
 title = "deliver_to config as single trunk-ref source"
-status = "reconcile"
+status = "done"
 created = "2026-06-20"
 updated = "2026-06-20"
 
