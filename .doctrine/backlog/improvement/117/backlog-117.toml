@@ -5,10 +5,10 @@ id = 117
 slug = "pi-extension-bridge-mcpjson-mcp-servers-as-tools"
 title = "Pi extension: bridge .mcp.json MCP servers as tools"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-20"
 tags = ["area:extensions", "area:mcp"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
