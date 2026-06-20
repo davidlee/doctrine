@@ -1,9 +1,9 @@
 id = 114
 slug = "canonical-id-consolidation"
 title = "Consolidate per-kind canonical_id onto shared listing helper"
-status = "proposed"
+status = "ready"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-20"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite

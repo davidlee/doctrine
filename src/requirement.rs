@@ -242,7 +242,7 @@ pub(crate) fn reserve(
 /// The canonical FK string for a reserved requirement id (`REQ-007`). The `Kind`
 /// is the single source of the prefix.
 pub(crate) fn canonical_id(id: u32) -> String {
-    format!("{}-{id:03}", REQUIREMENT_KIND.prefix)
+    crate::listing::canonical_id(REQUIREMENT_KIND.prefix, id)
 }
 
 /// Best-effort FK canonicalizer: parse-and-reformat if the FK is a valid (possibly
