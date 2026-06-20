@@ -98,27 +98,64 @@ modes — stale matcher, poisoned command, duplicate/dead entries.
 
 ## Code impact
 
-### B-path — sanitize at the source
+### B-path — sanitize at the source (validated, byte-safe, all bake sites)
+
+`strip_deleted` works on **bytes** (not `to_str`), so a path that is non-UTF-8
+*before* the kernel-appended ASCII suffix is still cleaned (codex M2). It returns
+`Option` — `Some` only when the suffix was actually present — so `resolve_exec`
+can tell a poisoned reading from a clean one and **validate against disk** rather
+than silently baking a guessed path (codex M1):
 
 ```rust
-/// Strip a kernel-appended " (deleted)" suffix from a /proc/self/exe reading.
-/// Pure; non-UTF-8 paths pass through untouched.
-fn strip_deleted(p: &Path) -> PathBuf {
-    match p.to_str() {
-        Some(s) => PathBuf::from(s.strip_suffix(" (deleted)").unwrap_or(s)),
-        None => p.to_path_buf(),
-    }
+/// Strip a kernel-appended b" (deleted)" suffix from a /proc/self/exe reading.
+/// Pure, byte-level (UTF-8-agnostic). `Some` iff the suffix was present.
+#[cfg(unix)]
+fn strip_deleted(p: &Path) -> Option<PathBuf> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    p.as_os_str()
+        .as_bytes()
+        .strip_suffix(b" (deleted)")
+        .map(|b| PathBuf::from(std::ffi::OsString::from_vec(b.to_vec())))
 }
+#[cfg(not(unix))]
+fn strip_deleted(_p: &Path) -> Option<PathBuf> { None } // /proc/self/exe poison is Linux-only
 
-/// The single exec resolver every bake site uses instead of current_exe().
-fn resolve_exec() -> anyhow::Result<PathBuf> {
-    let p = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
-    Ok(strip_deleted(&p))
+/// The single approved exec resolver. Prefer the raw reading when it exists; on a
+/// `(deleted)` reading fall back to the stripped path **only if it exists on
+/// disk**; otherwise fail loudly rather than bake a dead command.
+pub(crate) fn resolve_exec() -> anyhow::Result<PathBuf> {
+    let raw = std::env::current_exe()
+        .context("Failed to resolve the doctrine executable path")?;
+    if raw.exists() {
+        return Ok(raw);
+    }
+    if let Some(stripped) = strip_deleted(&raw)
+        && stripped.exists()
+    {
+        return Ok(stripped);
+    }
+    anyhow::bail!(
+        "doctrine executable path {raw:?} does not resolve to an on-disk binary; \
+         reinstall from a stable location"
+    )
 }
 ```
 
-Replace the four raw `std::env::current_exe()` calls — `boot.rs:316`, `:333`,
-`:1479`, `corpus.rs:482` — with `resolve_exec()`.
+`resolve_exec` is the **single approved resolver** and replaces **every**
+`current_exe()` that feeds a persisted command, extension, MCP entry, or hook spec
+— not just the four originally listed (codex C1). The full set:
+
+| Site | What it bakes |
+|---|---|
+| `boot.rs:316`, `:333` | `boot` run / `--check` exec |
+| `boot.rs:1479` (`run_install`) | the `wire`/hook commands |
+| `corpus.rs:482` | `memory sync` exec |
+| `skills.rs:1069` | the SubagentStart **stamp hook** (`doctrine claude install`) — a real stamp bake site the first draft missed |
+| `install.rs:140` (`run_forward_steps`) | forward-step exec (hook/extension wiring) |
+| `status.rs:337` | boot-staleness compare — read-only, but a poisoned exec falsely reports `stale`; route through `resolve_exec().unwrap_or_else(|_| PathBuf::from("doctrine"))` to keep its existing lenient fallback |
+
+All except `status.rs` propagate the `bail!`; `status.rs` keeps its lenient
+`unwrap_or_else` since a staleness read must never abort.
 
 ### A + B-prune — poison-tolerant ownership + reconcile
 
@@ -171,10 +208,21 @@ if owned.is_empty() {
   carries no foreign sibling — the canonical entry is doctrine-sole).
 - `drop_owned_hooks`: for each owned `(ei, hi)`, remove that **hook** from its
   entry's `hooks` array; afterwards remove any entry whose `hooks` became empty.
-  Foreign hooks and their entry-level `matcher` are preserved (D4). Implemented as
-  a filter/rebuild (collect owned positions into a set, rebuild each entry's
-  `hooks` keeping non-owned hooks, drop emptied entries) — no descending-index
-  surgery, no shared-matcher rewrite.
+  Implemented as a filter/rebuild — **the entry object is preserved in full**
+  (clone it, replace only its `hooks` array with the retained non-owned hooks,
+  keep every other entry-level key including `matcher` and any unknown keys), and
+  the entry is dropped only when the retained `hooks` array is empty (codex m1).
+  No descending-index surgery, no entry-level `matcher` rewrite (D4).
+
+**Outcome mapping (RefreshOutcome):** `owned.is_empty()` → `Wired`; the no-write
+short-circuit → `None`; every other path (stale command, stale matcher, poisoned,
+duplicate collapse, foreign-sibling extraction) → `Refreshed`. The
+`Wired`/`Refreshed`/`None`/`PrintedFallback` variants and their `"wired"` /
+`"refreshed"` / `"already current"` labels (`install.rs:314`, `skills.rs:1085`)
+are **unchanged**; only the doc comment on `Refreshed` broadens from "stale
+command refreshed" to "an owned hook existed and was normalized to canonical"
+(codex M3). Existing outcome assertions hold (verified: the stale-path test
+asserts `Refreshed`, the first-install test `Wired`, the reinstall test `None`).
 
 Net effect: at most one doctrine-owned entry survives, always canonical and
 doctrine-sole, appended fresh. A messy file's entry moves to the array tail
@@ -183,11 +231,13 @@ owned hook is extracted into its own entry once, then `hook_is_sole` makes re-ru
 no-write.
 
 **Blast radius:** `find_owned` + `enum Owned` + `set_command` removed/replaced;
-`plan_hook` rewritten as normalize; three one-line predicate edits; add
-`is_doctrine_program`, `owned_positions`, `entry_is_canonical`, `hook_is_sole`,
-`drop_owned_hooks`, `strip_deleted`, `pub(crate) resolve_exec` (reachable from
-`corpus.rs`). Boot/sync ride the new core unchanged (single canonical doctrine-sole
-entry → no-write).
+`plan_hook` rewritten as normalize; `RefreshOutcome::Refreshed` doc broadened;
+three one-line predicate edits; add `is_doctrine_program`, `owned_positions`,
+`entry_is_canonical`, `hook_is_sole`, `drop_owned_hooks`, `strip_deleted`,
+`pub(crate) resolve_exec`. Seven `current_exe()` call sites rerouted through
+`resolve_exec` across `boot.rs`, `corpus.rs`, `skills.rs`, `install.rs`,
+`status.rs` (table above). Boot/sync ride the new core unchanged (single canonical
+doctrine-sole entry → no-write).
 
 ## Verification
 
@@ -221,12 +271,34 @@ boot/sync hook matrix stays green **unmodified** (behaviour-preservation gate).
 
 **Preservation**
 - Existing boot/sync single-entry installs → canonical → `None` on re-run
-  (current idempotency tests pass unmodified).
+  (current idempotency tests pass unmodified). Verified order-tolerant:
+  `plan_session_hook_refreshes_on_path_change_preserving_foreign` and
+  `install_claude_stamp_hook_appends_subagentstart…` assert via order-independent
+  `commands()` / per-event `len()`, so normalize's append-at-tail keeps them green.
 - `stamp_subagent_matcher_tracks_worktree_const` stays.
+- **Shared-core proof (codex m2):** add the foreign-sibling shared-entry case for
+  **boot and sync too**, not stamp only — proving the shared merge core did not
+  acquire event-specific behaviour.
 
-**Seam note:** `current_exe()` can't be faked in a unit test; `resolve_exec` is
-covered transitively — `strip_deleted` carries the logic, the wrapper is thin.
+**Seam note:** `current_exe()` can't be faked in a unit test; `resolve_exec`'s disk
+checks are covered by `strip_deleted` unit cases plus the existing-path branch
+(the test binary exists → raw branch). The `bail!` path (neither raw nor stripped
+exists) is asserted by pointing `strip_deleted` at synthetic paths; the thin
+wrapper's branch logic is otherwise exercised transitively.
 
 ## Open questions
 
 _None remaining — OQ-1/2/3 resolved (D1/D2/D3)._
+
+## Review log
+
+- **Self (adversarial):** F1 fragile index surgery, F2 entry-level matcher clobber
+  on heal-in-place → replaced heal-in-place with **normalize** (drop owned + append
+  fresh). F3 `resolve_exec` `pub(crate)`. F4 same-entry/foreign-sibling test cases.
+- **External (codex GPT-5.5):** C1 missed stamp bake sites (`skills.rs:1069`,
+  `install.rs:140`, `status.rs:337`) → all seven `current_exe()` sites rerouted.
+  M1 `strip_deleted` too trusting → `resolve_exec` validates against disk, bails
+  loudly. M2 non-UTF-8 poison survived `to_str` → byte-level strip. M3 `Refreshed`
+  semantics widened → doc broadened, variant/labels kept, existing assertions
+  verified. m1 preserve all entry-level keys in `drop_owned_hooks`. m2 shared-entry
+  tests for boot/sync, not stamp only. All integrated above.
