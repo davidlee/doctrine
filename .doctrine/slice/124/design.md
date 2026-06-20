@@ -202,22 +202,43 @@ if let [(ei, hi)] = owned[..]
 if owned.is_empty() {
     arr.push(desired_entry(spec));            // Wired — append at tail
 } else {
-    // Position-preserving insertion at the first owned hook's *execution slot*.
+    // Insert the fresh canonical entry at the first owned hook's execution slot.
     // Entries before the first owned entry are all foreign and unremoved, so its
-    // index `first` is stable. Two sub-cases (codex round-3):
-    //   • first owned entry was doctrine-SOLE → drop removes the whole entry →
-    //     insert the fresh entry at `first` (takes the vacated slot).
-    //   • first owned entry SHARED a foreign sibling → that entry survives at
-    //     `first`, so insert the fresh entry at `first + 1` — AFTER the retained
-    //     foreign hook, never before it. Exact execution order is preserved.
+    // index `first` is stable. The +1 depends on whether that entry *survives the
+    // drop* — i.e. retains a foreign hook — NOT on how many hooks it had (codex
+    // round-4: two owned hooks in one entry has len>1 yet is fully removed):
+    //   • first owned entry fully removed (all its hooks were owned) → insert at
+    //     `first` (takes the vacated slot).
+    //   • first owned entry survives (kept a foreign hook) → insert at `first + 1`
+    //     — after the retained foreign remnant.
     let first = owned[0].0;
-    let shared = !hook_is_sole(arr, first);   // entry survives drop iff it has a foreign sibling
+    let survives = entry_has_foreign_hook(arr, first, spec.is_ours); // ≥1 non-owned hook
     drop_owned_hooks(arr, &owned);            // extract every owned hook (F1/F2/m1)
-    let ins = (first + usize::from(shared)).min(arr.len());
+    let ins = (first + usize::from(survives)).min(arr.len());
     arr.insert(ins, desired_entry(spec));     // one fresh canonical entry
     // Refreshed
 }
 ```
+
+`entry_has_foreign_hook(arr, ei, is_ours)` = the entry at `ei` has at least one
+hook whose command is **not** `is_ours` — the precise "survives the drop"
+predicate (distinct from `hook_is_sole`, which counts hooks for the no-write
+short-circuit).
+
+**Order-preservation bound (codex rounds 2–4).** Doctrine only ever writes
+**single-hook** entries, so in every realistic file each owned hook is sole in its
+entry and the execution slot is preserved **exactly** — a stale `boot` before
+`sync` stays before `sync`. The only residual is a *hand-merged* entry that
+interleaves a doctrine hook with foreign hooks in one `hooks` array: the doctrine
+hook is extracted to its own entry placed immediately after the foreign remnant,
+so a foreign hook the operator listed *after* the doctrine hook keeps its relative
+order, but one listed *before* the doctrine hook in that same entry may end up
+after it. Foreign **content, matcher, and all entry-level keys are always
+preserved** — only sub-entry interleave order is not guaranteed, for an input
+doctrine never produces and where independent SessionStart hooks carry no defined
+ordering dependency. Splitting the entry to preserve exact interleave was rejected
+as gold-plating on the shared merge core (raises preservation-gate risk for the
+real boot/sync paths to no real-world benefit).
 
 - `entry_is_canonical(arr, ei, hi, spec)` = `arr[ei].matcher == spec.matcher &&
   arr[ei].hooks[hi].command == spec.command`.
@@ -242,18 +263,17 @@ command refreshed" to "an owned hook existed and was normalized to canonical"
 asserts `Refreshed`, the first-install test `Wired`, the reinstall test `None`).
 
 Net effect: at most one doctrine-owned entry survives, always canonical and
-doctrine-sole. It is inserted at the first owned hook's **execution slot** (`first`
-if that entry was doctrine-sole and got removed; `first + 1` if it shared a foreign
-sibling and survives), so execution order is preserved exactly — a stale `boot`
-before `sync` stays before `sync`, and a foreign hook listed before the doctrine
-hook in a shared entry stays before it too (codex rounds 2–3). A
-hand-merged-but-canonical owned hook is extracted into its own entry once, then
-`hook_is_sole` makes re-runs no-write.
+doctrine-sole, inserted at the first owned hook's execution slot (see the
+order-preservation bound below). For every doctrine-written (single-hook) entry
+order is preserved exactly — a stale `boot` before `sync` stays before `sync`. A
+hand-merged-but-canonical owned hook is extracted into its own entry once, then the
+no-write short-circuit makes re-runs `None`.
 
 **Blast radius:** `find_owned` + `enum Owned` + `set_command` removed/replaced;
 `plan_hook` rewritten as normalize; `RefreshOutcome::Refreshed` doc broadened;
 three one-line predicate edits; add `is_doctrine_program`, `owned_positions`,
-`entry_is_canonical`, `hook_is_sole`, `drop_owned_hooks`, `strip_deleted`,
+`entry_is_canonical`, `hook_is_sole`, `entry_has_foreign_hook`, `drop_owned_hooks`,
+`strip_deleted`,
 `pick_exec` + `pub(crate) resolve_exec`. Seven `current_exe()` call sites rerouted
 through `resolve_exec` across `boot.rs`, `corpus.rs`, `skills.rs`, `install.rs`,
 `status.rs` (table above). Boot/sync ride the new core unchanged (single canonical
@@ -285,10 +305,14 @@ boot/sync hook matrix stays green **unmodified** (behaviour-preservation gate).
 **Safety / non-clobber (D3/D4)**
 - Owned hook sharing an entry with a **foreign** sibling hook → the owned hook is
   extracted into a fresh entry inserted **after** the retained shared entry; the
-  foreign hook **and its entry-level matcher** survive unchanged. (Exercises F2.)
-- Owned hook listed **after** a foreign hook in one shared entry → after normalize,
-  the foreign hook still executes **before** the doctrine entry (exact order; codex
-  round-3 counterexample). Asserts via the ordered `commands()` list.
+  foreign hook **and its entry-level matcher/keys** survive unchanged. (Exercises
+  F2 + m1.)
+- Owned hook listed **after** a foreign hook in one shared entry → the foreign hook
+  still executes **before** the doctrine entry. Asserts via the ordered
+  `commands()` list.
+- **Two owned hooks in one entry, followed by a separate foreign entry** (codex
+  round-4 shape d) → the all-owned entry is removed, fresh entry inserts at `first`
+  (not `first + 1`), the foreign entry keeps its position. Asserts ordered.
 - Foreign `SubagentStart` hook under an unrelated matcher → untouched.
 - A single canonical doctrine-sole entry → `None` (no spurious reorder/write).
 
@@ -342,7 +366,12 @@ _None remaining — OQ-1/2/3 resolved (D1/D2/D3)._
   Minor — slice scope still said "heal in place" → reconciled to normalize wording.
 - **External (codex GPT-5.5, 3rd pass):** round-2 fixes confirmed resolved except a
   residual Major — insert-at-`first` jumps the doctrine entry ahead of a foreign
-  hook sharing the first owned entry. Fixed: insert at the execution slot (`first`
-  if the owned entry was sole/removed, `first + 1` if it shared and survives) →
-  exact order preserved + foreign-before-doctrine ordering test. Stale
-  "append-at-tail" doc line corrected.
+  hook sharing the first owned entry. Fixed: insert at the execution slot, +1 when
+  the entry survives the drop. Stale "append-at-tail" doc line corrected.
+- **External (codex GPT-5.5, 4th pass):** found the survival predicate `!hook_is_sole`
+  was wrong — two owned hooks in one entry has len>1 yet is fully removed, mis-placing
+  the insert (Major). Fixed: survival = `entry_has_foreign_hook` (retains a non-owned
+  hook), not hook count. Honest order-preservation **bound** added: exact for
+  doctrine-written single-hook entries (all real files); sub-entry interleave order in
+  a hand-merged multi-hook entry is not guaranteed (content/matcher/keys always
+  preserved). Entry-splitting to chase exact interleave rejected as gold-plating.
