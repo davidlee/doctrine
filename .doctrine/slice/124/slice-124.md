@@ -62,10 +62,15 @@ Closure intent — judged green when:
 ## Affected Surface
 
 - `src/boot.rs` — the merge core: `find_owned` / `Owned` / `plan_hook` /
-  `set_command` / `desired_entry` (Defect A); exec-path resolution at the
-  `run_install` / `wire` seam and/or a sanitizer applied to `current_exe()`
-  (Defect B-path); dead/duplicate pruning in the merge (Defect B-prune).
-- Tests live in the `src/boot.rs` test module (existing hook-merge matrix).
+  `set_command` → normalize (Defect A + B-prune); poison-tolerant
+  `is_doctrine_program`; `strip_deleted` + `pub(crate) resolve_exec` (Defect
+  B-path).
+- Exec-path resolution rerouted through `resolve_exec` at **all seven**
+  `current_exe()` bake sites (design review C1): `boot.rs` (×3), `corpus.rs`,
+  `skills.rs` (the stamp-hook install), `install.rs` (forward steps), `status.rs`
+  (read-only staleness, lenient fallback retained).
+- Tests live in the `src/boot.rs` test module (existing hook-merge matrix; add
+  heal / sanitize / prune-converge / shared-entry cases).
 - No change to `worktree marker --stamp-subagent`, to the matcher const, or to the
   `verify-worker` refusal — those are correct; the writer is at fault.
 
