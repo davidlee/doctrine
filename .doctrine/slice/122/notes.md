@@ -42,6 +42,27 @@ orchestrator = sole writer, workers = source-delta only.
   arm rather than a dedicated minted-RFC scan test. VT-1/VT-5 have dedicated
   tests. Audit should confirm VT-2/VT-4 coverage is adequate or add tests.
 
+## PHASE-02 — RFC lifecycle transitions + catalog list (done)
+
+- Code: funnel commit `8d6da66f`; boundary record `18bf45b5`. Base B = `9d8bd307`
+  (PHASE-01 boundary). Worker delta = `28a1014f` on `worker/SL-122/PHASE-02`.
+- **Scope bleed (finding for audit):** the PHASE-02 delta is +227 lines of
+  `src/rfc.rs` that are **ALL TESTS** — no new impl. The lifecycle machine
+  (`RfcStatus`, `RFC_STATUSES`, `set_status`, `rfc status`, `rfc list
+  --status/--all`) was already pre-shipped inside **PHASE-01's** commit `06afaad0`
+  (its worker built the full `RfcCommand{New,List,Show,Status}` enum + handlers,
+  beyond its mint/show charter). Functionally complete + now tested + green, but
+  the P01↔P02 boundary bled. Audit should reconcile the boundary record against
+  what each phase actually delivered.
+- **Verify gotcha (orchestrator self-inflicted, resolved):** ran verify with
+  `DOCTRINE_TRUNK_REF=main` prefixed onto `just test-all` → 141 failures, all
+  `DOCTRINE_TRUNK_REF=main does not resolve to a commit`. The env var leaks into
+  every test that spins up its own temp git repo (no `main` ref there). The env
+  prefix is for **trunk-resolving dispatch cmds only** (`setup`/`sync`), NOT for
+  the verify suite. Plain `just lint && just test-all && just build` is green in
+  the markerless coord tree — and the 2 `run_new` tests the worker flagged also
+  pass here (markerless coord tree resolves trunk natively).
+
 ## Pre-existing fix folded into the dispatch base
 
 - `9c6d649d fix(IMP-122)` (committed on `main`, = dispatch base B2): IMP-122
