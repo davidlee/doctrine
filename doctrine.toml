@@ -3,3 +3,7 @@
 # "pi"  — pi RPC mode (SL-108)
 # "codex" — codex exec (default)
 preferred-subprocess-harness = "pi"
+# Force the subprocess arm even under a claude env-marker. SL-123 dogfoods the
+# pi arm to fix the claude arm's wrong-base bug — running the fix on the broken
+# arm is the bootstrap hazard we avoid here.
+claude-force-subprocess-dispatch = true
