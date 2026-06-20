@@ -1,0 +1,54 @@
+memory_uid = "mem_019ee3a0323d704193b8c9ecf359678f"
+memory_key = "mem.pattern.dispatch.subagentstart-hook-cwd-is-worker-worktree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SubagentStart hook process cwd is the worker worktree, breaking auto-stamp provision"
+summary = "Claude Code runs the SubagentStart hook with process cwd = the spawned subagent's own worktree, not the orchestrator tree — so the auto stamp's source==fork guard trips and the worker is never stamped."
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:dispatch", "harness-behavior"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5b00be99c265cbf1146f37fb71c63bc68dad03a5"
+ref_name = "refs/heads/main"
+checkout_state_id = "4ba7bd909b56a9397263f94ed4f3eb999c9defd9e3247ff79776766d1fc9c374"
+base_commit = "81ef4b32681d965a0498524399d844c58f203fd2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "major"
+weight = 0
+
+[[source]]
+kind = "improvement"
+ref = "IMP-046"
+
+[[source]]
+kind = "issue"
+ref = "ISS-011"
+
+[[source]]
+kind = "slice"
+ref = "SL-056"
+
