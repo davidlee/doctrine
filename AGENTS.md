@@ -1,4 +1,5 @@
 @.doctrine/state/boot.md
+If you have NOT seen `BOOT-SENTINEL: doctrine-governance-snapshot` anywhere in your context (system prompt or preceding messages), you MUST read the file referenced above now. If you HAVE seen it, you MUST NOT — the content is already in context.
 # jail
 
 if `/workspace` exists, you're in a bubblewrap jail with the system defined in flake.nix,
