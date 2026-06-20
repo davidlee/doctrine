@@ -104,7 +104,7 @@ impl SpecSubtype {
     /// `SPEC-012`) — the inverse of `resolve_spec_ref`, prefix from the `Kind`
     /// (single source). Used by `spec new`'s print and the registry scan.
     fn canonical_id(self, id: u32) -> String {
-        format!("{}-{id:03}", self.kind().prefix)
+        listing::canonical_id(self.kind().prefix, id)
     }
 
     /// Human label for `spec list` section headers.
@@ -1011,7 +1011,7 @@ fn show_json(
     let value = serde_json::json!({
         "kind": "spec",
         "spec": spec,
-        "id": canonical_id(spec.kind, spec.id),
+        "id": spec.kind.canonical_id(spec.id),
         "body": body,
         "members": member_rows,
         "interactions": interactions,
@@ -1159,12 +1159,6 @@ fn is_hidden(status: &str) -> bool {
     status == "superseded"
 }
 
-/// The `PRD-007` / `SPEC-012` canonical id for a spec id in `subtype`'s namespace,
-/// via the single id-form authority. The prefix comes from the subtype's `Kind`.
-fn canonical_id(subtype: SpecSubtype, id: u32) -> String {
-    listing::canonical_id(subtype.kind().prefix, id)
-}
-
 /// Re-export of the spine's status validator, scoped to spec so callers read intent
 /// locally. Guards `--status` against [`SPEC_STATUSES`] (READ/filter input only).
 fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
@@ -1176,7 +1170,7 @@ fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
 /// carries no `[tags]` on the `Meta` read path, so the tag axis is empty here.
 fn key(subtype: SpecSubtype, m: &Meta) -> listing::FilterFields {
     listing::FilterFields {
-        canonical: canonical_id(subtype, m.id),
+        canonical: subtype.canonical_id(m.id),
         slug: m.slug.clone(),
         title: m.title.clone(),
         status: m.status.clone(),
@@ -1288,7 +1282,7 @@ const SPEC_DEFAULT: &[&str] = &["id", "status", "title", "members"];
 fn spec_list_rows(subtype: SpecSubtype, rows: &[(Meta, usize)]) -> Vec<SpecListRow> {
     rows.iter()
         .map(|(m, count)| SpecListRow {
-            id: canonical_id(subtype, m.id),
+            id: subtype.canonical_id(m.id),
             status: m.status.clone(),
             slug: m.slug.clone(),
             title: m.title.clone(),
@@ -1343,7 +1337,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
             for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
                 for (m, count) in subtype_rows(root, subtype, &filter)? {
                     rows.push(SpecRow {
-                        id: canonical_id(subtype, m.id),
+                        id: subtype.canonical_id(m.id),
                         subtype: subtype.label(),
                         status: m.status,
                         slug: m.slug,

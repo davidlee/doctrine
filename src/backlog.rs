@@ -154,7 +154,7 @@ impl ItemKind {
     /// `Kind` (single source). `pub(crate)` so the `backlog_order` adapter's
     /// `ItemId` renders through the same single source.
     pub(crate) fn canonical_id(self, id: u32) -> String {
-        format!("{}-{id:03}", self.prefix())
+        listing::canonical_id(self.prefix(), id)
     }
 
     /// Resolve a canonical-id prefix back to its kind (`backlog show <ID>`
