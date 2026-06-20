@@ -30,9 +30,10 @@ Two defects, one writer, fixed together (ISS-011 § Fix):
   stale/wrong matcher (e.g. an old agent-type literal) is never healed on
   reinstall → the matcher never matches the dispatch-worker → the stamp never
   fires.
-  - **Objective:** the merge owns and heals identity on `(event, matcher,
-    command)`. A reinstall reconciles a stale matcher to the spec's matcher
-    (`DISPATCH_WORKER_AGENT_TYPE`) in place, idempotently.
+  - **Objective:** the merge owns and reconciles identity on `(event, matcher,
+    command)`. A reinstall normalizes a stale-matcher entry to the spec's matcher
+    (`DISPATCH_WORKER_AGENT_TYPE`) — by drop+reinsert at the entry's position, not
+    a shared-matcher rewrite (design D2/D4) — idempotently.
 
 - **Defect B — `(deleted)` exec path + dead duplicates.** `run_install`
   (`src/boot.rs:1479`) resolves the command path via
@@ -48,8 +49,9 @@ Two defects, one writer, fixed together (ISS-011 § Fix):
     is provably dead) on reinstall, converging on the single live entry.
 
 Closure intent — judged green when:
-- A settings file with the stamp command under a stale matcher is healed in place
-  on reinstall (matcher == `DISPATCH_WORKER_AGENT_TYPE`), idempotent on re-run.
+- A settings file with the stamp command under a stale matcher is normalized to one
+  canonical entry on reinstall (matcher == `DISPATCH_WORKER_AGENT_TYPE`, position
+  preserved), idempotent on re-run.
 - A `current_exe()` reading bearing ` (deleted)` yields a sanitized command path
   (no `(deleted)` token) in the written hook.
 - A settings file carrying duplicate / `(deleted)` doctrine stamp hooks converges
