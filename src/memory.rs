@@ -2511,7 +2511,7 @@ pub(crate) fn run_tag(
 
     let changed = apply_memory_tags(&mut doc, &add_set, &remove_set, &crate::clock::today())?;
     if changed {
-        fs::write(&toml_path, doc.to_string())
+        crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     }
 
@@ -2615,7 +2615,7 @@ pub(crate) fn run_status(
     let today = crate::clock::today();
     let changed = memory_status_transition(&mut doc, state, &today)?;
     if changed {
-        fs::write(&toml_path, doc.to_string())
+        crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     }
 
@@ -2873,7 +2873,7 @@ pub(crate) fn run_edit(
 
     let changed = apply_edit(&mut doc, fields, &crate::clock::today())?;
     if changed {
-        fs::write(&toml_path, doc.to_string())
+        crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     }
 

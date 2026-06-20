@@ -490,7 +490,7 @@ pub(crate) fn run_reseat(
         .with_context(|| format!("parse {}", toml_path.display()))?;
     doc.as_table_mut()
         .insert("id", toml_edit::value(i64::from(dst_id)));
-    std::fs::write(&toml_path, doc.to_string())
+    crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
         .with_context(|| format!("write {}", toml_path.display()))?;
     // Alias — drop the old `NNN-slug`, plant `MMM-slug → MMM`.
     let old_alias = tree_root.join(format!("{src_name}-{slug}"));

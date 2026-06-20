@@ -150,7 +150,7 @@ fn edit_in_place(
         .with_context(|| format!("Failed to parse {}", path.display()))?;
     let changed = f(&mut doc)?;
     if changed {
-        std::fs::write(path, doc.to_string())
+        crate::fsutil::write_atomic(path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", path.display()))?;
     }
     Ok(changed)

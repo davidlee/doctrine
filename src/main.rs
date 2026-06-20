@@ -5115,7 +5115,7 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
                 &[("status", policy.superseded_status), ("updated", &today)],
                 &status_hint,
             )?;
-            std::fs::write(&old_path, old_doc.to_string())
+            crate::fsutil::write_atomic(&old_path, old_doc.to_string().as_bytes())
                 .with_context(|| format!("Failed to write {}", old_path.display()))?;
         }
         crate::supersede::StorageTarget::TypedArray { field } => {
@@ -5176,9 +5176,9 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
             }
 
             // Write each file ONCE, NEW then OLD.
-            std::fs::write(&new_path, new_doc.to_string())
+            crate::fsutil::write_atomic(&new_path, new_doc.to_string().as_bytes())
                 .with_context(|| format!("Failed to write {}", new_path.display()))?;
-            std::fs::write(&old_path, old_doc.to_string())
+            crate::fsutil::write_atomic(&old_path, old_doc.to_string().as_bytes())
                 .with_context(|| format!("Failed to write {}", old_path.display()))?;
 
             writeln!(std::io::stdout(), "{new} supersedes {old}")?;
