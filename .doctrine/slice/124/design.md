@@ -202,13 +202,19 @@ if let [(ei, hi)] = owned[..]
 if owned.is_empty() {
     arr.push(desired_entry(spec));            // Wired — append at tail
 } else {
-    // Position-preserving: insert the fresh canonical entry at the FIRST owned
-    // entry's original index. Every entry before it is foreign (the first owned
-    // is, by definition, the first owned), so `drop_owned_hooks` removes nothing
-    // ahead of it — that index stays valid and ordering is preserved (codex M-2).
-    let ins = owned[0].0;
-    drop_owned_hooks(arr, &owned);            // extract every owned hook (F1/F2)
-    arr.insert(ins.min(arr.len()), desired_entry(spec)); // one fresh canonical entry
+    // Position-preserving insertion at the first owned hook's *execution slot*.
+    // Entries before the first owned entry are all foreign and unremoved, so its
+    // index `first` is stable. Two sub-cases (codex round-3):
+    //   • first owned entry was doctrine-SOLE → drop removes the whole entry →
+    //     insert the fresh entry at `first` (takes the vacated slot).
+    //   • first owned entry SHARED a foreign sibling → that entry survives at
+    //     `first`, so insert the fresh entry at `first + 1` — AFTER the retained
+    //     foreign hook, never before it. Exact execution order is preserved.
+    let first = owned[0].0;
+    let shared = !hook_is_sole(arr, first);   // entry survives drop iff it has a foreign sibling
+    drop_owned_hooks(arr, &owned);            // extract every owned hook (F1/F2/m1)
+    let ins = (first + usize::from(shared)).min(arr.len());
+    arr.insert(ins, desired_entry(spec));     // one fresh canonical entry
     // Refreshed
 }
 ```
@@ -236,11 +242,13 @@ command refreshed" to "an owned hook existed and was normalized to canonical"
 asserts `Refreshed`, the first-install test `Wired`, the reinstall test `None`).
 
 Net effect: at most one doctrine-owned entry survives, always canonical and
-doctrine-sole. It is inserted at the **first owned entry's original index**, so a
-stale refresh keeps its relative position — e.g. a stale `boot` entry preceding
-`sync` stays before `sync` after refresh (codex M-2; the boot/sync execution order
-is preserved, not just SubagentStart). A hand-merged-but-canonical owned hook is
-extracted into its own entry once, then `hook_is_sole` makes re-runs no-write.
+doctrine-sole. It is inserted at the first owned hook's **execution slot** (`first`
+if that entry was doctrine-sole and got removed; `first + 1` if it shared a foreign
+sibling and survives), so execution order is preserved exactly — a stale `boot`
+before `sync` stays before `sync`, and a foreign hook listed before the doctrine
+hook in a shared entry stays before it too (codex rounds 2–3). A
+hand-merged-but-canonical owned hook is extracted into its own entry once, then
+`hook_is_sole` makes re-runs no-write.
 
 **Blast radius:** `find_owned` + `enum Owned` + `set_command` removed/replaced;
 `plan_hook` rewritten as normalize; `RefreshOutcome::Refreshed` doc broadened;
@@ -276,17 +284,21 @@ boot/sync hook matrix stays green **unmodified** (behaviour-preservation gate).
 
 **Safety / non-clobber (D3/D4)**
 - Owned hook sharing an entry with a **foreign** sibling hook → the owned hook is
-  extracted (removed) and a fresh canonical entry appended; the foreign hook **and
-  its entry-level matcher** survive unchanged. (Directly exercises F2.)
+  extracted into a fresh entry inserted **after** the retained shared entry; the
+  foreign hook **and its entry-level matcher** survive unchanged. (Exercises F2.)
+- Owned hook listed **after** a foreign hook in one shared entry → after normalize,
+  the foreign hook still executes **before** the doctrine entry (exact order; codex
+  round-3 counterexample). Asserts via the ordered `commands()` list.
 - Foreign `SubagentStart` hook under an unrelated matcher → untouched.
 - A single canonical doctrine-sole entry → `None` (no spurious reorder/write).
 
 **Preservation**
 - Existing boot/sync single-entry installs → canonical → `None` on re-run
-  (current idempotency tests pass unmodified). Verified order-tolerant:
-  `plan_session_hook_refreshes_on_path_change_preserving_foreign` and
-  `install_claude_stamp_hook_appends_subagentstart…` assert via order-independent
-  `commands()` / per-event `len()`, so normalize's append-at-tail keeps them green.
+  (current idempotency tests pass unmodified). Verified order-safe:
+  `plan_session_hook_refreshes_on_path_change_preserving_foreign` asserts via
+  order-independent `commands()`, and `install_claude_hook_wires_boot_and_sync…`
+  exact-checks only the no-op reinstall path — insert-at-execution-slot keeps both
+  green without edits.
 - `stamp_subagent_matcher_tracks_worktree_const` stays.
 - **Shared-core proof (codex m2):** add the foreign-sibling shared-entry case for
   **boot and sync too**, not stamp only — proving the shared merge core did not
@@ -328,3 +340,9 @@ _None remaining — OQ-1/2/3 resolved (D1/D2/D3)._
   (position-preserving) + order regression test. Minor — `resolve_exec` bail path
   untestable → factored `pick_exec` with injectable existence probe + branch tests.
   Minor — slice scope still said "heal in place" → reconciled to normalize wording.
+- **External (codex GPT-5.5, 3rd pass):** round-2 fixes confirmed resolved except a
+  residual Major — insert-at-`first` jumps the doctrine entry ahead of a foreign
+  hook sharing the first owned entry. Fixed: insert at the execution slot (`first`
+  if the owned entry was sole/removed, `first + 1` if it shared and survives) →
+  exact order preserved + foreign-before-doctrine ordering test. Stale
+  "append-at-tail" doc line corrected.
