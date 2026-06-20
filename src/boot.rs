@@ -3987,7 +3987,7 @@ weight = 0
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
 
-        let out = install_refresh(&Harness::Pi, root, exec, false).unwrap();
+        let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert_eq!(out.mcp_extension, ExtOutcome::Generated);
         assert!(
             root.join(".pi")
@@ -4005,11 +4005,11 @@ weight = 0
         let exec = Path::new("/abs/doctrine");
 
         // First run generates.
-        let out1 = install_refresh(&Harness::Pi, root, exec, false).unwrap();
+        let out1 = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert_eq!(out1.mcp_extension, ExtOutcome::Generated);
 
         // Second run is no-op.
-        let out2 = install_refresh(&Harness::Pi, root, exec, false).unwrap();
+        let out2 = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert_eq!(out2.mcp_extension, ExtOutcome::NoOp);
     }
 
