@@ -195,6 +195,77 @@ fn stamp_provisions_and_marks_the_payload_worktree() {
     );
 }
 
+// --- VT-1 (SL-125): the Defect-C pin — hook process cwd == the worker worktree ---
+
+#[test]
+fn stamp_provisions_from_primary_when_hook_fires_inside_the_worker() {
+    // ISS-011 Defect C: the SubagentStart hook fires with PROCESS cwd == the worker
+    // worktree (== the fork). The provision SOURCE must resolve to the PRIMARY tree,
+    // not the process cwd — else source==fork and `verify_sibling_worktree` bails.
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    // An allowlisted, gitignored UNTRACKED file in the primary tree. `worktree add`
+    // checks out tracked files only, so it exists solely in the primary — its arrival
+    // in the fork proves the copy SOURCE is the primary worktree, not the fork.
+    std::fs::write(src.path().join(".gitignore"), "provisioned.txt\n").unwrap();
+    std::fs::write(src.path().join(".worktreeinclude"), "provisioned.txt\n").unwrap();
+    std::fs::write(src.path().join("provisioned.txt"), "from primary").unwrap();
+
+    let holder = tempfile::tempdir().unwrap();
+    let fork = add_linked_fork(src.path(), holder.path(), "wkr");
+    let fork = std::fs::canonicalize(&fork).unwrap();
+    assert!(!marker_path(&fork).exists(), "no marker before stamp");
+    assert!(
+        !fork.join("provisioned.txt").exists(),
+        "fork lacks the untracked file before stamp"
+    );
+
+    // PROCESS cwd = the fork itself (the exact Defect-C condition); payload cwd = fork.
+    let payload = format!(
+        "{{\"cwd\": \"{}\", \"agent_type\": \"dispatch-worker\"}}",
+        fork.display()
+    );
+    let out = run(&fork, None, &payload, STAMP);
+    assert!(
+        out.status.success(),
+        "stamp must succeed even when the hook fires inside the worker worktree; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        marker_path(&fork).exists(),
+        "marker stamped into the worker worktree"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fork.join("provisioned.txt")).unwrap(),
+        "from primary",
+        "the allowlisted untracked file was provisioned FROM the primary worktree"
+    );
+}
+
+// --- VT-4 (SL-125): cross-repo payload still rejected bad-dir (codex BLOCKER) ---
+
+#[test]
+fn stamp_bad_dir_for_payload_worktree_in_a_different_repo() {
+    // The binding anchor (root::find on the PROCESS cwd) must still reject a payload
+    // cwd that is a real linked worktree of a DIFFERENT repo — proving validation is
+    // not self-authenticating from the payload alone. Process cwd binds repo A; the
+    // payload names a linked worktree of repo B.
+    let repo_a = tempfile::tempdir().unwrap();
+    init_repo(repo_a.path());
+    let repo_b = tempfile::tempdir().unwrap();
+    init_repo(repo_b.path());
+    let holder = tempfile::tempdir().unwrap();
+    let fork_b = add_linked_fork(repo_b.path(), holder.path(), "wkr");
+    let fork_b = std::fs::canonicalize(&fork_b).unwrap();
+
+    let payload = format!(
+        "{{\"cwd\": \"{}\", \"agent_type\": \"dispatch-worker\"}}",
+        fork_b.display()
+    );
+    let out = run(repo_a.path(), None, &payload, STAMP);
+    assert_refusal(&out, "bad-dir");
+}
+
 // --- VT-2: M3 failure posture — loud fail, worktree LEFT in place ---
 
 #[test]
