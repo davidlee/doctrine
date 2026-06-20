@@ -1,0 +1,21 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 130
+slug = "land-the-rv-116-operator-guard-in-spec-021-closeaudit-skills-check-review-surface-candidate-drift"
+title = "Land the RV-116 operator guard in SPEC-021 / close+audit skills: check review_surface candidate drift before /close --source"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-20"
+updated = "2026-06-20"
+tags = []
+
+# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
+# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
