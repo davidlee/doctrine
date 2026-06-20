@@ -231,9 +231,9 @@ entry and the execution slot is preserved **exactly** — a stale `boot` before
 `sync` stays before `sync`. The only residual is a *hand-merged* entry that
 interleaves a doctrine hook with foreign hooks in one `hooks` array: the doctrine
 hook is extracted to its own entry placed immediately after the foreign remnant,
-so a foreign hook the operator listed *after* the doctrine hook keeps its relative
-order, but one listed *before* the doctrine hook in that same entry may end up
-after it. Foreign **content, matcher, and all entry-level keys are always
+so a foreign hook the operator listed *before* the doctrine hook keeps its relative
+order, but one listed *after* the doctrine hook in that same entry may end up
+before it. Foreign **content, matcher, and all entry-level keys are always
 preserved** — only sub-entry interleave order is not guaranteed, for an input
 doctrine never produces and where independent SessionStart hooks carry no defined
 ordering dependency. Splitting the entry to preserve exact interleave was rejected
