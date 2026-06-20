@@ -63,10 +63,7 @@ fn text_contains_pattern(text: &str, pat: &str, exclude_line_patterns: &[&str]) 
         if !line.contains(pat) {
             return false;
         }
-        if exclude_line_patterns
-            .iter()
-            .any(|excl| line.contains(excl))
-        {
+        if exclude_line_patterns.iter().any(|excl| line.contains(excl)) {
             return false;
         }
         true
@@ -87,7 +84,14 @@ const SYMBOLS: &[Symbol] = &[
     // `value::` is precise only when NOT inside `toml::value::`,
     // `serde::de::value::`, or `serde_json::from_value::` — those are
     // serde/TOML library paths, not the doctrine value module.
-    Symbol::with_exclusions("value::", &["toml::value::", "serde::de::value::", "serde_json::from_value::"]),
+    Symbol::with_exclusions(
+        "value::",
+        &[
+            "toml::value::",
+            "serde::de::value::",
+            "serde_json::from_value::",
+        ],
+    ),
 ];
 
 struct Symbol {
@@ -132,9 +136,8 @@ fn facet_symbols_are_confined_to_allowlist() {
     let mut offenders: Vec<(String, &str)> = Vec::new();
     for file in &files {
         let rel = src_relative(file, &src);
-        let text = std::fs::read_to_string(file).unwrap_or_else(|e| {
-            panic!("read {}: {e}", file.display())
-        });
+        let text = std::fs::read_to_string(file)
+            .unwrap_or_else(|e| panic!("read {}: {e}", file.display()));
         if let Some(sym) = offending_symbol(&text) {
             if !allowlist.contains(rel.as_str()) {
                 offenders.push((rel, sym));
