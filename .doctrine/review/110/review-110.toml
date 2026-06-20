@@ -1,0 +1,52 @@
+id    = 110
+slug  = "reconciliation-review-of-sl-122"
+title = "reconciliation review of SL-122"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-122"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "PHASE-01 worker pre-shipped PHASE-02's lifecycle machine — boundary records vs as-built diverge"
+detail = "Expected: PHASE-01 delivers mint/show only (its charter); PHASE-02 delivers the status machine (RfcStatus/RFC_STATUSES/set_status, rfc status, rfc list --status/--all). Observed: PHASE-01 commit 06afaad0 already built the full RfcCommand{New,List,Show,Status} enum + handlers; the PHASE-02 delta (28a1014f) was +227 lines of src/rfc.rs that are ALL TESTS, no new impl. Functionally complete + green, but the boundary record (PHASE-01 9c6d649d..06afaad0 vs PHASE-02 9d8bd307..8d6da66f) attributes impl to PHASE-01 that the plan assigned to PHASE-02. PHASE-NN boundaries are immutable; the divergence is a record-accuracy issue, not a code defect."
+disposition = "tolerated"
+response = "Accepted, recorded drift. PHASE-NN boundaries are immutable (never renumber/re-attribute); the bleed is documented in notes.md PHASE-02 section. The lifecycle machine is functionally complete, tested, and green — no functional impact. Harvest the cross-phase-bleed pattern to memory so future dispatch prompts pin phase charters tighter."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Plan Affected-Surface omitted the architecture_layering registration for the new rfc command module"
+detail = "Expected: the plan's Affected Surface enumerates every hand-maintained registration surface a new command module touches. Observed: a new command module must be registered in .doctrine/adr/001/layering.toml (or tests/architecture_layering.rs completeness assertion fails); the plan did not enumerate it, and the PHASE-01 worker hit the assertion. The orchestrator added the rfc='command' row (authored .doctrine write, off-limits to workers). Code is correct now; the gap is a plan-completeness lesson worth a durable note."
+disposition = "tolerated"
+response = "The registration surface IS correctly landed (rfc='command' row in .doctrine/adr/001/layering.toml; architecture_layering assertion green). The finding is a plan-completeness lesson, not a code gap — harvested to memory: a plan's Affected Surface must enumerate the architecture_layering registration for any new command module (the trap PHASE-01 hit)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "VT coverage leans on generic/pre-existing assertions: PHASE-01 VT-2/VT-4 and PHASE-04 VT-3 have no dedicated minted-RFC tests"
+detail = "Expected: each VT criterion has a dedicated test. Observed: PHASE-01 VT-2 (validate/reseat) satisfied via generic kinds_table_covers_* assertions and VT-4 (corpus-scan no-panic) via code-inspection of the routed outbound_for arm rather than a minted-RFC scan test; PHASE-04 added dedicated tests for VT-1/VT-2/VT-4 (6 new) but NO dedicated VT-3 boot-byte-unchanged test — it leans on the pre-existing boot suite staying green. The behaviour IS proven (generic assertions + behaviour-preservation gate), so coverage is adequate; dedicated tests would be an enhancement, not a correctness gap."
+disposition = "tolerated"
+response = "Coverage adequate: behaviour is proven. PHASE-01 VT-2/VT-4 ride generic kinds_table_covers_* assertions + the routed outbound_for arm; PHASE-04 VT-3 (boot byte-unchanged) is proven by the pre-existing boot suite staying green (behaviour-preservation gate). Dedicated minted-RFC tests are an enhancement, not a correctness gap — captured as a backlog improvement for optional future hardening."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "PHASE-04 EX-2 'most recent first' implemented as RFC-id-descending (recency proxy)"
+detail = "Expected: open RFC titles listed most-recent first. Observed: src/status.rs sorts by RFC id descending (no mtime read in the pure layer, honouring the pure/imperative split). Since RFC ids are monotonically minted, id-descending == creation-recency order, so the proxy satisfies EX-2's intent without a clock/disk read in pure code."
+disposition = "aligned"
+response = "Observed behaviour is correct. RFC ids are monotonically minted, so id-descending order == creation-recency, satisfying EX-2 'most recent first' without a clock/disk read in the pure layer (honours the pure/imperative split). No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
