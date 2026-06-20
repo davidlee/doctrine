@@ -14,3 +14,15 @@ updated = "2026-06-20"
 superseded_by = []   # reverse link is derived (REV→RFC originates_from)
 tags          = []   # free-form classification
 
+[[relation]]
+label = "related"
+target = "SPEC-001"
+
+[[relation]]
+label = "related"
+target = "SPEC-018"
+
+[[relation]]
+label = "related"
+target = "SL-130"
+
