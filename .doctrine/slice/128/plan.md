@@ -30,9 +30,10 @@ test pins the two together (I1). The struct already carries a **container**
 truth (G2). Deliberately introduces **no** live read of `doc.dispatch`, so the
 existing `expect(dead_code)` stays fulfilled and the build stays green — the
 dead-code removal is held until its real consumer lands. The new `deliver-to` key
-is also documented (commented, default-valued) in both `doctrine.toml.example`
-files alongside `preferred-subprocess-harness`, since it is the operator-facing
-point of the slice (G1).
+is also documented (commented, default-valued) in `install/doctrine.toml.example`
+— the git-tracked, build-embedded source — alongside `preferred-subprocess-harness`,
+since it is the operator-facing point of the slice. The `.doctrine/` copy is
+gitignored derived state and regenerates from install/, so it is not hand-edited (G1).
 
 **PHASE-02 — gate consumer (the behaviour-preservation crux).** The const
 `TRUNK_REF` is retired from the gate in favour of a config read. Two design

@@ -38,13 +38,13 @@ exit_criteria = [
   { id = "EX-1", text = "`DispatchConfig` carries `deliver_to: String`, kebab key `deliver-to`. The struct's container `#[serde(default)]` already fills absent fields from `Default`, so the per-field `#[serde(default = \"default_deliver_to\")]` is redundant — keep it only as local documentation, not a second source of truth (design §5.2, G2)." },
   { id = "EX-2", text = "`#[derive(Default)]` replaced by a hand `impl Default` (the single load-bearing default mechanism, backing both file-absent and serde absent-key paths via container `default`) so `DispatchConfig::default().deliver_to == \"refs/heads/main\"` (I1)." },
   { id = "EX-3", text = "No live (non-test) read of `doc.dispatch` introduced; `expect(dead_code)` untouched; `just gate` green." },
-  { id = "EX-4", text = "New `deliver-to` key documented (commented, default-valued) in the `[dispatch]` block of both `.doctrine/doctrine.toml.example` and `install/doctrine.toml.example`, alongside `preferred-subprocess-harness` (G1)." },
+  { id = "EX-4", text = "New `deliver-to` key documented (commented, default-valued) in the `[dispatch]` block of `install/doctrine.toml.example` — the git-tracked, build-embedded source — alongside `preferred-subprocess-harness`. The `.doctrine/doctrine.toml.example` copy is gitignored derived state (regenerates from install/ on install; under the funnel R-5 belt), so it is NOT hand-edited (G1)." },
 ]
 verification = [
   { id = "VT-1", expects = "Unit: absent `deliver-to` → `refs/heads/main`; present → override (parity with existing key tests)." },
   { id = "VT-2", expects = "Unit: `DispatchConfig::default().deliver_to` equals the serde-absent value (I1 parity)." },
   { id = "VT-3", expects = "`dtoml.rs` outer round-trip test (`dispatch_table_roundtrip`, dtoml.rs:91) covers `deliver-to` surviving a full `DoctrineToml` parse (codex-F2 neutral reader)." },
-  { id = "VT-4", expects = "Both example files stay parse-clean; spot-check the commented `deliver-to` block is shape-correct (uncommenting round-trips) (G1)." },
+  { id = "VT-4", expects = "`install/doctrine.toml.example` stays parse-clean; spot-check the commented `deliver-to` block is shape-correct (uncommenting round-trips) (G1)." },
 ]
 specs        = []
 requirements = []
