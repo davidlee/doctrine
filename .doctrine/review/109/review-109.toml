@@ -1,0 +1,43 @@
+id    = 109
+slug  = "reconciliation-review-of-sl-124"
+title = "reconciliation review of SL-124"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-124"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design.md code-sketch for drop_owned_hooks diverges from implemented signature"
+detail = "design.md §Code-impact (L191/L216/L248) sketches `drop_owned_hooks(arr, &owned)` taking the precomputed owned (ei,hi) positions slice. Implementation (src/boot.rs:924) is `drop_owned_hooks(arr: &mut Vec<Value>, is_ours: fn(&str)->bool)` — it re-filters each entry's hooks by ownership via retain_mut rather than threading positions. Behaviourally identical (same hooks removed, same empties dropped, all entry-level keys preserved per D4/m1) and cleaner (no index threading, no descending-index surgery). Divergence is design-prose vs code only; the invariant and order-bound are unaffected."
+disposition = "verified"
+response = "Confirmed observation; remediation is a per-slice direct edit delegated to /reconcile — update the design.md drop_owned_hooks code-sketch (L191/L216/L248) to the implemented `(arr, is_ours: fn(&str)->bool)` signature + retain_mut filter/rebuild. Recorded in the Reconciliation Brief (per-slice direct edit). No code change: impl is behaviourally equivalent and cleaner."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "merge-core memory still names the removed find_owned first-match"
+detail = "mem.pattern.distribution.hookspec-merge-core-generalized-event-matcher describes the merge core's ownership as find_owned first-match. PHASE-02 removed enum Owned / find_owned / set_command and replaced them with the normalize in plan_hook (collect owned_positions → no-write iff single canonical sole entry → else drop every owned hook + insert one fresh canonical entry). The memory body is now stale on the mechanism. Flagged in phase-02 sheet Findings for memory reconcile at close."
+disposition = "verified"
+response = "Confirmed; remediation delegated to /reconcile — update memory mem.pattern.distribution.hookspec-merge-core-generalized-event-matcher body to describe the normalize mechanism (owned_positions + no-write short-circuit + drop-all-owned + insert-one-canonical) instead of find_owned first-match. Recorded in the Reconciliation Brief (governance/knowledge). No spec/ADR change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "VA-1 preservation gate confirmed — zero existing test-body edits"
+detail = "git show be7f45f8 -- src/boot.rs: every deletion is confined to removed production symbols (enum Owned, find_owned, set_command, the find_owned match arm, three predicate one-liners deferring to is_doctrine_program, one doc comment). The named preservation tests (plan_session_hook_refreshes_on_path_change_preserving_foreign, install_claude_hook_wires_boot_and_sync_as_two_entries, stamp_subagent_matcher_tracks_worktree_const) show 0 hits in the deletion set — bodies byte-unchanged. just check green (clippy clean + full suite, incl. e2e_worktree_verify_worker). Behaviour-preservation gate (AGENTS.md) holds."
+disposition = "aligned"
+response = "Observation correct, no change needed. The behaviour-preservation gate is satisfied: existing test bodies unmodified, full suite green. Documents the audit's VA-1 check."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
