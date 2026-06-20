@@ -128,13 +128,8 @@ formalise"). Outcome (yes/no) lives in the RFC **body prose** and in what the RE
 records — never structurally asserted by the edge. Not `spawns` (taken:
 record→backlog).
 
-**Tier-1 over tier-2**: `enacts` is a bare citation with *no payload*. `revises`
-is `TypedVerbOnly` only because its `[[change]]` rows carry payload; `enacts`
-carries none, so typing it buys a bespoke verb for nothing. Tier-1 writable via
-generic `link`.
-
 Consequences:
-- RFC needs **no reverse-edge storage**; "enacted by" is pure derived render
+- RFC needs **no reverse-edge storage**; "precursor of" is pure derived render
   (ADR-004 clean).
 - The precursor link is **not** authored by RFC → it puts RFC in no `sources`
   set. Independent of Decision 1's `related`/`AnyNumbered` edge set.
@@ -244,9 +239,11 @@ ADR-013):
   **outcome-neutral** (no yes-bias, no status coupling) and **revision-owned**
   (TypedVerbOnly, §1 Decision 2). D2 adds a new REV outbound edge to ADR-013's
   change-axis model, so the new ADR **explicitly amends ADR-013** on the REV
-  precursor interface (F6) — not a silent fold-in. The ADR carries a `supersedes`
-  or amendment relation to ADR-013 and states the REV-edge addition in those
-  terms.
+  precursor interface (F6) — not a silent fold-in. ADR-013 stays **accepted**
+  (the amendment extends, doesn't retire it), so the link is governance `related`
+  (SameKind, ADR→ADR is legal) **not** `supersedes` (which would wrongly deprecate
+  ADR-013). The amendment itself is stated in the new ADR's prose body, citing
+  ADR-013 and the REV-edge addition.
 
 Stays design-level (not ADR): lifecycle states (§2), dir naming (§3),
 `AnyNumbered` participation for RFC's own edges (§1, rides ADR-004/010).
