@@ -134,9 +134,15 @@ git reads fail (fail-closed).
 ## 6. Verification
 
 - **VT-1** — fixture: a primary repo + a `git worktree add` linked worktree. Call
-  `run_stamp_subagent` with payload `cwd` = the linked worktree (process cwd
-  irrelevant). Assert: marker exists at `<linked>/.doctrine/state/dispatch/worker`,
-  and `.doctrine/doctrine.just` copied. Proves source ≠ fork and provision ran.
+  `run_stamp_subagent` with payload `cwd` = the linked worktree, **with the test's
+  process cwd set into that same worktree** (reproduce the exact Defect-C condition:
+  process cwd == worker == fork). Assert: marker exists at
+  `<linked>/.doctrine/state/dispatch/worker` and `.doctrine/doctrine.just` copied.
+  Pins the core invariant — **the stamp decision no longer reads the process cwd**;
+  source derives from the payload cwd. (If a process-cwd-changing test proves racy
+  under parallel `cargo test`, fall back to asserting `primary_worktree(worker)` ≠
+  `worker` and a payload-cwd-only stamp — source resolution touches process cwd
+  nowhere, so the weaker form still pins the property.)
 - **VT-2** — `primary_worktree` unit: from a linked-worktree path it returns the
   primary root; from the primary it returns the primary (idempotent).
 - **VT-3** — regression: the four refusal tokens (`missing-cwd`, `bad-dir` via a
@@ -148,7 +154,23 @@ git reads fail (fail-closed).
 - **Gate** — `just check`, zero clippy warnings. Behaviour-preservation: the
   shared entity engine is untouched; existing worktree suites stay green.
 
-## 7. Non-goals
+## 7. Assumptions (adversarial pass)
+
+- **A1 — standard non-bare layout.** `--git-common-dir` resolves to `<primary>/.git`
+  and its parent is the primary worktree. True for ordinary repos and
+  `git worktree add` linked worktrees (dispatch's case). NOT guarded against
+  `--separate-git-dir` or bare repos — out of scope; dispatch never runs there. A
+  bare/separate layout would yield a non-worktree parent; downstream copy enumerates
+  nothing and the marker write would surface the error (no silent corruption).
+- **A2 — `path` override is a footgun, hook-safe.** `--path` (if set) is used as the
+  literal source; `--path=<worker>` would re-introduce `source==fork`. The hook
+  passes `None`, so the live path is unaffected; the override stays only as an
+  operator/test escape hatch. Documented, not removed (lowest churn; preserves the
+  flag's meaning on the shared `marker` verb).
+- **A3 — pure/imperative split.** `primary_worktree` is impure (git read) and sits
+  in the shell layer; `classify_stamp` stays pure (ADR-001 leaf, CLAUDE.md split).
+
+## 8. Non-goals
 
 - ISS-011 Defect A (matcher heal on reinstall) and Defect B (`(deleted)` path
   poison) — SL-124 territory.
