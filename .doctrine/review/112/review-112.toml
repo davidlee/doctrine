@@ -1,0 +1,43 @@
+id    = 112
+slug  = "reconciliation-review-of-sl-114"
+title = "reconciliation review of SL-114"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-114"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "expected: 5 edits per design.md §5.2 (4 delegations + spec free-fn delete + 4 repoints); observed: exact match"
+detail = "requirement.rs:244 -> crate::listing::canonical_id(REQUIREMENT_KIND.prefix,id); knowledge.rs:125 + backlog.rs:156 -> listing::canonical_id(self.prefix(),id); spec.rs:106 -> listing::canonical_id(self.kind().prefix,id). Free fn canonical_id(subtype,id) deleted; 4 callers repointed (spec.kind.canonical_id(spec.id) + 3x subtype.canonical_id(m.id)). cargo check clean; surviving signatures unchanged. Behaviour-preserving — canonical_id tests green unchanged (D2 requirement wrapper kept; D1 method kept, free fn deleted)."
+disposition = "aligned"
+response = "Confirmed against committed source: all 5 edits match design.md §5.2; cargo check clean; behaviour-preserving. No change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "expected: closure intent — listing.rs:37 the sole format! body; observed: confirmed"
+detail = """grep -n -A1 'fn canonical_id' src/*.rs: the only format!("{prefix}-{id:03}") body is listing.rs:37 (the authority). All per-kind canonical_id bodies delegate; spec free fn absent (grep -c 'fn canonical_id(subtype' = 0). ADR-001: requirement->listing adds no cycle (listing imports no kind module). Slice Closure intent satisfied."""
+disposition = "aligned"
+response = "Closure intent met: listing.rs:37 is the sole format! body; spec free fn gone; no ADR-001 cycle. No change needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "expected: VT-2 full-suite green; observed: one external pre-existing red (e2e_worktree_stamp), not slice-attributable"
+detail = "just check is red on tests/e2e_worktree_stamp.rs:229 stamp_provisions_from_primary_when_hook_fires_inside_the_worker — 'fork path is the source tree itself; refusing to provision'. Worktree-provisioning code (worktree.rs), zero coupling to canonical_id. worktree.rs/e2e_worktree_stamp.rs unmodified by this slice (clean vs HEAD); red at committed HEAD — ISS-038-class dirty/shared-trunk env condition, compounded by a concurrent agent (uncommitted status.rs + slice-125.toml appeared mid-execute). Clippy zero-warn; VT-1 id-format tests green; closure clean. The slice's own gate axes are green; VT-2's literal 'full suite' carries external noise."
+disposition = "tolerated"
+response = "Accepted: VT-2's literal 'full suite green' carries one EXTERNAL red (e2e_worktree_stamp, worktree provisioning), pre-existing at HEAD and not slice-attributable (worktree files unmodified by SL-114; concurrent-agent dirty tree; ISS-038-class). Slice's own axes green (VT-1, closure, clippy). minor severity — does not gate close. Not this slice's defect to fix; left for the worktree workstream."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
