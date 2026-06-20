@@ -1,9 +1,9 @@
 id = 120
 slug = "mcp-bridge"
 title = "Pi extension: doctrine MCP tools in pi"
-status = "done"
+status = "design"
 created = "2026-06-19"
-updated = "2026-06-20"
+updated = "2026-06-19"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
