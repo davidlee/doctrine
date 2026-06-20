@@ -1035,10 +1035,32 @@ fn trunk_tree_ish(root: &Path) -> anyhow::Result<Option<String>> {
     trunk_ladder(root, std::env::var_os("DOCTRINE_TRUNK_REF").as_deref())
 }
 
+/// Fold `candidates` (resolved shas, in ladder-preference order) toward the
+/// freshest reachable base: start at the first, step to a later candidate
+/// only when it is a *descendant* of the current pick; a diverged candidate
+/// (not a descendant) is skipped, never regressed to. NOT a global maximum
+/// (C2) — "preferred-order, advance-to-descendant". So a stale `origin/HEAD`
+/// that is an ancestor of local `main` is overtaken by `main`, but a
+/// `origin/HEAD` that has *diverged* from `main` is kept (preference wins,
+/// never regress below the most-preferred resolvable ref).
+fn freshest_descendant(root: &Path, candidates: &[String]) -> anyhow::Result<Option<String>> {
+    candidates
+        .iter()
+        .try_fold(None::<String>, |acc, c| match acc {
+            None => Ok(Some(c.clone())),
+            Some(a) if is_ancestor(root, &a, c)? => Ok(Some(c.clone())), // c descends a ⇒ advance
+            Some(a) => Ok(Some(a)),                                      // diverged/older ⇒ keep a
+        })
+}
+
 /// The peeled trunk ladder with the explicit override injected (`explicit` is
 /// `DOCTRINE_TRUNK_REF` when set). See [`trunk_tree_ish`] for the contract; the
 /// asymmetry (F4/X6) lives here: an explicit ref that fails to peel is a hard
-/// error, ladder candidates that fail simply fall through.
+/// error, ladder candidates that fail simply fall through. The implicit arm
+/// peels `origin/HEAD`, `main`, `master` IN THAT ORDER, then hands the resolved
+/// shas (de-duplicated, first-seen order preserved) to [`freshest_descendant`]
+/// — so a stale `origin/HEAD` that is an ancestor of local `main` is overtaken
+/// by `main` rather than winning by first-resolves (design §2.2a, stance A, C2).
 fn trunk_ladder(root: &Path, explicit: Option<&std::ffi::OsStr>) -> anyhow::Result<Option<String>> {
     let peel = |r: &str| -> anyhow::Result<Option<String>> {
         let spec = format!("{r}^{{commit}}");
@@ -1051,12 +1073,15 @@ fn trunk_ladder(root: &Path, explicit: Option<&std::ffi::OsStr>) -> anyhow::Resu
             None => anyhow::bail!("DOCTRINE_TRUNK_REF={explicit} does not resolve to a commit"),
         };
     }
+    let mut resolved: Vec<String> = Vec::new();
     for candidate in ["origin/HEAD", "main", "master"] {
-        if let Some(sha) = peel(candidate)? {
-            return Ok(Some(sha));
+        if let Some(sha) = peel(candidate)?
+            && !resolved.contains(&sha)
+        {
+            resolved.push(sha);
         }
     }
-    Ok(None)
+    freshest_descendant(root, &resolved)
 }
 
 /// Resolve trunk's commit sha via the peeled ladder (ADR-006 D3) — public
@@ -2539,6 +2564,154 @@ mod tests {
         let head = repo.commit("a.txt", "hello", "init");
         let sha = super::trunk_ladder(repo.path(), Some(OsStr::new("main"))).unwrap();
         assert_eq!(sha, Some(head));
+    }
+
+    // --- SL-127 PHASE-01: freshest-descendant trunk ladder (VT-1/2/3) -------
+    //
+    // The implicit ladder no longer takes the first ref that resolves: it folds
+    // the resolved candidates (preference order) toward the freshest reachable
+    // base — a stale `origin/HEAD` that is an *ancestor* of local `main` is
+    // overtaken by `main`, but a diverged `origin/HEAD` is kept (no regression
+    // below the most-preferred resolvable ref). Lagging/diverged `origin/HEAD`
+    // is simulated by writing `refs/remotes/origin/HEAD` directly (the ladder
+    // peels it as `origin/HEAD`) — no real remote, no `set_var`.
+
+    /// Point `refs/remotes/origin/HEAD` at `sha` so the ladder peels it as the
+    /// `origin/HEAD` candidate.
+    fn set_origin_head(repo: &ScratchRepo, sha: &str) {
+        repo.git(&["update-ref", "refs/remotes/origin/HEAD", sha]);
+    }
+
+    // VT-1: freshest_descendant exercised directly with explicit sha slices.
+
+    #[test]
+    fn freshest_descendant_advances_to_descendant() {
+        // origin/HEAD < main: c1 is an ancestor of c2 ⇒ the later (fresher) c2 wins.
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "c1");
+        let c2 = repo.commit("a.txt", "2", "c2");
+        let pick = super::freshest_descendant(repo.path(), &[c1, c2.clone()]).unwrap();
+        assert_eq!(pick, Some(c2));
+    }
+
+    #[test]
+    fn freshest_descendant_folds_full_chain() {
+        // Chain c1 < c2 < c3 (origin/HEAD < main < master) ⇒ the tip c3 wins.
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "c1");
+        let c2 = repo.commit("a.txt", "2", "c2");
+        let c3 = repo.commit("a.txt", "3", "c3");
+        let pick = super::freshest_descendant(repo.path(), &[c1, c2, c3.clone()]).unwrap();
+        assert_eq!(pick, Some(c3));
+    }
+
+    #[test]
+    fn freshest_descendant_keeps_preferred_when_later_diverged() {
+        // Most-preferred candidate diverges from the next ⇒ the preferred one is
+        // kept (the later candidate is not a descendant — never regress to it).
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "base", "base");
+        // Branch A (preferred) — the first candidate.
+        repo.git(&["checkout", "-b", "branch-a"]);
+        let a = repo.commit("a.txt", "branch-a", "a");
+        // Branch B diverges from `base` (sibling of A, not a descendant of A).
+        repo.git(&["checkout", "-b", "branch-b", &base]);
+        let b = repo.commit("b.txt", "branch-b", "b");
+        let pick = super::freshest_descendant(repo.path(), &[a.clone(), b]).unwrap();
+        assert_eq!(
+            pick,
+            Some(a),
+            "preferred-but-older kept; diverged sibling skipped"
+        );
+    }
+
+    #[test]
+    fn freshest_descendant_single_and_empty() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "c1");
+        assert_eq!(
+            super::freshest_descendant(repo.path(), &[c1.clone()]).unwrap(),
+            Some(c1)
+        );
+        assert_eq!(super::freshest_descendant(repo.path(), &[]).unwrap(), None);
+    }
+
+    // VT-1 (integration): the rewired implicit ladder arm via real refs.
+
+    #[test]
+    fn trunk_ladder_stale_origin_head_overtaken_by_main() {
+        // origin/HEAD lags behind main (ancestor) ⇒ ladder picks the ahead `main`,
+        // not the first-resolving `origin/HEAD`.
+        let repo = ScratchRepo::new();
+        let lag = repo.commit("a.txt", "1", "lag");
+        let ahead = repo.commit("a.txt", "2", "ahead"); // main now at `ahead`
+        set_origin_head(&repo, &lag);
+        let pick = super::trunk_ladder(repo.path(), None).unwrap();
+        assert_eq!(pick, Some(ahead), "stale origin/HEAD overtaken by main");
+    }
+
+    #[test]
+    fn trunk_ladder_diverged_origin_head_kept_over_main() {
+        // origin/HEAD diverges from main (most-preferred, not an ancestor of main)
+        // ⇒ preference wins; main does NOT regress the pick below origin/HEAD.
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "base", "base");
+        // main advances to its own tip.
+        let _main_tip = repo.commit("a.txt", "main", "main-advance");
+        // origin/HEAD points at a sibling commit off `base` (diverged from main).
+        repo.git(&["checkout", "-b", "remote-sim", &base]);
+        let origin = repo.commit("o.txt", "origin", "origin-advance");
+        repo.git(&["checkout", "main"]);
+        set_origin_head(&repo, &origin);
+        let pick = super::trunk_ladder(repo.path(), None).unwrap();
+        assert_eq!(
+            pick,
+            Some(origin),
+            "diverged origin/HEAD kept (preference order)"
+        );
+    }
+
+    // VT-2: explicit override still wins over a fresher implicit candidate.
+
+    #[test]
+    fn trunk_ladder_explicit_wins_over_fresher_implicit() {
+        // main is ahead of origin/HEAD, but an explicit DOCTRINE_TRUNK_REF pinning
+        // the lagging ref still short-circuits and wins (override unchanged).
+        let repo = ScratchRepo::new();
+        let lag = repo.commit("a.txt", "1", "lag");
+        let _ahead = repo.commit("a.txt", "2", "ahead");
+        set_origin_head(&repo, &lag);
+        let pick = super::trunk_ladder(repo.path(), Some(OsStr::new("origin/HEAD"))).unwrap();
+        assert_eq!(
+            pick,
+            Some(lag),
+            "explicit override beats fresher implicit main"
+        );
+    }
+
+    // VT-3: minting fallout — trunk_entity_ids reads off the ahead (`main`) tree.
+
+    #[test]
+    fn trunk_entity_ids_read_off_ahead_main_when_origin_head_behind() {
+        // origin/HEAD behind, main ahead with an extra slice dir ⇒ the id-read
+        // rides the ahead ladder pick and sees the newer id.
+        let repo = ScratchRepo::new();
+        repo.write(".doctrine/slice/001/slice.toml", "x = 1\n");
+        repo.git(&["add", "-A"]);
+        repo.git(&["commit", "-m", "seed 001"]);
+        let behind = repo.git(&["rev-parse", "HEAD"]);
+        // main advances, adding slice 002.
+        repo.write(".doctrine/slice/002/slice.toml", "x = 1\n");
+        repo.git(&["add", "-A"]);
+        repo.git(&["commit", "-m", "seed 002"]);
+        set_origin_head(&repo, &behind);
+        let mut ids = super::trunk_entity_ids(repo.path(), ".doctrine/slice").unwrap();
+        ids.sort_unstable();
+        assert_eq!(
+            ids,
+            vec![1, 2],
+            "ids read off the ahead main tree, not stale origin/HEAD"
+        );
     }
 
     // --- SL-064 PHASE-03: projection plumbing (VT-1/VT-2/VT-3) --------------

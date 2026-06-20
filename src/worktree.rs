@@ -1675,6 +1675,17 @@ pub(crate) fn run_fork(
 /// Pure-ish core: form the dispatch coordination worktree, provision it, and
 /// regenerate the runtime phase sheets. Returns the abbreviated dispatch tip.
 /// No stdout/stderr — I/O lives in [`run_coordinate`].
+/// Does the dispatched slice's `plan.toml` exist on the chosen trunk `base`'s
+/// tree? Probes `git ls-tree <base> -- .doctrine/slice/<NNN>/plan.toml`: a path
+/// the tree carries lists itself, an absent path lists nothing. `git_opt` yields
+/// `None` only on non-zero exit, so an absent file (exit 0, empty stdout) arrives
+/// as `Some("")` — both empty arms mean "absent" (F6).
+fn base_has_slice_plan(root: &Path, base: &str, slice: u32) -> anyhow::Result<bool> {
+    let pathspec = format!(".doctrine/slice/{slice:03}/plan.toml");
+    let listing = git::git_opt(root, &["ls-tree", base, "--", &pathspec])?;
+    Ok(listing.is_some_and(|out| !out.is_empty()))
+}
+
 pub(crate) fn coordinate(root: &Path, slice: u32, dir: &Path) -> anyhow::Result<CoordOutcome> {
     let branch = format!("dispatch/{slice:03}");
 
@@ -1718,6 +1729,17 @@ pub(crate) fn coordinate(root: &Path, slice: u32, dir: &Path) -> anyhow::Result<
                     "coordinate-refused: no trunk ref resolves (set DOCTRINE_TRUNK_REF)"
                 )
             })?;
+            // plan.toml for the dispatched slice must exist on the chosen base,
+            // else the off-trunk fork would regen phase sheets against a tree
+            // that predates the slice's own plan (ISS-036). Gate BEFORE the fork
+            // so no worktree is created and the rollback path is never entered.
+            if !base_has_slice_plan(root, &trunk, slice)? {
+                bail!(
+                    "coordinate-refused: base {trunk} lacks .doctrine/slice/{slice:03}/plan.toml \
+                     — the trunk base predates this slice's plan; set DOCTRINE_TRUNK_REF to a base \
+                     that carries it (e.g. DOCTRINE_TRUNK_REF=main)"
+                );
+            }
             git::git_text(
                 root,
                 &[
@@ -2981,6 +3003,69 @@ mod tests {
             "a fully fs-reaped rollback reports no debris; got: {debris:?}"
         );
         assert!(!dir.exists(), "the orphan dir was reaped");
+    }
+
+    // --- SL-127 PHASE-02: plan-presence refuse-gate at coordinate (Create) ---
+
+    /// Commit `.doctrine/slice/<NNN>/plan.toml` onto the repo's current branch so
+    /// the chosen trunk base carries the dispatched slice's plan.
+    fn commit_slice_plan(repo: &Path, slice: u32) {
+        let slice_dir = repo.join(format!(".doctrine/slice/{slice:03}"));
+        fs::create_dir_all(&slice_dir).unwrap();
+        fs::write(slice_dir.join("plan.toml"), "# plan\n").unwrap();
+        git(repo, &["add", "."]);
+        git(repo, &["commit", "-q", "-m", "add slice plan"]);
+    }
+
+    #[test]
+    fn base_has_slice_plan_tracks_presence_on_the_trunk_tree() {
+        // VT-1 (helper): absent on the base tree ⇒ false; once committed ⇒ true.
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("src"));
+
+        assert!(
+            !base_has_slice_plan(&repo, "main", 127).unwrap(),
+            "base lacking the slice plan ⇒ absent"
+        );
+
+        commit_slice_plan(&repo, 127);
+
+        assert!(
+            base_has_slice_plan(&repo, "main", 127).unwrap(),
+            "base carrying the slice plan ⇒ present"
+        );
+        // A different slice with no plan dir is still absent on the same base.
+        assert!(
+            !base_has_slice_plan(&repo, "main", 99).unwrap(),
+            "an unrelated slice number stays absent"
+        );
+    }
+
+    #[test]
+    fn coordinate_refuses_create_when_base_lacks_the_slice_plan() {
+        // VT-1 (coordinate): Create where trunk lacks the slice plan bails BEFORE
+        // the fork — Err names DOCTRINE_TRUNK_REF and NO worktree dir is created
+        // (the rollback path is never entered, F6).
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("src"));
+        let dir = tmp.path().join("coord");
+
+        let Err(err) = coordinate(&repo, 127, &dir) else {
+            panic!("must refuse: base predates plan");
+        };
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("DOCTRINE_TRUNK_REF"),
+            "refusal must hint DOCTRINE_TRUNK_REF; got: {msg}"
+        );
+        assert!(
+            msg.contains(".doctrine/slice/127/plan.toml"),
+            "refusal names the missing plan path; got: {msg}"
+        );
+        assert!(
+            !dir.exists(),
+            "no worktree dir is created on the early bail"
+        );
     }
 
     // --- SL-056 PHASE-10: classify_stamp pure arms (T2) ---
