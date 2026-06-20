@@ -1,0 +1,50 @@
+memory_uid = "mem_019ee3c479c57c51b72cb0e6a5d924d8"
+memory_key = "mem.fact.dispatch.verify-trunk-ref-poison"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Dispatch verify: DOCTRINE_TRUNK_REF=main poisons just test-all"
+summary = "DOCTRINE_TRUNK_REF=main belongs only on trunk-resolving dispatch cmds (setup/sync), never on the verify suite — it poisons every test that inits its own temp repo."
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "65612d85fd0d0e43e19642a8bdf8198fcfadd9d2"
+ref_name = "refs/heads/main"
+checkout_state_id = "388884fc2003b838379268f93f04113b0d6b61e581a0add25b8f10ca01421bbe"
+base_commit = "99b03a67c34716c116872cfd00e1e63d0c39cad1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-122"
+
+[[source]]
+kind = "review"
+ref = "RV-110"
+
