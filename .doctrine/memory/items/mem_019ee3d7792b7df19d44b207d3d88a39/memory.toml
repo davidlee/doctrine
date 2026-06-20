@@ -1,0 +1,50 @@
+memory_uid = "mem_019ee3d7792b7df19d44b207d3d88a39"
+memory_key = "mem.pattern.dispatch.integrate-clean-trunk-or-phantom"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch integrate: clean exclusive trunk checkout, or the phantom index gets committed"
+summary = "Stage-2 integrate must run against a clean, exclusively-held trunk checkout; against a dirty shared tree it leaves a phantom index that the next commit reverts. On ISS-030 STOP: resync the checkout to HEAD before ANY commit."
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e4258872ba910d52e9bb4731af128877d982e7a3"
+ref_name = "refs/heads/main"
+checkout_state_id = "bb258cfff37a1f48e0e3037d87e10855fbef911f0d520d61825c84e67b5ad45d"
+base_commit = "3a9656ecfe4452be9b33e16ab10357bbc808f1b7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-122"
+
+[[source]]
+kind = "issue"
+ref = "ISS-038"
+
