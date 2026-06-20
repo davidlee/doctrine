@@ -65,7 +65,14 @@ The clean correlation: **worker tree is clobbered to `main` exactly when `main`
 moves during the run.** When `main` is static (PHASE-01/04) the isolated tree
 holds; when `main` moves (PHASE-02) the worker lands on it.
 
-## Root cause (two distinct defects)
+## Root cause
+
+> **Scope note (2026-06-20):** this issue originally documented two distinct
+> defects. **Defect B (the `SubagentStart` stamp-hook reliability problem) is now
+> tracked in ISS-011**, folded together with its sibling (stale-matcher) as one
+> hook-stamp reliability item. It is retained below for context only; fix it under
+> ISS-011. This issue owns **Defect A** — the isolation race / `baseRef:"head"`
+> wrong-base defect.
 
 ### Defect A — isolation race → fallback-to-main, amplified by `baseRef: "head"`
 
@@ -83,7 +90,9 @@ This is the same family as **ISS-031** (jail `cd` silently reverts to project ro
 → worker forks `main` not B) — the failure mode is "claude worker silently ends up
 on `main`", reached here by lock-race rather than by an outside-root `cd`.
 
-### Defect B — `SubagentStart` stamp hook points at a deleted binary
+### Defect B — `SubagentStart` stamp hook points at a deleted binary (→ tracked in ISS-011)
+
+> Folded into **ISS-011** (hook-stamp reliability). Kept here for context.
 
 `.claude/settings.local.json` `SubagentStart` has **three** `dispatch-worker`
 hooks; **two** invoke `"/home/david/.cargo/bin/doctrine (deleted) worktree marker
@@ -126,9 +135,8 @@ condition we can assume in the dispatch use case.
    funnel halt even absent the prompt guard.
 4. **Lock-retry / backoff on worktree creation** (harness-level) so a lost race
    retries instead of falling back to the main tree.
-5. **Fix Defect B:** repair the two `SubagentStart` hooks' `doctrine (deleted)`
-   paths (point at the live binary), or have `verify-worker` self-stamp on first
-   use.
+5. **Fix Defect B → moved to ISS-011.** (Repair the `(deleted)` hook paths /
+   prune dead stamp hooks; tracked there with the stale-matcher sibling.)
 6. **Isolation alternative:** the **subprocess arm** (`/dispatch-subprocess`,
    `doctrine worktree fork --worker`) forks deterministically and binds the
    subprocess cwd to the fork — no fallback-to-main. It shares the same git-lock

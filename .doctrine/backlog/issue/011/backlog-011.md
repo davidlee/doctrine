@@ -2,7 +2,15 @@
 
 Source: RV-016 finding F-13 (reconciliation review of SL-056), severity minor / follow-up.
 
-## Detail
+**Scope (widened 2026-06-20):** this item now covers the whole *hook-stamp
+reliability* family — both ways the `dispatch-worker` SubagentStart stamp hook
+silently fails to fire, leaving an unstamped worker. **Defect A** (original):
+stale **matcher** never healed on reinstall. **Defect B** (folded from ISS-034):
+stale **command path** carrying a literal `(deleted)` token. Same outcome
+(unstamped worker → `verify-worker-refused: unstamped`, or fail-open writes on the
+no-env-leg/no-bwrap harness); distinct root causes; sensible to fix together.
+
+## Defect A — stale matcher never healed on reinstall
 
 `src/boot.rs:658-696` — the SubagentStart hook merge keys ownership on the hook
 **command** only (the Current-decision merge compares/owns on the command; `set_command`
@@ -15,7 +23,37 @@ writes freely** on the one harness with no env leg and no bwrap.
 `mem.pattern.distribution.hookspec-merge-core-generalized-event-matcher` notes the merge is
 generalized over event+matcher; the ownership key should include the matcher.
 
-## Fix
+### Fix (Defect A)
 
 Key the merge identity on `(event, matcher, command)`, or reconcile the matcher on
 reinstall so a stale matcher is healed.
+
+## Defect B — stale `(deleted)` command path (folded from ISS-034)
+
+`.claude/settings.local.json` `SubagentStart` had **three** `dispatch-worker`
+stamp hooks; **two** invoked
+`"/home/david/.cargo/bin/doctrine (deleted) worktree marker --stamp-subagent"` — a
+`/proc/self/exe`-style path captured while the running binary had been
+rebuilt/replaced, so the install wrote a path with a literal `(deleted)` token.
+Those two fail to exec; only the third (clean
+`…/doctrine worktree marker --stamp-subagent`) works. Net: workers frequently come
+up **unstamped**, so `doctrine worktree verify-worker` refuses with
+`verify-worker-refused: unstamped` until the orchestrator hand-stamps via
+`echo '{"cwd":"…","agent_type":"dispatch-worker"}' | doctrine worktree marker --stamp-subagent`.
+
+Independent of Defect A, but it compounds friction on every spawn. Discovered
+dogfooding `/dispatch` (claude arm) on SL-121, 2026-06-20.
+
+### Fix (Defect B)
+
+Resolve the install-time command path to a stable on-disk binary location, never a
+`/proc/self/exe` reading that can carry `(deleted)`; and/or have the merge prune
+duplicate/dead SubagentStart stamp hooks (a `(deleted)` command is provably dead)
+on reinstall. A `verify-worker` self-stamp on first use would mask the symptom but
+not the bad install — fix the writer.
+
+## Related
+
+- **ISS-034** — Defect B was first documented there (claude dispatch arm
+  isolation/base defect); the hook-stamp half is folded here, the
+  isolation/`baseRef:"head"` half stays in ISS-034.
