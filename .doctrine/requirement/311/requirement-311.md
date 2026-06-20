@@ -2,8 +2,8 @@
 
 ## Statement
 
-Every branch the system creates is classified into exactly one of two classes, and
-the class governs its lifecycle. **Mutable** refs are advanced in the normal course of
+Every ref the model touches is classified into exactly one of two lifecycle classes,
+and the class governs its lifecycle. **Mutable** refs are advanced in the normal course of
 a run: `dispatch/<N>` (the coordination SSoT, funnel's sole write target),
 `candidate/<N>/<label>` (interaction branch; tip mutable, recorded OIDs immutable),
 `edge` (optional standing aggregate), and trunk (`main`/`master`/`origin/HEAD`,
