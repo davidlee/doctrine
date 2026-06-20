@@ -58,14 +58,17 @@ on the `reconcile → done` crossing.
 - **Other crossings.** Only `reconcile → done`; not `audit → reconcile`, not any
   back-edge.
 
-## Open Questions
+## Open Questions (resolved at design-lock)
 
-- **OQ-1 — trunk ref source.** Hardcode `refs/heads/main`, or read a configured
-  trunk (close passes `--trunk refs/heads/main` explicitly)? Default needed if
-  unconfigured. → `/design`.
-- **OQ-2 — failure-closed vs open on a malformed/absent journal.** A dispatched
-  slice whose journal is unreadable: refuse (fail-closed, consistent with the
-  dirty-tree refusal philosophy) or treat as not-dispatched? → `/design`.
+- **OQ-1 — trunk ref source.** RESOLVED → `design.md` D1: **self-describing from
+  the journal trunk row** (namespace elimination); no new config. The
+  `[dispatch] deliver_to` config is deferred to **IMP-124** (after SL-126).
+- **OQ-2 — failure-closed vs open on a malformed/absent journal.** RESOLVED →
+  `design.md` D2: **fail-closed**, no `--force` bypass in v1.
+
+Layering verified clean against ADR-001 (`design.md` §4): query sited in `ledger`
+(leaf), not `dispatch` — avoids the `slice ↔ dispatch` cycle; no new accepted
+violation, no tangle growth.
 
 ## Summary
 
