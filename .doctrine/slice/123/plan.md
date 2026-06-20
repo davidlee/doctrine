@@ -19,21 +19,31 @@ Two phases, split on the trust boundary and the file surface (design §5):
 
 ## Sequencing & Rationale
 
+The cut is **dependency-first**, not file-partition-neat (codex plan review): the
+ordering is forced by an interface dependency, and the "two clean file sets" framing
+oversimplifies (PHASE-01 owns code + its own integration test; PHASE-02 owns the
+skill + the e2e shrinkage test).
+
 PHASE-01 precedes PHASE-02 because the skill documents and calls a real CLI
 interface (`verify-worker --branch`, the five refusal tokens). Writing the skill
 first would cite a verb that does not yet exist — and the budget test's presence
 asserts (`not-isolated`, `branch-mismatch`) would have nothing to bind to. Code
-first, prose second.
+first, prose second. Serial: PHASE-02 has a hard dependency on PHASE-01's interface
+(EN-1), so even though the edited files don't overlap, they cannot run concurrently.
 
-The two phases are **file-disjoint** (worktree.rs/main.rs vs SKILL.md/the e2e
-test), so they could in principle dispatch in parallel — but they are **not**
-independent: PHASE-02 depends on PHASE-01's interface (EN-1). Run serial.
-
-PHASE-01 is pure TDD: the design fixes the classifier signature and the refusal
-ordering, so the goldens (VT-1..3) are writable red-first before the shell and CLI
-exist. The behaviour-preservation gate (EX-4 / VT-3) is the proof that adding two
-facts to `classify_worker_verify` did not move any existing verdict — the existing
-suite must stay green with only the mechanical arg additions.
+**PHASE-01 execution shape (realistic, not idealised TDD).** `classify_worker_verify`
+and its goldens live in the SAME file (`src/worktree.rs`), and the signature change
+ripples to every existing call site + test on the first edit — a naive "write the
+new goldens red first" produces a *compile break*, not a meaningful red. Land it as
+compile-preserving microsteps instead:
+1. Extend the signature + enum and mechanically thread the two new args (placeholder
+   `true`/`is_linked_worktree`) through all existing call sites and goldens so the
+   crate compiles and the existing suite stays green (behaviour-preservation, VT-3).
+2. THEN add the new goldens (VT-1/VT-2) red against the not-yet-wired branches, and
+   implement the `NotIsolated` / `BranchMismatch` arms green.
+3. Wire the shell `head_is_branch_tip` gather + the `--branch` CLI/executor sites,
+   covered red→green by the integration test (VT-4).
+Red/green/refactor holds per-microstep; the phase is not one big red.
 
 PHASE-02 is mostly prose, so its load-bearing verification is VA/VH, not VT — a
 test can assert the safety strings are *present* (VT-1) but not that they are

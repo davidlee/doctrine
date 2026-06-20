@@ -35,20 +35,22 @@ gather→classify→act preserved; read-classed (survives worker-mode).
 """
 entrance_criteria = [
   { id = "EN-1", text = "Design locked (slice in plan state); design §5.2 is the contract." },
-  { id = "EN-2", text = "Existing verify-worker suite green at HEAD (behaviour-preservation baseline)." },
+  { id = "EN-2", text = "Setup (not evidence): record the existing verify-worker suite green at HEAD as the pre-change baseline; the signature change will force mechanical edits to those goldens, so behaviour-preservation is proven by VT-3, not by EN-2 itself." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "`classify_worker_verify` takes `is_isolated` + `head_is_branch_tip`; returns `NotIsolated` (ordered after head, before marker/base) and `BranchMismatch` (last); tokens `not-isolated` / `branch-mismatch`." },
   { id = "EX-2", text = "`run_verify_worker` gathers isolation via `is_linked_worktree` (short-circuited on head_resolved) and `head_is_branch_tip` only when `--branch` is supplied (else true)." },
-  { id = "EX-3", text = "CLI `WorktreeCommand::VerifyWorker` gains `--branch: Option<String>`; the call site threads it through. Help/doc-comment list all five refusal tokens." },
-  { id = "EX-4", text = "Existing non-fallback verify-worker verdicts unchanged (behaviour-preservation gate): isolated/stamped/ancestor cases still `Ok`." },
-  { id = "EX-5", text = "`just gate` green (clippy zero-warning, fmt)." },
+  { id = "EX-3", text = "Both `src/main.rs` surfaces updated: the CLI struct `WorktreeCommand::VerifyWorker` (main.rs:966) gains `--branch: Option<String>`; the executor arm (main.rs:4168) destructures `branch` and threads `branch.as_deref()` into `run_verify_worker`. Help/doc-comment list all five refusal tokens." },
+  { id = "EX-4", text = "`verify-worker` stays Read-classed under worker-mode after the command-shape change: it remains in the `=> Read` arm (main.rs:3050) and is callable (not refused) inside a stamped worker fork." },
+  { id = "EX-5", text = "Existing non-fallback verify-worker verdicts unchanged (behaviour-preservation gate): isolated/stamped/ancestor cases still `Ok`." },
+  { id = "EX-6", text = "`just gate` green (clippy zero-warning, fmt)." },
 ]
 verification = [
   { id = "VT-1", expects = "Pure golden `not_isolated_refuses_after_head_before_marker`: head✓ isolated✗ ⇒ NotIsolated, regardless of marker/base." },
   { id = "VT-2", expects = "Pure golden `branch_mismatch_refuses_last`: head✓ isolated✓ marker✓ base✓ tip≠HEAD ⇒ BranchMismatch; and head_is_branch_tip=true (no --branch) ⇒ Ok." },
-  { id = "VT-3", expects = "Existing `classify_worker_verify_*` goldens updated for the two new args with verdicts unchanged (Ok/Unstamped/WrongBase)." },
+  { id = "VT-3", expects = "Existing `classify_worker_verify_*` goldens updated for the two new args with verdicts unchanged (Ok/Unstamped/WrongBase) — the behaviour-preservation evidence for EX-5." },
   { id = "VT-4", expects = "`run_verify_worker` integration: refuses `not-isolated` against a primary tree; refuses `branch-mismatch` when --branch tip ≠ worktree HEAD; `Ok` on a linked worktree on B with coherent --branch." },
+  { id = "VT-5", expects = "Worker-mode regression: `verify-worker --base … --dir … --branch …` invoked inside a stamped worker fork is NOT refused (proves EX-4 read-class survival). If no worker-mode CLI harness exists, downgrade to VA-1 (inspect the main.rs:3050 arm still maps VerifyWorker → Read)." },
 ]
 specs        = []
 requirements = []
@@ -71,7 +73,7 @@ exit_criteria = [
   { id = "EX-1", text = "`dispatch-agent/SKILL.md` carries the base-guard block with all four checks (clean tree / git-dir≠common-dir / merge-base --is-ancestor B HEAD / prerequisite seams) and the STOP-and-report contract." },
   { id = "EX-2", text = "Post-spawn section = the pre-funnel gate: missing-footer abort; `verify-worker … --branch`; the five refusal tokens; hand branch to funnel as S." },
   { id = "EX-3", text = "Red Flags add: never funnel a no-`worktreePath:`-footer worker; always embed the base-guard. `dispatch/SKILL.md` unchanged." },
-  { id = "EX-4", text = "`e2e_skills_dispatch_shrinkage.rs` budget bump (≤61 → sized to additions) WITH new presence asserts (`base-guard`, `not-isolated`, `branch-mismatch`, `worktreePath`); router test untouched." },
+  { id = "EX-4", text = "`e2e_skills_dispatch_shrinkage.rs`: the EXACT cap is deferred to execution (set to the actual post-edit body line count, no slack-padding) — not pre-specified here, to avoid a rotting number. The crisp, falsifiable part is the content gate: new presence asserts `base-guard`, `not-isolated`, `branch-mismatch`, `worktreePath` all added; router test (`dispatch_router_skill_is_shrunk`) untouched." },
   { id = "EX-5", text = "`just gate` green." },
 ]
 verification = [
