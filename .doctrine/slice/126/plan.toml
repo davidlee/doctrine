@@ -78,6 +78,7 @@ verification = [
   { id = "VT-4", expects = "dispatched slice (journal has rows) whose journal has no refs/heads/main trunk row → reconcile→done refused (fail-closed)." },
   { id = "VT-5", expects = "the gate fires ONLY on reconcile→done — an unintegrated dispatched slice on audit→reconcile is not refused by this gate." },
   { id = "VT-6", expects = "composition — an unintegrated slice that also carries an unresolved blocker is refused (either gate independently suffices)." },
+  { id = "VT-7", expects = "END-TO-END against a REAL journal (not a hand-built fixture): reusing the e2e_dispatch_sync harness (prepare-review + `integrate --trunk refs/heads/main`, helper ~L469), drive a slice fixture in `reconcile` to `done`. (a) After a real integrate, `slice status <n> done` SUCCEEDS (gate reads the git-produced trunk row, planned_new_oid is an ancestor of main). (b) With prepare-review run but `--trunk` NOT integrated, the same transition is REFUSED with the no-trunk-row token. Proves the row-shape assumptions PHASE-01's unit fixtures encode are real (RV-codex follow-up: hand-built fixtures must not be the only evidence)." },
 ]
 specs        = []
 requirements = []
