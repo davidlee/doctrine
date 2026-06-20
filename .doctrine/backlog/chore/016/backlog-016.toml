@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 67
-slug = "dep-seq-for-delegate-slice-path"
-title = "dep_seq_for SL arm should delegate slice toml path to the slice module (mirror outbound_for)"
-kind = "improvement"
+id = 16
+slug = "burn-down-adr-001-coverage-requirement-layering-wart"
+title = "Burn down ADR-001 coverage→requirement layering wart"
+kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-06-14"
-updated = "2026-06-19"
-tags = ["area:relations", "area:slice", "scope:corpus-wide"]
+created = "2026-06-20"
+updated = "2026-06-20"
+tags = ["architecture", "area:coverage", "area:requirement"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
