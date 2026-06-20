@@ -1,0 +1,50 @@
+memory_uid = "mem_019ee405060a7422b0a82128e0c15087"
+memory_key = "mem.fact.fsutil.write-atomic-readonly-target"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "write_atomic renames over a read-only target file"
+summary = "write_atomic overwrites a read-only target FILE; induce write failure via a read-only DIR"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ccda28cb15b072c9161880c55a5e8f9bc06cf7cd"
+ref_name = "refs/heads/main"
+checkout_state_id = "25d4ce27cb799d7c30e9d3537ee1baedaf2bc00dc3aa42add07a7a97f430d3ca"
+base_commit = "cc277618fc397e50c7d9105e9bb6004641b1b88e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-113"
+
+[[source]]
+kind = "review"
+ref = "RV-113"
+

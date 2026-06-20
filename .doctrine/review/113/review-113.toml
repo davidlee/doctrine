@@ -1,0 +1,43 @@
+id    = 113
+slug  = "reconciliation-review-of-sl-113"
+title = "reconciliation review of SL-113"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-113"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "VT-1/§3 'no test edits' claim is false — one fixture changed"
+detail = "design.md §3 (Forces) and VT-1 (§9) both assert the migration is proven with 'No test edits — that is the gate.' Observed: spec.rs::spec_req_add_orphan_on_append_failure_left_uncommitted changed its failure-induction from chmod 0o444 on members.toml to 0o555 on the parent dir, because write_atomic renames over a read-only *target file* (rename(2) keys on directory write perm, not file mode) where the old bare fs::write failed with EACCES. The test's behavioural assertion (failed member-append leaves the reserved requirement an uncommitted orphan) is PRESERVED — only the induction mechanism changed. Production contract not regressed; the read-only-target semantic is a real minor behaviour change (design E3 anticipated it for authored files but VT-1's 'no test edits' wording did not). Remediation: reconcile design prose (per-slice direct edit)."
+disposition = "verified"
+response = "Observation confirmed. Code is correct: the behavioural assertion is preserved, the fixture change is sound (read-only dir induces the same failure), and the read-only-target semantic is benign for git-tracked 0644 authored files (design E3). The DESIGN PROSE is what diverged. Remediation routed to /reconcile as a per-slice direct edit: amend design.md §3 (drop/qualify 'No test edits to prove the migration') and VT-1 §9 ('No test edits — that is the gate') to acknowledge the single failure-induction fixture change and the read-only-target semantic. See Reconciliation Brief → Per-slice."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "facet_write was unclassified in ADR-001 layering map (pre-existing SL-118 gap)"
+detail = """src/facet_write.rs (added by SL-118, commit 9976ed2a, with out=0 tracked edges) was never added to .doctrine/adr/001/layering.toml. SL-112's layering gate flags a unit once it is an edge SOURCE; SL-113's facet_write→fsutil edge gave it its first outbound edge, surfacing Unclassified("facet_write"). Classified leaf (imports std + leaf only — Path, anyhow::Context, fsutil), matching sibling shared-core dep_seq. leaf→leaf is always legal — no tier ambiguity, ADR-001 policy unchanged. The classification edit was already applied and committed in-slice (forced by the gate). Observation confirms the fix is correct and complete; no further reconcile action."""
+disposition = "aligned"
+response = "Aligned — no change needed. Classification is correct (leaf→leaf always legal, ADR-001 policy untouched) and was already applied + committed in-slice, forced by the SL-112 gate. This is layering DATA, not an ADR decision, so no REV. The pre-existing SL-118 omission is now closed; nothing durable left to reconcile. Captured in notes.md F2."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "D3/§5.4/EX-3 mandate #[allow]; enforced allow_attributes=deny forced #[expect]"
+detail = """Design D3, the §5.4 exclusion table, and PHASE-03 EX-3 all mandate #[allow(clippy::disallowed_methods, reason=…)] and explicitly reject #[expect]. Observed: repo Cargo.toml [lints] sets allow_attributes = "deny" — a bare #[allow] does not compile (14 pre-existing #[expect] in src, 0 #[allow]). All 8 exclusion sites use #[expect]; clippy.toml reason string was updated to say #[expect]. Enforced canon outranks the design decision (boot: plan/design is not higher authority than canon); the design author appears not to have known the lint was denied. The design's stated reasons for #[allow] are moot: the guard lands in the SAME commit as the annotations so each #[expect] is fulfilled. Remediation: reconcile design prose D3 + §5.4 table + EX-3 (per-slice direct edit)."""
+disposition = "verified"
+response = "Observation confirmed. Code is correct: enforced allow_attributes=deny makes #[expect] the only compiling form; canon outranks the design decision (boot guardrail). The DESIGN PROSE is what diverged. Remediation routed to /reconcile as a per-slice direct edit: amend D3, the §5.4 exclusion table, and PHASE-03 EX-3 to replace #[allow] with #[expect] and note the allow_attributes=deny constraint as the reason. The clippy.toml reason string is already correct in-tree. See Reconciliation Brief → Per-slice."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
