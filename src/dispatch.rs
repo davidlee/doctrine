@@ -973,49 +973,48 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     plan_phases(root, &slice3, &trunk_base, &boundaries, &mut planned)?;
 
     // --- EX-2: journal intent committed onto the branch BEFORE any external
-    //     ref mutation ---------------------------------------------------------
+    //     ref mutation; apply the external ref creations under zero-oid CAS
+    //     (EX-5); record applied status back (recoverability) -------------------
     let mut journal = pending_journal(&planned);
-    let journal_commit = commit_journal(
+    let outcomes = with_journaled_projection(
         root,
-        &tip_tree,
         &tip,
-        &journal_path,
-        &coord_ref,
-        &journal,
-        "journal: prepare-review",
-    )?;
-
-    // --- apply the external ref creations under zero-oid CAS (EX-5) ----------
-    let mut stale: Vec<String> = Vec::new();
-    for row in &mut journal.rows {
-        match git::update_ref_cas(root, &row.target_ref, &row.planned_new_oid, ZERO_OID)? {
-            RefCas::Updated => {
-                row.status = LedgerStatus::Verified;
-                row.applied_new_oid = row.planned_new_oid.clone();
-                writeln!(io::stdout(), "{}", row.target_ref)?;
-            }
-            RefCas::Moved { actual } => {
-                row.status = LedgerStatus::Failed;
-                stale.push(format!(
-                    "{} (exists at {})",
-                    row.target_ref,
-                    actual.as_deref().unwrap_or("?")
-                ));
-            }
-        }
-    }
-
-    // --- record applied status back onto the branch (recoverability) --------
-    commit_journal(
-        root,
         &tip_tree,
-        &journal_commit,
         &journal_path,
         &coord_ref,
-        &journal,
+        &mut journal,
         "journal: prepare-review",
+        |root, row| {
+            match git::update_ref_cas(root, &row.target_ref, &row.planned_new_oid, ZERO_OID)? {
+                RefCas::Updated => {
+                    row.status = LedgerStatus::Verified;
+                    row.applied_new_oid = row.planned_new_oid.clone();
+                    writeln!(io::stdout(), "{}", row.target_ref)?;
+                    Ok(RowOutcome::Done {
+                        disposition: Disposition::Created,
+                    })
+                }
+                RefCas::Moved { actual } => {
+                    row.status = LedgerStatus::Failed;
+                    Ok(RowOutcome::Refused {
+                        token: format!(
+                            "{} (exists at {})",
+                            row.target_ref,
+                            actual.as_deref().unwrap_or("?")
+                        ),
+                    })
+                }
+            }
+        },
     )?;
 
+    let stale: Vec<String> = outcomes
+        .into_iter()
+        .filter_map(|o| match o {
+            RowOutcome::Refused { token } => Some(token),
+            RowOutcome::Done { .. } => None,
+        })
+        .collect();
     if stale.is_empty() {
         writeln!(
             io::stderr(),
@@ -1093,57 +1092,59 @@ fn integrate(
     }
 
     // --- journal the (possibly extended) intent onto the branch BEFORE any
-    //     external ref mutation (EX-5, ADR-012 D4) ------------------------------
-    let journal_commit = commit_journal(
+    //     external ref mutation (EX-5, ADR-012 D4); replay every row idempotently
+    //     under the 3-way CAS (EX-1/EX-2); record applied status back ------------
+    let outcomes = with_journaled_projection(
         root,
-        &tip_tree,
         &tip,
-        &journal_path,
-        &coord_ref,
-        &journal,
-        "journal: integrate",
-    )?;
-
-    // --- replay every row idempotently under the 3-way CAS (EX-1/EX-2) --------
-    let mut moved: Vec<String> = Vec::new();
-    for row in &mut journal.rows {
-        match git::replay_ref(
-            root,
-            &row.target_ref,
-            &row.expected_old_oid,
-            &row.planned_new_oid,
-        )? {
-            ReplayOutcome::NoOp => {
-                row.status = LedgerStatus::Verified;
-                row.applied_new_oid = row.planned_new_oid.clone();
-            }
-            ReplayOutcome::Applied => {
-                row.status = LedgerStatus::Verified;
-                row.applied_new_oid = row.planned_new_oid.clone();
-                writeln!(io::stdout(), "{}", row.target_ref)?;
-            }
-            ReplayOutcome::Moved { actual } => {
-                row.status = LedgerStatus::Failed;
-                moved.push(format!(
-                    "{} (target at {})",
-                    row.target_ref,
-                    actual.as_deref().unwrap_or("?")
-                ));
-            }
-        }
-    }
-
-    // --- record applied status back onto the branch (recoverability) ----------
-    commit_journal(
-        root,
         &tip_tree,
-        &journal_commit,
         &journal_path,
         &coord_ref,
-        &journal,
+        &mut journal,
         "journal: integrate",
+        |root, row| {
+            match git::replay_ref(
+                root,
+                &row.target_ref,
+                &row.expected_old_oid,
+                &row.planned_new_oid,
+            )? {
+                ReplayOutcome::NoOp => {
+                    row.status = LedgerStatus::Verified;
+                    row.applied_new_oid = row.planned_new_oid.clone();
+                    Ok(RowOutcome::Done {
+                        disposition: Disposition::NoOp,
+                    })
+                }
+                ReplayOutcome::Applied => {
+                    row.status = LedgerStatus::Verified;
+                    row.applied_new_oid = row.planned_new_oid.clone();
+                    writeln!(io::stdout(), "{}", row.target_ref)?;
+                    Ok(RowOutcome::Done {
+                        disposition: Disposition::Applied,
+                    })
+                }
+                ReplayOutcome::Moved { actual } => {
+                    row.status = LedgerStatus::Failed;
+                    Ok(RowOutcome::Refused {
+                        token: format!(
+                            "{} (target at {})",
+                            row.target_ref,
+                            actual.as_deref().unwrap_or("?")
+                        ),
+                    })
+                }
+            }
+        },
     )?;
 
+    let moved: Vec<String> = outcomes
+        .into_iter()
+        .filter_map(|o| match o {
+            RowOutcome::Refused { token } => Some(token),
+            RowOutcome::Done { .. } => None,
+        })
+        .collect();
     if moved.is_empty() {
         writeln!(
             io::stderr(),
@@ -1414,6 +1415,76 @@ fn commit_journal(
             actual.as_deref().unwrap_or("?")
         ),
     }
+}
+
+/// The per-row disposition of a successful apply. Transient REPORT data — NOT a
+/// [`JournalRow`] field: the row schema carries only oids + status, and every
+/// success (`Created`/`NoOp`/`Applied`) persists as [`LedgerStatus::Verified`],
+/// so the disposition cannot be recovered from the row after the fact. The
+/// caller renders output from these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Disposition {
+    /// A zero-oid creation succeeded (prepare-review).
+    Created,
+    /// A replay found the target already at the planned oid (integrate).
+    NoOp,
+    /// A replay advanced the target to the planned oid (integrate).
+    Applied,
+}
+
+/// Per-row outcome the apply closure hands back. The bracket collects these and
+/// returns them; the CALLER renders output and bails from the vec.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RowOutcome {
+    /// The row applied successfully with the given disposition.
+    Done { disposition: Disposition },
+    /// A semantic refusal (moved/stale target) — the row was journaled
+    /// [`LedgerStatus::Failed`] inside the closure; `token` is the caller's
+    /// report fragment.
+    Refused { token: String },
+}
+
+/// Journal the planned intent onto `coord_ref` BEFORE any external ref mutation,
+/// apply each row via `apply`, then re-journal the applied status so a crashed
+/// run is recoverable. The bracket owns ONLY the two [`commit_journal`] calls and
+/// the per-row loop; construction stays caller-side before, report-or-bail
+/// caller-side after.
+///
+/// The recovery [`commit_journal`] runs STRICTLY AFTER the loop, so a `?`-`Err`
+/// out of `apply` aborts BEFORE applied status is recorded. `apply` must
+/// therefore return `Err` ONLY for fatal operational failure; every semantic
+/// per-row refusal sets `row.status = Failed` inside the closure and returns
+/// `Ok(RowOutcome::Refused { .. })` so the post-loop commit durably records it.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "thin journal-cycle bracket threads the commit_journal arg set plus the apply closure"
+)]
+fn with_journaled_projection(
+    root: &Path,
+    tip: &str,
+    tip_tree: &str,
+    journal_path: &str,
+    coord_ref: &str,
+    journal: &mut Journal,
+    message: &str,
+    mut apply: impl FnMut(&Path, &mut JournalRow) -> anyhow::Result<RowOutcome>,
+) -> anyhow::Result<Vec<RowOutcome>> {
+    let journal_commit =
+        commit_journal(root, tip_tree, tip, journal_path, coord_ref, journal, message)?;
+    let mut outcomes = Vec::with_capacity(journal.rows.len());
+    for row in &mut journal.rows {
+        outcomes.push(apply(root, row)?);
+    }
+    commit_journal(
+        root,
+        tip_tree,
+        &journal_commit,
+        journal_path,
+        coord_ref,
+        journal,
+        message,
+    )?;
+    Ok(outcomes)
 }
 
 /// Render an ordered phase-status table. Pure formatting — caller owns data.
