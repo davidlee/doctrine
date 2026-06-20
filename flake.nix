@@ -138,18 +138,99 @@
           bubblewrap = pkgs.bubblewrap;
         };
 
+        # Frontend: hermetic bun build → web/map/dist, embedded into the binary
+        # via rust-embed (release profile reads web/map/dist/, debug reads
+        # web/map/). dist is gitignored, so crane's git-based cleanCargoSource
+        # drops it; we build it here and graft it into the rust source tree.
+        #
+        # Source for the bun build, sans the local node_modules/dist (a plain
+        # nix path import copies everything — gitignore is not consulted).
+        webSrc = lib.cleanSourceWith {
+          src = ./web/map;
+          filter = path: _type: let
+            b = baseNameOf path;
+          in
+            b != "node_modules" && b != "dist";
+        };
+
+        # node_modules via a fixed-output derivation keyed on bun.lock.
+        # REGENERATE webModules.outputHash whenever web/map/bun.lock changes —
+        # `nix build` prints the correct `got: sha256-…` on mismatch.
+        webModules = stdenv.mkDerivation {
+          name = "doctrine-web-node-modules";
+          src = webSrc;
+          nativeBuildInputs = [pkgs.bun];
+          dontConfigure = true;
+          buildPhase = ''
+            export HOME=$TMPDIR
+            bun install --frozen-lockfile --no-progress
+          '';
+          installPhase = ''
+            mkdir -p $out
+            cp -R node_modules $out/node_modules
+          '';
+          dontFixup = true;
+          outputHashMode = "recursive";
+          outputHashAlgo = "sha256";
+          outputHash = "sha256-Fn1c5nzfclWXvney5hCVNUviKz3oeyYkl45Ry0M/w8c=";
+        };
+
+        webDist = stdenv.mkDerivation {
+          name = "doctrine-web-dist";
+          src = webSrc;
+          nativeBuildInputs = [pkgs.bun pkgs.nodejs_latest];
+          configurePhase = ''
+            export HOME=$TMPDIR
+            cp -R ${webModules}/node_modules ./node_modules
+            chmod -R u+w ./node_modules
+          '';
+          buildPhase = ''
+            node node_modules/vite/bin/vite.js build
+          '';
+          installPhase = ''
+            mkdir -p $out
+            cp -R dist/. $out/
+          '';
+        };
+
         # Rust binary — crane for workspace-aware builds.
         # cleanCargoSource uses git ls-files + Cargo.toml exclude list, so
         # plugins/ and install/ (git-tracked, embedded via rust-embed) and
-        # crates/cordage (workspace member) are included automatically.
-        craneLib = crane.mkLib pkgs;
+        # crates/cordage (workspace member) are included automatically. The
+        # built web dist is grafted on top (it is gitignored, hence absent).
+        # Build with the SAME toolchain the devshell + `just lint` use
+        # (rust-bin.beta.latest); crane defaults to nixpkgs-stable rustc, and
+        # the version skew flips lint verdicts (e.g. unfulfilled_lint_expectations
+        # on consts referenced only by a dead fn → spurious -D warnings failure).
+        craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-bin.beta.latest.default;
+        # cleanCargoSource keeps ONLY .rs/.toml/.lock, silently stripping every
+        # non-rust embedded asset (RustEmbed folders + include_str! targets) —
+        # the folders survive via their .toml siblings so it still compiles, but
+        # the binary ships asset-incomplete. Graft the complete git-tracked
+        # asset roots back so the embed matches what `cargo install` sees on
+        # disk; web/map/dist is the freshly built frontend (gitignored, absent
+        # even from a full tree).
+        cleanedSrc = craneLib.cleanCargoSource ./.;
+        srcWithDist = pkgs.runCommandLocal "doctrine-src" {} ''
+          cp -R ${cleanedSrc} $out
+          chmod -R u+w $out
+          rm -rf $out/plugins $out/install $out/memory $out/.pi/extensions/doctrine
+          mkdir -p $out/plugins $out/install $out/memory $out/.pi/extensions $out/web/map/dist
+          cp -R ${./plugins}/. $out/plugins/
+          cp -R ${./install}/. $out/install/
+          cp -R ${./memory}/. $out/memory/
+          cp -R ${./.pi/extensions/doctrine} $out/.pi/extensions/doctrine
+          cp -R ${webDist}/. $out/web/map/dist/
+          chmod -R u+w $out
+        '';
         doctrine = craneLib.buildPackage {
           pname = "doctrine";
           version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
-          src = craneLib.cleanCargoSource ./.;
+          src = srcWithDist;
+          # Deps layer never needs the assets — keep it on the lean source.
           cargoArtifacts = craneLib.buildDepsOnly {
             pname = "doctrine-deps";
-            src = craneLib.cleanCargoSource ./.;
+            src = cleanedSrc;
             cargoExtraArgs = "--workspace";
           };
           cargoExtraArgs = "--workspace";
