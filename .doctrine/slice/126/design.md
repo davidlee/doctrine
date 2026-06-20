@@ -85,9 +85,11 @@ Resolution order:
    refs/heads/phase/}`. `0` such rows ⇒ `Blocked("no trunk row in journal")`
    (the exact shape of a never-integrated slice); `>1` ⇒
    `Blocked("ambiguous trunk row")`.
-4. Resolve that row's `target_ref` tip (`rev-parse`); unresolved ⇒
+4. Empty `planned_new_oid` ⇒ `Blocked("trunk row has no planned oid")` (guards
+   `is_ancestor("")` from erroring; fail-closed).
+5. Resolve that row's `target_ref` tip (`rev-parse`); unresolved ⇒
    `Blocked("trunk ref unresolved")`.
-5. `git::is_ancestor(planned_new_oid, tip)` → `true` ⇒ `Integrated`; `false` ⇒
+6. `git::is_ancestor(planned_new_oid, tip)` → `true` ⇒ `Integrated`; `false` ⇒
    `Blocked("planned tip not on trunk")`.
 
 **Fail-closed (OQ-2):** only `NotDispatched` and `Integrated` pass; every anomaly
