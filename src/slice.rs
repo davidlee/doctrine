@@ -1017,6 +1017,7 @@ struct SliceDoc {
 struct Gate {
     #[serde(default)]
     extra_reqs: Vec<String>,
+    estimate: (),
 }
 
 /// Parse a slice reference — `SL-025`, `sl-25`, or the bare id `25` — to its
@@ -3474,5 +3475,13 @@ mod tests {
             err_drift.contains("residual drift"),
             "drift gate refuses independently: {err_drift}"
         );
+    }
+
+    // NF-001: the closure gate cannot branch on estimate/value presence — the facet is
+    // structurally absent from Gate's input type. Exhaustive (no `..`): a future
+    // estimate/value field on Gate breaks this compile.
+    #[test]
+    fn nf001_gate_destructure_is_exhaustive_and_facet_free() {
+        let Gate { extra_reqs: _ } = Gate::default();
     }
 }
