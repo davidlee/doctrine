@@ -59,8 +59,13 @@ concept-map route).
   (`dep_seq` cores, `relation`, and the `write_atomic` seam itself under D4). The
   existing suites are the proof and must stay **green unchanged** — including
   `write_atomic`'s single-writer test, which D4 must not perturb (VT-3 *adds* the
-  concurrency case rather than editing the existing one). No test edits to prove
-  the migration.
+  concurrency case rather than editing the existing one). Migration test edits
+  held to **one failure-induction fixture** (reconciled SL-113 RV-113 F-1): the
+  read→mutate logic carries no edits, but `spec.rs`'s orphan-on-append-failure
+  test had to re-induce its forced write failure via a read-only **directory**
+  (`0o555`) — `write_atomic` renames over a read-only target *file* where bare
+  `fs::write` failed `EACCES` (rename keys on dir perm; §5.5 E3). The behavioural
+  assertion is preserved; only the induction mechanism changed.
 - **Storage rule.** In scope = **authored** `*.toml`/`*.md` only. Runtime state
   (`state.rs` phase sheets, `ledger.rs` manifest, `worktree.rs` marker) and
   derived/install (`install.rs`, `skills.rs`) deliberately stay on `fs::write`.
@@ -149,7 +154,7 @@ The 23 authored call sites (12 files):
 | `revision.rs` | 888 | (status funnels through `dep_seq`) |
 | `map_server/routes.rs` | 412 | concept-map via HTTP |
 
-**Out of scope** (stay on `fs::write`, get `#[allow]` — §5.4): `state.rs:409`
+**Out of scope** (stay on `fs::write`, get `#[expect]` — §5.4): `state.rs:409`
 (runtime phase sheet), `ledger.rs:408` (runtime manifest), `worktree.rs:1862`
 (runtime marker), `install.rs:586` + `skills.rs:637` (derived asset unpack),
 `corpus.rs:403`/`406` (`sync_corpus` — shipped-corpus install, derived).
@@ -158,7 +163,7 @@ Line numbers are an at-design snapshot; the plan re-locates by function before
 editing. **The authored set above is the *known* starting set, not a proven-
 exhaustive hand count** — the `clippy` guard (§5.4) is the oracle: adding it and
 running `just gate` surfaces every remaining production `fs::write`, each then
-triaged by the rule *authored → migrate, runtime/derived → `#[allow]` + reason*.
+triaged by the rule *authored → migrate, runtime/derived → `#[expect]` + reason*.
 `corpus.rs` was itself a hand-count miss (caught by the external pass, §10), and
 `facet_write.rs:153` was a second miss (caught by the `/plan`-review oracle probe,
 2026-06-20) — which is exactly why the guard, not the table, is authoritative.
@@ -168,12 +173,12 @@ triaged by the rule *authored → migrate, runtime/derived → `#[allow]` + reas
 **Closure guard.** Add to `clippy.toml` `disallowed-methods`:
 
 ```toml
-{ path = "std::fs::write", reason = "authored entity writes must route through fsutil::write_atomic (SL-113); runtime/derived sites carry an explicit #[allow]" }
+{ path = "std::fs::write", reason = "authored entity writes must route through fsutil::write_atomic (SL-113); runtime/derived sites carry an explicit #[expect]" }
 ```
 
 `just gate` runs clippy bins/lib only (no `--all-targets`), so test code is
 unlinted — no test-site noise. Deliberate non-authored production sites each
-carry `#[allow(clippy::disallowed_methods, reason="…")]`, which documents the
+carry `#[expect(clippy::disallowed_methods, reason="…")]`, which documents the
 authored/runtime boundary in code:
 
 | Site | reason |
@@ -209,7 +214,7 @@ This inventory is the *known* exclusion set; the gate confirms completeness
   No allocation-count change vs `fs::write` (which also materialised the String).
 - **E2 (`catalog/test_helpers.rs:16`) — CLOSED.** The module header declares
   "Compiles only under `#[cfg(test)]`"; `catalog/mod.rs` pulls it in for tests.
-  The gate (no `--all-targets`) does not lint it → no `#[allow]` needed.
+  The gate (no `--all-targets`) does not lint it → no `#[expect]` needed.
 - **E3 (metadata not preserved — immaterial).** `rename`-replace yields a new
   inode; the target's mode/ACL/xattrs/hardlinks are not carried over, and the new
   file's mode is the temp's (`0666 & ~umask` → `0644`). Immaterial here: authored
@@ -241,11 +246,19 @@ This inventory is the *known* exclusion set; the gate confirms completeness
   Matches the slice non-goal; gives a crisp closure invariant ("no *authored*
   update path calls `fs::write`"). `state.rs` phase sheets are `rm -rf`-able by
   design — runtime atomicity is a possible follow-up, not this slice.
-- **D3 — closure via `clippy` `disallowed-methods` + explicit `#[allow]`.** The
+- **D3 — closure via `clippy` `disallowed-methods` + explicit `#[expect]`.** The
   test-noise objection to a global ban does not apply (the gate skips tests). The
-  `#[allow]` annotations convert the authored/runtime boundary from tribal
-  knowledge into documented-in-code intent. *Rejected — audit-grep only:* no
-  permanent regression guard.
+  annotations convert the authored/runtime boundary from tribal knowledge into
+  documented-in-code intent. *Rejected — audit-grep only:* no permanent regression
+  guard. **Reconciled SL-113 RV-113 F-3 — `#[expect]`, not `#[allow]`:** the repo
+  enforces `Cargo.toml [lints] allow_attributes = "deny"`, so a bare `#[allow]`
+  does not compile (this design originally mandated `#[allow]` and rejected
+  `#[expect]`; enforced canon outranks that decision). The original objection to
+  `#[expect]` — that it would fire `unfulfilled_lint_expectations` before the guard
+  lands — is moot: the guard and the annotations land in the **same commit**
+  (PHASE-03), so each `#[expect]` is fulfilled the moment it exists. A future stale
+  `#[expect]` self-flags — a feature, and the tradeoff the repo already accepted
+  globally.
 - **D4 — harden `write_atomic` temp uniqueness; do not add `fsync`.** The pid-only
   temp name does not isolate concurrent same-process writers (the map-server is
   the one such caller). Migrating its route from raw `fs::write` (concurrent →
@@ -295,8 +308,10 @@ This inventory is the *known* exclusion set; the gate confirms completeness
 - **VT-1 — behaviour-preservation gate (primary).** Full suite green,
   **unchanged**. The per-kind suites (status round-trips, no-op-writes-nothing,
   malformed-refuse, relation append/remove idempotence, supersede, concept-map
-  edits) prove the read→mutate logic is intact. No test edits — that is the gate.
-- **VT-2 — `just gate` green** with the new disallowed-method and the `#[allow]`
+  edits) prove the read→mutate logic is intact. No read→mutate test edits — that
+  is the gate; the sole fixture change was one failure-induction mechanism
+  (reconciled SL-113 RV-113 F-1; see §3).
+- **VT-2 — `just gate` green** with the new disallowed-method and the `#[expect]`
   inventory. Proves no stray authored `fs::write` and that exclusions are
   explicit.
 - **VA-1 — atomicity present.** `write_atomic` owns its swap test in `fsutil.rs`;
@@ -325,7 +340,7 @@ This inventory is the *known* exclusion set; the gate confirms completeness
   usage (see §8 R4).
 - **E2 (test-helper lint) attacked and closed** — `cfg(test)`-only, gate skips it
   (see §5.5 E2).
-- **`#[allow]` inventory** — known starting set; the gate is the oracle (§5.3,
+- **`#[expect]` inventory** — known starting set; the gate is the oracle (§5.3,
   §8 R3). *(The internal pass's "proven exhaustive by a 29-site sweep" claim was
   refuted by the external pass — see below.)*
 - **Layering re-checked.** All callers (incl. `main`, `map_server/routes`) →

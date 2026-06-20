@@ -105,3 +105,33 @@ warranted.
 ### Governance/spec (REV)
 
 - None.
+
+## Reconciliation Outcome
+
+All findings terminal (verified ×2, aligned ×1). Brief was entirely per-slice
+direct edits to `design.md`; no REV authored (no ADR/spec/requirement truth
+changed — `layering.toml` is data already landed in-slice, `clippy.toml` reason
+string already correct in-tree).
+
+### Direct edits applied (`design.md`)
+- **F-1** — §3 (Forces) + §9 VT-1: the "No test edits" claim qualified to "no
+  read→mutate test edits"; the one failure-induction fixture change (`spec.rs`
+  orphan test, `0o444`-file → `0o555`-dir, forced by `write_atomic` renaming over a
+  read-only file) is now recorded with the behaviour-preservation claim intact.
+- **F-3** — D3 + §5.4 (out-of-scope line, oracle rule, `clippy.toml` reason quote,
+  exclusion-table lead-in) + §9 VT-2 + §10 review note + §5.5 E2: `#[allow]` →
+  `#[expect]` throughout (8 spots). D3 now records the cause — repo
+  `allow_attributes = "deny"` forbids bare `#[allow]` — and drops its now-moot
+  rejection of `#[expect]`.
+
+### Not edited (deliberate)
+- **`plan.toml` PHASE-03 objective / EX-4** keep the original `#[allow]` mandate
+  verbatim — locked, completed criteria are the honest historical record of what
+  was planned; the deviation is the audit trail (notes F4, this RV), not a
+  falsified rewrite.
+
+### Withdrawn / tolerated
+- None. **F-2** (facet_write layering classification) was `aligned` — correct and
+  already landed in-slice; no write needed.
+
+Reconcile pass complete — handoff to /close.
