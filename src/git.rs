@@ -25,7 +25,7 @@
     )
 )]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::{Number, Value};
@@ -1081,6 +1081,49 @@ pub(crate) fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Ve
     Ok(ids)
 }
 
+/// PURE: scan `git worktree list --porcelain` text for the worktree path that has
+/// `refname` (e.g. `refs/heads/main`) checked out, `None` if none does. The
+/// porcelain stream is blank-line-separated blocks; each opens with a `worktree
+/// <path>` line and, when a branch is checked out, carries a `branch
+/// refs/heads/<name>` line. **Block-reset rule (M9):** a blank line clears the
+/// pending path, so a `branch` line can only bind to the `worktree` line of its own
+/// block — the more defensive of the two pre-extraction parses (a detached or
+/// bare block leaves no stale path to mis-attribute). No I/O — fed by
+/// [`worktree_for_ref`].
+fn parse_worktree_for_ref(listing: &str, refname: &str) -> Option<PathBuf> {
+    let mut current_path: Option<PathBuf> = None;
+    for line in listing.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(PathBuf::from(path));
+        } else if let Some(branch) = line.strip_prefix("branch ") {
+            if branch == refname {
+                return current_path;
+            }
+        } else if line.is_empty() {
+            current_path = None;
+        }
+    }
+    None
+}
+
+/// The worktree path that has `refname` (e.g. `refs/heads/main`) checked out, or
+/// `None` if no live worktree does. The single branch→worktree-path probe (SL-121
+/// PHASE-01): one `git worktree list --porcelain` shell feeding the PURE
+/// [`parse_worktree_for_ref`]. Thin impure half — a git failure is an `Err`
+/// (callers fold it as they see fit), distinct from `Ok(None)` (the ref is simply
+/// not checked out anywhere live).
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if the `git worktree list` invocation fails.
+pub(crate) fn worktree_for_ref(
+    root: &Path,
+    refname: &str,
+) -> Result<Option<PathBuf>, CaptureError> {
+    let listing = git_text(root, &["worktree", "list", "--porcelain"])?;
+    Ok(parse_worktree_for_ref(&listing, refname))
+}
+
 /// Capture the born frame for the working tree at `repo_root` (design §5.2).
 ///
 /// Three Ok states: clean → [`AnchorKind::Commit`] (`commit`/`tree`/`base_commit`/
@@ -1427,7 +1470,7 @@ mod tests {
     use super::{
         AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, Frame, REMOTE_NORMALIZER,
         RepoIdKind, RepoIdentity, canonical_bytes, capture, checkout_state_id, commits_touching,
-        explicit_identity, normalize_remote_url, sha256,
+        explicit_identity, normalize_remote_url, parse_worktree_for_ref, sha256, worktree_for_ref,
     };
 
     /// Render canonical bytes as a `String` for readable assertions (canonical
@@ -2631,6 +2674,121 @@ mod tests {
                 .expect("absent"),
             None,
             "absent path yields None, not an error"
+        );
+    }
+
+    // --- SL-121 PHASE-01: branch→worktree-path probe (VT-1) ----------------
+
+    #[test]
+    fn parse_worktree_for_ref_returns_path_of_matching_branch() {
+        let listing = "\
+worktree /repos/main
+HEAD aaaa
+branch refs/heads/main
+
+worktree /repos/feature
+HEAD bbbb
+branch refs/heads/dispatch/121
+";
+        assert_eq!(
+            parse_worktree_for_ref(listing, "refs/heads/dispatch/121"),
+            Some(PathBuf::from("/repos/feature")),
+        );
+        assert_eq!(
+            parse_worktree_for_ref(listing, "refs/heads/main"),
+            Some(PathBuf::from("/repos/main")),
+        );
+    }
+
+    #[test]
+    fn parse_worktree_for_ref_absent_ref_is_none() {
+        let listing = "\
+worktree /repos/main
+HEAD aaaa
+branch refs/heads/main
+";
+        assert_eq!(
+            parse_worktree_for_ref(listing, "refs/heads/nope"),
+            None,
+            "a ref no live worktree checks out yields None",
+        );
+    }
+
+    #[test]
+    fn parse_worktree_for_ref_skips_detached_block() {
+        // A detached block (bare/no `branch` line) must not lend its `worktree`
+        // path to a later block's branch match.
+        let listing = "\
+worktree /repos/detached
+HEAD cccc
+detached
+
+worktree /repos/live
+HEAD dddd
+branch refs/heads/target
+";
+        assert_eq!(
+            parse_worktree_for_ref(listing, "refs/heads/target"),
+            Some(PathBuf::from("/repos/live")),
+        );
+        // And a refname that only the detached block could (wrongly) satisfy stays None.
+        assert_eq!(parse_worktree_for_ref(listing, "refs/heads/detached"), None);
+    }
+
+    #[test]
+    fn parse_worktree_for_ref_blank_line_resets_state() {
+        // The block-reset rule (M9): the blank line clears the pending path, so a
+        // stray `branch` line not preceded (in its block) by a `worktree` line
+        // binds to nothing — proving the reset, not the carry-over.
+        let listing = "\
+worktree /repos/first
+HEAD eeee
+
+branch refs/heads/orphan
+";
+        assert_eq!(
+            parse_worktree_for_ref(listing, "refs/heads/orphan"),
+            None,
+            "after a blank line the path is reset, so the orphan branch binds to no path",
+        );
+    }
+
+    #[test]
+    fn worktree_for_ref_finds_linked_worktree() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        let linked = repo._dir.path().join("linked");
+        repo.git(&[
+            "worktree",
+            "add",
+            "-b",
+            "feature",
+            &linked.to_string_lossy(),
+        ]);
+
+        let found = worktree_for_ref(repo.path(), "refs/heads/feature")
+            .expect("worktree list must succeed");
+        // git may canonicalize the path (e.g. /private on macOS); compare by suffix.
+        assert!(
+            found.as_ref().is_some_and(|p| p.ends_with("linked")),
+            "expected the linked worktree path, got {found:?}",
+        );
+        assert_eq!(
+            worktree_for_ref(repo.path(), "refs/heads/absent").expect("list ok"),
+            None,
+            "a branch with no live worktree yields Ok(None)",
+        );
+    }
+
+    #[test]
+    fn worktree_for_ref_errors_when_not_a_repo() {
+        let dir = tempfile::tempdir().expect("tempdir"); // bare dir, not a repo
+        assert!(
+            matches!(
+                worktree_for_ref(dir.path(), "refs/heads/main"),
+                Err(CaptureError::Git(_))
+            ),
+            "a git failure surfaces as Err, distinct from Ok(None)",
         );
     }
 }
