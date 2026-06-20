@@ -583,6 +583,7 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
                         format!("Failed to create parent dir for {}", dest.display())
                     })?;
                 }
+                #[expect(clippy::disallowed_methods, reason = "derived asset unpack")]
                 fs::write(dest, &file.data)
                     .with_context(|| format!("Failed to write {}", dest.display()))?;
             }

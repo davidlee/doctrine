@@ -354,6 +354,12 @@ fn refresh_symlink(project_root: &Path, slice_id: u32) -> anyhow::Result<()> {
 /// reserialised. The path is computed from the id (`phase_stem` validates it);
 /// the convenience symlink is never followed. `now` is supplied by the shell
 /// (the clock stays out of this layer).
+// fn-level expect: the lone fs::write is the function's tail expression, which
+// cannot carry a stmt-level attribute on stable Rust (stmt_expr_attributes).
+#[expect(
+    clippy::disallowed_methods,
+    reason = "runtime phase sheet — disposable, atomicity not required"
+)]
 pub(crate) fn set_phase_status(
     project_root: &Path,
     slice_id: u32,

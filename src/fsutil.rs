@@ -65,6 +65,10 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
         std::process::id(),
         seq
     ));
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the seam itself — write_atomic's internal temp write"
+    )]
     fs::write(&tmp, bytes).with_context(|| format!("Failed to write temp {}", tmp.display()))?;
     fs::rename(&tmp, path)
         .with_context(|| format!("Failed to rename {} -> {}", tmp.display(), path.display()))
