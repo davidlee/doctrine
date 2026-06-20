@@ -137,3 +137,42 @@ Both are the *code* being right and the *design text* owing a fold.
 - **IMP-122** (related SL-121): harden the None-leg post-CAS resync — re-resolve
   `target_ref` before `reset --hard`; guard untracked collisions. Closes the F-1/F-2
   code gaps; the broad §7 placement-lock remains the larger out-of-scope follow-up.
+
+## Reconciliation Outcome
+
+Reconcile pass complete (RV-107 consumed). All 6 findings terminal at entry
+(F-1/F-2/F-4/F-5/F-6 `verified`, F-3 `tolerated`). 3 per-slice design-text folds
+written to `slice/121/design.md`; 0 REV (no governance/spec edit owed).
+
+### Direct edits applied (design.md, SL-121)
+- **§2.2** (RV-107 F-4): None-leg resync `reset --keep planned` → `reset --hard
+  planned`, with rationale (post-`update_ref_cas` HEAD already resolves to `planned`,
+  so `--keep`/`--merge` see no diff and leave the desync; `--hard` under the §2.3
+  `tree_clean` precondition is the only re-syncing primitive). Code was already
+  correct; this folds design text to match.
+- **§5 code-impact table** (RV-107 F-5): `gather_tree_clean` row corrected from
+  "reused at a worktree path (no signature change)" to record the extracted leaf-level
+  `git::tree_clean` predicate that the dirty pre-gate, §2.5 re-check, and
+  `gather_tree_clean` (now a thin wrapper) all delegate to — a layering extraction.
+- **§7 concurrency boundary** (RV-107 F-1/F-2): removed the overstated blanket
+  "three residual races … all content-safe." Items 1–2 remain content-safe; item 3
+  (None-leg `reset --hard` resync) reframed as **NOT content-safe** — (a) can clobber
+  a concurrent post-CAS advance while reporting success, (b) overwrites an untracked
+  file colliding with a tracked path (silent data loss, asymmetric with the ff-merge
+  safe abort). Stated as known, owned, vanishing-race gaps under single-writer close;
+  code remediation owned by IMP-122.
+
+### REVs completed
+- _None._ Brief carried no governance/spec item; all corrections were per-slice
+  design-text folds.
+
+### Withdrawn / tolerated
+- RV-107 F-3: `tolerated` at audit — ff-merge §2.5 check-then-act is the same
+  documented §7 boundary; rationale in finding disposition. No reconcile write owed.
+
+### Close prerequisite (carried from brief, not a reconcile write)
+- F-6 resolved by consolidation: the 7 SL-121 code commits were cherry-picked onto
+  `main` (clean). **Code is already integrated on `main`** ⇒ `/close` must **NOT**
+  run `dispatch sync --integrate`. `dispatch/121` retained as immutable evidence.
+
+Reconcile pass complete — handoff to /close.

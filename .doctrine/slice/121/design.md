@@ -133,7 +133,11 @@ awareness: if a ref is checked out *after* `worktree_for_ref` returned `None` bu
 *before/at* the CAS, the CAS advances a now-live branch behind its index — exactly
 the ISS-022/030 desync this slice exists to kill. So after a `None`-leg `Applied`,
 **re-probe** `worktree_for_ref(target)`: if it is now `Some(wt)`, the worktree just
-desynced — resync it (clean → `reset --keep planned`) or, if dirty, surface a
+desynced — resync it (clean → `reset --hard planned`; `--keep`/`--merge` can't —
+  after `update_ref_cas` the live HEAD already resolves to `planned`, so they see no
+  diff and leave the desync standing; `--hard` under the §2.3 `tree_clean`
+  precondition is the only primitive that re-syncs index+tree to the advanced ref)
+  or, if dirty, surface a
 `raced-checkout-desync` warning in the report (the advance already happened; we
 cannot un-advance). This is best-effort under a genuine race; see §7 for the honest
 concurrency boundary.
@@ -404,7 +408,7 @@ implementation MUST emit — pinned by §6 VTs, not paraphrased.
 |---|---|
 | `src/git.rs` | NEW pure porcelain parser + `worktree_for_ref` (M9 fixtures); NEW status-capturing `ff_advance_in_worktree` (symbolic-ref + clean re-check + post-assert per §2.5; returns an outcome, never bare `?` — B3). |
 | `src/dispatch.rs` | NEW `with_journaled_projection` thin bracket (§2.6, IMP-075): commit-pre / per-row `apply` closure / commit-post / collect failures. `prepare_review` + `integrate` both refactored onto it; `prepare_review`'s closure = its existing zero-oid-CAS body (behaviour-pure). `integrate` (≈1044–1161): dirty gate **before** the bracket (§2.3/M4); the injected `apply` closure carries per-row exact-CAS classify + mechanism branch (§2.2) + non-ff-checkout refusal + None-leg re-probe; report rendered from the returned `Vec<RowOutcome>` **after** the bracket (§4). `find_coordination_worktree` → wrapper over `worktree_for_ref` (`Err`→`"(removed)"`, F4). |
-| `src/worktree.rs` | `gather_fork_worktree` → delegate to `worktree_for_ref`; `gather_tree_clean` reused at a worktree path (no signature change). |
+| `src/worktree.rs` | `gather_fork_worktree` → delegate to `worktree_for_ref`; `gather_tree_clean` delegates to a new leaf-level `git::tree_clean` predicate (shared by the §2.3 dirty pre-gate, the §2.5 re-check, and `gather_tree_clean` as a thin wrapper) — a layering extraction, not a reuse-in-place. |
 | `plugins/doctrine/skills/close/SKILL.md` | step-3a verify → tree-true (§3). |
 
 ## 6. Verification
@@ -454,21 +458,30 @@ New/changed evidence:
   refuses with **zero refs moved** — including the coordination ref
   `dispatch/<slice>`. This is the new invariant this slice establishes. It covers
   **pre-existing** dirt only; see the concurrency boundary below.
-- **Concurrency boundary (honest scope — round-2).** This slice does not introduce a
-  worktree-placement lock; under genuine concurrent writers on the target, three
-  residual races remain, all **content-safe** (the tree never lands on anything but
-  `planned`), differing only in labeling/cleanliness reporting:
-  1. *Dirt introduced during/after a merge* — caught only post-advance, so it is a
-     **raced failure after advance**, not "zero refs moved." (Not the pre-existing
-     case the gate guarantees.)
-  2. *Checked-out merge leg vs a compatible concurrent advance* — can mark
-     `Verified` where `replay_ref` would say `Moved` (decision-time classify, no
-     atomic expected-old on the merge; §2.2). Content is still `planned`.
-  3. *None-leg ref checked out between probe and CAS* — re-probe + best-effort
-     resync / `raced-checkout-desync` warning (§2.2); cannot be un-advanced.
-  These are documented and **tested**, not silently tolerated. Eliminating them
-  needs a real placement lock — out of scope (a follow-up if close ever runs under
-  true multi-writer contention).
+- **Concurrency boundary (honest scope — round-2; corrected at reconcile, RV-107
+  F-1/F-2).** This slice does not introduce a worktree-placement lock; under genuine
+  concurrent writers on the target, residual races remain. The slice's
+  *single-writer close purpose* — kill the phantom reverse-diff — is fully met and
+  tested; these gaps live only on a vanishing post-CAS race window:
+  1. *Dirt introduced during/after a merge* — content-safe (tree never lands on
+     anything but `planned`); caught only post-advance, so it is a **raced failure
+     after advance**, not "zero refs moved." (Not the pre-existing case the gate
+     guarantees.)
+  2. *Checked-out merge leg vs a compatible concurrent advance* — content-safe; can
+     mark `Verified` where `replay_ref` would say `Moved` (decision-time classify,
+     no atomic expected-old on the merge; §2.2). Content is still `planned`.
+  3. *None-leg ref checked out between probe and CAS* — re-probe + `reset --hard`
+     resync / `raced-checkout-desync` warning (§2.2); cannot be un-advanced. **This
+     leg is NOT content-safe** (earlier drafts overstated "all content-safe"): the
+     `reset --hard` resync (a) forces the live branch back to `planned`, **clobbering
+     a concurrent post-CAS advance while reporting success**, and (b) overwrites an
+     untracked file that collides with a tracked path in the target tree — **silent
+     data loss, asymmetric** with the ff-merge leg's safe abort. Both are known,
+     owned gaps on a vanishing race, not designed-in safety.
+  Items 1–2 are documented and **tested**. Item 3's code gaps are owned as **IMP-122**
+  (re-resolve `target_ref` before `reset --hard`; guard untracked collisions);
+  eliminating the residual race entirely needs a real placement lock — out of scope
+  (a follow-up if close ever runs under true multi-writer contention).
 - **NOT fully atomic on `Moved`/collision (F3 — honest scope).** The replay loop
   applies rows sequentially and bails *after* the loop on any `Moved` row (the
   existing `moved` vec), so a later `Moved` — or an untracked-collision ff abort
