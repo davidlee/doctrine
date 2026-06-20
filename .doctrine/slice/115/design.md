@@ -129,6 +129,13 @@ by this design:
 (`facet_write` leaf, combined `estimate_value_tests`). File boundary = where the
 private helpers stop being shared.
 
+**Two further main.rs orphans (codex round 4):** `run_catalog_scan` (`main.rs:3247`)
+and `run_catalog_graph` (`main.rs:3262`) are also stranded shells, but they call
+`catalog::*` (own tier) and belong to `Command::Catalog`. They are **not** `commands/`
+shells — they relocate *with the Catalog kind fold* into the `catalog` module
+(PHASE-03, own-module, zero new edge), not into `commands/`. Listed here only so the
+orphan inventory is complete.
+
 ### F-A — shared id→path core is already owned by SL-129 / IMP-067
 
 The four resolvers (`resolve_link_path`, `resolve_supersede_path`,
@@ -168,7 +175,13 @@ dispatch.
     close a `spec↔requirement` cycle (D1a). General rule: route a dispatch to the
     module its `run_*` body actually calls, not the nominal kind name.
 - **Nested enums ride their parent:** `CandidateCommand`⊂Dispatch,
-  `SyncCommand`⊂Memory, `ExportCommand`⊂ConceptMap, `RevisionChangeCommand`⊂Revision.
+  `SyncCommand`⊂Memory, `RevisionChangeCommand`⊂Revision. (The concept-map export
+  is the `ConceptMapCommand::Export` *variant* — it rides `ConceptMap`.)
+- **`ExportCommand` is a TOP-LEVEL verb, not nested** (`Command::Export`,
+  `main.rs:583,2955,4153`; corrected codex round 4 — it is **not** `⊂ConceptMap`).
+  Its body calls `lazyspec::run_export_lazyspec` (defined in `lazyspec.rs:697`), so
+  its dispatch rides the residual match → `commands/cli.rs`, giving a harmless
+  `commands→lazyspec` sink out-edge. No kind fold, no carve-out.
 - **`commands/` shells** (data below command tier): `Coverage`→
   `commands/coverage.rs` (all `coverage*` modules are engine), `Map`→
   `commands/map.rs` (exists).
@@ -359,6 +372,20 @@ forced and correct (point 4). It **refuted** my "only known instance" claim:
   cycle. **Verified** all five facts against source. **Fixed:** route `SpecReq`
   into `spec.rs` (own-module, zero edge) — §4 + D1a updated; the audit rule
   generalised to "route to where the `run_*` lives, not the nominal kind name."
+
+### Codex round 4 (final exhaustive cycle sweep) — clean
+
+Same thread. GPT-5.5 read-only verified the `SpecReq→spec` fix and ran a
+**complete per-kind table** over every folded dispatch arm + nested sub-enum,
+cross-checking each body's command-tier calls against the kind's `layering.toml`
+import row. **Result:** `SpecReq→spec.rs` is genuinely zero-new-edge (its only
+command-tier refs, `requirement::ReqKind/ReqStatus`, are already imported by
+`spec.rs:41`; `requirement.rs` stays CLI-free). **`memory→corpus` is the sole
+remaining cycle-former** (D1a carve-out handles it); **no third instance exists.**
+Two factual corrections folded (neither a cycle risk): `ExportCommand` is a
+top-level verb, not `⊂ConceptMap` (§4); `run_catalog_scan`/`run_catalog_graph` are
+main.rs orphans that ride the Catalog fold (§3). **Verdict: safe to advance to
+/plan on the layering/cycle question.**
 
 ### R1 — SL-129 coordination (cross-slice conflict, decision needed)
 
