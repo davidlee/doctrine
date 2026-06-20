@@ -51,8 +51,35 @@ provision copies FROM source TO the worker worktree with source ≠ fork.
 
 ## Summary
 
-(to be completed at close)
+ISS-011 **Defect C** resolved. `run_stamp_subagent` now derives the provision
+SOURCE from the repo's **primary worktree** via the new private helper
+`primary_worktree(cwd)` (first `worktree <path>` of `git worktree list
+--porcelain`, canonicalized) instead of `root::find` on the hook process cwd. The
+`SubagentStart` hook fires inside the worker worktree, so the process cwd is the
+fork; the old code made `source == fork` and `verify_sibling_worktree` bailed. The
+**R1 binding anchor** (`repo = root::find`, `cwd_valid`, `classify_stamp`, every
+`StampRefusal` token, the `(Some,Some)` bind) is behaviourally unchanged — only the
+R2 source role moved (`src/worktree.rs`).
+
+Delivered single-phase via `/dispatch` (claude arm), one source-delta commit
+`9ce7dc0c`; integrated surface = candidate `cand-125-review-001`. VT-1 (Defect-C
+pin) red→green, VT-2 unit (`primary_worktree`), VT-3 refusals unchanged, VT-4
+cross-repo `bad-dir` (codex BLOCKER closure); 2073 bin + 11 e2e pass, clippy
+zero-warnings, fmt clean. Audited as RV-111 (4 findings, all verified, no
+blockers).
+
+**Caveat:** end-state acceptance VH-1 (worker comes up stamped with no hand-stamp)
+is deferred to post-integration — Defect C was live during this very drive (old
+orchestrator binary), so the worker came up unstamped and was hand-stamped from the
+primary. VT-1 pins the mechanism in-suite; re-run the IMP-046 probe once this lands
+on `main` and the orchestrator is rebuilt.
 
 ## Follow-Ups
 
-(none yet)
+- **FU-1 → IDE-017.** Orchestrator-addressable worker provisioning if
+  `.worktreeinclude` ever grows genuinely per-worktree-divergent untracked state the
+  worker must inherit from the orchestrator (the hook cannot name that tree). Source
+  byte-equivalence (primary == orchestrator) holds today only for the one-file
+  allowlist (design §2/A4).
+- **VH-1.** Re-run the IMP-046 fresh-session probe post-integration to confirm a
+  `dispatch-worker` comes up stamped with no hand-stamp.

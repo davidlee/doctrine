@@ -85,3 +85,28 @@ integrated surface: 2073 bin tests + 11 e2e pass, clippy zero-warnings, fmt clea
   follow-up as a backlog idea (do not lose it; it has no home yet).
 - **RSK-010:** already updated this drive with the setup-time base-staleness
   manifestation + `DOCTRINE_TRUNK_REF=main` workaround.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- `slice-125.md` §Summary + §Follow-Ups: replaced the `(to be completed at close)`
+  / `(none yet)` placeholders with the as-built summary (primary-worktree SOURCE,
+  R1 unchanged, Defect C resolved, RV-111 audited) and follow-ups (FU-1→IDE-017,
+  VH-1 post-integration probe). Drove RV-111 **F-3**.
+- `design.md` §Follow-ups already carried FU-1 — no edit needed.
+
+### REVs completed
+- **None.** Reconciliation brief recorded no governance/spec items — no ADR, spec,
+  requirement, policy, or standard changed. The slice makes the existing happy path
+  actually stamp; ADR-006 (incl. marker-absent fail-closed D2a) and ADR-001 are
+  untouched.
+
+### Withdrawn / tolerated
+- RV-111 **F-1** (tolerated): `just check` lint-js failure is pre-existing env
+  breakage, out of scope; Rust gate green.
+- RV-111 **F-2** (tolerated): VH-1 deferred to post-integration; recorded in the
+  slice Summary caveat + notes.md.
+- RV-111 **F-4** (tolerated): source byte-equivalence limitation → captured as
+  IDE-017 (FU-1).
+
+Reconcile pass complete — handoff to /close.
