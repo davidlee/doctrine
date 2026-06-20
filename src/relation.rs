@@ -174,6 +174,8 @@ impl RelationLabel {
     }
 }
 
+use anyhow::Context;
+
 use crate::entity::Kind;
 use crate::kinds::{
     ADR, ASM, BACKLOG, CHR, CM, CON, DEC, GOV, IDE, IMP, ISS, POL, PRD, QUE, REC, RECORD, REQ, REV,
@@ -803,9 +805,8 @@ pub(crate) fn append_edge(
         .map_err(|e| anyhow::anyhow!("read {} for relation append: {e}", toml_path.display()))?;
     let (next, outcome) = append_relation_row(&text, label, target)?;
     if outcome == AppendOutcome::Wrote {
-        std::fs::write(toml_path, next).map_err(|e| {
-            anyhow::anyhow!("write {} after relation append: {e}", toml_path.display())
-        })?;
+        crate::fsutil::write_atomic(toml_path, next.as_bytes())
+            .with_context(|| format!("write {} after relation append", toml_path.display()))?;
     }
     Ok(outcome)
 }
@@ -822,9 +823,8 @@ pub(crate) fn remove_edge(
         .map_err(|e| anyhow::anyhow!("read {} for relation remove: {e}", toml_path.display()))?;
     let (next, outcome) = remove_relation_row(&text, label, target)?;
     if outcome == RemoveOutcome::Removed {
-        std::fs::write(toml_path, next).map_err(|e| {
-            anyhow::anyhow!("write {} after relation remove: {e}", toml_path.display())
-        })?;
+        crate::fsutil::write_atomic(toml_path, next.as_bytes())
+            .with_context(|| format!("write {} after relation remove", toml_path.display()))?;
     }
     Ok(outcome)
 }

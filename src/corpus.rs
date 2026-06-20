@@ -400,9 +400,17 @@ fn apply(shipped: &Path, plan: &CorpusPlan) -> Result<()> {
         let dir = shipped.join(&asset.uid);
         fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
         let toml_path = dir.join("memory.toml");
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "derived: shipped-corpus sync into the items tree"
+        )]
         fs::write(&toml_path, &asset.toml)
             .with_context(|| format!("Failed to write {}", toml_path.display()))?;
         let md_path = dir.join("memory.md");
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "derived: shipped-corpus sync into the items tree"
+        )]
         fs::write(&md_path, &asset.md)
             .with_context(|| format!("Failed to write {}", md_path.display()))?;
     }

@@ -1813,7 +1813,7 @@ pub(crate) fn run_tag(
         .with_context(|| format!("Failed to parse {}", item_path.display()))?;
     let changed = apply_tags(&mut doc, &add_set, &remove_set, &crate::clock::today())?;
     if changed {
-        std::fs::write(&item_path, doc.to_string())
+        crate::fsutil::write_atomic(&item_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", item_path.display()))?;
     }
 

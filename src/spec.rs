@@ -796,7 +796,7 @@ fn append_member(
     row.insert("label", toml_edit::value(label));
     row.insert("order", toml_edit::value(i64::from(order)));
     members.push(row);
-    std::fs::write(members_path, doc.to_string())
+    crate::fsutil::write_atomic(members_path, doc.to_string().as_bytes())
         .with_context(|| format!("Failed to write {}", members_path.display()))
 }
 
@@ -2658,12 +2658,18 @@ parent = \"SPEC-002\"
         let root = dir.path();
         fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
 
-        // make the append target read-only: the label/order scan still reads it
-        // (valid seed), the reserve succeeds, the final write fails → torn write.
+        // Make the append target's DIRECTORY read-only. The label/order scan still
+        // reads members.toml (valid seed) and the requirement reserve (a different
+        // dir) succeeds, but the member append's temp+rename in this dir fails → no
+        // member row is written. NB: since SL-113 the append goes through
+        // `write_atomic`, which renames over a read-only *file* fine (rename keys on
+        // *directory* write perm) — so the old 0o444-on-the-file trick no longer
+        // induces failure; the directory must be made unwritable instead.
         let members_path = root.join(".doctrine/spec/product/001/members.toml");
-        let mut perms = fs::metadata(&members_path).unwrap().permissions();
-        perms.set_mode(0o444);
-        fs::set_permissions(&members_path, perms).unwrap();
+        let members_dir = root.join(".doctrine/spec/product/001");
+        let mut perms = fs::metadata(&members_dir).unwrap().permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&members_dir, perms).unwrap();
 
         let err = run_req_add(
             Some(root.to_path_buf()),
@@ -2673,9 +2679,15 @@ parent = \"SPEC-002\"
             None,
             None,
         );
+
+        // Restore writability so the tempdir can be reaped on drop.
+        let mut perms = fs::metadata(&members_dir).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&members_dir, perms).unwrap();
+
         assert!(
             err.is_err(),
-            "append must fail on the read-only members.toml"
+            "append must fail when its directory is read-only"
         );
 
         // the reserved requirement is an orphan: present (uncommitted), no member row.

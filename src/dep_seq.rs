@@ -175,7 +175,7 @@ pub(crate) fn append(toml_path: &Path, edit: &RelEdit<'_>) -> anyhow::Result<()>
     if !changed {
         return Ok(()); // every entry already present — write nothing (mtime holds).
     }
-    std::fs::write(toml_path, doc.to_string())
+    crate::fsutil::write_atomic(toml_path, doc.to_string().as_bytes())
         .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     Ok(())
 }
@@ -243,7 +243,7 @@ pub(crate) fn remove(
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
     let count = remove_after(&mut doc, to, rank_ceiling)?;
     if count > 0 {
-        std::fs::write(toml_path, doc.to_string())
+        crate::fsutil::write_atomic(toml_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     }
     Ok(count)
@@ -353,7 +353,7 @@ pub(crate) fn set_authored_status(
         .with_context(|| format!("Failed to parse {}", path.display()))?;
     let changed = apply_status(&mut doc, managed, hint)?;
     if changed {
-        std::fs::write(path, doc.to_string())
+        crate::fsutil::write_atomic(path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", path.display()))?;
     }
     Ok(changed)
@@ -375,7 +375,7 @@ pub(crate) fn append_string_array(path: &Path, field: &str, value: &str) -> anyh
         .with_context(|| format!("Failed to parse {}", path.display()))?;
     let changed = apply_string_append(&mut doc, field, value)?;
     if changed {
-        std::fs::write(path, doc.to_string())
+        crate::fsutil::write_atomic(path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", path.display()))?;
     }
     Ok(changed)
