@@ -104,3 +104,26 @@ F-2 (two journal readers) is design-scoped intent, not drift.
 governance already tell the truth. `/reconcile` confirms no-op truth and hands to
 `/close`. Close step-3a (`dispatch sync --integrate --trunk refs/heads/main`) must
 run before `reconcile → done`, or this slice's own gate refuses the transition.
+
+## Reconciliation Outcome
+
+**No-op reconcile.** The reconciliation brief carried no write-surface work — no
+per-slice `design.md`/`slice-126.md` edits, no governance/spec REV. The
+implementation conforms to the locked design and introduces no ADR/REQ/policy
+drift (ADR-001 fitness gate green), so reconciled truth requires no writes.
+
+### Direct edits applied
+- None.
+
+### REVs completed
+- None.
+
+### Withdrawn / tolerated / aligned
+- F-1 (nit): **tolerated** — cosmetic `src/slice.rs:406` comment §-ref; rationale
+  in the finding disposition. May ride any future `slice.rs` touch.
+- F-2 (minor): **aligned** — two journal tree-readers coexist by design §3.3's
+  deliberately narrow DRY scope; not drift, no write.
+
+Reconcile pass complete — handoff to `/close`. Pre-`done` obligation stands: close
+step-3a `dispatch sync --integrate --trunk refs/heads/main` must land the journaled
+code on `main` before `reconcile → done`, else SL-126's own integration gate refuses.
