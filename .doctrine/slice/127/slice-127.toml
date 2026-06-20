@@ -1,7 +1,7 @@
 id = 127
 slug = "dispatch-base-freshness"
 title = "Dispatch base freshness: ancestor-dominant ladder and mid-drive refresh"
-status = "ready"
+status = "audit"
 created = "2026-06-20"
 updated = "2026-06-20"
 
