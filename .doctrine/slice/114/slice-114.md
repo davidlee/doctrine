@@ -10,6 +10,13 @@ eight kinds redefine their own `canonical_id` instead of delegating to it:
 - `knowledge.rs:125`, `requirement.rs:244`, `backlog.rs:155`, `spec.rs:1160`,
   `review.rs:866`, `rec.rs:376`, `revision.rs:476`, `slice.rs:759`.
 
+**Drift note (2026-06-20, design):** by design time, four of the eight already
+delegate (`rec`, `slice`, `revision`, `review`, and the spec **free fn**) — prior
+work consolidated them. Four raw `format!` sites remain: `requirement.rs:244`,
+`knowledge.rs:125` (method), `backlog.rs:156` (method), `spec.rs:106` (method).
+`spec.rs` additionally carries a same-output duplicate — a method (`:106`) and a
+delegating free fn (`:1164`); the design collapses these to the method (D1).
+
 Pure copy-paste of the same `format!("{:03}")` logic. Low-severity but it spreads:
 each new kind copies the pattern, and any change to the id format (padding width,
 separator) means editing N sites. This is the cheapest DRY win in the audit.
