@@ -70,10 +70,12 @@ human/agent in the main tree) is named, not solved — that is true pre-worker i
 **Trivia.** F-4 (a redundant HEAD rev-parse) tolerated — negligible and faithful to the
 design pseudocode.
 
-**Pending human gate.** VH-1 (human sign-off that the base-guard wording is unambiguous
-and the footer-gate cadence is followable) is the only verification not closable by the
-auditor. On review the prose is clear, complete, and followable — recommend pass — but
-the sign-off is the user's.
+**Human gate — SIGNED.** VH-1 (human sign-off that the base-guard wording is unambiguous
+and the footer-gate cadence is followable) was the only verification not closable by the
+auditor. Signed off PASS by the user (2026-06-20), recorded as F-5 — prose clear,
+complete, followable; the budget bump did not compress the safety prose (R3). Two
+distill-time orchestrator obligations (fill `<B>`/`<seams>`) noted as prompt-fill duties,
+not prose defects.
 
 ## Reconciliation Brief
 

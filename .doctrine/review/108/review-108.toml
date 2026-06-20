@@ -48,5 +48,14 @@ detail = "src/worktree.rs run_verify_worker: 'git rev-parse --verify HEAD' runs 
 disposition = "tolerated"
 response = "Tolerated. The redundant rev-parse is negligible (two cheap reads on the same worktree, no correctness effect) and faithful to design §5.2's pseudocode; not worth a deviation from the locked design at audit time. Could be folded into a future micro-cleanup if run_verify_worker is touched again."
 
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "VH-1 (PHASE-02 human acceptance): base-guard wording + footer-gate cadence — expected unambiguous & followable"
+detail = "VH-1 verification criterion (plan.toml PHASE-02): a human confirms the dispatch-agent BASE GUARD block (4 checks) is unambiguous and the Post-spawn pre-funnel footer-gate cadence (footer-abort → verify-worker --branch with 5 refusal tokens → hand branch as S) is followable by an orchestrator, with no line-budget-driven compression of the safety prose (R3). Reviewed via walkthrough against the candidate surface."
+disposition = "aligned"
+response = "ACCEPTED by human sign-off (david.lee, 2026-06-20). Base-guard 4 checks are concrete commands with binary pass conditions; Post-spawn gate is a 3-step cadence with named substitutions and a defined abort+recovery; all 4 checks + 5 tokens survive the budget bump intact (R3 satisfied). Two distill-time orchestrator obligations noted (fill <B> check 3, <seams> check 4) — prompt-fill duties, not prose defects. VH-1 PASS."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
