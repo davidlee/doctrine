@@ -25,35 +25,40 @@ dependencies = []
 [[phase]]
 id        = "PHASE-01"
 name      = "RFC kind foundation"
-objective = "Introduce RFC as a registered first-class authored kind: mint and show round-trip, tree committable, engine suites green. (design §1 'beyond the relation layer', §3, §5 D1)"
+objective = "Introduce RFC as a fully-registered first-class authored kind: mint (status-bearing) and show round-trip, ALL registration surfaces landed together (KINDS + outbound_for arm + manifest/.gitignore), tree committable, engine suites green. The whole F1 registration set lands here — a KINDS row without its outbound_for arm panics every debug corpus scan (scan.rs:68-83, REV precedent). (design §1 'beyond the relation layer', §2 read-path, §3, §5 D1)"
 entrance_criteria = [
   { id = "EN-1", text = "design.md locked: §3 naming (.doctrine/rfc singular), §5 D1 (governance-neutral kind-is-data), Affected Surface enumerates the hand-maintained registration surfaces." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "`doctrine rfc new` mints RFC-001 and scaffolds rfc-001.toml + rfc-001.md under .doctrine/rfc/ from templates." },
-  { id = "EX-2", text = "`doctrine rfc show RFC-001` synthesises both tiers (structured TOML + prose MD), mirroring adr/rec show." },
+  { id = "EX-2", text = "`doctrine rfc show RFC-001` synthesises both tiers (structured TOML + prose MD), mirroring adr show (the status-bearing read path — see EX-7)." },
   { id = "EX-3", text = "RFC added to integrity::KINDS (hand table); generic id ops validate/reseat cover RFC ids." },
   { id = "EX-4", text = "Authored-tree wiring landed: install/manifest.toml [dirs].create includes .doctrine/rfc and .gitignore carries !.doctrine/rfc/ — the tree is git-committable, not silently ignored." },
   { id = "EX-5", text = "Existing entity-engine suites pass unchanged (behaviour-preservation gate)." },
+  { id = "EX-6", text = "catalog::scan::outbound_for has an RFC arm landed WITH the KINDS row (EX-3) — a stub `Ok(vec![])` is acceptable here per the REV precedent (scan.rs:68-72); PHASE-03 fills it with the real reader. The point: a minted RFC must not hit the `unrouted KINDS prefix` debug_assert (scan.rs:83) on any corpus scan." },
+  { id = "EX-7", text = "`rfc new` writes status=open into the TOML tier; RFC is read via the status-bearing path (ADR/slice), NOT REC's status-less meta::read_id. The status FIELD + read path are foundation (design §2); the transition verb + list filtering are PHASE-02." },
 ]
 verification = [
   { id = "VT-1", expects = "mint→show round-trip test: rfc new writes both tier files; rfc show renders structured + prose tiers." },
   { id = "VT-2", expects = "integrity test: a well-formed RFC id validates; a malformed/missing one is rejected; reseat handles RFC." },
   { id = "VT-3", expects = "`git check-ignore .doctrine/rfc/rfc-001.toml` reports NOT ignored (the negation actually admits the tree)." },
-  { id = "VA-1", expects = "agent confirms install/manifest.toml + .gitignore edits match design §4 wiring exactly and the full engine suite is green." },
+  { id = "VT-4", expects = "corpus-scan test: mint RFC-001 then run a debug-build corpus scan (scan_entities / outbound_for over the RFC) — no panic (the arm is routed, EX-6)." },
+  { id = "VT-5", expects = "status test: a freshly minted RFC reads status=open via the status-bearing path (EX-7)." },
+  { id = "VA-1", expects = "agent confirms install/manifest.toml + .gitignore edits match design §4 wiring exactly (suite-green is EX-5, not re-checked here)." },
+  { id = "VA-2", expects = "agent confirms A2: RFC needed no GovKind wrapper and no governance-or-slice engine assumption was bent — the engine took the ~13th kind data-only. If it did NOT, stop and /consult." },
 ]
 specs        = []
 requirements = []
 
 [[phase]]
 id        = "PHASE-02"
-name      = "Lifecycle + catalog list"
-objective = "RFC carries the minimal status machine (open → resolved|withdrawn), a CLI transition verb, and `rfc list` with open-by-default visibility. (design §2)"
+name      = "Lifecycle transitions + catalog list"
+objective = "RFC gains the status MACHINE on top of PHASE-01's status field: the transition verb (open → resolved|withdrawn), the RFC_STATUSES known-set, and `rfc list` with open-by-default visibility. (design §2 — the default-open field + status-bearing read are PHASE-01 EX-7.)"
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01 complete: RFC mints, shows, and is KINDS-registered." },
+  { id = "EN-1", text = "PHASE-01 complete: RFC mints status=open, shows via the status-bearing path, is KINDS-registered and outbound_for-routed." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "RFC_STATUSES = {open, resolved, withdrawn}; a newly minted RFC defaults to open; RFC reads via the status-bearing path (not REC's status-less meta::read_id)." },
+  { id = "EX-1", text = "RFC_STATUSES = {open, resolved, withdrawn} is the defined known-status set; transitions and `--status` validate against it (mirrors governance.rs:66 / revision.rs:50). (Default-open field + read path land in PHASE-01 EX-7, not here.)" },
   { id = "EX-2", text = "`doctrine rfc status <id> <state>` transitions among the known set and rejects unknown/illegal states (status moves via CLI, not hand-edit)." },
   { id = "EX-3", text = "`doctrine rfc list` shows open only by default; `--status` reveals resolved/withdrawn and validates its values against RFC_STATUSES." },
 ]
@@ -70,18 +75,18 @@ id        = "PHASE-03"
 name      = "Relations: RFC own edges + REV→RFC precursor"
 objective = "RFC participates as a relation source via the existing related/AnyNumbered rule (catalog scan routed); REV→RFC `originates_from` is authored revision-owned (TypedVerbOnly), derived inbound 'precursor of' on RFC. (design §1 Decisions 1 & 2)"
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01 complete: RFC is a numbered, KINDS-registered kind." },
+  { id = "EN-1", text = "PHASE-01 complete: RFC is a numbered, KINDS-registered kind with a stub outbound_for arm (EX-6) ready to fill." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "RFC added to the `related` (AnyNumbered) rule's sources; `doctrine link RFC-NNN related <entity>` round-trips and the reciprocal renders as derived inbound on the target." },
-  { id = "EX-2", text = "catalog::scan::outbound_for routes RFC by prefix — RFC outbound edges are non-empty in release (no degraded empty-edge path)." },
+  { id = "EX-2", text = "PHASE-01's stub outbound_for RFC arm (EX-6) is filled with the real reader — RFC outbound edges are non-empty in release (no degraded empty-edge path). (The arm already EXISTS from PHASE-01; this phase replaces the stub body, not the routing.)" },
   { id = "EX-3", text = "New `originates_from` rule row: sources &[REV], target Kinds(&[RFC]), Tier::Typed, LinkPolicy::TypedVerbOnly, inbound_name 'precursor of'." },
-  { id = "EX-4", text = "A revision verb/flag authors the edge (`revision new --originates-from RFC-NNN` and/or `revision originates-from <rev> <rfc>`); generic `doctrine link … originates_from …` is refused, naming the typed verb." },
+  { id = "EX-4", text = "A revision CREATION-FLAG authors the edge: `doctrine revision new --originates-from RFC-NNN`, mirroring how `revises` is TypedVerbOnly (revision-owned, no [[change]] payload — a provenance ref). Generic `doctrine link … originates_from …` is refused, naming the typed verb. (A standalone `revision originates-from` verb is a candidate follow-up, NOT in this phase.)" },
   { id = "EX-5", text = "`inspect RFC-NNN` shows 'precursor of: REV-NNN' as pure derived render — no reverse edge stored on the RFC (ADR-004 clean)." },
 ]
 verification = [
   { id = "VT-1", expects = "RFC `related`→entity round-trips; the target's derived inbound lists the RFC." },
-  { id = "VT-2", expects = "the revision verb/flag authors `originates_from`; inspect RFC shows 'precursor of: REV-NNN'." },
+  { id = "VT-2", expects = "the `revision new --originates-from` flag authors `originates_from`; inspect RFC shows 'precursor of: REV-NNN'." },
   { id = "VT-3", expects = "generic `link … originates_from …` is refused with the TypedVerbOnly message (REV discipline not bypassable)." },
   { id = "VT-4", expects = "catalog scan test: an RFC with a `related` edge yields non-empty outbound_for(RFC) (prefix dispatch wired)." },
 ]
@@ -105,6 +110,7 @@ verification = [
   { id = "VT-1", expects = "status render test: count line present; >10 open RFCs render exactly 10 titles + '+K more'." },
   { id = "VT-2", expects = "empty-state test: only-open-RFCs repo still renders 'No active work'." },
   { id = "VT-3", expects = "boot test: boot snapshot has no RFC section and existing boot output is byte-unchanged (boot_sequence untouched)." },
+  { id = "VT-4", expects = "envelope test: the serialized status JSON carries the rfc count + open-title data (the data model, not just the rendered text — design §4 F4)." },
 ]
 specs        = []
 requirements = []
