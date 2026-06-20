@@ -1037,7 +1037,7 @@ enum DispatchCommand {
         /// `planned_new_oid` — the row whose target is `--trunk` — to stdout and
         /// exit; the close step-3a verify read surface. Tree-reads `dispatch/<slice>`,
         /// writes nothing.
-        #[arg(long, group = "stage", required = true, requires = "trunk")]
+        #[arg(long, group = "stage", required = true)]
         show_journal_trunk_oid: bool,
 
         /// Project the cumulative code units onto this trunk ref, fast-forward-only +
@@ -1152,6 +1152,14 @@ enum DispatchCommand {
         json: bool,
 
         /// Explicit project root.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Print the resolved `[dispatch] deliver_to` trunk delivery ref to stdout
+    /// (SL-128 / IMP-124). Read-only — callable from anywhere.
+    DeliverTo {
+        /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
@@ -3198,7 +3206,9 @@ fn write_class(cmd: &Command) -> WriteClass {
             },
             // plan-next / status — read plan + phase sheets; never mutates a
             // ref or ledger row — Read-classed so it works under worker-mode.
-            DispatchCommand::PlanNext { .. } | DispatchCommand::Status { .. } => Read,
+            DispatchCommand::PlanNext { .. }
+            | DispatchCommand::Status { .. }
+            | DispatchCommand::DeliverTo { .. } => Read,
         },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and
@@ -4311,12 +4321,11 @@ fn main() -> anyhow::Result<()> {
                 // The `stage` group is `required = true` single-choice: exactly one
                 // of `--prepare-review` / `--integrate` / `--show-journal-trunk-oid`
                 // is set, so the booleans select the stage in order (no unreachable
-                // arm). `--show-journal-trunk-oid` requires `--trunk` (clap-enforced).
+                // arm).
                 if show_journal_trunk_oid {
-                    let trunk = trunk.as_deref().ok_or_else(|| {
-                        anyhow::anyhow!("--show-journal-trunk-oid requires --trunk")
-                    })?;
-                    dispatch::run_show_journal_trunk_oid(path, slice, trunk)
+                    // SL-128 D3: absent `--trunk` defaults from `[dispatch] deliver_to`;
+                    // explicit `--trunk` still wins. `--integrate` is unchanged.
+                    dispatch::run_show_journal_trunk_oid(path, slice, trunk.as_deref())
                 } else if integrate {
                     dispatch::run_integrate(path, slice, trunk.as_deref(), edge.as_deref())
                 } else {
@@ -4392,6 +4401,7 @@ fn main() -> anyhow::Result<()> {
             DispatchCommand::Status { slice, json, path } => {
                 dispatch::run_status(path, slice, json)
             }
+            DispatchCommand::DeliverTo { path } => dispatch::run_deliver_to(path),
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
