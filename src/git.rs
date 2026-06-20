@@ -1124,6 +1124,120 @@ pub(crate) fn worktree_for_ref(
     Ok(parse_worktree_for_ref(&listing, refname))
 }
 
+/// True iff the *tracked* working tree at `root` is clean — `git status
+/// --porcelain --untracked-files=no` empty (SL-121 §2.3). The single tracked-clean
+/// predicate (leaf altitude, ADR-001): the integrate dirty pre-gate (dispatch.rs),
+/// the §2.5 probe→merge re-check ([`ff_advance_in_worktree`]), and
+/// `worktree::gather_tree_clean` all share it. Untracked scratch is deliberately
+/// excluded — ephemeral files in a close session must not block a clean advance
+/// (F1: an untracked *collision* is caught later by `merge --ff-only`'s own abort).
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if the `git status` invocation fails.
+pub(crate) fn tree_clean(root: &Path) -> Result<bool, CaptureError> {
+    let status = git_text(root, &["status", "--porcelain", "--untracked-files=no"])?;
+    Ok(status.is_empty())
+}
+
+/// Outcome of a guarded fast-forward advance of a checked-out ref
+/// ([`ff_advance_in_worktree`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FfAdvance {
+    /// The worktree's checked-out `target_ref` fast-forwarded to `planned`; ref +
+    /// index + worktree all landed on `planned` with a clean tree.
+    Advanced,
+    /// A §2.5 race guard tripped — HEAD detached/switched off `target_ref`, the
+    /// tree dirtied in the probe→merge window (M5), the merge aborted (e.g. an
+    /// untracked collision, F1), or the post-merge ref did not land on `planned`.
+    /// Nothing is claimed about the ref beyond "not a clean advance"; `token` is
+    /// the caller's report fragment. Captured, never a bare `?`-`Err` (B3).
+    Raced { token: String },
+}
+
+/// Fast-forward the checked-out `target_ref` in worktree `wt` to `planned` via
+/// git's own `merge --ff-only` — the only primitive that advances ref + index +
+/// worktree atomically (design §2.2). Guarded for the probe→merge TOCTOU
+/// (§2.5/M6): before the merge HEAD must still be symbolically on `target_ref` and
+/// the tracked tree clean (the M5 window `merge --ff-only` does NOT itself close);
+/// after, `target_ref` must resolve to `planned`. Any guard failure or a merge
+/// abort is a captured [`FfAdvance::Raced`] (the caller journals the row `Failed`),
+/// NEVER a bare `?`-`Err` that would abort before status is durable (B3).
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] only for a genuine plumbing failure (a probe that
+/// cannot run), never for a semantic race.
+pub(crate) fn ff_advance_in_worktree(
+    wt: &Path,
+    target_ref: &str,
+    planned: &str,
+) -> Result<FfAdvance, CaptureError> {
+    // Pre-guard: HEAD still symbolically attached to target_ref (not detached or
+    // switched to a sibling branch — else the merge would advance the wrong ref).
+    let head = git_opt(wt, &["symbolic-ref", "--quiet", "HEAD"])?;
+    if head.as_deref() != Some(target_ref) {
+        return Ok(FfAdvance::Raced {
+            token: format!(
+                "raced HEAD off {target_ref} (now {})",
+                head.as_deref().unwrap_or("detached")
+            ),
+        });
+    }
+    // Pre-guard: tracked tree still clean (the M5 window merge --ff-only ignores).
+    if !tree_clean(wt)? {
+        return Ok(FfAdvance::Raced {
+            token: format!("raced dirty worktree at {target_ref}"),
+        });
+    }
+    // The atomic advance: ref + index + worktree together.
+    let out = run_git(wt, &["merge", "--ff-only", planned])?;
+    if !out.status.success() {
+        return Ok(FfAdvance::Raced {
+            token: format!(
+                "ff-only merge aborted at {target_ref}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+        });
+    }
+    // Post-condition: target landed exactly on planned (§2.2 post-assert).
+    let now = git_opt(wt, &["rev-parse", "--verify", "--quiet", target_ref])?;
+    if now.as_deref() != Some(planned) {
+        return Ok(FfAdvance::Raced {
+            token: format!(
+                "post-merge {target_ref} at {} not planned {planned}",
+                now.as_deref().unwrap_or("?")
+            ),
+        });
+    }
+    Ok(FfAdvance::Advanced)
+}
+
+/// Resync the checked-out worktree `wt`'s index + tracked tree onto `oid` via `git
+/// reset --hard <oid>` — the None-leg post-CAS resync (design §2.2). When the race
+/// fires, `update_ref_cas` has ALREADY advanced `target_ref` to `oid`, so the live
+/// worktree's HEAD now resolves to `oid` while its index/tree are stale at the old
+/// commit. `reset --keep`/`--merge` only touch files differing between `<oid>` and
+/// HEAD — and HEAD == `oid` here (the ref moved under it), so they see no diff and
+/// leave the desync UNFIXED (proven empirically). `reset --hard` sets index+tree to
+/// `<oid>` unconditionally, immune to the HEAD-already-moved ordering. It is
+/// content-safe ONLY because the caller invokes it after [`tree_clean`] confirmed
+/// the tree clean (no tracked local modification to discard; untracked files
+/// survive `reset --hard`); a failure here is a genuine plumbing fault,
+/// `?`-propagated.
+///
+/// (Design §2.2 originally named `reset --keep`; that cannot fix the
+/// already-advanced ref — corrected to `reset --hard` under the clean precondition,
+/// folded back into the design at reconcile.)
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if the `git reset --hard` invocation fails.
+pub(crate) fn resync_worktree_hard(wt: &Path, oid: &str) -> Result<(), CaptureError> {
+    git_text(wt, &["reset", "--hard", oid])?;
+    Ok(())
+}
+
 /// Capture the born frame for the working tree at `repo_root` (design §5.2).
 ///
 /// Three Ok states: clean → [`AnchorKind::Commit`] (`commit`/`tree`/`base_commit`/
@@ -2789,6 +2903,128 @@ branch refs/heads/orphan
                 Err(CaptureError::Git(_))
             ),
             "a git failure surfaces as Err, distinct from Ok(None)",
+        );
+    }
+
+    // --- SL-121 PHASE-02: worktree-aware advance shells -----------------------
+
+    /// Build `main @ c1` (checked out) with a descendant `c2` parked on `side`,
+    /// leaving the working tree on `main` at `c1`. The shared fixture for the
+    /// ff-advance / reset-keep shell tests.
+    fn main_at_c1_with_descendant_c2(repo: &ScratchRepo) -> (String, String) {
+        let c1 = repo.commit("a.txt", "1", "first");
+        repo.git(&["branch", "side"]);
+        repo.git(&["checkout", "side"]);
+        let c2 = repo.commit("b.txt", "2", "second");
+        repo.git(&["checkout", "main"]);
+        assert_eq!(repo.git(&["rev-parse", "main"]), c1);
+        (c1, c2)
+    }
+
+    /// `tree_clean` reports tracked dirt and ignores untracked scratch — the
+    /// `--untracked-files=no` predicate shared by the dirty pre-gate and the §2.5
+    /// race re-check.
+    #[test]
+    fn tree_clean_reports_tracked_dirt_ignores_untracked() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "1", "first");
+        assert!(super::tree_clean(repo.path()).expect("clean"));
+        repo.write("untracked.txt", "x");
+        assert!(
+            super::tree_clean(repo.path()).expect("clean w/ untracked"),
+            "untracked files are ignored (--untracked-files=no)",
+        );
+        repo.write("a.txt", "changed");
+        assert!(
+            !super::tree_clean(repo.path()).expect("dirty"),
+            "tracked modification is dirt",
+        );
+    }
+
+    /// Clean fast-forward of a checked-out ref: ref + index + worktree all land on
+    /// `planned`, `git status` empty (the ISS-022/030 desync this shell kills).
+    #[test]
+    fn ff_advance_in_worktree_advances_checked_out_ref() {
+        let repo = ScratchRepo::new();
+        let (_c1, c2) = main_at_c1_with_descendant_c2(&repo);
+
+        let out = super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2)
+            .expect("probe ok");
+        assert_eq!(out, super::FfAdvance::Advanced);
+        assert_eq!(repo.git(&["rev-parse", "main"]), c2, "ref advanced");
+        assert_eq!(repo.git(&["rev-parse", "HEAD"]), c2, "HEAD advanced with it");
+        assert!(
+            repo.git(&["status", "--porcelain"]).is_empty(),
+            "index + worktree at planned — no phantom reverse-diff",
+        );
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("b.txt")).expect("read b"),
+            "2",
+            "worktree carries the advanced content",
+        );
+    }
+
+    /// §2.5 guard: HEAD detached off `target_ref` between probe and merge → a
+    /// captured `Raced`, never a wrong-ref advance.
+    #[test]
+    fn ff_advance_in_worktree_races_when_head_detached() {
+        let repo = ScratchRepo::new();
+        let (c1, c2) = main_at_c1_with_descendant_c2(&repo);
+        repo.git(&["checkout", "--detach"]); // HEAD detached at c1
+
+        match super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2).expect("probe ok") {
+            super::FfAdvance::Raced { token } => {
+                assert!(token.contains("HEAD"), "token names the HEAD race: {token}");
+            }
+            super::FfAdvance::Advanced => panic!("must refuse: HEAD is not on target_ref"),
+        }
+        assert_eq!(
+            repo.git(&["rev-parse", "main"]),
+            c1,
+            "main untouched under a raced HEAD",
+        );
+    }
+
+    /// §2.5 guard: a dirty tracked tree in the probe→merge window → a captured
+    /// `Raced` (merge --ff-only does NOT itself refuse arbitrary dirt, M5).
+    #[test]
+    fn ff_advance_in_worktree_races_when_tree_dirty() {
+        let repo = ScratchRepo::new();
+        let (c1, c2) = main_at_c1_with_descendant_c2(&repo);
+        repo.write("a.txt", "locally modified"); // tracked dirt
+
+        match super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2).expect("probe ok") {
+            super::FfAdvance::Raced { token } => {
+                assert!(token.contains("dirty"), "token names the dirt: {token}");
+            }
+            super::FfAdvance::Advanced => panic!("must refuse: tree is dirty"),
+        }
+        assert_eq!(repo.git(&["rev-parse", "main"]), c1, "main untouched");
+    }
+
+    /// The None-leg clean resync: a pure `update-ref` under a live checkout
+    /// desyncs the index/worktree; `resync_worktree_hard` restores them to the
+    /// advanced ref with a clean tree. `reset --keep` cannot (HEAD already moved
+    /// with the ref → no diff to apply); `reset --hard` is immune to that ordering.
+    #[test]
+    fn resync_worktree_hard_resyncs_stale_index_after_pure_ref_advance() {
+        let repo = ScratchRepo::new();
+        let (_c1, c2) = main_at_c1_with_descendant_c2(&repo);
+        // Simulate the None-leg desync: advance the ref under the live checkout.
+        repo.git(&["update-ref", "refs/heads/main", &c2]);
+        assert!(
+            !repo.git(&["status", "--porcelain"]).is_empty(),
+            "pure update-ref desynced the live checkout",
+        );
+
+        super::resync_worktree_hard(repo.path(), &c2).expect("reset --hard");
+        assert!(
+            repo.git(&["status", "--porcelain"]).is_empty(),
+            "resync restored index + worktree to the advanced ref",
+        );
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("b.txt")).expect("read b"),
+            "2",
         );
     }
 }

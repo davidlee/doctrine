@@ -1,0 +1,43 @@
+memory_uid = "mem_019ee2a5d84077d3a93c5a3ee52af7ab"
+memory_key = "mem.pattern.dispatch.reset-keep-cant-resync-already-advanced-ref"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "git reset --keep cannot resync a worktree whose branch already advanced under it"
+summary = "After a branch ref advances under a live checkout (pure update-ref), reset --keep/--merge see HEAD==target → no diff and leave the worktree stale; reset --hard (gated on a clean tree) is the correct resync."
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = ["src/git.rs", "src/dispatch.rs"]
+globs = []
+commands = ["doctrine dispatch sync"]
+tags = ["sl-121", "dispatch", "worktree", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1645e0a13b74ceff8e9f584274002e2368864a3e"
+ref_name = "refs/heads/dispatch/121"
+checkout_state_id = "d5d18ef11a9c10fbd7b187fa5bbb3271256740633d2c04d878b2bcf0117b03ca"
+base_commit = "bbfc90bbbc55830877765bc60d97d13cc6bc8b85"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

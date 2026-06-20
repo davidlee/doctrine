@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
 
-use crate::git::{self, MergeTree, RefCas, ReplayOutcome, ZERO_OID};
+use crate::git::{self, MergeTree, RefCas, ZERO_OID};
 use crate::ledger::{
     Admission, Boundaries, CandidateKind, CandidatePayload, CandidateRole, CandidateRow,
     CandidateStatus, Candidates, Journal, JournalRow, LedgerStatus, Orthogonal, read_candidates,
@@ -1091,9 +1091,24 @@ fn integrate(
         journal.rows.push(row);
     }
 
+    // --- §2.3/M4 dirty pre-gate: BEFORE the first commit_journal (which the
+    //     bracket owns and which advances dispatch/<slice>). Any checked-out target
+    //     with a DIRTY tracked tree refuses the WHOLE integrate with zero refs
+    //     moved — incl. dispatch/<slice> (EX-1). Pre-existing dirt only; concurrent
+    //     dirt is a raced-failure-after-advance (§7). Err early-return is correct:
+    //     nothing is journaled yet. -----------------------------------------------
+    for row in &journal.rows {
+        if let Some(wt) = git::worktree_for_ref(root, &row.target_ref)?
+            && !git::tree_clean(&wt)?
+        {
+            bail!("integrate-dirty-worktree ({})", row.target_ref);
+        }
+    }
+
     // --- journal the (possibly extended) intent onto the branch BEFORE any
-    //     external ref mutation (EX-5, ADR-012 D4); replay every row idempotently
-    //     under the 3-way CAS (EX-1/EX-2); record applied status back ------------
+    //     external ref mutation (EX-5, ADR-012 D4); advance every row idempotently
+    //     — exact-CAS classification, worktree-aware mechanism (§2.2, EX-2..EX-5);
+    //     record applied status back. ---------------------------------------------
     let outcomes = with_journaled_projection(
         root,
         &tip,
@@ -1102,50 +1117,164 @@ fn integrate(
         &coord_ref,
         &mut journal,
         "journal: integrate",
-        |root, row| {
-            match git::replay_ref(
-                root,
-                &row.target_ref,
-                &row.expected_old_oid,
-                &row.planned_new_oid,
-            )? {
-                ReplayOutcome::NoOp => {
-                    row.status = LedgerStatus::Verified;
-                    row.applied_new_oid = row.planned_new_oid.clone();
-                    Ok(RowOutcome::Done {
-                        disposition: Disposition::NoOp,
-                    })
-                }
-                ReplayOutcome::Applied => {
-                    row.status = LedgerStatus::Verified;
-                    row.applied_new_oid = row.planned_new_oid.clone();
-                    writeln!(io::stdout(), "{}", row.target_ref)?;
-                    Ok(RowOutcome::Done {
-                        disposition: Disposition::Applied,
-                    })
-                }
-                ReplayOutcome::Moved { actual } => {
-                    row.status = LedgerStatus::Failed;
-                    Ok(RowOutcome::Refused {
-                        token: format!(
-                            "{} (target at {})",
-                            row.target_ref,
-                            actual.as_deref().unwrap_or("?")
-                        ),
-                    })
-                }
-            }
-        },
+        advance_row,
     )?;
 
-    let moved: Vec<String> = outcomes
-        .into_iter()
-        .filter_map(|o| match o {
-            RowOutcome::Refused { token } => Some(token),
-            RowOutcome::Done { .. } => None,
+    report_integrate(&journal, &outcomes)
+}
+
+/// Advance one journal row to its planned oid — integrate's worktree-aware apply
+/// closure (design §2.2, EX-2..EX-5). Classification is the EXACT `replay_ref`
+/// predicate (`current == planned` → no-op; `current != expected_old` → moved;
+/// else advance); only the *mechanism* of the advance branches on the target's
+/// checkout state. A semantic refusal sets `row.status = Failed` and returns
+/// `Ok(RowOutcome::Refused)` (the post-loop recovery commit makes it durable, B3);
+/// `Err` is reserved for genuine plumbing failure.
+fn advance_row(root: &Path, row: &mut JournalRow) -> anyhow::Result<RowOutcome> {
+    let actual = resolve_commit(root, &row.target_ref)?;
+    let current = actual.as_deref().unwrap_or(ZERO_OID);
+    let planned = row.planned_new_oid.clone();
+    let expected_old = row.expected_old_oid.clone();
+
+    if current == planned {
+        row.status = LedgerStatus::Verified;
+        row.applied_new_oid = planned;
+        return Ok(RowOutcome::Done {
+            disposition: Disposition::NoOp,
+        });
+    }
+    if current != expected_old {
+        row.status = LedgerStatus::Failed;
+        return Ok(RowOutcome::Refused {
+            token: format!(
+                "{} (target at {})",
+                row.target_ref,
+                actual.as_deref().unwrap_or("?")
+            ),
+        });
+    }
+
+    // current == expected_old → a real advance. The ONLY place the mechanism
+    // branches on checkout state.
+    match git::worktree_for_ref(root, &row.target_ref)? {
+        None => advance_pure_ref(root, row, &planned, &expected_old),
+        Some(wt) => advance_checked_out(root, row, &wt, &planned, &expected_old),
+    }
+}
+
+/// The not-checked-out leg: pure `update_ref_cas`, then the §2.2 None-leg post-CAS
+/// re-probe (R2 gap) — a ref checked out in the probe→CAS window is now desynced;
+/// resync a clean worktree (`reset --hard`) or warn `raced-checkout-desync` on a
+/// dirty one (the advance already happened; it cannot be un-done).
+fn advance_pure_ref(
+    root: &Path,
+    row: &mut JournalRow,
+    planned: &str,
+    expected_old: &str,
+) -> anyhow::Result<RowOutcome> {
+    match git::update_ref_cas(root, &row.target_ref, planned, expected_old)? {
+        RefCas::Moved { actual } => {
+            row.status = LedgerStatus::Failed;
+            Ok(RowOutcome::Refused {
+                token: format!(
+                    "{} (target at {})",
+                    row.target_ref,
+                    actual.as_deref().unwrap_or("?")
+                ),
+            })
+        }
+        RefCas::Updated => {
+            row.status = LedgerStatus::Verified;
+            planned.clone_into(&mut row.applied_new_oid);
+            let disposition = match git::worktree_for_ref(root, &row.target_ref)? {
+                None => Disposition::AdvancedPureRef,
+                Some(wt) if git::tree_clean(&wt)? => {
+                    git::resync_worktree_hard(&wt, planned)?;
+                    Disposition::AdvancedResynced
+                }
+                Some(_dirty) => Disposition::RacedDesync,
+            };
+            Ok(RowOutcome::Done { disposition })
+        }
+    }
+}
+
+/// The checked-out leg: a fast-forward advance (`expected_old` is an ancestor of
+/// `planned`) syncs ref+index+worktree together via `merge --ff-only` under the
+/// §2.5 race guard; a non-ff advance on a live ref REFUSES `integrate-nonff-checkout`
+/// rather than `reset --hard` a checked-out ref (data loss, B2).
+fn advance_checked_out(
+    root: &Path,
+    row: &mut JournalRow,
+    wt: &Path,
+    planned: &str,
+    expected_old: &str,
+) -> anyhow::Result<RowOutcome> {
+    if git::is_ancestor(root, expected_old, planned)? {
+        match git::ff_advance_in_worktree(wt, &row.target_ref, planned)? {
+            git::FfAdvance::Advanced => {
+                row.status = LedgerStatus::Verified;
+                planned.clone_into(&mut row.applied_new_oid);
+                Ok(RowOutcome::Done {
+                    disposition: Disposition::AdvancedResynced,
+                })
+            }
+            git::FfAdvance::Raced { token } => {
+                row.status = LedgerStatus::Failed;
+                Ok(RowOutcome::Refused {
+                    token: format!("{} ({token})", row.target_ref),
+                })
+            }
+        }
+    } else {
+        row.status = LedgerStatus::Failed;
+        Ok(RowOutcome::Refused {
+            token: format!("integrate-nonff-checkout ({})", row.target_ref),
         })
-        .collect();
-    if moved.is_empty() {
+    }
+}
+
+/// Render the integrate outcome (design §4 / IMP-078): the existing machine-readable
+/// stdout ref-list (every applied row, byte-for-byte as before) PLUS a per-row
+/// stderr disposition line. A refusal bails (moved/raced targets reported, never
+/// clobbered); a `raced-checkout-desync` is a non-fatal warning line (the ref did
+/// advance). Reads `(row, outcome)` pairs in row order.
+fn report_integrate(journal: &Journal, outcomes: &[RowOutcome]) -> anyhow::Result<()> {
+    let mut applied_refs: Vec<String> = Vec::new();
+    let mut detail: Vec<String> = Vec::new();
+    let mut refusals: Vec<String> = Vec::new();
+
+    for (row, outcome) in journal.rows.iter().zip(outcomes) {
+        match outcome {
+            RowOutcome::Done { disposition } => match disposition {
+                Disposition::NoOp => {
+                    detail.push(format!("integrate: {} (no-op)", row.target_ref));
+                }
+                disp => {
+                    applied_refs.push(row.target_ref.clone());
+                    detail.push(format!(
+                        "integrate: {} {}..{} ({})",
+                        row.target_ref,
+                        short_oid(&row.expected_old_oid),
+                        short_oid(&row.applied_new_oid),
+                        disp.label(),
+                    ));
+                }
+            },
+            RowOutcome::Refused { token } => refusals.push(token.clone()),
+        }
+    }
+
+    // stdout: the changed-ref list contract (scripts consume it) — unchanged shape.
+    for refname in &applied_refs {
+        writeln!(io::stdout(), "{refname}")?;
+    }
+    // stderr: additive per-row human detail.
+    for line in &detail {
+        writeln!(io::stderr(), "{line}")?;
+    }
+
+    if refusals.is_empty() {
         writeln!(
             io::stderr(),
             "integrate: {} ref(s) replayed",
@@ -1155,8 +1284,8 @@ fn integrate(
     } else {
         bail!(
             "integrate: {} moved target(s), not clobbered: {}",
-            moved.len(),
-            moved.join(", ")
+            refusals.len(),
+            refusals.join(", ")
         )
     }
 }
@@ -1419,17 +1548,42 @@ fn commit_journal(
 
 /// The per-row disposition of a successful apply. Transient REPORT data — NOT a
 /// [`JournalRow`] field: the row schema carries only oids + status, and every
-/// success (`Created`/`NoOp`/`Applied`) persists as [`LedgerStatus::Verified`],
-/// so the disposition cannot be recovered from the row after the fact. The
-/// caller renders output from these.
+/// success persists as [`LedgerStatus::Verified`], so the disposition cannot be
+/// recovered from the row after the fact. The caller renders output from these
+/// (SL-121 §4 / IMP-078).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Disposition {
     /// A zero-oid creation succeeded (prepare-review).
     Created,
     /// A replay found the target already at the planned oid (integrate).
     NoOp,
-    /// A replay advanced the target to the planned oid (integrate).
-    Applied,
+    /// A checked-out target fast-forwarded in its live worktree via
+    /// `merge --ff-only`, or a None-leg advance whose post-CAS re-probe found the
+    /// ref freshly checked out and clean (resynced via `reset --hard`) — ref +
+    /// index + worktree all at the planned oid (integrate, §2.2).
+    AdvancedResynced,
+    /// A not-checked-out target advanced by pure `update_ref_cas`; no worktree to
+    /// sync (integrate, §2.2 None leg).
+    AdvancedPureRef,
+    /// A None-leg advance whose post-CAS re-probe found the ref checked out **and
+    /// dirty** — the ref already moved (content is the planned oid) but the live
+    /// worktree's stale tree could not be safely resynced. A WARNING, not a
+    /// refusal: the advance cannot be un-done (§2.2 / §7 boundary #3).
+    RacedDesync,
+}
+
+impl Disposition {
+    /// The exact report token (SL-121 §4). Tests assert these literally — do NOT
+    /// paraphrase.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::NoOp => "no-op",
+            Self::AdvancedResynced => "advanced+resynced",
+            Self::AdvancedPureRef => "advanced+pure-ref",
+            Self::RacedDesync => "raced-checkout-desync",
+        }
+    }
 }
 
 /// Per-row outcome the apply closure hands back. The bracket collects these and

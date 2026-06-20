@@ -713,6 +713,210 @@ fn integrate_edge_is_opt_in_and_aggregates_the_review_bundle() {
     );
 }
 
+// === SL-121 PHASE-02 — worktree-aware integrate advance + report ============
+
+/// VT-2 (the ISS-022/030 regression): a checked-out trunk target fast-forwards via
+/// `merge --ff-only`, so ref + index + worktree all land on the planned tip and
+/// `git status` is empty — no phantom reverse-diff. (Pre-SL-121 pure
+/// `update_ref_cas` advanced the ref but left the live tree stale.)
+#[test]
+fn integrate_trunk_checked_out_ff_leaves_clean_tree() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let phase_tip = git(dir, &["rev-parse", "phase/064-02"]);
+    // build_fixture leaves the working tree on main → the trunk target is checked out.
+    assert_eq!(git(dir, &["rev-parse", "--abbrev-ref", "HEAD"]), "main");
+
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(
+        out.status.success(),
+        "ff integrate on a checked-out trunk; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        phase_tip,
+        "trunk ref advanced to the cumulative code tip"
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "HEAD"]),
+        phase_tip,
+        "HEAD advanced with the live checkout"
+    );
+    assert!(
+        git(dir, &["status", "--porcelain"]).is_empty(),
+        "index + worktree resynced — no phantom reverse-diff (ISS-022/030)",
+    );
+    assert!(
+        dir.join("src1.txt").exists() && dir.join("src2.txt").exists(),
+        "the advanced code is materialised in the live worktree",
+    );
+}
+
+/// VT-1: a NOT-checked-out target advances by pure ref-CAS; the live (main)
+/// checkout is left untouched — a pure-ref advance introduces no phantom diff.
+#[test]
+fn integrate_trunk_not_checked_out_advances_ref_leaves_live_checkout_clean() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let fixture = build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let phase_tip = git(dir, &["rev-parse", "phase/064-02"]);
+    // A trunk-like ref parked at the fork base, checked out nowhere.
+    git(dir, &["update-ref", "refs/heads/release", &fixture.base]);
+
+    let out = integrate(dir, &["--trunk", "refs/heads/release"]);
+    assert!(
+        out.status.success(),
+        "ff integrate on a not-checked-out ref; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "release"]),
+        phase_tip,
+        "the unchecked-out ref advanced by CAS"
+    );
+    assert!(
+        git(dir, &["status", "--porcelain"]).is_empty(),
+        "the live main checkout is untouched by a pure-ref advance",
+    );
+}
+
+/// VT-3 (EX-1, M4): a DIRTY checked-out target refuses the whole integrate with
+/// `integrate-dirty-worktree` and moves ZERO refs — including the coordination ref
+/// `dispatch/064` (the gate runs before the first `commit_journal`).
+#[test]
+fn integrate_dirty_checked_out_target_refuses_zero_refs_moved() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+
+    // Snapshot every ref the integrate would touch + the coordination ref.
+    let main_before = git(dir, &["rev-parse", "main"]);
+    let dispatch_before = git(dir, &["rev-parse", "dispatch/064"]);
+    let review_before = git(dir, &["rev-parse", "review/064"]);
+    let phase_before = git(dir, &["rev-parse", "phase/064-02"]);
+
+    // Dirty the checked-out trunk (tracked modification).
+    std::fs::write(dir.join("trunk.txt"), "locally dirtied").unwrap();
+
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(!out.status.success(), "a dirty checked-out target refuses");
+    assert!(
+        stderr(&out).contains("integrate-dirty-worktree"),
+        "refusal names the dirty-worktree token: {}",
+        stderr(&out),
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        main_before,
+        "trunk unmoved"
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "dispatch/064"]),
+        dispatch_before,
+        "coordination ref unmoved (gate precedes the first commit_journal, M4)"
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "review/064"]),
+        review_before,
+        "review unmoved"
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "phase/064-02"]),
+        phase_before,
+        "phase unmoved"
+    );
+}
+
+/// VT-4 (B2): a checked-out target needing a NON-ff advance refuses
+/// `integrate-nonff-checkout` (never `reset --hard` a live ref); the ref is left
+/// unmoved and the row persists `Failed` in the committed journal. Exercised via
+/// the edge row (not ff-gated at plan time) checked out in a linked worktree on a
+/// commit divergent from `review/064`.
+#[test]
+fn integrate_nonff_checked_out_edge_refuses_and_persists_failed() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let fixture = build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+
+    // An `edge` branch checked out in a linked worktree, advanced divergently so a
+    // fast-forward to review/064 is impossible.
+    git(dir, &["update-ref", "refs/heads/edge", &fixture.base]);
+    let holder = tempfile::tempdir().unwrap();
+    let linked = holder.path().join("edgewt");
+    git(dir, &["worktree", "add", linked.to_str().unwrap(), "edge"]);
+    std::fs::write(linked.join("divergent.txt"), "x").unwrap();
+    git(&linked, &["add", "divergent.txt"]);
+    git(&linked, &["commit", "-q", "-m", "edge divergent"]);
+    let edge_before = git(dir, &["rev-parse", "edge"]);
+
+    let out = integrate(dir, &["--edge", "refs/heads/edge"]);
+    assert!(!out.status.success(), "a non-ff checked-out edge refuses");
+    assert!(
+        stderr(&out).contains("integrate-nonff-checkout"),
+        "refusal names the non-ff-checkout token: {}",
+        stderr(&out),
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "edge"]),
+        edge_before,
+        "edge ref left untouched (never reset --hard a live ref)"
+    );
+    let journal = git(
+        dir,
+        &["show", "dispatch/064:.doctrine/dispatch/064/journal.toml"],
+    );
+    assert!(
+        journal.contains("failed"),
+        "the refused edge row persisted status=failed: {journal}"
+    );
+}
+
+/// VT-6 (§4 / IMP-078): integrate emits per-row disposition detail on stderr with
+/// the EXACT tokens AND preserves the machine-readable stdout ref-list contract.
+#[test]
+fn integrate_report_emits_disposition_and_preserves_stdout_reflist() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let so = String::from_utf8_lossy(&out.stdout);
+    let se = stderr(&out);
+
+    // stdout: the changed-ref list (advanced rows) — contract preserved.
+    assert!(
+        so.lines().any(|l| l == "refs/heads/main"),
+        "stdout carries the advanced trunk ref verbatim: {so:?}",
+    );
+    // stderr: per-row disposition line for the trunk (main was checked out → the
+    // ff-merge resync disposition) plus the trailing replayed count.
+    assert!(
+        se.contains("(advanced+resynced)"),
+        "stderr names the exact advanced+resynced disposition: {se}",
+    );
+    assert!(
+        se.contains("integrate: refs/heads/main "),
+        "stderr carries the per-row trunk detail line: {se}",
+    );
+    assert!(
+        se.contains("ref(s) replayed"),
+        "the trailing summary line is preserved: {se}",
+    );
+    // The already-at-tip prepared rows report the no-op token.
+    assert!(
+        se.contains("(no-op)"),
+        "no-op rows are reported with the exact token: {se}",
+    );
+}
+
 /// VT-5: `--integrate` is the same Orchestrator verb class — a marker-present
 /// linked worktree AND `DOCTRINE_WORKER=1` each refuse it, writing no trunk.
 #[test]

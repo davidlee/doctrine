@@ -703,14 +703,12 @@ pub(crate) fn classify_import(
 ///    durable git later, never a pre-commit gitignored flag that would survive a
 ///    crash and lie "landed".
 ///
-/// Gather the tracked-tree cleanliness fact: `git status --porcelain
-/// --untracked-files=no` empty ⇒ clean. The SINGLE tree-clean gather shared by
-/// both [`run_import`] and [`run_land`] — untracked scratch is deliberately
-/// excluded (the `--untracked-files=no` scoping), so neither verb trips on
-/// ephemeral files (SL-056, no parallel impl / EN-1). Impure (the git read).
+/// Gather the tracked-tree cleanliness fact for [`run_import`] / [`run_land`].
+/// Delegates to the single leaf predicate [`git::tree_clean`] (SL-121 §2.3 lifted
+/// it to git.rs so the integrate dirty pre-gate + the §2.5 race re-check share the
+/// one `--untracked-files=no` definition — no parallel impl). Impure (the git read).
 fn gather_tree_clean(root: &Path) -> anyhow::Result<bool> {
-    let status = git::git_text(root, &["status", "--porcelain", "--untracked-files=no"])?;
-    Ok(status.is_empty())
+    Ok(git::tree_clean(root)?)
 }
 
 /// Orchestrator-classed; refused under worker-mode by `worker_guard` (the verb is
