@@ -93,23 +93,30 @@ by this design:
 (`facet_write` leaf, combined `estimate_value_tests`). File boundary = where the
 private helpers stop being shared.
 
-### F-A — pre-existing parallel resolvers (recorded, deferred)
+### F-A — shared id→path core is already owned by SL-129 / IMP-067
 
-Four near-identical id→toml-path resolvers (`resolve_link_path`,
-`resolve_supersede_path`, `resolve_dep_seq_src_path`,
-`resolve_entity_path_and_canonical`) are adjacent in `main.rs` today. This
-relocation scatters them across four `commands/` files, burying an obvious DRY
-target. Consolidation is **behaviour-changing** and out of this slice's
-mechanical scope. Captured as **IMP-131** before the scatter; each relocated
-resolver carries a one-line breadcrumb comment → IMP-131.
+The four resolvers (`resolve_link_path`, `resolve_supersede_path`,
+`resolve_dep_seq_src_path`, `resolve_entity_path_and_canonical`) are **not**
+duplicates of each other — each layers distinct domain logic (relation rule,
+supersede policy, dep-seq source, canonical id) over one **shared core**: the
+`<dir>/<NNN>/<stem>-<NNN>.toml` id→path formula. That core is exactly what
+**SL-129** introduces as `entity::id_path` (corpus-wide; backlog **IMP-067**).
+
+So SL-115 does **not** file a new dedup item and does **not** merge the
+resolvers. It relocates them as-is into their `commands/` shells; SL-129 (when it
+lands) replaces the path-formula line inside each with `entity::id_path`. Each
+relocated resolver carries a one-line breadcrumb comment → SL-129. See the
+**SL-129 coordination** note below — these two slices overlap on `main.rs` and
+must be sequenced.
 
 ## 4. Clap-enum redistribution (thrust 2)
 
 **Dispatch entry (uniform):**
-`pub(crate) fn dispatch(command: AdrCommand, color: ResolvedColor) -> anyhow::Result<()>`.
-The sole global is `--color` (resolved once in `main()`); `path` already lives in
-each variant; the per-variant `if json { Json } else { format }` normalization
-moves into the kind dispatch.
+`pub(crate) fn dispatch(command: AdrCommand, color: bool) -> anyhow::Result<()>`.
+The sole global is `--color`, resolved once in `main()` to a `bool`
+(`tty::resolve_color → bool`); `path` already lives in each variant; the
+per-variant `if json { Json } else { format }` normalization moves into the kind
+dispatch.
 
 - **Clean kind homes** (already command-tier): `Adr`→adr, `Policy`→policy,
   `Standard`→standard, `Rfc`→rfc, `Spec`→spec, `SpecReq`→requirement,
@@ -173,12 +180,49 @@ umbrella — every new sub-file is at-or-below command tier (`commands::list`
 reaches only `listing`(leaf), *below*, so no forced sub-classification). Courtesy
 only: refresh the dep-list comment on the `commands` row.
 
+## 7. Adversarial review findings
+
+- **Dispatch signature** corrected `ResolvedColor` → `bool` (`tty::resolve_color`
+  returns `bool`).
+- **`is_work_like`** confirmed dep_seq-local (used only inside
+  `resolve_dep_seq_src`) → clean move to `commands/dep_seq.rs`, no external edge.
+- **`write_class`** confirmed called only by `worker_guard` in production (rest
+  are tests) → `commands/guard.rs` is a near-sink, upholding the F-C cycle-free
+  invariant.
+- **F-A reframed** — the resolvers' shared id→path core is SL-129/IMP-067's
+  surface, not a new dedup item (IMP-131 was filed then closed as duplicate).
+
+### R1 — SL-129 coordination (cross-slice conflict, decision needed)
+
+**SL-129** (`entity::id_path` corpus-wide; in design) and **SL-115** both heavily
+edit `src/main.rs` and the same ~13–16 kind modules:
+
+- SL-129 replaces ~93 id→path sites across 13 files, incl. `main.rs` (8,
+  test-only) and KIND-decl / `format!` sites in `adr.rs`, `slice.rs`,
+  `backlog.rs`, …; it also removes `KindRef::stem` (in `integrity.rs`).
+- SL-115 guts `main.rs` (→ ~30 LOC), **moves** its test modules into `commands/`,
+  and appends an enum + `dispatch` to each kind module.
+
+These collide: SL-115 *moves* the very `main.rs` test sites and kind-module
+regions SL-129 *edits*. A find-replace slice (SL-129) is fragile to files moving
+underneath it.
+
+**Recommendation: sequence SL-129 → SL-115** with an `after` edge (`SL-115 after
+SL-129`). SL-129 consolidates id→path on the *current* layout (its inventory stays
+valid); SL-115 then relocates the now-thinner shells (the F-A breadcrumb concern
+evaporates — the path core is already `entity::id_path` before the move).
+Alternative orders (SL-115 first, or parallel) force a stale SL-129 site inventory
+or manual conflict resolution on a 93-site sweep. **Open for the user to confirm
+before `/plan`.**
+
 ## Decisions log
 
 - D1 dispatch arm moves with the enum · D2 `write_class` centralized in
   `commands/guard.rs` · D3 same-stem shells allowed.
-- F-A resolver dedup deferred → IMP-131 · F-B `commands/list.rs` extracted first ·
-  F-C `Command`+dispatch in `commands/cli.rs`, `guard` separate, `main` roots both.
+- F-A resolver path-core owned by SL-129/IMP-067 (no in-slice dedup) · F-B
+  `commands/list.rs` extracted first · F-C `Command`+dispatch in `commands/cli.rs`,
+  `guard` separate, `main` roots both.
+- R1 sequence SL-129 → SL-115 (`after` edge) — pending user confirmation.
 - Scope: full (all ~25 enums + 7 orphan units land in this slice; `/plan` phases
   per-domain).
 
