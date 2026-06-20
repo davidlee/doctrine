@@ -56,6 +56,34 @@ because this slice surfaced it. `leaf → leaf` is always legal — no tier ambi
 - `map_server/routes.rs`: wrapper unchanged — `MapServerError::ConceptMapIoError(
   e.to_string())` works for both `io::Error` and `anyhow::Error`.
 
+## PHASE-03 — clippy guard
+
+### F4 — design D3/EX-3 (#[allow]) reversed to #[expect] (RECONCILE AT AUDIT)
+
+Design D3/§5.4/EX-3 mandate `#[allow(clippy::disallowed_methods, …)]`, explicitly
+rejecting `#[expect]`. But the repo **enforces** `allow_attributes = "deny"`
+(`Cargo.toml [lints]`) — bare `#[allow]` does **not compile** (14 existing
+`#[expect]` in src, 0 `#[allow]`). The design author appears not to have known the
+lint was denied. Used `#[expect]` (enforced canon outranks the design decision;
+boot: plan/design ≠ higher authority than canon). Consulted with user 2026-06-20.
+
+The design's stated reasons for `#[allow]` are moot here:
+- *"#[expect] fires unfulfilled before the rule"* — the guard lands in the SAME
+  commit as the annotations, so each `#[expect]` is fulfilled (the lint fires).
+- *"brittle to call-graph drift"* — the only residual; the repo already accepted
+  this tradeoff globally. A future stale `#[expect]` flags itself (a feature).
+
+`state.rs` uses a **fn-level** `#[expect]` on `set_phase_status` — its lone
+`fs::write` is the function's tail expression, which cannot carry a stable
+stmt-level attribute (`stmt_expr_attributes` is unstable). The fn has exactly one
+write, so the scope is precise.
+
+VH-1 proven: removing any annotation re-exposes a bare production `fs::write` and
+the guard errors with the SL-113 reason note (clippy non-zero).
+
+**Reconcile:** design D3 + §5.4 table + PHASE-03 EX-3 wording (`#[allow]` →
+`#[expect]`) at audit. The clippy.toml reason string was updated to say `#[expect]`.
+
 ### Style
 
 All call sites use fully-qualified `crate::fsutil::write_atomic(…)` — the
