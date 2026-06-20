@@ -52,8 +52,34 @@ duplicate/dead SubagentStart stamp hooks (a `(deleted)` command is provably dead
 on reinstall. A `verify-worker` self-stamp on first use would mask the symptom but
 not the bad install — fix the writer.
 
+## Defect C — auto-stamp source resolves to the worker worktree (source==fork)
+
+Proven by the IMP-046 fresh-session probe (2026-06-20). Even with a clean,
+single, un-poisoned `dispatch-worker` stamp hook, the auto-stamp **never lands a
+marker**. `run_stamp_subagent` (`src/worktree.rs:2099`) resolves the copy SOURCE
+via `root::find` on the **hook process cwd**, assuming it is the orchestrator tree
+(comment at `src/worktree.rs:2110`). Empirically the Claude harness runs the
+`SubagentStart` hook with **process cwd = the worker's own worktree**
+(`.claude/worktrees/agent-<id>`) — identical to the payload `cwd`. So source==fork
+and `verify_sibling_worktree` bails `fork path is the source tree itself; refusing
+to provision` (`src/worktree.rs:417`) → unstamped worker.
+
+This is why operators must hand-stamp (Defect B note above): a hand-stamp is run
+from the orchestrator cwd, so source ≠ fork and provision succeeds. The hook path
+cannot, as written.
+
+### Fix (Defect C)
+
+Do not derive the provision SOURCE from the hook process cwd. Resolve it to the
+repo's **primary worktree** (the main checkout — e.g. via `--git-common-dir`'s
+parent, or `git worktree list --porcelain` first entry) and pass it explicitly to
+`run_provision`, independent of where the hook fires. Probe evidence + harness
+finding: `mem.pattern.dispatch.subagentstart-hook-cwd-is-worker-worktree`.
+
 ## Related
 
+- **IMP-046** — the fresh-session probe that proved Defect C end-to-end (hook
+  fires, matcher matches, payload cwd correct, provision refuses source==fork).
 - **ISS-034** — Defect B was first documented there (claude dispatch arm
   isolation/base defect); the hook-stamp half is folded here, the
   isolation/`baseRef:"head"` half stays in ISS-034.

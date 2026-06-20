@@ -21,3 +21,29 @@ it validates the gate the whole claude path rests on.
 
 Refs: ADR-011 D6/D7, ADR-006 D2a/D9, SL-056 `g2-draft.md §6` (M2),
 `mem.pattern.dispatch.subagentstart-blocking-but-not-failclosable`.
+
+---
+
+## Probe result (2026-06-20, fresh session via kill+resume)
+
+Ran the probe with tracer hooks on `SubagentStart` and the live single clean
+`dispatch-worker` stamp hook. Findings, in order:
+
+- (a) **hook fires** for the `dispatch-worker` subagent — confirmed. ✅
+- **matcher works**: `matcher: "dispatch-worker"` matched on the payload
+  `agent_type` (a matcher'd tracer and a catch-all tracer both fired; a benign
+  `general-purpose` subagent gets no marker). ✅
+- payload `cwd` = the worker worktree, `agent_type` correct. ✅
+- (b) **marker does NOT land** — the gate FAILS. ❌ Root cause is NOT the matcher
+  (IMP-046's hypothesis) and NOT Defect B poison: `run_stamp_subagent` resolves the
+  provision SOURCE via `root::find` on the **hook process cwd**, but the harness runs
+  the hook with **process cwd = the worker worktree** (proven: hook `pwd` == payload
+  `cwd`). source==fork → `verify_sibling_worktree` bails `fork path is the source
+  tree itself; refusing to provision` (`src/worktree.rs:417`).
+
+Net: the literal matcher path is sound; the auto-stamp's source-resolution is the
+real defect. Routed to **ISS-011 Defect C** with the fix direction (resolve SOURCE
+to the primary worktree, not the hook cwd). Harness finding recorded as
+`mem.pattern.dispatch.subagentstart-hook-cwd-is-worker-worktree`. The fail-open
+note holds: unstamped → caught fail-closed (ADR-006 D2a), so confidence/perf, not
+safety. **Probe objective met; this item can close (finding lives in ISS-011).**
