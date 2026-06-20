@@ -65,7 +65,7 @@ No npm dependencies beyond the pi SDK (`@earendil-works/pi-coding-agent`,
 | `doctrine_<tool>` naming | Clear provenance, zero collision risk. |
 | Spawn once per session | MCP is designed for persistent sessions. Avoids handshake per call. |
 | Persistent stdout reader | One `readline` interface for the process lifetime. Lines dispatched by `id`; notifications ignored. Avoids buffer leakage from per-call interfaces (F-6). |
-| Binary path baked at install (`BIN_PATH`) | Same `current_exe()` pattern as SL-119. No runtime path discovery. |
+| Binary path baked at install (`BIN_PATH`) | Same `current_exe()` pattern as SL-119, with runtime fallback chain: baked constant → `process.env.DOCTRINE_BIN` → hardcoded path (dev affordance). |
 | `BIN_PATH` duplicated (not shared with `index.ts`) | Deliberate: both files are independent — either can be installed without the other. Accepted redundancy over hidden coupling. |
 | Graceful MCP shutdown | Send `shutdown` request, await response (2s timeout), send `notifications/exit`, then `proc.kill()` fallback. Respects MCP lifecycle spec. |
 | Stderr byte-bounded ring buffer | Piped, consumed silently. Last 16KB appended to error messages on failure. |
@@ -487,7 +487,7 @@ bakes `current_exe()` as `BIN_PATH`.
 | Handshake timeout (2s) | Non-MCP binary → timeout, tools absent, session ok |
 | `session_shutdown` graceful | `shutdown` request sent, exit notification, process killed |
 | `session_start` idempotent | Second call no-ops (started guard) |
-| Pure functions | `buildRequest`, `parseResponse`, `toolPiName`, `stripPiPrefix`, `extractText`, `formatMcpError`, `withTimeout` — unit-testable via `vitest` |
+| Pure functions | `buildRequest`, `parseResponse`, `toolPiName`, `stripPiPrefix` (test-only, omitted from extension), `extractText`, `formatMcpError`, `withTimeout` — unit-testable via `vitest` |
 | Integration | `vitest` spawns real `doctrine serve --mcp` |
 | Extension file installed by `doctrine boot install` | Integration: file present, contains baked `BIN_PATH` |
 
