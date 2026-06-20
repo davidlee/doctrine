@@ -6,6 +6,7 @@ disallowed-methods = [
   { path = "std::env::var", reason = "Use typed configuration loading instead" },
   { path = "std::env::set_var", reason = "Global process mutation is test-hostile" },
   { path = "std::process::exit", reason = "Return an error from main/application boundary instead" },
+  { path = "std::fs::write", reason = "authored entity writes must route through fsutil::write_atomic (SL-113); runtime/derived sites carry an explicit #[expect]" },
 ]
 
 disallowed-types = [

@@ -634,6 +634,7 @@ fn copy_skill(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
         }
         let asset =
             PluginAssets::get(file).with_context(|| format!("Embedded file '{file}' not found"))?;
+        #[expect(clippy::disallowed_methods, reason = "derived asset unpack")]
         fs::write(&target, &asset.data)
             .with_context(|| format!("Failed to write {}", target.display()))?;
     }

@@ -1488,7 +1488,7 @@ pub(crate) fn run_add(
             let name = format!("{id:03}");
             let stem = format!("concept-map-{name}");
             let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-            std::fs::write(&toml_path, updated)
+            crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
                 .with_context(|| format!("Failed to write {}", toml_path.display()))?;
         }
         Err(ConceptMapMutationError::DuplicateEdge { line: _ }) if force => {
@@ -1503,7 +1503,7 @@ pub(crate) fn run_add(
             let name = format!("{id:03}");
             let stem = format!("concept-map-{name}");
             let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-            std::fs::write(&toml_path, updated)
+            crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
                 .with_context(|| format!("Failed to write {}", toml_path.display()))?;
         }
         Err(ConceptMapMutationError::DuplicateEdge { line }) => {
@@ -1553,7 +1553,7 @@ pub(crate) fn run_remove(
     let name = format!("{id:03}");
     let stem = format!("concept-map-{name}");
     let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-    std::fs::write(&toml_path, updated)
+    crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
         .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     Ok(())
 }
@@ -1648,7 +1648,7 @@ pub(crate) fn run_rename_node(
     let name = format!("{id:03}");
     let stem = format!("concept-map-{name}");
     let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-    std::fs::write(&toml_path, updated)
+    crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
         .with_context(|| format!("Failed to write {}", toml_path.display()))?;
 
     writeln!(

@@ -1842,6 +1842,7 @@ pub(crate) fn write_marker(root: &Path) -> anyhow::Result<()> {
         fs::create_dir_all(dir)
             .with_context(|| format!("create dispatch marker dir {}", dir.display()))?;
     }
+    #[expect(clippy::disallowed_methods, reason = "runtime worker marker")]
     fs::write(&path, b"").with_context(|| format!("write worker marker {}", path.display()))?;
     Ok(())
 }
