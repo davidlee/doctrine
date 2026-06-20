@@ -1051,10 +1051,7 @@ mod tests {
             (RelationLabel::Members, &["PRD", "SPEC"]),
             (RelationLabel::Interactions, &["SPEC"]),
             (RelationLabel::Slices, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
-            (
-                RelationLabel::Related,
-                &["ADR", "POL", "SL", "STD"],
-            ),
+            (RelationLabel::Related, &["ADR", "POL", "SL", "STD"]),
             (RelationLabel::Reviews, &["RV"]),
             (RelationLabel::OwningSlice, &["REC"]),
             (RelationLabel::Drift, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
