@@ -63,15 +63,18 @@ Inputs:
    slice was driven by `/dispatch`, project the audited units now:
 
    ```bash
+   # 0. Resolve the trunk delivery ref once (config-driven; default refs/heads/main):
+   trunk=$(doctrine dispatch deliver-to)
+
    # 1. Admit a close_target candidate (if not already done during /reconcile):
    doctrine dispatch candidate create --slice <N> --label close-001 \
-     --role close_target --payload code --base refs/heads/main \
+     --role close_target --payload code --base "$trunk" \
      --source refs/heads/review/<N>
    doctrine dispatch candidate admit --slice <N> --role close_target \
      --candidate refs/heads/candidate/<N>/close-001 --review RV-NNN
 
    # 2. Project onto trunk (--trunk is REQUIRED; omitting it is a dry run):
-   doctrine dispatch sync --slice <N> --integrate --trunk refs/heads/main
+   doctrine dispatch sync --slice <N> --integrate --trunk "$trunk"
    ```
 
    When a candidate workflow is active this targets the immutable **admitted
@@ -91,20 +94,19 @@ Inputs:
 
    # (b) The projected delta genuinely landed (not a silent dry-run): the committed
    #     journal's trunk row holds the planned tip; it must equal the trunk ref.
+   trunk=$(doctrine dispatch deliver-to)
    planned=$(doctrine dispatch sync --slice <N> --show-journal-trunk-oid \
-     --trunk refs/heads/main)
-   git diff --quiet "$planned" refs/heads/main
+     --trunk "$trunk")
+   git diff --quiet "$planned" "$trunk"
    ```
    (a) is the ISS-030 detector — the **whole tracked tree**, not path-limited (a
    phantom reverse-diff can span any file the slice projected, not just `src/`).
    (b) reads the trunk row's `planned_new_oid` from the committed `dispatch/<N>`
    journal — a tree-read, stable from this checkout (SL-121) — and diffs it against
-   `refs/heads/main`; a difference means trunk does not hold the projected tip, so
+   the resolved trunk delivery ref (`doctrine dispatch deliver-to`, default
+   `refs/heads/main`); a difference means trunk does not hold the projected tip, so
    integration did not land.
 
-   > **TODO:** Once project config (`doctrine.toml [dispatch] deliver_to`) lands,
-   > the trunk ref will be derived from config rather than hard-coded
-   > `refs/heads/main` here.
 4. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
    `doctrine slice status <id> reconcile` if `/audit` didn't), then
    `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).

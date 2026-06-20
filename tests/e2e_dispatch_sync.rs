@@ -1220,15 +1220,25 @@ fn show_journal_trunk_oid_errors_when_no_trunk_row() {
     );
 }
 
-/// EX-1 (clap wiring, R1): `--show-journal-trunk-oid` without `--trunk` is refused
-/// at parse — the read mode always names the row it reads.
+/// SL-128 VT-1: with no `--trunk`, the read stage defaults the ref from
+/// `[dispatch] deliver_to` (absent config ⇒ refs/heads/main) — resolving to
+/// the same trunk row as an explicit `--trunk refs/heads/main`.
 #[test]
-fn show_journal_trunk_oid_requires_trunk() {
+fn show_journal_trunk_oid_defaults_trunk_from_deliver_to() {
     let repo = tempfile::tempdir().unwrap();
     let dir = repo.path();
     build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    assert!(
+        integrate(dir, &["--trunk", "refs/heads/main"])
+            .status
+            .success()
+    );
 
-    let out = run(
+    let explicit = show_journal_trunk_oid(dir, "refs/heads/main");
+    assert!(explicit.status.success(), "explicit: {}", stderr(&explicit));
+
+    let defaulted = run(
         dir,
         None,
         &[
@@ -1241,12 +1251,75 @@ fn show_journal_trunk_oid_requires_trunk() {
             dir.to_str().unwrap(),
         ],
     );
-    assert!(!out.status.success(), "missing --trunk is a parse error");
     assert!(
-        stderr(&out).contains("--trunk"),
-        "clap names the required --trunk: {}",
+        defaulted.status.success(),
+        "no `--trunk` defaults from config: {}",
+        stderr(&defaulted)
+    );
+    assert_eq!(
+        stdout(&explicit),
+        stdout(&defaulted),
+        "config default resolves to the same trunk row as explicit refs/heads/main"
+    );
+}
+
+/// SL-128 VT-1 (precedence): an explicit `--trunk` overrides a configured
+/// `deliver_to`. Config names a ref with no trunk row, but the explicit
+/// `refs/heads/main` still reads the real row.
+#[test]
+fn show_journal_trunk_oid_explicit_trunk_overrides_config() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    assert!(
+        integrate(dir, &["--trunk", "refs/heads/main"])
+            .status
+            .success()
+    );
+    std::fs::write(
+        dir.join("doctrine.toml"),
+        "[dispatch]\ndeliver-to = \"refs/heads/other\"\n",
+    )
+    .unwrap();
+
+    let out = show_journal_trunk_oid(dir, "refs/heads/main");
+    assert!(
+        out.status.success(),
+        "explicit --trunk wins over config deliver_to: {}",
         stderr(&out)
     );
+    assert!(!stdout(&out).trim().is_empty(), "prints the trunk-row oid");
+}
+
+/// SL-128 VT-2: the `dispatch deliver-to` verb prints the resolved ref —
+/// the default when unset, the configured value when present.
+#[test]
+fn dispatch_deliver_to_prints_default_and_override() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+
+    let out = run(
+        dir,
+        None,
+        &["dispatch", "deliver-to", "-p", dir.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "default: {}", stderr(&out));
+    assert_eq!(stdout(&out).trim(), "refs/heads/main");
+
+    std::fs::write(
+        dir.join("doctrine.toml"),
+        "[dispatch]\ndeliver-to = \"refs/heads/release\"\n",
+    )
+    .unwrap();
+    let out = run(
+        dir,
+        None,
+        &["dispatch", "deliver-to", "-p", dir.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "override: {}", stderr(&out));
+    assert_eq!(stdout(&out).trim(), "refs/heads/release");
 }
 
 // ====================================================================
@@ -1343,5 +1416,41 @@ fn vt7_close_integration_refused_without_trunk_integrate() {
     assert!(
         toml.contains("status = \"reconcile\""),
         "no write on refusal: {toml}"
+    );
+}
+
+/// SL-128 VT-2: the close-integration gate reads `[dispatch] deliver_to`, not a
+/// hardcoded ref. Trunk is integrated on refs/heads/main, but project config
+/// redirects deliver_to to a ref with NO trunk row, so the gate checks the
+/// configured ref and REFUSES — proving the literal was retired.
+#[test]
+fn vt2_close_integration_honours_deliver_to_override() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    // Real trunk row lands on main.
+    assert!(
+        integrate(dir, &["--trunk", "refs/heads/main"])
+            .status
+            .success()
+    );
+    // Redirect the delivery ref away from main via project config.
+    let cfg = dir.join("doctrine.toml");
+    let mut body = std::fs::read_to_string(&cfg).unwrap_or_default();
+    body.push_str("\n[dispatch]\ndeliver-to = \"refs/heads/other\"\n");
+    std::fs::write(&cfg, body).unwrap();
+
+    write_reconcile_slice_64(dir);
+    let out = slice_status_done(dir);
+    assert!(
+        !out.status.success(),
+        "gate must check the configured ref (refs/heads/other), which has no trunk row; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("not integrated to trunk"),
+        "refusal cites the integration gate: {}",
+        stderr(&out)
     );
 }

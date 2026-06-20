@@ -8,10 +8,13 @@
 //! parses to its sub-config's default (tolerant — the conduct precedent). Every
 //! other top-level key is ignored.
 //!
-//! **Pure leaf (ADR-001).** The file *read* lives in the shell; [`parse`] takes
-//! owned text only.
+//! **Layering (ADR-001).** [`parse`] is the pure leaf — owned text in, no IO.
+//! [`load_doctrine_toml`] is the one thin impure shell seam co-located here (read
+//! file → `parse` → absent ⇒ default), so every consumer shares a single reader.
 
+use anyhow::Context;
 use serde::Deserialize;
+use std::path::Path;
 
 /// The outer `doctrine.toml` shape — the union of every read sub-config. Absent
 /// tables fall to their sub-config defaults (`#[serde(default)]`); unknown
@@ -36,13 +39,6 @@ pub(crate) struct DoctrineToml {
     pub(crate) value: crate::value::ValueConfig,
     /// The `[dispatch]` table — consumed by the dispatch orchestrator to select
     /// the spawn arm (SL-108 design D3 / IMP-101).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "consumed by a future dispatch-config display slice"
-        )
-    )]
     #[serde(default)]
     pub(crate) dispatch: crate::dispatch_config::DispatchConfig,
 }
@@ -58,6 +54,24 @@ pub(crate) fn parse(text: &str) -> anyhow::Result<DoctrineToml> {
     // need the bounds call `estimate::resolve_confidence` themselves.
     let doc: DoctrineToml = toml::from_str(text)?;
     Ok(doc)
+}
+
+/// The project config filename at the repo root (the structured sibling of
+/// `governance.md`), NOT a `.doctrine/` entity.
+pub(crate) const DOCTRINE_TOML: &str = "doctrine.toml";
+
+/// Read + parse the project `doctrine.toml` (IMPURE shell seam, ADR-001).
+/// Absent file -> `DoctrineToml::default()`; present -> tolerant [`parse`];
+/// genuinely malformed TOML errors with context. The single reader shared by
+/// the close-integration gate, the sync handler, the `deliver-to` verb, and
+/// `load_conduct`.
+pub(crate) fn load_doctrine_toml(root: &Path) -> anyhow::Result<DoctrineToml> {
+    let path = root.join(DOCTRINE_TOML);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => parse(&text).with_context(|| format!("Failed to parse {}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DoctrineToml::default()),
+        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    }
 }
 
 #[cfg(test)]
@@ -105,6 +119,15 @@ mod tests {
             doc2.dispatch.preferred_subprocess_harness,
             SubprocessHarness::Codex
         );
+    }
+
+    #[test]
+    fn dispatch_deliver_to_roundtrip() {
+        // VT-3: deliver-to survives the full DoctrineToml parse.
+        let doc = parse("[dispatch]\ndeliver-to = \"refs/heads/release\"\n").unwrap();
+        assert_eq!(doc.dispatch.deliver_to, "refs/heads/release");
+        let doc2 = parse("[dispatch]\n").unwrap();
+        assert_eq!(doc2.dispatch.deliver_to, "refs/heads/main");
     }
 
     #[test]
