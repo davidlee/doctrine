@@ -422,6 +422,106 @@ pub(crate) fn read_journal(root: &Path, slice: u32) -> anyhow::Result<Journal> {
     load(&dispatch_dir(root, slice).join("journal.toml"))
 }
 
+/// Tree-read `journal.toml` for `slice` from the committed `dispatch/<slice>`
+/// tip (object db, not the working filesystem) — `refs/heads/dispatch/<slice>`
+/// at `.doctrine/dispatch/<slice>/journal.toml` via `git::read_path_at`. `None`
+/// when the ref OR the path is absent (`read_path_at` folds both to `None`);
+/// `Some(parsed)` for a committed journal (a TOML-parse failure propagates).
+///
+/// Distinct from [`read_journal`], which reads the working filesystem: the
+/// coordination worktree is GC'd at conclude, so the trunk-integration query
+/// (EX-2) must source the ref tree, never disk.
+pub(crate) fn read_journal_at_ref(root: &Path, slice: u32) -> anyhow::Result<Option<Journal>> {
+    let refish = format!("refs/heads/dispatch/{slice:03}");
+    let path = format!(".doctrine/dispatch/{slice:03}/journal.toml");
+    match crate::git::read_path_at(root, &refish, &path)? {
+        Some(text) => Ok(Some(toml::from_str(&text)?)),
+        None => Ok(None),
+    }
+}
+
+/// Whether a slice's code units have integrated onto `trunk_ref` (design §3.1).
+/// Mechanical and ref-agnostic — the caller supplies `trunk_ref`; the
+/// refusal-policy copy lives in the `slice` shell (PHASE-02), not this leaf.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TrunkIntegration {
+    /// Nothing to integrate: no `dispatch/<slice>` ref, or a coordinated slice
+    /// whose journal is absent / has zero rows (never projected). Not gated.
+    NotDispatched,
+    /// The trunk row's planned oid is an ancestor of the resolved `trunk_ref`.
+    Integrated,
+    /// Dispatched, but the trunk row is missing / malformed / not yet landed —
+    /// the carried reason names the anomaly. Fail-closed.
+    Blocked(String),
+}
+
+/// Resolve a slice's [`TrunkIntegration`] against `trunk_ref` per design §3.1.
+/// Fail-closed: any anomaly on a slice whose journal HAS rows ⇒ `Blocked`; only
+/// `NotDispatched` and `Integrated` pass. `trunk_ref` is taken verbatim — no
+/// `refs/heads/main` literal here (PHASE-02's shell supplies it). The first
+/// non-test caller is the `slice` close-integration gate (`run_status`, PHASE-02).
+pub(crate) fn trunk_integration(
+    root: &Path,
+    slice: u32,
+    trunk_ref: &str,
+) -> anyhow::Result<TrunkIntegration> {
+    // 1. Probe dispatch-ref existence explicitly — read_path_at can't tell an
+    //    absent ref from an absent path, so the "never dispatched" terminus
+    //    needs its own rev-parse probe.
+    let dispatch_ref = format!("refs/heads/dispatch/{slice:03}");
+    if crate::git::resolve_ref(root, &dispatch_ref)?.is_none() {
+        return Ok(TrunkIntegration::NotDispatched);
+    }
+
+    // 2. A coordinated-but-never-projected slice (absent journal / zero rows)
+    //    has nothing to integrate; an unparseable journal is a hard block.
+    let journal = match read_journal_at_ref(root, slice) {
+        Ok(Some(journal)) => journal,
+        Ok(None) => return Ok(TrunkIntegration::NotDispatched),
+        Err(_unreadable) => {
+            return Ok(TrunkIntegration::Blocked("journal unreadable".to_owned()));
+        }
+    };
+    if journal.rows.is_empty() {
+        return Ok(TrunkIntegration::NotDispatched);
+    }
+
+    // 3. Count exact trunk-ref matches (count, never first-match — a malformed
+    //    journal must fail-close, not silently pick a row).
+    let mut trunk_rows = journal.rows.iter().filter(|r| r.target_ref == trunk_ref);
+    let Some(row) = trunk_rows.next() else {
+        return Ok(TrunkIntegration::Blocked(
+            "dispatched but no trunk row — integrate --trunk never completed".to_owned(),
+        ));
+    };
+    if trunk_rows.next().is_some() {
+        return Ok(TrunkIntegration::Blocked("ambiguous trunk row".to_owned()));
+    }
+
+    // 4. The matched row must carry a planned oid.
+    if row.planned_new_oid.is_empty() {
+        return Ok(TrunkIntegration::Blocked(
+            "trunk row has no planned oid".to_owned(),
+        ));
+    }
+
+    // 5. Resolve the trunk tip.
+    let Some(tip) = crate::git::resolve_ref(root, trunk_ref)? else {
+        return Ok(TrunkIntegration::Blocked(format!(
+            "trunk ref {trunk_ref} unresolved"
+        )));
+    };
+
+    // 6. Integrated iff the planned oid is an ancestor of the trunk tip.
+    if crate::git::is_ancestor(root, &row.planned_new_oid, &tip)? {
+        Ok(TrunkIntegration::Integrated)
+    } else {
+        Ok(TrunkIntegration::Blocked(
+            "planned tip not on trunk".to_owned(),
+        ))
+    }
+}
+
 /// Read `boundaries.toml` for `slice` (empty when absent).
 #[cfg_attr(
     not(test),
@@ -788,5 +888,266 @@ created_at = "d"
         assert_eq!(after.merge_oid, before.merge_oid);
         assert_eq!(after.created_by, before.created_by);
         assert_eq!(after.created_at, before.created_at);
+    }
+
+    // --- SL-126 PHASE-01: trunk-integration query (VT-1/VT-1b/VT-2) --------
+
+    use std::process::Command;
+
+    /// A throwaway git repo for the ref-tree reads the trunk-integration query
+    /// performs. Mirrors `git.rs`'s `ScratchRepo` (one suite per crate-module,
+    /// no shared test harness across the leaf tier) — pinned identity so commits
+    /// are deterministic; helpers commit the journal onto `dispatch/<slice>`.
+    struct JournalRepo {
+        _dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+
+    impl JournalRepo {
+        fn new() -> Self {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let path = dir.path().to_path_buf();
+            let repo = Self { _dir: dir, path };
+            repo.git(&["init", "-b", "main"]);
+            repo.git(&["config", "user.name", "Doctrine Test"]);
+            repo.git(&["config", "user.email", "test@doctrine.invalid"]);
+            repo
+        }
+
+        fn git(&self, args: &[&str]) -> String {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(&self.path)
+                .args(args)
+                .env("GIT_AUTHOR_DATE", "2026-06-20T00:00:00 +0000")
+                .env("GIT_COMMITTER_DATE", "2026-06-20T00:00:00 +0000")
+                .output()
+                .expect("spawn git");
+            assert!(
+                output.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+
+        /// Commit `contents` at `rel` on the CURRENT branch; return the new oid.
+        fn commit_file(&self, rel: &str, contents: &str, message: &str) -> String {
+            let full = self.path.join(rel);
+            if let Some(parent) = full.parent() {
+                std::fs::create_dir_all(parent).expect("create parent");
+            }
+            std::fs::write(&full, contents).expect("write file");
+            self.git(&["add", rel]);
+            self.git(&["commit", "-m", message]);
+            self.git(&["rev-parse", "HEAD"])
+        }
+
+        /// Commit a `journal.toml` body onto `refs/heads/dispatch/<slice>` (a
+        /// fresh orphan branch — the coordination branch is never main's child),
+        /// leaving the working branch on `main`. Returns the dispatch tip oid.
+        fn commit_journal(&self, slice: u32, body: &str) -> String {
+            let branch = format!("dispatch/{slice:03}");
+            self.git(&["checkout", "--orphan", &branch]);
+            self.git(&["rm", "-rf", "--cached", "--ignore-unmatch", "."]);
+            let rel = format!(".doctrine/dispatch/{slice:03}/journal.toml");
+            let oid = self.commit_file(&rel, body, "coordinate: journal");
+            // Force back to main — the orphan branch's tree is the source of the
+            // object-db read; the working-tree carry-over is irrelevant.
+            self.git(&["checkout", "-f", "main"]);
+            oid
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    /// A single journal row in on-disk TOML form (only the fields the query reads
+    /// need be meaningful; the rest satisfy the non-`default` serde requirements).
+    fn journal_row_toml(target_ref: &str, planned_new_oid: &str) -> String {
+        format!(
+            "[[row]]\n\
+             source_oid = \"src\"\n\
+             target_ref = \"{target_ref}\"\n\
+             expected_old_oid = \"{zero}\"\n\
+             planned_new_oid = \"{planned_new_oid}\"\n\
+             status = \"pending\"\n",
+            zero = "0".repeat(40),
+        )
+    }
+
+    const TRUNK: &str = "refs/heads/main";
+
+    // VT-1: no dispatch ref at all ⇒ NotDispatched.
+    #[test]
+    fn trunk_integration_no_dispatch_ref_is_not_dispatched() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "hi", "init"); // main exists, no dispatch/NNN.
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::NotDispatched,
+        );
+    }
+
+    // VT-1: dispatch ref present but the journal file is absent ⇒ NotDispatched.
+    #[test]
+    fn trunk_integration_ref_present_journal_absent_is_not_dispatched() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "hi", "init");
+        // Create dispatch/126 with NO journal.toml in its tree.
+        repo.git(&["checkout", "--orphan", "dispatch/126"]);
+        repo.git(&["rm", "-rf", "--cached", "--ignore-unmatch", "."]);
+        repo.commit_file("placeholder.txt", "x", "coordinate: no journal");
+        repo.git(&["checkout", "-f", "main"]);
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::NotDispatched,
+        );
+    }
+
+    // VT-1: dispatch ref present, journal with zero rows ⇒ NotDispatched.
+    #[test]
+    fn trunk_integration_zero_rows_is_not_dispatched() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "hi", "init");
+        repo.commit_journal(126, "");
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::NotDispatched,
+        );
+    }
+
+    // VT-1: planned oid IS an ancestor of the trunk tip ⇒ Integrated.
+    #[test]
+    fn trunk_integration_planned_ancestor_is_integrated() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "1", "init");
+        let landed = repo.commit_file("b.txt", "2", "feature landed");
+        repo.commit_file("c.txt", "3", "advance trunk"); // landed now an ancestor.
+        repo.commit_journal(126, &journal_row_toml(TRUNK, &landed));
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::Integrated,
+        );
+    }
+
+    // VT-1: planned oid NOT an ancestor of trunk ⇒ Blocked("planned tip not on trunk").
+    #[test]
+    fn trunk_integration_planned_not_ancestor_is_blocked() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "1", "init");
+        // A divergent commit on a side branch, never merged into main.
+        repo.git(&["checkout", "-b", "side"]);
+        let orphaned = repo.commit_file("side.txt", "x", "divergent work");
+        repo.git(&["checkout", "-f", "main"]);
+        repo.commit_file("b.txt", "2", "advance trunk");
+        repo.commit_journal(126, &journal_row_toml(TRUNK, &orphaned));
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::Blocked("planned tip not on trunk".to_owned()),
+        );
+    }
+
+    // VT-1: journal has rows but NONE target the trunk ref ⇒ Blocked(no trunk row).
+    #[test]
+    fn trunk_integration_no_trunk_row_is_blocked() {
+        let repo = JournalRepo::new();
+        let oid = repo.commit_file("a.txt", "1", "init");
+        repo.commit_journal(126, &journal_row_toml("refs/heads/edge", &oid));
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::Blocked(
+                "dispatched but no trunk row — integrate --trunk never completed".to_owned()
+            ),
+        );
+    }
+
+    // VT-1: TWO rows targeting the trunk ref ⇒ Blocked("ambiguous trunk row").
+    #[test]
+    fn trunk_integration_two_trunk_rows_is_ambiguous() {
+        let repo = JournalRepo::new();
+        let oid = repo.commit_file("a.txt", "1", "init");
+        let body = format!(
+            "{}{}",
+            journal_row_toml(TRUNK, &oid),
+            journal_row_toml(TRUNK, &oid),
+        );
+        repo.commit_journal(126, &body);
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::Blocked("ambiguous trunk row".to_owned()),
+        );
+    }
+
+    // VT-1: malformed TOML committed at the journal path ⇒ Blocked("journal unreadable").
+    #[test]
+    fn trunk_integration_malformed_journal_is_unreadable() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "1", "init");
+        repo.commit_journal(126, "this = = not valid toml [[[");
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::Blocked("journal unreadable".to_owned()),
+        );
+    }
+
+    // VT-1: matched trunk row with an empty planned oid ⇒ Blocked(no planned oid).
+    #[test]
+    fn trunk_integration_empty_planned_oid_is_blocked() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "1", "init");
+        repo.commit_journal(126, &journal_row_toml(TRUNK, ""));
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::Blocked("trunk row has no planned oid".to_owned()),
+        );
+    }
+
+    // VT-1b: a main row AND an edge row — exact-match selects the trunk row,
+    // resolves on it, no ambiguity.
+    #[test]
+    fn trunk_integration_exact_match_selects_trunk_among_edge() {
+        let repo = JournalRepo::new();
+        repo.commit_file("a.txt", "1", "init");
+        let landed = repo.commit_file("b.txt", "2", "feature landed");
+        repo.commit_file("c.txt", "3", "advance trunk");
+        let body = format!(
+            "{}{}",
+            journal_row_toml("refs/heads/edge", "deadbeef"),
+            journal_row_toml(TRUNK, &landed),
+        );
+        repo.commit_journal(126, &body);
+        assert_eq!(
+            trunk_integration(repo.path(), 126, TRUNK).unwrap(),
+            TrunkIntegration::Integrated,
+        );
+    }
+
+    // VT-2: read_journal_at_ref — None for absent ref & present-ref-missing-journal;
+    // Some(parsed) for a committed journal.
+    #[test]
+    fn read_journal_at_ref_none_and_some() {
+        let repo = JournalRepo::new();
+        let oid = repo.commit_file("a.txt", "1", "init");
+
+        // Absent dispatch ref ⇒ None.
+        assert_eq!(read_journal_at_ref(repo.path(), 126).unwrap(), None);
+
+        // Ref present but no journal.toml in its tree ⇒ None.
+        repo.git(&["checkout", "--orphan", "dispatch/126"]);
+        repo.git(&["rm", "-rf", "--cached", "--ignore-unmatch", "."]);
+        repo.commit_file("placeholder.txt", "x", "coordinate: no journal");
+        repo.git(&["checkout", "-f", "main"]);
+        assert_eq!(read_journal_at_ref(repo.path(), 126).unwrap(), None);
+
+        // A committed journal ⇒ Some(parsed) with the row read back.
+        repo.commit_journal(200, &journal_row_toml(TRUNK, &oid));
+        let journal = read_journal_at_ref(repo.path(), 200)
+            .unwrap()
+            .expect("committed journal parses to Some");
+        assert_eq!(journal.rows.len(), 1);
+        assert_eq!(journal.rows[0].target_ref, TRUNK);
+        assert_eq!(journal.rows[0].planned_new_oid, oid);
     }
 }
