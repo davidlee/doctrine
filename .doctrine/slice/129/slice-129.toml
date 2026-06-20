@@ -7,7 +7,7 @@ updated = "2026-06-20"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = [{ to = "SL-115", rank = 0 }]  # SL-115 design § R1: must land after SL-129
+after = []
 
 [[relation]]
 label = "specs"

@@ -27,9 +27,10 @@ own `stem`; the build compiles with the duplication.
 call produces the identical path the `format!` produced. Doing them all at once
 avoids intermediate states where some files use the helper and others don't.
 
-After SL-129 is closed, SL-115 can sequence with `doctrine link SL-115 after
-SL-129` (already authored) and relocate the now-thinner shells without stale
-id→path sites to manage.
+SL-115 carries an `after = [{ to = "SL-129" }]` edge so the sequencing is
+guaranteed at the project level: SL-129 lands first, consolidating all id→path
+construction; SL-115 then relocates the now-thinner shells without stale
+format! sites to manage.
 
 ## Notes
 
@@ -41,4 +42,4 @@ id→path sites to manage.
   `format!(".doctrine/slice/{id:03}/slice-{id:03}.toml")`) excluded — they are
   intentionally concrete for test failure readability.
 - Sub-kinds (DESIGN_KIND, PLAN_KIND, NOTES_KIND) get `stem: ""` as a sentinel:
-  `debug_assert!` in `id_path` catches accidental calls.
+  the shared `make_file_name` helper guards both `id_path` and `rel_path`.

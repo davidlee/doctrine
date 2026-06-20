@@ -1,9 +1,9 @@
 id = 115
 slug = "main-decompose"
 title = "Decompose main.rs: relocate orphan runners, extract cli arg modules"
-status = "proposed"
+status = "plan"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-20"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
