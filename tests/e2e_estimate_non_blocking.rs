@@ -1,41 +1,59 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! NF-001 structural non-blocking tripwire: Tier 1 — allowlist source-scan.
+//! SL-104 PHASE-01 — REQ-275 structural non-blocking tripwire (NF-001 / VT-1).
 //!
-//! Scans all `src/**/*.rs` for estimate / value facet symbols and asserts every
-//! match lands in the known exposure surface (the allowlist). Any new file naming
-//! a facet symbol breaks this test, forcing explicit review of the exposure.
+//! Source-scan allowlist: every file under `src/` that names a facet symbol
+//! (EstimateFacet, ValueFacet, EstimationConfig, ValueConfig, resolve_confidence,
+//! crate::estimate, crate::value, estimate::, value::) must be in the known
+//! exposure surface. Any NEW file naming a facet symbol fails the test — the
+//! non-blocking guarantee is structural: a gating path that reads estimate/value
+//! is ruled out by construction.
 //!
-//! Because `resolve_confidence` is in the symbol set, this same test proves no
-//! non-allowlist consumer of confidence exists (the display-only guarantee).
+//! Tier-2 (in `src/slice.rs`) complements this with a compile-time Gate
+//! destructure that proves the closure-gate input type is structurally
+//! facet-free.
+//!
+//! Because `resolve_confidence` is in the symbol set, this same test also proves
+//! no non-allowlist consumer of confidence exists (the display-only guarantee).
+//!
+//! # CHR-014 stale-shared-target-path hazard
+//! `CARGO_MANIFEST_DIR` is compile-time relative to the test binary's crate root.
+//! In a cargo build with shared target dir (e.g. workspace or `--target-dir`),
+//! stale binaries may embed the wrong path. `cargo clean -p doctrine` before a
+//! suspect run is the escape hatch.
 
-use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::tests_outside_test_module,
+    reason = "integration test: fail-fast unwrap/expect are idiomatic, and test fns live at crate root by construction"
+)]
 
-/// The workspace root, via the compile-time crate directory.
-fn src_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")
-}
+use std::path::PathBuf;
 
-/// Recursively collect every `.rs` file under `dir` (skipping directories that
-/// aren't Rust modules). Returns file paths relative to `dir`.
-fn collect_rs_files(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return out,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            out.extend(collect_rs_files(&path));
-        } else if path.extension().map_or(false, |e| e == "rs") {
-            out.push(path);
-        }
-    }
-    out
-}
+/// The set of precise symbol strings whose presence in a source file
+/// constitutes a facet reference. Bare words like `estimate`/`value` are NOT
+/// included — they collide with `toml::Value`, field names, and prose.
+const FACET_SYMBOLS: &[&str] = &[
+    "EstimateFacet",
+    "ValueFacet",
+    "EstimationConfig",
+    "ValueConfig",
+    "resolve_confidence",
+    "crate::estimate",
+    "crate::value",
+    "estimate::",
+    "value::",
+];
 
-/// The known exposure surface — files that are allowed to name facet symbols.
+/// Files known to name facet symbols. These are the legitimate exposure surface:
+/// the facet definitions themselves, their configuration readers, the catalog
+/// that hydrates them, the CLI handlers (main.rs), and the SliceDoc that
+/// carries them as optional fields.
+///
+/// `value::` is a broad substring that collides with `serde::de::value::`,
+/// `toml::value::`, and `serde_json::from_value::` — those lines are excluded
+/// from matching (see `line_matches_symbol`), so false-positives in revision.rs,
+/// knowledge.rs, and backlog.rs are correctly skipped.
 const ALLOWLIST: &[&str] = &[
     "estimate.rs",
     "value.rs",
@@ -48,114 +66,85 @@ const ALLOWLIST: &[&str] = &[
     "main.rs",
 ];
 
-/// Normalise a path to the `src/`-relative form used in the allowlist.
-fn src_relative(path: &Path, src: &Path) -> String {
-    path.strip_prefix(src)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .to_string()
+fn src_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
-/// Check whether `text` contains the literal string `pat` on any line, excluding
-/// lines that match any entry in `exclude_line_patterns`.
-fn text_contains_pattern(text: &str, pat: &str, exclude_line_patterns: &[&str]) -> bool {
-    text.lines().any(|line| {
-        if !line.contains(pat) {
-            return false;
-        }
-        if exclude_line_patterns.iter().any(|excl| line.contains(excl)) {
-            return false;
-        }
-        true
-    })
+/// Walk `src/**/*.rs`, returning every file path relative to `src/`.
+fn src_files(root: &PathBuf) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    walk(root, root, &mut out);
+    out.sort();
+    out
 }
 
-/// Symbol strings that indicate facet usage. Each is checked as a literal
-/// substring, with the exclusion filters noted below.
-const SYMBOLS: &[Symbol] = &[
-    Symbol::simple("EstimateFacet"),
-    Symbol::simple("ValueFacet"),
-    Symbol::simple("EstimationConfig"),
-    Symbol::simple("ValueConfig"),
-    Symbol::simple("resolve_confidence"),
-    Symbol::simple("crate::estimate"),
-    Symbol::simple("crate::value"),
-    Symbol::simple("estimate::"),
-    // `value::` is precise only when NOT inside `toml::value::`,
-    // `serde::de::value::`, or `serde_json::from_value::` — those are
-    // serde/TOML library paths, not the doctrine value module.
-    Symbol::with_exclusions(
-        "value::",
-        &[
-            "toml::value::",
-            "serde::de::value::",
-            "serde_json::from_value::",
-        ],
-    ),
-];
-
-struct Symbol {
-    pat: &'static str,
-    exclusions: &'static [&'static str],
-}
-
-impl Symbol {
-    const fn simple(pat: &'static str) -> Self {
-        Self {
-            pat,
-            exclusions: &[],
+fn walk(base: &PathBuf, dir: &PathBuf, out: &mut Vec<PathBuf>) {
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(base, &p, out);
+            } else if p.extension().is_some_and(|ext| ext == "rs") {
+                let rel = p.strip_prefix(base).unwrap().to_path_buf();
+                out.push(rel);
+            }
         }
     }
-    const fn with_exclusions(pat: &'static str, exclusions: &'static [&'static str]) -> Self {
-        Self { pat, exclusions }
-    }
 }
 
-/// Which symbols does a file match? Returns the FIRST matching symbol name (for
-/// the error message); the test fails on the first offender per file.
-fn offending_symbol(text: &str) -> Option<&'static str> {
-    for sym in SYMBOLS {
-        if text_contains_pattern(text, sym.pat, sym.exclusions) {
-            return Some(sym.pat);
+/// Does `line` name a facet symbol? For `estimate::` and `value::`, exclude
+/// lines that mention `serde::`, `serde_json::`, or `toml::` — those are
+/// library-level path segments, NOT references to the crate's facet modules.
+fn line_matches_facet_symbol(line: &str) -> bool {
+    let trimmed = line.trim();
+    for sym in FACET_SYMBOLS {
+        if trimmed.contains(sym) {
+            // For `estimate::` and `value::`, guard against serde/toml false positives.
+            if *sym == "estimate::" || *sym == "value::" {
+                if trimmed.contains("serde::")
+                    || trimmed.contains("serde_json::")
+                    || trimmed.contains("toml::")
+                {
+                    continue;
+                }
+            }
+            return true;
         }
     }
-    None
+    false
+}
+
+fn file_matches_facet_symbol(path: &PathBuf) -> bool {
+    let full = src_dir().join(path);
+    let text =
+        std::fs::read_to_string(&full).unwrap_or_else(|e| panic!("read {}: {e}", full.display()));
+    text.lines().any(line_matches_facet_symbol)
 }
 
 #[test]
-fn facet_symbols_are_confined_to_allowlist() {
-    // CHR-014: `CARGO_MANIFEST_DIR` points at the crate root, not the workspace
-    // root — this is correct here because `src/` lives beside `Cargo.toml`. A
-    // stale shared target path hazard exists if the build directory changes, but
-    // the manifest dir stays reliable for source discovery.
-    let src = src_dir();
-    let files = collect_rs_files(&src);
+fn no_facet_symbol_outside_allowlist() {
+    let root = src_dir();
+    let files = src_files(&root);
+    let mut offenders: Vec<String> = Vec::new();
 
-    let allowlist: BTreeSet<&str> = ALLOWLIST.iter().copied().collect();
-
-    let mut offenders: Vec<(String, &str)> = Vec::new();
     for file in &files {
-        let rel = src_relative(file, &src);
-        let text = std::fs::read_to_string(file)
-            .unwrap_or_else(|e| panic!("read {}: {e}", file.display()));
-        if let Some(sym) = offending_symbol(&text) {
-            if !allowlist.contains(rel.as_str()) {
-                offenders.push((rel, sym));
-            }
+        let rel = file.to_string_lossy().to_string();
+        if ALLOWLIST.contains(&rel.as_str()) {
+            continue;
+        }
+        if file_matches_facet_symbol(file) {
+            offenders.push(rel);
         }
     }
 
     if !offenders.is_empty() {
-        let mut msg = String::from(
-            "NF-001 TRIPWIRE: facet symbols found outside the allowlist exposure surface.\n",
+        panic!(
+            "NF-001 structural non-blocking tripwire FAILED — facet symbol(s) found outside allowlist:\n  {}\n\n\
+             Every file naming EstimateFacet, ValueFacet, EstimationConfig, ValueConfig, \
+             resolve_confidence, crate::estimate, crate::value, estimate::, or value:: \
+             must be in the ALLOWLIST (the known exposure surface). A new gating path \
+             that reads estimate/value would appear here.",
+            offenders.join("\n  ")
         );
-        for (file, sym) in &offenders {
-            msg.push_str(&format!("  {} — found `{sym}`\n", file));
-        }
-        msg.push_str("The closure-gate path must not read estimate/value facets.\n");
-        msg.push_str("Either remove the reference or add the file to the ALLOWLIST\n");
-        msg.push_str("(tests/e2e_estimate_non_blocking.rs) after confirming it is not\n");
-        msg.push_str("a gating-path consumer.\n");
-        panic!("{msg}");
     }
 }

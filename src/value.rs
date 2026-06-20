@@ -177,6 +177,15 @@ mod tests {
     }
 
     #[test]
+    fn v5a_negative_finite() {
+        let t = table_from("value=-5");
+        let facet = parse_optional(Some(&t)).unwrap().unwrap();
+        assert_eq!(facet.value, -5.0);
+        // No range constraint — validate must also accept negative finite
+        assert!(validate(&facet).is_ok());
+    }
+
+    #[test]
     fn v6_resolve_unit_default() {
         assert_eq!(resolve_unit(&ValueConfig::default()), "magic_beans");
     }
