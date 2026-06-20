@@ -42,3 +42,16 @@ ambient `root::find` and pin the test's root.
 Out of SL-050's scope (none of its seven findings); surfaced during SL-050
 PHASE-04 (which rewrote this test's dangling assertions onto the consequence
 tally). Captured here so it is not lost at SL-050 close.
+
+## Further sighting (SL-124, 2026-06-20)
+
+A `just gate` run during SL-124 PHASE-02 saw two *different* table-driven tests
+fail together — `relation::tests::every_variant_appears_in_the_table` and
+`relation_graph::tests::overlay_set_equals_resolvable_graph_labels_table_driven` —
+then **pass clean in isolation and on the very next `just gate`** (2055 passed, 0
+failed). ~60 dispatch worktrees were active at the time (concurrent worker
+compiles into the shared jail target). New tests, same flake-then-pass signature,
+strongly consistent with **hypothesis #1 (shared-target pollution)** rather than a
+defect localised to any one test — the failing set varies by run, which an
+ambient-root isolation bug (#2) in a specific test would not explain. Reinforces
+that the real fix is hardening the gate against shared-target false-failures.
