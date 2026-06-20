@@ -22,8 +22,11 @@ Validation is `lookup(source_kind, label)` → row, then `check_target_kind`
 against the row's `TargetSpec` (`relation.rs:897`). Edge logic never lives inside
 a Kind — ADR-010's "unify the contract, keep storage bespoke."
 
-"Link to anything" is therefore an **additive const edit, not an engine fork**
-(retires R2). Three target modes already exist:
+"Link to anything" is therefore **additive in the relation layer — no engine
+fork** (retires R2): the *relation validation + overlay allocation* take RFC with
+no special case (proven below). This is narrower than "a new kind is one const
+edit" — kind registration has other hand-maintained surfaces (see "Beyond the
+relation layer" below). Three target modes already exist:
 - `TargetSpec::AnyNumbered` — link to any *entity* that exists (`related`,
   `reviews`). Full graph citizen: overlay allocated, reciprocity derived.
 - `TargetSpec::Unvalidated` — free-text, no kind check, **no overlay, permanently
@@ -49,9 +52,26 @@ gates:
   distinct non-`Unvalidated` label, auto-allocated; `CyclePolicy::Reject,
   Arity::Unbounded`. A new resolvable label joins the graph for free.
 
-Mechanics: add `RFC` to `integrity::KINDS` (numbered kind), add `RFC` to the
-`related` rule's `sources` set (the `AnyNumbered` row). No new label required for
-RFC's own context edges.
+Relation mechanics: add `RFC` to the `related` rule's `sources` set (the
+`AnyNumbered` row). No new label required for RFC's own context edges.
+
+**RFC↔RFC self-reference** rides the same `AnyNumbered` row — no `SameKind`
+collision (the governance `related`/`SameKind` row is a *different* rule; `lookup`
+selects by source prefix, so an RFC source resolves to the `AnyNumbered` row).
+`CyclePolicy::Reject` is a non-issue: reciprocity is *derived*, so a "see also"
+is authored **one direction only** and the reverse view comes free — you never
+author both directions, so no cycle to reject.
+
+**Beyond the relation layer (F1 — kind registration is not "one const edit").**
+A new kind also touches hand-maintained surfaces that are *not* free:
+- `integrity::KINDS` — add the RFC row (`integrity.rs`, hand table).
+- `catalog::scan::outbound_for` (`catalog/scan.rs:39`) — explicit prefix dispatch;
+  an unrouted kind degrades to empty outbound edges in release (debug-asserts).
+- `src/rfc.rs` — **bespoke** verb module (`new`/`show`/`list`/`status`), mirroring
+  `adr.rs`/`rec.rs`. `list`/`show` are per-kind, not inherited (cf.
+  `rec::list_rows`, `concept_map::run_show`).
+So "RFC's own edges are an additive const edit" is true; "the whole kind is" is
+not. Scope's Affected Surface reflects this.
 
 ### Decision 2 — the RFC↔REV precursor edge (OQ-3)
 
@@ -77,11 +97,24 @@ passive/earlier renders derived inbound). New rule row:
 | `label` | `originates_from` — reads "REV-005 originates from RFC-003" |
 | `target` | `TargetSpec::Kinds(&[RFC])` — a REV originates from RFCs only |
 | `inbound_name` | `"precursor of"` — `inspect RFC-003` shows "precursor of: REV-005" |
-| `tier` | `Tier::One` (writable) |
-| `link` | `LinkPolicy::Writable` — `doctrine link rev-005 originates_from rfc-003` |
+| `tier` | `Tier::Typed` |
+| `link` | `LinkPolicy::TypedVerbOnly` — **not** generic `doctrine link` |
 
 Arity unbounded both ways (a REV may draw on several RFCs; an RFC may precede
 several REVs).
+
+**Revision-owned, not generic-link (F2).** The edge is authored only through a
+revision verb — a creation-time flag `doctrine revision new --originates-from
+RFC-NNN` (and/or a `revision originates-from <rev> <rfc>` verb), mirroring how
+`revises` is `TypedVerbOnly` and authored via `revision change add`
+(`relation.rs:429`, `revision.rs:779`). Making it `Tier::One`/`Writable` would let
+generic `doctrine link` append a REV outbound edge with only source/label/target
+checks (`relation.rs:858`), bypassing REV-local discipline — the exact "don't let
+`link` write to a REV" smell. It is **lighter than `revises`**: a provenance ref,
+no `[[change]]` payload — so `TypedVerbOnly` here costs a small flag/verb, not the
+change-row machinery. (The earlier "tier-1 is cheapest" rested on generic `link`
+being free; that "free" *is* the discipline violation, so the cheapest *correct*
+option is the revision-owned flag.)
 
 **Verb is outcome-neutral by design.** The edge means "this revision *arose from*
 this discussion" — true whether the RFC concluded yes or no. An earlier candidate
@@ -134,6 +167,14 @@ Reader path: an authored `status` field ⇒ RFC does **not** use REC's status-le
 Transition verb `doctrine rfc status <id> <state>` (status moves via CLI, not
 hand-edit — boot rule).
 
+**Status set + list visibility (F4).** `RFC_STATUSES = {open, resolved,
+withdrawn}` (known-status set, mirrors the per-kind status sets at
+`governance.rs:66`, `concept_map.rs:28`, `revision.rs:50`). `rfc list` default:
+**show `open` only**; `resolved`/`withdrawn` are hidden unless `--status` names
+them (the live-set-by-default idiom, same as governance kinds hiding
+deprecated/retired). `rfc list --status all` (or explicit values) reveals
+terminals. `--status` validates against `RFC_STATUSES`.
+
 **Status ⊥ `originates_from`.** A REV-authored edge never flips RFC status (that
 would reintroduce the target-mutation avoided in §1 Decision 2). An RFC may be
 `resolved` then later preceded by a REV, or precede a REV while still `open`. The
@@ -172,9 +213,21 @@ Three surfaces, three distinct treatments:
      reflects them). Cap 10 over 20 — `status` is a glance surface; 20 open
      deliberations is itself a signal better read via `rfc list`. The cap is a
      single const, trivially bumped if deliberation volume argues for it.
+   - **Serialized envelope + empty-state (F4):** `status` has a data model, not
+     just a render (`status.rs:22`). RFC count + titles extend the JSON envelope
+     too. Open RFCs **do not** flip empty-state: "No active work" (`status.rs:112`)
+     stays keyed on slices + open backlog only — deliberation is knowledge, not
+     tracked work, so a repo with only open RFCs is still "no active work" (RFCs
+     render as an awareness adjunct, not a work driver).
 
-3. **`doctrine rfc list` — catalog.** Free with kind registration (cf.
-   `rec list`). The on-demand full catalog.
+3. **`doctrine rfc list` — catalog.** The on-demand full catalog (bespoke
+   `rfc.rs` list, per F1 — not "free", but per-kind like `rec list`).
+
+**Authored-tree wiring (F5 — the silent-uncommittable trap, pinned).** `.doctrine/*`
+is gitignored with per-tree re-includes; without the negation the new kind is
+silently swallowed even when install creates the dir. Exact edits:
+- `install/manifest.toml` — add `.doctrine/rfc` to `[dirs].create`.
+- `.gitignore` — add `!.doctrine/rfc/` to the authored-tree negation block.
 
 ## §5 Governing ADR (OQ-5 — LOCKED)
 
@@ -186,10 +239,14 @@ ADR-013):
   and is structurally absent from governance surfaces. The novel,
   precedent-setting claim — the kind taxonomy gains a "think in public, decide
   nothing" slot.
-- **D2 — RFC's position on the change axis.** RFC is the *precursor* to a Revision
-  (ADR-013 territory); the REV→RFC `originates_from` edge is **outcome-neutral**
-  (no yes-bias, no status coupling). In the ADR because it interfaces ADR-013's
-  change-axis model.
+- **D2 — RFC's position on the change axis (amends ADR-013).** RFC is the
+  *precursor* to a Revision; the REV→RFC `originates_from` edge is
+  **outcome-neutral** (no yes-bias, no status coupling) and **revision-owned**
+  (TypedVerbOnly, §1 Decision 2). D2 adds a new REV outbound edge to ADR-013's
+  change-axis model, so the new ADR **explicitly amends ADR-013** on the REV
+  precursor interface (F6) — not a silent fold-in. The ADR carries a `supersedes`
+  or amendment relation to ADR-013 and states the REV-edge addition in those
+  terms.
 
 Stays design-level (not ADR): lifecycle states (§2), dir naming (§3),
 `AnyNumbered` participation for RFC's own edges (§1, rides ADR-004/010).
