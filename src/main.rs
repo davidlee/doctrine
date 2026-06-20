@@ -1022,10 +1022,18 @@ enum DispatchCommand {
         #[arg(long, group = "stage", required = true)]
         integrate: bool,
 
-        /// Stage-2 only: project the cumulative code units onto this trunk ref,
-        /// fast-forward-only + expected-tip CAS (e.g. `refs/heads/main`). Absent ⇒
+        /// Read-only (SL-121 §3(b)): print the committed journal's trunk-row
+        /// `planned_new_oid` — the row whose target is `--trunk` — to stdout and
+        /// exit; the close step-3a verify read surface. Tree-reads `dispatch/<slice>`,
+        /// writes nothing.
+        #[arg(long, group = "stage", required = true, requires = "trunk")]
+        show_journal_trunk_oid: bool,
+
+        /// Project the cumulative code units onto this trunk ref, fast-forward-only +
+        /// expected-tip CAS (e.g. `refs/heads/main`) under `--integrate`; names the
+        /// row to read under `--show-journal-trunk-oid`. Absent under `--integrate` ⇒
         /// trunk is left untouched.
-        #[arg(long, requires = "integrate")]
+        #[arg(long, conflicts_with = "prepare_review")]
         trunk: Option<String>,
 
         /// Stage-2 only: advance this standing aggregate ref to the `review/<slice>`
@@ -4185,15 +4193,22 @@ fn main() -> anyhow::Result<()> {
             DispatchCommand::Sync {
                 slice,
                 integrate,
+                show_journal_trunk_oid,
                 trunk,
                 edge,
                 path,
                 ..
             } => {
                 // The `stage` group is `required = true` single-choice: exactly one
-                // of `--prepare-review` / `--integrate` is set, so `integrate`
-                // alone selects the stage (no unreachable arm needed).
-                if integrate {
+                // of `--prepare-review` / `--integrate` / `--show-journal-trunk-oid`
+                // is set, so the booleans select the stage in order (no unreachable
+                // arm). `--show-journal-trunk-oid` requires `--trunk` (clap-enforced).
+                if show_journal_trunk_oid {
+                    let trunk = trunk.as_deref().ok_or_else(|| {
+                        anyhow::anyhow!("--show-journal-trunk-oid requires --trunk")
+                    })?;
+                    dispatch::run_show_journal_trunk_oid(path, slice, trunk)
+                } else if integrate {
                     dispatch::run_integrate(path, slice, trunk.as_deref(), edge.as_deref())
                 } else {
                     dispatch::run_prepare_review(path, slice)
@@ -7042,6 +7057,7 @@ mod write_class_tests {
                 slice: 64,
                 prepare_review: true,
                 integrate: false,
+                show_journal_trunk_oid: false,
                 trunk: None,
                 edge: None,
                 path: None,
@@ -7063,6 +7079,7 @@ mod write_class_tests {
                 slice: 64,
                 prepare_review: false,
                 integrate: true,
+                show_journal_trunk_oid: false,
                 trunk: None,
                 edge: None,
                 path: None,

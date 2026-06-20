@@ -1128,3 +1128,123 @@ fn record_boundary_refused_under_worker_mode() {
     );
     assert!(!ledger.exists(), "still records nothing");
 }
+
+// ====================================================================
+// PHASE-03 (SL-121) — close-verify read surface (EX-1 / VT-1, design §3(b))
+// ====================================================================
+
+fn stdout(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// Read the committed `dispatch/064` journal's trunk-row `planned_new_oid` via the
+/// new read flag, naming the row with `--trunk <ref>`. Runs in `cwd`.
+fn show_journal_trunk_oid(cwd: &Path, trunk: &str) -> Output {
+    run(
+        cwd,
+        None,
+        &[
+            "dispatch",
+            "sync",
+            "--show-journal-trunk-oid",
+            "--slice",
+            "64",
+            "--trunk",
+            trunk,
+            "-p",
+            cwd.to_str().unwrap(),
+        ],
+    )
+}
+
+/// VT-1 / EX-1: after a trunk integrate journals the trunk row, the read surface
+/// returns that row's full `planned_new_oid` from a checkout where `dispatch/064`
+/// is NOT checked out (the working tree is on `main`) — a tree-read of the
+/// committed journal (the `sync-tree-reads-ledger-not-worktree` invariant), not a
+/// transient `candidate admit` stdout. The value equals the cumulative code tip
+/// that `main` was advanced to.
+#[test]
+fn show_journal_trunk_oid_returns_committed_planned_oid_from_any_checkout() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let phase_tip = git(dir, &["rev-parse", "phase/064-02"]);
+
+    assert!(
+        integrate(dir, &["--trunk", "refs/heads/main"])
+            .status
+            .success(),
+        "trunk integrate journals the trunk row"
+    );
+    // The working tree is on `main`; dispatch/064 has no live worktree.
+    assert_eq!(git(dir, &["rev-parse", "--abbrev-ref", "HEAD"]), "main");
+
+    let out = show_journal_trunk_oid(dir, "refs/heads/main");
+    assert!(
+        out.status.success(),
+        "read surface succeeds; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        stdout(&out),
+        phase_tip,
+        "prints the trunk row's full planned_new_oid (== the projected tip)"
+    );
+}
+
+/// EX-1 (error path): a journal with no row for the named trunk ref (only
+/// `--prepare-review` ran — no trunk row journaled) refuses with a named token and
+/// prints no oid to stdout, so the close skill never diffs against an empty value.
+#[test]
+fn show_journal_trunk_oid_errors_when_no_trunk_row() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+
+    let out = show_journal_trunk_oid(dir, "refs/heads/main");
+    assert!(
+        !out.status.success(),
+        "no trunk row in the journal ⇒ refused"
+    );
+    assert!(
+        stderr(&out).contains("show-journal-trunk-oid"),
+        "refusal names the read surface: {}",
+        stderr(&out)
+    );
+    assert!(
+        stdout(&out).is_empty(),
+        "no oid emitted on the error path: {:?}",
+        stdout(&out)
+    );
+}
+
+/// EX-1 (clap wiring, R1): `--show-journal-trunk-oid` without `--trunk` is refused
+/// at parse — the read mode always names the row it reads.
+#[test]
+fn show_journal_trunk_oid_requires_trunk() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+
+    let out = run(
+        dir,
+        None,
+        &[
+            "dispatch",
+            "sync",
+            "--show-journal-trunk-oid",
+            "--slice",
+            "64",
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(!out.status.success(), "missing --trunk is a parse error");
+    assert!(
+        stderr(&out).contains("--trunk"),
+        "clap names the required --trunk: {}",
+        stderr(&out)
+    );
+}
