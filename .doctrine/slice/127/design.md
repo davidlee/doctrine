@@ -178,7 +178,7 @@ invisible terminal conflict into an up-front prompt.
 | Path | Change |
 |---|---|
 | `src/git.rs` | `ancestor_maximal` helper; `trunk_ladder` implicit arm → ancestor-maximal-then-order. |
-| `src/worktree.rs` | `coordinate`: plan-presence refuse-gate before `run_phases`. |
+| `src/worktree.rs` | `coordinate`: plan-presence refuse-gate **before the `worktree add -b` fork** (F6). |
 | `src/dispatch.rs` | extract `trunk_drift`/`Drift`; new `refresh-base` verb (`run_refresh_base` + core); classifier in `candidate_create` conflict arm; `RefreshBase` guidance arm in `run_status`. |
 | CLI wiring (dispatch subcommand enum) | register `refresh-base --slice`. |
 | `plugins/doctrine/skills/dispatch*/SKILL.md` | route to `refresh-base`; retire the `DOCTRINE_TRUNK_REF=main` env-prefix ritual. |
@@ -223,3 +223,9 @@ invisible terminal conflict into an up-front prompt.
 Integrate-side phantom (ISS-038 / IMP-122), `[dispatch] deliver_to` config
 (IMP-124 / IMP-101), `import --allow-reanchor` (IMP-043), and auto-refresh
 (Q2 deferred) are out — adjacent seams / a proven-verb follow-up.
+
+**New follow-up surfaced by the adversarial pass:** RSK-010 candidate (e) —
+`coordinate`'s rollback must never mutate the session working tree for *any*
+cause. F6 neutralizes it for the base-staleness cause only (the gate fires before
+the fork, so rollback is never entered); the general remedy is a separate
+rollback-safety fix. Harvest to backlog at reconcile.
