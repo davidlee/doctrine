@@ -18,6 +18,7 @@ pub(crate) const STD: &str = "STD";
 pub(crate) const RV: &str = "RV";
 pub(crate) const REC: &str = "REC";
 pub(crate) const REV: &str = "REV";
+pub(crate) const RFC: &str = "RFC";
 pub(crate) const ISS: &str = "ISS";
 pub(crate) const IMP: &str = "IMP";
 pub(crate) const CHR: &str = "CHR";
