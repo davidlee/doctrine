@@ -209,6 +209,7 @@ pub(crate) const REV_DIR: &str = ".doctrine/revision";
 pub(crate) const REV_KIND: Kind = Kind {
     dir: REV_DIR,
     prefix: crate::kinds::REV,
+    stem: "revision",
     scaffold: rev_scaffold_unused,
 };
 

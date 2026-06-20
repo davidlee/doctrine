@@ -50,6 +50,7 @@ pub(crate) const SPEC_STEM: &str = "spec";
 pub(crate) const PRODUCT_SPEC_KIND: Kind = Kind {
     dir: ".doctrine/spec/product",
     prefix: crate::kinds::PRD,
+    stem: "spec",
     scaffold: product_spec_scaffold,
 };
 
@@ -58,6 +59,7 @@ pub(crate) const PRODUCT_SPEC_KIND: Kind = Kind {
 pub(crate) const TECH_SPEC_KIND: Kind = Kind {
     dir: ".doctrine/spec/tech",
     prefix: crate::kinds::SPEC,
+    stem: "spec",
     scaffold: tech_spec_scaffold,
 };
 
@@ -330,11 +332,11 @@ fn spec_scaffold(subtype: SpecSubtype, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<
     let name = format!("{id:03}");
     let mut fileset = vec![
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/{SPEC_STEM}-{name}.toml")),
+            rel_path: entity::rel_path(subtype.kind(), id, entity::Ext::Toml),
             body: render_spec_toml(subtype, id, ctx.slug, ctx.title)?,
         },
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/{SPEC_STEM}-{name}.md")),
+            rel_path: entity::rel_path(subtype.kind(), id, entity::Ext::Md),
             body: render_spec_md(subtype, ctx.canonical, ctx.title)?,
         },
         Artifact::File {
@@ -550,14 +552,12 @@ pub(crate) fn read_spec(
     root: &Path,
     id: u32,
 ) -> anyhow::Result<(Spec, String, String)> {
-    let name = format!("{id:03}");
-    let dir = root.join(subtype.kind().dir).join(&name);
-    let toml_path = dir.join(format!("{SPEC_STEM}-{name}.toml"));
+    let toml_path = entity::id_path(root, subtype.kind(), id, entity::Ext::Toml);
     let toml_text = std::fs::read_to_string(&toml_path)
         .with_context(|| format!("Failed to read {}", toml_path.display()))?;
     let spec: Spec = toml::from_str(&toml_text)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
-    let md_path = dir.join(format!("{SPEC_STEM}-{name}.md"));
+    let md_path = entity::id_path(root, subtype.kind(), id, entity::Ext::Md);
     let prose_body = std::fs::read_to_string(&md_path)
         .with_context(|| format!("Failed to read {}", md_path.display()))?;
     Ok((spec, toml_text, prose_body))
@@ -1044,7 +1044,7 @@ fn build_registry(root: &Path) -> anyhow::Result<Registry> {
             // it was invisible to `validate`. BOTH arms harvest BOTH tech-only
             // fields so a product carrying one is seen, not dropped (codex F5b); the
             // `on_product` flag lets the check turn it into an invalid-kind finding.
-            let spec_toml = dir.join(format!("{SPEC_STEM}-{id:03}.toml"));
+            let spec_toml = entity::id_path(root, subtype.kind(), id, entity::Ext::Toml);
             let spec_text = std::fs::read_to_string(&spec_toml)
                 .with_context(|| format!("Failed to read {}", spec_toml.display()))?;
             // Classify a `parent` duplicate-key / array parse error into a named
@@ -1993,7 +1993,8 @@ mod tests {
         let toml = format!(
             "id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
         );
-        fs::write(dir.join(format!("{SPEC_STEM}-{name}.toml")), toml).unwrap();
+        let spec_toml = entity::id_path(root, subtype.kind(), id, entity::Ext::Toml);
+        fs::write(&spec_toml, toml).unwrap();
     }
 
     #[test]

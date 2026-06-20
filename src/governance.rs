@@ -36,8 +36,6 @@ use crate::meta::{self, Meta};
 pub(crate) struct GovKind {
     /// The entity-engine kind: dir, canonical-id prefix, scaffold fn.
     pub kind: Kind,
-    /// File stem AND JSON envelope/object key: `"adr"` / `"policy"`.
-    pub stem: &'static str,
     /// Known-set — the authority `validate_statuses` checks `--status` against.
     pub statuses: &'static [&'static str],
     /// The default-list hide-set predicate.
@@ -70,7 +68,7 @@ pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow:
     let (filter, format) = listing::build(args)?;
     let gov_root = root.join(g.kind.dir);
     let mut metas = listing::retain(
-        meta::read_metas(&gov_root, g.stem)?,
+        meta::read_metas(&gov_root, g.kind.stem)?,
         &filter,
         g.hidden,
         |m| key(g, m),
@@ -84,7 +82,7 @@ pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow:
             let sel = listing::select_columns(&GOV_COLUMNS, GOV_DEFAULT, columns.as_deref())?;
             Ok(listing::render_columns(&rows, &sel, render))
         }
-        Format::Json => listing::json_envelope(g.stem, &rows),
+        Format::Json => listing::json_envelope(g.kind.stem, &rows),
     }
 }
 
@@ -209,15 +207,14 @@ fn parse_ref(g: &GovKind, reference: &str) -> anyhow::Result<u32> {
 /// Read one entity's `<stem>-NNN.toml` (as data) and `<stem>-NNN.md` (prose body).
 /// Returns the parsed `Doc`, the raw TOML `text` (so the tier-1 `related` `[[relation]]`
 /// rows can be read by `relation::read_block` — SL-048 PHASE-04), and the prose body.
-fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, String, String)> {
+fn read_doc(g: &GovKind, root: &Path, id: u32) -> anyhow::Result<(Doc, String, String)> {
     let name = format!("{id:03}");
-    let dir = gov_root.join(&name);
-    let toml_path = dir.join(format!("{}-{name}.toml", g.stem));
+    let toml_path = entity::id_path(root, &g.kind, id, entity::Ext::Toml);
     let text = fs::read_to_string(&toml_path)
-        .with_context(|| format!("{} {name} not found at {}", g.stem, toml_path.display()))?;
+        .with_context(|| format!("{} {name} not found at {}", g.kind.stem, toml_path.display()))?;
     let doc: Doc = toml::from_str(&text)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
-    let md_path = dir.join(format!("{}-{name}.md", g.stem));
+    let md_path = entity::id_path(root, &g.kind, id, entity::Ext::Md);
     let body = fs::read_to_string(&md_path)
         .with_context(|| format!("Failed to read {}", md_path.display()))?;
     Ok((doc, text, body))
@@ -241,9 +238,9 @@ pub(crate) fn supersession_pair(
     id: u32,
 ) -> anyhow::Result<(Vec<String>, Vec<String>)> {
     use crate::relation::{RelationDoc, RelationLabel, read_block};
-    let (doc, toml_text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    let (doc, toml_text, _body) = read_doc(g, root, id)?;
     let relation_doc: RelationDoc = toml::from_str(&toml_text)
-        .with_context(|| format!("failed to parse relations for {} {id}", g.stem))?;
+        .with_context(|| format!("failed to parse relations for {} {id}", g.kind.stem))?;
     let (edges, _illegal) = read_block(&g.kind, &relation_doc);
     let supersedes = edges
         .into_iter()
@@ -269,7 +266,7 @@ pub(crate) fn relation_edges(
     id: u32,
 ) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
     use crate::relation::tier1_edges;
-    let (_doc, toml_text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    let (_doc, toml_text, _body) = read_doc(g, root, id)?;
     tier1_edges(&g.kind, &toml_text)
 }
 
@@ -353,10 +350,10 @@ fn show_json(
     let mut map = serde_json::Map::new();
     map.insert(
         "kind".to_string(),
-        serde_json::Value::String(g.stem.to_string()),
+        serde_json::Value::String(g.kind.stem.to_string()),
     );
     let mut doc_value =
-        serde_json::to_value(doc).with_context(|| format!("failed to serialize {}", g.stem))?;
+        serde_json::to_value(doc).with_context(|| format!("failed to serialize {}", g.kind.stem))?;
     // Splice the migrated `related` axis back into the `relationships` object so the
     // JSON shape is byte-identical to the pre-migration typed-field serialization.
     if let Some(rel) = doc_value
@@ -366,13 +363,13 @@ fn show_json(
         rel.insert("supersedes".to_string(), serde_json::json!(supersedes));
         rel.insert("related".to_string(), serde_json::json!(related));
     }
-    map.insert(g.stem.to_string(), doc_value);
+    map.insert(g.kind.stem.to_string(), doc_value);
     map.insert(
         "body".to_string(),
         serde_json::Value::String(body.to_string()),
     );
     serde_json::to_string_pretty(&serde_json::Value::Object(map))
-        .with_context(|| format!("failed to serialize {} show JSON", g.stem))
+        .with_context(|| format!("failed to serialize {} show JSON", g.kind.stem))
 }
 
 // ---------------------------------------------------------------------------
@@ -389,19 +386,19 @@ fn show_json(
 /// enum is bound in the per-kind `run_status` wrapper; this takes a `&str`.
 pub(crate) fn set_status(
     g: &GovKind,
-    gov_root: &Path,
+    root: &Path,
     id: u32,
     status: &str,
     today: &str,
 ) -> anyhow::Result<()> {
     let name = format!("{id:03}");
-    let path = gov_root.join(&name).join(format!("{}-{name}.toml", g.stem));
+    let path = entity::id_path(root, &g.kind, id, entity::Ext::Toml);
     // Delegate the write-core (no-op guard + F-1 refuse + edit-preserving insert) to
     // the shared authored-TOML seam; this flat kind carries no gate of its own. The
     // F-1 hint is non-destructive (EX-4): restore the seeded keys, never regenerate.
     let hint = format!(
         "malformed {stem} {name}: missing seeded `status`/`updated` — restore the seeded keys before the transition; the file is left untouched",
-        stem = g.stem
+        stem = g.kind.stem
     );
     crate::dep_seq::set_authored_status(&path, &[("status", status), ("updated", today)], &hint)?;
     Ok(())
@@ -441,7 +438,7 @@ pub(crate) fn run_new(
     let id = out
         .eid
         .numeric_id()
-        .with_context(|| format!("{} kind must yield a numeric id", g.stem))?;
+        .with_context(|| format!("{} kind must yield a numeric id", g.kind.stem))?;
     writeln!(
         io::stdout(),
         "Created {} {id:03}: {}",
@@ -473,7 +470,7 @@ pub(crate) fn run_show(
     use crate::relation::RelationLabel;
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let id = parse_ref(g, reference)?;
-    let (doc, toml_text, body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    let (doc, toml_text, body) = read_doc(g, &root, id)?;
 
     // SL-095 (D4): both `supersedes` and `related` now come from tier1_edges.
     let edges = crate::relation::tier1_edges(&g.kind, &toml_text)?;
@@ -535,7 +532,7 @@ mod tests {
         .unwrap();
         set_status(
             &ADR_KIND,
-            &adr_root(root),
+            root,
             1,
             first_status.as_str(),
             &crate::clock::today(),
@@ -588,8 +585,6 @@ mod tests {
         let root = dir.path().to_path_buf();
         run_new(&ADR_KIND, Some(root.clone()), Some("Use Rust".into()), None).unwrap();
         run_new(&ADR_KIND, Some(root.clone()), Some("Adopt CI".into()), None).unwrap();
-        let adr = adr_root(&root);
-
         // list (the run_list pipeline): both ADRs, sorted by id. `--all` reveals
         // every status; the spine owns the filter, the kind owns the id sort.
         let all = list_rows(
@@ -607,7 +602,7 @@ mod tests {
         // authored mutation via the real verb core (not a rewrite).
         set_status(
             &ADR_KIND,
-            &adr,
+            &root,
             1,
             AdrStatus::Accepted.as_str(),
             &crate::clock::today(),
@@ -666,7 +661,7 @@ mod tests {
         .unwrap();
         set_status(
             &ADR_KIND,
-            &adr_root(root),
+            root,
             2,
             AdrStatus::Superseded.as_str(),
             "2099-01-01",
@@ -702,7 +697,7 @@ mod tests {
         .unwrap();
         set_status(
             &ADR_KIND,
-            &adr_root(root),
+            root,
             2,
             AdrStatus::Superseded.as_str(),
             "2099-01-01",
@@ -1019,7 +1014,7 @@ mod tests {
         )
         .unwrap();
 
-        let (doc, _toml_text, body) = read_doc(&ADR_KIND, &adr_root(root), 1).unwrap();
+        let (doc, _toml_text, body) = read_doc(&ADR_KIND, root, 1).unwrap();
         assert_eq!(doc.id, 1);
         assert_eq!(doc.slug, "use-rust");
         assert_eq!(doc.status, "proposed");
@@ -1078,7 +1073,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let (doc, _toml_text, body) = read_doc(&ADR_KIND, &adr_root(root), 1).unwrap();
+        let (doc, _toml_text, body) = read_doc(&ADR_KIND, root, 1).unwrap();
 
         let out = show_json(&ADR_KIND, &doc, &[], &[], &body).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
@@ -1187,7 +1182,7 @@ mod tests {
         // an injected date distinct from today() so the bump is visible (VT-1).
         set_status(
             &ADR_KIND,
-            &adr,
+            root,
             1,
             AdrStatus::Accepted.as_str(),
             "2099-01-01",
@@ -1227,7 +1222,7 @@ mod tests {
         // wrote — so byte-equality proves the guard short-circuited (I5).
         set_status(
             &ADR_KIND,
-            &adr_root(root),
+            root,
             1,
             AdrStatus::Proposed.as_str(),
             "2099-01-01",
@@ -1254,7 +1249,7 @@ mod tests {
         .unwrap();
         let err = set_status(
             &ADR_KIND,
-            &adr_root(root),
+            root,
             9,
             AdrStatus::Accepted.as_str(),
             "2099-01-01",
@@ -1278,7 +1273,7 @@ mod tests {
         .unwrap();
         let err = set_status(
             &ADR_KIND,
-            &adr_root(dir.path()),
+            dir.path(),
             3,
             AdrStatus::Accepted.as_str(),
             "2099-01-01",

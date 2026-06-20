@@ -696,6 +696,7 @@ pub(crate) const REVIEW_DIR: &str = ".doctrine/review";
 pub(crate) const REVIEW_KIND: Kind = Kind {
     dir: REVIEW_DIR,
     prefix: crate::kinds::RV,
+    stem: "review",
     scaffold: review_scaffold_unused,
 };
 

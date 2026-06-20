@@ -39,7 +39,6 @@ use crate::{entity, fsutil, git, listing, meta, root};
 /// owns — `Some` only for slice today — which `reseat` refuses to strand (F3).
 pub(crate) struct KindRef {
     pub(crate) kind: &'static entity::Kind,
-    pub(crate) stem: &'static str,
     pub(crate) state_dir: Option<&'static str>,
 }
 
@@ -50,62 +49,50 @@ pub(crate) struct KindRef {
 pub(crate) const KINDS: &[KindRef] = &[
     KindRef {
         kind: &SLICE_KIND,
-        stem: "slice",
         state_dir: Some(".doctrine/state/slice"),
     },
     KindRef {
         kind: &ADR_KIND.kind,
-        stem: "adr",
         state_dir: None,
     },
     KindRef {
         kind: &POLICY_KIND.kind,
-        stem: "policy",
         state_dir: None,
     },
     KindRef {
         kind: &STANDARD_KIND.kind,
-        stem: "standard",
         state_dir: None,
     },
     KindRef {
         kind: &PRODUCT_SPEC_KIND,
-        stem: "spec",
         state_dir: None,
     },
     KindRef {
         kind: &TECH_SPEC_KIND,
-        stem: "spec",
         state_dir: None,
     },
     KindRef {
         kind: &REQUIREMENT_KIND,
-        stem: "requirement",
         state_dir: None,
     },
     KindRef {
         kind: &ISSUE_KIND,
-        stem: "backlog",
         state_dir: None,
     },
     KindRef {
         kind: &IMPROVEMENT_KIND,
-        stem: "backlog",
         state_dir: None,
     },
     KindRef {
         kind: &CHORE_KIND,
-        stem: "backlog",
         state_dir: None,
     },
     KindRef {
         kind: &RISK_KIND,
-        stem: "backlog",
         state_dir: None,
     },
     KindRef {
         kind: &IDEA_KIND,
-        stem: "backlog",
         state_dir: None,
     },
     // Review (SL-040) — the 2nd kind with a runtime state tree (baton/lock/cache,
@@ -114,7 +101,6 @@ pub(crate) const KINDS: &[KindRef] = &[
     // ledger scans cleanly while the strict `Meta` stays untouched.
     KindRef {
         kind: &REVIEW_KIND,
-        stem: "review",
         state_dir: Some(".doctrine/state/review"),
     },
     // REC (SL-042) — the reconciliation-record kind. Status-LESS like review
@@ -122,7 +108,6 @@ pub(crate) const KINDS: &[KindRef] = &[
     // id-only reader (meta::read_id). Owns no runtime state tree (state_dir None).
     KindRef {
         kind: &REC_KIND,
-        stem: "rec",
         state_dir: None,
     },
     // Knowledge records (SL-059) — four numbered kinds over one engine, each its
@@ -133,27 +118,22 @@ pub(crate) const KINDS: &[KindRef] = &[
     // graph scan).
     KindRef {
         kind: &ASSUMPTION_KIND,
-        stem: "record",
         state_dir: None,
     },
     KindRef {
         kind: &DECISION_KIND,
-        stem: "record",
         state_dir: None,
     },
     KindRef {
         kind: &QUESTION_KIND,
-        stem: "record",
         state_dir: None,
     },
     KindRef {
         kind: &CONSTRAINT_KIND,
-        stem: "record",
         state_dir: None,
     },
     KindRef {
         kind: &CONCEPT_MAP_KIND,
-        stem: "concept-map",
         state_dir: None,
     },
     // Revision (SL-066, ADR-013) — the REV change-axis kind. Status-ful (scanned via
@@ -164,7 +144,6 @@ pub(crate) const KINDS: &[KindRef] = &[
     // debug-build corpus scan panics/mis-classifies the moment a REV is minted.
     KindRef {
         kind: &REV_KIND,
-        stem: "revision",
         state_dir: None,
     },
     // RFC (SL-122) — the governance-neutral discussion kind. Status-ful (scanned via
@@ -173,7 +152,6 @@ pub(crate) const KINDS: &[KindRef] = &[
     // debug-build corpus scan panics the moment an RFC is minted.
     KindRef {
         kind: &RFC_KIND.kind,
-        stem: "rfc",
         state_dir: None,
     },
 ];
@@ -282,11 +260,11 @@ fn scan_kind(root: &Path, kind: &'static KindRef) -> anyhow::Result<KindSnapshot
         // The scan path needs only the id (design §5 D2): read it via the id-only
         // reader so review's intentionally status-less toml scans cleanly, while
         // the strict `Meta` (status-bearing readers) is untouched.
-        let toml_id = meta::read_id(&tree_root, kind.stem, dir_id)?;
+        let toml_id = meta::read_id(&tree_root, kind.kind.stem, dir_id)?;
         entities.push(EntityFacts { dir_id, toml_id });
     }
 
-    let aliases = scan_aliases(&tree_root, kind.stem)?;
+    let aliases = scan_aliases(&tree_root, kind.kind.stem)?;
     Ok(KindSnapshot {
         prefix: kind.kind.prefix,
         entities,
@@ -433,7 +411,7 @@ pub(crate) fn run_reseat(
         src_dir.display()
     );
     // Slug from the authored metadata — the alias name component.
-    let slug = meta::read_meta(&tree_root, kind.stem, src_id)?.slug;
+    let slug = meta::read_meta(&tree_root, kind.kind.stem, src_id)?.slug;
 
     // The free-id pick: explicit `--to`, else the trunk-aware default (PHASE-02).
     let dst_id = match to {
@@ -474,15 +452,15 @@ pub(crate) fn run_reseat(
     std::fs::rename(&src_dir, &dst_dir)
         .with_context(|| format!("rename {} → {}", src_dir.display(), dst_dir.display()))?;
     for ext in ["toml", "md"] {
-        let from = dst_dir.join(format!("{}-{src_name}.{ext}", kind.stem));
-        let onto = dst_dir.join(format!("{}-{dst_name}.{ext}", kind.stem));
+        let from = dst_dir.join(format!("{}-{src_name}.{ext}", kind.kind.stem));
+        let onto = dst_dir.join(format!("{}-{dst_name}.{ext}", kind.kind.stem));
         if from.exists() {
             std::fs::rename(&from, &onto)
                 .with_context(|| format!("rename {} → {}", from.display(), onto.display()))?;
         }
     }
     // toml `id` field — edit-preserving (toml_edit keeps comments/sections).
-    let toml_path = dst_dir.join(format!("{}-{dst_name}.toml", kind.stem));
+    let toml_path = crate::entity::id_path(&root, kind.kind, dst_id, crate::entity::Ext::Toml);
     let text = std::fs::read_to_string(&toml_path)
         .with_context(|| format!("read {}", toml_path.display()))?;
     let mut doc = text

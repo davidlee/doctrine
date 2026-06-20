@@ -75,6 +75,7 @@ use std::str::FromStr;
 use clap::{Args, Parser, Subcommand};
 
 use crate::commands::map::MapServeArgs;
+// unused: Ext, id_path, rel_path
 use crate::listing::{Format, ListArgs};
 
 fn parse_expand_depth(s: &str) -> Result<usize, String> {
@@ -4472,11 +4473,7 @@ fn resolve_link_path(
 ) -> anyhow::Result<(PathBuf, &'static relation::RelationRule)> {
     let (kref, id) = integrity::parse_canonical_ref(source)?;
     let rule = relation::validate_link(kref.kind, label)?;
-    let name = format!("{id:03}");
-    let toml_path = root
-        .join(kref.kind.dir)
-        .join(&name)
-        .join(format!("{}-{name}.toml", kref.stem));
+    let toml_path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     Ok((toml_path, rule))
 }
 
@@ -4487,11 +4484,7 @@ fn resolve_entity_path_and_canonical(
     raw: &str,
 ) -> anyhow::Result<(PathBuf, String)> {
     let (kref, id) = integrity::parse_canonical_ref(raw)?;
-    let name = format!("{id:03}");
-    let path = root
-        .join(kref.kind.dir)
-        .join(&name)
-        .join(format!("{}-{name}.toml", kref.stem));
+    let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     if !path.exists() {
         anyhow::bail!("entity not found: {raw}");
     }
@@ -4731,11 +4724,7 @@ fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Res
         "`{source}` is a {} entity, which cannot author needs/after — only a slice or a backlog item (issue/improvement/chore/risk/idea) carries dep/seq",
         skref.kind.prefix
     );
-    let name = format!("{sid:03}");
-    Ok(root
-        .join(skref.kind.dir)
-        .join(&name)
-        .join(format!("{}-{name}.toml", skref.stem)))
+    Ok(entity::id_path(root, skref.kind, sid, entity::Ext::Toml))
 }
 
 /// Resolve a generic dep/seq `(SRC, TGT)` pair against the author-time gate (§5.4),
@@ -4847,10 +4836,7 @@ fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Result<()> {
     for edge in &ds.after {
         let is_dangling = match integrity::parse_canonical_ref(&edge.to) {
             Ok((kref, tid)) => {
-                let target_path = root
-                    .join(kref.kind.dir)
-                    .join(format!("{tid:03}"))
-                    .join(format!("{}-{tid:03}.toml", kref.stem));
+                let target_path = entity::id_path(&root, kref.kind, tid, entity::Ext::Toml);
                 if target_path.exists() {
                     let body = std::fs::read_to_string(&target_path).unwrap_or_default();
                     let val: toml::Value = match toml::from_str(&body) {
@@ -4869,10 +4855,7 @@ fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Result<()> {
         if is_dangling {
             let reason = match integrity::parse_canonical_ref(&edge.to) {
                 Ok((kref2, tid2)) => {
-                    let target_path = root
-                        .join(kref2.kind.dir)
-                        .join(format!("{tid2:03}"))
-                        .join(format!("{}-{tid2:03}.toml", kref2.stem));
+                    let target_path = entity::id_path(&root, kref2.kind, tid2, entity::Ext::Toml);
                     if target_path.exists() {
                         let body = std::fs::read_to_string(&target_path).unwrap_or_default();
                         let val: toml::Value = match toml::from_str(&body) {
@@ -4933,11 +4916,7 @@ fn resolve_supersede_path(
     kref: &integrity::KindRef,
     id: u32,
 ) -> (PathBuf, String) {
-    let name = format!("{id:03}");
-    let toml_path = root
-        .join(kref.kind.dir)
-        .join(&name)
-        .join(format!("{}-{name}.toml", kref.stem));
+    let toml_path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     (toml_path, listing::canonical_id(kref.kind.prefix, id))
 }
 
@@ -6078,9 +6057,9 @@ mod estimate_value_tests {
     fn seed_entity(root: &std::path::Path, prefix: &str, id: u32) -> (std::path::PathBuf, String) {
         let padded = format!("{id:03}");
         let kref = integrity::kind_by_prefix(prefix).expect("valid prefix");
-        let dir = root.join(kref.kind.dir).join(&padded);
+        let toml_path = entity::id_path(&root, kref.kind, id, entity::Ext::Toml);
+        let dir = toml_path.parent().unwrap().to_path_buf();
         std::fs::create_dir_all(&dir).unwrap();
-        let toml_path = dir.join(format!("{}-{padded}.toml", kref.stem));
         std::fs::write(
             &toml_path,
             format!(
