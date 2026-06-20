@@ -37,15 +37,30 @@ memory).
 
 ## Spawn
 
+BASE GUARD — run FIRST, before any read/edit/commit. STOP and write nothing if any check fails:
+  1. git status --porcelain                         → MUST be empty (clean tree)
+  2. git rev-parse --git-dir vs --git-common-dir    → MUST differ (isolated linked worktree, not main tree)
+  3. git merge-base --is-ancestor <B> HEAD          → MUST exit 0 (HEAD descends from base <B>)
+  4. grep prerequisite seams: <seams>               → MUST be present
+On any failure: STOP, author/commit nothing, report "base-guard-failed: <check>".
+
+Check #2 is the in-worker mirror of the orchestrator's `not-isolated` belt —
+if the worker's git-dir equals git-common-dir, it is not an isolated worktree.
+
 ```
 subagent_type: dispatch-worker
 isolation: worktree
-prompt: <pre-distilled worker prompt>
+prompt: <pre-distilled worker prompt, including the base-guard block above>
 ```
 
-## Post-spawn
-After the worker returns: `doctrine worktree verify-worker --base <B> --dir <worktree>`.
-Abort the funnel on any refusal.
+## Post-spawn (pre-funnel gate, claude arm)
+1. Read the Agent return footer for `worktreePath:` / `worktreeBranch:`.
+   NO footer ⇒ no isolated tree was created (fallback-to-main under lock contention) ⇒
+   ABORT, do NOT enter the funnel. Re-dispatch, or switch to the subprocess arm if main churns.
+2. doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <worktreeBranch>
+   Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base / branch-mismatch.
+   (`--branch` binds dir↔branch — both belts then verify ONE worker state.)
+3. Hand <worktreeBranch> to the funnel as S.
 
 ## Boundary recording
 After the batch's code commit and before the knowledge commit:
@@ -57,9 +72,11 @@ Claude-arm-only (no fork branch); skip on codex/pi.
 arm (the `cd` silently reverts under a jail → worker forks `main`; the CLI now
 refuses this, but use `.dispatch/SL-<n>`); spawn without cd'ing into the
 coordination tree first (a worker forked off `main` is a wrong-base verdict at
-`verify-worker`); spawn with a
+`verify-worker`); funnel a worker that returned no `worktreePath:` footer;
+spawn with a
 `subagent_type` other than `dispatch-worker`; run `fork` or bwrap here (that's
 `/dispatch-subprocess`); claim parallel landing (v1 lands one per base).
 **Always:** cd into the coord tree before every spawn; pin `subagent_type` to
-`dispatch-worker`; run `verify-worker` before `import`; return to the router for
+`dispatch-worker`; embed the base-guard block in the distilled worker prompt;
+run `verify-worker` before `import`; return to the router for
 the funnel cadence.
