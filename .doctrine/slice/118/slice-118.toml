@@ -1,9 +1,9 @@
 id = 118
 slug = "estimate-authoring-cli"
 title = "Estimate facet authoring CLI verb"
-status = "ready"
+status = "done"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-21"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
