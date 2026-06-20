@@ -27,6 +27,23 @@ the slice closes.
   module behind `pub(crate) fn dispatch(command, color)`; the call site collapses
   to one line per kind. Moving the enum alone would leave `main.rs` growing per
   kind (the arm).
+- **D1a — sideways-call carve-out (the body-relocation corollary).** An arm body
+  moved from `main` into a kind module *mints a production edge from that kind to
+  every command-tier module the body calls* — edges that were inert `main→X`
+  before. If the kind does **not already import** that module, this is a NEW
+  command-tier edge that can grow the tangle baseline (the sink proof does **not**
+  cover it — §5). **Rule:** an arm whose body calls *sideways* into a command-tier
+  module the owning kind does not already import keeps its dispatch in a
+  `commands/` **sink shell** (sink-safe by §5), not the kind module. Verified
+  instance: `MemoryCommand::Sync` calls `corpus::run_sync` /
+  `run_sync_install` (`main.rs:3688,3690`); `corpus` already imports `memory`
+  (`corpus.rs:38`), so folding Sync into `memory.rs` mints `memory→corpus` and
+  closes a `corpus↔memory` 2-cycle → tangle 120→≥121. **Fix:** `MemoryCommand::Sync`
+  dispatch stays in `commands/` (e.g. `commands/cli.rs`), not `memory.rs`. (Top-level
+  verbs `Install`/`Status`/`Reseat` are unaffected — they already home in
+  `commands/cli.rs`, so their `install`/`status`/`integrity` calls are harmless
+  `commands→X` sink out-edges; `MemoryCommand::Find`/`Retrieve` are fine because
+  `memory→retrieve` already exists.)
 - **D2 — `write_class` stays centralized** (`commands/guard.rs`), not distributed
   per kind. It is the SL-056 / ADR-008 worker-mode write gate — security-critical.
   One auditable `Read`/`Write`/`Orchestrator` match beats 25 scattered
@@ -162,7 +179,12 @@ blows past 120 → gate fails.
 - **`FindRetrieveArgs`** depends on `memory::{MemoryType, Status, Lifespan}`
   (command-tier) and is flattened into `MemoryCommand::{Find,Retrieve}`. It
   **cannot** be a shared module (anything importing it ↔ `memory`). It moves into
-  **`memory.rs`**, co-located with `MemoryCommand`.
+  **`memory.rs`**, co-located with `MemoryCommand`. Safe: the `Find`/`Retrieve`
+  dispatch bodies call `retrieve::*`, and `memory→retrieve` is an existing
+  production edge. **But** the sibling `MemoryCommand::Sync` arm calls `corpus::*`
+  and `memory→corpus` does **not** exist today — so Sync's dispatch does **not**
+  move with the rest of `MemoryCommand`; it stays in a `commands/` sink shell
+  (D1a). Only the clap struct + the non-Sync arms land in `memory.rs`.
 - **General rule:** a shared clap bundle with leaf-only deps → crate root
   (`main`, inert); a clap bundle coupled to a command/engine module → that
   module. **Never `commands/`** (would break the sink — §5). A plan task audits
@@ -191,9 +213,22 @@ out-edges* from `commands` (`cli`→every kind enum, `relation`→`memory`,
 `coverage`→`coverage_store`, …) but **no inbound** command-tier edge — provided no
 kind ever imports `commands`. That is exactly why the §4 shared-args rule forbids
 `commands/list.rs`: a kind's `list: CommonListArgs` field must not point into
-`commands`. Hold the invariant and `commands` stays out of the SCC →
-`[tangle_baseline] command = 120` is unchanged no matter how many kind/engine
-modules the shells call.
+`commands`. Hold the invariant and `commands` stays out of the SCC → it adds **0**
+tangle no matter how many kind/engine modules the shells call.
+
+**Scope of the sink proof (what it does NOT cover).** The sink invariant proves
+only that `commands` itself stays out of the command SCC. It says nothing about
+edges **between two kind/engine modules** that the refactor introduces. D1 relocates
+each dispatch arm's body from inert `main` into a command-tier kind module, so any
+command-module call inside a body becomes a *new* production kind→X edge. If X is
+command-tier and the kind didn't already import it, that edge can enlarge the
+command SCC and grow tangle past 120 — **independently of the sink**. Verified
+exemplar: `MemoryCommand::Sync → corpus::*` would mint `memory→corpus`, cycling with
+the existing `corpus→memory`. The D1a carve-out (sideways callers stay in a
+`commands/` sink shell) neutralises this class. **Therefore `[tangle_baseline]
+command = 120` is not asserted as automatically unchanged — it is an obligation the
+plan must verify per batch (V3), and the per-arm sideways-call audit (below) is a
+mandatory plan task, not an assumption.**
 
 ### F-C (revised) — relocation is for LOC, not cycles
 
@@ -214,11 +249,11 @@ root, by §4). Still a ~96% cut.
 |---|---|---|---|
 | V1 | `tests/e2e_*` golden suites pass **unchanged** (zero golden-file edits) | VT | runtime CLI behaviour byte-identical for covered paths (behaviour-preservation gate, AGENTS.md). **Scope caveat:** `e2e_list_conformance` is *parse-only* over 8 `SPINE_KINDS` — it does **not** cover `--help` text or every `CommonListArgs` consumer (e.g. `ConceptMapCommand::List` is outside it). See V7. |
 | V2 | relocated `#[cfg(test)]` modules pass in new homes, assertions unchanged (only `use super::*` / path fixups) | VT | logic preserved through the move |
-| V3 | `tests/architecture_layering.rs` green: **no new `[[accepted_violation]]`**; `[tangle_baseline] command = 120` **unchanged** | VT | ADR-001 honored — no upward edge, `commands` stays a sink (the §5 invariant makes this provable) |
+| V3 | `tests/architecture_layering.rs` green: **no new `[[accepted_violation]]`**; `[tangle_baseline] command = 120` **unchanged** | VT | ADR-001 honored — no upward edge, `commands` stays a sink (the §5 invariant makes this provable). **Run the gate per batch** — the sink proof does not cover kind→kind edges minted by D1 body relocation (§5 scope note); any growth is a stop/restructure per D1a, never an auto-accept. |
 | V4 | `just gate` green — clippy zero-warn `--workspace`, fmt | VT | house standard |
 | V5 | grep: no relocated `run_*` remains in `main.rs`; no `enum *Command` in `main.rs` (top-level `Command` now in `commands/cli.rs`); `commands/` contains no `*ListArgs`/shared-arg struct (sink invariant) | VA | decomposition complete + invariant held |
 | V6 | `wc -l src/main.rs` ≈ 7264 → ~250 (shared leaf-only clap bundles + `Cli` + `main()` stay) | VA | closure's "materially reduced" LOC objective |
-| V7 | **new** — capture a clap `CommandFactory` `--help` snapshot (top-level + representative nested subcommands) **before** the refactor; assert byte-identical **after**. Add parse coverage for every moved `CommonListArgs` consumer not in `SPINE_KINDS`. | VT | help text / arg-group ordering / `value_parser` wiring unchanged by the enum moves — closes the V1 gap codex flagged |
+| V7 | **new** — (a) capture a clap `CommandFactory` `--help` snapshot (top-level + representative nested subcommands) **before** the refactor; assert byte-identical **after**; (b) **parse-regression tests** (`Cli::try_parse_from`, extending the existing seam at `main.rs:5284`) over the parser-only contracts a `--help` diff cannot see — `CommonListArgs` `value_delimiter`; `FindRetrieveArgs` `conflicts_with="offset"` + `value_parser` on memory types; `Retrieve` `value_parser=retrieve::parse_min_trust`; `After` `required_unless_present`/conflicts; `DispatchCommand::Sync` `requires="trunk"`; (c) parse coverage for every moved `CommonListArgs` consumer not in `SPINE_KINDS`. | VT | help text **and** arg-group / `value_parser` / `conflicts_with` / `value_delimiter` / `requires` wiring unchanged by the enum moves — `--help` snapshot alone proves only displayed surface (codex round 2) |
 
 **No `layering.toml` edits required.** No new top-level unit is introduced
 (`CommonListArgs` stays in `main`; all shells collapse into the existing
@@ -262,6 +297,32 @@ Codex (GPT-5.5) attacked the layering proof; I verified each claim against
   V1 caveated, V7 added (CommandFactory `--help` snapshot + parse coverage for all
   moved consumers).
 
+### Codex round 2 (confirmation pass) — one blocker, one finding, verified & folded
+
+Thread `019ee5ec-7d6e-71b2-855e-83d1502a640f`. Re-ran GPT-5.5 read-only on the
+revised §4/§5/§6. It **confirmed** the sink invariant (point 1) and the shared
+arg-bundle audit (point 3 — the seven `Args` structs in `main.rs` are exhaustively
+routed; only `FindRetrieveArgs` carries command-tier deps). Two items, both
+verified against source before folding:
+
+- **B4 (blocker) — D1 mints kind→kind edges the sink proof never covered.** Moving
+  a dispatch arm's body from inert `main` into a command-tier kind module turns its
+  command-module calls into new production edges. Concrete: `MemoryCommand::Sync`
+  calls `corpus::run_sync`/`run_sync_install` (`main.rs:3688,3690`); `corpus`
+  already imports `memory` (`corpus.rs:38,313`; `memory→corpus` absent from the
+  `memory` layering row) → folding Sync into `memory.rs` closes a `corpus↔memory`
+  2-cycle → tangle 120→≥121. **Verified** the full dispatch region: this is the
+  **only** new cycle-forming edge — `install`/`status`/`integrity::run_reseat` are
+  top-level verbs homing in `commands/cli.rs` (sink), `boot` is own-module,
+  `retrieve` is a pre-existing `memory` edge. **Fixed:** D1a carve-out + §5 scope
+  note + V3 per-batch gate + the plan audit task; `MemoryCommand::Sync` dispatch
+  stays in a `commands/` shell.
+- **B5 (finding) — V7 `--help` snapshot proves only displayed surface.** It misses
+  `value_delimiter`, `conflicts_with`, `value_parser`, `required_unless_present`,
+  `requires` (codex cited `main.rs:124,146,229,716,2134,1027,1040,1047`). **Fixed:**
+  V7 extended with `Cli::try_parse_from` parse-regression tests over those
+  contracts.
+
 ### R1 — SL-129 coordination (cross-slice conflict, decision needed)
 
 **SL-129** (`entity::id_path` corpus-wide; in design) and **SL-115** both heavily
@@ -287,8 +348,9 @@ SL-129` edge is written; SL-129 lands first.
 
 ## Decisions log
 
-- D1 dispatch arm moves with the enum · D2 `write_class` centralized in
-  `commands/guard.rs` · D3 same-stem shells allowed.
+- D1 dispatch arm moves with the enum · **D1a** sideways command-tier callers keep
+  dispatch in a `commands/` sink shell (proven: `MemoryCommand::Sync`→`corpus`) ·
+  D2 `write_class` centralized in `commands/guard.rs` · D3 same-stem shells allowed.
 - F-A resolver path-core owned by SL-129/IMP-067 (no in-slice dedup) · **F-B
   (revised)** leaf-only shared args stay in `main` (inert), `FindRetrieveArgs`→
   `memory.rs`, **no `commands/list.rs`** · **F-C (revised)** `Command`+dispatch→
@@ -302,6 +364,13 @@ SL-129` edge is written; SL-129 lands first.
 ## Open questions
 
 None blocking. `/plan` settles phase granularity (suggested: phase-1 the V7
-`--help`/parse snapshot baseline + `commands/{cli,guard}.rs` scaffold +
+`--help`/parse-regression snapshot baseline + `commands/{cli,guard}.rs` scaffold +
 `FindRetrieveArgs`→`memory.rs` → then orphan shells → then kind-enum batches by
 domain).
+
+**Mandatory plan task (from codex round 2 / D1a):** before relocating any
+clean-kind arm, audit each arm body for calls into a command-tier module the owning
+kind does **not** already import; route every such arm's dispatch to a `commands/`
+sink shell instead of the kind module. `MemoryCommand::Sync`→`corpus` is the one
+known instance; the audit confirms there are no others, but the gate (V3) is run per
+batch and any tangle growth halts the batch (D1a), never auto-accepts.

@@ -7,7 +7,7 @@ updated = "2026-06-19"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = []                      # slice→work soft sequence: { to, rank }
+after = [{ to = "SL-129", rank = 0 }]  # SL-115 design § R1: SL-129 must land first
 
 [[relation]]
 label = "governed_by"
