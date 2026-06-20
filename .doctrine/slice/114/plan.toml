@@ -1,0 +1,44 @@
+# Implementation plan for SL-114 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-114"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Delegate canonical_id sites + collapse spec dual-wrapper"
+objective = "Route the four remaining raw `format!(\"{prefix}-{id:03}\")` id-form sites through `listing::canonical_id`, and collapse spec's same-output dual wrapper to the method (design D1). Sites: requirement.rs:244 (free fn), knowledge.rs:125 + backlog.rs:156 (methods), spec.rs:106 (method). Spec: keep the method, delete the free fn `canonical_id(subtype,id)` (:1164), repoint its 4 callers (:1014/:1179/:1291/:1346) to `subtype.canonical_id(...)`. Behaviour-preserving — output strings unchanged; existing id-format tests are the proof and stay green unchanged. ADR-001-clean (engine→leaf; listing imports no kind module)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked — D1 (keep method, delete free fn) and the four-site set confirmed by codex review (2026-06-20)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "requirement.rs:244 body delegates: `crate::listing::canonical_id(REQUIREMENT_KIND.prefix, id)` (fully-qualified, no new `use`)" },
+  { id = "EX-2", text = "knowledge.rs:125 and backlog.rs:156 method bodies delegate: `listing::canonical_id(self.prefix(), id)`" },
+  { id = "EX-3", text = "spec.rs:106 method body delegates: `listing::canonical_id(self.kind().prefix, id)`; free fn `canonical_id(subtype,id)` (:1164) deleted; its 4 callers repointed to `subtype.canonical_id(...)` / `spec.kind.canonical_id(...)`" },
+  { id = "EX-4", text = "Closure gate: no `fn canonical_id` body in src/ reimplements the `\"{prefix}-{id:03}\"` form — all delegate to listing::canonical_id; spec free fn absent" },
+  { id = "EX-5", text = "`just check` zero-warn (clippy + tests)" },
+]
+verification = [
+  { id = "VT-1", expects = "Existing id-format tests green UNCHANGED — requirement.rs:631 (REQ-001), knowledge.rs:1418 (canonical_id_uses_the_kind_prefix), backlog.rs:2462 (ISS-001), listing.rs:783" },
+  { id = "VT-2", expects = "Full suite green via `just check` — no new test (behaviour-preserving)" },
+  { id = "VA-1", expects = "grep audit: `grep -n 'fn canonical_id' src/` enumerated; each body delegates to listing::canonical_id; the spec free fn `canonical_id(subtype, id)` no longer appears" },
+]
+specs             = []
+requirements      = []
