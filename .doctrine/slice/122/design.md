@@ -162,9 +162,16 @@ Three surfaces, three distinct treatments:
 
 2. **`doctrine status` — SURFACE (in-scope).** This is the work/awareness
    dashboard (slice + backlog counts, next-up, blocked) — no governance flavour,
-   so no misconstrual risk. RFC gets a count line here (e.g. under `Work`:
-   `rfcs: N open, M total`). This is the chosen situational-awareness home,
-   distinct from the boot snapshot.
+   so no misconstrual risk. The chosen situational-awareness home, distinct from
+   the boot snapshot. Two parts:
+   - a count line under `Work` (`rfcs: N open, M total`); and
+   - a short **list of unresolved RFC titles** — `status = open` only, ordered
+     **most-recent first**, capped at **10** with a `+K more` overflow marker when
+     exceeded (idiom matches the existing `Blocked backlog` / `next up` blocks:
+     `RFC-007  <title>`). Resolved/withdrawn RFCs drop off the list (count still
+     reflects them). Cap 10 over 20 — `status` is a glance surface; 20 open
+     deliberations is itself a signal better read via `rfc list`. The cap is a
+     single const, trivially bumped if deliberation volume argues for it.
 
 3. **`doctrine rfc list` — catalog.** Free with kind registration (cf.
    `rec list`). The on-demand full catalog.
