@@ -291,13 +291,14 @@ delivery (it resolves to a commit-ish; delivery needs a writable ref — D3).
 
 Adversarial self-review (internal pass) integrated:
 
-- **F1 — `expect(dead_code)` trap.** Reading `doc.dispatch` live makes the
+- **IF1 — `expect(dead_code)` trap.** Reading `doc.dispatch` live makes the
   `DoctrineToml.dispatch` dead-code expectation fire → compile error. → R5;
   remove the attr (`dtoml.rs:38`). Confirmed against source.
-- **F2 — prose-check overreach.** Original §9 said "no `refs/heads/main` literal";
-  `SKILL.md:68 --base` legitimately stays (fork base, out of scope). → §9 scoped
-  to delivery literals; §2 records the full inventory + the D1 boundary.
-- **F3 — `load_conduct` collateral.** It has a second caller + tests; kept as a
+- **IF2 — prose-check overreach.** Original §9 said "no `refs/heads/main` literal".
+  *(This internal note initially mislabelled `SKILL.md:68 --base` as an
+  out-of-scope fork base — superseded by codex-F1 below: line 68 is an in-scope
+  delivery literal. §2/§7/§9 reflect the corrected view.)*
+- **IF3 — `load_conduct` collateral.** It has a second caller + tests; kept as a
   delegating wrapper over `load_doctrine_toml`. → §5.3.
 - **Confirmed facts:** `DoctrineToml: Default` (`dtoml.rs:18`); `run_status` has
   `root` in scope and already parses `doctrine.toml` once (`slice.rs:428`), so the
