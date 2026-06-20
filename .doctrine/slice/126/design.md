@@ -155,9 +155,15 @@ git-repo fixture pattern (cf. dispatch journal tests).
 ## 6. Decisions & non-goals
 
 - **D1 (OQ-1):** trunk ref is **self-describing from the journal trunk row**
-  (namespace elimination), not a hardcoded literal or new config. The
-  `[dispatch] deliver_to` config that would become the single source of truth is
-  deferred to **IMP-124** (fulfils the close-skill TODO; `after: SL-126`).
+  (namespace elimination), not a hardcoded literal or new config. The integrate
+  journal's rows are `review/<N>` + `phase/<N>-NN` (excluded) + the trunk row
+  (`target_ref == --trunk`) + an edge row (`target_ref == --edge`). Uniqueness of
+  the non-excluded row relies on canonical close passing `--edge
+  refs/heads/review/<N>` (excluded). A non-canonical `--edge` outside the excluded
+  namespaces yields `>1` ⇒ `Blocked("ambiguous trunk row")` — **fail-closed
+  (safe), never a false pass.** The `[dispatch] deliver_to` config that becomes
+  the single source of truth (and retires the heuristic) is deferred to **IMP-124**
+  (fulfils the close-skill TODO; after SL-126).
 - **D2 (OQ-2):** **fail-closed** — any dispatched slice not provably integrated
   refuses; no `--force` bypass in v1.
 - **D3:** ancestry (`is_ancestor`), not tree-equality, so a moved-forward trunk
