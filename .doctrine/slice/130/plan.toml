@@ -1,0 +1,34 @@
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-130"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Add RFC visual identity to web map frontend"
+objective = "Wire RFC into the three frontend surfaces: NODE_STYLES (dot.ts), CSS variable (tokens.css), and kind-filter checkbox (index.html), so RFC entities render distinctly in the entity graph."
+
+entrance_criteria = [
+  { id = "EN-1", text = "RFC-001 exists on disk (.doctrine/rfc/001/) as test fodder" },
+  { id = "EN-2", text = "Web map frontend source is clean (no local WIP in web/map/)" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "NODE_STYLES in dot.ts contains an RFC entry with fill #7F8C8D, white font, box shape" },
+  { id = "EX-2", text = "tokens.css declares --kind-RFC: #7F8C8D in both light and dark theme blocks" },
+  { id = "EX-3", text = "index.html has a checked kind-filter checkbox for RFC in the filter grid" },
+]
+
+verification = [
+  { id = "VH-1", expects = "bun run dev renders RFC-001 with warm-grey node, coloured kind pill, and toggleable filter checkbox" },
+]
+
+specs        = []
+requirements = []
