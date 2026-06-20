@@ -2948,11 +2948,15 @@ branch refs/heads/orphan
         let repo = ScratchRepo::new();
         let (_c1, c2) = main_at_c1_with_descendant_c2(&repo);
 
-        let out = super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2)
-            .expect("probe ok");
+        let out =
+            super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2).expect("probe ok");
         assert_eq!(out, super::FfAdvance::Advanced);
         assert_eq!(repo.git(&["rev-parse", "main"]), c2, "ref advanced");
-        assert_eq!(repo.git(&["rev-parse", "HEAD"]), c2, "HEAD advanced with it");
+        assert_eq!(
+            repo.git(&["rev-parse", "HEAD"]),
+            c2,
+            "HEAD advanced with it"
+        );
         assert!(
             repo.git(&["status", "--porcelain"]).is_empty(),
             "index + worktree at planned — no phantom reverse-diff",
@@ -2972,7 +2976,8 @@ branch refs/heads/orphan
         let (c1, c2) = main_at_c1_with_descendant_c2(&repo);
         repo.git(&["checkout", "--detach"]); // HEAD detached at c1
 
-        match super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2).expect("probe ok") {
+        match super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2).expect("probe ok")
+        {
             super::FfAdvance::Raced { token } => {
                 assert!(token.contains("HEAD"), "token names the HEAD race: {token}");
             }
@@ -2993,7 +2998,8 @@ branch refs/heads/orphan
         let (c1, c2) = main_at_c1_with_descendant_c2(&repo);
         repo.write("a.txt", "locally modified"); // tracked dirt
 
-        match super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2).expect("probe ok") {
+        match super::ff_advance_in_worktree(repo.path(), "refs/heads/main", &c2).expect("probe ok")
+        {
             super::FfAdvance::Raced { token } => {
                 assert!(token.contains("dirty"), "token names the dirt: {token}");
             }
