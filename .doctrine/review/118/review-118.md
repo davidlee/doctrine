@@ -102,3 +102,29 @@ governance/spec REV is warranted.
 the rollup and resolving **IMP-124** (the originating improvement, resolved on
 close per slice scope §6) and threading the IMP-129 follow-up. No write surface is
 owed by the audit findings themselves.
+
+## Reconciliation Outcome
+
+No-op write pass. Both findings (F-1 fix-now, F-2 fix-now) are `verified`-terminal
+and were remediated in-audit on the impl bundle `review/128` (`72527bbd`); neither
+implicates design, ADRs, or specs. The reconciliation brief is empty on both
+surfaces, confirmed against the targets:
+
+### Direct edits applied
+- _(none)_ — design.md, plan.toml, slice-128 prose all match the shipped
+  implementation. Inspected for drift since audit; none found.
+
+### REVs completed
+- _(none)_ — no governance/spec finding. ADR-001 layering and SL-126 gate
+  semantics are upheld by the implementation, not amended.
+
+### Withdrawn / tolerated
+- _(none)_ — both findings verified and fixed-now; dispositions unchanged.
+
+### Backlog threading (rollup confirmation)
+- **IMP-124** (originating improvement) — left `open`; resolution belongs to
+  `/close` per slice scope §6, not reconcile.
+- **IMP-129** (edge/main split downstream) — already exists, already linked
+  `after: IMP-124 (rank 1)`. Follow-up thread in place; no write needed.
+
+Reconcile pass complete — handoff to /close.
