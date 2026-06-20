@@ -68,6 +68,7 @@ pub(crate) enum ItemKind {
 pub(crate) const ISSUE_KIND: Kind = Kind {
     dir: ".doctrine/backlog/issue",
     prefix: crate::kinds::ISS,
+    stem: "backlog",
     scaffold: |c| backlog_scaffold(ItemKind::Issue, c),
 };
 
@@ -75,6 +76,7 @@ pub(crate) const ISSUE_KIND: Kind = Kind {
 pub(crate) const IMPROVEMENT_KIND: Kind = Kind {
     dir: ".doctrine/backlog/improvement",
     prefix: crate::kinds::IMP,
+    stem: "backlog",
     scaffold: |c| backlog_scaffold(ItemKind::Improvement, c),
 };
 
@@ -82,6 +84,7 @@ pub(crate) const IMPROVEMENT_KIND: Kind = Kind {
 pub(crate) const CHORE_KIND: Kind = Kind {
     dir: ".doctrine/backlog/chore",
     prefix: crate::kinds::CHR,
+    stem: "backlog",
     scaffold: |c| backlog_scaffold(ItemKind::Chore, c),
 };
 
@@ -89,6 +92,7 @@ pub(crate) const CHORE_KIND: Kind = Kind {
 pub(crate) const RISK_KIND: Kind = Kind {
     dir: ".doctrine/backlog/risk",
     prefix: crate::kinds::RSK,
+    stem: "backlog",
     scaffold: |c| backlog_scaffold(ItemKind::Risk, c),
 };
 
@@ -96,6 +100,7 @@ pub(crate) const RISK_KIND: Kind = Kind {
 pub(crate) const IDEA_KIND: Kind = Kind {
     dir: ".doctrine/backlog/idea",
     prefix: crate::kinds::IDE,
+    stem: "backlog",
     scaffold: |c| backlog_scaffold(ItemKind::Idea, c),
 };
 
@@ -1570,10 +1575,7 @@ pub(crate) fn run_after(
         for edge in &ds.after {
             let is_dangling = match crate::integrity::parse_canonical_ref(&edge.to) {
                 Ok((kref, tid)) => {
-                    let target_path = root
-                        .join(kref.kind.dir)
-                        .join(format!("{tid:03}"))
-                        .join(format!("{}-{tid:03}.toml", kref.stem));
+                    let target_path = crate::entity::id_path(&root, kref.kind, tid, crate::entity::Ext::Toml);
                     if target_path.exists() {
                         let body = std::fs::read_to_string(&target_path).unwrap_or_default();
                         let val: toml::Value = match toml::from_str(&body) {
@@ -1592,10 +1594,7 @@ pub(crate) fn run_after(
             if is_dangling {
                 let reason = match crate::integrity::parse_canonical_ref(&edge.to) {
                     Ok((kref2, tid2)) => {
-                        let target_path = root
-                            .join(kref2.kind.dir)
-                            .join(format!("{tid2:03}"))
-                            .join(format!("{}-{tid2:03}.toml", kref2.stem));
+                        let target_path = crate::entity::id_path(&root, kref2.kind, tid2, crate::entity::Ext::Toml);
                         if target_path.exists() {
                             let body = std::fs::read_to_string(&target_path).unwrap_or_default();
                             let val: toml::Value = match toml::from_str(&body) {

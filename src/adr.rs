@@ -31,9 +31,9 @@ pub(crate) const ADR_KIND: GovKind = GovKind {
     kind: Kind {
         dir: ADR_DIR,
         prefix: crate::kinds::ADR,
+        stem: "adr",
         scaffold: adr_scaffold,
     },
-    stem: "adr",
     statuses: ADR_STATUSES,
     hidden: is_hidden,
 };
@@ -164,10 +164,9 @@ pub(crate) fn run_status(
     color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let gov_root = root.join(ADR_KIND.kind.dir);
     governance::set_status(
         &ADR_KIND,
-        &gov_root,
+        &root,
         id,
         status.as_str(),
         &crate::clock::today(),

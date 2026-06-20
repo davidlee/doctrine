@@ -41,6 +41,7 @@ fn is_hidden(status: &str) -> bool {
 pub(crate) const CONCEPT_MAP_KIND: Kind = Kind {
     dir: CONCEPT_MAP_DIR,
     prefix: crate::kinds::CM,
+    stem: "concept-map",
     scaffold: concept_map_scaffold,
 };
 
@@ -70,14 +71,13 @@ fn render_md(title: &str, id: u32) -> anyhow::Result<String> {
 fn concept_map_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
     let name = format!("{id:03}");
-    let stem = format!("concept-map-{name}");
     Ok(vec![
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/{stem}.toml")),
+            rel_path: entity::rel_path(&CONCEPT_MAP_KIND, id, entity::Ext::Toml),
             body: render_toml(id, ctx.slug, ctx.title, ctx.date)?,
         },
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/{stem}.md")),
+            rel_path: entity::rel_path(&CONCEPT_MAP_KIND, id, entity::Ext::Md),
             body: render_md(ctx.title, id)?,
         },
         Artifact::Symlink {
@@ -162,9 +162,8 @@ pub(crate) fn read_concept_map(
     id: u32,
 ) -> anyhow::Result<(ConceptMapDoc, String, String)> {
     let name = format!("{id:03}");
-    let stem = format!("concept-map-{name}");
-    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-    let md_path = cm_root.join(&name).join(format!("{stem}.md"));
+    let toml_path = cm_root.join(&name).join(format!("concept-map-{name}.toml"));
+    let md_path = cm_root.join(&name).join(format!("concept-map-{name}.md"));
     let toml_text = std::fs::read_to_string(&toml_path)
         .with_context(|| format!("Failed to read {}", toml_path.display()))?;
     let body = std::fs::read_to_string(&md_path).unwrap_or_default();
@@ -1485,9 +1484,7 @@ pub(crate) fn run_add(
     match add_edge_to_dsl(&old_dsl, source, rel, target) {
         Ok(new_dsl) => {
             let updated = set_dsl(&toml_text, &new_dsl)?;
-            let name = format!("{id:03}");
-            let stem = format!("concept-map-{name}");
-            let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+            let toml_path = entity::id_path(&root, &CONCEPT_MAP_KIND, id, entity::Ext::Toml);
             crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
                 .with_context(|| format!("Failed to write {}", toml_path.display()))?;
         }
@@ -1500,9 +1497,7 @@ pub(crate) fn run_add(
                 format!("{old_dsl}\n{new_line}")
             };
             let updated = set_dsl(&toml_text, &new_dsl)?;
-            let name = format!("{id:03}");
-            let stem = format!("concept-map-{name}");
-            let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+            let toml_path = entity::id_path(&root, &CONCEPT_MAP_KIND, id, entity::Ext::Toml);
             crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
                 .with_context(|| format!("Failed to write {}", toml_path.display()))?;
         }
@@ -1550,9 +1545,7 @@ pub(crate) fn run_remove(
     })?;
     let updated = set_dsl(&toml_text, &new_dsl)?;
 
-    let name = format!("{id:03}");
-    let stem = format!("concept-map-{name}");
-    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+    let toml_path = entity::id_path(&root, &CONCEPT_MAP_KIND, id, entity::Ext::Toml);
     crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
         .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     Ok(())
@@ -1645,9 +1638,7 @@ pub(crate) fn run_rename_node(
 
     let updated = set_dsl(&toml_text, &new_dsl)?;
 
-    let name = format!("{id:03}");
-    let stem = format!("concept-map-{name}");
-    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+    let toml_path = entity::id_path(&root, &CONCEPT_MAP_KIND, id, entity::Ext::Toml);
     crate::fsutil::write_atomic(&toml_path, updated.as_bytes())
         .with_context(|| format!("Failed to write {}", toml_path.display()))?;
 

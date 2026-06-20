@@ -376,11 +376,7 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
         let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
         ids.sort_unstable();
         for id in ids {
-            let name = format!("{id:03}");
-            let toml_path = root
-                .join(kref.kind.dir)
-                .join(&name)
-                .join(format!("{}-{name}.toml", kref.stem));
+            let toml_path = crate::entity::id_path(root, kref.kind, id, crate::entity::Ext::Toml);
             let text = std::fs::read_to_string(&toml_path)
                 .map_err(|e| anyhow::anyhow!("read {} for validate: {e}", toml_path.display()))?;
             let doc = crate::relation::RelationDoc::parse(&text)?;
