@@ -35,12 +35,28 @@ pub(crate) struct NextItem {
     pub(crate) title: String,
 }
 
-/// The "Work" section — slices, backlog, next-up.
+/// One RFC title entry for the status list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct RfcTitle {
+    pub(crate) id: String,
+    pub(crate) title: String,
+}
+
+/// RFC summary for the status dashboard.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct RfcSummary {
+    pub(crate) open: usize,
+    pub(crate) total: usize,
+    pub(crate) open_titles: Vec<RfcTitle>,
+}
+
+/// The "Work" section — slices, backlog, next-up, rfcs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct WorkSection {
     pub(crate) slices: SliceCounts,
     pub(crate) backlog: BTreeMap<String, usize>,
     pub(crate) next_up: Vec<NextItem>,
+    pub(crate) rfcs: RfcSummary,
 }
 
 /// One blocked item — slice or backlog.
@@ -83,10 +99,12 @@ pub(crate) struct Status {
 
 /// Assemble the status dashboard from pre-gathered data. Pure — no disk, clock,
 /// git, or rng.
+#[expect(clippy::too_many_arguments, reason = "pure assembly fans gathered data 1:1")]
 pub(crate) fn assemble_status(
     slice_counts: SliceCounts,
     backlog_counts: BTreeMap<String, usize>,
     next_up: Vec<NextItem>,
+    rfcs: RfcSummary,
     blocked_slices: Vec<BlockedItem>,
     blocked_backlog: Vec<BlockedItem>,
     boot: BootSection,
@@ -97,6 +115,7 @@ pub(crate) fn assemble_status(
             slices: slice_counts,
             backlog: backlog_counts,
             next_up,
+            rfcs,
         },
         blocked_slices,
         blocked_backlog,
@@ -147,6 +166,21 @@ pub(crate) fn render_human(status: &Status) -> String {
             .map(|(k, v)| format!("{v} {k}{}", if *v == 1 { "" } else { "s" }))
             .collect();
         parts.push(format!("  backlog: {}\n", kinds.join(", ")));
+    }
+
+    // RFCs.
+    if status.work.rfcs.total > 0 {
+        parts.push(format!(
+            "  rfcs: {} open, {} total\n",
+            status.work.rfcs.open, status.work.rfcs.total
+        ));
+        for t in &status.work.rfcs.open_titles {
+            parts.push(format!("  {} {}\n", t.id, t.title));
+        }
+        let overflow = status.work.rfcs.open.saturating_sub(status.work.rfcs.open_titles.len());
+        if overflow > 0 {
+            parts.push(format!("  +{overflow} more\n"));
+        }
     }
 
     // Next up.
@@ -269,6 +303,33 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
             .or_insert(0) += 1;
     }
 
+    // --- Gather RFCs ---
+    let rfc_metas =
+        crate::meta::read_metas(&root.join(".doctrine/rfc"), "rfc").unwrap_or_default();
+    let rfc_total = rfc_metas.len();
+    let mut open_rfc_ids: Vec<u32> = rfc_metas
+        .iter()
+        .filter(|m| m.status == "open")
+        .map(|m| m.id)
+        .collect();
+    open_rfc_ids.sort_unstable_by(|a, b| b.cmp(a)); // most-recent first (id desc)
+    let rfc_open = open_rfc_ids.len();
+    let rfc_open_titles: Vec<RfcTitle> = open_rfc_ids
+        .iter()
+        .take(10)
+        .filter_map(|id| {
+            rfc_metas.iter().find(|m| m.id == *id).map(|m| RfcTitle {
+                id: format!("RFC-{:03}", m.id),
+                title: m.title.clone(),
+            })
+        })
+        .collect();
+    let rfcs = RfcSummary {
+        open: rfc_open,
+        total: rfc_total,
+        open_titles: rfc_open_titles,
+    };
+
     // --- Next up (top 5) ---
     let next_rows = crate::priority::surface::next(&root).unwrap_or_default();
     let next_up: Vec<NextItem> = next_rows
@@ -378,6 +439,7 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
         slice_counts,
         backlog_counts,
         next_up,
+        rfcs,
         blocked_slices,
         blocked_backlog,
         boot,
@@ -456,6 +518,14 @@ mod tests {
         Vec::new()
     }
 
+    fn empty_rfcs() -> RfcSummary {
+        RfcSummary {
+            open: 0,
+            total: 0,
+            open_titles: Vec::new(),
+        }
+    }
+
     // --- VT-3: empty corpus ---
 
     #[test]
@@ -464,6 +534,7 @@ mod tests {
             empty_counts(),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -478,6 +549,7 @@ mod tests {
             empty_counts(),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -521,6 +593,7 @@ mod tests {
             counts(2, 1, 4),
             backlog,
             next,
+            empty_rfcs(),
             blocked_slices,
             empty_blocked(),
             fresh_boot(),
@@ -549,6 +622,7 @@ mod tests {
             counts(2, 1, 4),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -574,6 +648,7 @@ mod tests {
             counts(1, 0, 1),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -590,6 +665,7 @@ mod tests {
             counts(1, 0, 1),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -612,6 +688,7 @@ mod tests {
             counts(1, 0, 1),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             boot,
@@ -632,6 +709,7 @@ mod tests {
             counts(1, 0, 1),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             boot,
@@ -649,6 +727,7 @@ mod tests {
             empty_counts(),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -663,6 +742,7 @@ mod tests {
             counts(1, 0, 1),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -679,6 +759,7 @@ mod tests {
             empty_counts(),
             backlog,
             empty_next(),
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -705,6 +786,7 @@ mod tests {
             counts(1, 1, 2),
             empty_backlog(),
             empty_next(),
+            empty_rfcs(),
             blocked,
             empty_blocked(),
             fresh_boot(),
@@ -733,6 +815,7 @@ mod tests {
             counts(5, 0, 5),
             backlog,
             next,
+            empty_rfcs(),
             empty_blocked(),
             empty_blocked(),
             fresh_boot(),
@@ -741,6 +824,169 @@ mod tests {
         let output = render_human(&status);
         assert!(output.contains("SL-001 (design)"));
         assert!(output.contains("SL-005 (design)"));
+    }
+
+    // --- VT-1: RFC count line + title listing ---
+
+    #[test]
+    fn rfc_count_line_renders_in_work_section() {
+        let rfcs = RfcSummary {
+            open: 3,
+            total: 5,
+            open_titles: vec![
+                RfcTitle { id: "RFC-003".into(), title: "Use async".into() },
+                RfcTitle { id: "RFC-002".into(), title: "Add linter".into() },
+                RfcTitle { id: "RFC-001".into(), title: "New format".into() },
+            ],
+        };
+        let status = assemble_status(
+            counts(1, 0, 2),
+            empty_backlog(),
+            empty_next(),
+            rfcs,
+            empty_blocked(),
+            empty_blocked(),
+            fresh_boot(),
+            no_commits(),
+        );
+        let output = render_human(&status);
+        assert!(output.contains("rfcs: 3 open, 5 total\n"));
+        assert!(output.contains("RFC-003 Use async\n"));
+        assert!(output.contains("RFC-002 Add linter\n"));
+        assert!(output.contains("RFC-001 New format\n"));
+        assert!(!output.contains("+ more"));
+    }
+
+    #[test]
+    fn rfc_overflow_shows_ten_titles_plus_k_more() {
+        let titles: Vec<RfcTitle> = (1..=12)
+            .map(|i| RfcTitle {
+                id: format!("RFC-{i:03}"),
+                title: format!("Title {i}"),
+            })
+            .collect();
+        let rfcs = RfcSummary {
+            open: 12,
+            total: 15,
+            open_titles: titles.into_iter().take(10).collect(),
+        };
+        let status = assemble_status(
+            counts(1, 0, 2),
+            empty_backlog(),
+            empty_next(),
+            rfcs,
+            empty_blocked(),
+            empty_blocked(),
+            fresh_boot(),
+            no_commits(),
+        );
+        let output = render_human(&status);
+        assert!(output.contains("rfcs: 12 open, 15 total\n"));
+        // Exactly 10 titles rendered, then +2 more overflow.
+        for i in 1..=10 {
+            assert!(output.contains(&format!("RFC-{i:03} Title {i}\n")));
+        }
+        assert!(!output.contains("RFC-011"));
+        assert!(!output.contains("RFC-012"));
+        assert!(output.contains("+2 more\n"));
+    }
+
+    #[test]
+    fn rfc_section_suppressed_when_no_rfcs() {
+        let status = assemble_status(
+            counts(1, 0, 2),
+            empty_backlog(),
+            empty_next(),
+            empty_rfcs(),
+            empty_blocked(),
+            empty_blocked(),
+            fresh_boot(),
+            no_commits(),
+        );
+        let output = render_human(&status);
+        assert!(!output.contains("rfcs:"));
+    }
+
+    #[test]
+    fn rfc_section_shows_count_but_no_titles_when_none_open() {
+        let rfcs = RfcSummary {
+            open: 0,
+            total: 3,
+            open_titles: vec![],
+        };
+        let status = assemble_status(
+            counts(1, 0, 2),
+            empty_backlog(),
+            empty_next(),
+            rfcs,
+            empty_blocked(),
+            empty_blocked(),
+            fresh_boot(),
+            no_commits(),
+        );
+        let output = render_human(&status);
+        assert!(output.contains("rfcs: 0 open, 3 total\n"));
+        // Should NOT list any titles.
+        assert!(!output.contains("RFC-"));
+    }
+
+    // --- VT-2: empty-state — RFCs do NOT flip empty ---
+
+    #[test]
+    fn repo_with_only_open_rfcs_is_still_empty() {
+        let rfcs = RfcSummary {
+            open: 5,
+            total: 5,
+            open_titles: vec![
+                RfcTitle { id: "RFC-001".into(), title: "Use Rust?".into() },
+            ],
+        };
+        let status = assemble_status(
+            empty_counts(),
+            empty_backlog(),
+            empty_next(),
+            rfcs,
+            empty_blocked(),
+            empty_blocked(),
+            fresh_boot(),
+            no_commits(),
+        );
+        // is_empty must stay false on non-zero rfcs — only slices.active + backlog sum matter.
+        assert!(is_empty(&status));
+        assert_eq!(render_human(&status), "No active work.\n");
+    }
+
+    // --- VT-4: JSON envelope carries RFC data ---
+
+    #[test]
+    fn json_envelope_carries_rfc_counts_and_titles() {
+        let rfcs = RfcSummary {
+            open: 3,
+            total: 5,
+            open_titles: vec![
+                RfcTitle { id: "RFC-003".into(), title: "Use async".into() },
+                RfcTitle { id: "RFC-002".into(), title: "Add linter".into() },
+            ],
+        };
+        let status = assemble_status(
+            counts(1, 0, 2),
+            empty_backlog(),
+            empty_next(),
+            rfcs,
+            empty_blocked(),
+            empty_blocked(),
+            fresh_boot(),
+            no_commits(),
+        );
+        let json = render_json(&status).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["kind"], "status");
+        assert_eq!(v["work"]["rfcs"]["open"], 3);
+        assert_eq!(v["work"]["rfcs"]["total"], 5);
+        let titles = v["work"]["rfcs"]["open_titles"].as_array().unwrap();
+        assert_eq!(titles.len(), 2);
+        assert_eq!(titles[0]["id"], "RFC-003");
+        assert_eq!(titles[0]["title"], "Use async");
     }
 
     // --- Parse git log ---

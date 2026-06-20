@@ -25,6 +25,7 @@ use crate::rec::REC_KIND;
 use crate::requirement::REQUIREMENT_KIND;
 use crate::review::REVIEW_KIND;
 use crate::revision::REV_KIND;
+use crate::rfc::RFC_KIND;
 use crate::slice::SLICE_KIND;
 use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
 use crate::standard::STANDARD_KIND;
@@ -164,6 +165,15 @@ pub(crate) const KINDS: &[KindRef] = &[
     KindRef {
         kind: &REV_KIND,
         stem: "revision",
+        state_dir: None,
+    },
+    // RFC (SL-122) — the governance-neutral discussion kind. Status-ful (scanned via
+    // the standard meta::Meta path; its `rfc-NNN.toml` carries `status`), stem `rfc`,
+    // no runtime state tree. Its `outbound_for` arm co-lands with this row, or the
+    // debug-build corpus scan panics the moment an RFC is minted.
+    KindRef {
+        kind: &RFC_KIND.kind,
+        stem: "rfc",
         state_dir: None,
     },
 ];
@@ -766,7 +776,7 @@ mod tests {
             prefixes,
             [
                 "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE",
-                "RV", "REC", "ASM", "DEC", "QUE", "CON", "CM", "REV"
+                "RV", "REC", "ASM", "DEC", "QUE", "CON", "CM", "REV", "RFC"
             ]
         );
         // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
