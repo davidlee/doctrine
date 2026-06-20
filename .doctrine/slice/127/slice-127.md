@@ -64,28 +64,35 @@ skills only route to them.
   slice fixes ladder *ordering*, not config plumbing. May become a follow-up.
 - **`import --allow-reanchor` (IMP-043).** Moved-HEAD 3-way re-anchor at import is a
   separate funnel-stage concern.
-- Rebase-vs-merge for the refresh verb is an **open question** for `/design`, not a
-  settled non-goal — see below.
+- **Auto-refresh** (per-phase / config-gated) — deferred (design Q2=(i)): ship the
+  operator verb + drift visibility first, optimise once the accident is well-
+  understood.
+- **Rollback-safety (RSK-010 candidate e)** — `coordinate`'s rollback must never
+  mutate the session working tree for *any* cause. Design F6 neutralizes the base-
+  staleness cause only (gate fires before the fork); the general fix is a separate
+  follow-up, harvested at reconcile.
 
 ## Affected Surface
 
-- `src/git.rs` — `trunk_ladder` (ordering + ancestor dominance), `trunk_commit`,
-  a `merge-base --is-ancestor` / drift-count helper.
-- `src/worktree.rs` — `coordinate` (~1700) base-selection gate + plan-presence
-  check before phase-sheet regen.
-- Dispatch sync/status surface (the refresh verb + drift reporting).
+- `src/git.rs` — `trunk_ladder` implicit arm → `ancestor_maximal` left-fold (reuses
+  `is_ancestor`).
+- `src/worktree.rs` — `coordinate` (~1700) plan-presence refuse-gate **before** the
+  `worktree add -b` fork (F6).
+- `src/dispatch.rs` — extract `trunk_drift`/`Drift` from `run_status` (drift already
+  computed there); new `refresh-base` verb; base-divergence classifier in
+  `candidate_create`'s conflict arm; `RefreshBase` next-step in `run_status`.
+- CLI wiring — register `dispatch refresh-base --slice`.
 - Skills: `/dispatch`, `/dispatch-subprocess`, `/dispatch-agent` — route to the
   new verb; remove the `DOCTRINE_TRUNK_REF=main` env-prefix ritual.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 — refresh = merge or rebase?** The coordination branch's bundle is
-  *regenerated* by prepare-review, so its commit history is semi-disposable, which
-  favours rebase-onto-fresh-trunk (clean merge-base, no merge-commit noise). Merge
-  is safer/idempotent and preserves history. Decide in `/design`; pressure-test
-  against worker-commit sha references and the candidate-create bundle path.
-- **OQ-2** — does ancestor-dominance fully subsume the plan-presence check, or are
-  both needed (non-ancestor-related divergent refs)? Likely both.
+- **OQ-1 (resolved → merge).** Refresh = **merge** trunk into the dispatch branch
+  (Q1=A), not rebase: rebase rewrites worker commits the ledger/journal reference
+  (provenance model). Residual sub-OQ: verb does merge-only (operator re-runs
+  `prepare-review`) vs bundling regen — design defaults merge-only; settle at plan.
+- **OQ-2** — ancestor-dominance does **not** fully subsume the plan gate: the
+  *diverged* case (force-pushed/rebased `origin/HEAD`) needs the gate. Both retained.
 - **A-1** — local `main` is the de-facto trunk here (commit-on-main, origin
   unpushed); the fix must not *assume* that for consuming projects (ADR-006).
 - **R-1** — reordering the ladder could regress a consumer who genuinely wants
