@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee40b4c9272a29c645b1a89fd2bab"
+memory_key = "mem.pattern.dispatch.pi-arm-worker-ops"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "pi-arm dispatch worker operational footguns"
+summary = "pi-arm dispatch worker: compact-JSON RPC, parks on success (no self-exit), may git-reset its own work"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = [".claude/skills/dispatch-subprocess/SKILL.md"]
+globs = []
+commands = ["pi --mode rpc"]
+tags = ["sl-104", "dispatch", "pi", "worker"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9c7f4c22e199b09a0fce35163492c22aa2bb8e99"
+ref_name = "refs/heads/main"
+checkout_state_id = "2ce4af61ec87460434b1b4bf418fe2b24bfde7be2cdce6b1fdaaee0be4678112"
+base_commit = "29ffdf93c96cad43e2fc96a83120389bc9559db4"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
