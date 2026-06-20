@@ -1,0 +1,52 @@
+id    = 108
+slug  = "audit-sl-123-claude-dispatch-arm-fail-closed-base-integrity"
+title = "Audit: SL-123 claude dispatch arm fail-closed base integrity"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-123"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-01 VT-4 promised run_verify_worker integration tests for the two new belts; delivered with only pure classifier goldens"
+detail = "plan.toml PHASE-01 VT-4 and design §9 VT require run_verify_worker integration coverage: refuses not-isolated against a primary tree; refuses branch-mismatch when --branch tip ≠ worktree HEAD; Ok on a linked worktree on B with a coherent --branch. The phase landed (review/123 @ 865cedd3) with tests/e2e_worktree_verify_worker.rs UNCHANGED (4 pre-existing cases: ok/unstamped/wrong-base/no-worker-head). The new IMPURE shell wiring — is_isolated=is_linked_worktree(dir) gather, the --branch rev-parse coherence read, and the CLI --branch plumbing — had zero end-to-end coverage; only the pure classify_worker_verify goldens (VT-1/2/3) exercised the new logic. PHASE-01 was flipped completed with an unmet VT exit criterion."
+disposition = "fix-now"
+response = "Fixed-now within audit scope (test-only). Added three integration tests to tests/e2e_worktree_verify_worker.rs on the candidate branch (commit b8c80e8c): primary_tree_refuses_not_isolated, incoherent_branch_refuses_branch_mismatch, coherent_branch_verifies_ok. Refactored the verify_worker helper to thread an optional --branch. All 7 cases green (4 pre-existing + 3 new); cargo fmt + plain clippy (bins/lib gate) clean. Closes the VT-4 exit criterion; PHASE-01 now conforms."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Closure obligation: ISS-034 Defect A must be reconciled (resolved/promoted) at close — not yet done"
+detail = "slice scope §'Verification / Closure intent' and design §9 require ISS-034 Defect A reconciled at close. The code/skill remedy is delivered and verified on the candidate, but the backlog item's status reconciliation is a governance write owned by /reconcile. Observation confirmed; remediation routed to the reconciliation brief."
+disposition = "verified"
+response = "verified → reconciliation brief (governance/backlog write, /reconcile-owned): resolve/promote ISS-034 Defect A; the code+skill remedy is delivered and proven on the candidate."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Closure obligation: IMP-052 overlap (pre-funnel footer-abort partly delivers its intent) must be noted, not auto-closed"
+detail = "design §9 + slice §Non-Goals note the §5.4b footer-abort cadence partly delivers IMP-052's 'abort an un-isolated/unstamped worker' intent. Design says do NOT auto-close IMP-052. Confirmed delivered-overlap; route a note to IMP-052 via the reconciliation brief (governance write)."
+disposition = "verified"
+response = "verified → reconciliation brief: add a delivered-overlap note to IMP-052 (footer-abort partly delivers its intent); do NOT auto-close per design §9."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "run_verify_worker resolves HEAD twice (head_resolved gather + head_is_branch_tip match) — a redundant rev-parse"
+detail = "src/worktree.rs run_verify_worker: 'git rev-parse --verify HEAD' runs once for head_resolved and again inside the head_is_branch_tip Some(branch) arm. Harmless (cheap, same worktree) and faithful to the design §5.2 pseudocode, but the second read could reuse the first. Trivial."
+disposition = "tolerated"
+response = "Tolerated. The redundant rev-parse is negligible (two cheap reads on the same worktree, no correctness effect) and faithful to design §5.2's pseudocode; not worth a deviation from the locked design at audit time. Could be folded into a future micro-cleanup if run_verify_worker is touched again."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
