@@ -309,11 +309,56 @@ pub(crate) fn boot_check(root: &Path, exec: &Path) -> CheckReport {
     }
 }
 
+/// Strip a kernel-appended `b" (deleted)"` suffix from a `/proc/self/exe`
+/// reading. Pure, byte-level (UTF-8-agnostic, so a path that is non-UTF-8
+/// *before* the ASCII suffix is still cleaned). `Some` iff the suffix was present.
+#[cfg(unix)]
+fn strip_deleted(p: &Path) -> Option<PathBuf> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    p.as_os_str()
+        .as_bytes()
+        .strip_suffix(b" (deleted)")
+        .map(|b| PathBuf::from(std::ffi::OsString::from_vec(b.to_vec())))
+}
+#[cfg(not(unix))]
+fn strip_deleted(_p: &Path) -> Option<PathBuf> {
+    None // the /proc/self/exe poison is Linux-only
+}
+
+/// Pure branch logic with an injectable existence probe, so all three arms are
+/// unit-testable without a real `current_exe()` reading. Prefer the raw reading
+/// when it exists; on a `(deleted)` reading take the stripped path **only if it
+/// exists**; otherwise fail loudly rather than bake a dead command.
+fn pick_exec(raw: PathBuf, exists: impl Fn(&Path) -> bool) -> anyhow::Result<PathBuf> {
+    if exists(&raw) {
+        return Ok(raw);
+    }
+    if let Some(stripped) = strip_deleted(&raw)
+        && exists(&stripped)
+    {
+        return Ok(stripped);
+    }
+    bail!(
+        "doctrine executable path {} does not resolve to an on-disk binary; \
+         reinstall from a stable location",
+        raw.display()
+    )
+}
+
+/// The single approved exec resolver — the thin shell over `pick_exec` that
+/// supplies the real `current_exe()` reading and `Path::exists`. Every bake site
+/// (hook command, pi extension, boot snapshot, corpus sync) resolves through here
+/// so the `(deleted)` poison is sanitized once, at the source (SL-124 D1).
+pub(crate) fn resolve_exec() -> anyhow::Result<PathBuf> {
+    let raw = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    pick_exec(raw, std::path::Path::exists)
+}
+
 /// `doctrine boot [-p ROOT]` — resolve the root, resolve `current_exe()` in the
 /// shell (never in the pure layer), regenerate, and report wrote vs unchanged.
 pub(crate) fn run(path: Option<PathBuf>) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
-    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let exec = resolve_exec()?;
     let dest = root.join(BOOT_REL);
     let verb = if regenerate(&root, &exec)? {
         "Wrote"
@@ -330,7 +375,7 @@ pub(crate) fn run(path: Option<PathBuf>) -> anyhow::Result<()> {
 /// warning + the freshen-now ritual, not this verb).
 pub(crate) fn run_check(path: Option<PathBuf>) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
-    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let exec = resolve_exec()?;
     let report = boot_check(&root, &exec);
     let dest = root.join(BOOT_REL);
     let mut out = io::stdout();
@@ -1476,7 +1521,7 @@ pub(crate) fn run_install(
     yes: bool,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
-    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let exec = resolve_exec()?;
     let harnesses = resolve_harnesses(agents, &root)?;
 
     if !yes && !dry_run {
@@ -2880,6 +2925,40 @@ mod tests {
         assert!(!is_doctrine_boot_command("/x/doctrine-helper run"));
         assert!(!is_doctrine_boot_command("/x/doctrine check"));
         assert!(!is_doctrine_boot_command("doctrine"));
+    }
+
+    // --- exec-path sanitize (SL-124 PHASE-01) ---
+
+    #[test]
+    fn strip_deleted_strips_only_a_trailing_kernel_suffix() {
+        // suffix present → Some(stripped)
+        assert_eq!(
+            strip_deleted(Path::new("/x/doctrine (deleted)")),
+            Some(PathBuf::from("/x/doctrine"))
+        );
+        // clean path → None
+        assert_eq!(strip_deleted(Path::new("/x/doctrine")), None);
+        // no suffix (different tail) → None
+        assert_eq!(strip_deleted(Path::new("/x/doctrine-helper")), None);
+        // `(deleted)` mid-string, not trailing → None
+        assert_eq!(strip_deleted(Path::new("/x/(deleted)/doctrine")), None);
+    }
+
+    #[test]
+    fn pick_exec_prefers_raw_then_stripped_then_bails() {
+        let raw = Path::new("/x/doctrine");
+        // raw exists → raw
+        assert_eq!(
+            pick_exec(PathBuf::from("/x/doctrine"), |p| p == raw).unwrap(),
+            PathBuf::from("/x/doctrine")
+        );
+        // raw absent + stripped exists → stripped
+        assert_eq!(
+            pick_exec(PathBuf::from("/x/doctrine (deleted)"), |p| p == raw).unwrap(),
+            PathBuf::from("/x/doctrine")
+        );
+        // neither exists → bail
+        assert!(pick_exec(PathBuf::from("/x/doctrine (deleted)"), |_| false).is_err());
     }
 
     // --- T2: plan_session_hook (pure merge matrix) ---

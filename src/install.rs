@@ -137,7 +137,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     stdout_line("Done.")?;
 
     // ── Stage 2: forward steps ──
-    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let exec = crate::boot::resolve_exec()?;
     run_forward_steps(&project_root, &exec, args)?;
     Ok(())
 }

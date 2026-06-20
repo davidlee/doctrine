@@ -334,7 +334,7 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
     };
 
     // --- Boot staleness ---
-    let exec = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("doctrine"));
+    let exec = crate::boot::resolve_exec().unwrap_or_else(|_| PathBuf::from("doctrine"));
     let report = crate::boot::boot_check(&root, &exec);
     let boot_path = root.join(".doctrine/state/boot.md");
     let (staleness, age_seconds, commit) = if boot_path.exists() {
