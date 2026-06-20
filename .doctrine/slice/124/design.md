@@ -120,17 +120,16 @@ fn strip_deleted(p: &Path) -> Option<PathBuf> {
 #[cfg(not(unix))]
 fn strip_deleted(_p: &Path) -> Option<PathBuf> { None } // /proc/self/exe poison is Linux-only
 
-/// The single approved exec resolver. Prefer the raw reading when it exists; on a
-/// `(deleted)` reading fall back to the stripped path **only if it exists on
-/// disk**; otherwise fail loudly rather than bake a dead command.
-pub(crate) fn resolve_exec() -> anyhow::Result<PathBuf> {
-    let raw = std::env::current_exe()
-        .context("Failed to resolve the doctrine executable path")?;
-    if raw.exists() {
+/// Pure branch logic, injectable existence probe so all three arms are
+/// unit-testable without a real `current_exe()` reading (codex minor). Prefer the
+/// raw reading when it exists; on a `(deleted)` reading take the stripped path
+/// **only if it exists**; otherwise fail loudly rather than bake a dead command.
+fn pick_exec(raw: PathBuf, exists: impl Fn(&Path) -> bool) -> anyhow::Result<PathBuf> {
+    if exists(&raw) {
         return Ok(raw);
     }
     if let Some(stripped) = strip_deleted(&raw)
-        && stripped.exists()
+        && exists(&stripped)
     {
         return Ok(stripped);
     }
@@ -138,6 +137,13 @@ pub(crate) fn resolve_exec() -> anyhow::Result<PathBuf> {
         "doctrine executable path {raw:?} does not resolve to an on-disk binary; \
          reinstall from a stable location"
     )
+}
+
+/// The single approved exec resolver — the thin shell over `pick_exec`.
+pub(crate) fn resolve_exec() -> anyhow::Result<PathBuf> {
+    let raw = std::env::current_exe()
+        .context("Failed to resolve the doctrine executable path")?;
+    pick_exec(raw, |p| p.exists())
 }
 ```
 
@@ -194,10 +200,15 @@ if let [(ei, hi)] = owned[..]
     return None;                              // idempotent no-write
 }
 if owned.is_empty() {
-    arr.push(desired_entry(spec));            // Wired
+    arr.push(desired_entry(spec));            // Wired — append at tail
 } else {
+    // Position-preserving: insert the fresh canonical entry at the FIRST owned
+    // entry's original index. Every entry before it is foreign (the first owned
+    // is, by definition, the first owned), so `drop_owned_hooks` removes nothing
+    // ahead of it — that index stays valid and ordering is preserved (codex M-2).
+    let ins = owned[0].0;
     drop_owned_hooks(arr, &owned);            // extract every owned hook (F1/F2)
-    arr.push(desired_entry(spec));            // one fresh canonical entry
+    arr.insert(ins.min(arr.len()), desired_entry(spec)); // one fresh canonical entry
     // Refreshed
 }
 ```
@@ -225,19 +236,20 @@ command refreshed" to "an owned hook existed and was normalized to canonical"
 asserts `Refreshed`, the first-install test `Wired`, the reinstall test `None`).
 
 Net effect: at most one doctrine-owned entry survives, always canonical and
-doctrine-sole, appended fresh. A messy file's entry moves to the array tail
-(cosmetic; SubagentStart matching is order-independent); a hand-merged-but-canonical
-owned hook is extracted into its own entry once, then `hook_is_sole` makes re-runs
-no-write.
+doctrine-sole. It is inserted at the **first owned entry's original index**, so a
+stale refresh keeps its relative position — e.g. a stale `boot` entry preceding
+`sync` stays before `sync` after refresh (codex M-2; the boot/sync execution order
+is preserved, not just SubagentStart). A hand-merged-but-canonical owned hook is
+extracted into its own entry once, then `hook_is_sole` makes re-runs no-write.
 
 **Blast radius:** `find_owned` + `enum Owned` + `set_command` removed/replaced;
 `plan_hook` rewritten as normalize; `RefreshOutcome::Refreshed` doc broadened;
 three one-line predicate edits; add `is_doctrine_program`, `owned_positions`,
 `entry_is_canonical`, `hook_is_sole`, `drop_owned_hooks`, `strip_deleted`,
-`pub(crate) resolve_exec`. Seven `current_exe()` call sites rerouted through
-`resolve_exec` across `boot.rs`, `corpus.rs`, `skills.rs`, `install.rs`,
+`pick_exec` + `pub(crate) resolve_exec`. Seven `current_exe()` call sites rerouted
+through `resolve_exec` across `boot.rs`, `corpus.rs`, `skills.rs`, `install.rs`,
 `status.rs` (table above). Boot/sync ride the new core unchanged (single canonical
-doctrine-sole entry → no-write).
+doctrine-sole entry → no-write; refresh preserves entry position).
 
 ## Verification
 
@@ -279,12 +291,21 @@ boot/sync hook matrix stays green **unmodified** (behaviour-preservation gate).
 - **Shared-core proof (codex m2):** add the foreign-sibling shared-entry case for
   **boot and sync too**, not stamp only — proving the shared merge core did not
   acquire event-specific behaviour.
+- **Order preservation (codex M-2):** a stale `boot` entry positioned **before** a
+  `sync` entry → after refreshing boot, `boot` is still ordered before `sync`
+  (insert-at-first-owned-index, not append-at-tail). Asserts via the ordered
+  `commands()` list, not `.contains`.
 
-**Seam note:** `current_exe()` can't be faked in a unit test; `resolve_exec`'s disk
-checks are covered by `strip_deleted` unit cases plus the existing-path branch
-(the test binary exists → raw branch). The `bail!` path (neither raw nor stripped
-exists) is asserted by pointing `strip_deleted` at synthetic paths; the thin
-wrapper's branch logic is otherwise exercised transitively.
+**`pick_exec` branches (injectable probe — codex minor):**
+- raw exists → returns raw (clean path, the normal case).
+- raw absent, `…/doctrine (deleted)` → stripped exists → returns the stripped path
+  (rebuild-in-place).
+- neither exists → `bail!` (binary deleted/moved without replacement) — install
+  fails loudly, never bakes a dead command.
+
+**Seam note:** `current_exe()` itself can't be faked, but `pick_exec` takes the raw
+reading + an `exists` closure, so all three arms above are unit-tested directly;
+`resolve_exec` is the thin shell that supplies `current_exe()` + `Path::exists`.
 
 ## Open questions
 
@@ -301,4 +322,9 @@ _None remaining — OQ-1/2/3 resolved (D1/D2/D3)._
   loudly. M2 non-UTF-8 poison survived `to_str` → byte-level strip. M3 `Refreshed`
   semantics widened → doc broadened, variant/labels kept, existing assertions
   verified. m1 preserve all entry-level keys in `drop_owned_hooks`. m2 shared-entry
-  tests for boot/sync, not stamp only. All integrated above.
+  tests for boot/sync, not stamp only. All integrated.
+- **External (codex GPT-5.5, 2nd pass):** prior six confirmed resolved. New Major —
+  append-at-tail reorders `SessionStart` boot/sync → insert at first-owned index
+  (position-preserving) + order regression test. Minor — `resolve_exec` bail path
+  untestable → factored `pick_exec` with injectable existence probe + branch tests.
+  Minor — slice scope still said "heal in place" → reconciled to normalize wording.
