@@ -1,0 +1,63 @@
+id    = 106
+slug  = "reconciliation-review-of-sl-120"
+title = "reconciliation review of SL-120"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-120"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "stripPiPrefix in test file but unused in extension"
+detail = "Design lists stripPiPrefix as a pure function. Implementation correctly omits it from extension (dead code — never called there). Test file includes it for unit testing. This is a correct implementation divergence from design (the design listed it in the Pure functions section; the code is DRY-er)."
+disposition = "aligned"
+response = "stripPiPrefix is correctly omitted from the extension — it has no call site there. The test file includes it for unit testing the pure function, which is correct (tests should validate the function, even if the extension doesn't call it directly). The design listed it as a proposed function; implementation correctly pruned dead code. This is a DRY improvement over design."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "parseResponse uses unchecked type assertion (as JsonRpcResponse)"
+detail = "parseResponse(line) does JSON.parse(line) as JsonRpcResponse — no runtime validation of response shape. A response that parses as valid JSON but has wrong shape (e.g. missing jsonrpc field) would pass through silently. Consistent with design's pass-through philosophy (trust MCP server output), but the caller (pending handler) assumes resp.id, resp.error, resp.result exist. A malformed response would produce undefined behaviour rather than a clear error."
+disposition = "tolerated"
+response = "The unchecked type assertion is deliberate and consistent with the design's pass-through philosophy: the MCP server is a trusted, local process with a known schema. Adding runtime shape validation (jsonrpc/result/error/id checks) would add complexity for minimal benefit — a malformed response from doctrine's own MCP server is a bug in the server, not a runtime concern for the bridge. The design's pass-through params strategy accepts this. Tolerated with the acceptance that if the MCP server returns malformed JSON-RPC, the error will be less clear than it could be."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "BIN_PATH fallback mechanism diverges from design's baked-only commitment"
+detail = "Design D6: 'Binary path baked at install (BIN_PATH) ... No runtime path discovery.' Implementation adds runtime fallback: typeof BIN_PATH !== 'undefined' ? BIN_PATH : process.env.DOCTRINE_BIN || '/home/david/.cargo/bin/doctrine'. This is a beneficial improvement for dev/test workflows but the design didn't document it. The hardcoded path '/home/david/.cargo/bin/doctrine' is user-specific and won't work on other machines — acceptable as last-resort fallback for the known deployment."
+disposition = "aligned"
+response = "The BIN_PATH fallback chain (baked constant → env var → hardcoded path) is a beneficial improvement over the design's 'baked only' commitment. It makes the extension testable without a full install cycle and provides a development escape hatch. The hardcoded fallback path is deployment-specific but acceptable as last resort. The design is slightly stale — the implementation improved on it. No code change needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "Main-branch regression: SL-119 pi extension machinery deleted by commit 587d4403"
+detail = """
+Commit 587d4403 ('fix(boot): rename Pi harness to Codex') deleted ALL of SL-119's pi extension substrate:
+- Removed: BOOT_SENTINEL, PI_EXT_HEADER, sentinel guard block, SymlinkAction enum, AppendSystemOutcome enum, ExtAction enum, ExtOutcome enum, plan_append_system(), install_append_system(), plan_pi_extension(), install_pi_extension()
+- Removed from RefreshReport: append_system and extension fields
+- Renamed Harness::Pi → Harness::Codex but gutted the arm: install_refresh's Codex match now returns RefreshReport { hook: None, baseref: NotApplicable, mcp: None } — a no-op
+- Updated .pi references to .codex but kept no functionality
+
+Impact: SL-120's review/120 code references types (ExtAction, ExtOutcome, PI_EXT_HEADER) and a harness variant (Harness::Pi) that NO LONGER EXIST on main. Review/120 is unmergeable. The candidate cand-120-review-001 could not be created cleanly — merge conflict in src/boot.rs with 10+ conflict blocks.
+
+Additionally: SL-119 is now dead on main — doctrine boot install --agent codex generates nothing. The pi extension surface (APPEND_SYSTEM.md symlink, index.ts extension generation) is gone.
+
+This is a regression that must be fixed before SL-120 can land."""
+disposition = "fix-now"
+response = "The regression must be fixed before SL-120 can land. The fix is to restore SL-119's pi extension machinery from commit 51981305 (the SL-119 review squash), adapting the Pi→Codex rename where needed. Specifically: restore ExtAction, ExtOutcome, SymlinkAction, AppendSystemOutcome enums; restore PI_EXT_HEADER, BOOT_SENTINEL constants; restore plan_append_system, install_append_system, plan_pi_extension, install_pi_extension functions; restore append_system and extension fields on RefreshReport; wire the Codex arm of install_refresh to call the extension installers. The rename Pi→Codex is preserved but the arm must DO work, not be a no-op."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
