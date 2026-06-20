@@ -409,7 +409,7 @@ async fn mutate_concept_map(
     let name = format!("{id:03}");
     let stem = format!("concept-map-{name}");
     let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-    std::fs::write(&toml_path, &updated_toml)
+    crate::fsutil::write_atomic(&toml_path, updated_toml.as_bytes())
         .map_err(|e| MapServerError::ConceptMapIoError(e.to_string()))?;
 
     // Re-parse for response — parse the DSL directly (we already have it)

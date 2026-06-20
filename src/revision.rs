@@ -920,7 +920,8 @@ fn append_change_row(rev_root: &Path, id: u32, row: &ChangeRow) -> anyhow::Resul
     }
     array.push(table);
 
-    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
+    crate::fsutil::write_atomic(&path, doc.to_string().as_bytes())
+        .with_context(|| format!("Failed to write {}", path.display()))
 }
 
 // ---------------------------------------------------------------------------

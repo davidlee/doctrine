@@ -393,7 +393,7 @@ pub(crate) fn set_kind(root: &Path, id: u32, kind: ReqKind) -> anyhow::Result<()
         anyhow::bail!("malformed requirement {name}: missing `kind` (regenerate via the scaffold)");
     }
     table.insert("kind", toml_edit::value(kind.as_str()));
-    std::fs::write(&path, doc.to_string())
+    crate::fsutil::write_atomic(&path, doc.to_string().as_bytes())
         .with_context(|| format!("Failed to write {}", path.display()))
 }
 
