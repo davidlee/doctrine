@@ -1,6 +1,7 @@
 # SL-127 Design — Dispatch base freshness
 
-> Status: drafted, pending adversarial review.
+> Status: drafted; internal adversarial pass integrated (F1/F3/F4/F6 substantive,
+> F2/F5 minor — see inline `F#` notes). Pending external challenge / lock.
 > Foundations locked interactively: Q1=A (freshen the dispatch branch), Q2=(i)
 > (operator verb + auto-surfaced drift, no auto-refresh), Q3=(c) (ancestor-dominant
 > ladder + plan-presence gate). Governed by ADR-006, ADR-011, ADR-012; specs
@@ -60,23 +61,47 @@ an equally-valid candidate strictly dominates."
 
 Signature (new helper, `git.rs`):
 ```rust
-/// The ancestor-maximal commit among `candidates` (resolved shas): the unique
-/// one that every other is an ancestor of. `None` when the set is empty or the
-/// candidates diverge (no single maximum) — caller falls back to ladder order.
+/// Fold `candidates` (resolved shas, in ladder-preference order) to the most-
+/// advanced base: start at the first, and step to a later candidate only when it
+/// is a *descendant* of the current pick; a candidate that diverges from (is not
+/// a descendant of) the current pick is skipped, never regressed to. So a stale
+/// ancestor is always overtaken by a descendant later in the list, while a
+/// diverged third candidate cannot drag the pick backwards.
 fn ancestor_maximal(root: &Path, candidates: &[String]) -> anyhow::Result<Option<String>>
+//   candidates.iter().try_fold(None, |acc, c| match acc {
+//     None => Some(c),
+//     Some(a) if is_ancestor(a, c)? => Some(c),   // c descends a → advance
+//     Some(a) => Some(a),                          // diverged/older → keep a
+//   })
 ```
 `trunk_ladder`'s implicit-candidate arm becomes: peel each of
-`["origin/HEAD","main","master"]`; collect the resolved set (de-duplicated by sha);
-if `ancestor_maximal` returns `Some`, use it; else fall back to first-resolves.
+`["origin/HEAD","main","master"]` **in that order**; collect the resolved shas
+(de-duplicated); fold with `ancestor_maximal`. Order is the *preference* seed (so
+genuinely-diverged candidates resolve to the most-preferred), and the fold only
+ever advances to a strict descendant.
+
+> **F1 (adversarial):** an earlier "unique global maximum, else fall to order"
+> formulation reintroduced the bug for `{origin/HEAD(old), main(new),
+> master(diverged)}` — no unique max ⇒ fall to order ⇒ stale `origin/HEAD`. The
+> left-fold above picks `main` there. This is the correct primary fix.
 
 **(b) Plan-presence refuse-gate at the dispatch layer (slice-specific).**
-`worktree::coordinate` (~1700), after resolving `trunk` and *before* `run_phases`,
-asserts the chosen base's tree carries the dispatched slice's plan:
-`git ls-tree <trunk> -- .doctrine/slice/<NNN>/plan.toml`. Absent ⇒ `bail!` early
-with the `DOCTRINE_TRUNK_REF` hint, converting the deep regen abort into a single
-clear pre-flight refusal. This backstops the rare *diverged* case (force-pushed /
+`worktree::coordinate` (~1700), after resolving `trunk` and **before the `git
+worktree add -b` fork** (F6, not merely before `run_phases`), asserts the chosen
+base's tree carries the dispatched slice's plan:
+`git ls-tree <trunk> -- .doctrine/slice/<NNN>/plan.toml` (reuse the
+`trunk_entity_ids` tree-read idiom — F2). Absent ⇒ `bail!` early with the
+`DOCTRINE_TRUNK_REF` hint, converting the deep regen abort into a single clear
+pre-flight refusal. This backstops the rare *diverged* case (force-pushed /
 rebased `origin/HEAD`) that dominance cannot decide. It lives at the dispatch layer,
 not in the generic ladder, because plan-presence is slice-specific.
+
+> **F6 (adversarial):** gating *before* the worktree fork means a bad base never
+> creates a worktree to roll back — which sidesteps RSK-010's "setup rollback
+> reverted uncommitted session-`main` WIP" sharp edge **for the base-staleness
+> cause** (the rollback path is never entered). The general rollback-safety
+> remedy (RSK-010 candidate (e): rollback must never touch the session tree for
+> *any* cause) stays out of scope — flagged as a follow-up.
 
 ### 2.3 Why both
 Dominance is the primary fix and handles every witnessed case neutrally. The gate
@@ -93,10 +118,14 @@ fork_point..trunk_tip`, `trunk_state = stable|moved` (tested:
 `dispatch_status_moved_trunk`). **No parallel drift implementation.** Extract:
 ```rust
 struct Drift { fork_point: String, ahead: u32 }
-fn trunk_drift(root: &Path, dispatch_tip: &str) -> anyhow::Result<Drift>
+/// Drift of `tip` against current trunk: fork_point = merge_base(tip, trunk),
+/// ahead = count(fork_point..trunk). Parameterized on `tip` (F4) so the
+/// classifier can measure the *bundle/source*, not only the dispatch branch.
+fn trunk_drift(root: &Path, tip: &str) -> anyhow::Result<Drift>
 ```
-`run_status` is refactored to call it (behaviour-preserving — existing status tests
-stay green); the new call-sites (verb + classifier) share it.
+`run_status` is refactored to call `trunk_drift(root, dispatch_tip)`
+(behaviour-preserving — existing status tests stay green); the verb and the
+candidate-create classifier share it on their relevant tips.
 
 ### 3.2 The verb — `doctrine dispatch refresh-base --slice N`
 Single responsibility: **advance the dispatch branch's base past trunk drift.** It
@@ -104,15 +133,22 @@ does *not* regenerate the bundle — the operator re-runs `dispatch sync
 --prepare-review` afterwards (the existing step), matching the two-step shape the
 SL-122 manual fix used. (Bundling regen into the verb is a deferred OQ — §6 OQ-1.)
 
+Ref-level, callable from anywhere (F3): like `candidate_create` it operates on the
+object-db and refs, **never checks out or dirties a worktree**. (It refuses, as
+`candidate_create` does, if the current branch is a raw evidence ref.)
+
 Mechanism (all primitives existing; object-db merge, never a dirty worktree):
 1. Resolve `dispatch_tip = dispatch/<NNN>`, `trunk_tip = trunk_commit`.
 2. `mb = merge_base(dispatch_tip, trunk_tip)`. If `is_ancestor(trunk_tip,
    dispatch_tip)` (no drift) ⇒ report "already fresh", exit 0, no write.
 3. `merge_tree(mb, dispatch_tip, trunk_tip)`:
    - **Clean** ⇒ `commit_tree_merge(tree, dispatch_tip, trunk_tip, "refresh(NNN):
-     merge trunk into dispatch/<NNN>")`, then `update_ref` the dispatch branch
-     under CAS on its expected tip. Advances B; bundle now contains trunk's later
-     changes, so the eventual candidate-create 3-way goes clean.
+     merge trunk into dispatch/<NNN>")` — first parent `dispatch_tip` (ours),
+     second `trunk_tip` (theirs) — then `update_ref_cas` the dispatch branch on
+     its expected old tip (`dispatch_tip`). Advances B; bundle now contains
+     trunk's later changes, so the eventual candidate-create 3-way goes clean.
+     After refresh, `merge_base(dispatch, trunk) == trunk_tip`, so a re-run
+     `prepare-review` re-pins the projection to the fresh base (no gap).
    - **Conflict** ⇒ **report the conflicting paths and halt; no ref/worktree
      mutation.** Mirrors `candidate_create`'s no-`--worktree` abort and SPEC-021
      stage-2 *report-never-auto-resolve*. Operator resolves the trunk merge by hand
@@ -123,11 +159,13 @@ write (writes only `dispatch/<NNN>`) — consistent with stage-1's no-trunk-writ
 
 ### 3.3 Conflict classifier at candidate-create
 `candidate_create`'s `MergeTree::Conflict` arm (dispatch.rs ~417) today emits a
-generic content-conflict message. Target: consult `trunk_drift`; when `ahead > 0`,
+generic content-conflict message. Target: consult `trunk_drift(root, source_oid)`
+(F4 — measured on the *bundle/source*, not the dispatch tip); when `ahead > 0`,
 the bail text **names the base-divergence** and directs the operator to
 `refresh-base` (then re-prepare + re-create), rather than implying a content
 conflict the operator cannot fix on the bundle. When `ahead == 0` the existing
-message stands (a true content conflict).
+message stands (a true content conflict). Diagnostic only — no change to the
+abort's no-durable-state guarantee.
 
 ### 3.4 Next-step guidance
 `run_status`'s `next_guidance`: when all phases complete **and** trunk has moved
