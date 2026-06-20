@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 320
+slug = "crash-safe-idempotent-recovery-no-force-push-no-auto-resolve"
+title = "Crash-safe idempotent recovery: no force-push, no auto-resolve"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

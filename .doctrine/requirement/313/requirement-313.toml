@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 313
+slug = "pinned-fork-point-with-refresh-base-as-the-sole-explicit-advance"
+title = "Pinned fork-point with refresh-base as the sole explicit advance"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

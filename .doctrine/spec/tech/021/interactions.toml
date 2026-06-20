@@ -4,3 +4,8 @@
 #   target = "SPEC-002"       # canonical FK into .doctrine/spec/tech/NNN
 #   type = "uses"             # free-text edge kind (calls / extends / uses / …)
 #   notes = "…"               # optional
+
+[[edge]]
+target = "SPEC-022"
+type = "uses"
+notes = "The orchestrator process (funnel cadence, two-stage integration) wields the git interaction model: the pinned fork-point, two-stage projection, and worktree-aware CAS advance are defined there."
