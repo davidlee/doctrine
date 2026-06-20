@@ -433,6 +433,22 @@ fn verify_sibling_worktree(source: &Path, fork: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The repo's PRIMARY (main) worktree root, as git reports it: the FIRST
+/// `worktree <path>` entry of `git worktree list --porcelain`, run against any
+/// path in the repo. Correct across ordinary, separate-git-dir, and submodule
+/// layouts (unlike `parent(--git-common-dir)`). Used as the stamp provision SOURCE
+/// so it is independent of the process cwd — the `SubagentStart` hook fires inside
+/// the worker worktree, which must never be the source (ISS-011 Defect C). Impure
+/// (git read). Bare repos (no main worktree) are out of scope for dispatch.
+fn primary_worktree(cwd: &Path) -> anyhow::Result<PathBuf> {
+    let listing = git::git_text(cwd, &["worktree", "list", "--porcelain"])?;
+    let first = listing
+        .lines()
+        .find_map(|l| l.strip_prefix("worktree "))
+        .ok_or_else(|| anyhow::anyhow!("no main worktree for {}", cwd.display()))?;
+    fs::canonicalize(first).with_context(|| format!("canonicalize primary worktree {first}"))
+}
+
 /// Enumerate the copy candidate set: gitignored, untracked files, NUL-delimited
 /// so newline/quoted paths survive (design §3 m9).
 fn enumerate_candidates(root: &Path) -> anyhow::Result<Vec<String>> {
@@ -2108,12 +2124,14 @@ pub(crate) fn run_stamp_subagent(path: Option<PathBuf>) -> anyhow::Result<()> {
     let cwd_str = payload.cwd.unwrap_or_default();
     let cwd_present = !cwd_str.is_empty();
 
-    // Resolve the SOURCE repo (the orchestrator's tree) from the PROCESS cwd — the
-    // SubagentStart hook fires inside it. This is the copy SOURCE for `run_provision`
-    // (the worker worktree is the destination), mirroring how `run_fork --worker`
-    // passes `Some(repo)`/`dir` — never `Some(fork)`/`fork` (that would make source
-    // == fork and trip the sibling-worktree guard). `None` ⇒ no doctrine root above
-    // the process cwd ⇒ the cwd cannot be validated against a repo ⇒ bad-dir.
+    // R1 binding ANCHOR ONLY: `root::find` on the PROCESS cwd resolves a doctrine
+    // root used to VALIDATE the payload cwd (via `cwd_shares_repo` / `is_linked_worktree`
+    // below) — it is NOT the provision SOURCE. The `SubagentStart` hook fires INSIDE the
+    // worker worktree, so the process cwd is the FORK, not the orchestrator tree; using it
+    // as the copy source would make source == fork and trip the sibling-worktree guard
+    // (ISS-011 Defect C). The R2 provision SOURCE is derived separately as the repo's
+    // primary worktree. `None` ⇒ no doctrine root above the process cwd ⇒ the cwd cannot
+    // be validated against a repo ⇒ bad-dir.
     let repo = root::find(path, &root::default_markers())
         .ok()
         .and_then(|r| fs::canonicalize(&r).ok());
@@ -2147,14 +2165,19 @@ pub(crate) fn run_stamp_subagent(path: Option<PathBuf>) -> anyhow::Result<()> {
     // required Some of each). Source = the orchestrator tree (provision copies FROM
     // it); the worker worktree `cwd` is the destination. Fail closed if either is
     // somehow absent — never panic on a hook input.
-    let (Some(source), Some(cwd)) = (repo, cwd_canon) else {
+    let (Some(_anchor), Some(cwd)) = (repo, cwd_canon) else {
         let token = StampRefusal::BadDir.token();
         writeln!(io::stderr(), "stamp-refused: {token}")?;
         bail!("stamp-refused: {token}");
     };
 
     // --- act: provision (SOLE copier) THEN mark. M3: NO rollback on failure. ---
-    if let Err(cause) = run_provision(Some(source), &cwd).and_then(|()| write_marker(&cwd)) {
+    // R2: provision SOURCE is the PRIMARY worktree, NOT the binding anchor — which is
+    // the fork itself when the hook fires inside the worker worktree (ISS-011 Defect C).
+    let act = primary_worktree(&cwd)
+        .and_then(|source| run_provision(Some(source), &cwd))
+        .and_then(|()| write_marker(&cwd));
+    if let Err(cause) = act {
         // LOUD diagnostic; the worktree is LEFT in place (Claude owns it). No
         // `git worktree remove` — there is no compensating rollback for a stamp.
         writeln!(
@@ -2902,6 +2925,39 @@ mod tests {
 
         assert!(is_linked_worktree(&fork).unwrap(), "a linked worktree");
         assert!(!is_linked_worktree(&primary).unwrap(), "the primary tree");
+    }
+
+    #[test]
+    fn primary_worktree_resolves_to_the_main_tree_from_a_fork_or_itself() {
+        // VT-2 (SL-125): the R2 provision SOURCE. From a linked worktree it must
+        // resolve to the PRIMARY tree (the Defect-C correction); from the primary
+        // tree it is idempotent (resolves to itself).
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("src"));
+        let fork = tmp.path().join("fork");
+        git(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "feat",
+                fork.to_str().unwrap(),
+            ],
+        );
+        let fork = fs::canonicalize(&fork).unwrap();
+
+        assert_eq!(
+            primary_worktree(&fork).unwrap(),
+            primary,
+            "a linked worktree resolves to the main tree"
+        );
+        assert_eq!(
+            primary_worktree(&primary).unwrap(),
+            primary,
+            "the main tree resolves to itself"
+        );
     }
 
     #[test]
