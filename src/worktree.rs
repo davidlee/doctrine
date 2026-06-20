@@ -2189,12 +2189,18 @@ pub(crate) enum WorkerVerifyRefusal {
     /// The worker worktree HEAD does not resolve (`git -C <dir> rev-parse HEAD`
     /// failed) — no fork to verify. The explicit unresolved-HEAD verdict.
     NoWorkerHead,
+    /// The worktree is NOT a linked worktree (git-dir == git-common-dir ⇒ primary
+    /// tree) — the fork exists but it is the main tree, not an isolated worker.
+    NotIsolated,
     /// HEAD resolves but the worker marker is absent — the `SubagentStart` stamp
     /// never landed (a non-fail-closable hook), so this is not a trusted worker.
     Unstamped,
     /// Stamped fork, but `B` is NOT an ancestor of the worker HEAD — the worker
     /// forked off the wrong base (`baseRef` misconfigured or placement wrong).
     WrongBase,
+    /// The worker HEAD does NOT equal the branch tip `S` the funnel imports as —
+    /// the footer dir and branch are incoherent (a `--branch` coherence belt).
+    BranchMismatch,
 }
 
 impl WorkerVerifyRefusal {
@@ -2202,8 +2208,10 @@ impl WorkerVerifyRefusal {
     pub(crate) fn token(self) -> &'static str {
         match self {
             WorkerVerifyRefusal::NoWorkerHead => "no-worker-head",
+            WorkerVerifyRefusal::NotIsolated => "not-isolated",
             WorkerVerifyRefusal::Unstamped => "unstamped",
             WorkerVerifyRefusal::WrongBase => "wrong-base",
+            WorkerVerifyRefusal::BranchMismatch => "branch-mismatch",
         }
     }
 }
@@ -2211,24 +2219,39 @@ impl WorkerVerifyRefusal {
 /// PURE worker-verify classifier (no git / disk / env / clock — ADR-001 leaf,
 /// CLAUDE.md pure/imperative split). Mirror of [`classify_stamp`]/
 /// [`classify_import`]: it takes the gathered, already-resolved FACTS and returns
-/// the verdict. The shell resolves the worker HEAD, the marker presence, and the
-/// is-ancestor probe (impure git/disk), then calls this.
+/// the verdict. The shell resolves the worker HEAD, the marker presence, the
+/// is-ancestor probe, the isolation check, and the branch-tip coherence check
+/// (impure git/disk), then calls this.
 ///
 /// * `head_resolved`     — `git -C <dir> rev-parse --verify HEAD` succeeded.
+/// * `is_isolated`       — the worktree is a linked worktree (git-dir ≠ git-common-dir),
+///   not the primary tree.
 /// * `marker_present`    — the worker worktree bears the withheld worker marker.
 /// * `base_is_ancestor`  — `merge-base --is-ancestor <B> HEAD` (run -C the worker
 ///   dir) succeeded ⇒ the worker HEAD descends from `B`.
+/// * `head_is_branch_tip` — the worker HEAD equals the branch tip `S` the funnel
+///   imports as (coherence belt); `true` when no `--branch` given.
 ///
-/// Precond order: head-resolves → marker → base (an unstamped worker names itself
-/// before the base check; the base check only matters once we know it is a stamped
-/// fork with a resolvable HEAD).
+/// Precond order: head-resolves → isolated → marker → base → branch-coherence
+/// (an unstamped worker names itself before the base check; the base check only
+/// matters once we know it is a stamped, isolated fork with a resolvable HEAD;
+/// branch coherence is the final belt).
+#[expect(
+    clippy::fn_params_excessive_bools,
+    reason = "pure classifier with distinct ordered preconditions; a struct would obscure the precond order"
+)]
 pub(crate) fn classify_worker_verify(
     head_resolved: bool,
+    is_isolated: bool,
     marker_present: bool,
     base_is_ancestor: bool,
+    head_is_branch_tip: bool,
 ) -> Result<WorkerVerify, WorkerVerifyRefusal> {
     if !head_resolved {
         return Err(WorkerVerifyRefusal::NoWorkerHead);
+    }
+    if !is_isolated {
+        return Err(WorkerVerifyRefusal::NotIsolated);
     }
     if !marker_present {
         return Err(WorkerVerifyRefusal::Unstamped);
@@ -2236,44 +2259,77 @@ pub(crate) fn classify_worker_verify(
     if !base_is_ancestor {
         return Err(WorkerVerifyRefusal::WrongBase);
     }
+    if !head_is_branch_tip {
+        return Err(WorkerVerifyRefusal::BranchMismatch);
+    }
     Ok(WorkerVerify::Ok)
 }
 
-/// `doctrine worktree verify-worker --base <B> --dir <worktree>` — the claude
-/// `/dispatch` arm's post-spawn base==B check (design §8.4 / DD-12). After a
-/// claude worker returns, the orchestrator runs this against the worker worktree
-/// to PROVE its HEAD descends from the base `B` it was meant to fork off (option
-/// Y: base is orchestrator-controlled by placement, verified here rather than
-/// ref-redirected). Fail-LOUD and diagnostic only — it NEVER removes the fork;
+/// `doctrine worktree verify-worker --base <B> --dir <worktree> [--branch <S>]` —
+/// the claude `/dispatch` arm's post-spawn base==B check (design §8.4 / DD-12).
+/// After a claude worker returns, the orchestrator runs this against the worker
+/// worktree to PROVE its HEAD descends from the base `B` it was meant to fork off
+/// (option Y: base is orchestrator-controlled by placement, verified here rather
+/// than ref-redirected). Fail-LOUD and diagnostic only — it NEVER removes the fork;
 /// the orchestrator decides what to do with a refused worker.
 ///
 /// `--dir` fully locates the worker worktree (it is the git `-C` root for every
 /// probe), so no `-p` root override is needed — unlike the funnel verbs that run
 /// at the coordination root, this verb's operand IS the subject worktree.
 ///
+/// When `--branch <S>` is given, an additional coherence belt fires: the worktree
+/// HEAD must equal the tip of `S` (dir↔branch coherence).
+///
+/// Refusal tokens: `no-worker-head` / `not-isolated` / `unstamped` /
+/// `wrong-base` / `branch-mismatch`.
+///
 /// Read-classed (no writes; mirrors `branch-point-check`/`status`) — harmless
 /// under worker-mode, and design §8.6 lists no impersonation test for it.
 ///
 /// Gather → pure-classify → act:
 /// 1. gather the FACTS — worker HEAD resolves (`rev-parse --verify HEAD`, run -C
-///    the worker dir); the worker marker is present at `<dir>`; `B` is an ancestor
-///    of the worker HEAD (`merge-base --is-ancestor <B> HEAD`, the SHARED
-///    [`git::git_status_ok`] is-ancestor primitive — NO new git.rs plumbing);
+///    the worker dir); the worktree is isolated (git-dir ≠ git-common-dir); the
+///    worker marker is present at `<dir>`; `B` is an ancestor of the worker HEAD
+///    (`merge-base --is-ancestor <B> HEAD`, the SHARED [`git::git_status_ok`]
+///    is-ancestor primitive — NO new git.rs plumbing); when `--branch <S>`, the
+///    worker HEAD equals the tip of `S` (dir↔branch coherence belt);
 /// 2. [`classify_worker_verify`] returns the verdict;
 /// 3. on Refuse print the distinct token to stderr + exit non-zero, fork PRESERVED;
 ///    on Ok exit 0.
-pub(crate) fn run_verify_worker(base: &str, dir: &Path) -> anyhow::Result<()> {
+pub(crate) fn run_verify_worker(
+    base: &str,
+    dir: &Path,
+    branch: Option<&str>,
+) -> anyhow::Result<()> {
     // --- gather (all impure git/disk reads, fail-closed) ---
     // Worker HEAD must resolve in the worker WORKTREE (-C <dir>), not the
     // orchestrator root — a non-resolving HEAD ⇒ `no-worker-head`.
     let head_resolved = git::git_opt(dir, &["rev-parse", "--verify", "HEAD"])?.is_some();
+    // Isolation check: git-dir must differ from git-common-dir (linked worktree).
+    // Missing dir ⇒ NoWorkerHead wins (head_resolved gates is_isolated).
+    let is_isolated = head_resolved && is_linked_worktree(dir)?;
     let marker = marker_present(dir);
     // is-ancestor signals purely via exit code; unresolvable refs ⇒ Ok(false)
     // (fail-closed, never a panic). `git_status_ok` errors only on a spawn failure.
     let base_is_ancestor = git::git_status_ok(dir, &["merge-base", "--is-ancestor", base, "HEAD"])?;
+    // Coherence: worktree HEAD must equal the branch tip the funnel imports as S.
+    let head_is_branch_tip = match branch {
+        Some(s) => {
+            let head = git::git_opt(dir, &["rev-parse", "--verify", "HEAD"])?;
+            let tip = git::git_opt(dir, &["rev-parse", "--verify", &format!("{s}^{{commit}}")])?;
+            matches!((head, tip), (Some(h), Some(t)) if h == t)
+        }
+        None => true,
+    };
 
     // --- pure classify ---
-    match classify_worker_verify(head_resolved, marker, base_is_ancestor) {
+    match classify_worker_verify(
+        head_resolved,
+        is_isolated,
+        marker,
+        base_is_ancestor,
+        head_is_branch_tip,
+    ) {
         Ok(WorkerVerify::Ok) => {
             writeln!(
                 io::stderr(),
@@ -2932,12 +2988,15 @@ mod tests {
     }
 
     // --- SL-064 PHASE-08: worker-verify pure classifier + token table (design §8.4) ---
+    // --- SL-123 PHASE-01: not-isolated + branch-mismatch belts (design §5.2) ---
 
+    // VT-3 (updated): existing goldens with the 5-arg signature, verdicts UNCHANGED.
     #[test]
     fn classify_worker_verify_ok_when_all_preconds_hold() {
-        // HEAD resolves, marker present, B is an ancestor ⇒ base==B holds.
+        // HEAD resolves, isolated, marker present, B is an ancestor, branch tip
+        // matches ⇒ base==B holds.
         assert_eq!(
-            classify_worker_verify(true, true, true),
+            classify_worker_verify(true, true, true, true, true),
             Ok(WorkerVerify::Ok)
         );
     }
@@ -2947,11 +3006,11 @@ mod tests {
         // HEAD unresolved ⇒ no-worker-head, regardless of the other inputs (the
         // first precond — nothing to verify without a HEAD).
         assert_eq!(
-            classify_worker_verify(false, true, true),
+            classify_worker_verify(false, true, true, true, true),
             Err(WorkerVerifyRefusal::NoWorkerHead)
         );
         assert_eq!(
-            classify_worker_verify(false, false, false),
+            classify_worker_verify(false, false, false, false, false),
             Err(WorkerVerifyRefusal::NoWorkerHead)
         );
         assert_eq!(WorkerVerifyRefusal::NoWorkerHead.token(), "no-worker-head");
@@ -2962,7 +3021,7 @@ mod tests {
         // HEAD resolves but marker absent ⇒ unstamped, EVEN WHEN the base is also
         // wrong — the marker check precedes the base check (precond order).
         assert_eq!(
-            classify_worker_verify(true, false, false),
+            classify_worker_verify(true, true, false, false, true),
             Err(WorkerVerifyRefusal::Unstamped)
         );
         assert_eq!(WorkerVerifyRefusal::Unstamped.token(), "unstamped");
@@ -2971,12 +3030,46 @@ mod tests {
     #[test]
     fn classify_worker_verify_wrong_base_refuses_last() {
         // Resolvable, stamped fork, but B is NOT an ancestor of the worker HEAD ⇒
-        // wrong-base (the base check is LAST — only meaningful once stamped).
+        // wrong-base.
         assert_eq!(
-            classify_worker_verify(true, true, false),
+            classify_worker_verify(true, true, true, false, true),
             Err(WorkerVerifyRefusal::WrongBase)
         );
         assert_eq!(WorkerVerifyRefusal::WrongBase.token(), "wrong-base");
+    }
+
+    // VT-1: not-isolated refuses after NoWorkerHead but before marker.
+    #[test]
+    fn classify_worker_verify_not_isolated_refuses_after_head_before_marker() {
+        // HEAD resolves but is_isolated=false ⇒ NotIsolated, regardless of marker/base.
+        assert_eq!(
+            classify_worker_verify(true, false, true, true, true),
+            Err(WorkerVerifyRefusal::NotIsolated)
+        );
+        assert_eq!(
+            classify_worker_verify(true, false, false, false, false),
+            Err(WorkerVerifyRefusal::NotIsolated)
+        );
+        assert_eq!(WorkerVerifyRefusal::NotIsolated.token(), "not-isolated");
+    }
+
+    // VT-2: branch-mismatch refuses last.
+    #[test]
+    fn classify_worker_verify_branch_mismatch_refuses_last() {
+        // Everything ok except head_is_branch_tip=false ⇒ BranchMismatch.
+        assert_eq!(
+            classify_worker_verify(true, true, true, true, false),
+            Err(WorkerVerifyRefusal::BranchMismatch)
+        );
+        // No --branch (head_is_branch_tip=true) with all-true ⇒ Ok.
+        assert_eq!(
+            classify_worker_verify(true, true, true, true, true),
+            Ok(WorkerVerify::Ok)
+        );
+        assert_eq!(
+            WorkerVerifyRefusal::BranchMismatch.token(),
+            "branch-mismatch"
+        );
     }
 
     // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---
