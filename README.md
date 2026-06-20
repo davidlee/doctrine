@@ -216,6 +216,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-019 — Knowledge-record entity surface](.doctrine/spec/tech/019/spec-019.md) — `active`
 - [SPEC-020 — Estimation facet](.doctrine/spec/tech/020/spec-020.md) — `active`
 - [SPEC-021 — Dispatch orchestrator process](.doctrine/spec/tech/021/spec-021.md) — `active`
+- [SPEC-022 — Git interaction model](.doctrine/spec/tech/022/spec-022.md) — `active`
 
 ### Architecture Decision Records
 
@@ -232,4 +233,5 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-011 — Harness-agnostic orchestrator spawn interface and per-harness capability altitude](.doctrine/adr/011/adr-011.md) — `accepted`
 - [ADR-012 — Dispatch integration topology: isolated coordination worktree, class-routed projection, preserved code branches](.doctrine/adr/012/adr-012.md) — `accepted`
 - [ADR-013 — Revision as a first-class change-axis kind; governance dependency routes through a Revision](.doctrine/adr/013/adr-013.md) — `accepted`
+- [ADR-014 — RFC: governance-neutral first-class kind, precursor to Revision](.doctrine/adr/014/adr-014.md) — `accepted`
 <!-- END:readme-index -->
