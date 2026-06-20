@@ -118,12 +118,16 @@ Both are the *code* being right and the *design text* owing a fold.
   "reuse `gather_tree_clean` … no signature change."
 
 ### Close procedure (not a governance edit — a /close prerequisite)
-- **F-6**: before `dispatch sync --integrate --trunk refs/heads/main`, rebase the
-  SL-121 delta (or rebuild the `close_target` candidate) onto **current** `main` and
-  re-admit. The SL-121 source files apply cleanly (main never touched
-  `src/{dispatch,git,worktree,main}.rs`, `close/SKILL.md`, `e2e_dispatch_sync.rs`
-  since `587d4403`); only the trunk-row ff-only CAS needs the current-main base. The
-  engine refuses non-ff safely — heed the refusal, don't force.
+- **F-6 — RESOLVED by consolidation (post-audit).** The abandoned-dispatch fork was
+  consolidated by **cherry-picking the 7 SL-121 code commits directly onto current
+  `main`** (clean — main never touched `src/{dispatch,git,worktree,main}.rs`,
+  `close/SKILL.md`, `e2e_dispatch_sync.rs` since `587d4403`; gate green on main:
+  clippy + 24/24 e2e_dispatch_sync + 2037 bin units). **The code is therefore
+  already integrated on `main`.** `/close` must **NOT** run `dispatch sync
+  --integrate` (the dispatch path is moot — dispatch was abandoned per ISS-034); the
+  non-ff trunk refusal F-6 warned about no longer applies. Close = confirm the
+  rollup (`⚠` clears once authored status agrees), spec-coherence, harvest, final
+  commit. The `dispatch/121` branch is retained as immutable evidence.
 
 ### Governance/spec (REV)
 - _None._ No ADR / tech-spec / requirement change is owed; all corrections are
