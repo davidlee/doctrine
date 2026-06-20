@@ -31,7 +31,11 @@ already runs post-spawn and refuses with a distinct token on:
 It is read-classed (survives worker-mode confinement, ISS-028), pure/imperative
 split (pure `classify_worker_verify` + impure `run_verify_worker` shell, ADR-001).
 `is_linked_worktree(dir)` (`worktree.rs:404`, git-dir ≠ git-common-dir) already
-exists and is the exact, jail-layout-independent test for "is this the main tree."
+exists: it distinguishes the **primary** tree from a **linked** worktree
+(jail-layout-independent). It does NOT prove "this is the intended fresh worker
+fork" — only "this is/ isn't the primary tree." That is exactly the discriminator
+the `not-isolated` belt needs for the observed primary-tree fallback; the
+non-primary misplacements are caught by the marker/base/import belts (§5.1).
 
 The `dispatch-agent` skill spawn template `cd`s into the coord tree, spawns, then
 runs `verify-worker`. The base-guard that made SL-121 fail closed was **ad-hoc
@@ -71,18 +75,31 @@ footer (the signal that no isolated tree was created).
 
 ## 5. Proposed Design
 
-### 5.1 System Model
+### 5.1 System Model — layered defense, NOT "each belt sufficient"
 
-Three independent belts, in order of action:
+This slice does not close every wrong-base manifestation with a single new belt;
+it adds the belt that closes the **observed** one (primary-tree fallback) and shows
+the remaining manifestations are already caught downstream by the
+**harness-identical funnel import belt** (`dispatch/SKILL.md:37-46`,
+`classify_import`, `worktree.rs:665`). Defense is layered and scenario-specific.
 
-1. **In-worker base-guard (fail-fast, prose).** Worker's first action; STOP if the
-   tree is dirty, not an isolated linked worktree, B is not an ancestor, or
-   prerequisite seams are absent. Saves wasted work; not the authoritative belt.
-2. **Footer check (orchestrator, no-tree case).** A missing `worktreePath:` footer
-   in the Agent return ⇒ no isolated tree was created ⇒ abort before import.
-3. **`verify-worker not-isolated` (orchestrator, authoritative code belt).** Catches
-   the fallback even when a footer is present and base is coincidentally an
-   ancestor — the case G1 that belts 1–2 can miss.
+Map of manifestation → the belt that catches it (✦ = added by this slice):
+
+| Failure manifestation | Caught by |
+|---|---|
+| No isolated tree created at all (no `worktreePath:` footer) | ✦ footer-abort, pre-funnel (§5.4b) |
+| Worker starts in the **primary** main worktree (footer present, base coincidentally an ancestor) | ✦ `verify-worker not-isolated` + in-worker guard #2 |
+| Worker lands in the **coordination** tree (markerless) | existing `verify-worker unstamped` |
+| Worker lands in **another** linked fork (HEAD ⊉ B) | existing `verify-worker wrong-base` |
+| Mid-run clobber: commit diverted to `main`/elsewhere (parent ≠ B, or empty fork) | existing funnel import belt: `S^ == B` single-commit (`multi-commit`) / `head-moved` |
+
+So the `not-isolated` belt's job is narrow and precise: close the **primary-tree
+fallback** that `wrong-base` misses when B is coincidentally an ancestor. The
+"fail-closed" claim is for the *belt-set*, not `not-isolated` alone.
+
+**Residual (honest, out of scope):** a clobbered worker may still *dirty the main
+worktree* as a side-effect. That cannot enter slice history (import belt), but this
+slice does not prevent the side-effect — true pre-worker isolation is IMP-072.
 
 ### 5.2 Interfaces & Contracts
 
@@ -144,22 +161,31 @@ On any failure: STOP, author/commit nothing, report "base-guard-failed: <check>"
 
 Check #2 is the in-worker mirror of the orchestrator's `not-isolated`.
 
-**(b) Post-spawn cadence** (replaces the current Post-spawn section):
+**(b) Post-spawn cadence** (replaces the current Post-spawn section). This is a
+claude-arm **pre-funnel gate**: the `worktreePath:`/`worktreeBranch:` footer is the
+source of both `--dir` (for `verify-worker`) and `S` (the worker fork branch the
+funnel's delta check `B..S` already requires, `dispatch/SKILL.md:39`). No footer ⇒
+neither is locatable ⇒ the batch cannot be funnelled:
 
 ```
-## Post-spawn
-1. Read the Agent return footer. NO `worktreePath:` footer ⇒ no isolated tree was created
-   (fallback-to-main under lock contention) ⇒ ABORT, do NOT import. Re-dispatch, or switch
-   to the subprocess arm if main is churning.
+## Post-spawn (pre-funnel gate, claude arm)
+1. Read the Agent return footer for `worktreePath:` / `worktreeBranch:`.
+   NO footer ⇒ no isolated tree was created (fallback-to-main under lock contention) ⇒
+   ABORT, do NOT enter the funnel. Re-dispatch, or switch to the subprocess arm if main churns.
 2. doctrine worktree verify-worker --base <B> --dir <worktreePath>
    Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base.
+3. Hand <worktreeBranch:> to the funnel as S.
 ```
 
-**(c) Red Flags** — add: never import a worker that returned no `worktreePath:`
+**(c) Red Flags** — add: never funnel a worker that returned no `worktreePath:`
 footer; always embed the base-guard block in the distilled prompt.
 
-`dispatch/SKILL.md` (router) is **untouched** — the `worktreePath:` footer is a
-claude `Agent` artifact, so the footer/guard cadence is claude-arm-specific.
+**`dispatch/SKILL.md` (router funnel) is untouched, and that is correct.** The
+footer parse is a claude `Agent` artifact (codex review Major-4): it is an arm-level
+*pre-funnel* gate that produces the `S`/`--dir` inputs the funnel already consumes.
+The funnel's own ordered belts (import `S^==B`, head-moved, R-5) are unchanged and
+remain harness-identical — this slice does not alter the funnel contract, it feeds
+it. (Slice scope §affected-surface reconciled to match: no router edit.)
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -171,10 +197,15 @@ claude `Agent` artifact, so the footer/guard cadence is claude-arm-specific.
   verdict change. The behaviour-preservation gate covers all *isolated* cases.
 - **Edge — genuine git spawn failure** (broken env): propagates loud via `?`, not
   masked as `not-isolated`.
-- **Mid-run clobber:** `verify-worker` samples the *final* cwd post-return → catches
-  a clobber that the in-worker pre-flight guard (belt 1) cannot. If the worker
-  committed to a clobbered main branch instead of its fork branch, the funnel's
-  import/delta check finds an empty delta — a further backstop, unchanged.
+- **Mid-run clobber (corrected per codex review):** `verify-worker --dir <X>`
+  samples whatever path the orchestrator passes (the footer's `worktreePath`), NOT
+  an authoritative live cwd — so if the footer still names the original (now
+  orphaned) fork, `verify-worker` can pass. The belt that actually contains this is
+  the **funnel import belt**, not `verify-worker`: a commit diverted to `main`
+  (parent ≠ B) or an empty fork fails `classify_import`'s `S^ == B` single-commit
+  check (`worktree.rs:665`, token `multi-commit`) / `head-moved`. The bad work
+  cannot enter slice history. The in-worker guard (belt 1) only samples the initial
+  tree and does NOT close this — claimed accordingly, not overclaimed.
 - **Assumption:** the funnel already calls `verify-worker --base B` pre-import
   (confirmed: skill Post-spawn). This slice strengthens that belt, adds no stage.
 
@@ -193,12 +224,14 @@ claude `Agent` artifact, so the footer/guard cadence is claude-arm-specific.
 ## 7. Decisions, Rationale & Alternatives
 
 - **D1 — belt-set = B (skill + `not-isolated` in code).** Rejected A (skill-only:
-  leaves G1 uncaught by code) and C (worker-run `assert-base` CLI: adds NO
-  correctness assurance over B — the worker is untrusted, so the authoritative gate
-  must be orchestrator-side regardless; C is logically subsumed by `verify-worker`,
-  and for mid-run clobber the post-spawn sample is strictly stronger; C buys only
-  fail-fast/UX at the cost of a new verb + worker-mode plumbing + goldens). The
-  worker-side guard stays as template prose (belt 1) for fail-fast only.
+  leaves the primary-tree G1 uncaught by code). Rejected C (worker-run `assert-base`
+  CLI) on **complexity/redundancy** grounds: C *cannot be the authoritative belt*
+  (the worker is untrusted; the authoritative gate is orchestrator-side per ADR-006)
+  and is subsumed by `verify-worker` + the funnel import belt. C is not valueless —
+  a worker-side check on the live cwd could catch context drift earlier than prose
+  (codex review minor) — but it buys fail-fast/UX, not new correctness, at the cost
+  of a new read-classed verb + worker-mode plumbing + goldens. Not worth it for this
+  slice. The worker-side guard stays as template prose (belt 1) for fail-fast only.
 - **D2 — `NotIsolated` ordered #2** (after head, before marker/base). Being the main
   tree is the *root cause* of the fallback; marker/base are downstream symptoms a
   main tree can coincidentally satisfy. Report the structural fault first.
@@ -217,7 +250,19 @@ claude `Agent` artifact, so the footer/guard cadence is claude-arm-specific.
   Mitigated by the presence asserts (D3) + the two orchestrator belts that do not
   depend on belt 1.
 - **R3 — budget bump masks future bloat.** Mitigated by the added presence asserts
-  pinning the *content* the budget must cover.
+  pinning the *content* the budget must cover. Codex review (minor) flags the deeper
+  hazard: a line-count cap on *safety-critical* prose incentivises compression and
+  ambiguity. Mitigation: bump generously (don't shave the base-guard to fit) and
+  treat the presence asserts — not the count — as the real gate.
+- **R4 — `not-isolated` narrows, does not alone close.** It catches only the
+  primary-tree fallback; the belt-set (marker/base/import) closes the rest (§5.1).
+  Mitigated by NOT claiming single-belt closure and by leaning on the existing,
+  harness-identical funnel import belt for the residual manifestations.
+- **R5 — contract change to `verify-worker`.** A stamped, ancestor primary tree now
+  returns `not-isolated` instead of `Ok`. No current production caller runs
+  `verify-worker` against a primary tree on purpose (codex review confirmed: only
+  skill prose + tests call it), but the verb's contract changes — documented here
+  and in the verb's doc-comment at execute.
 
 ## 9. Quality Engineering & Validation
 
@@ -237,4 +282,42 @@ claude `Agent` artifact, so the footer/guard cadence is claude-arm-specific.
 
 ## 10. Review Notes
 
-(adversarial pass pending — codex mcp)
+### Adversarial pass — codex mcp (GPT-5.x), 2026-06-20
+
+Findings and dispositions (all integrated):
+
+- **[blocker] footer belt is theatre / no `worktreePath:` consumer.** PARTLY
+  ACCEPTED, REFRAMED. The footer IS consumed — it supplies `S` (the worker fork
+  branch) that the funnel's existing delta check `B..S` requires
+  (`dispatch/SKILL.md:39`) and `--dir` for `verify-worker`. The current skill prose
+  hand-waved this; §5.4b now makes the footer→`S`/`--dir` linkage explicit and the
+  belt a defined pre-funnel gate. The "three independent belts, each sufficient"
+  language was wrong → replaced with the layered scenario→belt map (§5.1).
+- **[blocker] mid-run clobber not closed; "empty delta" unsupported.** ACCEPTED,
+  CORRECTED. `verify-worker` samples the passed `--dir`, not a live cwd, and can
+  pass on an orphaned fork. The real containment is the funnel import belt
+  (`classify_import` `S^==B`, `worktree.rs:665`), not `verify-worker`. §5.5 + §5.1
+  rewritten to claim only what that belt delivers; residual main-tree side-effect
+  named (out of scope → IMP-072).
+- **[major] `is_linked_worktree` is primary-vs-linked, not "the main tree exactly";
+  fallback into another linked tree (incl. coordination) passes `not-isolated`.**
+  ACCEPTED. §2 wording corrected; §5.1 map shows coordination-tree (markerless →
+  `unstamped`) and other-fork (`wrong-base`) are caught by sibling belts. The
+  "fail-closed" claim is now scoped to the belt-set.
+- **[major] scope vs design contradiction on footer-belt location.** ACCEPTED.
+  Design is correct (router untouched; arm-level pre-funnel gate); slice scope
+  §affected-surface reconciled to drop `dispatch/SKILL.md` (§5.4b note).
+- **[minor] option-C trust-boundary rejection overclaims.** ACCEPTED. D1 softened:
+  rejected on complexity/redundancy, not "zero value."
+- **[minor] budget test is presence+count theatre; line pressure on safety prose.**
+  ACCEPTED. R3 updated; presence asserts (not the count) are the gate; bump
+  generously.
+- **[confirmed sound]** short-circuit ordering + error propagation; no legitimate
+  false-positive (`git-dir==git-common-dir` only on the primary tree); no live
+  caller broken by the `Ok→not-isolated` change (still a documented contract
+  change, R5).
+
+Net: codex's "narrows, does not close" verdict was right about `not-isolated` in
+isolation. Resolution is to lean on the **existing harness-identical funnel import
+belt** for the residual manifestations rather than to widen `not-isolated` — the
+design now states this explicitly rather than overclaiming a single-belt fix.

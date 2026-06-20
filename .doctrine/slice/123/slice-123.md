@@ -75,10 +75,17 @@ sufficient to catch the fallback, so the arm fails closed even if one is absent.
 
 ## Affected surface (concrete)
 
-- `plugins/doctrine/skills/dispatch-agent/SKILL.md` — worker prompt template (base-guard).
-- `src/worktree.rs` — `verify-worker` belt (fallback detection).
-- `plugins/doctrine/skills/dispatch/SKILL.md` — orchestrator funnel cadence (post-spawn footer check).
-- Tests: `verify-worker` refusal coverage for the new fallback signals.
+- `plugins/doctrine/skills/dispatch-agent/SKILL.md` — worker base-guard block +
+  pre-funnel footer gate (claude-arm only).
+- `src/worktree.rs` — `verify-worker` `not-isolated` belt (primary-tree fallback).
+- `tests/e2e_skills_dispatch_shrinkage.rs` — budget bump + content presence asserts.
+- Tests: `classify_worker_verify` goldens + `run_verify_worker` integration.
+
+NOT modified: `plugins/doctrine/skills/dispatch/SKILL.md` (router funnel). Per the
+codex adversarial pass (design §10), the footer parse is a claude `Agent` artifact
+handled as an arm-level pre-funnel gate; the funnel's own belts (import `S^==B`,
+head-moved) are unchanged and are the existing backstop this slice leans on for the
+mid-run-clobber / misplacement residuals.
 
 ## Risks / Assumptions / Open Questions
 
