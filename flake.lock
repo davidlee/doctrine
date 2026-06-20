@@ -354,8 +354,8 @@
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1781762453,
-        "narHash": "sha256-zuD59fdCHtC/1ZnS3DElpxtbkavvcCwBcdJqZ++ENKc=",
+        "lastModified": 1781924124,
+        "narHash": "sha256-s6gUIc7qQBfMlytc+HnWqHwpnfHCtdZd7Ohqt5/bCb0=",
         "path": "/home/david/flakes/pub",
         "type": "path"
       },

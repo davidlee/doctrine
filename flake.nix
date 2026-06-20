@@ -115,6 +115,10 @@
             profile = "specDev";
             extraPkgs = projectPkgs;
             extraOptions = jailEnvOptions;
+            allowSelfAsSubagent = true;
+            # claude can spawn pi/dirge inside its own jail (no re-jail).
+            subagents = ["pi" "dirge"];
+            maxSubagentDepth = 2;
           };
           # jailed-codex = jailLib.makeJailedCodex {
           #   profile = "specDev";
@@ -177,7 +181,10 @@
         devshells.default = {
           packages =
             projectPkgs
-            ++ lib.optional isLinux inputs.pub.packages.${system}.dirge
+            # Bare (unjailed) agents on the host PATH, mirroring the jailed
+            # set. From pub's eval (jailLib.unjailed) so they're the identical
+            # drvs the jails bundle — dirge here == packages.dirge below.
+            ++ lib.optionals isLinux (with jailLib.unjailed; [pi dirge claude])
             ++ lib.optionals isLinux (lib.attrValues jailPkgs);
 
           # darwin + nix: rustc's link line emits `-liconv` with `-nodefaultlibs`,
