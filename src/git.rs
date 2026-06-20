@@ -950,6 +950,18 @@ pub(crate) fn replay_ref(
     }
 }
 
+/// Resolve `refish` to its full commit oid via `rev-parse --verify --quiet
+/// <refish>^{commit}` — `Ok(None)` when the ref/object is absent (the
+/// `git_opt` success/None fold), distinct from a git/spawn failure. The
+/// trunk-integration query (SL-126) uses it twice: an existence probe for
+/// `dispatch/<slice>` (None ⇒ never dispatched) and to peel the trunk tip the
+/// planned oid is ff-checked against. Peels to `^{commit}` so an annotated tag
+/// or a ref-to-ref resolves to the underlying commit.
+pub(crate) fn resolve_ref(root: &Path, refish: &str) -> Result<Option<String>, CaptureError> {
+    let spec = format!("{refish}^{{commit}}");
+    git_opt(root, &["rev-parse", "--verify", "--quiet", &spec])
+}
+
 /// True iff `ancestor` is an ancestor of (or equal to) `descendant`, via
 /// `git merge-base --is-ancestor` (exit 0 ⇒ yes, exit 1 ⇒ no, anything else ⇒
 /// error). Reads the raw exit code rather than [`git_opt`]'s success/None fold so
