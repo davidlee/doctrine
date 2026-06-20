@@ -50,9 +50,11 @@ fn body_lines(text: &str) -> Vec<&str> {
 fn dispatch_router_skill_is_shrunk() {
     let full = source_skill_text("dispatch");
     let body = body_lines(&full);
+    // SL-127 PHASE-05 added the "Base freshness (mid-drive)" routing section
+    // (refresh-base), raising the lean-router budget from 64 to 74.
     assert!(
-        body.len() <= 64,
-        "dispatch router body lines: {} (target ≤64)",
+        body.len() <= 74,
+        "dispatch router body lines: {} (target ≤74)",
         body.len()
     );
 
