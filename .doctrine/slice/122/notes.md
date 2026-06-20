@@ -63,6 +63,29 @@ orchestrator = sole writer, workers = source-delta only.
   the markerless coord tree — and the 2 `run_new` tests the worker flagged also
   pass here (markerless coord tree resolves trunk natively).
 
+## PHASE-03 — Relations: RFC own edges + REV→RFC precursor (done)
+
+- Code: funnel commit `fe6d0861`; boundary record `65acca6a`. Base B = `18bf45b5`
+  (PHASE-02 boundary). Worker delta = `c705062f` on `worker/SL-122/PHASE-03`.
+- Genuine remainder confirmed by pre-spawn recon (coord tree, not main — main
+  lacks the PHASE-01 RFC code): all of EX-1..5 were unimplemented; only the
+  `outbound_for` RFC arm pre-existed as the `Ok(vec![])` stub (scan.rs:75). No
+  PHASE-01 over-reach into PHASE-03 scope (unlike the P01→P02 bleed).
+- Delivered (5 src files): RFC added to `related` AnyNumbered sources; `outbound_for`
+  RFC arm filled via `governance::relation_edges(&rfc::RFC_KIND, …)`; new
+  `originates_from` rule (REV→RFC, Tier::Typed, TypedVerbOnly, inbound "precursor
+  of") + `OriginatesFrom` RelationLabel variant (name/from_name arms);
+  `revision new --originates-from RFC-NNN` authors a single provenance `[[relation]]`
+  row (NOT a [[change]] payload); generic `link … originates_from` refused; derived
+  "precursor of" inbound on `inspect RFC`. `relation_graph.rs` label-count comment
+  16→17.
+- **Verify (funnel):** green in coord tree — 2544 passed, 0 failed. The worker
+  flagged 3 `e2e_adr_cli_golden` failures in its fork ("worker fork (signal:
+  both): refusing authored write") — that is **worker-marker confinement** blocking
+  authored `.doctrine` writes, a DIFFERENT env class from the run_new missing-trunk
+  one. Both classes clear in the markerless coord tree at funnel verify. Expected;
+  no action.
+
 ## Pre-existing fix folded into the dispatch base
 
 - `9c6d649d fix(IMP-122)` (committed on `main`, = dispatch base B2): IMP-122
