@@ -14,9 +14,12 @@ onto the shared helper so the format has exactly one home — behaviour-preservi
 
 ## 2. Current State
 
-The slice scope (2026-06-19 audit) named eight sites. By 2026-06-20 four already
-delegate (`rec`, `slice`, `revision`, `review`, and the spec **free fn** at
-`spec.rs:1164`). **Four raw `format!` sites remain:**
+The slice scope (2026-06-19 audit) named eight sites. By 2026-06-20 **five of those
+eight** already delegate (`rec`, `slice`, `revision`, `review`, and the spec **free
+fn** at `spec.rs:1164` — the audit's `spec.rs:1160`). Three of the original eight
+remain raw (`requirement`, `knowledge`, `backlog`); design review additionally found
+a fourth raw site **not** in the audit list — the spec **method** at `spec.rs:106`.
+**Four raw `format!` sites total:**
 
 | Site | Form | Body |
 |---|---|---|
@@ -43,7 +46,8 @@ wrapper entirely") invites resolving.
 - **Behaviour-preservation gate.** Output strings are unchanged. The existing
   id-format tests are the proof and must stay green **unchanged**:
   `requirement.rs:631` (`-> "REQ-001"`), `knowledge.rs:1418`
-  (`canonical_id_uses_the_kind_prefix`), `listing.rs:783`.
+  (`canonical_id_uses_the_kind_prefix`), `backlog.rs:2462` (`-> "ISS-001"`),
+  `listing.rs:783`.
 - Non-goals (slice §Non-Goals): the **parse** side (`strip_prefix`/`id_from_fk`),
   any format/prefix/padding change, the SL-113 mutation seam.
 
@@ -147,3 +151,10 @@ Internal adversarial pass (2026-06-20):
   no new `use`.
 - **Layering (ADR-001)** — `requirement → listing` adds no cycle (`listing` imports
   none of the kind modules). Verdict: sound, no open governance conflict.
+
+External codex pass (GPT-5.5, 2026-06-20): all six central claims verified against
+source — no blockers. Two doc nits fixed: §2 delegate count (five of eight, not
+"four"); §3 test list now includes `backlog.rs:2462` (`ISS-001`). Codex confirmed
+D1 (keep method / delete free fn) is the right call — 4 repoints vs 5 and the better
+API shape. Noted `spec.rs:763` (`format!("{prefix}-{:03}", max+1)`) is a member-label
+format, NOT a `canonical_id` wrapper — correctly out of scope.
