@@ -34,7 +34,7 @@ consume the new shared tree-read (DRY, design §3.3) so no parallel journal-read
 survives.
 """
 entrance_criteria = [
-  { id = "EN-1", text = "design.md locked; OQ-1/OQ-2 resolved (D1 self-describing row, D2 fail-closed)." },
+  { id = "EN-1", text = "design.md locked; OQ-1/OQ-2 resolved (D1 exact target_ref == refs/heads/main trunk-row match with >1 fail-closed; D2 fail-closed; D3 ancestry; D4 mechanical leaf query)." },
   { id = "EN-2", text = "ledger is tier=leaf with out=0 (layering.toml); adding crate::git is a leaf→leaf edge, git ∌ ledger (no cycle)." },
 ]
 exit_criteria = [
@@ -44,7 +44,7 @@ exit_criteria = [
   { id = "EX-4", text = "`just check` (or gate) green: clippy zero-warnings, ADR-001 fitness gate passes with no new accepted_violation and leaf tangle_baseline=0." },
 ]
 verification = [
-  { id = "VT-1", expects = "trunk_integration truth table from a git fixture (dispatch ref + committed journal.toml): NotDispatched (no ref), NotDispatched (ref present, journal empty/zero rows — RV-codex F2), Integrated (planned_oid ancestor-of-trunk), Blocked(planned tip not on trunk), Blocked(no trunk row when journal has rows), Blocked(journal unreadable), Blocked(trunk row has no planned oid)." },
+  { id = "VT-1", expects = "trunk_integration truth table from a git fixture (dispatch ref + committed journal.toml): NotDispatched (no ref), NotDispatched (ref present, journal empty/zero rows — RV-codex F2), Integrated (planned_oid ancestor-of-trunk), Blocked(planned tip not on trunk), Blocked(no trunk row when journal has rows), Blocked(>1 refs/heads/main rows = ambiguous — RV-codex F7-new), Blocked(journal unreadable), Blocked(trunk row has no planned oid)." },
   { id = "VT-1b", expects = "journal with BOTH a refs/heads/main trunk row and a refs/heads/edge row → exact-match selects the trunk row and resolves on it; no ambiguity / false refuse (RV-codex F1 regression)." },
   { id = "VT-2", expects = "read_journal_at_ref returns None for an absent dispatch ref and for a present ref missing journal.toml; Some(parsed) for a committed journal." },
   { id = "VT-3", expects = "show-journal-trunk-oid behaviour preserved post-refactor — its existing dispatch test(s) pass unchanged (behaviour-preservation gate)." },

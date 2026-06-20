@@ -107,13 +107,15 @@ Resolution order:
 3. **Trunk row = exact match** `target_ref == trunk_ref` (RV-codex F1/F4). This is
    the *same* selector `dispatch::run_show_journal_trunk_oid` already uses
    (`src/dispatch.rs:147`) and the same ref close step-3a passes
-   (`--trunk refs/heads/main`). Uniqueness is a **guarantee from the integrate
-   writer** — `integrate`'s `fresh` filter dedups rows by `target_ref`
-   (`src/dispatch.rs:34`), so at most one row can match — *not* an inferred
-   heuristic. The `review/`, `phase/`, and any `--edge` row (e.g.
-   `refs/heads/edge`, `tests/e2e_dispatch_sync.rs:695`) simply never equal
-   `trunk_ref`, so they are inert here. No trunk row ⇒
-   `Blocked("dispatched but no trunk row — integrate --trunk never completed")`.
+   (`--trunk refs/heads/main`). The `review/`, `phase/`, and any `--edge` row
+   (e.g. `refs/heads/edge`, `tests/e2e_dispatch_sync.rs:695`) never equal
+   `trunk_ref`, so they are inert here. **Count the matches** (RV-codex F7-new) —
+   `integrate`'s `fresh` filter only dedups *within a single integrate call*
+   (`src/dispatch.rs:34`); it does **not** validate an already-committed journal,
+   and the show-verb's first-match read would silently mask a duplicate. So the
+   query counts exact matches itself and fail-closes on a malformed/historical
+   journal: `0` ⇒ `Blocked("dispatched but no trunk row — integrate --trunk never
+   completed")`; `>1` ⇒ `Blocked("ambiguous trunk row")`; `1` ⇒ proceed.
 4. Empty `planned_new_oid` ⇒ `Blocked("trunk row has no planned oid")` (guards
    `is_ancestor("")` from erroring; fail-closed).
 5. Resolve `trunk_ref`'s tip (`rev-parse`); unresolved ⇒
@@ -190,8 +192,9 @@ check passes untouched.
 - **VT-6** composition — an unintegrated slice that *also* has an unresolved
   blocker is refused (either gate suffices).
 - **VT-7** (unit) `trunk_integration` truth table from a git fixture (dispatch ref
-  + committed `journal.toml`): every variant incl. journal-unreadable and
-  empty-oid.
+  + committed `journal.toml`): every variant incl. journal-unreadable, empty-oid,
+  and **two `refs/heads/main` rows ⇒ `Blocked("ambiguous trunk row")`**
+  (RV-codex F7-new — malformed-journal fail-closed).
 
 Evidence lands as Rust tests beside `ledger`/`slice`, using the existing
 git-repo fixture pattern (cf. dispatch journal tests).
@@ -203,8 +206,10 @@ git-repo fixture pattern (cf. dispatch journal tests).
   namespace-elimination (the original option (b), which false-refused a valid
   `--trunk main --edge refs/heads/edge` journal — two non-excluded rows). Exact
   match mirrors `run_show_journal_trunk_oid` (`src/dispatch.rs:147`) and close
-  step-3a's `--trunk`; uniqueness is **guaranteed by the integrate writer's
-  `fresh` dedup** (`src/dispatch.rs:34`), not inferred. `TRUNK_REF` is owned by
+  step-3a's `--trunk`. The integrate writer's `fresh` dedup
+  (`src/dispatch.rs:34`) only holds *within* one call, so the query still counts
+  matches and fail-closes on `>1` (`Blocked("ambiguous trunk row")`, RV-codex
+  F7-new) — it does not trust the writer for journal-integrity. `TRUNK_REF` is owned by
   the `slice` shell (the config-read seam); **IMP-124** generalises it to
   `[dispatch] deliver_to` (after SL-126). Same `refs/heads/main` assumption the
   existing read surface already bakes in — no new limitation.
