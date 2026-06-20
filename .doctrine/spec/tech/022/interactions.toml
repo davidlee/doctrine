@@ -4,8 +4,3 @@
 #   target = "SPEC-002"       # canonical FK into .doctrine/spec/tech/NNN
 #   type = "uses"             # free-text edge kind (calls / extends / uses / …)
 #   notes = "…"               # optional
-
-[[edge]]
-target = "SPEC-022"
-type = "uses"
-notes = "The dispatch mechanism (verb internals) builds on the git interaction model — ref taxonomy, evidence-ref immutability, the CAS journal contract, and the candidate layer are defined there, not here."
