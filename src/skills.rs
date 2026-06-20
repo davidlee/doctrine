@@ -1066,8 +1066,7 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         // path that belongs out of git, like the boot/sync hooks; `--global`
         // skips it). Reuses the boot.rs HookSpec merge core — no parallel impl.
         if !args.global {
-            let exec = std::env::current_exe()
-                .context("Failed to resolve the doctrine executable path")?;
+            let exec = crate::boot::resolve_exec()?;
             let outcome = crate::boot::install_claude_hook(
                 &root,
                 &crate::boot::HookSpec::stamp_subagent(&exec),

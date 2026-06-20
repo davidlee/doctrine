@@ -479,7 +479,7 @@ fn print_plan(plan: &CorpusPlan, shipped: &Path, dry_run: bool) -> Result<()> {
 /// a `.claude/settings.local.json` `SessionStart` command (codex has no equivalent).
 pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let exec = crate::boot::resolve_exec()?;
     let spec = crate::boot::HookSpec::sync(&exec);
 
     if !yes && !dry_run {
