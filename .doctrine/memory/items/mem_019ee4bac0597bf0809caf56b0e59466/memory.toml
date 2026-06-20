@@ -3,8 +3,8 @@ memory_key = "mem.pattern.dispatch.split-lineage-close-conflict-direct-land"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Split-lineage dispatch close: conflicted close_target, direct-land escape"
-summary = "Dispatch close: bundle base predating a direct-to-main phase landing conflicts the close_target; manually resolve then direct-land"
+title = "Dispatch candidate verb can't ingest a hand-resolved merge conflict — close dead-ends"
+summary = "candidate create is all-or-nothing: a conflicted close_target auto-merge dead-ends (admit refuses, re-create re-conflicts, no manual-resolve path). Base drift / split lineage is the trigger; escape = direct-land. Fix tracked IMP-127"
 created = "2026-06-20"
 updated = "2026-06-20"
 
