@@ -426,6 +426,41 @@ fn stale_review_ref_is_reported_not_clobbered() {
     );
 }
 
+// --- VT-4 (IMP-075): apply-contract persistence. A semantic refusal returns
+//     Ok(Refused) — NOT a `?`-Err — so the post-loop recovery commit_journal runs
+//     and durably records `status=Failed`. Tree-read the COMMITTED journal to
+//     prove the recovery commit ran rather than an early Err abort. ------------
+
+#[test]
+fn refused_row_persists_failed_status_in_committed_journal() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    // A crashed prior run left review/064 at the trunk base — its zero-oid CAS
+    // creation will be refused (the row is a SEMANTIC refusal, not fatal).
+    let bogus = git(dir, &["rev-parse", "main"]);
+    git(dir, &["update-ref", "refs/heads/review/064", &bogus]);
+
+    let out = prepare_review(dir);
+    assert!(!out.status.success(), "stale ref makes the run bail");
+
+    // The committed journal on dispatch/064 must carry the refused row as failed:
+    // proves the recovery commit_journal ran AFTER the apply loop (Ok(Refused),
+    // not an early Err abort that would skip the recovery commit).
+    let journal = git(
+        dir,
+        &["show", "dispatch/064:.doctrine/dispatch/064/journal.toml"],
+    );
+    assert!(
+        journal.contains("review/064"),
+        "journal records the refused review row: {journal}"
+    );
+    assert!(
+        journal.contains("failed"),
+        "the refused row persisted status=failed (recovery commit ran): {journal}"
+    );
+}
+
 // ====================================================================
 // PHASE-05 — stage-2 `dispatch sync --integrate` (design §4 / ADR-012 D4/D5)
 // ====================================================================
