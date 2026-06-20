@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::entity;
 use crate::fsutil::safe_join;
 use crate::integrity;
 use crate::map_server::error::MapServerError;
@@ -69,8 +70,7 @@ fn entity_md_path(
     }
     let kind_ref = integrity::kind_by_prefix(key.prefix)
         .ok_or_else(|| MapServerError::BadEntityId(key.canonical()))?;
-    let dir = root.join(kind_ref.kind.dir).join(format!("{:03}", key.id));
-    Ok(dir.join(format!("{}-{:03}.md", kind_ref.stem, key.id)))
+    Ok(entity::id_path(root, kind_ref.kind, key.id, entity::Ext::Md))
 }
 
 #[cfg(test)]

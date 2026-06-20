@@ -67,6 +67,7 @@ pub(crate) enum RecordKind {
 pub(crate) const ASSUMPTION_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/assumption",
     prefix: crate::kinds::ASM,
+    stem: "record",
     scaffold: |c| record_scaffold(RecordKind::Assumption, c),
 };
 
@@ -74,6 +75,7 @@ pub(crate) const ASSUMPTION_KIND: Kind = Kind {
 pub(crate) const DECISION_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/decision",
     prefix: crate::kinds::DEC,
+    stem: "record",
     scaffold: |c| record_scaffold(RecordKind::Decision, c),
 };
 
@@ -81,6 +83,7 @@ pub(crate) const DECISION_KIND: Kind = Kind {
 pub(crate) const QUESTION_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/question",
     prefix: crate::kinds::QUE,
+    stem: "record",
     scaffold: |c| record_scaffold(RecordKind::Question, c),
 };
 
@@ -88,6 +91,7 @@ pub(crate) const QUESTION_KIND: Kind = Kind {
 pub(crate) const CONSTRAINT_KIND: Kind = Kind {
     dir: ".doctrine/knowledge/constraint",
     prefix: crate::kinds::CON,
+    stem: "record",
     scaffold: |c| record_scaffold(RecordKind::Constraint, c),
 };
 
