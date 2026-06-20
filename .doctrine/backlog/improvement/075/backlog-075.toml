@@ -5,10 +5,10 @@ id = 75
 slug = "extract-with-journaled-projection-collapse-the-duplicated-journal-commitapplyjournal-cycle-shared"
 title = "Extract with_journaled_projection — collapse the duplicated journal-commit/apply/journal cycle shared by dispatch prepare_review and integrate (SL-064 RV-030 F-7)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-14"
-updated = "2026-06-16"
+updated = "2026-06-20"
 tags = ["area:dispatch", "area:review", "quality"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

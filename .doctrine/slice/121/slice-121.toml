@@ -1,7 +1,7 @@
 id = 121
 slug = "dispatch-integrate-clean-state"
 title = "dispatch sync --integrate: clean exit state and legible outcome"
-status = "reconcile"
+status = "done"
 created = "2026-06-19"
 updated = "2026-06-20"
 
