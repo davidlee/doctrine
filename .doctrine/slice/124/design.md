@@ -213,7 +213,7 @@ if owned.is_empty() {
     //     — after the retained foreign remnant.
     let first = owned[0].0;
     let survives = entry_has_foreign_hook(arr, first, spec.is_ours); // ≥1 non-owned hook
-    drop_owned_hooks(arr, &owned);            // extract every owned hook (F1/F2/m1)
+    drop_owned_hooks(arr, spec.is_ours);      // extract every owned hook (F1/F2/m1)
     let ins = (first + usize::from(survives)).min(arr.len());
     arr.insert(ins, desired_entry(spec));     // one fresh canonical entry
     // Refreshed
@@ -244,13 +244,14 @@ real boot/sync paths to no real-world benefit).
   arr[ei].hooks[hi].command == spec.command`.
 - `hook_is_sole(arr, ei)` = the entry's `hooks` array has length 1 (so the entry
   carries no foreign sibling — the canonical entry is doctrine-sole).
-- `drop_owned_hooks`: for each owned `(ei, hi)`, remove that **hook** from its
-  entry's `hooks` array; afterwards remove any entry whose `hooks` became empty.
-  Implemented as a filter/rebuild — **the entry object is preserved in full**
-  (clone it, replace only its `hooks` array with the retained non-owned hooks,
-  keep every other entry-level key including `matcher` and any unknown keys), and
-  the entry is dropped only when the retained `hooks` array is empty (codex m1).
-  No descending-index surgery, no entry-level `matcher` rewrite (D4).
+- `drop_owned_hooks(arr, is_ours)`: re-filter ownership in place rather than
+  threading the `owned` positions slice — `retain_mut` each entry's `hooks` array,
+  keeping only the hooks whose command is **not** `is_ours`; **the entry object is
+  preserved in full** (every entry-level key including `matcher` and any unknown
+  keys survives — only the `hooks` array is rewritten), and the entry is dropped
+  only when its retained `hooks` array becomes empty (codex m1). Re-deriving
+  ownership avoids descending-index surgery and any entry-level `matcher` rewrite
+  (D4); it is behaviourally identical to consuming the precomputed positions.
 
 **Outcome mapping (RefreshOutcome):** `owned.is_empty()` → `Wired`; the no-write
 short-circuit → `None`; every other path (stale command, stale matcher, poisoned,

@@ -94,3 +94,26 @@ confirmation). No blockers. Ledger done, await=none.
 
 _No ADR / REQ / SPEC change: the slice rode SPEC-009 / REQ-289 / ADR-001 without
 altering them. No REV required._
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §Code-impact (L216 + L247–253) — RV-109 F-1:** the `drop_owned_hooks`
+  code-sketch call and its prose now match the shipped signature
+  `drop_owned_hooks(arr, is_ours: fn(&str)->bool)` (re-filter via `retain_mut`,
+  not a consumed positions slice). Behaviourally identical; doc-only sync.
+- **memory `mem.pattern.distribution.hookspec-merge-core-generalized-event-matcher`
+  (memory.md) — RV-109 F-2:** body updated to describe the SL-124 `normalize`
+  mechanism (`owned_positions` + no-write short-circuit + `drop_owned_hooks` +
+  insert-one-canonical) and poison-tolerant `is_doctrine_program`, replacing the
+  stale `find_owned` first-match reference. Body-guard recomputed clean. Treated as
+  a knowledge artefact (direct edit), not governance/spec → no REV.
+
+### REVs completed
+- None. No ADR / REQ / SPEC / policy change — SL-124 rode SPEC-009 / REQ-289 /
+  ADR-001 unaltered.
+
+### Withdrawn / tolerated
+- None. F-3 was `aligned` (no remediation); F-1 / F-2 applied above.
+
+Reconcile pass complete — handoff to /close.
