@@ -99,7 +99,10 @@ pub(crate) struct Status {
 
 /// Assemble the status dashboard from pre-gathered data. Pure — no disk, clock,
 /// git, or rng.
-#[expect(clippy::too_many_arguments, reason = "pure assembly fans gathered data 1:1")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "pure assembly fans gathered data 1:1"
+)]
 pub(crate) fn assemble_status(
     slice_counts: SliceCounts,
     backlog_counts: BTreeMap<String, usize>,
@@ -177,7 +180,11 @@ pub(crate) fn render_human(status: &Status) -> String {
         for t in &status.work.rfcs.open_titles {
             parts.push(format!("  {} {}\n", t.id, t.title));
         }
-        let overflow = status.work.rfcs.open.saturating_sub(status.work.rfcs.open_titles.len());
+        let overflow = status
+            .work
+            .rfcs
+            .open
+            .saturating_sub(status.work.rfcs.open_titles.len());
         if overflow > 0 {
             parts.push(format!("  +{overflow} more\n"));
         }
@@ -304,8 +311,7 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
     }
 
     // --- Gather RFCs ---
-    let rfc_metas =
-        crate::meta::read_metas(&root.join(".doctrine/rfc"), "rfc").unwrap_or_default();
+    let rfc_metas = crate::meta::read_metas(&root.join(".doctrine/rfc"), "rfc").unwrap_or_default();
     let rfc_total = rfc_metas.len();
     let mut open_rfc_ids: Vec<u32> = rfc_metas
         .iter()
@@ -834,9 +840,18 @@ mod tests {
             open: 3,
             total: 5,
             open_titles: vec![
-                RfcTitle { id: "RFC-003".into(), title: "Use async".into() },
-                RfcTitle { id: "RFC-002".into(), title: "Add linter".into() },
-                RfcTitle { id: "RFC-001".into(), title: "New format".into() },
+                RfcTitle {
+                    id: "RFC-003".into(),
+                    title: "Use async".into(),
+                },
+                RfcTitle {
+                    id: "RFC-002".into(),
+                    title: "Add linter".into(),
+                },
+                RfcTitle {
+                    id: "RFC-001".into(),
+                    title: "New format".into(),
+                },
             ],
         };
         let status = assemble_status(
@@ -937,9 +952,10 @@ mod tests {
         let rfcs = RfcSummary {
             open: 5,
             total: 5,
-            open_titles: vec![
-                RfcTitle { id: "RFC-001".into(), title: "Use Rust?".into() },
-            ],
+            open_titles: vec![RfcTitle {
+                id: "RFC-001".into(),
+                title: "Use Rust?".into(),
+            }],
         };
         let status = assemble_status(
             empty_counts(),
@@ -964,8 +980,14 @@ mod tests {
             open: 3,
             total: 5,
             open_titles: vec![
-                RfcTitle { id: "RFC-003".into(), title: "Use async".into() },
-                RfcTitle { id: "RFC-002".into(), title: "Add linter".into() },
+                RfcTitle {
+                    id: "RFC-003".into(),
+                    title: "Use async".into(),
+                },
+                RfcTitle {
+                    id: "RFC-002".into(),
+                    title: "Add linter".into(),
+                },
             ],
         };
         let status = assemble_status(
