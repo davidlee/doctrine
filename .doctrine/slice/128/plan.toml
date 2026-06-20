@@ -1,0 +1,121 @@
+# Implementation plan for SL-128 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-128"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "deliver_to config field"
+objective = """
+Add the `deliver_to: String` field to `DispatchConfig` (design §5.2), defaulting \
+to `refs/heads/main`, with the Rust `Default` path and the serde absent-key path \
+in agreement (I1). Leaf-only: no live consumer yet, so the existing \
+`expect(dead_code)` on `DoctrineToml.dispatch` stays valid and the build stays \
+green."""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (lifecycle ≥ plan); SL-126 gate + DispatchConfig present on main." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`DispatchConfig` carries `deliver_to: String`; kebab key `deliver-to`; `#[serde(default = \"default_deliver_to\")]`." },
+  { id = "EX-2", text = "`#[derive(Default)]` replaced by a hand `impl Default` so `DispatchConfig::default().deliver_to == \"refs/heads/main\"` (I1)." },
+  { id = "EX-3", text = "No live (non-test) read of `doc.dispatch` introduced; `expect(dead_code)` untouched; `just gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: absent `deliver-to` → `refs/heads/main`; present → override (parity with existing key tests)." },
+  { id = "VT-2", expects = "Unit: `DispatchConfig::default().deliver_to` equals the serde-absent value (I1 parity)." },
+  { id = "VT-3", expects = "`dtoml.rs` outer round-trip test covers `deliver-to` surviving a full `DoctrineToml` parse (codex-F4)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "SL-126 gate reads deliver_to"
+objective = """
+Make the close-integration gate (`slice.rs` `reconcile→done`) resolve the trunk \
+ref from `deliver_to` instead of the `TRUNK_REF` literal, through a neutral impure \
+reader in `dtoml.rs` (codex-F2). Preserve `slice status` failure ordering: read \
+config ONLY inside the gate branch; leave the conduct read post-write (codex-F3, \
+I4). Drop the now-fulfilled `expect(dead_code)` (R5)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `deliver_to` field present and defaulted." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dtoml::load_doctrine_toml(root) -> DoctrineToml` impure reader added in `dtoml.rs` (absent file → default, malformed → error)." },
+  { id = "EX-2", text = "Gate resolves the ref via `load_doctrine_toml(&root)?.dispatch.deliver_to`, read INSIDE the `reconcile→done` branch only." },
+  { id = "EX-3", text = "`load_conduct` delegates to `load_doctrine_toml(root)?.conduct` (IF3); its callers + tests unchanged-green." },
+  { id = "EX-4", text = "`expect(dead_code)` on `DoctrineToml.dispatch` removed (R5); `just gate` green under `warnings=deny`." },
+]
+verification = [
+  { id = "VT-1", expects = "Existing `ledger::trunk_integration` suites green UNCHANGED (R3 behaviour-preservation proof)." },
+  { id = "VT-2", expects = "New: gate honours a `deliver_to` override — config names a non-`main` ref ⇒ gate checks that ref." },
+  { id = "VT-3", expects = "`load_conduct` absent/override/malformed tests still pass after delegation." },
+  { id = "VA-1", expects = "Confirm no second `doctrine.toml` parse on non-gate transitions (ordering preserved, I4)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "sync read-default + deliver-to verb"
+objective = """
+Default `--show-journal-trunk-oid`'s absent `--trunk` from `deliver_to` (relax the \
+clap `requires=\"trunk\"`), add the thin `doctrine dispatch deliver-to` read verb \
+(design D5), and leave `--integrate` semantics verbatim so the edge-only path is \
+preserved (I2). Precedence: explicit `--trunk` › config › default (D3)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: `load_doctrine_toml` reader available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`--show-journal-trunk-oid` no longer `requires=\"trunk\"`; absent `--trunk` resolves from `deliver_to`, explicit `--trunk` still wins (I3)." },
+  { id = "EX-2", text = "`doctrine dispatch deliver-to` subcommand prints the resolved ref to stdout." },
+  { id = "EX-3", text = "`dispatch sync --integrate` arg handling UNCHANGED — absent `--trunk` still plans no trunk row (I2)." },
+]
+verification = [
+  { id = "VT-1", expects = "Replace the clap-refusal test (`e2e_dispatch_sync.rs:1223`) with: no-flag → config/default; explicit `--trunk` wins (codex-F4)." },
+  { id = "VT-2", expects = "`dispatch deliver-to` prints default `refs/heads/main` and a configured override." },
+  { id = "VT-3", expects = "Edge-only `--integrate --edge` (no `--trunk`) still plans no trunk row — existing e2e green unchanged (I2)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "close prose retires the literals"
+objective = """
+Remove every delivery `refs/heads/main` literal from `close/SKILL.md` (lines 68, \
+74, 95, 96) — sourcing the ref from the `deliver-to` verb / config default — plus \
+the explanatory text (102) and the step-3a TODO (105–107). Fulfils the IMP-124 \
+standing TODO. The fork-base auto-resolver (concept #1) has no literal here."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: `dispatch deliver-to` verb + config defaulting available for prose to reference." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "No `refs/heads/main` literal remains in `close/SKILL.md`'s delivery path (candidate-base, integrate, verify-read, diff-compare)." },
+  { id = "EX-2", text = "Step-3a TODO (`once project config lands…`) removed; prose names the verb/config as the source." },
+]
+verification = [
+  { id = "VT-1", expects = "`grep refs/heads/main plugins/doctrine/skills/close/SKILL.md` returns no delivery-path hit." },
+  { id = "VH-1", expects = "Human/agent read: the rewritten step-3a is coherent and runnable as instructions (verb substitution reads correctly)." },
+]
+specs        = []
+requirements = []
