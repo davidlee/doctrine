@@ -1,7 +1,7 @@
 id = 123
 slug = "claude-dispatch-arm-fail-closed-base-integrity"
 title = "Claude dispatch arm fail-closed base integrity"
-status = "reconcile"
+status = "done"
 created = "2026-06-20"
 updated = "2026-06-20"
 
