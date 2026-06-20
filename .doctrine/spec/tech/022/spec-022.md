@@ -104,12 +104,15 @@ projection runs **in two stages**, with audit between them (SL-064, ADR-012 D4/D
   the prior evidence refs to be absent first. (Idempotent *replay* is stage-2's property,
   not stage-1's.)
 - **Audit** runs from the parent/root against the prepared refs (RV verbs refuse on a
-  worktree fork). It gates the review units *before* they integrate.
-- **Stage-2 — `integrate`.** Opt-in, post-audit. Replays every journal row idempotently
+  worktree fork). The audit-*gating* — that integration waits for a passed audit — is
+  **orchestrator process** (SPEC-021); the substrate only isolates the trunk write into a
+  separate opt-in step, it does not itself read audit state.
+- **Stage-2 — `integrate`.** Opt-in. Replays every journal row idempotently
   under 3-way CAS — an intact prepared ref is a verified no-op. Fast-forward-only,
   expected-tip-CAS, reports a moved/non-ff target and halts — never force-pushes, never
-  auto-resolves. A failed audit blocks trunk integration while preserving `dispatch/<N>`,
-  `phase/*`, and `review/*` intact.
+  auto-resolves. Skipping stage-2 (whether because audit failed or simply was not run)
+  leaves trunk untouched and `dispatch/<N>`, `phase/*`, `review/*` intact — the substrate
+  never auto-integrates.
 
 ### The CAS journal recovery contract
 
@@ -169,10 +172,12 @@ The run ledger — `journal.toml`, `boundaries.toml`, `orthogonal.toml` under
 stage-1 and stage-2. The same checkout-independent value is read everywhere; this is
 what lets audit run from the root while the coordination tree is elsewhere.
 
-Trunk is resolved by a peeled ladder `DOCTRINE_TRUNK_REF → origin/HEAD → main → master`
-folded through **`freshest_descendant`** — advance only to a strict descendant, so a
-stale `origin/HEAD` that is an ancestor of local `main` is overtaken, while a
-genuinely-diverged candidate keeps ladder order (SL-127). At the `reconcile → done`
+Trunk resolution has two cases. An explicit `DOCTRINE_TRUNK_REF` **wins outright** — it
+must resolve to a commit (a hard error otherwise) and is never folded with the fallback
+refs. Otherwise the fallback set `origin/HEAD`, `main`, `master` (first-seen,
+de-duplicated) is folded through **`freshest_descendant`** — advance only to a strict
+descendant, so a stale `origin/HEAD` that is an ancestor of local `main` is overtaken,
+while a genuinely-diverged candidate keeps ladder order (SL-127). At the `reconcile → done`
 lifecycle crossing a structural backstop asserts
 `is_ancestor(planned_new_oid, trunk_tip)` for the journal's trunk row — proving
 *integration occurred* (not tree survival at tip) and fail-closing a slice that

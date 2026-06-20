@@ -2,24 +2,20 @@
 
 ## Statement
 
-A repair committed on a review-surface candidate does **not** auto-flow to the
-close-target. To land such a repair on trunk, the operator must source the close-target
-candidate from the repaired candidate (`--source refs/heads/candidate/<N>/<label>`), or
-cherry-pick the fix onto the close-target and re-admit. The `/close` default
-`--source review/<N>` is the legacy straight-through path, correct only when no repair
-happened on the candidate. The chosen source must be explicit at close.
-
-**Normative guard.** Before creating or admitting a `close_target`, an operator/agent
-MUST determine whether the reviewed `review_surface` candidate has drifted from its
-recorded `merge_oid` or carries repair commits. If it has, `/close` MUST NOT use
-`--source refs/heads/review/<N>` unless that omission is deliberate and documented — it
-would silently drop the repair from the trunk payload. `candidate status` (the drift
-report) is the mechanical signal this check reads.
+A repair committed on a `review_surface` candidate does **not** affect trunk: trunk
+integration consumes the admitted `close_target` OID (REQ-316) and never auto-propagates
+`review_surface` changes. For such a repair to reach trunk, a `close_target` must be
+admitted whose source carries it — sourced from the repaired candidate
+(`--source refs/heads/candidate/<N>/<label>`), or given the fix by cherry-pick onto the
+close-target followed by re-admission.
 
 ## Rationale
 
 The decoupling is an intentional consequence of admit-by-OID (REQ-316), not a defect:
-the model never auto-propagates a mutable-branch change into the trunk payload. The
-failure it guards against is silent — a fix made on the candidate that never reaches
-trunk because the close-target was built from raw evidence. Stating the contract makes
-the propagation step a conscious operator choice (born from RV-116).
+the substrate never auto-propagates a mutable-branch change into the trunk payload. The
+operator-facing obligation this creates — choosing the right `--source` at `/close` and
+not silently dropping a candidate repair (the `/close` default `--source review/<N>` is a
+no-repair straight-through) — is owned by the close/audit **process** (SPEC-021), not the
+substrate. This requirement fixes only the substrate fact that process relies on. (Born
+from RV-116; the substrate and the code already agreed — the gap was that it was never
+written down.)

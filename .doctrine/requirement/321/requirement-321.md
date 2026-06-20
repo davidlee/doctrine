@@ -2,10 +2,16 @@
 
 ## Statement
 
-The evidence refs published by stage-1 are reconstructable from the recorded model: the
-pinned fork-point, the dispatch branch tip, the committed boundaries, and the tree
-filters together determine `review/<N>` and `phase/<N>-NN` deterministically. Given the
-same inputs, re-deriving an evidence ref yields the same tree.
+The evidence refs published by stage-1 are reconstructable from recorded state, by
+**distinct** derivations:
+
+- `review/<N>` = the `dispatch/<N>` tip tree, **minus** `.doctrine/dispatch/<N>` and
+  every committed `Verified` orthogonal-marked path (`orthogonal.toml`), parented on the
+  pinned fork-point.
+- `phase/<N>-NN` = each committed `boundaries.toml` row's code tree, `.doctrine` stripped,
+  chained off the pinned fork-point.
+
+Given the same recorded inputs, re-deriving an evidence ref yields the same tree.
 
 ## Rationale
 

@@ -12,12 +12,10 @@ candidate ref drifts after admission, status reports it but the admitted OID is
 unchanged. If trunk moved, integrate refuses with guidance to create a superseding
 candidate — there is no close-time merge.
 
-## Rationale
-
-Pinning "what lands on trunk" to an immutable OID makes the integrated artifact an
-explicit, reviewable choice rather than whatever a mutable branch happens to point at
-when close runs. It also lets audit and repair happen freely on the candidate without
-risking the evidence refs (SL-068).
+**Source provenance.** `candidate create` refuses a `--source` that is not a `Verified`
+stage-1 prepare-review journal row — a candidate may only be built from verified
+evidence. A `phase/<N>-NN` (code) close-target additionally refuses when an **earlier**
+non-empty phase row failed (an unresolved hole below the selected phase).
 
 **Branch condition.** Whether `integrate --trunk` takes the candidate path is gated on
 `candidate_active = the slice has ≥1 candidate row`. When candidate rows exist, integrate
@@ -25,3 +23,11 @@ risking the evidence refs (SL-068).
 or the phase chain. When no candidate workflow is active, the legacy path sources the
 phase-chain tip from the journal (the highest `phase/<N>-NN`), **never `review/<N>`** — no
 code path integrates trunk from the impl bundle.
+
+## Rationale
+
+Pinning "what lands on trunk" to an immutable OID makes the integrated artifact an
+explicit, reviewable choice rather than whatever a mutable branch happens to point at
+when close runs. The provenance gate keeps the chain honest — no candidate from
+unverified evidence, no close-target straddling a failed phase. It also lets audit and
+repair happen freely on the candidate without risking the evidence refs (SL-068).

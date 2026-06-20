@@ -2,11 +2,12 @@
 
 ## Statement
 
-No projection operation force-pushes a ref or auto-resolves a moved/conflicted target.
-A moved target is reported and the operation halts; a conflicted `refresh-base` leaves
-markers and `MERGE_HEAD` for manual resolution. Any interrupted sync is recovered by
-re-running it: journal-before-mutation (REQ-315) plus idempotent 3-way replay
-guarantees a re-run converges without duplicating or losing an advance.
+The projection path's quality envelope: **no operation force-pushes a ref or
+auto-resolves a moved/conflicted target.** A moved target is reported and the operation
+halts; a conflicted `refresh-base` leaves markers and `MERGE_HEAD` for manual resolution.
+(The journal-before-mutation + idempotent-replay mechanics that make an interrupted sync
+safe to re-run are REQ-315; this requirement owns only the never-force / never-auto-resolve
+envelope those mechanics operate within.)
 
 ## Rationale
 
