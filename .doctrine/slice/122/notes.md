@@ -108,6 +108,21 @@ orchestrator = sole writer, workers = source-delta only.
   recent first" is implemented as RFC-id-descending (recency proxy, no mtime read
   in the pure layer) — confirm that satisfies EX-2's intent.
 
+## PHASE-05 — Governing ADR-014 (done, accepted)
+
+- **Orchestrator-authored, NOT a worker** (authored `.doctrine/adr/` on `main`).
+  Commits: author `866350a9` (proposed), accept `59ce699c` (status=accepted).
+  No code branch / boundary record — ADR is authored truth, not a source delta.
+- ADR-014 "RFC: governance-neutral first-class kind, precursor to Revision" asserts
+  exactly D1 (governance-neutral first-class kind, absent from governance surfaces)
+  + D2 (REV→RFC `originates_from` precursor edge, outcome-neutral, revision-owned),
+  explicitly amending ADR-013 via prose + `related` link (ADR→ADR), NOT supersedes
+  (ADR-013 stays accepted). `doctrine link ADR-014 related ADR-013` wired.
+- **VA-1: 4/4 PASS** (independent reviewer subagent vs design §5 checklist — exactly
+  D1+D2, no governance position for RFC, amendment-via-related-not-supersedes,
+  design-level matters deferred). **VH-1: accepted by user.** EX-3 (status accepted,
+  appears in `adr list`) confirmed.
+
 ## Pre-existing fix folded into the dispatch base
 
 - `9c6d649d fix(IMP-122)` (committed on `main`, = dispatch base B2): IMP-122
