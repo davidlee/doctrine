@@ -80,6 +80,8 @@ default at `refs/heads/main`.
   config (relax `requires="trunk"`); `--integrate` UNCHANGED; new `dispatch
   deliver-to` verb
 - `plugins/doctrine/skills/close/SKILL.md` — drop all delivery literals + TODO
+- `.doctrine/doctrine.toml.example` + `install/doctrine.toml.example` — document the
+  new `deliver-to` key in the `[dispatch]` block (G1)
 
 ## Risks / Assumptions / Open Questions
 

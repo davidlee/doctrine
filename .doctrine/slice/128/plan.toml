@@ -35,14 +35,16 @@ entrance_criteria = [
   { id = "EN-1", text = "Design locked (lifecycle ≥ plan); SL-126 gate + DispatchConfig present on main." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`DispatchConfig` carries `deliver_to: String`; kebab key `deliver-to`; `#[serde(default = \"default_deliver_to\")]`." },
-  { id = "EX-2", text = "`#[derive(Default)]` replaced by a hand `impl Default` so `DispatchConfig::default().deliver_to == \"refs/heads/main\"` (I1)." },
+  { id = "EX-1", text = "`DispatchConfig` carries `deliver_to: String`, kebab key `deliver-to`. The struct's container `#[serde(default)]` already fills absent fields from `Default`, so the per-field `#[serde(default = \"default_deliver_to\")]` is redundant — keep it only as local documentation, not a second source of truth (design §5.2, G2)." },
+  { id = "EX-2", text = "`#[derive(Default)]` replaced by a hand `impl Default` (the single load-bearing default mechanism, backing both file-absent and serde absent-key paths via container `default`) so `DispatchConfig::default().deliver_to == \"refs/heads/main\"` (I1)." },
   { id = "EX-3", text = "No live (non-test) read of `doc.dispatch` introduced; `expect(dead_code)` untouched; `just gate` green." },
+  { id = "EX-4", text = "New `deliver-to` key documented (commented, default-valued) in the `[dispatch]` block of both `.doctrine/doctrine.toml.example` and `install/doctrine.toml.example`, alongside `preferred-subprocess-harness` (G1)." },
 ]
 verification = [
   { id = "VT-1", expects = "Unit: absent `deliver-to` → `refs/heads/main`; present → override (parity with existing key tests)." },
   { id = "VT-2", expects = "Unit: `DispatchConfig::default().deliver_to` equals the serde-absent value (I1 parity)." },
-  { id = "VT-3", expects = "`dtoml.rs` outer round-trip test covers `deliver-to` surviving a full `DoctrineToml` parse (codex-F4)." },
+  { id = "VT-3", expects = "`dtoml.rs` outer round-trip test (`dispatch_table_roundtrip`, dtoml.rs:91) covers `deliver-to` surviving a full `DoctrineToml` parse (codex-F2 neutral reader)." },
+  { id = "VT-4", expects = "Both example files stay parse-clean; spot-check the commented `deliver-to` block is shape-correct (uncommenting round-trips) (G1)." },
 ]
 specs        = []
 requirements = []
@@ -91,7 +93,7 @@ exit_criteria = [
   { id = "EX-3", text = "`dispatch sync --integrate` arg handling UNCHANGED — absent `--trunk` still plans no trunk row (I2)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Replace the clap-refusal test (`e2e_dispatch_sync.rs:1223`) with: no-flag → config/default; explicit `--trunk` wins (codex-F4)." },
+  { id = "VT-1", expects = "Replace the clap-refusal test `show_journal_trunk_oid_requires_trunk` (e2e_dispatch_sync.rs:~1224) — relaxing `requires=\"trunk\"` makes it no longer a parse error. The replacement fixture MUST hold a trunk row so no-flag resolves `deliver_to` and reads that row; a bare fixture would instead hit the distinct runtime no-trunk-row error. Assert: no-flag → reads config/default ref's row; explicit `--trunk` wins. The sibling `show_journal_trunk_oid_errors_when_no_trunk_row` (passes explicit `--trunk`) stays green unchanged (codex-F4, G3)." },
   { id = "VT-2", expects = "`dispatch deliver-to` prints default `refs/heads/main` and a configured override." },
   { id = "VT-3", expects = "Edge-only `--integrate --edge` (no `--trunk`) still plans no trunk row — existing e2e green unchanged (I2)." },
 ]
@@ -105,7 +107,10 @@ objective = """
 Remove every delivery `refs/heads/main` literal from `close/SKILL.md` (lines 68, \
 74, 95, 96) — sourcing the ref from the `deliver-to` verb / config default — plus \
 the explanatory text (102) and the step-3a TODO (105–107). Fulfils the IMP-124 \
-standing TODO. The fork-base auto-resolver (concept #1) has no literal here."""
+standing TODO. The fork-base auto-resolver (concept #1) has no literal here. \
+Capture the resolved ref ONCE into a shell var (e.g. `trunk=$(doctrine dispatch \
+deliver-to)`) reused by both the verify-read and the `git diff` compare — do not \
+spawn the verb twice (DRY, G4)."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete: `dispatch deliver-to` verb + config defaulting available for prose to reference." },
 ]
