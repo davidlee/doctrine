@@ -40,18 +40,22 @@ default at `refs/heads/main`.
    `doctrine.toml` for conduct). `ledger` stays ref-agnostic — the ref is still
    passed in.
 
-3. **Consumer B — `dispatch sync` CLI (option (a)).** Make `--trunk` **optional**
-   on `dispatch sync` (`--integrate`) and `--show-journal-trunk-oid`; when
-   omitted, default to `doc.dispatch.deliver_to`. Update close skill prose to
-   drop the `refs/heads/main` literal and the step-3a TODO.
+3. **Consumer B — `dispatch sync` READ stage only (α hybrid).** Relax
+   `--show-journal-trunk-oid`'s `requires="trunk"` so it defaults `--trunk` from
+   `deliver_to`. **`--integrate` is left UNCHANGED** — its `--trunk`/`--edge`
+   Option semantics are load-bearing (absent `--trunk` = edge-only projection, a
+   live tested path); config must NOT default the write opt-in.
 
-4. **Standalone read verb (option (b), no prose plumbing).** Expose the resolved
-   `deliver_to` ref via the CLI (e.g. `doctrine dispatch deliver-to` /
-   config-get) so agents doing git by hand can query the trunk ref. Per the
-   decision, this is offered as a convenience; close prose does NOT route through
-   it (it uses the optional-flag default from (3)).
+4. **Read verb `doctrine dispatch deliver-to` (option (b)).** Thin stdout read of
+   the resolved `deliver_to`. Load-bearing, not merely a convenience: it is how
+   close's `--integrate` *write* line names the trunk without a literal (since (3)
+   cannot overload absent-`--trunk`), and it also serves hand-driven git work.
 
-5. **Resolve IMP-124** on close.
+5. **Close prose.** Drop the *delivery* `refs/heads/main` literals (write line →
+   verb; read/compare lines → verb or config default) and the step-3a TODO. The
+   `--base refs/heads/main` literal (fork base, concept #1) stays — out of scope.
+
+6. **Resolve IMP-124** on close.
 
 ## Non-Goals
 
@@ -81,11 +85,13 @@ default at `refs/heads/main`.
 - **A2 — single config-read seam.** Both the gate and the sync verb resolve from
   the same `DispatchConfig`; no parallel config plumbing (ADR-001 layering — read
   in the shell, pass down).
-- **OQ-1 — verb shape for (b).** Subcommand under `dispatch` vs a generic
-  `config get`. Design decides; keep it a thin read.
-- **OQ-2 — sync arm precedence.** When `--trunk` IS passed explicitly, does it
-  override config, or is the flag retired entirely? (Lean: explicit flag wins,
-  config is the default — preserves escape hatch.)
+- **OQ-1 — verb shape (RESOLVED, design D5).** `doctrine dispatch deliver-to`
+  subcommand, not a generic `config get`.
+- **OQ-2 — precedence (RESOLVED, design D3).** Explicit `--trunk` › `deliver_to`
+  config › default; `DOCTRINE_TRUNK_REF` env stays base-only (it resolves a
+  commit-ish; delivery needs a writable ref).
+- **R5 — `expect(dead_code)` on `DoctrineToml.dispatch`** fires once read live;
+  remove the attr when wiring the gate (caught in adversarial review).
 
 ## Verification / Closure Intent
 
@@ -102,3 +108,9 @@ default at `refs/heads/main`.
 ## Follow-Ups
 
 - IMP-129 — `edge`/`main` separation builds on this config.
+- PR/remote **delivery mode** — a future `[dispatch] delivery-mode = "merge" |
+  "pull-request"` (+ remote/refspec); `deliver_to` becomes the PR base. The gate's
+  "integrated?" predicate goes async there.
+- **Base+delivery unification** — folding `deliver_to` into the fork-base ladder
+  (concept #1, also hardcoded at `close/SKILL.md:68 --base`) is an ADR-006 D3
+  amendment; deferred to whoever wants one trunk identity (likely IMP-129).
