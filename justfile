@@ -73,5 +73,25 @@ install: web-build
 # Pre-release gate: full workspace gate + hermetic nix flake build.
 release-check: gate nix-build
 
+# Pass an explicit X.Y.Z or a level: `just release 0.6.0` / `just release minor`.
+# Refuses a dirty Cargo.toml/Cargo.lock so the commit is the bump alone. Tags
+# locally; push and `just publish` stay manual.
+# Cut a release: bump version, run the pre-release gate, commit + tag the chore.
+release bump:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  git diff --quiet -- Cargo.toml Cargo.lock || { echo "release: Cargo.toml/Cargo.lock already modified — commit or revert first" >&2; exit 1; }
+  case "{{bump}}" in
+    major|minor|patch) cargo set-version -p doctrine --bump "{{bump}}" ;;
+    *)                 cargo set-version -p doctrine "{{bump}}" ;;
+  esac
+  version="$(cargo pkgid -p doctrine | sed 's/.*[#@]//')"
+  git rev-parse -q --verify "refs/tags/v${version}" >/dev/null && { echo "release: tag v${version} already exists" >&2; exit 1; }
+  just release-check
+  git add Cargo.toml Cargo.lock
+  git commit -m "chore: v${version}"
+  git tag "v${version}"
+  echo "released v${version} (committed + tagged) — push with: git push && git push --tags"
+
 publish: release-check
   cargo publish

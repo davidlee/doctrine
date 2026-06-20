@@ -51,6 +51,7 @@
           just
           rust-bin.beta.latest.default
           rust-analyzer
+          cargo-edit # `cargo set-version` for the release recipe
 
           stdenv.cc # cc/ld on PATH (linker for cargo build)
           stdenv.cc.cc.lib
