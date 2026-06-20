@@ -377,8 +377,8 @@ Today: success → `integrate: {N} ref(s) replayed` on stderr; Applied rows prin
 per-row human detail on **stderr**, carrying a disposition derived from §2:
 
 ```
-integrate: refs/heads/main 3a1f9c2..9c2e7b1 (advanced, worktree resynced)
-integrate: refs/heads/review/121 (no-op, already at tip)
+integrate: refs/heads/main 3a1f9c2..9c2e7b1 (advanced+resynced)
+integrate: refs/heads/review/121 (no-op)
 integrate: 2 ref(s) replayed
 ```
 
@@ -403,7 +403,7 @@ implementation MUST emit — pinned by §6 VTs, not paraphrased.
 | Path | Change |
 |---|---|
 | `src/git.rs` | NEW pure porcelain parser + `worktree_for_ref` (M9 fixtures); NEW status-capturing `ff_advance_in_worktree` (symbolic-ref + clean re-check + post-assert per §2.5; returns an outcome, never bare `?` — B3). |
-| `src/dispatch.rs` | NEW `with_journaled_projection` thin bracket (§2.6, IMP-075): commit-pre / per-row `apply` closure / commit-post / collect failures. `prepare_review` + `integrate` both refactored onto it; `prepare_review`'s closure = its existing zero-oid-CAS body (behaviour-pure). `integrate` (≈1044–1161): dirty gate **before** the bracket (§2.3/M4); the injected `apply` closure carries per-row exact-CAS classify + mechanism branch (§2.2) + non-ff-checkout refusal + None-leg re-probe; report from journal **after** the bracket (§4). `find_coordination_worktree` → wrapper over `worktree_for_ref` (`Err`→`"(removed)"`, F4). |
+| `src/dispatch.rs` | NEW `with_journaled_projection` thin bracket (§2.6, IMP-075): commit-pre / per-row `apply` closure / commit-post / collect failures. `prepare_review` + `integrate` both refactored onto it; `prepare_review`'s closure = its existing zero-oid-CAS body (behaviour-pure). `integrate` (≈1044–1161): dirty gate **before** the bracket (§2.3/M4); the injected `apply` closure carries per-row exact-CAS classify + mechanism branch (§2.2) + non-ff-checkout refusal + None-leg re-probe; report rendered from the returned `Vec<RowOutcome>` **after** the bracket (§4). `find_coordination_worktree` → wrapper over `worktree_for_ref` (`Err`→`"(removed)"`, F4). |
 | `src/worktree.rs` | `gather_fork_worktree` → delegate to `worktree_for_ref`; `gather_tree_clean` reused at a worktree path (no signature change). |
 | `plugins/doctrine/skills/close/SKILL.md` | step-3a verify → tree-true (§3). |
 
@@ -602,10 +602,11 @@ state those can later bolt onto without re-cutting. Adversarial pass on §2.6 be
   planning; the gate iterates targets before the call, the bracket iterates the
   identical `&mut journal.rows` inside — no divergence, gate strictly precedes the
   first `commit_journal` (M4 preserved). ✓
-- *`apply` returning `Some(msg)` vs `Err`.* The bracket collects `Some(msg)` as a
-  journaled `Failed` and still runs the post-commit (durability); only a real
-  command failure `?`-aborts — identical to today's split (B3). prepare_review's
-  `stale` and integrate's `moved` both become the returned `Vec<String>`. ✓
+- *`apply` returning `Refused{token}` vs `Err`.* The bracket collects each
+  `RowOutcome` (a `Refused{token}` is a journaled `Failed`) and still runs the
+  post-commit (durability); only a real command failure `?`-aborts — identical to
+  today's split (B3). prepare_review's `stale` and integrate's `moved` are derived
+  caller-side from the returned `Vec<RowOutcome>`. ✓
 - *Does the bracket hide the `fresh`/row-append or candidate logic?* No — journal
   construction (read, append trunk/edge rows, `pending_journal`) stays caller-side
   **before** the bracket; the bracket starts at the first `commit_journal`. The
@@ -617,7 +618,8 @@ state those can later bolt onto without re-cutting. Adversarial pass on §2.6 be
 `commit_journal` arg shape modulo message+parent — dispatch.rs:978/1009/1097/1137;
 only loop bodies differ — :991/:1110; all journal construction strictly before the
 first commit — :977/:1061/:1077). One MINOR: bind the `apply` contract explicitly —
-per-row semantic refusals must be `Ok(Some(msg))`, `Err` reserved for fatal failure,
+per-row semantic refusals must be captured outcomes (later refined to
+`Ok(Refused{token})` by the plan-review blocker), `Err` reserved for fatal failure,
 else a `?` aborts before the recovery commit (B3). **Integrated** into §2.6 (the
 `apply` contract paragraph), with the §2.3 whole-integrate dirty refusal explicitly
 exempted (it bails before the bracket). No blocker/major.
