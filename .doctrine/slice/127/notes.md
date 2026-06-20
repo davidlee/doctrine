@@ -75,3 +75,34 @@ Coordination worktree LEFT UP at `.dispatch/SL-127` (no teardown). Use the
 Caveat: `refresh-base` refuses a dirty coord tree; the park state has an
 uncommitted `.doctrine/dispatch/127/journal.toml` change (prepare-review
 bookkeeping) — clean/settle it before re-refreshing.
+
+## Conclude-resume EXECUTED (2026-06-20, post SL-104/126 close)
+
+Trunk settled: `main` advanced `ca6228f → 1b00c46` (+4: notes-SL-127 `af88ce84`,
+SL-104 trio `9e64cb3a`/`b8c303fa`/`1b00c46`). Source-disjoint from SL-127's delta
+(`estimate.rs`/`value.rs`/`e2e_estimate` vs `dispatch`/`git`/`main`/`worktree.rs`)
+— clean merge, no conflict.
+
+Steps run (all from coord tree `.dispatch/SL-127`, jail binary):
+1. `refresh-base --slice 127` → merged 4 trunk commits, dispatch tip `608d4cb`.
+2. `sync --prepare-review` refused first: stale `review/127 @ a325174e` (old base)
+   — the never-clobber guard. Resolved by `git branch -D review/127` then re-ran.
+3. Re-prepared: `review/127 @ e25adbd`, base = `1b00c46` = main; dispatch `968b984`;
+   `trunk: stable`. Bundle now reflects current trunk.
+
+**GOTCHA — stale shared jail-target binary.** First drift check reported
+`trunk: stable` falsely. Root cause: the shared build target
+`/home/david/.cargo/doctrine-target-jail/debug/doctrine` had been overwritten by a
+`cargo build` on `main` (OLD code, pre-PHASE-01 ladder), so it ran the plain
+origin/HEAD-first ladder and measured drift against stale `origin/HEAD=ca6228f`
+instead of the freshest-descendant pick (local `main`). **Always rebuild the binary
+from the coord tree (`cd .dispatch/SL-127 && cargo build`) before trusting dispatch
+drift** — the handover's "reuse the jail-target binary" is unsafe when concurrent
+agents build on main. Post-rebuild: correctly `moved (4 ahead)`. The fix itself
+(`freshest_descendant`, `git.rs`) is sound — it overtakes an ancestor `origin/HEAD`
+with local `main`, verified live here.
+
+### Audit fodder (added)
+4. **`0 phase cut(s)` confirmed on the fresh re-prepare too** — reinforces fodder
+   #1 (no `phase/127-NN` despite 5 boundaries). Persistent, not a base artifact.
+   Audit must decide expected-vs-defect for the claude arm.
