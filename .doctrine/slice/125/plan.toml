@@ -1,0 +1,53 @@
+# Implementation plan for SL-125 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-125"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Provision source from primary worktree"
+objective = """
+Fix ISS-011 Defect C in run_stamp_subagent: derive the provision SOURCE from the \
+repo's primary worktree (git worktree list --porcelain first entry) instead of \
+root::find on the process cwd, so source != fork when the SubagentStart hook fires \
+inside the worker worktree. Change only the R2 source role; leave the R1 binding \
+anchor (repo=root::find, cwd_valid, classify_stamp, refusal tokens) byte-for-byte \
+unchanged. design.md §2/§4.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (internal + codex passes folded; all findings CLOSED) and slice status = plan." },
+  { id = "EN-2", text = "Baseline green: just check passes and tests/e2e_worktree_stamp.rs is green before changes." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "New private helper primary_worktree(cwd) returns git's first `worktree` porcelain entry (main worktree), canonicalized; errors propagate as anyhow::Result." },
+  { id = "EX-2", text = "run_stamp_subagent provision SOURCE is primary_worktree(cwd); the binding anchor (repo=root::find), cwd_valid, classify_stamp, and all StampRefusal tokens are unchanged; a primary_worktree failure folds into the existing M3 STAMP FAILED no-rollback path." },
+  { id = "EX-3", text = "--path retains its existing binding/root meaning only — no source override introduced." },
+  { id = "EX-4", text = "just check passes with zero clippy warnings; cargo fmt clean; pre-existing worktree + e2e suites stay green." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: built binary spawned with current_dir = the worker worktree (process==worker==fork, the exact Defect-C condition) + payload cwd = that worktree stamps the marker at <worker>/.doctrine/state/dispatch/worker and copies .doctrine/doctrine.just; exit 0. Fails against the old root::find source, passes with the fix." },
+  { id = "VT-2", expects = "unit: primary_worktree returns the main worktree from a linked-worktree path, and itself from the main worktree (idempotent)." },
+  { id = "VT-3", expects = "regression: existing refusals stay green unchanged — missing-cwd, bad-dir (non-linked source tree; outside-repo), missing-agent-type, already-marked, Hookmint." },
+  { id = "VT-4", expects = "e2e: payload cwd = a linked worktree of a DIFFERENT repo than the binding anchor ⇒ bad-dir (cross-repo rejection preserved; closes the codex BLOCKER that validation could become self-authenticating)." },
+  { id = "VH-1", expects = "fresh-session IMP-046 probe re-run (Agent tool, isolation: worktree, matcher hook): dispatch-worker comes up stamped with no hand-stamp. Harness-dependent; out-of-suite." },
+]
+specs             = []
+requirements      = []
