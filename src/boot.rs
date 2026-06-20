@@ -291,7 +291,7 @@ impl CheckReport {
 }
 
 /// Recompute the snapshot and compare it to what is on disk (Charge II). A DISK
-/// sentry, not a session sentry (§5.4, pi F2): it sees the *file* fresh while
+/// sentry, not a session sentry (§5.4, codex F2): it sees the *file* fresh while
 /// the *current inlined prefix* stays stale until `/clear`/restart — so callers
 /// must NOT read a clean report as proof the live context is fresh. Absent /
 /// unreadable on-disk file ⇒ stale (the recompute differs from nothing).
@@ -393,7 +393,7 @@ const SESSION_MATCHER: &str = "startup|clear";
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Harness {
     Claude,
-    Pi,
+    Codex,
 }
 
 /// Parse an explicit `--agent` token. Unlike `skills::parse_agent` (which
@@ -402,37 +402,37 @@ pub(crate) enum Harness {
 fn parse_harness(s: &str) -> anyhow::Result<Harness> {
     if s.eq_ignore_ascii_case("claude") {
         Ok(Harness::Claude)
-    } else if s.eq_ignore_ascii_case("pi") {
-        Ok(Harness::Pi)
+    } else if s.eq_ignore_ascii_case("codex") {
+        Ok(Harness::Codex)
     } else {
-        bail!("Unknown harness '{s}'. Known harnesses: claude, pi.")
+        bail!("Unknown harness '{s}'. Known harnesses: claude, codex.")
     }
 }
 
 pub(crate) fn harness_label(h: &Harness) -> &'static str {
     match h {
         Harness::Claude => "claude",
-        Harness::Pi => "pi",
+        Harness::Codex => "codex",
     }
 }
 
 /// The committed file each harness `@`-imports the snapshot from. **One file per
-/// harness** (review fix #1): Claude reads `CLAUDE.md`, pi `AGENTS.md` — never
+/// harness** (review fix #1): Claude reads `CLAUDE.md`, codex `AGENTS.md` — never
 /// both for one agent, else the snapshot would inline twice. This repo's
 /// `CLAUDE.md → AGENTS.md` symlink makes the union dedup to a single inode.
 fn import_targets(h: &Harness, root: &Path) -> Vec<PathBuf> {
     match h {
         Harness::Claude => vec![root.join("CLAUDE.md")],
-        Harness::Pi => vec![root.join("AGENTS.md")],
+        Harness::Codex => vec![root.join("AGENTS.md")],
     }
 }
 
 /// Resolve target harnesses: explicit `--agent` wins; else auto-detect by marker
-/// (`.claude/` → Claude; `.pi/`, or an `AGENTS.md` that is not merely Claude's
-/// inode-alias → Pi); ≥1 required (mirrors `skills::resolve_agents`). A repo
+/// (`.claude/` → Claude; `.codex/`, or an `AGENTS.md` that is not merely Claude's
+/// inode-alias → Codex); ≥1 required (mirrors `skills::resolve_agents`). A repo
 /// with `.claude/` and a separate-inode `AGENTS.md` wires both; this repo's
 /// `AGENTS.md` symlink onto `CLAUDE.md` is Claude's import target via one inode,
-/// not a pi surface, so it stays Claude-only (SL-063 §3.1).
+/// not a codex surface, so it stays Claude-only (SL-063 §3.1).
 pub(crate) fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Harness>> {
     if !explicit.is_empty() {
         return explicit.iter().map(|s| parse_harness(s)).collect();
@@ -444,21 +444,21 @@ pub(crate) fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Res
     }
     // AGENTS.md is "merely Claude's alias" only when Claude is detected AND
     // AGENTS.md resolves to CLAUDE.md's inode (this repo's symlink) — then it is
-    // Claude's import target, not a pi surface, so it does not trigger pi.
-    // Otherwise a present AGENTS.md is a real pi surface — including a lone
+    // Claude's import target, not a codex surface, so it does not trigger codex.
+    // Otherwise a present AGENTS.md is a real codex surface — including a lone
     // symlinked pair with no `.claude/`, where alias-suppression is off because
     // Claude is not detected (SL-063 §3.1).
     let agents = root.join("AGENTS.md");
     let agents_is_claude_alias = claude
         && agents.exists()
         && resolve_target(&agents) == resolve_target(&root.join("CLAUDE.md"));
-    if root.join(".pi").exists() || (agents.exists() && !agents_is_claude_alias) {
-        found.push(Harness::Pi);
+    if root.join(".codex").exists() || (agents.exists() && !agents_is_claude_alias) {
+        found.push(Harness::Codex);
     }
     if found.is_empty() {
         bail!(
-            "No --agent given and no .claude/ or .pi/ (or AGENTS.md) found. \
-             Pass --agent <claude|pi>."
+            "No --agent given and no .claude/ or .codex/ (or AGENTS.md) found. \
+             Pass --agent <claude|codex>."
         );
     }
     Ok(found)
@@ -930,7 +930,7 @@ fn install_refresh(
     dry_run: bool,
 ) -> anyhow::Result<RefreshReport> {
     match h {
-        Harness::Pi => {
+        Harness::Codex => {
             let append_system = install_append_system(root, dry_run)?;
             let extension = install_pi_extension(root, exec, dry_run)?;
             Ok(RefreshReport {
@@ -2552,7 +2552,7 @@ mod tests {
     #[test]
     fn parse_harness_known_and_unknown() {
         assert_eq!(parse_harness("claude").unwrap(), Harness::Claude);
-        assert_eq!(parse_harness("PI").unwrap(), Harness::Pi);
+        assert_eq!(parse_harness("CODEX").unwrap(), Harness::Codex);
         assert!(
             parse_harness("cursor")
                 .unwrap_err()
@@ -2569,7 +2569,7 @@ mod tests {
             vec![root.join("CLAUDE.md")]
         );
         assert_eq!(
-            import_targets(&Harness::Pi, root),
+            import_targets(&Harness::Codex, root),
             vec![root.join("AGENTS.md")]
         );
     }
@@ -2577,32 +2577,32 @@ mod tests {
     #[test]
     fn resolve_harnesses_explicit_wins() {
         let root = Path::new("/r");
-        let got = resolve_harnesses(&["pi".into(), "claude".into()], root).unwrap();
-        assert_eq!(got, vec![Harness::Pi, Harness::Claude]);
+        let got = resolve_harnesses(&["codex".into(), "claude".into()], root).unwrap();
+        assert_eq!(got, vec![Harness::Codex, Harness::Claude]);
     }
 
     #[test]
     fn resolve_harnesses_auto_detects_by_marker() {
-        // Case 1 — bare AGENTS.md, no .claude → pi (a lone pi surface).
+        // Case 1 — bare AGENTS.md, no .claude → codex (a lone codex surface).
         let bare = tempfile::tempdir().unwrap();
         fs::write(bare.path().join("AGENTS.md"), "x").unwrap();
         assert_eq!(
             resolve_harnesses(&[], bare.path()).unwrap(),
-            vec![Harness::Pi]
+            vec![Harness::Codex]
         );
 
         // Case 2 — .claude/ + separate-inode AGENTS.md → both. The SL-063 fix: a
-        // genuine pi surface beside Claude must be wired, not suppressed.
+        // genuine codex surface beside Claude must be wired, not suppressed.
         let split = tempfile::tempdir().unwrap();
         fs::create_dir(split.path().join(".claude")).unwrap();
         fs::write(split.path().join("AGENTS.md"), "real pi surface").unwrap();
         assert_eq!(
             resolve_harnesses(&[], split.path()).unwrap(),
-            vec![Harness::Claude, Harness::Pi]
+            vec![Harness::Claude, Harness::Codex]
         );
 
         // Case 3 — .claude/ + AGENTS.md symlink→CLAUDE.md → Claude only. This repo's
-        // pattern: AGENTS.md is merely Claude's inode-alias, not a pi surface.
+        // pattern: AGENTS.md is merely Claude's inode-alias, not a codex surface.
         let alias = tempfile::tempdir().unwrap();
         fs::create_dir(alias.path().join(".claude")).unwrap();
         fs::write(alias.path().join("CLAUDE.md"), "real").unwrap();
@@ -2616,16 +2616,16 @@ mod tests {
             vec![Harness::Claude]
         );
 
-        // Case 4 — .pi/ + .claude/ → both (the explicit pi marker path).
-        let pi_marker = tempfile::tempdir().unwrap();
-        fs::create_dir(pi_marker.path().join(".claude")).unwrap();
-        fs::create_dir(pi_marker.path().join(".pi")).unwrap();
+        // Case 4 — .codex/ + .claude/ → both (the explicit codex marker path).
+        let codex_marker = tempfile::tempdir().unwrap();
+        fs::create_dir(codex_marker.path().join(".claude")).unwrap();
+        fs::create_dir(codex_marker.path().join(".codex")).unwrap();
         assert_eq!(
-            resolve_harnesses(&[], pi_marker.path()).unwrap(),
-            vec![Harness::Claude, Harness::Pi]
+            resolve_harnesses(&[], codex_marker.path()).unwrap(),
+            vec![Harness::Claude, Harness::Codex]
         );
 
-        // Case 5 — CLAUDE↔AGENTS symlink pair, NO .claude/ → pi. The adversarial
+        // Case 5 — CLAUDE↔AGENTS symlink pair, NO .claude/ → codex. The adversarial
         // edge: alias-suppression is gated on Claude-detected, so a lone symlinked
         // pair (no .claude/ for Claude to claim) still wires the present AGENTS.md.
         let lone_pair = tempfile::tempdir().unwrap();
@@ -2637,7 +2637,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             resolve_harnesses(&[], lone_pair.path()).unwrap(),
-            vec![Harness::Pi]
+            vec![Harness::Codex]
         );
     }
 
@@ -2875,7 +2875,7 @@ mod tests {
         assert!(matches!(out.mcp, RefreshOutcome::None));
 
         // pi is import-only — no hook, no settings/baseRef, no .mcp.json.
-        let out = install_refresh(&Harness::Pi, root, exec, false).unwrap();
+        let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert!(matches!(out.hook, RefreshOutcome::None));
         assert!(matches!(out.baseref, BaseRefOutcome::NotApplicable));
         assert!(matches!(out.mcp, RefreshOutcome::None));
@@ -3430,7 +3430,7 @@ mod tests {
         wire(
             root,
             Path::new(FAKE_EXEC),
-            &[Harness::Claude, Harness::Pi],
+            &[Harness::Claude, Harness::Codex],
             false,
         )
         .unwrap();
