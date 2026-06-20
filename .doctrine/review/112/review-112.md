@@ -61,3 +61,22 @@ time, and `plan.toml` PHASE-01 conforms.
 `/reconcile` confirms the no-op and hands to `/close`. The one external red (F-3,
 `tolerated`/minor) is documented, non-blocking, and belongs to the worktree
 workstream, not SL-114.
+
+## Reconciliation Outcome
+
+No-op. The reconciliation brief is empty — no per-slice edit and no REV needed.
+
+### Direct edits applied
+- None. `design.md`, `slice-114.md`, and `plan.toml` are already consistent with
+  the landed implementation (F-1, F-2 `aligned`).
+
+### REVs completed
+- None. The slice touched no ADR/spec/requirement/policy — no governance truth
+  changed.
+
+### Withdrawn / tolerated
+- F-3 `tolerated` (minor): VT-2's literal "full suite green" carries one external
+  pre-existing red (`e2e_worktree_stamp`, ISS-038-class), not slice-attributable.
+  Rationale recorded in the finding disposition; non-blocking.
+
+Reconcile pass complete — handoff to /close.
