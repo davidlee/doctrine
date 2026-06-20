@@ -1,8 +1,9 @@
 # SL-127 Design — Dispatch base freshness
 
-> Status: drafted; internal pass (F1/F3/F4/F6) + external codex pass (C2–C8)
-> integrated — see §9. **One open decision before lock: C1** (ladder neutrality —
-> §2.2a residual). Pending user confirmation on C1, then lock → `/plan`.
+> Status: **LOCKED** (2026-06-20). Internal pass (F1/F3/F4/F6) + external codex
+> pass (C2–C8) integrated — see §9. C1 resolved: stance **A** (freshest-descendant
+> default + explicit `DOCTRINE_TRUNK_REF` override); the durable config fix is
+> filed as **IMP-126** (folds with IMP-124). → `/plan`.
 > Foundations locked interactively: Q1=A (freshen the dispatch branch), Q2=(i)
 > (operator verb + auto-surfaced drift, no auto-refresh), Q3=(c) (ancestor-dominant
 > ladder + plan-presence gate). Governed by ADR-006, ADR-011, ADR-012; specs
@@ -288,7 +289,7 @@ Integrate-side phantom (ISS-038 / IMP-122), `[dispatch] deliver_to` config
 
 | # | Sev | Disposition |
 |---|---|---|
-| C1 | high | **OPEN** — ladder neutrality. Dominance-default + explicit-override + documented residual (§2.2a). Codex's "refuse ambiguous" alt rejected: it reinstates the `DOCTRINE_TRUNK_REF` ritual on every local-first dispatch (the pain we kill). Awaiting user confirm. |
+| C1 | high | **Resolved — stance A.** Freshest-descendant default + explicit `DOCTRINE_TRUNK_REF` override + documented residual (§2.2a). Codex's "refuse ambiguous" alt rejected (reinstates the ritual on every local-first dispatch). The durable neutral config fix (`[dispatch] trunk_preference`) → **IMP-126** (folds with IMP-124). |
 | C2 | med | Accepted — fold is "preferred-order advance-to-descendant", renamed `freshest_descendant`; plan gate backstops a diverged stale pick (§2.2a). |
 | C3 | high | Accepted (scope) — gate is `Create`-only; Resume out of scope, preflight → follow-up (§2.2b). |
 | C4 | high | **Accepted — major revise.** `refresh-base` uses a real `git merge` in the live coord worktree, not object-db `merge_tree` (which yields no resolvable conflict state). Conflict leaves markers + `MERGE_HEAD` (§3.2). |
