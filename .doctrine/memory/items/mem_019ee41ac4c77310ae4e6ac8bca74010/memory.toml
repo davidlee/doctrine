@@ -1,0 +1,50 @@
+memory_uid = "mem_019ee41ac4c77310ae4e6ac8bca74010"
+memory_key = "mem.pattern.dispatch.close-integrate-shared-trunk-race"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Close-integrate on shared trunk races repeatedly"
+summary = "Close-time dispatch --integrate on a shared active main races: trunk moves mid-command (re-supersede) and other agents' uncommitted WIP triggers integrate-dirty-worktree."
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:dispatch", "area:worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "0233f3fc4a8370861ec6af73ae548322cb48fe92"
+tree = "ec6a19b48ffe859c0cfeb798eb7bf30ba8d39722"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "0233f3fc4a8370861ec6af73ae548322cb48fe92"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-125"
+
+[[source]]
+kind = "review"
+ref = "RV-111"
+
