@@ -196,6 +196,97 @@ pub(crate) fn run_record_boundary(
     )
 }
 
+/// CLI entry — `doctrine dispatch refresh-base --slice N` (SL-127 §3.2). Advance
+/// `dispatch/<NNN>`'s base past trunk drift via a REAL `git merge --no-ff` of the
+/// current trunk tip into the dispatch branch, run in the LIVE coordination
+/// worktree (never the session/main tree). Single responsibility: the merge only —
+/// it does NOT regenerate the review bundle (the operator re-runs `sync
+/// --prepare-review` afterwards). Per SPEC-021 it REPORTS conflicts, never
+/// auto-resolves: a conflicted merge halts non-zero with the conflicting paths
+/// named, leaving `MERGE_HEAD` + markers for the operator and the dispatch ref
+/// unadvanced.
+pub(crate) fn run_refresh_base(path: Option<PathBuf>, slice: u32) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let slice3 = format!("{slice:03}");
+    let dispatch_ref = format!("refs/heads/dispatch/{slice3}");
+
+    let trunk_tip = git::trunk_commit(&root)?.with_context(|| "trunk ref not found")?;
+
+    // Resolve the live coordination worktree; ALL subsequent git runs use `coord`
+    // as the root so they execute there, never the session tree.
+    let coord = git::worktree_for_ref(&root, &dispatch_ref)?.with_context(|| {
+        format!(
+            "no live coordination worktree for dispatch/{slice3}; \
+             run 'dispatch setup --slice {slice}' (or resume) first"
+        )
+    })?;
+
+    let dispatch_tip = git::git_text(&coord, &["rev-parse", "HEAD"])?;
+
+    // Refuse to merge over WIP — a dirty coord tree is the operator's, untouched.
+    let dirty = git::git_text(&coord, &["status", "--porcelain"])?;
+    if !dirty.is_empty() {
+        bail!("refusing to refresh over a dirty coordination worktree (dispatch/{slice3})");
+    }
+
+    // Unrelated histories — refuse BEFORE any merge (codex C7).
+    if git::merge_base(&coord, &dispatch_tip, &trunk_tip)?.is_none() {
+        bail!("unrelated histories — dispatch/{slice3} and trunk share no common ancestor");
+    }
+
+    // Trunk already contained in the dispatch branch ⇒ nothing to do, no write.
+    if git::is_ancestor(&coord, &trunk_tip, &dispatch_tip)? {
+        writeln!(
+            io::stdout(),
+            "dispatch/{slice3} already fresh — trunk {} is already merged",
+            short(&trunk_tip)
+        )?;
+        return Ok(());
+    }
+
+    // The real merge in the coordination worktree. `git_status_ok` returns the
+    // raw exit success (it routes through the single `run_git` capture chokepoint)
+    // — exit 0 ⇒ git committed the merge; non-zero ⇒ a conflict left MERGE_HEAD +
+    // markers in `coord`.
+    let msg = format!("refresh-base: merge trunk into dispatch/{slice3}");
+    let clean = git::git_status_ok(&coord, &["merge", "--no-ff", "-m", &msg, &trunk_tip])?;
+
+    if clean {
+        let new_tip = git::git_text(&coord, &["rev-parse", "HEAD"])?;
+        let merged = git::git_text(
+            &coord,
+            &[
+                "rev-list",
+                "--count",
+                &format!("{dispatch_tip}..{trunk_tip}"),
+            ],
+        )?;
+        writeln!(
+            io::stdout(),
+            "dispatch/{slice3} refreshed: merged {merged} trunk commit(s); new tip {}",
+            short(&new_tip)
+        )?;
+        return Ok(());
+    }
+
+    // Conflict — collect the unmerged paths, report, and halt. Do NOT abort; the
+    // operator resolves the half-merged coord worktree (SPEC-021).
+    let conflicts = git::git_text(&coord, &["diff", "--name-only", "--diff-filter=U"])?;
+    let paths: Vec<&str> = conflicts.lines().filter(|l| !l.is_empty()).collect();
+    bail!(
+        "refresh-base merge of trunk into dispatch/{slice3} conflicted in {} path(s):\n  {}\n\
+         resolve them in the coordination worktree, then commit the merge \
+         (MERGE_HEAD is left in place; the dispatch ref is unadvanced).",
+        paths.len(),
+        paths.join("\n  ")
+    );
+}
+
+/// Short form of a commit oid for human report lines (first 7 chars).
+fn short(oid: &str) -> &str {
+    oid.get(..7).unwrap_or(oid)
+}
+
 // --- SL-068 PHASE-02: `dispatch candidate create` (design §5.3) --------------
 
 /// The resolved create request — the CLI flag bundle parsed into typed axes (the
@@ -331,6 +422,29 @@ fn check_provenance(journal: &Journal, slice3: &str, source_ref: &str) -> anyhow
     Ok(())
 }
 
+/// The no-`--worktree` content-conflict abort message (design §3.3). Pure. When
+/// `ahead == 0` the result is BYTE-IDENTICAL to the pre-SL-127 text — the SL-127
+/// base-divergence hint is APPENDED only when trunk has advanced past the source
+/// (`ahead > 0`), and even then never asserts the cause (codex C5). This is the
+/// single source of the abort text, so the production arm and the byte-identity
+/// test cannot drift.
+fn candidate_conflict_message(source_ref: &str, base: &str, ahead: u32) -> String {
+    let hint = if ahead > 0 {
+        format!(
+            "; trunk has advanced {ahead} commit(s) past this source — \
+             the conflict may be base divergence; try `dispatch refresh-base` \
+             then re-prepare + re-create"
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "candidate create: 3-way merge of {source_ref} onto {base} conflicts — \
+         pass --worktree to park the candidate branch at the base for \
+         manual resolve+commit, or abort (no row/ref/worktree written){hint}"
+    )
+}
+
 /// Core `candidate create` (design §5.3, EX-1..5). Happy path only — a content
 /// conflict aborts cleanly with NO row/ref/worktree written (the conflicted +
 /// `--worktree` lifecycle is PHASE-03). Sequencing: provenance gate → compute the
@@ -417,12 +531,14 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
                 // Clean: the branch points at the merge commit.
                 (merge_oid.clone(), merge_oid, CandidateStatus::Created)
             }
-            MergeTree::Conflict if !req.worktree => bail!(
-                "candidate create: 3-way merge of {source_ref} onto {} conflicts — \
-                 pass --worktree to park the candidate branch at the base for \
-                 manual resolve+commit, or abort (no row/ref/worktree written)",
-                req.base
-            ),
+            MergeTree::Conflict if !req.worktree => {
+                // SL-127 EX-1 (§3.3): diagnostic-only base-divergence hint. The
+                // drift count is resolved here in the shell; the (pure) message
+                // builder appends a non-asserting hint when trunk has advanced past
+                // the source, and renders BYTE-IDENTICAL legacy text when it has not.
+                let ahead = trunk_drift(root, &source_oid)?.map_or(0, |d| d.ahead);
+                bail!(candidate_conflict_message(&source_ref, &req.base, ahead))
+            }
             // Conflicted + --worktree: park the branch at the base so the user
             // resolves+commits in the worktree. No merge commit exists yet.
             MergeTree::Conflict => (base_oid.clone(), String::new(), CandidateStatus::Conflicted),
@@ -1817,6 +1933,39 @@ pub(crate) fn run_plan_next(path: Option<PathBuf>, slice: u32, json: bool) -> an
     Ok(())
 }
 
+/// Drift of a tip against current trunk (SL-127 §3.1).
+struct Drift {
+    /// The resolved trunk tip the drift was measured against (carried so callers
+    /// that already resolved drift need not re-walk the trunk ladder).
+    trunk_tip: String,
+    fork_point: String,
+    ahead: u32,
+}
+
+/// Drift of `tip` against current trunk: `fork_point` = `merge_base(tip, trunk)`,
+/// `ahead` = `count(fork_point..trunk)`. Resolves the trunk tip itself via the
+/// peeled ladder (a None trunk is a hard "trunk ref not found" error, preserving
+/// `run_status`' observable behaviour). `Ok(None)` ⇒ tip and trunk share no
+/// common ancestor (unrelated histories), which callers surface with their own
+/// context. Parameterized on `tip` (F4) so the PHASE-04 classifier can measure the
+/// bundle/source, not only the dispatch branch.
+fn trunk_drift(root: &Path, tip: &str) -> anyhow::Result<Option<Drift>> {
+    let trunk_tip = git::trunk_commit(root)?.with_context(|| "trunk ref not found")?;
+    let Some(fork_point) = git::merge_base(root, tip, &trunk_tip)? else {
+        return Ok(None);
+    };
+    let ahead_cnt = git::git_text(
+        root,
+        &["rev-list", "--count", &format!("{fork_point}..{trunk_tip}")],
+    )?;
+    let ahead: u32 = ahead_cnt.trim().parse().unwrap_or(0);
+    Ok(Some(Drift {
+        trunk_tip,
+        fork_point,
+        ahead,
+    }))
+}
+
 /// `doctrine dispatch status` — read-only full dispatch rollup: coordination
 /// state, phase table, trunk drift, sync state, candidate summary, next-step
 /// guidance. Read-only — callable from anywhere.
@@ -1835,14 +1984,12 @@ pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyho
     let coord_state = find_coordination_worktree(&root, &slice3);
 
     // --- Trunk drift -----------------------------------------------------------
-    let trunk_tip = git::trunk_commit(&root)?.with_context(|| "trunk ref not found")?;
-    let fork_point = git::merge_base(&root, &dispatch_tip, &trunk_tip)?
+    let Drift {
+        trunk_tip,
+        fork_point,
+        ahead,
+    } = trunk_drift(&root, &dispatch_tip)?
         .with_context(|| format!("dispatch/{slice3} and trunk share no common ancestor"))?;
-    let ahead_cnt = git::git_text(
-        &root,
-        &["rev-list", "--count", &format!("{fork_point}..{trunk_tip}")],
-    )?;
-    let ahead: u32 = ahead_cnt.trim().parse().unwrap_or(0);
     let trunk_state = if ahead == 0 { "stable" } else { "moved" };
 
     // --- Phase table -----------------------------------------------------------
@@ -1882,33 +2029,32 @@ pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyho
     let coord_live = !matches!(coord_state.as_str(), "(removed)");
     let admitted_ct = candidates.current_admission.close_target.as_ref();
 
-    let next_guidance = if !all_completed {
-        // Condition 1: phases remain
-        let next_phases = compute_next_phases(&phase_rows);
-        NextGuidance::Phases {
-            phases: next_phases,
-        }
-    } else if !review_exists {
-        // Condition 2: all completed, no review ref
-        NextGuidance::PrepareReview
-    } else if coord_live && admitted_ct.is_some() {
-        // Condition 3: all completed, review ref, admitted close_target, coord live
-        NextGuidance::AuditThenIntegrate
-    } else if coord_live && admitted_ct.is_none() {
-        // Condition 4: all completed, review ref, no admitted close_target, coord live
-        NextGuidance::AuditOrCandidateStatus
-    } else if let Some(ct) = admitted_ct {
-        if is_ancestor_of_trunk(&root, &ct.admitted_oid, &trunk_tip)? {
-            // Condition 5: coord removed, admitted close_target is ancestor of trunk
-            NextGuidance::Complete
-        } else {
-            // Condition 6: coord removed, admitted exists, NOT ancestor of trunk
-            NextGuidance::AwaitingIntegration
-        }
+    // SL-127 EX-2 (§3.4): when all phases are complete, the prepared bundle's tip
+    // is the `review/<NNN>` ref if it exists, else the pre-prepare dispatch tip.
+    // If trunk has advanced past that tip (a computed fact — codex C6, not a flag),
+    // the base is stale and refresh-base must run before prepare-review/audit.
+    let review_tip = if review_exists {
+        resolve_commit(&root, &review_ref)?.unwrap_or(dispatch_tip)
     } else {
-        // Fallback (shouldn't normally reach here)
-        NextGuidance::AuditOrCandidateStatus
+        dispatch_tip
     };
+    let bundle_stale = all_completed && trunk_drift(&root, &review_tip)?.map_or(0, |d| d.ahead) > 0;
+    // The only git-touching leg (condition 5/6) is resolved here in the shell so
+    // the decision itself stays pure + table-testable.
+    let admitted_is_ancestor = match admitted_ct {
+        Some(ct) if !coord_live => is_ancestor_of_trunk(&root, &ct.admitted_oid, &trunk_tip)?,
+        _ => false,
+    };
+
+    let next_guidance = select_guidance(GuidanceInputs {
+        all_completed,
+        bundle_stale,
+        review_exists,
+        coord_live,
+        admitted: admitted_ct.is_some(),
+        admitted_is_ancestor,
+        next_phases: || compute_next_phases(&phase_rows),
+    });
 
     // --- Output ----------------------------------------------------------------
     if json {
@@ -1991,6 +2137,12 @@ pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyho
             NextGuidance::Phases { phases } => {
                 let ids = phases.join(", ");
                 writeln!(io::stdout(), "next:     {ids}")?;
+            }
+            NextGuidance::RefreshBase => {
+                writeln!(
+                    io::stdout(),
+                    "next:     trunk advanced past the prepared base — run 'dispatch refresh-base --slice {slice}' then re-prepare"
+                )?;
             }
             NextGuidance::PrepareReview => {
                 writeln!(
@@ -2159,9 +2311,65 @@ struct NextJson {
     phases: Option<Vec<String>>,
 }
 
+/// Precomputed facts the next-step decision reads (all git/disk resolved in the
+/// `run_status` shell). `next_phases` is a thunk so the (only) allocating leg runs
+/// solely when phases remain.
+struct GuidanceInputs<F: FnOnce() -> Vec<String>> {
+    all_completed: bool,
+    bundle_stale: bool,
+    review_exists: bool,
+    coord_live: bool,
+    admitted: bool,
+    admitted_is_ancestor: bool,
+    next_phases: F,
+}
+
+/// The deterministic next-step state machine (design §3.4). Pure: every input is
+/// precomputed. The `bundle_stale` (SL-127 EX-2) leg fires BEFORE `PrepareReview`
+/// so a trunk that advanced past the prepared bundle routes to refresh-base, never
+/// to prepare-review/audit on a stale base.
+fn select_guidance<F: FnOnce() -> Vec<String>>(inputs: GuidanceInputs<F>) -> NextGuidance {
+    let GuidanceInputs {
+        all_completed,
+        bundle_stale,
+        review_exists,
+        coord_live,
+        admitted,
+        admitted_is_ancestor,
+        next_phases,
+    } = inputs;
+    if !all_completed {
+        NextGuidance::Phases {
+            phases: next_phases(),
+        }
+    } else if bundle_stale {
+        NextGuidance::RefreshBase
+    } else if !review_exists {
+        NextGuidance::PrepareReview
+    } else if coord_live && admitted {
+        NextGuidance::AuditThenIntegrate
+    } else if coord_live {
+        NextGuidance::AuditOrCandidateStatus
+    } else if admitted {
+        if admitted_is_ancestor {
+            NextGuidance::Complete
+        } else {
+            NextGuidance::AwaitingIntegration
+        }
+    } else {
+        // Fallback (coord removed, nothing admitted — shouldn't normally reach).
+        NextGuidance::AuditOrCandidateStatus
+    }
+}
+
 /// The next-step guidance resolved from the deterministic state machine.
 enum NextGuidance {
-    Phases { phases: Vec<String> },
+    Phases {
+        phases: Vec<String>,
+    },
+    /// SL-127 EX-2: trunk advanced past the prepared bundle — refresh the base
+    /// before prepare-review/audit.
+    RefreshBase,
     PrepareReview,
     AuditThenIntegrate,
     AuditOrCandidateStatus,
@@ -2175,6 +2383,10 @@ impl NextGuidance {
             NextGuidance::Phases { phases } => NextJson {
                 kind: "phases".to_string(),
                 phases: Some(phases.clone()),
+            },
+            NextGuidance::RefreshBase => NextJson {
+                kind: "refresh_base".to_string(),
+                phases: None,
             },
             NextGuidance::PrepareReview => NextJson {
                 kind: "blocked".to_string(),
@@ -2736,5 +2948,347 @@ mod tests {
             result.is_ok(),
             "status --json should succeed; err: {result:?}"
         );
+    }
+
+    // --- SL-127 PHASE-03: trunk_drift + refresh-base ---------------------------
+
+    /// Create `refs/heads/dispatch/{slice:03}` at the current HEAD and add a REAL
+    /// linked worktree on it under `<dir>/coord`, returning the coord path. The
+    /// coordination worktree is just `git worktree add <dir> dispatch/<NNN>`.
+    fn add_dispatch_worktree(repo: &Path, slice: u32, holder: &Path) -> std::path::PathBuf {
+        let branch = format!("dispatch/{slice:03}");
+        let head = git(repo, &["rev-parse", "HEAD"]);
+        git(repo, &["branch", &branch, &head]);
+        let coord = holder.join("coord");
+        git(
+            repo,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                coord.to_str().unwrap(),
+                &branch,
+            ],
+        );
+        coord
+    }
+
+    /// Commit `content` to `file` in `wt`, returning the new HEAD oid.
+    fn commit_file(wt: &Path, file: &str, content: &str, msg: &str) -> String {
+        std::fs::write(wt.join(file), content).unwrap();
+        git(wt, &["add", file]);
+        git(wt, &["commit", "-q", "-m", msg]);
+        git(wt, &["rev-parse", "HEAD"])
+    }
+
+    /// VT-1: `trunk_drift` — fork_point = merge_base(tip, trunk); ahead =
+    /// count(fork_point..trunk); ahead == 0 when trunk is an ancestor of tip.
+    #[test]
+    fn trunk_drift_measures_against_trunk() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let fork = git(src.path(), &["rev-parse", "HEAD"]);
+        // A tip parked at the fork: trunk has not moved past it yet.
+        let tip = fork.clone();
+        let d0 = trunk_drift(src.path(), &tip)
+            .unwrap()
+            .expect("shared ancestor");
+        assert_eq!(d0.fork_point, fork, "fork_point is the merge-base");
+        assert_eq!(d0.ahead, 0, "trunk == fork ⇒ zero ahead");
+
+        // Advance trunk twice (distinct content per commit); tip stays at fork.
+        commit_file(src.path(), "b.txt", "trunk-1\n", "advance trunk 1");
+        let trunk_tip = commit_file(src.path(), "b.txt", "trunk-2\n", "advance trunk 2");
+        let d = trunk_drift(src.path(), &tip)
+            .unwrap()
+            .expect("shared ancestor");
+        assert_eq!(d.trunk_tip, trunk_tip, "carries the resolved trunk tip");
+        assert_eq!(d.fork_point, fork, "fork unchanged — tip did not move");
+        assert_eq!(d.ahead, 2, "trunk is two commits ahead of the fork");
+
+        // A tip that already contains trunk ⇒ ahead == 0 (trunk is its ancestor).
+        let d_fresh = trunk_drift(src.path(), &trunk_tip)
+            .unwrap()
+            .expect("shared ancestor");
+        assert_eq!(d_fresh.ahead, 0, "trunk ancestor of tip ⇒ zero ahead");
+    }
+
+    /// VT-2: refresh-base CLEAN (reproduces SL-122). Trunk advances past the fork
+    /// with a non-overlapping change; the dispatch branch carries its own commit.
+    /// `run_refresh_base` merges clean, the coord HEAD advances to a merge commit
+    /// with parents [dispatch_tip, trunk_tip], and afterwards
+    /// merge_base(dispatch, trunk) == trunk_tip (trunk fully contained).
+    #[test]
+    fn refresh_base_clean_advances_dispatch() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let holder = tempfile::tempdir().unwrap();
+        let coord = add_dispatch_worktree(src.path(), 85, holder.path());
+
+        // Dispatch branch adds a NEW file in the coord worktree.
+        let dispatch_tip = commit_file(&coord, "c.txt", "dispatch work\n", "dispatch commit");
+        // Trunk advances on main with a same-block rewrite of a.txt that would
+        // conflict at candidate-create 3-way time, but here is non-overlapping
+        // with the dispatch delta (which touched only c.txt).
+        let trunk_tip = commit_file(src.path(), "a.txt", "hello trunk-moved\n", "advance trunk");
+
+        run_refresh_base(Some(src.path().to_path_buf()), 85).expect("clean refresh");
+
+        let new_tip = git(&coord, &["rev-parse", "HEAD"]);
+        assert_ne!(new_tip, dispatch_tip, "coord HEAD advanced");
+        let parents = git(&coord, &["rev-list", "--parents", "-n", "1", &new_tip]);
+        let p: Vec<&str> = parents.split_whitespace().skip(1).collect();
+        assert_eq!(
+            p,
+            vec![dispatch_tip.as_str(), trunk_tip.as_str()],
+            "merge parents"
+        );
+
+        // Trunk is now fully contained in the dispatch branch.
+        let mb = git(&coord, &["merge-base", &new_tip, &trunk_tip]);
+        assert_eq!(mb, trunk_tip, "merge_base(dispatch, trunk) == trunk_tip");
+    }
+
+    /// VT-3: refresh-base CONFLICT — a genuinely-conflicting trunk merge returns
+    /// Err naming the conflicting path(s), leaves `MERGE_HEAD` in the coord
+    /// worktree, and does NOT advance the dispatch ref past the pre-merge tip.
+    #[test]
+    fn refresh_base_conflict_reports_and_halts() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let holder = tempfile::tempdir().unwrap();
+        let coord = add_dispatch_worktree(src.path(), 85, holder.path());
+
+        // Both sides rewrite the SAME line of a.txt ⇒ a real conflict.
+        let dispatch_tip = commit_file(&coord, "a.txt", "DISPATCH\n", "dispatch edits a.txt");
+        commit_file(src.path(), "a.txt", "TRUNK\n", "trunk edits a.txt");
+
+        let result = run_refresh_base(Some(src.path().to_path_buf()), 85);
+        let err = format!("{}", result.expect_err("conflict must Err"));
+        assert!(
+            err.contains("a.txt"),
+            "names the conflicting path; got: {err}"
+        );
+        assert!(err.contains("conflicted"), "reports conflict; got: {err}");
+
+        // MERGE_HEAD persists in the coord worktree (not aborted).
+        let merge_head = coord.join(".git");
+        // Worktree .git is a file pointing at the gitdir; resolve via rev-parse.
+        let _ = merge_head;
+        let mh = git(&coord, &["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]);
+        assert!(!mh.is_empty(), "MERGE_HEAD left in place");
+
+        // The dispatch ref is unadvanced (the conflicted merge is uncommitted).
+        let tip_now = git(&coord, &["rev-parse", "dispatch/085"]);
+        assert_eq!(
+            tip_now, dispatch_tip,
+            "dispatch ref unadvanced past pre-merge tip"
+        );
+    }
+
+    /// VT-4a: unrelated histories ⇒ refuse before merging.
+    #[test]
+    fn refresh_base_refuses_unrelated_histories() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let holder = tempfile::tempdir().unwrap();
+        let coord = add_dispatch_worktree(src.path(), 85, holder.path());
+        // Re-root the dispatch branch onto an orphan with no shared ancestor.
+        git(&coord, &["checkout", "-q", "--orphan", "orphan-tmp"]);
+        std::fs::write(coord.join("orphan.txt"), "orphan\n").unwrap();
+        git(&coord, &["add", "orphan.txt"]);
+        git(&coord, &["commit", "-q", "-m", "orphan root"]);
+        // Move dispatch/085 to the orphan, restore HEAD onto it cleanly.
+        let orphan = git(&coord, &["rev-parse", "HEAD"]);
+        git(&coord, &["branch", "-f", "dispatch/085", &orphan]);
+        git(&coord, &["checkout", "-q", "dispatch/085"]);
+        git(&coord, &["branch", "-D", "orphan-tmp"]);
+
+        let result = run_refresh_base(Some(src.path().to_path_buf()), 85);
+        let err = format!("{}", result.expect_err("unrelated histories must Err"));
+        assert!(
+            err.contains("unrelated histories"),
+            "refuses unrelated histories; got: {err}"
+        );
+    }
+
+    /// VT-4b: already-fresh (trunk is an ancestor of dispatch) ⇒ no-op Ok, no new
+    /// commit written.
+    #[test]
+    fn refresh_base_noop_when_already_fresh() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let holder = tempfile::tempdir().unwrap();
+        let coord = add_dispatch_worktree(src.path(), 85, holder.path());
+        // Dispatch branch is at trunk tip (no drift) and adds a commit on top, so
+        // trunk is strictly an ancestor of dispatch.
+        let before = commit_file(&coord, "c.txt", "ahead of trunk\n", "dispatch ahead");
+
+        run_refresh_base(Some(src.path().to_path_buf()), 85).expect("already-fresh is Ok");
+
+        let after = git(&coord, &["rev-parse", "HEAD"]);
+        assert_eq!(after, before, "no new commit on a fresh dispatch branch");
+    }
+
+    /// VT-4c: dirty coord tree ⇒ refuse (don't merge over WIP).
+    #[test]
+    fn refresh_base_refuses_dirty_coord() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let holder = tempfile::tempdir().unwrap();
+        let coord = add_dispatch_worktree(src.path(), 85, holder.path());
+        advance_trunk(src.path()); // make trunk move so a merge would be attempted
+        // Leave uncommitted WIP in the coord tree.
+        std::fs::write(coord.join("a.txt"), "uncommitted edit\n").unwrap();
+
+        let result = run_refresh_base(Some(src.path().to_path_buf()), 85);
+        let err = format!("{}", result.expect_err("dirty coord must Err"));
+        assert!(
+            err.contains("dirty coordination worktree"),
+            "refuses a dirty coord tree; got: {err}"
+        );
+    }
+
+    /// VT-4d: no coordination worktree ⇒ refuse with the setup/resume hint.
+    #[test]
+    fn refresh_base_refuses_without_coord_worktree() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        // Create the dispatch ref but NO live worktree on it.
+        create_dispatch_ref(src.path(), 85);
+
+        let result = run_refresh_base(Some(src.path().to_path_buf()), 85);
+        let err = format!("{}", result.expect_err("missing coord worktree must Err"));
+        assert!(
+            err.contains("no live coordination worktree") && err.contains("setup"),
+            "hints at setup/resume; got: {err}"
+        );
+    }
+
+    // --- SL-127 PHASE-04: drift diagnostics ------------------------------------
+
+    /// The pre-SL-127 content-conflict abort text, verbatim. VT-1b pins the
+    /// `ahead == 0` rendering to these exact bytes — the no-verdict contract.
+    const LEGACY_CONFLICT_TEXT: &str = "candidate create: 3-way merge of refs/heads/review/085 onto trunk conflicts — pass --worktree to park the candidate branch at the base for manual resolve+commit, or abort (no row/ref/worktree written)";
+
+    /// VT-1a (EX-1): a content conflict where trunk has advanced past the source
+    /// ⇒ the abort message APPENDS the refresh-base hint AND the drift count, while
+    /// preserving the original text as a prefix (the hint is additive, never a
+    /// replacement, and never asserts the cause).
+    #[test]
+    fn candidate_conflict_message_appends_drift_hint() {
+        let msg = candidate_conflict_message("refs/heads/review/085", "trunk", 3);
+        assert!(
+            msg.starts_with(LEGACY_CONFLICT_TEXT),
+            "legacy text is preserved as a prefix; got: {msg}"
+        );
+        assert!(
+            msg.contains("trunk has advanced 3 commit(s) past this source"),
+            "names the drift count; got: {msg}"
+        );
+        assert!(
+            msg.contains("refresh-base") && msg.contains("re-prepare + re-create"),
+            "hints the refresh-base remedy; got: {msg}"
+        );
+        assert!(
+            msg.contains("may be base divergence"),
+            "non-asserting ('may be'); got: {msg}"
+        );
+    }
+
+    /// VT-1b (EX-1): a content conflict where trunk has NOT advanced (`ahead == 0`)
+    /// ⇒ the abort message is BYTE-IDENTICAL to the pre-SL-127 text. Guards the
+    /// no-verdict contract: a plain content conflict carries no drift diagnosis.
+    #[test]
+    fn candidate_conflict_message_byte_identical_when_not_behind_trunk() {
+        let msg = candidate_conflict_message("refs/heads/review/085", "trunk", 0);
+        assert_eq!(msg, LEGACY_CONFLICT_TEXT, "ahead==0 ⇒ verbatim legacy text");
+    }
+
+    /// A `select_guidance` row with no phases remaining, no admission, coord live —
+    /// the common "all done" shape. Individual tests flip the fields under test.
+    fn all_done_inputs() -> GuidanceInputs<fn() -> Vec<String>> {
+        GuidanceInputs {
+            all_completed: true,
+            bundle_stale: false,
+            review_exists: false,
+            coord_live: true,
+            admitted: false,
+            admitted_is_ancestor: false,
+            next_phases: Vec::new,
+        }
+    }
+
+    /// VT-2a (EX-2): all phases complete AND the prepared bundle is stale past trunk
+    /// ⇒ guidance is `RefreshBase`, and it fires BEFORE the prepare-review/audit
+    /// legs (even with a review ref + admission present, RefreshBase wins). JSON
+    /// kind is the structured `refresh_base`.
+    #[test]
+    fn select_guidance_refresh_base_precedes_prepare_review_and_audit() {
+        // Bare stale bundle, no review yet ⇒ would route to PrepareReview without
+        // the stale check; the stale leg must win.
+        let g = select_guidance(GuidanceInputs {
+            bundle_stale: true,
+            ..all_done_inputs()
+        });
+        assert!(
+            matches!(g, NextGuidance::RefreshBase),
+            "stale ⇒ RefreshBase"
+        );
+        assert_eq!(g.to_json().kind, "refresh_base");
+
+        // Even with a review ref AND an admitted close target (the audit legs), a
+        // stale bundle still routes to RefreshBase — it precedes audit.
+        let g2 = select_guidance(GuidanceInputs {
+            bundle_stale: true,
+            review_exists: true,
+            admitted: true,
+            ..all_done_inputs()
+        });
+        assert!(
+            matches!(g2, NextGuidance::RefreshBase),
+            "stale wins over the audit legs"
+        );
+    }
+
+    /// VT-2b (EX-2): a fresh bundle (`bundle_stale == false`) leaves the prior
+    /// machine untouched — no review ref ⇒ PrepareReview; review ref present ⇒ the
+    /// audit leg. RefreshBase is ABSENT.
+    #[test]
+    fn select_guidance_fresh_bundle_keeps_existing_guidance() {
+        let no_review = select_guidance(all_done_inputs());
+        assert!(
+            matches!(no_review, NextGuidance::PrepareReview),
+            "fresh + no review ⇒ PrepareReview (unchanged)"
+        );
+
+        let with_review = select_guidance(GuidanceInputs {
+            review_exists: true,
+            ..all_done_inputs()
+        });
+        assert!(
+            matches!(with_review, NextGuidance::AuditOrCandidateStatus),
+            "fresh + review ⇒ audit leg (unchanged)"
+        );
+    }
+
+    /// VT-2a (integration): `run_status` drives the stale bundle end-to-end — a
+    /// dispatch ref parked at the fork, all phases completed, trunk advanced past
+    /// it, no review ref ⇒ Ok (the RefreshBase leg is reached, not a stale-base
+    /// prepare-review). Pairs with the table test above for the routing proof.
+    #[test]
+    fn dispatch_status_stale_bundle_routes_refresh_base() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        // Dispatch ref pinned at the current HEAD (the fork), THEN trunk advances —
+        // so trunk_drift(dispatch_tip).ahead > 0 (the bundle is stale).
+        create_dispatch_ref(src.path(), 85);
+        advance_trunk(src.path());
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, true);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
     }
 }

@@ -1087,6 +1087,16 @@ enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
+    /// Advance dispatch/<slice>'s base by merging current trunk into it in the
+    /// live coordination worktree (design SL-127 §3.2). Merge-only; re-run
+    /// `sync --prepare-review` after. Orchestrator-classed — refused under worker-mode.
+    RefreshBase {
+        #[arg(long)]
+        slice: u32,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Create OR resume the coordination worktree and emit the dispatch env
     /// contract on stdout (design §2). Orchestrator-classed — refused under
     /// worker-mode.
@@ -3170,6 +3180,7 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Dispatch { command } => match command {
             DispatchCommand::Sync { .. } => Orchestrator("dispatch-sync"),
             DispatchCommand::RecordBoundary { .. } => Orchestrator("dispatch-record-boundary"),
+            DispatchCommand::RefreshBase { .. } => Orchestrator("dispatch-refresh-base"),
             DispatchCommand::Setup { .. } => Orchestrator("dispatch-setup"),
             // candidate create publishes coordination refs + ledger rows (SL-068
             // §5.3) — Orchestrator-classed like sync/record-boundary; refused
@@ -4319,6 +4330,7 @@ fn main() -> anyhow::Result<()> {
                 code_end,
                 path,
             } => dispatch::run_record_boundary(path, slice, &phase, &code_start, &code_end),
+            DispatchCommand::RefreshBase { slice, path } => dispatch::run_refresh_base(path, slice),
             DispatchCommand::Setup { slice, dir, path } => {
                 // Read the harness signal here in the shell (ISS-031 placement
                 // guard); a `CLAUDE`-prefixed env var marks the Claude arm, whose

@@ -49,6 +49,16 @@ Capture `B = git rev-parse HEAD` pre-spawn. After workers return, in exact order
 Hand over at a committed boundary: after `handover_after` batches (default 5) or
 `handover_delta` cumulative reviewed-delta lines (default 2000), whichever first.
 
+## Base freshness (mid-drive)
+A long drive lets trunk advance under the coordination branch; the drift stays
+invisible until `dispatch sync`/candidate-create conflicts on a merge-base
+divergence — the most disruptive place to discover it. `dispatch status` surfaces
+it (`trunk: moved (N commit(s) ahead of fork-point)`). When status shows movement,
+run `dispatch refresh-base --slice <N>` — it merges current trunk into
+`dispatch/<N>` in the live coordination worktree, advancing the base early and in
+context so each conflict is one phase's delta. Conflicts there report-and-halt for
+manual resolve in the coord tree — never auto-merged.
+
 ## Conclude
 When all phases land: `dispatch sync --prepare-review` → remove coordination worktree
 directory (KEEP the refs) → `slice status <id> audit` → `/audit` from parent/root.
