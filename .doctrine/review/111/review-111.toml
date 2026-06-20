@@ -12,5 +12,41 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-125"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "EX-4: 'just check' does not fully pass — lint-js fails on pre-existing missing @eslint/js (web/map), unrelated to SL-125"
+detail = "Expected: just check passes (EX-4). Observed: the Rust gate is fully green on the integrated candidate cand-125-review-001 — cargo clippy --bin doctrine zero warnings, cargo fmt clean on both changed files, full bin suite 2073 pass / 0 fail, e2e_worktree_stamp 11 pass. But the just-check recipe's lint-js step fails: 'ESLint: Cannot find package @eslint/js' in web/map/ — a pre-existing JS-toolchain breakage in the jail, outside the SL-125 Rust file set and not caused by this change (the two changed files are .rs). The worker reported the same."
+disposition = "tolerated"
+response = "Accepted, out-of-scope env breakage. lint-js fails on a pre-existing missing @eslint/js in web/map — unrelated to SL-125 (two .rs files), not introduced here, and broken before this slice. The SL-125 gate that matters is fully green on the integrated candidate: clippy zero-warnings, fmt clean, 2073 bin tests + 11 e2e pass. The JS toolchain breakage is a separate environment concern, not a SL-125 reconciliation item."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "VH-1 unverifiable at audit time — Defect C was live during this very drive (worker hand-stamped)"
+detail = "Expected: VH-1 — a fresh-session dispatch-worker comes up stamped with no hand-stamp. Observed: at audit time the fix lives on review/125 + the candidate, NOT on main, and the orchestrator binary (~/.cargo/bin/doctrine) is the old buggy one — so the SubagentStart hook during THIS drive still ran the buggy stamp logic and the worker came up unstamped; verify-worker returned 'unstamped' and the worker was hand-stamped from the primary (per handover). VH-1 is design §6 'harness-dependent; not in-suite' — it can only be confirmed once the fix integrates to main AND the orchestrator is rebuilt. The in-suite VT-1 pins the exact Defect-C mechanism (process cwd==fork) red->green, so the code is proven; VH-1 is a deferred harness-level confirmation."
+disposition = "tolerated"
+response = "Consciously accepted, self-resolving. VT-1 pins the exact Defect-C mechanism (process cwd==fork) red->green in-suite, so the writer fix is proven. VH-1 is design §6 harness-dependent / out-of-suite by construction; it can only be confirmed once this integrates to main AND the orchestrator binary is rebuilt. The hand-stamp during this drive is the EXPECTED transitional state (old orchestrator binary), documented in the phase note + handover. No code gap."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Authored Summary/Follow-ups are close-time placeholders — design.md §Summary and slice Summary read '(to be completed at close)'"
+detail = "Expected: at close the slice's durable Summary + Follow-ups are reconciled to as-built. Observed: design.md §Summary, §Follow-ups (FU-1) and slice-125 Summary still carry the '(to be completed at close)' placeholder. By-design deferral, not drift — flagged so /reconcile fills the per-slice prose (direct-edit surface) before /close."
+disposition = "verified"
+response = "Per-slice direct-edit item for /reconcile (see Reconciliation Brief). /reconcile fills design.md §Summary + §Follow-ups and slice-125 Summary to as-built before /close. Not a code or governance change — the per-slice prose surface only."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Source byte-equivalence (primary vs orchestrator) is scoped only to the current single-file allowlist (design §2/A4)"
+detail = "Expected: provisioning FROM the primary worktree yields the same bytes a worker would inherit from the orchestrator tree. Observed: true only for the current .worktreeinclude (one static install artifact, .doctrine/doctrine.just). If the allowlist ever grows genuinely per-worktree-divergent untracked state, the hook cannot supply it from primary and cannot name the orchestrator tree either (design §2 limitation; FU-1). Conditional, low-likelihood future work — harvest, not a defect."
+disposition = "tolerated"
+response = "Accepted limitation, explicitly in design §2/A4 + FU-1. Conditional on a future .worktreeinclude growth that does not exist today (allowlist is one static file). Harvested as a backlog idea so it is not lost; no change in scope for SL-125."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
