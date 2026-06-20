@@ -1,0 +1,70 @@
+id    = 107
+slug  = "sl-121-reconciliation-worktree-aware-integrate-exit-state-vs-design"
+title = "SL-121 reconciliation: worktree-aware integrate exit-state vs design"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-121"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "None-leg post-CAS resync can clobber a concurrent move while reporting success (§7 'content-safe' overstated)"
+detail = "src/dispatch.rs:1217 advance_pure_ref: after update_ref_cas → Updated, the leg re-probes worktree_for_ref and, if Some(wt)+clean, calls resync_worktree_hard(wt, planned) WITHOUT re-resolving row.target_ref. If a concurrent writer advances target_ref past planned between CAS and resync, 'git reset --hard planned' forces the live branch back to planned (clobbering the newer commit) and the row still returns Done{AdvancedResynced}=success. Design §7 claims all residual races are content-safe ('tree never lands on anything but planned'); this path can REVERT a concurrent advance, which §7 understates. Expected: re-resolve target_ref after the re-probe; if != planned → Failed + captured raced refusal, never resync. Likelihood vanishing (None-leg only fires when the ref becomes checked out AFTER the CAS; not the normal checked-out-trunk path) but real. (codex GPT-5.5 external pass.)"
+disposition = "verified"
+response = "Observation confirmed. The code race is ACCEPTED within design §7's conscious concurrency boundary (None-leg resync only fires when a ref becomes checked out AFTER the CAS — not the normal checked-out-trunk close path; single-writer close narrows it to vanishing). No code change in audit scope. Two remediations routed: (1) design §7's 'all residual races content-safe' claim is OVERSTATED here (this path can clobber a concurrent post-CAS advance) → per-slice design.md correction at reconcile; (2) the cheap re-resolve-before-resync hardening → follow-up IMP-122."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "resync_worktree_hard 'reset --hard' is not untracked-collision-safe — asymmetric with the ff-merge leg's safe abort (data loss on a raced None-leg)"
+detail = "src/git.rs:1236 resync_worktree_hard / doc-comment claims 'untracked files survive reset --hard'. True for non-colliding untracked files, but 'git reset --hard <oid>' overwrites an untracked file/dir that collides with a tracked path in <oid> — no 'would be overwritten' abort. The only gate is tree_clean (--untracked-files=no, ignores untracked). So a raced None-leg resync can silently delete local untracked data while reporting advanced+resynced. The ff-merge leg is SAFE here (merge --ff-only aborts on untracked collision → captured Raced, design F1/§2.3); the reset --hard resync leg is NOT, an asymmetry §2.2/§7 do not acknowledge. Expected: guard untracked collisions before reset --hard (downgrade to raced-checkout-desync warning), or always warn rather than hard-reset on the raced leg. Race-gated, narrow, but silent data loss. (codex GPT-5.5 external pass.)"
+disposition = "verified"
+response = "Confirmed. reset --hard's untracked-collision overwrite is a real asymmetry with the ff-merge leg's safe abort. Race-gated (None-leg resync only), narrow. Remediations: (1) design §2.2/§7 must drop the 'untracked files survive / content-safe' claim for the resync path → per-slice design.md correction at reconcile; (2) untracked-collision guard / always-warn → follow-up IMP-122. Code unchanged in audit scope (accepted §7 race path)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "ff-merge §2.5 guard is check-then-act: a branch-switch between the probes and the merge can ff the wrong ref before the post-assert catches it"
+detail = "src/git.rs:1178 ff_advance_in_worktree probes symbolic-ref HEAD==target + tree_clean, then runs 'git merge --ff-only planned'. A detach/branch-switch in the window between the probes and the merge means merge runs against the NEW HEAD; if that branch can ff to planned it advances the WRONG ref. The post-merge target_ref==planned assert turns the row Raced (target didn't move), but the other branch was already advanced. This is EXACTLY the §7 documented concurrency boundary (ff-merge leg, needs a real worktree/placement lock, out of scope) — surfaced here for explicit disposition, not as a new defect. Single-writer close narrows it. (codex GPT-5.5 external pass.)"
+disposition = "tolerated"
+response = "This is precisely the design §7 documented-and-accepted concurrency boundary for the ff-merge leg (check-then-act probe→merge TOCTOU; eliminating it needs a real worktree/placement lock, explicitly out of scope). The post-merge target_ref==planned assert keeps the target row honest (raced→Failed); single-writer close is the operating assumption. Design is already honest here — no correction owed, no code change. Tolerated with rationale; broad elimination noted as the §7 placement-lock follow-up."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "design §2.2 names 'reset --keep' for the None-leg resync; impl correctly uses 'reset --hard' (resync_worktree_hard) — design-text fold owed"
+detail = "design.md §2.2 / OQ-2 specify the None-leg post-CAS resync as 'reset --keep planned'. The impl uses 'git reset --hard' (src/git.rs:1236 resync_worktree_hard) because reset --keep/--merge only touch files differing between <oid> and HEAD — and after update_ref_cas the live HEAD ALREADY resolves to <oid> (the ref moved under it), so --keep sees no diff and leaves the desync UNFIXED (proven empirically, PHASE-02). reset --hard is correct under the prior tree_clean precondition. Code is right; the design text is stale. Expected: design §2.2 + OQ-2 updated to reset --hard with the HEAD-already-moved rationale. User-approved via /consult during PHASE-02; documented in the code doc-comment. Per-slice direct edit at reconcile."
+disposition = "verified"
+response = "Confirmed design-text drift. Code is CORRECT (reset --hard is required — after update_ref_cas the live HEAD already resolves to <oid>, so reset --keep/--merge no-op and leave the desync; proven empirically PHASE-02, user-approved via /consult, documented in the resync_worktree_hard doc-comment). Remediation: update design.md §2.2 + OQ-2 to 'reset --hard' with the HEAD-already-moved rationale → per-slice direct edit at reconcile."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "design §5 said 'reuse gather_tree_clean at a worktree path'; impl extracted a leaf-level git::tree_clean predicate that gather_tree_clean now delegates to — design-text fold (layering improvement)"
+detail = "design.md §5 code-impact table says worktree::gather_tree_clean is reused at a worktree path with no signature change. The impl instead introduced a NEW leaf-altitude predicate git::tree_clean (src/git.rs:1138) shared by the dirty pre-gate, the §2.5 re-check, AND worktree::gather_tree_clean (now a delegating wrapper). This is a DRY/layering improvement (single tracked-clean predicate at leaf, ADR-001) but the design §5 text no longer matches. Expected: §5 note the extracted git::tree_clean and gather_tree_clean's delegation. Per-slice direct edit at reconcile."
+disposition = "verified"
+response = "Confirmed. The impl extracted a leaf-level git::tree_clean shared by the dirty pre-gate, the §2.5 re-check, and worktree::gather_tree_clean (delegating) — a DRY/layering improvement (single tracked-clean predicate at leaf, ADR-001), cleaner than §5's 'reuse gather_tree_clean'. Code is right. Remediation: §5 code-impact table note the extracted git::tree_clean + gather_tree_clean delegation → per-slice direct edit at reconcile."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Integration topology: dispatch/121 is based on the old fork base 587d4403; main diverged on orthogonal files — close --integrate --trunk will refuse the non-ff trunk; close must rebase close_target onto current main first"
+detail = "merge-base(main, dispatch/121)=587d4403 (an ancestor of main); main has since advanced on files OUTSIDE the SL-121 surface (boot.rs/.pi/specs — none of src/{dispatch,git,worktree,main}.rs, close/SKILL.md, e2e_dispatch_sync.rs, which main never touched). The SL-121 code delta therefore applies cleanly, but the slice's close path (candidate admit close_target → sync --integrate --trunk refs/heads/main) plans a fast-forward-only trunk row: plan_(candidate_)trunk_row asserts is_ancestor(main_tip, planned). main_tip is NOT an ancestor of the fork-based planned tip → integrate will REFUSE ('trunk moved; create a superseding close-target candidate on the new base and re-admit'). This is the engine working correctly (reports, never clobbers main's orthogonal work — itself confirming the slice). Expected close procedure: rebase/cherry-pick the SL-121 delta (or rebuild the close_target candidate) onto CURRENT main before --integrate. Not a code defect; a close-mechanics prerequisite the reconciliation brief must carry (handover line 38-40)."
+disposition = "verified"
+response = "Confirmed close-mechanics prerequisite, not a code defect — the engine behaves correctly (plan_(candidate_)trunk_row's ff-only assert will REFUSE the non-ff trunk advance and instruct re-anchoring; main's orthogonal work is never clobbered). Remediation is procedural, routed to the reconciliation brief: at close, rebase/cherry-pick the SL-121 delta (or rebuild the close_target candidate) onto CURRENT main before sync --integrate --trunk, then re-admit. The SL-121 source files apply cleanly (main never touched them since the fork base 587d4403)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
