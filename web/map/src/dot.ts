@@ -38,6 +38,7 @@ export const NODE_STYLES: Record<string, { fill: string; font: string; shape: st
   IDE: { fill: '#27AE60', font: '#222222', shape: 'box' },
   RV:  { fill: '#1ABC9C', font: '#222222', shape: 'box' },
   REC: { fill: '#95A5A6', font: '#222222', shape: 'box' },
+  RFC:  { fill: '#7F8C8D', font: '#ffffff', shape: 'box' },
   ASM: { fill: '#3498DB', font: '#ffffff', shape: 'box' },
   DEC: { fill: '#3498DB', font: '#ffffff', shape: 'box' },
   QUE: { fill: '#8E44AD', font: '#ffffff', shape: 'box' },

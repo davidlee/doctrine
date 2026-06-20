@@ -1,0 +1,16 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 1
+slug = "thesis-graph-value-consumption-surfaces"
+title = "Thesis: graph value is gated on consumption surfaces"
+status = "open"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+tags          = []   # free-form classification
+

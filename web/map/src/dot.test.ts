@@ -147,8 +147,8 @@ describe('NODE_STYLES', () => {
     'REV', 'CM',
   ];
 
-  it('has exactly 20 kind-prefix keys', () => {
-    expect(Object.keys(NODE_STYLES)).toHaveLength(20);
+  it('has exactly 21 kind-prefix keys', () => {
+    expect(Object.keys(NODE_STYLES)).toHaveLength(21);
   });
 
   it.each(expectedKeys)('has entry for %s', (key) => {
