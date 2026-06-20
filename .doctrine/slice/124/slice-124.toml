@@ -1,7 +1,7 @@
 id = 124
 slug = "hook-stamp-install-reliability"
 title = "Hook-stamp install reliability: heal stale SubagentStart matcher, sanitize (deleted) exec path, prune dead stamp hooks"
-status = "design"
+status = "plan"
 created = "2026-06-20"
 updated = "2026-06-20"
 
