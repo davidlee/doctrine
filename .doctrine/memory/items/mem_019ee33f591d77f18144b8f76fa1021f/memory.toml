@@ -1,0 +1,50 @@
+memory_uid = "mem_019ee33f591d77f18144b8f76fa1021f"
+memory_key = "mem.pattern.audit.dispatched-phase-green-but-incomplete"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatched phase can land green-but-incomplete"
+summary = "Audit a dispatched slice against every VT/exit criterion, not just a green suite — a worker can land a phase green while skipping a promised integration test."
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["audit", "dispatch", "verification"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e2b399107807bfda4799c23dee1a841ffbe4e219"
+ref_name = "refs/heads/main"
+checkout_state_id = "d3f44fec2e04727a53b04cb2d009053a2a5da39c673e6fdce847223fb2a406e5"
+base_commit = "7f5bb0a64426de449a62f87075f2c2e0df05dae1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-123"
+
+[[source]]
+kind = "review"
+ref = "RV-108"
+
