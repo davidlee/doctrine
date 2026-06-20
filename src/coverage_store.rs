@@ -172,12 +172,12 @@ pub(crate) fn forget(
 }
 
 /// The terse withdrawal line naming the erased 4-tuple + its status (PURE):
-/// `withdrew <slice>/<requirement>/<change>/<mode> [<Status>]`,
-/// e.g. `withdrew SL-057/REQ-256/SL-057/VT [Failed]`. Single `format!` (no
+/// `withdrew <slice>/<requirement>/<change>/<mode> [<status>]`,
+/// e.g. `withdrew SL-057/REQ-256/SL-057/VT [failed]`. Single `format!` (no
 /// push/format-in-loop assembly).
 pub(crate) fn withdrawal_line(key: &CoverageKey, status: CoverageStatus) -> String {
     format!(
-        "withdrew {}/{}/{}/{} [{status:?}]",
+        "withdrew {}/{}/{}/{} [{status}]",
         key.slice, key.requirement, key.contributing_change, key.mode,
     )
 }
@@ -797,6 +797,6 @@ mod tests {
             &key("SL-057", "REQ-256", "SL-057", "VT"),
             CoverageStatus::Failed,
         );
-        assert_eq!(line, "withdrew SL-057/REQ-256/SL-057/VT [Failed]");
+        assert_eq!(line, "withdrew SL-057/REQ-256/SL-057/VT [failed]");
     }
 }

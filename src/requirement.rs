@@ -149,6 +149,18 @@ pub(crate) enum CoverageStatus {
     Blocked,
 }
 
+impl std::fmt::Display for CoverageStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Planned => "planned",
+            Self::InProgress => "in-progress",
+            Self::Verified => "verified",
+            Self::Failed => "failed",
+            Self::Blocked => "blocked",
+        })
+    }
+}
+
 /// The parse layer (entity-model tolerant-parse tier — §5.3). `title` keys the
 /// shared-`Meta` convention (inquisition C2 — NOT `name`); `slug` is derived from
 /// it. `description`/`tags`/`acceptance_criteria` default, so a minimal toml

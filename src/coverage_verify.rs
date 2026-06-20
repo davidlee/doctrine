@@ -254,11 +254,11 @@ pub(crate) fn run_cli(path: Option<PathBuf>, slice: Option<&str>, all: bool) -> 
     print_report(&report)
 }
 
-/// The terse display token for a [`CoverageStatus`] in the report (the Debug name,
-/// matching `coverage_store::withdrawal_line`'s `[Failed]` register). Routed through
-/// a single `format!` so the report's status rendering has one source.
+/// The terse display token for a [`CoverageStatus`] in the report (the kebab
+/// [`Display`] impl, matching `coverage_store::withdrawal_line`'s register).
+/// Routed through a single `format!` so the report's status rendering has one source.
 fn status_label(status: CoverageStatus) -> String {
-    format!("{status:?}")
+    status.to_string()
 }
 
 /// Print a verifier [`Report`]: one `key: old→new` line per re-derived entry (with
