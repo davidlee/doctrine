@@ -1764,24 +1764,18 @@ pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyho
     Ok(())
 }
 
-/// Parse `git worktree list --porcelain` for a worktree checked out on
-/// `dispatch/<slice3>`. Returns the worktree path or "(removed)".
+/// The coordination worktree checked out on `dispatch/<slice3>`, or the
+/// `"(removed)"` sentinel. Delegates to the shared [`git::worktree_for_ref`] probe
+/// (SL-121 PHASE-01). The pre-extraction parser folded BOTH a git-command failure
+/// AND an absent ref into `"(removed)"`; the probe splits those (`Err` vs
+/// `Ok(None)`), so this wrapper folds both legs back to the sentinel to preserve
+/// behaviour (F4).
 fn find_coordination_worktree(root: &Path, slice3: &str) -> String {
     let target_branch = format!("refs/heads/dispatch/{slice3}");
-    let Ok(out) = git::git_text(root, &["worktree", "list", "--porcelain"]) else {
-        return "(removed)".to_string();
-    };
-    let mut current_path: Option<String> = None;
-    for line in out.lines() {
-        if let Some(path) = line.strip_prefix("worktree ") {
-            current_path = Some(path.to_string());
-        } else if let Some(branch) = line.strip_prefix("branch ")
-            && branch == target_branch
-        {
-            return current_path.unwrap_or_else(|| "(removed)".to_string());
-        }
+    match git::worktree_for_ref(root, &target_branch) {
+        Ok(Some(path)) => path.to_string_lossy().into_owned(),
+        Ok(None) | Err(_) => "(removed)".to_string(),
     }
-    "(removed)".to_string()
 }
 
 /// Count `refs/heads/phase/{slice3}-*` refs via `git for-each-ref`.

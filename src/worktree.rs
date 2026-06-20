@@ -938,28 +938,13 @@ pub(crate) fn classify_coordinate(
     }
 }
 
-/// Gather the `<fork>` branch's live-linked-worktree path, if any, by parsing
-/// `git worktree list --porcelain` (NEW shell gather — there is no existing
-/// branch→worktree-path helper to reuse). Blocks are separated by blank lines;
-/// each block has a `worktree <path>` line and, when a branch is checked out, a
-/// `branch refs/heads/<name>` line. Returns the `worktree` path of the block whose
-/// `branch` == `refs/heads/<fork>`. Found ⇒ the branch has a live linked worktree.
+/// Gather the `<fork>` branch's live-linked-worktree path, if any, via the shared
+/// [`git::worktree_for_ref`] probe (SL-121 PHASE-01). Found ⇒ the branch has a live
+/// linked worktree. The probe propagates a git failure as `Err`, which this caller
+/// passes straight through (`anyhow::Error`) — no behavioural change from the
+/// pre-extraction inline parse.
 fn gather_fork_worktree(root: &Path, fork: &str) -> anyhow::Result<Option<PathBuf>> {
-    let listing = git::git_text(root, &["worktree", "list", "--porcelain"])?;
-    let wanted = format!("refs/heads/{fork}");
-    let mut current_path: Option<PathBuf> = None;
-    for line in listing.lines() {
-        if let Some(path) = line.strip_prefix("worktree ") {
-            current_path = Some(PathBuf::from(path));
-        } else if let Some(branch) = line.strip_prefix("branch ") {
-            if branch == wanted {
-                return Ok(current_path);
-            }
-        } else if line.is_empty() {
-            current_path = None;
-        }
-    }
-    Ok(None)
+    Ok(git::worktree_for_ref(root, &format!("refs/heads/{fork}"))?)
 }
 
 /// `doctrine worktree land --fork <branch>` — solo `/execute`'s analog of
