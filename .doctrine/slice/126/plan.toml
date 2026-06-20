@@ -1,0 +1,81 @@
+# Implementation plan for SL-126 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-126"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "ledger: trunk-integration query"
+objective = """
+Add the cycle-free integration query to `ledger` (leaf): a tree-read journal
+accessor and the three-state `trunk_integration` resolver. This is the whole
+mechanism (design §3.1) minus the gate wiring — self-contained, leaf-only, fully
+unit-tested. The existing `dispatch::run_show_journal_trunk_oid` is refactored to
+consume the new shared tree-read (DRY, design §3.3) so no parallel journal-read
+survives.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; OQ-1/OQ-2 resolved (D1 self-describing row, D2 fail-closed)." },
+  { id = "EN-2", text = "ledger is tier=leaf with out=0 (layering.toml); adding crate::git is a leaf→leaf edge, git ∌ ledger (no cycle)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ledger::read_journal_at_ref(root, slice) -> Result<Option<Journal>>` tree-reads journal.toml from refs/heads/dispatch/<slice:03> via git::read_path_at (None when the dispatch ref or path is absent)." },
+  { id = "EX-2", text = "`ledger::TrunkIntegration { NotDispatched, Integrated, Blocked(String) }` and `ledger::trunk_integration(root, slice) -> Result<TrunkIntegration>` implement the design §3.1 resolution order incl. the explicit dispatch-ref existence probe, self-describing trunk-row selection (namespace elimination over {dispatch/,review/,candidate/,phase/}), empty-oid guard, and is_ancestor test." },
+  { id = "EX-3", text = "dispatch::run_show_journal_trunk_oid consumes read_journal_at_ref; the bespoke read_ledger::<Journal> trunk-oid path is gone. Behaviour unchanged (its existing tests stay green)." },
+  { id = "EX-4", text = "`just check` (or gate) green: clippy zero-warnings, ADR-001 fitness gate passes with no new accepted_violation and leaf tangle_baseline=0." },
+]
+verification = [
+  { id = "VT-1", expects = "trunk_integration truth table from a git fixture (dispatch ref + committed journal.toml): NotDispatched (no ref), Integrated (planned_oid ancestor-of-trunk), Blocked(planned tip not on trunk), Blocked(no trunk row), Blocked(ambiguous trunk row), Blocked(journal unreadable), Blocked(trunk row has no planned oid)." },
+  { id = "VT-2", expects = "read_journal_at_ref returns None for an absent dispatch ref and for a present ref missing journal.toml; Some(parsed) for a committed journal." },
+  { id = "VT-3", expects = "show-journal-trunk-oid behaviour preserved post-refactor — its existing dispatch test(s) pass unchanged (behaviour-preservation gate)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "slice: close-integration gate wiring"
+objective = """
+Wire `ledger::trunk_integration` into `slice::run_status` as the third reverse
+close-gate (design §3.2), firing only on the reconcile → done crossing, composing
+with the existing blocker + drift gates. NotDispatched | Integrated pass; Blocked
+refuses with the reason token and the recovery instruction. Behavioural tests
+cover the pass/refuse paths, the edge-only firing, and gate composition.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: trunk_integration available and unit-green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "run_status, on from==reconcile && to==done, calls trunk_integration; Blocked(reason) bails with `slice <ID> → done: refused — dispatched code not integrated to trunk: {reason} (…retry)`; NotDispatched|Integrated proceed to set_slice_status." },
+  { id = "EX-2", text = "The gate is sited after the drift gate; slice→ledger is the only new edge (command→leaf); no slice↔dispatch edge introduced." },
+  { id = "EX-3", text = "`just gate` green: clippy zero-warnings; ADR-001 fitness gate passes (no new accepted_violation, no tangle growth)." },
+]
+verification = [
+  { id = "VT-1", expects = "not-dispatched slice (no dispatch ref) → reconcile→done succeeds." },
+  { id = "VT-2", expects = "dispatched slice with planned_oid ancestor-of-trunk → reconcile→done succeeds." },
+  { id = "VT-3", expects = "dispatched slice with planned_oid not on trunk → reconcile→done refused, error carries the reason token + retry guidance." },
+  { id = "VT-4", expects = "dispatched slice whose journal has no trunk row → reconcile→done refused (fail-closed)." },
+  { id = "VT-5", expects = "the gate fires ONLY on reconcile→done — an unintegrated dispatched slice on audit→reconcile is not refused by this gate." },
+  { id = "VT-6", expects = "composition — an unintegrated slice that also carries an unresolved blocker is refused (either gate independently suffices)." },
+]
+specs        = []
+requirements = []
