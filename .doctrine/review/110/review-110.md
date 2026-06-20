@@ -79,3 +79,30 @@ therefore confirmatory: no REV, no per-slice artifact rewrite owed.
   Affected-Surface must enumerate `architecture_layering` for new command modules.
 - Backlog: RSK — dispatch base-staleness surfaces as a candidate-time merge
   conflict on long drives. IMP — optional dedicated VT tests (F-3).
+
+## Reconciliation Outcome
+
+**No-op reconcile.** Every finding is terminal with no write owed — three
+`tolerated` (F-1 scope bleed, F-2 plan Affected-Surface gap, F-3 VT coverage) and
+one `aligned` (F-4 recency proxy). The audit found no design drift and no
+governance/spec change: `design.md`, the ADRs, and the tech specs already match the
+as-built, so no per-slice artefact edit and no REV were required.
+
+### Direct edits applied
+- None. (No design/scope drift.)
+
+### REVs completed
+- None. (RFC asserts no canon per D1; ADR-014 already records D1+D2 and the
+  ADR-013 amendment, accepted.)
+
+### Withdrawn / tolerated / aligned
+- F-1 `tolerated` — immutable boundary records over-attribute impl to PHASE-01;
+  recorded in `notes.md`, no functional impact.
+- F-2 `tolerated` — `architecture_layering` registration is correctly landed; the
+  plan-completeness gap is a process lesson, harvested to memory.
+- F-3 `tolerated` — VT coverage adequate via generic assertions + the
+  behaviour-preservation gate; dedicated tests captured as IMP-123.
+- F-4 `aligned` — id-descending == creation-recency for monotonically-minted RFC
+  ids; satisfies EX-2 with no clock/disk read in the pure layer.
+
+Reconcile pass complete — handoff to /close.
