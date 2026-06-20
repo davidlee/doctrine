@@ -91,47 +91,86 @@ Map of manifestation → the belt that catches it (✦ = added by this slice):
 | Worker starts in the **primary** main worktree (footer present, base coincidentally an ancestor) | ✦ `verify-worker not-isolated` + in-worker guard #2 |
 | Worker lands in the **coordination** tree (markerless) | existing `verify-worker unstamped` |
 | Worker lands in **another** linked fork (HEAD ⊉ B) | existing `verify-worker wrong-base` |
-| Mid-run clobber: commit diverted to `main`/elsewhere (parent ≠ B, or empty fork) | existing funnel import belt: `S^ == B` single-commit (`multi-commit`) / `head-moved` |
+| Footer `worktreePath`/`worktreeBranch` incoherent (point at different states) | ✦ `verify-worker branch-mismatch` (`--branch`, §5.2) |
+| Mid-run clobber: commit diverted to `main`/elsewhere (parent ≠ B, or empty/orphan fork) | existing funnel import belt: `single_commit` = `S^ == B` (`multi-commit`) / `head-moved` (`worktree.rs:665`) |
 
 So the `not-isolated` belt's job is narrow and precise: close the **primary-tree
 fallback** that `wrong-base` misses when B is coincidentally an ancestor. The
-"fail-closed" claim is for the *belt-set*, not `not-isolated` alone.
+`branch-mismatch` belt binds the two footer fields so the `not-isolated`/`wrong-base`
+checks (on `--dir`) and the import check (on `S`) are about ONE worker state. The
+"fail-closed" claim is for the *belt-set*, not any single belt — and it verifies
+properties, not provenance (§5.2 residual).
 
-**Residual (honest, out of scope):** a clobbered worker may still *dirty the main
-worktree* as a side-effect. That cannot enter slice history (import belt), but this
-slice does not prevent the side-effect — true pre-worker isolation is IMP-072.
+**Residual (honest, out of scope):** a clobbered worker may still *dirty the
+primary worktree*. This cannot enter slice history (the funnel runs in the
+coordination tree and gates on its own `head_at_base`/`tree_clean`,
+`worktree.rs:721`/`:765`). But the side-effect is **not cosmetic**: a dirtied or
+moved primary checkout can disrupt any *other* concurrent human or agent working in
+it (the shared-clone blast radius this whole issue lives in). This slice does not
+prevent that; true pre-worker isolation is IMP-072.
 
 ### 5.2 Interfaces & Contracts
 
-**Pure classifier** — new fact `is_isolated`, new variant `NotIsolated`
-(token `not-isolated`), inserted #2 (after head, before marker/base):
+**Pure classifier** — two new facts (`is_isolated`, `head_is_branch_tip`), two new
+variants (`NotIsolated`, `BranchMismatch`). `not-isolated` inserted #2 (after head,
+before marker/base); `branch-mismatch` last (it binds `--dir` to `S`, the
+most-specific cross-field check, and only when `--branch` is supplied):
 
 ```rust
-pub(crate) enum WorkerVerifyRefusal { NoWorkerHead, NotIsolated, Unstamped, WrongBase }
-// token(): NotIsolated => "not-isolated"
+pub(crate) enum WorkerVerifyRefusal { NoWorkerHead, NotIsolated, Unstamped, WrongBase, BranchMismatch }
+// token(): NotIsolated => "not-isolated", BranchMismatch => "branch-mismatch"
 
 pub(crate) fn classify_worker_verify(
     head_resolved: bool,
-    is_isolated: bool,       // NEW — git-dir ≠ git-common-dir
+    is_isolated: bool,        // NEW — git-dir ≠ git-common-dir
     marker_present: bool,
     base_is_ancestor: bool,
+    head_is_branch_tip: bool, // NEW — HEAD(dir) == tip(S); `true` when no --branch given (skip)
 ) -> Result<WorkerVerify, WorkerVerifyRefusal> {
-    if !head_resolved    { return Err(NoWorkerHead); }
-    if !is_isolated      { return Err(NotIsolated); }   // fork exists but it's the main tree
-    if !marker_present   { return Err(Unstamped); }
-    if !base_is_ancestor { return Err(WrongBase); }
+    if !head_resolved      { return Err(NoWorkerHead); }
+    if !is_isolated        { return Err(NotIsolated); }   // fork exists but it's the main tree
+    if !marker_present     { return Err(Unstamped); }
+    if !base_is_ancestor   { return Err(WrongBase); }
+    if !head_is_branch_tip { return Err(BranchMismatch); } // footer dir/branch incoherent
     Ok(WorkerVerify::Ok)
 }
 ```
 
-**Shell** (`run_verify_worker`) — reuse `is_linked_worktree`, short-circuit on head:
+**Shell** (`run_verify_worker`, now `--base <B> --dir <path> [--branch <S>]`) — reuse
+`is_linked_worktree`, short-circuit on head:
 
 ```rust
 let head_resolved = git::git_opt(dir, &["rev-parse","--verify","HEAD"])?.is_some();
-let is_isolated   = head_resolved && is_linked_worktree(dir)?; // missing dir → NoWorkerHead wins
+let is_isolated   = head_resolved && is_linked_worktree(dir)?;     // missing dir → NoWorkerHead wins
 let marker        = marker_present(dir);
 let base_is_ancestor = git::git_status_ok(dir, &["merge-base","--is-ancestor",base,"HEAD"])?;
+// Coherence: the worktree's checked-out HEAD must equal the branch the funnel will import as S.
+// Binds the two footer fields to ONE worker state (codex pass-2 blocker). Skipped if no --branch.
+let head_is_branch_tip = match branch {
+    Some(s) => {
+        let head = git::git_opt(dir, &["rev-parse","--verify","HEAD"])?;
+        let tip  = git::git_opt(dir, &["rev-parse","--verify",&format!("{s}^{{commit}}")])?;
+        matches!((head,tip), (Some(h),Some(t)) if h == t)         // either unresolved ⇒ false ⇒ refuse
+    }
+    None => true,
+};
 ```
+
+**Why this closes the footer-incoherence blocker.** `verify-worker` inspects only
+`--dir`; `import` inspects only `S`. Without binding, a stale footer can satisfy
+both against *different* trees. With `head_is_branch_tip`, both authoritative belts
+are provably about the **same** commit: the worktree at `--dir` has `S` checked out
+at its tip. The funnel then imports exactly the verified state.
+
+**Honest residual — properties, not provenance.** The belt-set verifies
+*properties* (isolated, stamped, descends from B, single commit S with `S^==B`,
+dir↔branch coherent) — not the *provenance* that this worktree is "the Agent we just
+spawned." A worktree satisfying every property IS a valid worker result by
+construction, so accepting it is correct even if its origin is unexpected. The only
+unguarded case is a harness that returns a *coherent footer naming a wholly
+unrelated yet fully-valid worktree* — indistinguishable from a correct result and
+therefore harmless to import. Provenance binding (e.g. a per-spawn nonce in the
+marker) is explicitly out of scope (→ IMP-072 territory).
 
 **Skill** (`dispatch-agent/SKILL.md`) — see §5.4.
 
@@ -172,8 +211,9 @@ neither is locatable ⇒ the batch cannot be funnelled:
 1. Read the Agent return footer for `worktreePath:` / `worktreeBranch:`.
    NO footer ⇒ no isolated tree was created (fallback-to-main under lock contention) ⇒
    ABORT, do NOT enter the funnel. Re-dispatch, or switch to the subprocess arm if main churns.
-2. doctrine worktree verify-worker --base <B> --dir <worktreePath>
-   Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base.
+2. doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <worktreeBranch>
+   Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base / branch-mismatch.
+   (`--branch` binds dir↔branch — both belts then verify ONE worker state.)
 3. Hand <worktreeBranch:> to the funnel as S.
 ```
 
@@ -204,8 +244,13 @@ it. (Slice scope §affected-surface reconciled to match: no router edit.)
   the **funnel import belt**, not `verify-worker`: a commit diverted to `main`
   (parent ≠ B) or an empty fork fails `classify_import`'s `S^ == B` single-commit
   check (`worktree.rs:665`, token `multi-commit`) / `head-moved`. The bad work
-  cannot enter slice history. The in-worker guard (belt 1) only samples the initial
-  tree and does NOT close this — claimed accordingly, not overclaimed.
+  cannot enter slice history. Exact booleans (codex pass-2): `classify_import`
+  refuses unless `head_at_base ∧ tree_clean ∧ single_commit` all hold
+  (`worktree.rs:665`); `single_commit` = `<fork>^^{commit} == B` (`worktree.rs:733`).
+  An orphan fork still at B (`S == B`) has no parent equal to B ⇒ `single_commit`
+  false ⇒ `multi-commit` refusal (`worktree.rs:737`) — confirmed. The in-worker
+  guard (belt 1) only samples the initial tree and does NOT close this — claimed
+  accordingly, not overclaimed.
 - **Assumption:** the funnel already calls `verify-worker --base B` pre-import
   (confirmed: skill Post-spawn). This slice strengthens that belt, adds no stage.
 
@@ -266,11 +311,14 @@ it. (Slice scope §affected-surface reconciled to match: no router edit.)
 
 ## 9. Quality Engineering & Validation
 
-- **VT** — pure goldens: `not_isolated_refuses_after_head_before_marker`; existing
-  `classify_worker_verify_*` goldens take the new `is_isolated` arg, verdicts
+- **VT** — pure goldens: `not_isolated_refuses_after_head_before_marker`;
+  `branch_mismatch_refuses_last`; the `head_is_branch_tip=true`-when-no-branch
+  skip; existing `classify_worker_verify_*` goldens take the two new args, verdicts
   unchanged (behaviour-preservation).
 - **VT** — `run_verify_worker` integration: refuses `not-isolated` against a primary
-  tree, `Ok` against a linked worktree on B (existing worktree test harness).
+  tree; refuses `branch-mismatch` when `--branch` names a branch whose tip ≠ the
+  worktree HEAD; `Ok` against a linked worktree on B with a coherent `--branch`
+  (existing worktree test harness).
 - **VT** — `e2e_skills_dispatch_shrinkage.rs::dispatch_agent_skill_is_shrunk`:
   raise cap; add `base-guard` / `not-isolated` / `worktreePath` presence asserts.
   Router test untouched.
@@ -321,3 +369,28 @@ Net: codex's "narrows, does not close" verdict was right about `not-isolated` in
 isolation. Resolution is to lean on the **existing harness-identical funnel import
 belt** for the residual manifestations rather than to widen `not-isolated` — the
 design now states this explicitly rather than overclaiming a single-belt fix.
+
+### Adversarial pass 2 — codex mcp, 2026-06-20
+
+- **[blocker] `worktreePath`/`worktreeBranch` never cross-checked** — a stale footer
+  could point `verify-worker` (`--dir`) and `import` (`S`) at different valid-looking
+  trees, both pass. ACCEPTED + CLOSED IN CODE: added `--branch` + `branch-mismatch`
+  belt to `verify-worker` binding HEAD(dir) == tip(S) (§5.2, §5.1 table). This was a
+  genuine miss in pass-1's reframe.
+- **[major] slice scope still said "two independent belts each sufficient"** —
+  contradicted the design's layered framing. ACCEPTED: `slice-123.md` objective
+  rewritten to the layered belt-set (no "each sufficient").
+- **[major] scenario table hole — stale linked worktree stamped+clean+on-B+`S^==B`
+  passes everything.** ACCEPTED: this is the identity-under-specification root the
+  `branch-mismatch` belt now addresses; the irreducible remainder (a *coherent*
+  footer naming a wholly-valid unrelated tree) is named as the
+  properties-not-provenance residual (§5.2) — harmless because such a tree is a
+  valid result by construction; provenance binding deferred to IMP-072.
+- **[minor] import-belt prose imprecise** — tightened §5.5 to the exact
+  `head_at_base ∧ tree_clean ∧ single_commit` booleans (`worktree.rs:665/733/737`).
+  Codex confirmed the orphan-fork (`S==B`) case refuses `multi-commit`.
+- **[minor] "dirty main" residual under-honest** — §5.1 residual now names the
+  concurrent-checkout blast radius, not "harmless leftover."
+
+Pass-2 verdict was "not ready to lock; fix the coherence check + the scope
+objective." Both done (coherence belt in §5.2; scope objective in `slice-123.md`).

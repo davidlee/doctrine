@@ -51,12 +51,17 @@ In scope (the doctrine-owned surface):
    `merge-base --is-ancestor B HEAD` false, or a missing-isolation signal. Turn a
    silent wrong-base into a loud funnel halt **independent of** the prompt guard.
    (ISS-034 remedy 3.)
-3. **Orchestrator post-spawn detection** of a missing `worktreePath:` footer in the
-   Agent return (no isolated tree was created) — treat as a red flag and halt.
-   (Overlaps **IMP-052**; reconcile with it.)
+3. **Orchestrator pre-funnel footer gate** — a missing `worktreePath:`/
+   `worktreeBranch:` footer (no isolated tree) halts before the funnel; the footer
+   feeds `--dir`/`S` and a `verify-worker --branch` **coherence** check binds them
+   to one worker state. (Overlaps **IMP-052**; reconcile with it.)
 
-Objective bar: two independent belts (prompt guard + `verify-worker`) each
-sufficient to catch the fallback, so the arm fails closed even if one is absent.
+Objective bar: **layered, scenario-specific** defense (NOT "each belt sufficient").
+Each wrong-base manifestation maps to a belt — primary-tree fallback →
+`verify-worker not-isolated`; footer incoherence → `branch-mismatch`; coordination
+tree → `unstamped`; other fork → `wrong-base`; mid-run clobber / diverted commit →
+the existing harness-identical funnel import belt (`S^==B`). See design §5.1 for the
+full map. The belt-set fails closed; no single belt is load-bearing alone.
 
 ## Non-Goals
 
@@ -77,7 +82,8 @@ sufficient to catch the fallback, so the arm fails closed even if one is absent.
 
 - `plugins/doctrine/skills/dispatch-agent/SKILL.md` — worker base-guard block +
   pre-funnel footer gate (claude-arm only).
-- `src/worktree.rs` — `verify-worker` `not-isolated` belt (primary-tree fallback).
+- `src/worktree.rs` — `verify-worker` `not-isolated` belt (primary-tree fallback) +
+  `--branch`/`branch-mismatch` coherence belt (binds footer dir↔branch).
 - `tests/e2e_skills_dispatch_shrinkage.rs` — budget bump + content presence asserts.
 - Tests: `classify_worker_verify` goldens + `run_verify_worker` integration.
 
