@@ -47,3 +47,22 @@ to the primary worktree, not the hook cwd). Harness finding recorded as
 `mem.pattern.dispatch.subagentstart-hook-cwd-is-worker-worktree`. The fail-open
 note holds: unstamped → caught fail-closed (ADR-006 D2a), so confidence/perf, not
 safety. **Probe objective met; this item can close (finding lives in ISS-011).**
+
+---
+
+## VH-1 re-run (2026-06-20, post-SL-125 integration)
+
+Re-ran the probe on `main` with the rebuilt orchestrator binary
+(`~/.cargo/bin/doctrine`, built Jun 20 18:18, carries `primary_worktree` — the
+SL-125 fix). Spawned a `dispatch-worker` at `isolation: worktree` plus a
+`general-purpose` negative control. No hand-stamp.
+
+- **dispatch-worker** (`agent-a08c8f12f8f91e243`): marker **present** at
+  `<worker>/.doctrine/state/dispatch/worker` (0-byte presence flag) on the worker's
+  first command — **auto-stamped, no hand-stamp**. ✅
+- **negative control** (`general-purpose`, `agent-aa666c34663c908cf`):
+  `.doctrine/state/dispatch/` absent, no marker — matcher gates correctly. ✅
+
+**VH-1 satisfied.** SL-125 (Defect C fix) validated end-to-end: the claude-arm
+auto-stamp now lands the marker FROM the primary worktree, source ≠ fork. Closes
+the SL-125 deferred-acceptance caveat / FU-1 VH-1 follow-up.
