@@ -117,6 +117,7 @@ default at `refs/heads/main`.
 - PR/remote **delivery mode** — a future `[dispatch] delivery-mode = "merge" |
   "pull-request"` (+ remote/refspec); `deliver_to` becomes the PR base. The gate's
   "integrated?" predicate goes async there.
-- **Base+delivery unification** — folding `deliver_to` into the fork-base ladder
-  (concept #1, also hardcoded at `close/SKILL.md:68 --base`) is an ADR-006 D3
-  amendment; deferred to whoever wants one trunk identity (likely IMP-129).
+- **Base+delivery unification** — folding `deliver_to` into the fork-base
+  auto-resolver (concept #1, `src/git.rs::trunk_tree_ish` / the
+  `origin/HEAD→main→master` ladder) is an ADR-006 D3 amendment; deferred to
+  whoever wants one trunk identity (likely IMP-129).
