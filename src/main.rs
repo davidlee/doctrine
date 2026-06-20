@@ -53,7 +53,6 @@ mod requirement;
 mod retrieve;
 mod review;
 mod revision;
-mod rfc;
 mod root;
 mod skills;
 mod slice;
@@ -563,12 +562,6 @@ enum Command {
     Standard {
         #[command(subcommand)]
         command: StandardCommand,
-    },
-
-    /// Create and list RFC discussion artifacts — governance-neutral deliberation.
-    Rfc {
-        #[command(subcommand)]
-        command: RfcCommand,
     },
 
     /// Create and list product / technical specifications.
@@ -1433,65 +1426,6 @@ enum StandardCommand {
         /// New status (required): draft|default|required|deprecated|retired.
         #[arg(long)]
         status: standard::StandardStatus,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-}
-
-#[derive(Subcommand)]
-enum RfcCommand {
-    /// Allocate the next id and scaffold a new RFC.
-    New {
-        /// RFC title (prompted for if omitted).
-        title: Option<String>,
-
-        /// Explicit slug (default: derived from the title).
-        #[arg(long)]
-        slug: Option<String>,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-
-    /// List RFCs by id: RFC-id, status, slug, title.
-    List {
-        #[command(flatten)]
-        list: CommonListArgs,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-
-    /// Show one RFC: its metadata, relationships, and prose body.
-    Show {
-        /// RFC reference — `RFC-007` or the bare id `7`.
-        reference: String,
-
-        /// Output format.
-        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
-        format: Format,
-
-        /// Shorthand for `--format json`.
-        #[arg(long)]
-        json: bool,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-
-    /// Set an RFC's status (edit-preserving; a no-op if unchanged).
-    Status {
-        /// RFC id (numeric).
-        id: u32,
-
-        /// New status (required): open|resolved|withdrawn.
-        #[arg(long)]
-        status: rfc::RfcStatus,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -2814,11 +2748,6 @@ enum RevisionCommand {
         #[arg(long)]
         slug: Option<String>,
 
-        /// Provenance RFC reference (e.g. `RFC-007`). Authors ONE `originates_from`
-        /// relation row — a typed provenance edge, NOT a `[[change]]` payload.
-        #[arg(long)]
-        originates_from: Option<String>,
-
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -3083,11 +3012,6 @@ fn write_class(cmd: &Command) -> WriteClass {
             StandardCommand::New { .. } => Write("standard new"),
             StandardCommand::Status { .. } => Write("standard status"),
             StandardCommand::List { .. } | StandardCommand::Show { .. } => Read,
-        },
-        Command::Rfc { command } => match command {
-            RfcCommand::New { .. } => Write("rfc new"),
-            RfcCommand::Status { .. } => Write("rfc status"),
-            RfcCommand::List { .. } | RfcCommand::Show { .. } => Read,
         },
         Command::Spec { command } => match command {
             SpecCommand::New { .. } => Write("spec new"),
@@ -3874,12 +3798,7 @@ fn main() -> anyhow::Result<()> {
             } => rec::run_show(path, &reference, if json { Format::Json } else { format }),
         },
         Command::Revision { command } => match command {
-            RevisionCommand::New {
-                title,
-                slug,
-                path,
-                originates_from,
-            } => revision::run_new(path, title, slug, originates_from.as_deref()),
+            RevisionCommand::New { title, slug, path } => revision::run_new(path, title, slug),
             RevisionCommand::Show {
                 reference,
                 format,
@@ -4088,17 +4007,6 @@ fn main() -> anyhow::Result<()> {
             StandardCommand::Status { id, status, path } => {
                 standard::run_status(path, id, status, color)
             }
-        },
-        Command::Rfc { command } => match command {
-            RfcCommand::New { title, slug, path } => rfc::run_new(path, title, slug),
-            RfcCommand::List { list, path } => rfc::run_list(path, list.into_list_args(color)),
-            RfcCommand::Show {
-                reference,
-                format,
-                json,
-                path,
-            } => rfc::run_show(path, &reference, if json { Format::Json } else { format }),
-            RfcCommand::Status { id, status, path } => rfc::run_status(path, id, status, color),
         },
         Command::Spec { command } => match command {
             SpecCommand::New {

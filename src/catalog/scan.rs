@@ -70,9 +70,6 @@ pub(crate) fn outbound_for(
         // moment a REV is minted. The accessor returns an empty stub this phase
         // (PHASE-03 fills it with the `[[change]]`-row `revises` reader).
         "REV" => crate::revision::relation_edges(root, id),
-        // RFC (SL-122) — governance-spine dispatching via governance::relation_edges
-        // (reads tier-1 `[[relation]]` rows). PHASE-03 filled.
-        "RFC" => crate::governance::relation_edges(&crate::rfc::RFC_KIND, root, id),
         // The five backlog kinds share one accessor, routed by their ItemKind (the
         // prefix↔kind map is backlog's single source — no second copy here).
         other => {

@@ -1600,9 +1600,9 @@ mod tests {
                 "{label:?} (Unvalidated) must have no overlay"
             );
         }
-        // The 17 = 20 distinct labels minus the 3 Unvalidated. The set, not just the
+        // The 16 = 19 distinct labels minus the 3 Unvalidated. The set, not just the
         // count, is the real assertion above; the count is a human-readable sanity tag.
-        assert_eq!(overlay_backed.len(), 17, "overlay-backed label count is 17");
+        assert_eq!(overlay_backed.len(), 16, "overlay-backed label count is 16");
     }
 
     // -- PHASE-04 VT-4 / X3 arm (a): exact reader coverage (read_block live) ---

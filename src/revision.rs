@@ -225,25 +225,12 @@ fn rev_scaffold_unused(_ctx: &entity::ScaffoldCtx<'_>) -> anyhow::Result<entity:
 /// `status = "proposed"`, `approval = "none"`, the `updated` stamp, and an empty
 /// `[relationships]` dep/seq block (so the G2 read arm is total). `date` is the
 /// injected clock (the shell stamps it; the pure render stays clock-free).
-fn render_revision_toml(
-    id: u32,
-    slug: &str,
-    title: &str,
-    date: &str,
-    originates_from: Option<&str>,
-) -> anyhow::Result<String> {
-    let mut toml = crate::install::asset_text("templates/revision.toml")?
+fn render_revision_toml(id: u32, slug: &str, title: &str, date: &str) -> anyhow::Result<String> {
+    Ok(crate::install::asset_text("templates/revision.toml")?
         .replace("{{id}}", &id.to_string())
         .replace("{{slug}}", &toml_string(slug))
         .replace("{{title}}", &toml_string(title))
-        .replace("{{date}}", date);
-    if let Some(rfcref) = originates_from {
-        use std::fmt::Write;
-        writeln!(toml, "\n[[relation]]")?;
-        writeln!(toml, "label = \"originates_from\"")?;
-        writeln!(toml, "target = \"{rfcref}\"")?;
-    }
-    Ok(toml)
+        .replace("{{date}}", date))
 }
 
 /// Render `revision-NNN.md` — the rationale companion (design §4.1). Plain markdown
@@ -426,42 +413,20 @@ pub(crate) fn relation_edges(
 // CLI: `revision new`
 // ---------------------------------------------------------------------------
 
-/// `doctrine revision new "<title>" [--slug S] [--originates-from RFC-NNN]` — allocate
-/// a fresh REV and write its skeleton (`status = proposed`, `approval = none`, empty
-/// dep/seq + no `[[change]]` rows) plus the rationale md. When `originates_from` is
-/// supplied, the skeleton carries ONE `[[relation]]` `originates_from` row (a typed
-/// provenance edge, NOT a `[[change]]` payload). Mirrors `rec::run_new`'s claim-retry
-/// materialise. Prints the canonical `REV-NNN` id.
+/// `doctrine revision new "<title>" [--slug S]` — allocate a fresh REV and write its
+/// skeleton (`status = proposed`, `approval = none`, empty dep/seq + no `[[change]]`
+/// rows) plus the rationale md. The `change add` verb (PHASE-03) populates the
+/// payload. Mirrors `rec::run_new`'s claim-retry materialise. Prints the canonical
+/// `REV-NNN` id.
 pub(crate) fn run_new(
     path: Option<PathBuf>,
     title: Option<String>,
     slug: Option<String>,
-    originates_from: Option<&str>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let title = crate::input::resolve_title(title)?;
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
-
-    // Validate and canonicalise the optional originates-from ref.
-    let rfcref: Option<String> = match originates_from {
-        Some(raw) => {
-            use crate::integrity;
-            let (kref, id) = integrity::parse_canonical_ref(raw)
-                .map_err(|e| anyhow::anyhow!("invalid --originates-from `{raw}`: {e}"))?;
-            anyhow::ensure!(
-                kref.kind.prefix == "RFC",
-                "--originates-from must be an RFC reference, got `{raw}` (prefix `{}`)",
-                kref.kind.prefix
-            );
-            let canonical = crate::listing::canonical_id(kref.kind.prefix, id);
-            integrity::ensure_ref_resolves(&root, &canonical).map_err(|e| {
-                anyhow::anyhow!("--originates-from `{canonical}` does not resolve: {e}")
-            })?;
-            Some(canonical)
-        }
-        None => None,
-    };
 
     let trunk_ids = crate::git::trunk_entity_ids(&root, REV_DIR)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
@@ -475,7 +440,7 @@ pub(crate) fn run_new(
             Ok(vec![
                 entity::Artifact::File {
                     rel_path: PathBuf::from(format!("{name}/revision-{name}.toml")),
-                    body: render_revision_toml(id, &slug, &title, &date, rfcref.as_deref())?,
+                    body: render_revision_toml(id, &slug, &title, &date)?,
                 },
                 entity::Artifact::File {
                     rel_path: PathBuf::from(format!("{name}/revision-{name}.md")),
@@ -1439,7 +1404,7 @@ primary = true
     /// break the rendered document or inject a key (the rec.rs precedent).
     #[test]
     fn render_escapes_a_hostile_title() {
-        let text = render_revision_toml(1, "s", "T\"\ninjected = \"x", "2026-06-14", None).unwrap();
+        let text = render_revision_toml(1, "s", "T\"\ninjected = \"x", "2026-06-14").unwrap();
         // The document still parses (the breaker was escaped, not spliced raw) …
         let back: RevDoc = toml::from_str(&text).unwrap();
         // … and the hostile value round-trips verbatim, no injected key.

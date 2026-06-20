@@ -21,7 +21,7 @@ exit_criteria = [
   { id = "EX-1", text = "write_atomic temp name is `.{name}.{pid}.{counter}.tmp`" },
   { id = "EX-2", text = "Existing VT-1 test stays green (behaviour-preservation gate)" },
   { id = "EX-3", text = "VT-2 concurrent test passes — two threads write_atomic same path, both Ok(()), no stray temps" },
-  { id = "EX-4", text = "write_atomic internal fs::write carries #[expect(clippy::disallowed_methods)] so it survives PHASE-03's guard" },
+  { id = "EX-4", text = "just check zero-warn after the counter change — NO #[allow]/#[expect] added this phase (the clippy guard does not exist until PHASE-03; write_atomic's own fs::write is annotated there). Design §5.4/D3 mandates #[allow], which is dormant-safe; #[expect] is rejected (it would fire unfulfilled_lint_expectations before the guard lands)." },
 ]
 verification = [
   { id = "VT-1", expects = "write_atomic_creates_then_overwrites_leaving_no_temp — unchanged, green" },
@@ -30,40 +30,40 @@ verification = [
 
 [[phase]]
 id        = "PHASE-02"
-name      = "Migrate 18 call sites to write_atomic"
-objective = "Replace every production std::fs::write on authored entity TOML/MD files with crate::fsutil::write_atomic. Mechanical transform: std::fs::write(path, doc.to_string()) → write_atomic(path, doc.to_string().as_bytes()) with matching error context. Two sites (relation.rs, map_server/routes.rs) need error-wrapper adaptation per design §6 VT-6. Existing test suites must stay green (behaviour-preservation gate)."
+name      = "Migrate the authored call sites to write_atomic"
+objective = "Replace every production std::fs::write on authored entity TOML/MD files with crate::fsutil::write_atomic. Design §5.3 set (reconciled to current HEAD by the oracle probe, 2026-06-20): 23 sites across 12 files — dep_seq.rs(4), facet_write.rs:153 (edit_in_place shared core), relation.rs(2), memory.rs(3), concept_map.rs(4), main.rs(3 supersede), requirement.rs:396, spec.rs:799, integrity.rs:483, backlog.rs:1816, revision.rs:888, map_server/routes.rs:412. The count is a guide, NOT the gate — PHASE-03's clippy guard is the oracle (design §5.3/R3). Mechanical transform: std::fs::write(path, doc.to_string()) → write_atomic(path, doc.to_string().as_bytes()) with matching error context. relation.rs and map_server/routes.rs need error-wrapper adaptation (design R1/R2, VT-6). Existing suites stay green (behaviour-preservation gate)."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete — write_atomic counter is live and tested" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "All 18 production std::fs::write calls on authored entity files replaced with write_atomic" },
+  { id = "EX-1", text = "Every production std::fs::write on an authored entity file routes through write_atomic. Oracle-confirmed, not hand-counted: a dry-run of the PHASE-03 guard (clippy.toml rule, just check) reports violations ONLY at the 8 runtime/derived exception sites (design §5.4) — every authored site migrated. The 23-site/12-file §5.3 set is the known starting list; the guard is authoritative if it diverges." },
   { id = "EX-2", text = "relation.rs:784,803 error wrappers adapted (map_err → with_context)" },
   { id = "EX-3", text = "map_server/routes.rs:412 error wrapper unchanged (e.to_string() works for both types)" },
   { id = "EX-4", text = "relation.rs and map_server/routes.rs error display format change documented (VT-6)" },
-  { id = "EX-5", text = "just check zero-warn (residual violations: only the 2 exceptions in PHASE-03)" },
+  { id = "EX-5", text = "facet_write.rs:153 (edit_in_place) migrated — the design §5.3 oracle add; missed by the at-design sweep" },
 ]
 verification = [
   { id = "VT-3", expects = "dep_seq unit tests (append, remove, set_authored_status, append_string_array) — green" },
-  { id = "VT-4", expects = "E2E suites: supersede, relation link/unlink, spec add-requirement, backlog tag, concept-map edge mutate — all green" },
+  { id = "VT-4", expects = "E2E suites green across the authored kinds touched: supersede, relation link/unlink, spec add-requirement, backlog tag, concept-map edge mutate, memory edit, revision row append, and a facet_write/edit_in_place-backed mutation — all green" },
   { id = "VT-6", expects = "Error-wrapper format change documented: relation.rs OS error nests in anyhow chain instead of outer string; map_server/routes.rs changes from io::Error OS message to anyhow::Error context message. Cosmetic, not semantic — no tests assert on error message format" },
 ]
 
 [[phase]]
 id        = "PHASE-03"
 name      = "Install clippy guard"
-objective = "Add std::fs::write to clippy.toml disallowed-methods, gate to non-test via #![cfg_attr] in main.rs, add #[expect] on the two production exceptions (fsutil.rs write_atomic itself, ledger.rs store). Verify just check zero-warn and confirm the guard fires on a deliberate violation."
+objective = "Add std::fs::write to clippy.toml disallowed-methods (design §5.4 rule string), then annotate ALL 8 runtime/derived production exception sites with #[allow(clippy::disallowed_methods, reason=...)] — NOT #[expect] (design D3/§5.4 mandate #[allow]; #[expect] would warn unfulfilled before the rule and is brittle to call-graph drift). The 8 sites (7 files, design §5.4, oracle-confirmed): fsutil.rs:63 (the seam itself), state.rs:409 (runtime phase sheet), ledger.rs:408 (runtime manifest), worktree.rs:1845 (runtime marker), install.rs:586 + skills.rs:637 (derived asset unpack), corpus.rs:403 + corpus.rs:406 (derived corpus sync). Test code is unlinted (gate runs clippy bins/lib only, no --all-targets) so no test-site annotation is needed. Verify just check zero-warn and that the guard fires on a deliberate violation."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-02 complete — zero bare std::fs::write on authored entities remaining in production code" },
+  { id = "EN-1", text = "PHASE-02 complete — zero bare std::fs::write on authored entities remaining in production code (per the guard dry-run, PHASE-02 EX-1)" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "clippy.toml disallowed-methods includes std::fs::write with documented reason" },
-  { id = "EX-2", text = "main.rs has #![cfg_attr(test, allow(clippy::disallowed_methods))] — unit tests exempt" },
-  { id = "EX-3", text = "fsutil.rs write_atomic carries #[expect(clippy::disallowed_methods, reason = \"canonical temp-file write before atomic rename\")]" },
-  { id = "EX-4", text = "ledger.rs:408 store() carries #[expect(clippy::disallowed_methods, reason = \"runtime journal manifest, not an authored entity\")]" },
-  { id = "EX-5", text = "just check zero-warn — no disallowed-methods violations except the two documented #[expect] sites" },
-  { id = "EX-6", text = "Manual verification: introduce a bare std::fs::write in production code, confirm just check fails" },
+  { id = "EX-1", text = "clippy.toml disallowed-methods includes std::fs::write with the design §5.4 reason string" },
+  { id = "EX-2", text = "All 8 runtime/derived exception sites carry #[allow(clippy::disallowed_methods, reason=...)] with a per-site reason: fsutil.rs:63, state.rs:409, ledger.rs:408, worktree.rs:1845, install.rs:586, skills.rs:637, corpus.rs:403, corpus.rs:406" },
+  { id = "EX-3", text = "Annotations use #[allow], NOT #[expect] — #[allow] is dormant-safe and not invalidated if a site stops tripping the lint (design D3/§5.4)" },
+  { id = "EX-4", text = "Test code requires no annotation — confirmed: just check (clippy bins/lib, no --all-targets) does not lint #[cfg(test)] modules" },
+  { id = "EX-5", text = "just check zero-warn — no disallowed-methods violations except the 8 documented #[allow] sites" },
+  { id = "EX-6", text = "Manual verification (VH-1): introduce a bare std::fs::write in production code, confirm just check fails" },
 ]
 verification = [
-  { id = "VT-5", expects = "just check zero-warn — no disallowed-methods violations except documented #[expect] sites" },
+  { id = "VT-5", expects = "just check zero-warn — no disallowed-methods violations except the 8 documented #[allow] sites" },
   { id = "VH-1", expects = "Manual verification: add bare std::fs::write to production code, confirm clippy fails (one-shot, guard proves itself)" },
 ]
