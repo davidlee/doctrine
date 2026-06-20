@@ -88,18 +88,14 @@ Closure intent — judged green when:
 
 ## Open Questions
 
-- **OQ-1** Defect A heal granularity: extend the ownership *key* to `(matcher,
-  command)` so a wrong-matcher entry reads as `Stale` and `set_command` grows a
-  sibling matcher reconcile — or reconcile the matcher as a separate heal pass?
-  (key the merge identity vs. a targeted matcher reconcile.) → `/design`.
-- **OQ-2** Defect B-path: sanitize the ` (deleted)` suffix off the
-  `current_exe()` reading, or resolve a stable path by a different means (argv0 /
-  install-target lookup)? Sanitize is minimal; confirm it cannot mask a genuinely
-  relocated binary. → `/design`.
-- **OQ-3** Defect B-prune scope: prune only `(deleted)`-bearing doctrine stamp
-  duplicates, or any duplicate doctrine-owned entry under the same event? Keep the
-  prune predicate provably-dead-only to avoid clobbering a legitimately divergent
-  operator entry. → `/design`.
+_All resolved in design.md (§ Design decisions); kept here for trace._
+
+- **OQ-1** (Defect A heal granularity) → **D2**: unified normalize, not heal-in-place
+  — `matcher` is entry-level, so a rewrite would clobber a foreign sibling.
+- **OQ-2** (Defect B-path approach) → **D1**: byte-level `strip_deleted` +
+  disk-validated `pick_exec`/`resolve_exec` (bail rather than bake a guessed path).
+- **OQ-3** (Defect B-prune scope) → **D3**: removal is ownership-bounded
+  (poison-tolerant `is_ours`); converge to one canonical doctrine-sole entry.
 
 ## Summary
 

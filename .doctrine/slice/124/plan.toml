@@ -1,0 +1,88 @@
+# Implementation plan for SL-124 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-124"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Exec-path sanitize (Defect B-path)"
+objective = """
+Every persisted exec path is sanitized against the `/proc/self/exe` ` (deleted)` \
+poison through a single validated resolver. Add the pure `strip_deleted` \
+(byte-level, unix-cfg, returns `Option`), the injectable-probe `pick_exec` \
+(raw-exists / stripped-exists / bail), and the `pub(crate) resolve_exec` shell; \
+reroute all seven `current_exe()` bake sites through it (design D1, code-impact \
+table). No merge-core change in this phase."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked; SL-124 is in plan lifecycle." },
+  { id = "EN-2", text = "Baseline `just gate` is green before any edit (preservation reference)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`strip_deleted(&Path) -> Option<PathBuf>` exists: byte-level (OsStrExt), `#[cfg(unix)]` strips a trailing b\" (deleted)\", non-unix returns None." },
+  { id = "EX-2", text = "`pick_exec(raw, exists_probe)` returns raw when it exists, else the stripped path when IT exists, else `bail!`; `resolve_exec()` is the `pub(crate)` shell over `current_exe()` + `Path::exists`." },
+  { id = "EX-3", text = "All seven sites call `resolve_exec`: boot.rs (~316, ~333, ~1479), corpus.rs (~482), skills.rs (~1069), install.rs (~140); status.rs (~337) routes through it but keeps its lenient `unwrap_or_else` fallback (no abort on a staleness read)." },
+  { id = "EX-4", text = "`cargo clippy` zero warnings; `just gate` green; existing suite unmodified." },
+]
+verification = [
+  { id = "VT-1", expects = "strip_deleted: `/x/doctrine (deleted)` -> Some(`/x/doctrine`); clean path -> None; no-suffix -> None; `(deleted)` mid-string (not trailing) -> None." },
+  { id = "VT-2", expects = "pick_exec branches via a fake probe: raw-exists -> raw; raw-absent + stripped-exists -> stripped; neither -> Err (bail)." },
+  { id = "VA-1", expects = "Agent confirms no raw `std::env::current_exe()` remains outside `resolve_exec` (grep across src/), and status.rs retains its lenient fallback." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Merge normalize: matcher heal + dead/dup prune (Defects A + B-prune)"
+objective = """
+Install converges `hooks.<event>` to exactly one canonical, doctrine-sole entry \
+per spec. Make ownership poison-tolerant via a shared `is_doctrine_program`; \
+replace `find_owned`/`enum Owned`/`set_command` with the normalize in `plan_hook` \
+(collect owned positions; no-write iff a single canonical sole entry exists; else \
+drop every owned hook and insert one fresh canonical entry at the first owned \
+hook's execution slot — `first + 1` iff that entry survives the drop). Broaden \
+the `RefreshOutcome::Refreshed` doc; keep variants and labels. The existing \
+boot/sync/stamp suites are the behaviour-preservation proof — they stay green \
+UNMODIFIED (design D2/D3/D4, order-preservation bound)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `resolve_exec` lands clean exec paths (so normalize heals toward a clean canonical command)." },
+  { id = "EN-2", text = "Baseline suite green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`is_doctrine_program(program)` strips a trailing ` (deleted)` then checks file-name == doctrine; the boot/sync/stamp predicates defer to it (poison-tolerant ownership)." },
+  { id = "EX-2", text = "`find_owned`, `enum Owned`, `set_command` removed; `plan_hook` rewritten as normalize using `owned_positions`, `entry_is_canonical`, `hook_is_sole` (no-write short-circuit), `entry_has_foreign_hook` (survival), `drop_owned_hooks` (filter/rebuild, preserves entry-level keys, drops only emptied entries)." },
+  { id = "EX-3", text = "Outcome mapping: empty -> Wired; single canonical sole -> None; else -> Refreshed. `RefreshOutcome::Refreshed` doc broadened to 'owned hook existed and was normalized'; variants and `wired`/`refreshed`/`already current` labels unchanged." },
+  { id = "EX-4", text = "Existing boot/sync/stamp hook tests pass with NO edits to their bodies (behaviour-preservation gate)." },
+  { id = "EX-5", text = "`cargo clippy` zero warnings; `just gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "Defect A: clean stamp command under a wrong matcher -> Refreshed, surviving entry matcher == DISPATCH_WORKER_AGENT_TYPE, command preserved; re-run -> None." },
+  { id = "VT-2", expects = "Convergence: three owned stamp entries (two `(deleted)`-poisoned, one clean) under assorted matchers -> one canonical entry, rest gone; re-run -> None." },
+  { id = "VT-3", expects = "Single poisoned stamp entry -> normalized to one clean canonical entry (Refreshed); re-run -> None." },
+  { id = "VT-4", expects = "Two owned stamp hooks in one entry, followed by a separate foreign entry -> all-owned entry removed, fresh entry at `first` (not first+1), foreign entry keeps position." },
+  { id = "VT-5", expects = "Non-clobber: owned hook sharing an entry with a foreign sibling -> owned hook extracted, foreign hook + its entry-level matcher + unknown keys survive unchanged; doctrine entry inserted after the remnant." },
+  { id = "VT-6", expects = "Order: foreign hook listed before the doctrine hook in a shared entry still executes before the doctrine entry (ordered `commands()` assertion)." },
+  { id = "VT-7", expects = "Shared-core proof: the foreign-sibling shared-entry case holds for boot and sync specs too, not stamp only (no event-specific behaviour)." },
+  { id = "VT-8", expects = "Idempotency: every shape above converges to None on reinstall (<= 2 installs)." },
+  { id = "VA-1", expects = "Agent confirms the existing hook-merge tests are unmodified (git diff shows no changes to their bodies), proving the preservation gate." },
+]
+specs             = []
+requirements      = []
