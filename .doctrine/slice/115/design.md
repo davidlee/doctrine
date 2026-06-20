@@ -27,20 +27,31 @@ the slice closes.
   module behind `pub(crate) fn dispatch(command, color)`; the call site collapses
   to one line per kind. Moving the enum alone would leave `main.rs` growing per
   kind (the arm).
-- **D1a — sideways-call carve-out (the body-relocation corollary).** An arm body
+- **D1a — sideways-call corollary (route to where the impl lives).** An arm body
   moved from `main` into a kind module *mints a production edge from that kind to
   every command-tier module the body calls* — edges that were inert `main→X`
-  before. If the kind does **not already import** that module, this is a NEW
-  command-tier edge that can grow the tangle baseline (the sink proof does **not**
-  cover it — §5). **Rule:** an arm whose body calls *sideways* into a command-tier
-  module the owning kind does not already import keeps its dispatch in a
-  `commands/` **sink shell** (sink-safe by §5), not the kind module. Verified
-  instance: `MemoryCommand::Sync` calls `corpus::run_sync` /
-  `run_sync_install` (`main.rs:3688,3690`); `corpus` already imports `memory`
-  (`corpus.rs:38`), so folding Sync into `memory.rs` mints `memory→corpus` and
-  closes a `corpus↔memory` 2-cycle → tangle 120→≥121. **Fix:** `MemoryCommand::Sync`
-  dispatch stays in `commands/` (e.g. `commands/cli.rs`), not `memory.rs`. (Top-level
-  verbs `Install`/`Status`/`Reseat` are unaffected — they already home in
+  before. If the destination kind does **not already import** that module, this is
+  a NEW command-tier edge that can grow the tangle baseline (the sink proof does
+  **not** cover it — §5). **Rule:** route a kind's dispatch to the module whose
+  `run_*` the body actually calls, **not the nominal kind name**. Concretely: (i)
+  if the body calls only the kind's own module → clean own-module fold; (ii) if it
+  calls *sideways* into a command-tier module the nominal kind doesn't import,
+  either fold into **that** module when it is the implementation's real home and
+  the edge already exists/is a self-edge, or keep the dispatch in a `commands/`
+  **sink shell** (sink-safe by §5). Never fold into a nominal kind that mints a new
+  cross-command cycle. **Two known instances** (the plan audit confirms no others):
+  - **`MemoryCommand::Sync`** calls `corpus::run_sync`/`run_sync_install`
+    (`main.rs:3688,3690`); `corpus` already imports `memory` (`corpus.rs:38`), so
+    folding Sync into `memory.rs` mints `memory→corpus` → `corpus↔memory` 2-cycle →
+    tangle 120→≥121. **Fix:** Sync's dispatch stays in `commands/` (the residual
+    match → `commands/cli.rs`), not `memory.rs` — a `commands→corpus` sink out-edge.
+  - **`SpecReqCommand`** calls `spec::run_req_*` (`main.rs:4139,4145,4150`), which
+    live in `spec.rs`; `requirement.rs` has no CLI and doesn't import `spec`, while
+    `spec` imports `requirement`. **Fix:** `SpecReq` folds into **`spec.rs`**
+    (own-module, zero edge), not `requirement.rs` (which would mint
+    `requirement→spec` → `spec↔requirement` cycle). See §4.
+
+  (Top-level verbs `Install`/`Status`/`Reseat` are unaffected — they home in
   `commands/cli.rs`, so their `install`/`status`/`integrity` calls are harmless
   `commands→X` sink out-edges; `MemoryCommand::Find`/`Retrieve` are fine because
   `memory→retrieve` already exists.)
@@ -144,11 +155,18 @@ per-variant `if json { Json } else { format }` normalization moves into the kind
 dispatch.
 
 - **Clean kind homes** (already command-tier): `Adr`→adr, `Policy`→policy,
-  `Standard`→standard, `Rfc`→rfc, `Spec`→spec, `SpecReq`→requirement,
+  `Standard`→standard, `Rfc`→rfc, `Spec`→spec, **`SpecReq`→`spec`** (see note),
   `Backlog`→backlog, `Knowledge`→knowledge, `Memory`→memory, `Slice`→slice,
   `ConceptMap`→concept_map, `Review`→review, `Rec`→rec, `Revision`→revision,
   `Skills`→skills, `Worktree`→worktree, `Dispatch`→dispatch, `Boot`→boot,
   `Catalog`→catalog/.
+  - **`SpecReq`→`spec`, NOT `requirement`** (codex round 3): `requirement.rs` has
+    no standalone CLI (`requirement.rs:19`, "spec-mediated"); the `run_req_*`
+    shells already live in `spec.rs` (`spec.rs:853,913,1578`), so `SpecReq` folds
+    into `spec.rs` as an **own-module** move (zero new edge). Routing it to
+    `requirement` (which does not import `spec`) would mint `requirement→spec` and
+    close a `spec↔requirement` cycle (D1a). General rule: route a dispatch to the
+    module its `run_*` body actually calls, not the nominal kind name.
 - **Nested enums ride their parent:** `CandidateCommand`⊂Dispatch,
   `SyncCommand`⊂Memory, `ExportCommand`⊂ConceptMap, `RevisionChangeCommand`⊂Revision.
 - **`commands/` shells** (data below command tier): `Coverage`→
@@ -323,6 +341,25 @@ verified against source before folding:
   V7 extended with `Cli::try_parse_from` parse-regression tests over those
   contracts.
 
+### Codex round 3 (confirmation of the round-2 fold) — one blocker, folded
+
+Same thread. Re-ran GPT-5.5 read-only on the folded design to verify the D1a fix.
+It **confirmed** the carve-out is sink-safe (point 1 — nothing on the `corpus`
+side transitively imports `commands`), that the memory→corpus direction argument
+is stated correctly, that no engine-tier carve-out is needed (body relocation
+mints `command→X` edges, never `engine→engine`), and that the phase ordering is
+forced and correct (point 4). It **refuted** my "only known instance" claim:
+
+- **B6 (blocker) — `SpecReq → requirement` is a second cycle-former.**
+  `SpecReqCommand` arms call `spec::run_req_add/status/list`
+  (`main.rs:4139,4145,4150`), implemented in `spec.rs:853,913,1578`.
+  `requirement.rs` has no standalone CLI (`requirement.rs:19`) and does not import
+  `spec`; `spec` already imports `requirement` (`spec.rs:41`). So §4's
+  `SpecReq→requirement` would mint `requirement→spec` → new `spec↔requirement`
+  cycle. **Verified** all five facts against source. **Fixed:** route `SpecReq`
+  into `spec.rs` (own-module, zero edge) — §4 + D1a updated; the audit rule
+  generalised to "route to where the `run_*` lives, not the nominal kind name."
+
 ### R1 — SL-129 coordination (cross-slice conflict, decision needed)
 
 **SL-129** (`entity::id_path` corpus-wide; in design) and **SL-115** both heavily
@@ -348,9 +385,11 @@ SL-129` edge is written; SL-129 lands first.
 
 ## Decisions log
 
-- D1 dispatch arm moves with the enum · **D1a** sideways command-tier callers keep
-  dispatch in a `commands/` sink shell (proven: `MemoryCommand::Sync`→`corpus`) ·
-  D2 `write_class` centralized in `commands/guard.rs` · D3 same-stem shells allowed.
+- D1 dispatch arm moves with the enum · **D1a** route dispatch to where the `run_*`
+  lives, not the nominal kind — sideways cycle-formers go to a `commands/` sink
+  shell or their real home (proven: `MemoryCommand::Sync`→`corpus` → shell;
+  `SpecReq`→`spec` not `requirement`) · D2 `write_class` centralized in
+  `commands/guard.rs` · D3 same-stem shells allowed.
 - F-A resolver path-core owned by SL-129/IMP-067 (no in-slice dedup) · **F-B
   (revised)** leaf-only shared args stay in `main` (inert), `FindRetrieveArgs`→
   `memory.rs`, **no `commands/list.rs`** · **F-C (revised)** `Command`+dispatch→
@@ -368,9 +407,11 @@ None blocking. `/plan` settles phase granularity (suggested: phase-1 the V7
 `FindRetrieveArgs`→`memory.rs` → then orphan shells → then kind-enum batches by
 domain).
 
-**Mandatory plan task (from codex round 2 / D1a):** before relocating any
+**Mandatory plan task (from codex rounds 2–3 / D1a):** before relocating any
 clean-kind arm, audit each arm body for calls into a command-tier module the owning
-kind does **not** already import; route every such arm's dispatch to a `commands/`
-sink shell instead of the kind module. `MemoryCommand::Sync`→`corpus` is the one
-known instance; the audit confirms there are no others, but the gate (V3) is run per
-batch and any tangle growth halts the batch (D1a), never auto-accepts.
+*nominal* kind does **not** already import; route the dispatch to the module its
+`run_*` actually calls (own-module fold) or a `commands/` sink shell — never to a
+nominal kind that mints a cross-command cycle. **Two known instances:**
+`MemoryCommand::Sync`→`corpus` (→ `commands/` shell) and `SpecReqCommand`→`spec`
+(fold into `spec.rs`, NOT `requirement.rs`). The gate (V3) is run per batch and any
+tangle growth halts the batch (D1a), never auto-accepts.
