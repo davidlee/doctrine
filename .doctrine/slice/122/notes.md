@@ -86,6 +86,28 @@ orchestrator = sole writer, workers = source-delta only.
   one. Both classes clear in the markerless coord tree at funnel verify. Expected;
   no action.
 
+## PHASE-04 — doctrine status RFC surface (done)
+
+- Code: funnel commit `2ff08f19`; boundary record `b472654c`. Base B = `65acca6a`
+  (PHASE-03 boundary). Worker delta = `79ed2527` on `worker/SL-122/PHASE-04`.
+  Single file `src/status.rs` (+247/-1). No pre-ship; clean remainder.
+- Delivered: `RfcSummary`/`RfcTitle` pure types on `WorkSection.rfcs`;
+  `assemble_status` takes `rfcs` param; `render_human` emits `rfcs: N open, M total`
+  + open-title list (cap 10, `+K more`); `is_empty()` UNCHANGED (slices+backlog
+  only — RFCs don't flip empty-state); `StatusEnvelope` flatten carries
+  `work.rfcs.{open,total,open_titles}`; impure `run()` gathers via
+  `meta::read_metas(.doctrine/rfc, "rfc")`, open-filter, id-desc sort (recency
+  proxy), cap 10. No boot/governance change.
+- **Verify (funnel):** green in coord tree — 2550 passed, 0 failed (the existing
+  boot suite stayed green → VT-3 boot-byte-unchanged proven). Worker's 3
+  `adr_status_*` fork failures were marker-confinement; clear here.
+- **Finding for audit:** worker added dedicated tests for VT-1/VT-2/VT-4 (6 new)
+  but NO dedicated VT-3 boot-byte-unchanged test — it leans on the pre-existing
+  boot suite staying green as the proof. Adequate (behaviour-preservation gate),
+  but if audit wants an explicit VT-3 assertion it must be added. Also: "most
+  recent first" is implemented as RFC-id-descending (recency proxy, no mtime read
+  in the pure layer) — confirm that satisfies EX-2's intent.
+
 ## Pre-existing fix folded into the dispatch base
 
 - `9c6d649d fix(IMP-122)` (committed on `main`, = dispatch base B2): IMP-122
