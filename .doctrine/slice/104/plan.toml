@@ -33,10 +33,10 @@ exposure files. Tier 2: a compile-time exhaustive-destructure guard on `Gate` \
 (the closure-gate input type carries no facet field). No `syn`, no SL-112 \
 coupling (design.md §4, D4)."""
 entrance_criteria = [
-  { id = "EN-1", text = "design.md §4 locked: the facet symbol set, the 8-file allowlist, and the current `Gate` field set are enumerated and current on `main`." },
+  { id = "EN-1", text = "design.md §4 locked: the facet symbol set, the 9-file allowlist (RECONCILE RV-114 F-1: includes `main.rs`, the CLI write-handler exposure site; was 8 in the locked design, amended at reconcile), and the current `Gate` field set are enumerated and current on `main`." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "Tier 1: `tests/e2e_estimate_non_blocking.rs` scans `src/**/*.rs` for the facet symbol set (EstimateFacet, ValueFacet, EstimationConfig, ValueConfig, resolve_confidence, crate::estimate, crate::value, estimate::, value::) and asserts every matching file is in the allowlist {estimate.rs, value.rs, estimate/display.rs, dtoml.rs, catalog/{scan,graph,hydrate}.rs, slice.rs}; green on `main`." },
+  { id = "EX-1", text = "Tier 1: `tests/e2e_estimate_non_blocking.rs` scans `src/**/*.rs` for the facet symbol set (EstimateFacet, ValueFacet, EstimationConfig, ValueConfig, resolve_confidence, crate::estimate, crate::value, estimate::, value::) and asserts every matching file is in the allowlist {estimate.rs, value.rs, estimate/display.rs, dtoml.rs, catalog/{scan,graph,hydrate}.rs, slice.rs, main.rs}; green on `main`. (RECONCILE RV-114 F-1: `main.rs` added — CLI write-handler exposure site under-enumerated in the locked design.)" },
   { id = "EX-2", text = "Tier 2: a `slice.rs` unit test exhaustively destructures `Gate` with no `..`; green, and provably breaks compilation if `Gate` gains an estimate/value field." },
   { id = "EX-3", text = "`resolve_confidence` is in the scanned set → the test also proves no non-allowlist consumer exists (confidence display-only guarantee, D1)." },
   { id = "EX-4", text = "Source root located via the compile-time manifest dir, scan kept tree-relative; CHR-014 stale-path hazard noted inline." },

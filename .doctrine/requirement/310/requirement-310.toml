@@ -1,0 +1,18 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 310
+slug = "confidence-band-for-estimate-bounds"
+title = "Confidence band for estimate bounds"
+status = "active"
+kind = "functional"
+
+description = "An estimate's lower/upper are framed as a project-wide confidence band (lower at P-low, upper at P-high) resolved from doctrine.toml [estimation].lower_confidence/upper_confidence (defaults 0.1/0.9; finite, in [0,1], low<high); display-framing only — no gating/aggregation/normalization in v1; estimate-only, no entity-local field."
+tags = ["confidence", "percentile", "display-framing", "estimate"]
+acceptance_criteria = [
+  "An estimate's lower/upper bounds carry a project-wide percentile reading (lower at P-low, upper at P-high) resolved from config.",
+  "The band resolves from doctrine.toml [estimation].lower_confidence/upper_confidence, defaulting 0.1/0.9, and is configurable.",
+  "Each bound is rejected unless finite, in [0,1], with lower < upper.",
+  "Display-framing only — no predicate, aggregation, normalization, or validation depends on the band in v1.",
+  "Confidence is estimate-only: no entity-local confidence field, and the value facet carries no band.",
+]

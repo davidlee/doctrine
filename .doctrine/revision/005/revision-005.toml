@@ -1,0 +1,37 @@
+id      = 5
+slug    = "reconcile-sl-104"
+title   = "reconcile SL-104"
+status = "done"
+approval = "approved"
+updated = "2026-06-20"
+
+# A Revision (REV, ADR-013) is a first-class change-axis entity: a pending
+# revise-intent against authored governance/spec truth plus a staged delta payload.
+# Lifecycle (proposed→started→done; abandoned from any non-terminal) is moved by
+# `revision status REV-N <state>`. `approval` is orthogonal — lifecycle transitions
+# are approval-blind; the apply checkpoint (PHASE-05) consults it. The prose
+# rationale + before/after excerpts live in the sister `revision-NNN.md`.
+
+# change rows — the typed `revises` payload (the touched-entity set; the rows ARE
+# the edges, members.toml precedent). Authored by `revision change add` (PHASE-03),
+# NOT by hand and NEVER by `doctrine link`. A fresh `revision new` writes none:
+#   [[change]]
+#   target  = "ADR-006"   # durable peer id (the FK / anchor)
+#   action  = "modify"    # modify | retire | move | status | introduce | create
+#   primary = true        # display/headline hint; at most one, optional
+
+[relationships]
+needs = []
+after = []
+
+[[change]]
+action = "introduce"
+primary = true
+new_label = "FR-011"
+member_of = "SPEC-020"
+new_statement = "Frame estimate bounds with a project-wide confidence band: an estimate's lower/upper are interpreted as a project-wide confidence band — lower at percentile P-low, upper at P-high — resolved from doctrine.toml [estimation].lower_confidence/upper_confidence (defaults 0.1/0.9; each finite, in [0,1], low < high). Display-framing only: no gating, aggregation, or normalization effect in v1, and no entity-local confidence field."
+
+[[change]]
+target = "SPEC-020"
+action = "modify"
+primary = false

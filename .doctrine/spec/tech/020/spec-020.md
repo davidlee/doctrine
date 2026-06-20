@@ -64,6 +64,18 @@ The estimation unit is read from project config `doctrine.toml [estimation].unit
 unconfigured. The unit is project-wide; the facet schema carries no entity-local
 unit field in v1.
 
+### Confidence band resolution
+
+An estimate's `lower`/`upper` bounds carry a project-wide **percentile reading**:
+`lower` sits at P-low, `upper` at P-high. The band resolves from
+`doctrine.toml [estimation].lower_confidence`/`upper_confidence`, defaulting
+`0.1`/`0.9`, each bound finite, in `[0,1]`, with `low < high`. The band **frames**
+the bounds for authoring and display only — it drives **no** predicate,
+aggregation, normalization, or validation in v1 (**REQ-310 / FR-011**). Confidence
+is estimate-only: the value facet is a single magnitude with no band, and `[value]`
+config carries no confidence fields. Wiring the band into the `show` display path is
+deferred to IMP-112.
+
 ### Round-trip durability
 
 A valid estimate survives parse → hydrate → catalog projection unchanged: the

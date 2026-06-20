@@ -110,10 +110,22 @@ set; assert every matching file is in the **allowlist** — the known exposure s
 ```
 allowlist: estimate.rs · value.rs · estimate/display.rs · dtoml.rs
            catalog/scan.rs · catalog/graph.rs · catalog/hydrate.rs · slice.rs
+           main.rs
 symbols (precise — not bare words, which collide with toml::Value):
    EstimateFacet · ValueFacet · EstimationConfig · ValueConfig · resolve_confidence
    crate::estimate · crate::value · estimate:: · value::
 ```
+
+<!-- RECONCILE (RV-114 F-1, 2026-06-20): allowlist is **9 files**, not the 8 this
+     section originally enumerated. `src/main.rs` is a legitimate facet exposure
+     site via the estimate/value CLI write handlers (`main.rs:4501` `EstimateFacet`,
+     `:4541` `ValueFacet`, `:6358` `crate::estimate`, `:6369` `crate::value`) — a
+     real exposure surface the locked design under-enumerated, NOT a gating-path
+     read. Dropping it reddens the Tier-1 tripwire on `main`. Accepted by user. -->
+
+`main.rs` is an exposure site, not a gating read: it carries the estimate/value
+CLI **write** handlers (authoring entry points), which is why it names the facet
+symbols. The closure/dispatch/audit gating paths remain facet-free (Tier 2).
 
 Any *new* file naming a facet fails the test → forces a conscious decision: legitimate
 exposure site, or a gating read that must not exist? `resolve_confidence` in the set

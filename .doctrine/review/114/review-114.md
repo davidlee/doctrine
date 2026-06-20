@@ -121,3 +121,45 @@ Built from every non-aligned finding (F-1, F-3). Grouped by write surface.
   (and the `mod display` framing) to cite the concrete `REQ-NNN` in place of the
   "confidence requirement landing at SL-104 reconcile" placeholder. Tripwires stay
   armed.
+
+## Reconciliation Outcome
+
+Reconcile pass complete (2026-06-20). Both brief surfaces written; one code touch
+deferred to `/close` by integration ordering.
+
+### Direct edits applied (per-slice)
+- **design.md §4** (RV-114 F-1): allowlist amended 8 → **9 files** — added
+  `src/main.rs` to the block, with a reconcile comment + prose explaining it is the
+  CLI write-handler exposure site, not a gating read.
+- **plan.toml EN-1 + EX-1** (RV-114 F-1): "8-file allowlist" → "9-file"; `main.rs`
+  added to the EX-1 allowlist set; both annotated with the reconcile rationale.
+
+### REVs completed
+- **REV-005** (`reconcile-sl-104`): **done** · approved. Covers RV-114 **F-3**.
+  - `introduce` → minted **REQ-310 / FR-011** (functional, user decision resolving
+    OQ-1), member of SPEC-020, status `active`. Homes the confidence percentile band
+    (display-framing only, no gating v1; estimate-only). Statement + acceptance in
+    `requirement-310.{toml,md}`.
+  - `modify` SPEC-020 (surfaced-for-manual, landed by hand): new responsibility
+    bullet in `spec-020.toml`; new `### Confidence band resolution` subsection in
+    `spec-020.md` under "Project-wide unit resolution". `spec validate SPEC-020`
+    clean. Rationale + before/after in `revision-005.md`.
+
+### Deferred to /close (recorded so it cannot be lost)
+- **estimate.rs citation follow-through (RV-114 F-3, code touch).** The 3
+  `expect(dead_code, reason=…)` strings (`DEFAULT_LOWER_CONFIDENCE`,
+  `DEFAULT_UPPER_CONFIDENCE`, `resolve_confidence`) + the `mod display` framing on
+  the dispatch bundle `review/104` (`35d16875`, immutable audited evidence ref —
+  **not** on `main`) currently read "the confidence requirement landing at SL-104
+  reconcile". **At `/close`**, after `dispatch sync --slice 104 --integrate` brings
+  the bundle to `main`, rewrite them to cite **REQ-310 (FR-011)**. The placeholder
+  remains factually true until then; tripwires stay armed (self-clear when IMP-112
+  consumes the renderers). Deferred only because the code is unintegrated — mutating
+  the audited bundle or editing stale `main` code would both be wrong.
+
+### Aligned / no-write findings
+- **F-2** (residual gap), **F-4** (NF-002/003 Non-Goal honored), **F-5** (collision
+  exclusion) — `aligned`, no remediation; rationale in finding dispositions and the
+  `## Synthesis`.
+
+Reconcile pass complete — handoff to `/close`.
