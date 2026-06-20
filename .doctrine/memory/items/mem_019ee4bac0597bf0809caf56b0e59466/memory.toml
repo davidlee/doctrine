@@ -1,0 +1,50 @@
+memory_uid = "mem_019ee4bac0597bf0809caf56b0e59466"
+memory_key = "mem.pattern.dispatch.split-lineage-close-conflict-direct-land"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Split-lineage dispatch close: conflicted close_target, direct-land escape"
+summary = "Dispatch close: bundle base predating a direct-to-main phase landing conflicts the close_target; manually resolve then direct-land"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "close", "candidate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "b8c303fa6df694683cee14826b1d0e42b364d537"
+tree = "91e6cbb6d0cba61a7a590d5b59031e0f9bec1fa8"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "b8c303fa6df694683cee14826b1d0e42b364d537"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-104"
+
+[[source]]
+kind = "review"
+ref = "RV-114"
+
