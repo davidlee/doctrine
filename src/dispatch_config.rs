@@ -21,8 +21,13 @@ pub(crate) enum SubprocessHarness {
     Pi,
 }
 
+const DEFAULT_DELIVER_TO: &str = "refs/heads/main";
+fn default_deliver_to() -> String {
+    DEFAULT_DELIVER_TO.to_string()
+}
+
 /// The `[dispatch]` table from `doctrine.toml`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub(crate) struct DispatchConfig {
     /// Preferred subprocess harness for dispatch workers. Defaults to `codex`
@@ -35,6 +40,23 @@ pub(crate) struct DispatchConfig {
     /// Inert on non-Claude orchestrators.
     #[serde(default)]
     pub(crate) claude_force_subprocess_dispatch: bool,
+    /// The trunk delivery ref dispatch advances to / the close-integration
+    /// gate checks against (IMP-124). The same value becomes the PR *base*
+    /// under a future delivery-mode key. NOT the fork-base resolver
+    /// (ADR-006 D3 `DOCTRINE_TRUNK_REF` / ladder), which resolves a
+    /// commit-ish to fork *from*.
+    #[serde(default = "default_deliver_to")]
+    pub(crate) deliver_to: String,
+}
+
+impl Default for DispatchConfig {
+    fn default() -> Self {
+        Self {
+            preferred_subprocess_harness: SubprocessHarness::default(),
+            claude_force_subprocess_dispatch: false,
+            deliver_to: default_deliver_to(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -107,5 +129,24 @@ mod tests {
         .unwrap();
         assert_eq!(doc.preferred_subprocess_harness, SubprocessHarness::Pi);
         assert!(doc.claude_force_subprocess_dispatch);
+    }
+
+    #[test]
+    fn deliver_to_defaults_to_main() {
+        assert_eq!(DispatchConfig::default().deliver_to, "refs/heads/main");
+        let doc: DispatchConfig = toml::from_str("").unwrap();
+        assert_eq!(doc.deliver_to, "refs/heads/main");
+    }
+
+    #[test]
+    fn parse_deliver_to_override() {
+        let doc: DispatchConfig = toml::from_str("deliver-to = \"refs/heads/release\"\n").unwrap();
+        assert_eq!(doc.deliver_to, "refs/heads/release");
+    }
+
+    #[test]
+    fn deliver_to_default_matches_serde_absent() {
+        let absent: DispatchConfig = toml::from_str("").unwrap();
+        assert_eq!(DispatchConfig::default().deliver_to, absent.deliver_to);
     }
 }

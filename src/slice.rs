@@ -410,9 +410,10 @@ pub(crate) fn run_status(
     // that never integrated to trunk fails-closed here, in the binary, not in
     // skill prose. The new in-crate edge is `slice → ledger` (command→leaf,
     // downward — no cycle, ADR-001); `ledger` stays ref-agnostic, so the
-    // `TRUNK_REF` literal and the refusal copy live HERE in the shell.
+    // `"refs/heads/main"` literal and the refusal copy live HERE in the shell.
     if from == "reconcile" && to == "done" {
-        match crate::ledger::trunk_integration(&root, id, TRUNK_REF)? {
+        let deliver_to = crate::dtoml::load_doctrine_toml(&root)?.dispatch.deliver_to;
+        match crate::ledger::trunk_integration(&root, id, &deliver_to)? {
             crate::ledger::TrunkIntegration::NotDispatched
             | crate::ledger::TrunkIntegration::Integrated => {}
             crate::ledger::TrunkIntegration::Blocked(reason) => anyhow::bail!(
@@ -435,32 +436,16 @@ pub(crate) fn run_status(
     Ok(())
 }
 
-/// The project conduct filename — root-level user config (the structured sibling
-/// of `governance.md`), NOT a `.doctrine/` entity (design §5.3, F6).
-const DOCTRINE_TOML: &str = "doctrine.toml";
 
-/// The trunk delivery ref the close-integration gate (`run_status`, PHASE-02)
-/// checks dispatched code against. Mirrors close step-3a's `--trunk
-/// refs/heads/main` and the sync verb's trunk selector. Owned HERE in the shell
-/// (the config-reading seam) so `ledger` stays ref-agnostic; IMP-124 generalises
-/// it to a configured `[dispatch] deliver_to`.
-const TRUNK_REF: &str = "refs/heads/main";
+
+
 
 /// Read the project `doctrine.toml [conduct]` table into a [`conduct::ConductConfig`]
 /// — the impure shell seam that keeps `conduct` pure (ADR-001). An absent file
 /// falls back to the default config (= baked defaults on resolve); a present file
 /// is parsed tolerantly (F9), erroring only on genuinely malformed TOML.
 fn load_conduct(root: &Path) -> anyhow::Result<crate::conduct::ConductConfig> {
-    let path = root.join(DOCTRINE_TOML);
-    match fs::read_to_string(&path) {
-        Ok(text) => crate::dtoml::parse(&text)
-            .map(|doc| doc.conduct)
-            .with_context(|| format!("Failed to parse {}", path.display())),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            Ok(crate::conduct::ConductConfig::default())
-        }
-        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
-    }
+    Ok(crate::dtoml::load_doctrine_toml(root)?.conduct)
 }
 
 /// The `slice status` output line (pure — composed from already-resolved data):
@@ -2437,7 +2422,7 @@ mod tests {
         // into resolve (T5: an override is reflected in the posture).
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join(DOCTRINE_TOML),
+            dir.path().join(crate::dtoml::DOCTRINE_TOML),
             "[conduct]\ndefault-actor = \"agent\"\n[conduct.ready]\nautonomy = \"gate\"\n",
         )
         .unwrap();
@@ -2451,7 +2436,7 @@ mod tests {
         // A genuinely malformed file surfaces an error (not silent) — but the
         // FSM gates are untouched (this is the conduct read, advisory only).
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join(DOCTRINE_TOML), "[conduct\nbroken =").unwrap();
+        fs::write(dir.path().join(crate::dtoml::DOCTRINE_TOML), "[conduct\nbroken =").unwrap();
         assert!(load_conduct(dir.path()).is_err());
     }
 
@@ -3606,7 +3591,7 @@ mod tests {
         std::fs::write(root.join("src.rs"), "fn a() {}\nfn b() {}\nfn c() {}\n").unwrap();
         git(root, &["add", "src.rs"]);
         git(root, &["commit", "-q", "-m", "advance trunk"]);
-        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &landed));
+        commit_dispatch_journal(root, 1, &dispatch_row_toml("refs/heads/main", &landed));
         slice_at_reconcile(root);
         expect_close_succeeds(root);
     }
@@ -3624,7 +3609,7 @@ mod tests {
         git(root, &["commit", "-q", "-m", "divergent"]);
         let orphaned = git(root, &["rev-parse", "HEAD"]);
         git(root, &["checkout", "-f", "main"]);
-        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        commit_dispatch_journal(root, 1, &dispatch_row_toml("refs/heads/main", &orphaned));
         slice_at_reconcile(root);
 
         let err = expect_close_refused(root);
@@ -3676,7 +3661,7 @@ mod tests {
         git(root, &["commit", "-q", "-m", "divergent"]);
         let orphaned = git(root, &["rev-parse", "HEAD"]);
         git(root, &["checkout", "-f", "main"]);
-        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        commit_dispatch_journal(root, 1, &dispatch_row_toml("refs/heads/main", &orphaned));
         // Slice at `audit` — the legal source for `→ reconcile`.
         make_slice(root, "s", "S", "2026-06-12");
         set_status_raw(root, 1, "audit");
@@ -3699,7 +3684,7 @@ mod tests {
         git(root, &["commit", "-q", "-m", "divergent"]);
         let orphaned = git(root, &["rev-parse", "HEAD"]);
         git(root, &["checkout", "-f", "main"]);
-        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        commit_dispatch_journal(root, 1, &dispatch_row_toml("refs/heads/main", &orphaned));
         slice_at_reconcile(root);
         raise_blocker_rv(root, 1);
 
@@ -3724,7 +3709,7 @@ mod tests {
         git(root, &["commit", "-q", "-m", "divergent"]);
         let orphaned = git(root, &["rev-parse", "HEAD"]);
         git(root, &["checkout", "-f", "main"]);
-        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        commit_dispatch_journal(root, 1, &dispatch_row_toml("refs/heads/main", &orphaned));
         slice_at_reconcile(root);
 
         let err = expect_close_refused(root);

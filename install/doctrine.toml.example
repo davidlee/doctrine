@@ -49,3 +49,6 @@
 # # "pi"   — pi RPC mode (SL-108)
 # # "codex" — codex exec (default)
 # preferred-subprocess-harness = "pi"
+# # The trunk delivery ref dispatch advances to / the close-integration
+# # gate checks against. Defaults to refs/heads/main.
+# deliver-to = "refs/heads/main"

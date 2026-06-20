@@ -135,9 +135,15 @@ pub(crate) fn run_prepare_review(path: Option<PathBuf>, slice: u32) -> anyhow::R
 pub(crate) fn run_show_journal_trunk_oid(
     path: Option<PathBuf>,
     slice: u32,
-    trunk: &str,
+    trunk: Option<&str>,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
+    // SL-128 D3: absent `--trunk` defaults from `[dispatch] deliver_to`
+    // (explicit `--trunk` already won at the call site).
+    let trunk: String = match trunk {
+        Some(t) => t.to_string(),
+        None => crate::dtoml::load_doctrine_toml(&root)?.dispatch.deliver_to,
+    };
     let slice3 = format!("{slice:03}");
     // Absent ref/journal folds to an empty journal — same "no journal row"
     // refusal as before, now via the shared leaf tree-reader (DRY, EX-3).
@@ -151,6 +157,17 @@ pub(crate) fn run_show_journal_trunk_oid(
             format!("show-journal-trunk-oid: no journal row for {trunk} on dispatch/{slice3}")
         })?;
     writeln!(io::stdout(), "{oid}")?;
+    Ok(())
+}
+
+/// Print the resolved `[dispatch] deliver_to` trunk delivery ref to stdout
+/// (SL-128 / IMP-124) — the single source the close skill names instead of a
+/// `refs/heads/main` literal, and a convenience for hand-driven git work.
+/// Read-only; callable from anywhere (like `dispatch status`/`plan-next`).
+pub(crate) fn run_deliver_to(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let deliver_to = crate::dtoml::load_doctrine_toml(&root)?.dispatch.deliver_to;
+    writeln!(io::stdout(), "{deliver_to}")?;
     Ok(())
 }
 
