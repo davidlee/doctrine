@@ -3,7 +3,7 @@ version = 1
 
 id = 314
 slug = "two-stage-audit-gated-projection"
-title = "Two-stage audit-gated projection"
+title = "Two-stage projection — trunk isolated to stage-2"
 status = "pending"
 kind = "functional"
 
