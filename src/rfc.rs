@@ -15,7 +15,7 @@
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{self, Artifact, Fileset, Kind, ScaffoldCtx};
 use crate::governance::{self, GovKind};
 use crate::listing::{Format, ListArgs};
 use crate::tomlfmt::toml_string;
@@ -31,9 +31,9 @@ pub(crate) const RFC_KIND: GovKind = GovKind {
     kind: Kind {
         dir: RFC_DIR,
         prefix: crate::kinds::RFC,
+        stem: "rfc",
         scaffold: rfc_scaffold,
     },
-    stem: "rfc",
     statuses: RFC_STATUSES,
     hidden: is_hidden,
 };
@@ -100,14 +100,13 @@ fn render_rfc_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 /// `RFC_KIND.kind.scaffold`.
 fn rfc_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
-    let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/rfc-{name}.toml")),
+            rel_path: entity::rel_path(&RFC_KIND.kind, id, entity::Ext::Toml),
             body: render_rfc_toml(id, ctx.slug, ctx.title, ctx.date)?,
         },
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/rfc-{name}.md")),
+            rel_path: entity::rel_path(&RFC_KIND.kind, id, entity::Ext::Md),
             body: render_rfc_md(ctx.canonical, ctx.title)?,
         },
     ])
@@ -149,10 +148,9 @@ pub(crate) fn run_status(
     color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let gov_root = root.join(RFC_KIND.kind.dir);
     governance::set_status(
         &RFC_KIND,
-        &gov_root,
+        &root,
         id,
         status.as_str(),
         &crate::clock::today(),
@@ -264,7 +262,8 @@ mod tests {
              id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\n\
              status = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
         );
-        std::fs::write(dir.join(format!("rfc-{name}.toml")), toml).unwrap();
+        let toml_path = entity::id_path(root, &RFC_KIND.kind, id, entity::Ext::Toml);
+        std::fs::write(&toml_path, toml).unwrap();
     }
 
     /// The RFC tree root for a project root.
@@ -317,7 +316,7 @@ mod tests {
 
         governance::set_status(
             &RFC_KIND,
-            &rfc_root(root),
+            root,
             1,
             RfcStatus::Resolved.as_str(),
             "2099-01-01",
@@ -341,7 +340,7 @@ mod tests {
 
         governance::set_status(
             &RFC_KIND,
-            &rfc_root(root),
+            root,
             3,
             RfcStatus::Withdrawn.as_str(),
             "2099-01-01",
@@ -370,7 +369,7 @@ mod tests {
                 &format!("slug-{id}"),
                 &format!("Title {id}"),
             );
-            governance::set_status(&RFC_KIND, &rfc_root(root), id, target, "2099-01-01").unwrap();
+            governance::set_status(&RFC_KIND, root, id, target, "2099-01-01").unwrap();
             let meta = crate::meta::read_meta(&rfc_root(root), "rfc", id).unwrap();
             assert_eq!(meta.status, target, "id {id}");
         }
@@ -383,7 +382,7 @@ mod tests {
         rfc_at(root, 1, "open", "exists", "Exists");
         let err = governance::set_status(
             &RFC_KIND,
-            &rfc_root(root),
+            root,
             9,
             RfcStatus::Resolved.as_str(),
             "2099-01-01",

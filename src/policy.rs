@@ -34,9 +34,9 @@ pub(crate) const POLICY_KIND: GovKind = GovKind {
     kind: Kind {
         dir: POLICY_DIR,
         prefix: crate::kinds::POL,
+        stem: "policy",
         scaffold: policy_scaffold,
     },
-    stem: "policy",
     statuses: POLICY_STATUSES,
     hidden: is_hidden,
 };
@@ -164,10 +164,9 @@ pub(crate) fn run_status(
     color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let gov_root = root.join(POLICY_KIND.kind.dir);
     governance::set_status(
         &POLICY_KIND,
-        &gov_root,
+        &root,
         id,
         status.as_str(),
         &crate::clock::today(),

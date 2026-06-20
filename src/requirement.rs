@@ -41,6 +41,7 @@ const REQUIREMENT_DIR: &str = ".doctrine/requirement";
 pub(crate) const REQUIREMENT_KIND: Kind = Kind {
     dir: REQUIREMENT_DIR,
     prefix: crate::kinds::REQ,
+    stem: "requirement",
     scaffold: requirement_scaffold,
 };
 

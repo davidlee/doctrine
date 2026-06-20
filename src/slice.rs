@@ -38,6 +38,7 @@ const SLICE_DIR: &str = ".doctrine/slice";
 pub(crate) const SLICE_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: crate::kinds::SL,
+    stem: "slice",
     scaffold: slice_scaffold,
 };
 
@@ -45,6 +46,7 @@ pub(crate) const SLICE_KIND: Kind = Kind {
 const DESIGN_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: crate::kinds::SL,
+    stem: "",
     scaffold: design_scaffold,
 };
 
@@ -54,6 +56,7 @@ const DESIGN_KIND: Kind = Kind {
 const PLAN_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: crate::kinds::SL,
+    stem: "",
     scaffold: plan_scaffold,
 };
 
@@ -62,6 +65,7 @@ const PLAN_KIND: Kind = Kind {
 const NOTES_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: crate::kinds::SL,
+    stem: "",
     scaffold: notes_scaffold,
 };
 
@@ -98,11 +102,11 @@ fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/slice-{name}.toml")),
+            rel_path: entity::rel_path(&SLICE_KIND, id, entity::Ext::Toml),
             body: render_toml(id, ctx.slug, ctx.title, ctx.date)?,
         },
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/slice-{name}.md")),
+            rel_path: entity::rel_path(&SLICE_KIND, id, entity::Ext::Md),
             body: render_md(ctx.title)?,
         },
         Artifact::Symlink {

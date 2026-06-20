@@ -14,7 +14,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::entity;
+use crate::entity::{self};
 use crate::estimate::{self, EstimateFacet};
 use crate::integrity;
 use crate::listing;
@@ -229,11 +229,7 @@ fn read_facets(
     id: u32,
     diagnostics: &mut Vec<CatalogDiagnostic>,
 ) -> (Option<EstimateFacet>, Option<ValueFacet>) {
-    let name = format!("{id:03}");
-    let path = root
-        .join(kref.kind.dir)
-        .join(&name)
-        .join(format!("{}-{name}.toml", kref.stem));
+    let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     let Ok(text) = std::fs::read_to_string(&path) else {
         return (None, None);
     };
@@ -339,7 +335,7 @@ fn status_and_title_for(
         // Every other kind stores both `status` and `title` top-level — ONE parse.
         _ => {
             let tree_root = root.join(kref.kind.dir);
-            let m = crate::meta::read_meta(&tree_root, kref.stem, id)?;
+            let m = crate::meta::read_meta(&tree_root, kref.kind.stem, id)?;
             Ok((Some(m.status), m.title))
         }
     }
@@ -356,11 +352,7 @@ fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<
     struct TitleOnly {
         title: String,
     }
-    let name = format!("{id:03}");
-    let path = root
-        .join(kref.kind.dir)
-        .join(&name)
-        .join(format!("{}-{name}.toml", kref.stem));
+    let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     let text = std::fs::read_to_string(&path)
         .map_err(|e| anyhow::anyhow!("read {} for title: {e}", path.display()))?;
     let parsed: TitleOnly = toml::from_str(&text)

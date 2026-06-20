@@ -71,6 +71,10 @@ pub(crate) struct Kind {
     /// Canonical-id prefix, e.g. `SL` → `SL-003` (the `{{ref}}` token). Unused
     /// by named kinds, which have no numeric canonical id.
     pub prefix: &'static str,
+    /// File stem for `<stem>-NNN.toml` / `<stem>-NNN.md` file names. Empty for
+    /// sub-kinds that nest under a parent entity's numeric directory.
+    #[serde(skip)]
+    pub stem: &'static str,
     /// Fileset as a function — kind-supplied, never a frozen file count (D3).
     #[serde(skip)]
     pub scaffold: fn(&ScaffoldCtx<'_>) -> anyhow::Result<Fileset>,
@@ -145,6 +149,39 @@ impl OwnedEntityId {
 pub(crate) struct Materialised {
     pub eid: OwnedEntityId,
     pub dir: PathBuf,
+}
+
+// ---------------------------------------------------------------------------
+// Ext enum + path helpers
+// ---------------------------------------------------------------------------
+
+#[derive(Copy, Clone)]
+pub(crate) enum Ext {
+    Toml,
+    Md,
+}
+
+fn make_file_name(kind: &Kind, id: u32, ext: Ext) -> PathBuf {
+    debug_assert!(
+        !kind.stem.is_empty(),
+        "{}: stem-less kind {}",
+        module_path!(),
+        kind.prefix
+    );
+    let n = format!("{id:03}");
+    let file = match ext {
+        Ext::Toml => format!("{}-{n}.toml", kind.stem),
+        Ext::Md => format!("{}-{n}.md", kind.stem),
+    };
+    PathBuf::from(&n).join(file)
+}
+
+pub(crate) fn id_path(root: &Path, kind: &Kind, id: u32, ext: Ext) -> PathBuf {
+    root.join(kind.dir).join(make_file_name(kind, id, ext))
+}
+
+pub(crate) fn rel_path(kind: &Kind, id: u32, ext: Ext) -> PathBuf {
+    make_file_name(kind, id, ext)
 }
 
 // ---------------------------------------------------------------------------
@@ -675,6 +712,7 @@ mod tests {
     const TEST_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
+        stem: "",
         scaffold: one_file,
     };
 
@@ -766,6 +804,7 @@ mod tests {
     const DOOMED_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
+        stem: "",
         scaffold: doomed_fileset,
     };
 
@@ -795,6 +834,7 @@ mod tests {
     const ESCAPING_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
+        stem: "",
         scaffold: escaping_fileset,
     };
 
@@ -818,6 +858,7 @@ mod tests {
     const SUB_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
+        stem: "",
         scaffold: one_file,
     };
 
@@ -910,6 +951,7 @@ mod tests {
     const SUB_TWO_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
+        stem: "",
         scaffold: two_files,
     };
 
@@ -960,6 +1002,7 @@ mod tests {
     const SUB_DOOMED_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
+        stem: "",
         scaffold: sub_doomed_fileset,
     };
 

@@ -145,6 +145,7 @@ pub(crate) const REC_DIR: &str = ".doctrine/rec";
 pub(crate) const REC_KIND: Kind = Kind {
     dir: REC_DIR,
     prefix: crate::kinds::REC,
+    stem: "rec",
     scaffold: rec_scaffold_unused,
 };
 

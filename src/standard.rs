@@ -18,7 +18,7 @@
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{self, Artifact, Fileset, Kind, ScaffoldCtx};
 use crate::governance::{self, GovKind};
 use crate::listing::{Format, ListArgs};
 use crate::tomlfmt::toml_string;
@@ -36,9 +36,9 @@ pub(crate) const STANDARD_KIND: GovKind = GovKind {
     kind: Kind {
         dir: STANDARD_DIR,
         prefix: crate::kinds::STD,
+        stem: "standard",
         scaffold: standard_scaffold,
     },
-    stem: "standard",
     statuses: STANDARD_STATUSES,
     hidden: is_hidden,
 };
@@ -124,11 +124,11 @@ fn standard_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/standard-{name}.toml")),
+            rel_path: entity::rel_path(&STANDARD_KIND.kind, id, entity::Ext::Toml),
             body: render_standard_toml(id, ctx.slug, ctx.title, ctx.date)?,
         },
         Artifact::File {
-            rel_path: PathBuf::from(format!("{name}/standard-{name}.md")),
+            rel_path: entity::rel_path(&STANDARD_KIND.kind, id, entity::Ext::Md),
             body: render_standard_md(ctx.canonical, ctx.title)?,
         },
         Artifact::Symlink {
@@ -175,10 +175,9 @@ pub(crate) fn run_status(
     color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let gov_root = root.join(STANDARD_KIND.kind.dir);
     governance::set_status(
         &STANDARD_KIND,
-        &gov_root,
+        &root,
         id,
         status.as_str(),
         &crate::clock::today(),
