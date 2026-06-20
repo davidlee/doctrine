@@ -694,7 +694,8 @@ fn ensure_boot_import(
 pub(crate) enum RefreshOutcome {
     /// No doctrine hook existed; one was appended.
     Wired(String),
-    /// A doctrine hook existed with a stale command; it was refreshed.
+    /// An owned hook existed and was normalized to canonical (stale command, stale
+    /// matcher, `(deleted)` poison, duplicate collapse, or foreign-sibling extraction).
     Refreshed(String),
     /// The settings file was malformed (or oddly shaped); left untouched, snippet
     /// printed by the caller — never clobbered (§5.3/D3).
@@ -746,7 +747,17 @@ fn is_doctrine_boot_command(cmd: &str) -> bool {
     let Some((program, arg)) = cmd.trim().rsplit_once(char::is_whitespace) else {
         return false;
     };
-    arg == "boot" && Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
+    arg == "boot" && is_doctrine_program(program)
+}
+
+/// A program path is doctrine's iff — after dropping a trailing ` (deleted)`
+/// (the `/proc/self/exe` poison, SL-124 Defect B) — its file name is `doctrine`.
+/// Shared by all three ownership predicates so a poisoned command is still
+/// recognised as ours and healed, never abandoned beside a fresh duplicate.
+fn is_doctrine_program(program: &str) -> bool {
+    let p = program.trim_end();
+    let p = p.strip_suffix(" (deleted)").unwrap_or(p);
+    Path::new(p.trim_end()).file_name() == Some(OsStr::new("doctrine"))
 }
 
 /// The hook command for `exec`: `<exec> memory sync`. TWO trailing args, so the
@@ -766,7 +777,7 @@ fn is_doctrine_sync_command(cmd: &str) -> bool {
     let Some(program) = cmd.trim().strip_suffix(" memory sync") else {
         return false;
     };
-    Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
+    is_doctrine_program(program)
 }
 
 /// The `SubagentStart` stamp hook command for `exec`:
@@ -785,12 +796,12 @@ fn is_doctrine_stamp_command(cmd: &str) -> bool {
     let Some(program) = cmd.trim().strip_suffix(" worktree marker --stamp-subagent") else {
         return false;
     };
-    Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
+    is_doctrine_program(program)
 }
 
 /// A `SessionStart` hook doctrine owns: its canonical `command` plus the predicate
 /// that recognizes a prior (possibly stale) copy in foreign settings JSON. The
-/// merge core (`plan_hook`/`find_owned`/`fallback_for`/`install_claude_hook`) is
+/// merge core (`plan_hook`/`owned_positions`/`fallback_for`/`install_claude_hook`) is
 /// generic over this; `boot install` and `memory sync install` are the two thin
 /// callers (no-parallel-impl), differing only in command string + ownership.
 pub(crate) struct HookSpec {
@@ -837,35 +848,91 @@ impl HookSpec {
     }
 }
 
-/// Where a doctrine-owned `SessionStart` hook sits, relative to a desired command.
-enum Owned {
-    /// Present and already current — no write.
-    Current,
-    /// Present but stale — refresh the entry at `(entry_idx, hook_idx)`.
-    Stale(usize, usize),
-    /// Absent — append a fresh entry.
-    Absent,
-}
-
-fn find_owned(arr: &[Value], desired_cmd: &str, is_ours: fn(&str) -> bool) -> Owned {
+/// All doctrine-owned `(entry_idx, hook_idx)` positions for `is_ours`, in array
+/// order. A hook is owned iff its `command` is recognised by the spec's
+/// poison-tolerant predicate. More than one owned position is never legitimate —
+/// the normalize collapses them to a single canonical entry (D2/D3).
+fn owned_positions(arr: &[Value], is_ours: fn(&str) -> bool) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
     for (ei, entry) in arr.iter().enumerate() {
         let Some(inner) = entry.get("hooks").and_then(Value::as_array) else {
             continue;
         };
         for (hi, hook) in inner.iter().enumerate() {
-            let Some(cmd) = hook.get("command").and_then(Value::as_str) else {
-                continue;
-            };
-            if is_ours(cmd) {
-                return if cmd == desired_cmd {
-                    Owned::Current
-                } else {
-                    Owned::Stale(ei, hi)
-                };
+            if hook
+                .get("command")
+                .and_then(Value::as_str)
+                .is_some_and(is_ours)
+            {
+                out.push((ei, hi));
             }
         }
     }
-    Owned::Absent
+    out
+}
+
+/// The owned hook at `(ei, hi)` is canonical iff its entry's `matcher` and its
+/// `command` both equal the spec's — the no-write short-circuit's precondition.
+fn entry_is_canonical(arr: &[Value], ei: usize, hi: usize, spec: &HookSpec) -> bool {
+    let Some(entry) = arr.get(ei) else {
+        return false;
+    };
+    let matcher_ok = entry.get("matcher").and_then(Value::as_str) == Some(spec.matcher);
+    let command_ok = entry
+        .get("hooks")
+        .and_then(Value::as_array)
+        .and_then(|h| h.get(hi))
+        .and_then(|h| h.get("command"))
+        .and_then(Value::as_str)
+        == Some(spec.command.as_str());
+    matcher_ok && command_ok
+}
+
+/// The entry at `ei` carries exactly one hook — so it has no foreign sibling and
+/// a canonical owned hook there is doctrine-sole. Distinct from
+/// `entry_has_foreign_hook`: this counts hooks for the no-write short-circuit.
+fn hook_is_sole(arr: &[Value], ei: usize) -> bool {
+    arr.get(ei)
+        .and_then(|e| e.get("hooks"))
+        .and_then(Value::as_array)
+        .is_some_and(|h| h.len() == 1)
+}
+
+/// The entry at `ei` has at least one hook that is NOT doctrine-owned — the
+/// precise "survives the drop" predicate (a foreign or command-less hook is
+/// preserved, so the entry remains after `drop_owned_hooks`). A multi-hook entry
+/// of purely owned hooks is fully removed, so hook count alone is NOT survival
+/// (codex round-4).
+fn entry_has_foreign_hook(arr: &[Value], ei: usize, is_ours: fn(&str) -> bool) -> bool {
+    arr.get(ei)
+        .and_then(|e| e.get("hooks"))
+        .and_then(Value::as_array)
+        .is_some_and(|hooks| {
+            hooks.iter().any(|h| {
+                !h.get("command")
+                    .and_then(Value::as_str)
+                    .is_some_and(is_ours)
+            })
+        })
+}
+
+/// Remove every doctrine-owned hook from its entry, preserving all other
+/// entry-level keys — clone-and-rebuild only the `hooks` array with the retained
+/// non-owned hooks (D4/m1: the entry-level `matcher` and any unknown keys always
+/// survive). An entry whose `hooks` array becomes empty is dropped; a foreign
+/// sibling always survives. No descending-index surgery, no `matcher` rewrite.
+fn drop_owned_hooks(arr: &mut Vec<Value>, is_ours: fn(&str) -> bool) {
+    arr.retain_mut(|entry| {
+        let Some(hooks) = entry.get_mut("hooks").and_then(Value::as_array_mut) else {
+            return true; // not a hooks-bearing entry — leave untouched
+        };
+        hooks.retain(|h| {
+            !h.get("command")
+                .and_then(Value::as_str)
+                .is_some_and(is_ours)
+        });
+        !hooks.is_empty()
+    });
 }
 
 /// Navigate (creating as needed) to the `hooks.<event>` array. Returns `None` —
@@ -883,17 +950,6 @@ fn hook_array_mut<'a>(value: &'a mut Value, event: &str) -> Option<&'a mut Vec<V
         .entry(event)
         .or_insert_with(|| Value::Array(Vec::new()));
     entries.as_array_mut()
-}
-
-fn set_command(arr: &mut [Value], ei: usize, hi: usize, command: &str) -> Option<()> {
-    let hook = arr
-        .get_mut(ei)?
-        .get_mut("hooks")?
-        .as_array_mut()?
-        .get_mut(hi)?
-        .as_object_mut()?;
-    hook.insert("command".to_string(), Value::String(command.to_string()));
-    Some(())
 }
 
 /// `boot`'s thin caller over the generic merge core (`plan_hook`) — exercised by
@@ -922,22 +978,32 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
     let Some(arr) = hook_array_mut(&mut value, spec.event) else {
         return printed_fallback();
     };
-    let outcome = match find_owned(arr, &command, spec.is_ours) {
-        Owned::Current => {
-            return HookPlan {
-                outcome: RefreshOutcome::None,
-                new_json: None,
-            };
+    // Normalize to exactly one canonical, doctrine-sole entry (D2). No-write iff a
+    // single canonical sole entry already exists; otherwise drop every owned hook
+    // and insert one fresh canonical entry at the first owned hook's execution slot.
+    let owned = owned_positions(arr, spec.is_ours);
+    if let [(ei, hi)] = owned[..]
+        && entry_is_canonical(arr, ei, hi, spec)
+        && hook_is_sole(arr, ei)
+    {
+        return HookPlan {
+            outcome: RefreshOutcome::None,
+            new_json: None,
+        };
+    }
+    let outcome = match owned.first() {
+        None => {
+            arr.push(desired_entry(spec)); // Wired — append at tail
+            RefreshOutcome::Wired(command)
         }
-        Owned::Stale(ei, hi) => {
-            if set_command(arr, ei, hi, &command).is_none() {
-                return printed_fallback();
-            }
-            RefreshOutcome::Refreshed(command.clone())
-        }
-        Owned::Absent => {
-            arr.push(desired_entry(spec));
-            RefreshOutcome::Wired(command.clone())
+        Some(&(first, _)) => {
+            // Insert at the first owned hook's slot: `first` if that entry is fully
+            // removed (all-owned), `first + 1` if it survives (retains a foreign hook).
+            let survives = entry_has_foreign_hook(arr, first, spec.is_ours);
+            drop_owned_hooks(arr, spec.is_ours);
+            let ins = (first + usize::from(survives)).min(arr.len());
+            arr.insert(ins, desired_entry(spec));
+            RefreshOutcome::Refreshed(command)
         }
     };
     match serde_json::to_string_pretty(&value) {
@@ -2961,6 +3027,14 @@ mod tests {
         assert!(pick_exec(PathBuf::from("/x/doctrine (deleted)"), |_| false).is_err());
     }
 
+    #[test]
+    fn is_doctrine_program_is_poison_tolerant() {
+        assert!(is_doctrine_program("/x/doctrine"));
+        assert!(is_doctrine_program("/x/doctrine (deleted)")); // kernel poison
+        assert!(!is_doctrine_program("/x/doctrine-helper"));
+        assert!(!is_doctrine_program("(deleted)")); // bare token is not ours
+    }
+
     // --- T2: plan_session_hook (pure merge matrix) ---
 
     #[test]
@@ -3446,6 +3520,293 @@ mod tests {
         assert!(!is_doctrine_stamp_command(
             "/usr/bin/tool worktree marker --stamp-subagent"
         ));
+    }
+
+    // --- SL-124 PHASE-02: merge normalize (Defects A + B-prune) ---
+
+    /// Ordered command list under `hooks.<event>`, array order (execution order).
+    fn event_commands(json: &str, event: &str) -> Vec<String> {
+        event_entries(json, event)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|e| e.get("hooks").and_then(Value::as_array))
+            .flatten()
+            .filter_map(|h| h.get("command").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect()
+    }
+
+    const POISON_STAMP: &str = "/abs/doctrine (deleted) worktree marker --stamp-subagent";
+
+    // VT-1 (Defect A): a clean stamp command under the WRONG matcher is healed —
+    // the surviving entry's matcher becomes the dispatch-worker agent type, the
+    // command is preserved. Reinstall is a no-op.
+    #[test]
+    fn vt1_stale_matcher_is_healed() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::stamp_subagent(exec);
+        let seed = serde_json::to_string(&serde_json::json!({
+            "hooks": { "SubagentStart": [
+                { "matcher": "old-agent-type",
+                  "hooks": [ { "type": "command", "command": stamp_subagent_command(exec) } ] }
+            ]}
+        }))
+        .unwrap();
+
+        let plan = plan_hook(Some(&seed), &spec);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+        let sub = event_entries(&json, "SubagentStart").unwrap();
+        assert_eq!(sub.len(), 1, "one canonical entry");
+        assert_eq!(
+            sub[0].get("matcher").and_then(Value::as_str),
+            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
+            "matcher healed to the dispatch-worker agent type"
+        );
+        assert_eq!(
+            event_commands(&json, "SubagentStart"),
+            vec![stamp_subagent_command(exec)],
+            "command preserved"
+        );
+        assert!(matches!(
+            plan_hook(Some(&json), &spec).outcome,
+            RefreshOutcome::None
+        ));
+    }
+
+    // VT-2: three owned stamp entries (two `(deleted)`-poisoned, one clean) under
+    // assorted matchers converge to one canonical entry; the rest are gone.
+    #[test]
+    fn vt2_three_owned_entries_converge_to_one() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::stamp_subagent(exec);
+        let seed = serde_json::to_string(&serde_json::json!({
+            "hooks": { "SubagentStart": [
+                { "matcher": "m0", "hooks": [ { "type": "command", "command": POISON_STAMP } ] },
+                { "matcher": "m1", "hooks": [ { "type": "command", "command": stamp_subagent_command(exec) } ] },
+                { "matcher": "m2", "hooks": [ { "type": "command", "command": POISON_STAMP } ] }
+            ]}
+        }))
+        .unwrap();
+
+        let plan = plan_hook(Some(&seed), &spec);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+        assert_eq!(
+            event_commands(&json, "SubagentStart"),
+            vec![stamp_subagent_command(exec)],
+            "collapsed to one clean canonical entry"
+        );
+        assert_eq!(
+            event_entries(&json, "SubagentStart").unwrap()[0]
+                .get("matcher")
+                .and_then(Value::as_str),
+            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE)
+        );
+        assert!(matches!(
+            plan_hook(Some(&json), &spec).outcome,
+            RefreshOutcome::None
+        ));
+    }
+
+    // VT-3: a single poisoned stamp entry is normalized to one clean canonical entry.
+    #[test]
+    fn vt3_single_poisoned_entry_normalized() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::stamp_subagent(exec);
+        let seed = serde_json::to_string(&serde_json::json!({
+            "hooks": { "SubagentStart": [
+                { "matcher": crate::worktree::DISPATCH_WORKER_AGENT_TYPE,
+                  "hooks": [ { "type": "command", "command": POISON_STAMP } ] }
+            ]}
+        }))
+        .unwrap();
+
+        let plan = plan_hook(Some(&seed), &spec);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+        assert_eq!(
+            event_commands(&json, "SubagentStart"),
+            vec![stamp_subagent_command(exec)],
+            "poison stripped to clean canonical command"
+        );
+        assert!(matches!(
+            plan_hook(Some(&json), &spec).outcome,
+            RefreshOutcome::None
+        ));
+    }
+
+    // VT-4 (codex round-4 shape d): two owned stamp hooks in ONE entry, followed
+    // by a separate foreign entry → the all-owned entry is removed and the fresh
+    // canonical entry inserts at `first` (NOT first+1); the foreign entry keeps its
+    // position. Survival is `entry_has_foreign_hook`, not hook count.
+    #[test]
+    fn vt4_all_owned_entry_removed_inserts_at_first() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::stamp_subagent(exec);
+        let seed = serde_json::to_string(&serde_json::json!({
+            "hooks": { "SubagentStart": [
+                { "matcher": "m", "hooks": [
+                    { "type": "command", "command": stamp_subagent_command(exec) },
+                    { "type": "command", "command": POISON_STAMP }
+                ] },
+                { "matcher": "fm", "hooks": [ { "type": "command", "command": "/usr/bin/foreign sub" } ] }
+            ]}
+        }))
+        .unwrap();
+
+        let plan = plan_hook(Some(&seed), &spec);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+        assert_eq!(
+            event_commands(&json, "SubagentStart"),
+            vec![
+                stamp_subagent_command(exec),
+                "/usr/bin/foreign sub".to_string()
+            ],
+            "fresh canonical at first, foreign entry after"
+        );
+        let sub = event_entries(&json, "SubagentStart").unwrap();
+        assert_eq!(sub.len(), 2);
+        assert_eq!(
+            sub[0].get("matcher").and_then(Value::as_str),
+            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
+            "canonical inserted at first"
+        );
+        assert_eq!(
+            sub[1].get("matcher").and_then(Value::as_str),
+            Some("fm"),
+            "foreign entry keeps its position"
+        );
+        assert!(matches!(
+            plan_hook(Some(&json), &spec).outcome,
+            RefreshOutcome::None
+        ));
+    }
+
+    // VT-5 / VT-6 (D4 non-clobber + order): an owned stamp hook sharing an entry
+    // with a foreign sibling → the owned hook is extracted into a fresh entry
+    // inserted AFTER the retained remnant; the foreign hook, the entry-level
+    // matcher, and unknown keys all survive. A foreign hook listed BEFORE the
+    // doctrine hook still executes before the doctrine entry (ordered assertion).
+    #[test]
+    fn vt5_foreign_sibling_preserved_doctrine_extracted_after() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::stamp_subagent(exec);
+        let seed = serde_json::to_string(&serde_json::json!({
+            "hooks": { "SubagentStart": [
+                { "matcher": "shared", "customKey": "keep-me", "hooks": [
+                    { "type": "command", "command": "/usr/bin/foreign sub" },
+                    { "type": "command", "command": stamp_subagent_command(exec) }
+                ] }
+            ]}
+        }))
+        .unwrap();
+
+        let plan = plan_hook(Some(&seed), &spec);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+        let sub = event_entries(&json, "SubagentStart").unwrap();
+        assert_eq!(sub.len(), 2, "remnant + fresh doctrine entry");
+        assert_eq!(
+            sub[0].get("matcher").and_then(Value::as_str),
+            Some("shared"),
+            "foreign entry-level matcher preserved"
+        );
+        assert_eq!(
+            sub[0].get("customKey").and_then(Value::as_str),
+            Some("keep-me"),
+            "unknown entry-level key preserved"
+        );
+        assert_eq!(
+            event_commands(&json, "SubagentStart"),
+            vec![
+                "/usr/bin/foreign sub".to_string(),
+                stamp_subagent_command(exec)
+            ],
+            "foreign executes before the extracted doctrine entry (order)"
+        );
+        assert_eq!(
+            sub[1].get("matcher").and_then(Value::as_str),
+            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
+            "doctrine survivor is canonical + sole"
+        );
+        assert!(matches!(
+            plan_hook(Some(&json), &spec).outcome,
+            RefreshOutcome::None
+        ));
+    }
+
+    /// The foreign-sibling shared-entry case for an arbitrary `SessionStart` spec —
+    /// proves the shared merge core has no event-specific behaviour (VT-7).
+    fn assert_session_foreign_sibling_extraction(spec: &HookSpec) {
+        assert_eq!(spec.event, "SessionStart");
+        let foreign = "/usr/bin/foreign hook";
+        let seed = serde_json::to_string(&serde_json::json!({
+            "hooks": { "SessionStart": [
+                { "matcher": "shared", "keepKey": "v", "hooks": [
+                    { "type": "command", "command": foreign },
+                    { "type": "command", "command": spec.command }
+                ] }
+            ]}
+        }))
+        .unwrap();
+
+        let plan = plan_hook(Some(&seed), spec);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+        assert_eq!(
+            commands(&json),
+            vec![foreign.to_string(), spec.command.clone()],
+            "foreign preserved before the extracted doctrine entry"
+        );
+        assert_eq!(
+            session_entries(&json)[0]
+                .get("keepKey")
+                .and_then(Value::as_str),
+            Some("v"),
+            "unknown entry-level key preserved"
+        );
+        assert!(matches!(
+            plan_hook(Some(&json), spec).outcome,
+            RefreshOutcome::None
+        ));
+    }
+
+    // VT-7: the shared-core foreign-sibling extraction holds for boot AND sync, not
+    // stamp only — the merge core acquired no event-specific behaviour.
+    #[test]
+    fn vt7_foreign_sibling_extraction_holds_for_boot_and_sync() {
+        let exec = Path::new("/abs/doctrine");
+        assert_session_foreign_sibling_extraction(&HookSpec::boot(exec));
+        assert_session_foreign_sibling_extraction(&HookSpec::sync(exec));
+    }
+
+    // Order preservation (design § codex M-2): a stale `boot` entry positioned
+    // BEFORE a `sync` entry stays before `sync` after refresh (insert at the first
+    // owned slot, not append-at-tail). Ordered `commands()` assertion.
+    #[test]
+    fn boot_refresh_keeps_position_before_sync() {
+        let old_exec = Path::new("/old/doctrine");
+        let new_exec = Path::new("/abs/doctrine");
+        let seed = serde_json::to_string(&serde_json::json!({
+            "hooks": { "SessionStart": [
+                { "matcher": SESSION_MATCHER,
+                  "hooks": [ { "type": "command", "command": boot_command(old_exec) } ] },
+                { "matcher": SESSION_MATCHER,
+                  "hooks": [ { "type": "command", "command": sync_command(new_exec) } ] }
+            ]}
+        }))
+        .unwrap();
+
+        let plan = plan_hook(Some(&seed), &HookSpec::boot(new_exec));
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+        assert_eq!(
+            commands(&json),
+            vec![boot_command(new_exec), sync_command(new_exec),],
+            "refreshed boot stays before sync"
+        );
     }
 
     // =======================================================================
