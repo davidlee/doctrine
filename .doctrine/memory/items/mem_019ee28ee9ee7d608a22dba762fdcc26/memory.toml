@@ -1,0 +1,58 @@
+memory_uid = "mem_019ee28ee9ee7d608a22dba762fdcc26"
+memory_key = "mem.signpost.doctrine.dispatch-claude-arm-wrong-base"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "Claude dispatch arm wrong-base risk under shared-clone contention"
+summary = "Claude /dispatch arm forks wrong/moving base under shared-clone lock contention — verify worker base==B; see ISS-034"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:dispatch", "area:worktree", "scope:claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3576022380b93853f28a4e52c5ddd3fb6ad41367"
+ref_name = "refs/heads/main"
+checkout_state_id = "e00bfbcd0f8339e0babaa62fb3d7e7526c505924aa4add100df754fe6b4f0eeb"
+base_commit = "1c51862cb5dda8f87e0fae493b5ffe2a0fdf0205"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "issue"
+ref = "ISS-034"
+
+[[source]]
+kind = "slice"
+ref = "SL-121"
+
+[[relation]]
+label = "related"
+target = "mem_019ec65ecbc77282bad7e10a5240ad27"
+
+[[relation]]
+label = "related"
+target = "ISS-034"
+
