@@ -46,8 +46,11 @@ pub(crate) fn create_new_file(path: &Path) -> std::io::Result<File> {
 /// single filesystem, so a concurrent reader sees either the old file or the
 /// fully-written new one — never a torn write (slice-007 M6). The temp sits
 /// beside the target (not `$TMPDIR`) so the rename never crosses a mount.
-/// The pid keeps two processes' temps from colliding.
+/// The pid disambiguates distinct processes; a process-global counter disambiguates
+/// concurrent same-process writers (the map-server's axum/tokio tasks), so neither
+/// renames a temp the other already consumed (SL-113 D4). Last rename wins.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -55,10 +58,12 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let name = path
         .file_name()
         .ok_or_else(|| anyhow::anyhow!("path has no file name: {}", path.display()))?;
+    let seq = TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp = dir.join(format!(
-        ".{}.{}.tmp",
+        ".{}.{}.{}.tmp",
         name.to_string_lossy(),
-        std::process::id()
+        std::process::id(),
+        seq
     ));
     fs::write(&tmp, bytes).with_context(|| format!("Failed to write temp {}", tmp.display()))?;
     fs::rename(&tmp, path)
@@ -241,6 +246,46 @@ mod tests {
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, ["x.toml"]);
+    }
+
+    #[test]
+    fn write_atomic_concurrent_writers_same_path_leave_no_torn_temp() {
+        use std::thread;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("x.toml");
+
+        // Two threads hammer the SAME path. Pre-fix both compute the identical
+        // temp name `.x.toml.{pid}.tmp`, so one thread's rename races the other's
+        // temp: the loser renames a temp the winner already consumed → ENOENT.
+        // Loop to make the collision near-certain, not schedule-dependent (R1).
+        const ITERS: usize = 200;
+        thread::scope(|s| {
+            let a = s.spawn(|| {
+                for _ in 0..ITERS {
+                    write_atomic(&path, b"aaaa").unwrap();
+                }
+            });
+            let b = s.spawn(|| {
+                for _ in 0..ITERS {
+                    write_atomic(&path, b"bbbb").unwrap();
+                }
+            });
+            a.join().unwrap();
+            b.join().unwrap();
+        });
+
+        // the swap leaves only the target — no stray `.tmp` siblings.
+        let names: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["x.toml"], "no stray temps, only the target");
+        // content is one of the two complete inputs — never a torn write.
+        let got = fs::read_to_string(&path).unwrap();
+        assert!(
+            got == "aaaa" || got == "bbbb",
+            "content is a complete write, got {got:?}"
+        );
     }
 
     // --- is_real_dir (squat detection) ---
