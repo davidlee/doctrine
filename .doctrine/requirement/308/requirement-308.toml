@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 308
+slug = "validation-is-write-strict-and-read-tolerant-link-hard-refuses-dangling-or-illegal-kind-numbered"
+title = "Validation is write-strict and read-tolerant — `link` hard-refuses dangling or illegal-kind numbered edges at write, while the reader and corpus `validate` report danglers and illegal hand-edited rows but never rewrite."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

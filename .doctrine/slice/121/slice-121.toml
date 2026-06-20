@@ -1,9 +1,9 @@
 id = 121
 slug = "dispatch-integrate-clean-state"
 title = "dispatch sync --integrate: clean exit state and legible outcome"
-status = "design"
+status = "ready"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-20"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
