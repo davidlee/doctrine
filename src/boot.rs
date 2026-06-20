@@ -584,7 +584,7 @@ enum ExtAction {
 }
 
 /// The reportable result of the pi extension install.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
 enum ExtOutcome {
     /// Generated extension file.
     Generated,
@@ -933,14 +933,12 @@ fn install_refresh(
         Harness::Codex => {
             let append_system = install_append_system(root, dry_run)?;
             let extension = install_pi_extension(root, exec, dry_run)?;
-            let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
             Ok(RefreshReport {
                 hook: RefreshOutcome::None,
                 baseref: BaseRefOutcome::NotApplicable,
                 mcp: RefreshOutcome::None,
                 append_system,
                 extension,
-                mcp_extension,
             })
         }
         Harness::Claude => {
@@ -959,7 +957,6 @@ fn install_refresh(
                 mcp,
                 append_system: AppendSystemOutcome::NotApplicable,
                 extension: ExtOutcome::NotApplicable,
-                mcp_extension: ExtOutcome::NotApplicable,
             })
         }
     }
@@ -979,9 +976,6 @@ struct RefreshReport {
     /// The `.pi/extensions/doctrine/index.ts` extension outcome (PHASE-03);
     /// Claude carries `NotApplicable`.
     extension: ExtOutcome,
-    /// The `.pi/extensions/doctrine/mcp.ts` MCP extension outcome (SL-120);
-    /// Claude carries `NotApplicable`.
-    mcp_extension: ExtOutcome,
 }
 
 /// What the `worktree.baseRef="head"` install did, for reporting (SL-064 §8.3).
@@ -1348,82 +1342,6 @@ fn plan_pi_extension(root: &Path, exec: &Path) -> ExtAction {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Pi MCP extension (SL-120): pure plan + imperative apply.
-// ---------------------------------------------------------------------------
-
-/// The PHASE-01 MCP extension template — embedded at compile time.
-const MCP_EXT_TEMPLATE: &str = include_str!("../.pi/extensions/doctrine/mcp.ts");
-
-/// The marker line in the template that gets replaced with the baked exec path.
-const MCP_BIN_PATH_MARKER: &str = "declare const BIN_PATH: string;";
-
-/// Generate the candidate MCP extension file content with the baked exec path.
-fn generate_mcp_extension(exec: &Path) -> String {
-    let exec_str = exec.display();
-    let baked_line = format!("const BIN_PATH = \"{exec_str}\";");
-    let body = MCP_EXT_TEMPLATE.replace(MCP_BIN_PATH_MARKER, &baked_line);
-    format!("{}\n\n{}", PI_EXT_HEADER, body.trim())
-}
-
-/// Pure decision for `.pi/extensions/doctrine/mcp.ts`.
-/// Reads from disk (Path existence, file contents) but never mutates.
-fn plan_mcp_extension(root: &Path, exec: &Path) -> ExtAction {
-    let ext_dir = root.join(".pi").join("extensions").join("doctrine");
-    let ext_path = ext_dir.join("mcp.ts");
-
-    if !ext_path.exists() {
-        return ExtAction::Generate;
-    }
-
-    let Ok(existing) = std::fs::read_to_string(&ext_path) else {
-        return ExtAction::SkipForeign; // can't read, don't touch
-    };
-
-    // Check ownership via first line
-    let first_line = existing.lines().next().unwrap_or("");
-    if first_line != PI_EXT_HEADER {
-        return ExtAction::SkipForeign;
-    }
-
-    let candidate = generate_mcp_extension(exec);
-    if existing == candidate {
-        ExtAction::NoOp
-    } else {
-        ExtAction::Regenerate
-    }
-}
-
-/// Imperative apply for the MCP extension.
-/// Respects `dry_run`: reports the correct outcome without writing to disk.
-fn install_mcp_extension(root: &Path, exec: &Path, dry_run: bool) -> anyhow::Result<ExtOutcome> {
-    let action = plan_mcp_extension(root, exec);
-    let ext_dir = root.join(".pi").join("extensions").join("doctrine");
-    let ext_path = ext_dir.join("mcp.ts");
-
-    let outcome = match action {
-        ExtAction::Generate => {
-            if !dry_run {
-                std::fs::create_dir_all(&ext_dir)
-                    .with_context(|| format!("Failed to create {}", ext_dir.display()))?;
-                let content = generate_mcp_extension(exec);
-                fsutil::write_atomic(&ext_path, content.as_bytes())?;
-            }
-            ExtOutcome::Generated
-        }
-        ExtAction::Regenerate => {
-            if !dry_run {
-                let content = generate_mcp_extension(exec);
-                fsutil::write_atomic(&ext_path, content.as_bytes())?;
-            }
-            ExtOutcome::Regenerated
-        }
-        ExtAction::NoOp => ExtOutcome::NoOp,
-        ExtAction::SkipForeign => ExtOutcome::SkippedForeign,
-    };
-    Ok(outcome)
-}
-
 /// Imperative apply for the pi extension.
 /// Respects `dry_run`: reports the correct outcome without writing to disk.
 fn install_pi_extension(root: &Path, exec: &Path, dry_run: bool) -> anyhow::Result<ExtOutcome> {
@@ -1627,32 +1545,6 @@ pub(crate) fn wire(
                         writeln!(
                             stdout,
                             "  {}: skipped foreign file .pi/extensions/doctrine/index.ts",
-                            harness_label(h)
-                        )?;
-                    }
-                }
-                // MCP extension leg (SL-120): pi generates/refreshes the MCP
-                // bridge extension. Claude carries NotApplicable and stays silent.
-                match report.mcp_extension {
-                    ExtOutcome::Generated => {
-                        writeln!(
-                            stdout,
-                            "  {tag}{}: generated extension .pi/extensions/doctrine/mcp.ts",
-                            harness_label(h)
-                        )?;
-                    }
-                    ExtOutcome::Regenerated => {
-                        writeln!(
-                            stdout,
-                            "  {tag}{}: regenerated extension .pi/extensions/doctrine/mcp.ts",
-                            harness_label(h)
-                        )?;
-                    }
-                    ExtOutcome::NoOp | ExtOutcome::NotApplicable => {}
-                    ExtOutcome::SkippedForeign => {
-                        writeln!(
-                            stdout,
-                            "  {}: skipped foreign file .pi/extensions/doctrine/mcp.ts",
                             harness_label(h)
                         )?;
                     }
@@ -3803,223 +3695,5 @@ weight = 0
             plan_pi_extension(dir.path(), exec),
             ExtAction::NoOp
         ));
-    }
-
-    // =======================================================================
-    // SL-120 — MCP extension generation
-    // =======================================================================
-
-    fn write_mcp_ext_file(root: &Path, content: &str) -> PathBuf {
-        let ext_path = root
-            .join(".pi")
-            .join("extensions")
-            .join("doctrine")
-            .join("mcp.ts");
-        fs::create_dir_all(ext_path.parent().unwrap()).unwrap();
-        fs::write(&ext_path, content).unwrap();
-        ext_path
-    }
-
-    // --- Unit: generation ---
-
-    #[test]
-    fn generate_mcp_extension_bakes_exec_path() {
-        let exec = Path::new("/abs/doctrine");
-        let content = generate_mcp_extension(exec);
-        assert!(
-            content.starts_with(PI_EXT_HEADER),
-            "generated MCP extension must start with the generated header"
-        );
-        assert!(
-            content.contains("const BIN_PATH = \"/abs/doctrine\";"),
-            "BIN_PATH must be baked as const, got: {}",
-            content
-        );
-        assert!(
-            !content.contains("declare const BIN_PATH"),
-            "declare placeholder must be replaced"
-        );
-    }
-
-    // --- Unit: plan ---
-
-    #[test]
-    fn plan_mcp_extension_no_file_is_generate() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(matches!(
-            plan_mcp_extension(dir.path(), Path::new("/abs/doctrine")),
-            ExtAction::Generate
-        ));
-    }
-
-    #[test]
-    fn plan_mcp_extension_identical_content_is_noop() {
-        let dir = tempfile::tempdir().unwrap();
-        let exec = Path::new("/abs/doctrine");
-        let content = generate_mcp_extension(exec);
-        write_mcp_ext_file(dir.path(), &content);
-        assert!(matches!(
-            plan_mcp_extension(dir.path(), exec),
-            ExtAction::NoOp
-        ));
-    }
-
-    #[test]
-    fn plan_mcp_extension_different_exec_path_is_regenerate() {
-        let dir = tempfile::tempdir().unwrap();
-        let old_exec = Path::new("/old/doctrine");
-        let new_exec = Path::new("/new/doctrine");
-        let content = generate_mcp_extension(old_exec);
-        write_mcp_ext_file(dir.path(), &content);
-        assert!(matches!(
-            plan_mcp_extension(dir.path(), new_exec),
-            ExtAction::Regenerate
-        ));
-    }
-
-    #[test]
-    fn plan_mcp_extension_foreign_file_is_skip() {
-        let dir = tempfile::tempdir().unwrap();
-        write_mcp_ext_file(
-            dir.path(),
-            "// hand-authored extension\nimport { spawn } from 'child_process';\n",
-        );
-        assert!(matches!(
-            plan_mcp_extension(dir.path(), Path::new("/abs/doctrine")),
-            ExtAction::SkipForeign
-        ));
-    }
-
-    #[test]
-    fn plan_mcp_extension_missing_dir_is_generate() {
-        let dir = tempfile::tempdir().unwrap();
-        // .pi/ doesn't exist at all.
-        assert!(!dir.path().join(".pi").exists());
-        assert!(matches!(
-            plan_mcp_extension(dir.path(), Path::new("/abs/doctrine")),
-            ExtAction::Generate
-        ));
-    }
-
-    // --- Unit: install ---
-
-    #[test]
-    fn install_mcp_extension_generates_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let exec = Path::new("/abs/doctrine");
-        let outcome = install_mcp_extension(dir.path(), exec, false).unwrap();
-        assert_eq!(outcome, ExtOutcome::Generated);
-        let ext_path = dir
-            .path()
-            .join(".pi")
-            .join("extensions")
-            .join("doctrine")
-            .join("mcp.ts");
-        assert!(ext_path.exists());
-        let generated = fs::read_to_string(&ext_path).unwrap();
-        assert!(generated.starts_with(PI_EXT_HEADER));
-        assert!(generated.contains("const BIN_PATH = \"/abs/doctrine\";"));
-    }
-
-    #[test]
-    fn install_mcp_extension_idempotent_noop() {
-        let dir = tempfile::tempdir().unwrap();
-        let exec = Path::new("/abs/doctrine");
-        // First install generates.
-        let outcome = install_mcp_extension(dir.path(), exec, false).unwrap();
-        assert_eq!(outcome, ExtOutcome::Generated);
-        // Second install is NoOp.
-        let outcome = install_mcp_extension(dir.path(), exec, false).unwrap();
-        assert_eq!(outcome, ExtOutcome::NoOp);
-    }
-
-    #[test]
-    fn install_mcp_extension_dry_run_reports_without_touching_disk() {
-        let dir = tempfile::tempdir().unwrap();
-        let exec = Path::new("/abs/doctrine");
-        let outcome = install_mcp_extension(dir.path(), exec, true).unwrap();
-        assert_eq!(outcome, ExtOutcome::Generated);
-        assert!(!dir.path().join(".pi").exists());
-    }
-
-    #[test]
-    fn install_mcp_extension_skips_foreign() {
-        let dir = tempfile::tempdir().unwrap();
-        let foreign_content =
-            "// hand-authored extension\nimport { spawn } from 'child_process';\n";
-        write_mcp_ext_file(dir.path(), foreign_content);
-        let exec = Path::new("/abs/doctrine");
-        let outcome = install_mcp_extension(dir.path(), exec, false).unwrap();
-        assert_eq!(outcome, ExtOutcome::SkippedForeign);
-        // File untouched.
-        let ext_path = dir
-            .path()
-            .join(".pi")
-            .join("extensions")
-            .join("doctrine")
-            .join("mcp.ts");
-        assert_eq!(fs::read_to_string(&ext_path).unwrap(), foreign_content);
-    }
-
-    #[test]
-    fn install_mcp_extension_creates_parent_dirs() {
-        let dir = tempfile::tempdir().unwrap();
-        let exec = Path::new("/abs/doctrine");
-        // No .pi/ tree exists.
-        assert!(!dir.path().join(".pi").exists());
-        let outcome = install_mcp_extension(dir.path(), exec, false).unwrap();
-        assert_eq!(outcome, ExtOutcome::Generated);
-        // Parent dirs created.
-        let ext_path = dir
-            .path()
-            .join(".pi")
-            .join("extensions")
-            .join("doctrine")
-            .join("mcp.ts");
-        assert!(ext_path.exists());
-    }
-
-    // --- Integration: install_refresh pi arm includes mcp_extension outcome ---
-
-    #[test]
-    fn install_refresh_pi_generates_mcp_extension() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        let exec = Path::new("/abs/doctrine");
-
-        let out = install_refresh(&Harness::Pi, root, exec, false).unwrap();
-        assert_eq!(out.mcp_extension, ExtOutcome::Generated);
-        assert!(
-            root.join(".pi")
-                .join("extensions")
-                .join("doctrine")
-                .join("mcp.ts")
-                .exists()
-        );
-    }
-
-    #[test]
-    fn install_refresh_pi_idempotent_mcp_extension_noop() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        let exec = Path::new("/abs/doctrine");
-
-        // First run generates.
-        let out1 = install_refresh(&Harness::Pi, root, exec, false).unwrap();
-        assert_eq!(out1.mcp_extension, ExtOutcome::Generated);
-
-        // Second run is no-op.
-        let out2 = install_refresh(&Harness::Pi, root, exec, false).unwrap();
-        assert_eq!(out2.mcp_extension, ExtOutcome::NoOp);
-    }
-
-    #[test]
-    fn install_refresh_claude_carries_not_applicable_for_mcp_extension() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        let exec = Path::new("/abs/doctrine");
-
-        let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
-        assert_eq!(out.mcp_extension, ExtOutcome::NotApplicable);
     }
 }
