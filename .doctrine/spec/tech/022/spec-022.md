@@ -44,8 +44,8 @@ and the object-db ledger sourcing.
 
 ### The ref taxonomy and its two mutability classes
 
-Every branch the system creates falls into one of two classes, and the class is the
-load-bearing fact about it.
+Every ref the model touches falls into one of two lifecycle classes, and the class is
+the load-bearing fact about it.
 
 **Mutable refs** — advanced in the normal course of a run:
 
@@ -92,18 +92,24 @@ a merge commit on the dispatch branch or it did not happen.
 
 ### The two-stage, audit-gated projection
 
-Conclude does not push to trunk. It **projects outward in two stages**, with audit
-between them (SL-064, ADR-012 D4/D5):
+Conclude itself performs neither stage; it is followed by `dispatch sync
+--prepare-review`, and trunk moves only under `dispatch sync --integrate --trunk`. The
+projection runs **in two stages**, with audit between them (SL-064, ADR-012 D4/D5):
 
 - **Stage-1 — `prepare-review`.** Materialise `review/<N>` + `phase/<N>-NN` and commit
-  the CAS journal. **No trunk write.** Idempotent: a re-run re-pins the bundle to the
-  current fork-point.
+  the CAS journal. **No trunk write.** Evidence-ref creation is zero-oid CAS /
+  report-not-clobber (see the evidence-ref class above): re-running `prepare-review`
+  while `review/<N>` or `phase/<N>-NN` already exist **refuses** with a stale-ref report,
+  it does not refresh them in place — so a re-run after a `refresh-base` advance requires
+  the prior evidence refs to be absent first. (Idempotent *replay* is stage-2's property,
+  not stage-1's.)
 - **Audit** runs from the parent/root against the prepared refs (RV verbs refuse on a
   worktree fork). It gates the review units *before* they integrate.
-- **Stage-2 — `integrate`.** Opt-in, post-audit. Fast-forward-only, expected-tip-CAS,
-  reports a moved/non-ff target and halts — never force-pushes, never auto-resolves. A
-  failed audit blocks trunk integration while preserving `dispatch/<N>`, `phase/*`, and
-  `review/*` intact.
+- **Stage-2 — `integrate`.** Opt-in, post-audit. Replays every journal row idempotently
+  under 3-way CAS — an intact prepared ref is a verified no-op. Fast-forward-only,
+  expected-tip-CAS, reports a moved/non-ff target and halts — never force-pushes, never
+  auto-resolves. A failed audit blocks trunk integration while preserving `dispatch/<N>`,
+  `phase/*`, and `review/*` intact.
 
 ### The CAS journal recovery contract
 
@@ -145,6 +151,15 @@ Admission is **by immutable OID, never by ref**:
   OID is unchanged. If trunk has moved, integrate **refuses with guidance to create a
   superseding candidate** rather than merging at close time. There is no close-time
   merge: close only replays the journal.
+
+**Candidate-active vs legacy integration — the branch condition.** Whether `integrate`
+takes the candidate path is gated on `candidate_active = the slice has ≥1 candidate
+row`. When candidate rows exist, `integrate --trunk` uses the candidate-active path and
+**requires** a current `close_target` admission; it does **not** fall back to raw
+evidence or the phase chain. When no candidate workflow is active, the **legacy** path
+sources the **phase-chain tip from the journal** (the highest `phase/<N>-NN` code cut) —
+**not** `review/<N>`. There is no code path anywhere that integrates trunk from raw
+`review/<N>`: the impl bundle is a review surface, never a trunk payload.
 
 ### Run-ledger object-db sourcing and trunk resolution
 

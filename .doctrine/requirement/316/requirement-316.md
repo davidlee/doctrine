@@ -18,3 +18,10 @@ Pinning "what lands on trunk" to an immutable OID makes the integrated artifact 
 explicit, reviewable choice rather than whatever a mutable branch happens to point at
 when close runs. It also lets audit and repair happen freely on the candidate without
 risking the evidence refs (SL-068).
+
+**Branch condition.** Whether `integrate --trunk` takes the candidate path is gated on
+`candidate_active = the slice has ≥1 candidate row`. When candidate rows exist, integrate
+**requires** a current `close_target` admission and does **not** fall back to raw evidence
+or the phase chain. When no candidate workflow is active, the legacy path sources the
+phase-chain tip from the journal (the highest `phase/<N>-NN`), **never `review/<N>`** — no
+code path integrates trunk from the impl bundle.

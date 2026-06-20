@@ -9,6 +9,13 @@ cherry-pick the fix onto the close-target and re-admit. The `/close` default
 `--source review/<N>` is the legacy straight-through path, correct only when no repair
 happened on the candidate. The chosen source must be explicit at close.
 
+**Normative guard.** Before creating or admitting a `close_target`, an operator/agent
+MUST determine whether the reviewed `review_surface` candidate has drifted from its
+recorded `merge_oid` or carries repair commits. If it has, `/close` MUST NOT use
+`--source refs/heads/review/<N>` unless that omission is deliberate and documented — it
+would silently drop the repair from the trunk payload. `candidate status` (the drift
+report) is the mechanical signal this check reads.
+
 ## Rationale
 
 The decoupling is an intentional consequence of admit-by-OID (REQ-316), not a defect:
