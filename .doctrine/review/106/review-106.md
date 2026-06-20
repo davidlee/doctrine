@@ -100,3 +100,29 @@ Four findings were raised and disposed:
 (No governance or spec changes are needed — the audit found no design-wrong or
 spec-governance findings. The only blocker was a code regression on main, fixed
 by commit `b059eac4`.)
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §Design decisions table**: Updated BIN_PATH row to document the
+  runtime fallback chain (baked → env → hardcoded), reflecting the
+  implementation's dev affordance (RV-106 F3).
+- **design.md §Verification table**: Marked `stripPiPrefix` as test-only (the
+  function is correctly omitted from the extension; design now matches
+  implementation) (RV-106 F1).
+
+### REVs completed
+
+None — all findings were code-level or design-alignment; no governance or
+spec changes needed.
+
+### Withdrawn / tolerated
+- RV-106 F2: tolerated — `parseResponse` unchecked type assertion is consistent
+  with design's pass-through philosophy (trusted local MCP server).
+
+### Fix applied
+- RV-106 F4 (blocker): Main regression fixed by commit `b059eac4` — SL-119 pi
+  extension machinery restored with Pi→Codex harness rename preserved. `review/120`
+  now merges cleanly onto main.
+
+Reconcile pass complete — handoff to /close.
