@@ -73,9 +73,10 @@ with zero governance weight attached.
   command layer.
 - `src/integrity.rs::KINDS` — add the RFC kind ref.
 - `install/manifest.toml`, `.gitignore` — authored-tree wiring.
-- `.doctrine/rfc/` (or `.doctrine/rfcs/` — naming open below) — the authored tree.
-- Relation vocabulary: `RELATION_RULES` (if RFC participates in typed structural
-  edges) — design decides.
+- `.doctrine/rfc/` (singular, design §3) — the authored tree.
+- Relation vocabulary: `RELATION_RULES` — add `RFC` to the `related`/`AnyNumbered`
+  rule's sources (RFC's own edges) + a new `originates_from` row (REV→RFC). Design §1.
+- `src/status.rs` — RFC count line in `doctrine status` (design §4).
 - Templates for the scaffold (rfc-nnn.toml / rfc-nnn.md).
 
 ## Risks / Assumptions / Open Questions
@@ -86,26 +87,24 @@ Assumptions:
 - A2: The entity engine needs no new abstraction (Kind-is-data holds for ~13th
   kind). Confirm against the `GovKind` wrapper boundary.
 
-Open questions (for `/design`):
-- OQ-1: **Naming.** User said `.doctrine/rfcs` (plural); peer trees are singular
-  (`slice/`, `adr/`, `spec/`). Reconcile the convention deviation.
-- OQ-2: **"Link to anything" vs closed RELATION_RULES (ADR-004).** Does RFC get
-  one permissive associative label, participate in existing labels, or carry
-  free-text refs (DEC pattern)? What is the legal source/target vocabulary?
-- OQ-3: **RFC ↔ REV edge.** Precursor-of? Does a REV optionally cite its
-  originating RFC? Is there a forward/back edge, and is it validated?
-- OQ-4: **Lifecycle states.** draft / open / resolved / superseded / withdrawn?
-  Or stateless? Governance-neutral kinds may not need a status machine.
-- OQ-5: **ADR scope.** Confirm an ADR is warranted (precedent says yes) and what
-  exactly it asserts (the governance-neutral first-class-kind decision).
-- OQ-6: **Catalog / boot visibility.** Where do RFCs surface (catalog yes;
-  governance sections no) without leaking a governance position?
+Open questions — ALL RESOLVED in `design.md` (§ refs):
+- OQ-1 (naming) → §3: `.doctrine/rfc` singular.
+- OQ-2 ("link to anything") → §1: RFC's own edges ride the existing
+  `related`/`AnyNumbered` rule — link to any entity, real graph citizen, no engine
+  fork, no free-text adoption.
+- OQ-3 (RFC↔REV edge) → §1: REV→RFC `originates_from` ("precursor of"), tier-1
+  writable, outcome-neutral. ADR-004-clean (no RFC-side reverse storage).
+- OQ-4 (lifecycle) → §2: minimal `open → resolved|withdrawn`; outcome-blind, no
+  `accepted`; status ⊥ the REV edge.
+- OQ-5 (ADR scope) → §5: one ADR — D1 governance-neutral first-class kind, D2
+  precursor-to-change-axis.
+- OQ-6 (visibility) → §4: omit from boot GovRows (soft, revisitable); surface in
+  `doctrine status`; `rfc list` catalog.
 
 Risks:
 - R1: Scope creep into projection/MCP/memory surfaces — fenced as non-goals.
-- R2: Relation-model collision with ADR-004's closed vocabulary if "link to
-  anything" is taken literally; design must land a model that doesn't fork the
-  relation engine.
+- R2: Relation-model collision with ADR-004 — **retired**. Design §1: "link to
+  anything" is an additive const edit (label-first table), not an engine fork.
 
 ## Verification / Closure Intent
 
