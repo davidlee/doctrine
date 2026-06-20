@@ -1,0 +1,61 @@
+id    = 114
+slug  = "reconciliation-review-of-sl-104-estimate-hardening-nf-001-tripwire-confidence-legitimization"
+title = "reconciliation review of SL-104 (estimate hardening — NF-001 tripwire + confidence legitimization)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-104"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: Tier-1 allowlist = 8 files per design §4 / plan EX-1 — Observed: allowlist carries 9 (adds src/main.rs)"
+detail = "tests/e2e_estimate_non_blocking.rs ALLOWLIST enumerates 9 files: the 8 in design §4 / EX-1 (estimate.rs, value.rs, estimate/display.rs, dtoml.rs, catalog/{scan,graph,hydrate}.rs, slice.rs) PLUS src/main.rs. main.rs legitimately reads facet symbols via the estimate/value CLI write handlers (main.rs:4501 EstimateFacet, :4541 ValueFacet, :6358 crate::estimate, :6369 crate::value) — a real exposure site the locked design under-enumerated, NOT a gating-path read. Dropping main.rs makes the Tier-1 tripwire RED on main. Code↔authoritative-plan divergence: plan EX-1 and design §4 say 8."
+disposition = "verified"
+response = "Confirmed and accepted (user ruling 2026-06-20). main.rs is a real facet exposure site via the CLI write handlers, not a gating read; the locked design §4 / plan EX-1 under-enumerated the surface at 8. Remediation is a per-slice direct edit at reconcile: amend design.md §4 (allowlist + the prose enumerating it) and plan.toml EX-1 to the 9-file allowlist. Recorded in the reconciliation brief (per-slice). No code change — the 9-file allowlist is correct; the authored docs are stale."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: NF-001 structural proof covers all facet reads in gating paths — Observed: a hand-written close fn in allowlisted slice.rs reading SliceDoc.estimate directly evades both tiers"
+detail = "slice.rs is allowlisted (it carries SliceDoc's facet fields), so a hand-written close fn reading SliceDoc.estimate directly would be invisible to Tier-1 (file already allowlisted) and to Tier-2 (which only guards the typed Gate input). This is the honest residual gap of the structural proof, explicitly named in design §4 (F2) and plan VA-1. Not test-covered; mitigated by review + this audit argument."
+disposition = "aligned"
+response = "Accept-as-designed. This is the explicitly disclosed honest boundary of the structural proof (design §4 F2, plan VA-1): Tier-2 guards the typed Gate input; a hand-written close fn reading SliceDoc.estimate in allowlisted slice.rs is the known uncovered case, mitigated by review. No remediation — the gap is consciously accepted and now recorded in this review's Synthesis (replacing the retired audit.md disclosure). A future syn-based fitness gate (SL-112) is the candidate consolidation home, not in scope here."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected: every dead-code reason cites a real governing id — Observed: the 5 confidence/display expect reasons cite a confidence REQ that is not yet allocated"
+detail = "estimate.rs expect(dead_code) reasons on mod display, DEFAULT_LOWER/UPPER_CONFIDENCE, resolve_confidence now cite 'IMP-112' + 'the confidence requirement landing at SL-104 reconcile' (descriptive placeholder). Correct sequencing per design F5 (REQ has no id until reconcile), but the placeholder is undischarged: reconcile must mint the concrete REQ-NNN via a Revision (D2 / ADR-013, REV-002 precedent) homing the percentile model (lower/upper = P-low/P-high; defaults 0.1/0.9 from [estimation]; finite, [0,1], low<high; display-framing only, no gating v1), then rewrite the 3 reason strings to cite it."
+disposition = "verified"
+response = "Confirmed. The placeholder is correct sequencing (design F5) but undischarged. Remediation is GOVERNANCE, delegated to reconcile: mint the concrete confidence REQ-NNN via a Revision (D2 / ADR-013, REV-002 precedent) homing the percentile model (lower/upper = project P-low/P-high; defaults 0.1/0.9 from [estimation]; finite, in [0,1], low<high; display-framing only, no gating/aggregation/normalization v1; no entity-local field; estimate-only), amend SPEC-020 (one responsibility bullet + a 'Confidence band resolution' subsection + REQ in members.toml), then rewrite the 3 estimate.rs reason strings to cite the minted id. Recorded in the reconciliation brief (governance/REV)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Expected: NF-002/NF-003 verified for SL-104 — Observed: cited green from existing tests, not rebuilt (Non-Goal honored)"
+detail = "NF-002 (kind-agnosticism) and NF-003 (forward-compat) are green via SL-101/103 tests: graph VT-3 proves kind-agnosticism on a second kind; e19 / v7 / custom_deserialize_unknown_keys prove forward-compat. Design §5/D5 and the slice Non-Goals cut re-verification as busywork; cited at audit, not rebuilt. Confirming the Non-Goal was respected."
+disposition = "aligned"
+response = "Non-Goal honored. NF-002/NF-003 are green via existing SL-101/103 coverage (graph VT-3; e19/v7/custom_deserialize_unknown_keys); design §5/D5 cut re-verification as busywork. No new evidence and none required; no remediation."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Expected: design anticipated only the toml::Value collision — Observed: line_matches_facet_symbol also excludes serde::/serde_json:: collisions for estimate::/value::"
+detail = "Tier-1 line_matches_facet_symbol excludes lines containing serde::, serde_json::, or toml:: when matching the broad estimate:: / value:: substrings. Design §4 anticipated only toml::Value; the worker found serde::de::value:: etc. collide too (else revision.rs / knowledge.rs / backlog.rs false-positive). Load-bearing implementation detail, correct and consistent with design intent; design prose under-described the collision set."
+disposition = "aligned"
+response = "Load-bearing implementation detail, correct and consistent with design intent (confine to real facet refs, exclude library path-segment collisions). Design §4's toml::Value note was illustrative, not exhaustive; the serde::/serde_json:: exclusions are necessary to avoid false positives in revision.rs / knowledge.rs / backlog.rs. No defect, no remediation; noted in Synthesis. (Optional, non-blocking: a future design-prose touch could enumerate the full collision set, but the implementation is the authority and is correct.)"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
