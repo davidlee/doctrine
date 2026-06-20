@@ -78,19 +78,23 @@ modes — stale matcher, poisoned command, duplicate/dead entries.
   the pure `strip_deleted`. Every bake site uses it, repairing the hook, pi
   extension, snapshot, and corpus together. Rejected: sanitizing only the hook
   command — leaves identical latent bugs in the sibling bake paths.
-- **D2 — unified reconcile, not layered heal+prune (OQ-1/OQ-3).** Make ownership
+- **D2 — unified normalize, not layered heal+prune (OQ-1/OQ-3).** Make ownership
   recognition poison-tolerant and enforce the one-canonical-entry invariant inside
-  `plan_hook`: collect all owned positions, heal the first to canonical (command +
-  matcher), remove the rest. Rejected: keeping `find_owned` first-match plus a
-  separate `(deleted)`-only prune pass — two concepts, a parallel path, and it
-  won't collapse a clean duplicate.
-- **D3 — prune predicate stays ownership-bounded.** Only **doctrine-owned**
-  entries (poison-tolerant `is_ours`) are ever removed. A divergent operator entry
-  never matches `is_ours`, so it is untouched. Among owned entries, two is never
+  `plan_hook` by **normalize**: drop every owned hook and append one fresh
+  canonical entry (with a no-write short-circuit when a single canonical
+  doctrine-sole entry already exists). Rejected: heal-in-place — `matcher` is
+  entry-level, so rewriting it clobbers a foreign sibling hook (see D4). Also
+  rejected: `find_owned` first-match + a separate `(deleted)`-only prune pass — two
+  concepts, a parallel path, won't collapse a clean duplicate.
+- **D3 — removal stays ownership-bounded.** Only **doctrine-owned** hooks
+  (poison-tolerant `is_ours`) are ever removed. A divergent operator entry never
+  matches `is_ours`, so it is untouched. Among owned hooks, more than one is never
   legitimate → collapse to one.
-- **D4 — non-clobber on shared entries.** If a dropped owned hook shares an entry
-  with foreign sibling hooks, remove only the hook, not the entry. Doctrine writes
-  single-hook entries, so the common path removes whole entries.
+- **D4 — non-clobber on shared entries.** `drop_owned_hooks` removes the owned
+  **hook** from a shared entry (not the whole entry) and never rewrites an
+  entry-level `matcher` in place, so a foreign sibling hook and its matcher always
+  survive. The canonical survivor is always a fresh doctrine-sole entry, so the
+  shared-matcher hazard cannot arise.
 
 ## Code impact
 
@@ -132,42 +136,58 @@ fn is_doctrine_program(program: &str) -> bool {
 arg-shape split, then defer the program check to `is_doctrine_program` (one-line
 edit each).
 
-`find_owned` / `enum Owned` are replaced by a collector + reconcile in
-`plan_hook`:
+`find_owned` / `enum Owned` are replaced by a collector + **normalize** in
+`plan_hook`. Heal-in-place is rejected: `matcher` is an **entry-level** key shared
+by every hook in `entry.hooks`, so rewriting it in place would clobber a foreign
+sibling hook's matcher (the very hand-merged case D4 protects). Normalize instead —
+drop every owned hook and append one fresh canonical entry — which never re-keys a
+shared entry and needs no index surgery:
 
 ```rust
 /// All doctrine-owned (entry_idx, hook_idx) positions for this spec, array order.
 fn owned_positions(arr: &[Value], is_ours: fn(&str) -> bool) -> Vec<(usize, usize)>
 
-// plan_hook reconcile branch (replaces the Current/Stale/Absent match):
+// plan_hook normalize branch (replaces the Current/Stale/Absent match):
 let owned = owned_positions(arr, spec.is_ours);
-match owned.split_first() {
-    None => { arr.push(desired_entry(spec)); /* Wired */ }
-    Some((&(ei, hi), rest)) => {
-        if rest.is_empty() && entry_is_canonical(arr, ei, hi, spec) {
-            return None;                      // idempotent no-write
-        }
-        remove_owned(arr, rest);             // drop duplicates/dead (D4 safety)
-        set_canonical(arr, ei2, hi, spec);   // heal survivor: command + matcher
-        /* Refreshed */
-    }
+// No-write iff a single canonical doctrine-sole entry already exists.
+if let [(ei, hi)] = owned[..]
+    && entry_is_canonical(arr, ei, hi, spec)
+    && hook_is_sole(arr, ei)
+{
+    return None;                              // idempotent no-write
+}
+if owned.is_empty() {
+    arr.push(desired_entry(spec));            // Wired
+} else {
+    drop_owned_hooks(arr, &owned);            // extract every owned hook (F1/F2)
+    arr.push(desired_entry(spec));            // one fresh canonical entry
+    // Refreshed
 }
 ```
 
 - `entry_is_canonical(arr, ei, hi, spec)` = `arr[ei].matcher == spec.matcher &&
   arr[ei].hooks[hi].command == spec.command`.
-- `set_canonical` = today's `set_command` plus setting the entry's `matcher` (heal
-  for Defect A).
-- `remove_owned`: drops non-survivor owned positions in **descending** index order
-  (earlier indices stay valid; survivor index `ei2` adjusted for removals before
-  it). Per D4: if a dropped owned hook shares an entry with foreign hooks, remove
-  only that hook, not the entry.
+- `hook_is_sole(arr, ei)` = the entry's `hooks` array has length 1 (so the entry
+  carries no foreign sibling — the canonical entry is doctrine-sole).
+- `drop_owned_hooks`: for each owned `(ei, hi)`, remove that **hook** from its
+  entry's `hooks` array; afterwards remove any entry whose `hooks` became empty.
+  Foreign hooks and their entry-level `matcher` are preserved (D4). Implemented as
+  a filter/rebuild (collect owned positions into a set, rebuild each entry's
+  `hooks` keeping non-owned hooks, drop emptied entries) — no descending-index
+  surgery, no shared-matcher rewrite.
 
-**Blast radius:** `find_owned` + `enum Owned` removed/replaced; `plan_hook`
-rewritten; `set_command` → `set_canonical`; three one-line predicate edits; add
-`is_doctrine_program`, `owned_positions`, `entry_is_canonical`, `remove_owned`,
-`strip_deleted`, `resolve_exec`. Boot/sync ride the new core unchanged in behavior
-(single entry → canonical → `None`).
+Net effect: at most one doctrine-owned entry survives, always canonical and
+doctrine-sole, appended fresh. A messy file's entry moves to the array tail
+(cosmetic; SubagentStart matching is order-independent); a hand-merged-but-canonical
+owned hook is extracted into its own entry once, then `hook_is_sole` makes re-runs
+no-write.
+
+**Blast radius:** `find_owned` + `enum Owned` + `set_command` removed/replaced;
+`plan_hook` rewritten as normalize; three one-line predicate edits; add
+`is_doctrine_program`, `owned_positions`, `entry_is_canonical`, `hook_is_sole`,
+`drop_owned_hooks`, `strip_deleted`, `pub(crate) resolve_exec` (reachable from
+`corpus.rs`). Boot/sync ride the new core unchanged (single canonical doctrine-sole
+entry → no-write).
 
 ## Verification
 
@@ -181,19 +201,23 @@ boot/sync hook matrix stays green **unmodified** (behaviour-preservation gate).
   `…/doctrine-helper` false; bare `(deleted)` false.
 
 **Defect A — stale matcher heal**
-- Clean stamp command under a wrong matcher → `Refreshed`, entry `matcher ==
-  DISPATCH_WORKER_AGENT_TYPE`, command unchanged. Re-run → `None`.
+- Clean stamp command under a wrong matcher → `Refreshed`, the surviving entry's
+  `matcher == DISPATCH_WORKER_AGENT_TYPE`, command preserved. Re-run → `None`.
 
 **Defect B-prune — convergence**
 - Three owned stamp entries (two poisoned, one clean) under assorted matchers →
-  one canonical entry, two removed. Re-run → `None`.
-- Single poisoned stamp entry → healed to clean command (`Refreshed`), matcher
-  canonical; re-run → `None`.
+  one canonical entry, the rest gone. Re-run → `None`.
+- Single poisoned stamp entry → normalized to one clean canonical entry
+  (`Refreshed`); re-run → `None`.
+- **Two owned stamp hooks in one entry** (same `ei`) → collapse to one canonical
+  doctrine-sole entry. Re-run → `None`.
 
 **Safety / non-clobber (D3/D4)**
-- Dropped owned hook sharing an entry with a foreign sibling → only the doctrine
-  hook removed, foreign hook survives.
+- Owned hook sharing an entry with a **foreign** sibling hook → the owned hook is
+  extracted (removed) and a fresh canonical entry appended; the foreign hook **and
+  its entry-level matcher** survive unchanged. (Directly exercises F2.)
 - Foreign `SubagentStart` hook under an unrelated matcher → untouched.
+- A single canonical doctrine-sole entry → `None` (no spurious reorder/write).
 
 **Preservation**
 - Existing boot/sync single-entry installs → canonical → `None` on re-run
