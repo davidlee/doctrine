@@ -39,12 +39,13 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "`ledger::read_journal_at_ref(root, slice) -> Result<Option<Journal>>` tree-reads journal.toml from refs/heads/dispatch/<slice:03> via git::read_path_at (None when the dispatch ref or path is absent)." },
-  { id = "EX-2", text = "`ledger::TrunkIntegration { NotDispatched, Integrated, Blocked(String) }` and `ledger::trunk_integration(root, slice) -> Result<TrunkIntegration>` implement the design §3.1 resolution order incl. the explicit dispatch-ref existence probe, self-describing trunk-row selection (namespace elimination over {dispatch/,review/,candidate/,phase/}), empty-oid guard, and is_ancestor test." },
+  { id = "EX-2", text = "`ledger::TrunkIntegration { NotDispatched, Integrated, Blocked(String) }` and `ledger::trunk_integration(root, slice, trunk_ref: &str) -> Result<TrunkIntegration>` implement the REVISED design §3.1 order: explicit dispatch-ref probe; absent ref OR empty journal (zero rows) => NotDispatched (RV-codex F2); trunk row by EXACT target_ref == trunk_ref (RV-codex F1/F4, not namespace elimination); empty-oid guard; is_ancestor test. Query stays mechanical/ref-agnostic — caller supplies trunk_ref (RV-codex F6)." },
   { id = "EX-3", text = "dispatch::run_show_journal_trunk_oid consumes read_journal_at_ref; the bespoke read_ledger::<Journal> trunk-oid path is gone. Behaviour unchanged (its existing tests stay green)." },
   { id = "EX-4", text = "`just check` (or gate) green: clippy zero-warnings, ADR-001 fitness gate passes with no new accepted_violation and leaf tangle_baseline=0." },
 ]
 verification = [
-  { id = "VT-1", expects = "trunk_integration truth table from a git fixture (dispatch ref + committed journal.toml): NotDispatched (no ref), Integrated (planned_oid ancestor-of-trunk), Blocked(planned tip not on trunk), Blocked(no trunk row), Blocked(ambiguous trunk row), Blocked(journal unreadable), Blocked(trunk row has no planned oid)." },
+  { id = "VT-1", expects = "trunk_integration truth table from a git fixture (dispatch ref + committed journal.toml): NotDispatched (no ref), NotDispatched (ref present, journal empty/zero rows — RV-codex F2), Integrated (planned_oid ancestor-of-trunk), Blocked(planned tip not on trunk), Blocked(no trunk row when journal has rows), Blocked(journal unreadable), Blocked(trunk row has no planned oid)." },
+  { id = "VT-1b", expects = "journal with BOTH a refs/heads/main trunk row and a refs/heads/edge row → exact-match selects the trunk row and resolves on it; no ambiguity / false refuse (RV-codex F1 regression)." },
   { id = "VT-2", expects = "read_journal_at_ref returns None for an absent dispatch ref and for a present ref missing journal.toml; Some(parsed) for a committed journal." },
   { id = "VT-3", expects = "show-journal-trunk-oid behaviour preserved post-refactor — its existing dispatch test(s) pass unchanged (behaviour-preservation gate)." },
 ]
@@ -65,15 +66,16 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete: trunk_integration available and unit-green." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "run_status, on from==reconcile && to==done, calls trunk_integration; Blocked(reason) bails with `slice <ID> → done: refused — dispatched code not integrated to trunk: {reason} (…retry)`; NotDispatched|Integrated proceed to set_slice_status." },
+  { id = "EX-1", text = "run_status defines `const TRUNK_REF = \"refs/heads/main\"` and, on from==reconcile && to==done, calls trunk_integration(&root, id, TRUNK_REF); Blocked(reason) bails with `slice <ID> → done: refused — dispatched code not integrated to trunk: {reason} (…retry)`; NotDispatched|Integrated proceed to set_slice_status. Trunk ref + refusal copy owned by the shell, not the leaf (RV-codex F6)." },
   { id = "EX-2", text = "The gate is sited after the drift gate; slice→ledger is the only new edge (command→leaf); no slice↔dispatch edge introduced." },
   { id = "EX-3", text = "`just gate` green: clippy zero-warnings; ADR-001 fitness gate passes (no new accepted_violation, no tangle growth)." },
 ]
 verification = [
   { id = "VT-1", expects = "not-dispatched slice (no dispatch ref) → reconcile→done succeeds." },
+  { id = "VT-1b", expects = "dispatch ref present but journal empty (zero rows) → reconcile→done succeeds (RV-codex F2)." },
   { id = "VT-2", expects = "dispatched slice with planned_oid ancestor-of-trunk → reconcile→done succeeds." },
   { id = "VT-3", expects = "dispatched slice with planned_oid not on trunk → reconcile→done refused, error carries the reason token + retry guidance." },
-  { id = "VT-4", expects = "dispatched slice whose journal has no trunk row → reconcile→done refused (fail-closed)." },
+  { id = "VT-4", expects = "dispatched slice (journal has rows) whose journal has no refs/heads/main trunk row → reconcile→done refused (fail-closed)." },
   { id = "VT-5", expects = "the gate fires ONLY on reconcile→done — an unintegrated dispatched slice on audit→reconcile is not refused by this gate." },
   { id = "VT-6", expects = "composition — an unintegrated slice that also carries an unresolved blocker is refused (either gate independently suffices)." },
 ]

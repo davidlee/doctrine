@@ -60,9 +60,13 @@ on the `reconcile → done` crossing.
 
 ## Open Questions (resolved at design-lock)
 
-- **OQ-1 — trunk ref source.** RESOLVED → `design.md` D1: **self-describing from
-  the journal trunk row** (namespace elimination); no new config. The
-  `[dispatch] deliver_to` config is deferred to **IMP-124** (after SL-126).
+- **OQ-1 — trunk ref source.** RESOLVED → `design.md` D1 (revised after RV-codex
+  F1/F4): trunk row by **exact `target_ref == "refs/heads/main"`** (mirrors the
+  existing `run_show_journal_trunk_oid` selector + close `--trunk`); uniqueness
+  guaranteed by the integrate writer's `fresh` dedup, not a namespace heuristic.
+  The earlier namespace-elimination idea was dropped — it false-refused a valid
+  `--trunk main --edge refs/heads/edge` journal. `[dispatch] deliver_to` config
+  deferred to **IMP-124** (after SL-126).
 - **OQ-2 — failure-closed vs open on a malformed/absent journal.** RESOLVED →
   `design.md` D2: **fail-closed**, no `--force` bypass in v1.
 
