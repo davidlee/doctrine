@@ -1,0 +1,51 @@
+memory_uid = "mem_019ee749d0607c3089d969d5d53a307b"
+memory_key = "mem.dispatch-body-route"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "D1a: route dispatch by actual body calls, not nominal kind"
+summary = "Route dispatch by actual run_* body location, not nominal kind name (D1a rule)"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = ["src/**"]
+commands = []
+tags = ["dispatch", "layering", "cycle-former"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d64e734bedb5ebdf772ba381ba87435af274ebbc"
+ref_name = "refs/heads/main"
+checkout_state_id = "ae99e8e16a9c53df10162f36dbcc34ba42f40090a333b5ed695deace5076b1d0"
+base_commit = "e9390d79242ff22b62e724f975fa1f9b9c126088"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "critical"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-115"
+
+[[source]]
+kind = "design"
+ref = "SL-115-codex-round-2"
+
