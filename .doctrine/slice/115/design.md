@@ -11,8 +11,9 @@ into command-tier modules, under one convention. No CLI behaviour changes
 > when that module is command-tier**. When the owning data/policy lives **below**
 > command tier (leaf/engine), the CLI shell goes in a thin **command-tier
 > `commands/` module** that calls *down* into it. `main.rs` is reduced to a
-> ~30-LOC entrypoint. Pure leaf/engine modules stay pure — **clap never enters a
-> leaf** (ADR-001, already the rule at the `CommonListArgs` site).
+> ~250-LOC stub (shared leaf-only clap bundles + `Cli` + `main()`; §5). Pure
+> leaf/engine modules stay pure — **clap never enters a leaf** (ADR-001, already
+> the rule at the `CommonListArgs` site).
 
 There is **one** folder convention (`commands/`), riding the existing precedent
 (`commands/serve.rs`, `commands/map.rs` already pair `Args` + `run_`). No
@@ -41,16 +42,19 @@ the slice closes.
 
 ```
 src/
-  main.rs              ~30-LOC entrypoint: parse Cli → resolve color →
-                       guard::worker_guard(&cmd)? → cli::dispatch(cmd, color)
+  main.rs              shared cross-kind clap arg bundles that depend ONLY on
+                       leaves (CommonListArgs + into_list_args) + `Cli` + `fn main()`.
+                       Stays at crate root because `main` is INERT to the layering
+                       gate (see §5). ~7264 → ~250 LOC.
   adr.rs, slice.rs …   kind modules (already command-tier): each GAINS its own
                        subcommand enum + `pub(crate) fn dispatch(cmd, color)`
-  commands/
+  memory.rs            ALSO receives FindRetrieveArgs (memory-coupled clap bundle —
+                       cannot be shared without a memory↔X cycle; §4)
+  commands/            ALL collapse to ONE gate unit `commands` — must stay a SINK
     mod.rs
     map.rs, serve.rs   (exist — the precedent)
-    cli.rs             top-level `Cli` + `Command` enum + the thin dispatch match
+    cli.rs             `Command` enum + the thin dispatch match
     guard.rs           write_class + worker_guard + WriteClass  (was main.rs)
-    list.rs            CommonListArgs + into_list_args  (was main.rs; imports only `listing`)
     relation.rs        link / unlink         → relation(eng), memory, integrity
     dep_seq.rs         needs / after / after-remove / after-prune → dep_seq(leaf)
     supersede.rs       supersede             → supersede(eng), knowledge
@@ -60,6 +64,10 @@ src/
     coverage.rs        coverage subcommands  → coverage_store/verify/view (all engine)
     test_helpers.rs    cfg(test) seed_* fixtures (mirrors src/catalog/test_helpers.rs)
 ```
+
+**Note:** there is no `commands/list.rs`. The shared `CommonListArgs` bundle
+stays in `main.rs` (crate root) — see §4 F-B (revised) and the §5 sink invariant
+for why routing it through `commands/` would break the build.
 
 ## 3. Orphan runner relocation (thrust 1)
 
@@ -130,55 +138,94 @@ dispatch.
   `commands/coverage.rs` (all `coverage*` modules are engine), `Map`→
   `commands/map.rs` (exists).
 
-### F-B — shared clap bundle forces phase-1 sequencing
+### F-B (revised) — shared clap bundles stay at crate root; never in `commands/`
 
-`CommonListArgs` (the list-surface spine + `into_list_args`) is in `main.rs` and
-flattened into every kind's `list` variant. Left there, each relocated kind enum
-imports `crate::CommonListArgs` → **kind → main**; with the existing **main →
-kind** (the `Command` field types) that is a `main ↔ kind` 2-cycle for ~16 kinds
-→ grows `[tangle_baseline] command = 120` → `just gate` fails.
+**Correction (codex review):** the original F-B was solving a phantom. The
+layering gate (`tests/architecture_layering.rs`) discovers units by **top-level
+module** and *excludes `main.rs`* (`discover_units` skips it; `count_tangle_edges`
+ranges only over discovered same-tier units). So a kind enum referencing
+`crate::CommonListArgs` (a crate-root type defined in `main.rs`) produces **no
+unit-level edge** — it is inert. There is no `main ↔ kind` tangle cycle to fix.
 
-**Fix (phase 1, the unblock):** extract `CommonListArgs` + `into_list_args` into
-`commands/list.rs`, importing only `listing` (leaf). Kinds then depend on
-`commands::list` (acyclic — it imports no kind), not back on `main`. A plan task
-audits `main.rs` for any *other* clap type referenced by a relocated enum and
-pulls it into `commands/list.rs` too.
+Worse, the proposed fix would have *created* the real defect: every
+`src/commands/*.rs` collapses to the single unit `commands`, so putting
+`CommonListArgs` in `commands/list.rs` makes each kind enum's
+`list: CommonListArgs` field a **`kind → commands`** edge — and the dispatch
+shells already give **`commands → kind`** (e.g. `commands/relation.rs → memory`).
+Together: `commands ↔ kind` cycles → `commands` joins the command SCC → tangle
+blows past 120 → gate fails.
 
-## 5. `main.rs` end-state & the cycle-free argument
+**Resolution:**
+- **`CommonListArgs`** (depends only on `listing` + `tty`, both leaf) **stays in
+  `main.rs`** (crate root, inert). Kind enums reference `crate::CommonListArgs` —
+  no unit edge. No new module, no `layering.toml` row.
+- **`FindRetrieveArgs`** depends on `memory::{MemoryType, Status, Lifespan}`
+  (command-tier) and is flattened into `MemoryCommand::{Find,Retrieve}`. It
+  **cannot** be a shared module (anything importing it ↔ `memory`). It moves into
+  **`memory.rs`**, co-located with `MemoryCommand`.
+- **General rule:** a shared clap bundle with leaf-only deps → crate root
+  (`main`, inert); a clap bundle coupled to a command/engine module → that
+  module. **Never `commands/`** (would break the sink — §5). A plan task audits
+  `main.rs` for any *other* shared clap type and routes it by this rule.
 
-### F-C — `guard` ↔ `Command` cycle avoidance
+## 5. The gate model & the sink invariant (the real safety argument)
 
-`guard.rs` must import the `Command` type (it matches the whole tree); whoever
-calls `worker_guard` must import `guard`. If `Command` stays in `main.rs` and
-`main()` calls `worker_guard`, that is `main ↔ guard` → tangle growth.
+**How the gate actually measures** (`tests/architecture_layering.rs`, verified):
+- **Units = top-level modules.** `src/foo/bar.rs` collapses to unit `foo`. So
+  **every `src/commands/*.rs` is the single unit `commands`** — the gate cannot
+  see per-file structure inside it.
+- **`main.rs` is excluded** from `discover_units`, and `count_tangle_edges` ranges
+  only over discovered same-tier units. Edges to/from `main` are inert; crate-root
+  types (`crate::CommonListArgs`) are not units, so referencing them adds no edge.
+- **Tangle** = edges whose *both* endpoints lie in the same non-trivial
+  (size > 1) same-tier SCC. A unit with no inbound edge from its tier cannot be in
+  an SCC → contributes **0** tangle, regardless of out-degree.
 
-**Resolution:** `Cli` + `Command` + the dispatch match → `commands/cli.rs`;
-`guard.rs` imports `commands::cli::Command`; `main()` remains the orchestration
-root —
-`parse → resolve color → guard::worker_guard(&cmd)? → cli::dispatch(cmd, color)`.
+### The sink invariant (replaces the old file-level argument)
 
-**Cycle-free invariant (the whole-slice safety argument):** every new `commands/`
-unit (`cli`, `guard`, `relation`, `dep_seq`, `supersede`, `validate`, `inspect`,
-`facet`, `coverage`, `list`) is imported only by the **acyclic root `main`** (or
-by `cli`/`guard`, which `main` roots, in one direction). Nothing imports `main`.
-Therefore no new unit joins the command SCC, and the cyclic-edge count cannot
-grow. `main.rs` ends at ~30 LOC.
+> **`commands` must stay a pure sink** — no command-tier module may import it.
+
+Verified: today only `main` imports `crate::commands` (and `main` is inert), so
+`commands` is already a sink contributing 0 tangle. The decomposition *adds many
+out-edges* from `commands` (`cli`→every kind enum, `relation`→`memory`,
+`coverage`→`coverage_store`, …) but **no inbound** command-tier edge — provided no
+kind ever imports `commands`. That is exactly why the §4 shared-args rule forbids
+`commands/list.rs`: a kind's `list: CommonListArgs` field must not point into
+`commands`. Hold the invariant and `commands` stays out of the SCC →
+`[tangle_baseline] command = 120` is unchanged no matter how many kind/engine
+modules the shells call.
+
+### F-C (revised) — relocation is for LOC, not cycles
+
+Moving `Command` + the dispatch match → `commands/cli.rs`, and
+`write_class`/`worker_guard` → `commands/guard.rs`, is purely to shrink `main.rs`.
+There was never a `main ↔ guard` *tangle* risk — `main` is inert. `Cli` (the
+`clap::Parser` with the `--color` global) **stays in `main.rs`** with `main()`,
+the orchestration root: `Cli::parse → resolve color → guard::worker_guard(&cmd)?
+→ cli::dispatch(cmd, color)`. `guard` importing `commands::cli::Command` is an
+*intra-`commands`* reference (same unit — self-edges are dropped), so it adds
+nothing. **`main.rs` retains the leaf-only shared clap bundles (`CommonListArgs`)
++ `Cli` + `main()`** — ends ~250 LOC (not ~30; the shared args must stay at crate
+root, by §4). Still a ~96% cut.
 
 ## 6. Verification
 
 | # | evidence | mode | proves |
 |---|---|---|---|
-| V1 | `tests/e2e_*` golden suites pass **unchanged** (zero golden-file edits) | VT | CLI behaviour byte-identical (behaviour-preservation gate, AGENTS.md) |
+| V1 | `tests/e2e_*` golden suites pass **unchanged** (zero golden-file edits) | VT | runtime CLI behaviour byte-identical for covered paths (behaviour-preservation gate, AGENTS.md). **Scope caveat:** `e2e_list_conformance` is *parse-only* over 8 `SPINE_KINDS` — it does **not** cover `--help` text or every `CommonListArgs` consumer (e.g. `ConceptMapCommand::List` is outside it). See V7. |
 | V2 | relocated `#[cfg(test)]` modules pass in new homes, assertions unchanged (only `use super::*` / path fixups) | VT | logic preserved through the move |
-| V3 | `tests/architecture_layering.rs` green: **no new `[[accepted_violation]]`**; `[tangle_baseline] command = 120` **unchanged** | VT | ADR-001 honored — no upward edge, no new cycle (F-B + F-C make this provable) |
+| V3 | `tests/architecture_layering.rs` green: **no new `[[accepted_violation]]`**; `[tangle_baseline] command = 120` **unchanged** | VT | ADR-001 honored — no upward edge, `commands` stays a sink (the §5 invariant makes this provable) |
 | V4 | `just gate` green — clippy zero-warn `--workspace`, fmt | VT | house standard |
-| V5 | grep: no relocated `run_*` remains in `main.rs`; no `enum *Command` in `main.rs` (incl. top-level `Command`, now in `commands/cli.rs`) | VA | decomposition complete, not partial |
-| V6 | `wc -l src/main.rs` ≈ 7264 → ~30 | VA | closure's "materially reduced" LOC objective |
+| V5 | grep: no relocated `run_*` remains in `main.rs`; no `enum *Command` in `main.rs` (top-level `Command` now in `commands/cli.rs`); `commands/` contains no `*ListArgs`/shared-arg struct (sink invariant) | VA | decomposition complete + invariant held |
+| V6 | `wc -l src/main.rs` ≈ 7264 → ~250 (shared leaf-only clap bundles + `Cli` + `main()` stay) | VA | closure's "materially reduced" LOC objective |
+| V7 | **new** — capture a clap `CommandFactory` `--help` snapshot (top-level + representative nested subcommands) **before** the refactor; assert byte-identical **after**. Add parse coverage for every moved `CommonListArgs` consumer not in `SPINE_KINDS`. | VT | help text / arg-group ordering / `value_parser` wiring unchanged by the enum moves — closes the V1 gap codex flagged |
 
-**No `layering.toml` edits required.** `commands` stays a uniform `command`
-umbrella — every new sub-file is at-or-below command tier (`commands::list`
-reaches only `listing`(leaf), *below*, so no forced sub-classification). Courtesy
-only: refresh the dep-list comment on the `commands` row.
+**No `layering.toml` edits required.** No new top-level unit is introduced
+(`CommonListArgs` stays in `main`; all shells collapse into the existing
+`commands` unit). `commands` stays a uniform `command` umbrella — every sub-file
+is at-or-below command tier, and `commands` stays a sink, so neither the
+`MixedUmbrella` assertion nor the tangle ratchet fires. Courtesy only: refresh the
+dep-list comment on the `commands` row.
 
 ## 7. Adversarial review findings
 
@@ -187,10 +234,33 @@ only: refresh the dep-list comment on the `commands` row.
 - **`is_work_like`** confirmed dep_seq-local (used only inside
   `resolve_dep_seq_src`) → clean move to `commands/dep_seq.rs`, no external edge.
 - **`write_class`** confirmed called only by `worker_guard` in production (rest
-  are tests) → `commands/guard.rs` is a near-sink, upholding the F-C cycle-free
-  invariant.
+  are tests) → moves cleanly to `commands/guard.rs`.
 - **F-A reframed** — the resolvers' shared id→path core is SL-129/IMP-067's
   surface, not a new dedup item (IMP-131 was filed then closed as duplicate).
+
+### Codex round (external adversarial pass) — two blockers, verified & folded
+
+Codex (GPT-5.5) attacked the layering proof; I verified each claim against
+`tests/architecture_layering.rs` and **both blockers held**:
+
+- **B1 — wrong graph granularity.** The original §5 reasoned at *file* level, but
+  the gate discovers units by **top-level module** and **excludes `main.rs`**, and
+  collapses all `src/commands/*.rs` into the single unit `commands`. The
+  file-level "cycle-free invariant" was unprovable as written. **Fixed:** §5
+  rewritten around the real model — the **sink invariant** (`commands` must have
+  zero command-tier inbound edges; verified it does today).
+- **B2 — the old F-B fix created the real cycle.** Extracting `CommonListArgs`
+  into `commands/list.rs` would make each kind's `list:` field a `kind → commands`
+  edge, and the shells give `commands → kind`, so `commands` would join the SCC
+  and blow the tangle baseline. Also `FindRetrieveArgs` depends on `memory`
+  parsers → can't be a shared `commands/` type at all. **Fixed:** F-B inverted —
+  leaf-only shared args stay at crate root (`main`, inert); `FindRetrieveArgs`
+  goes to `memory.rs`; **no `commands/list.rs`**.
+- **B3 (major) — §6 over-claimed behaviour preservation.** `e2e_list_conformance`
+  is parse-only over 8 `SPINE_KINDS`; no `--help` snapshot exists; some moved
+  `CommonListArgs` consumers (`ConceptMapCommand::List`) are uncovered. **Fixed:**
+  V1 caveated, V7 added (CommandFactory `--help` snapshot + parse coverage for all
+  moved consumers).
 
 ### R1 — SL-129 coordination (cross-slice conflict, decision needed)
 
@@ -200,7 +270,7 @@ edit `src/main.rs` and the same ~13–16 kind modules:
 - SL-129 replaces ~93 id→path sites across 13 files, incl. `main.rs` (8,
   test-only) and KIND-decl / `format!` sites in `adr.rs`, `slice.rs`,
   `backlog.rs`, …; it also removes `KindRef::stem` (in `integrity.rs`).
-- SL-115 guts `main.rs` (→ ~30 LOC), **moves** its test modules into `commands/`,
+- SL-115 guts `main.rs` (→ ~250 LOC), **moves** its test modules into `commands/`,
   and appends an enum + `dispatch` to each kind module.
 
 These collide: SL-115 *moves* the very `main.rs` test sites and kind-module
@@ -212,22 +282,26 @@ SL-129`). SL-129 consolidates id→path on the *current* layout (its inventory s
 valid); SL-115 then relocates the now-thinner shells (the F-A breadcrumb concern
 evaporates — the path core is already `entity::id_path` before the move).
 Alternative orders (SL-115 first, or parallel) force a stale SL-129 site inventory
-or manual conflict resolution on a 93-site sweep. **Open for the user to confirm
-before `/plan`.**
+or manual conflict resolution on a 93-site sweep. **Resolved:** the `SL-115 after
+SL-129` edge is written; SL-129 lands first.
 
 ## Decisions log
 
 - D1 dispatch arm moves with the enum · D2 `write_class` centralized in
   `commands/guard.rs` · D3 same-stem shells allowed.
-- F-A resolver path-core owned by SL-129/IMP-067 (no in-slice dedup) · F-B
-  `commands/list.rs` extracted first · F-C `Command`+dispatch in `commands/cli.rs`,
-  `guard` separate, `main` roots both.
-- R1 sequence SL-129 → SL-115 (`after` edge) — pending user confirmation.
+- F-A resolver path-core owned by SL-129/IMP-067 (no in-slice dedup) · **F-B
+  (revised)** leaf-only shared args stay in `main` (inert), `FindRetrieveArgs`→
+  `memory.rs`, **no `commands/list.rs`** · **F-C (revised)** `Command`+dispatch→
+  `commands/cli.rs`, `guard`→`commands/guard.rs` for LOC (not cycles).
+- §5 **sink invariant**: `commands` must stay a pure sink — the whole-slice
+  layering-safety argument (verified against the gate).
+- R1 sequence SL-129 → SL-115 (`after` edge written; SL-129 lands first).
 - Scope: full (all ~25 enums + 7 orphan units land in this slice; `/plan` phases
   per-domain).
 
 ## Open questions
 
-None blocking. `/plan` settles phase granularity (suggested: phase-1
-`commands/list.rs` + `cli.rs` + `guard.rs` scaffold → then orphan shells → then
-kind-enum batches by domain).
+None blocking. `/plan` settles phase granularity (suggested: phase-1 the V7
+`--help`/parse snapshot baseline + `commands/{cli,guard}.rs` scaffold +
+`FindRetrieveArgs`→`memory.rs` → then orphan shells → then kind-enum batches by
+domain).
