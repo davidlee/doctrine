@@ -54,22 +54,27 @@ fn stamp_marker(wt: &Path) {
     std::fs::write(dir.join("worker"), b"").unwrap();
 }
 
-/// Run `doctrine worktree verify-worker --base <base> --dir <wt>`.
-fn verify_worker(base: &str, wt: &Path) -> Output {
+/// Run `doctrine worktree verify-worker --base <base> --dir <wt> [--branch <s>]`.
+fn verify_worker(base: &str, wt: &Path, branch: Option<&str>) -> Output {
+    let mut args = vec![
+        "worktree".to_string(),
+        "verify-worker".to_string(),
+        "--base".to_string(),
+        base.to_string(),
+        "--dir".to_string(),
+        wt.to_str().unwrap().to_string(),
+    ];
+    if let Some(s) = branch {
+        args.push("--branch".to_string());
+        args.push(s.to_string());
+    }
     Command::new(BIN)
-        .args([
-            "worktree",
-            "verify-worker",
-            "--base",
-            base,
-            "--dir",
-            wt.to_str().unwrap(),
-        ])
+        .args(&args)
         .output()
         .expect("spawn doctrine")
 }
 
-/// A linked worktree of `root` checked out at `at`, placed under `path`.
+/// A linked worktree of `root` checked out at `at` (detached), placed under `path`.
 fn add_worktree(root: &Path, path: &Path, at: &str) {
     git(
         root,
@@ -84,6 +89,15 @@ fn add_worktree(root: &Path, path: &Path, at: &str) {
     );
 }
 
+/// A linked worktree of `root` checked out on branch `branch`, under `path`.
+fn add_worktree_on_branch(root: &Path, path: &Path, branch: &str) {
+    git(root, &["branch", branch]);
+    git(
+        root,
+        &["worktree", "add", "-q", path.to_str().unwrap(), branch],
+    );
+}
+
 #[test]
 fn stamped_b_based_worker_verifies_ok() {
     let tmp = tempfile::tempdir().unwrap();
@@ -94,7 +108,7 @@ fn stamped_b_based_worker_verifies_ok() {
     add_worktree(root, &wt, &base);
     stamp_marker(&wt);
 
-    let out = verify_worker(&base, &wt);
+    let out = verify_worker(&base, &wt, None);
     assert!(
         out.status.success(),
         "stamped B-based worker must exit 0; stderr: {}",
@@ -112,7 +126,7 @@ fn unstamped_worker_refuses_unstamped() {
     let wt = tmp.path().join("wt-unstamped");
     add_worktree(root, &wt, &base);
 
-    let out = verify_worker(&base, &wt);
+    let out = verify_worker(&base, &wt, None);
     assert!(
         !out.status.success(),
         "unstamped worker must exit nonzero; stdout: {}",
@@ -145,7 +159,7 @@ fn stale_base_worker_refuses_wrong_base() {
     git(root, &["commit", "-q", "-m", "moved"]);
     let moved = git(root, &["rev-parse", "HEAD"]);
 
-    let out = verify_worker(&moved, &wt);
+    let out = verify_worker(&moved, &wt, None);
     assert!(
         !out.status.success(),
         "stale-base worker must exit nonzero; stdout: {}",
@@ -172,7 +186,7 @@ fn unresolvable_head_refuses_no_worker_head() {
     git(&empty, &["init", "-q", "-b", "main"]);
     stamp_marker(&empty);
 
-    let out = verify_worker(&base, &empty);
+    let out = verify_worker(&base, &empty, None);
     assert!(
         !out.status.success(),
         "unresolvable HEAD must exit nonzero; stdout: {}",
@@ -182,5 +196,86 @@ fn unresolvable_head_refuses_no_worker_head() {
     assert!(
         stderr.contains("no-worker-head"),
         "must name the no-worker-head token; stderr: {stderr}"
+    );
+}
+
+// --- SL-123 PHASE-01 VT-4: not-isolated + branch-mismatch belts end-to-end ---
+
+#[test]
+fn primary_tree_refuses_not_isolated() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = init_repo(tmp.path());
+    let base = git(root, &["rev-parse", "HEAD"]);
+
+    // The PRIMARY tree itself (git-dir == git-common-dir): stamped AND base is an
+    // ancestor (HEAD == base), so marker/base would both pass — but is_isolated
+    // is checked FIRST (after head), so not-isolated must win. This is the G1 fix:
+    // the silent fallback-to-main where B is coincidentally an ancestor.
+    stamp_marker(root);
+
+    let out = verify_worker(&base, root, None);
+    assert!(
+        !out.status.success(),
+        "primary tree must exit nonzero; stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("not-isolated"),
+        "must name the not-isolated token; stderr: {stderr}"
+    );
+    assert!(root.exists(), "verify-worker must NOT remove the tree");
+}
+
+#[test]
+fn incoherent_branch_refuses_branch_mismatch() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = init_repo(tmp.path());
+    let base = git(root, &["rev-parse", "HEAD"]);
+
+    // Isolated, stamped worker on B — passes head/isolated/marker/base.
+    let wt = tmp.path().join("wt-incoherent");
+    add_worktree(root, &wt, &base);
+    stamp_marker(&wt);
+
+    // A branch S whose tip has MOVED past the worktree HEAD: the footer dir↔branch
+    // are incoherent (verify-worker --dir and import --S would see different states).
+    git(root, &["branch", "s"]);
+    std::fs::write(root.join("d.txt"), "ahead").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "ahead"]);
+    git(root, &["branch", "-f", "s", "HEAD"]);
+
+    let out = verify_worker(&base, &wt, Some("s"));
+    assert!(
+        !out.status.success(),
+        "incoherent --branch must exit nonzero; stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("branch-mismatch"),
+        "must name the branch-mismatch token; stderr: {stderr}"
+    );
+    assert!(wt.exists(), "verify-worker must NOT remove the fork");
+}
+
+#[test]
+fn coherent_branch_verifies_ok() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = init_repo(tmp.path());
+    let base = git(root, &["rev-parse", "HEAD"]);
+
+    // Isolated, stamped worker checked out ON branch S at B: HEAD(dir) == tip(S),
+    // so the coherence belt passes and the whole belt-set is Ok.
+    let wt = tmp.path().join("wt-coherent");
+    add_worktree_on_branch(root, &wt, "s");
+    stamp_marker(&wt);
+
+    let out = verify_worker(&base, &wt, Some("s"));
+    assert!(
+        out.status.success(),
+        "coherent --branch must exit 0; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
 }

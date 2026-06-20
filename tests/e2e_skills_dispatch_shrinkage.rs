@@ -86,8 +86,8 @@ fn dispatch_agent_skill_is_shrunk() {
     let full = source_skill_text("dispatch-agent");
     let body = body_lines(&full);
     assert!(
-        body.len() <= 61,
-        "dispatch-agent body lines: {} (target ≤61)",
+        body.len() <= 78,
+        "dispatch-agent body lines: {} (target ≤78)",
         body.len()
     );
 
@@ -103,6 +103,13 @@ fn dispatch_agent_skill_is_shrunk() {
         full.contains("record-boundary"),
         "must reference record-boundary"
     );
+    assert!(full.contains("base-guard"), "must reference base-guard");
+    assert!(full.contains("not-isolated"), "must reference not-isolated");
+    assert!(
+        full.contains("branch-mismatch"),
+        "must reference branch-mismatch"
+    );
+    assert!(full.contains("worktreePath"), "must reference worktreePath");
 
     assert!(
         !full.contains("dispatch import"),
