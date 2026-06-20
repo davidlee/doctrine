@@ -59,5 +59,7 @@ pressure. Convention unified on `commands/`.
 
 ## Follow-Ups
 
-- **IMP-131** — consolidate the 4 parallel id→toml-path resolvers this slice
-  scatters across the `commands/` shells (behaviour-changing; out of scope here).
+- **SL-129 / IMP-067** own the shared id→path core (`entity::id_path`) inside the
+  four resolvers this slice relocates. **Sequence SL-129 → SL-115** (design R1):
+  both edit `main.rs` and the kind modules; consolidating id→path before the move
+  keeps SL-129's 93-site inventory valid. (`after` edge pending user confirmation.)
