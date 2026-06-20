@@ -139,10 +139,50 @@ would reintroduce the target-mutation avoided in §1 Decision 2). An RFC may be
 `resolved` then later preceded by a REV, or precede a REV while still `open`. The
 two axes are independent.
 
-## §3 Remaining open questions (driving next)
+## §3 Naming (OQ-1 — LOCKED)
 
-- OQ-1: **Naming** — `.doctrine/rfc/` (singular, peer convention) vs user's
-  `.doctrine/rfcs/`.
-- OQ-5: **ADR scope** — confirm the governing ADR + exactly what it asserts.
-- OQ-6: **Catalog / boot visibility** — surface in catalog, absent from
-  governance sections, no leaked governance position.
+`.doctrine/rfc/` — **singular**. The dir is a free per-kind `const X_DIR: &str`
+(`adr.rs:24`), but every authored tree is singular (`adr`, `rec`, `slice`, `spec`,
+`policy`, `standard`, `requirement`, `revision`, `review`) — zero plurals, even
+the acronym peer `adr`. `RFC_DIR = ".doctrine/rfc"`, prefix `RFC-NNN`.
+
+## §4 Visibility (OQ-6 — LOCKED)
+
+Three surfaces, three distinct treatments:
+
+1. **Boot snapshot governance sections — OMIT.** `boot_sequence()` (`boot.rs:90`)
+   is a fixed list; its only governance surfaces are `SourceKind::GovRows` over
+   `ADR/POLICY/STANDARD_KIND`. RFC is simply not added there. **Soft rationale,
+   not a hard never:** RFCs *are* situational awareness (live deliberations a
+   fresh agent might want), so the argument to surface them is real — but a line
+   in a governance-flavoured snapshot risks being **misconstrued as canon**. We
+   omit *on that basis*, and may revisit later behind an explicit disclaimer
+   ("deliberation, asserts nothing") if the awareness value proves worth it. The
+   design constraint is "not in the GovRows sections," not "invisible forever."
+
+2. **`doctrine status` — SURFACE (in-scope).** This is the work/awareness
+   dashboard (slice + backlog counts, next-up, blocked) — no governance flavour,
+   so no misconstrual risk. RFC gets a count line here (e.g. under `Work`:
+   `rfcs: N open, M total`). This is the chosen situational-awareness home,
+   distinct from the boot snapshot.
+
+3. **`doctrine rfc list` — catalog.** Free with kind registration (cf.
+   `rec list`). The on-demand full catalog.
+
+## §5 Governing ADR (OQ-5 — LOCKED)
+
+One ADR, scoped to the two **contestable** claims (precedent: ADR-007 D-C0,
+ADR-013):
+
+- **D1 — RFC is a governance-neutral, first-class authored kind.** Deliberation
+  gets a durable, citable home that asserts **no** canon, sources no ADR/POL/STD,
+  and is structurally absent from governance surfaces. The novel,
+  precedent-setting claim — the kind taxonomy gains a "think in public, decide
+  nothing" slot.
+- **D2 — RFC's position on the change axis.** RFC is the *precursor* to a Revision
+  (ADR-013 territory); the REV→RFC `originates_from` edge is **outcome-neutral**
+  (no yes-bias, no status coupling). In the ADR because it interfaces ADR-013's
+  change-axis model.
+
+Stays design-level (not ADR): lifecycle states (§2), dir naming (§3),
+`AnyNumbered` participation for RFC's own edges (§1, rides ADR-004/010).
