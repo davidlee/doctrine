@@ -1,0 +1,83 @@
+# Implementation plan for SL-123 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-123"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "verify-worker fallback + coherence belts"
+objective = """
+Add the two orchestrator-side code belts to `doctrine worktree verify-worker`
+(design §5.2): a `not-isolated` refusal (primary-tree fallback, reusing
+`is_linked_worktree`) and a `branch-mismatch` refusal gated by a new optional
+`--branch <S>` (binds HEAD(--dir) == tip(S), so the dir-based and S-based belts
+verify ONE worker state). Pure classifier + impure shell + CLI flag, ADR-001
+gather→classify→act preserved; read-classed (survives worker-mode).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (slice in plan state); design §5.2 is the contract." },
+  { id = "EN-2", text = "Existing verify-worker suite green at HEAD (behaviour-preservation baseline)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`classify_worker_verify` takes `is_isolated` + `head_is_branch_tip`; returns `NotIsolated` (ordered after head, before marker/base) and `BranchMismatch` (last); tokens `not-isolated` / `branch-mismatch`." },
+  { id = "EX-2", text = "`run_verify_worker` gathers isolation via `is_linked_worktree` (short-circuited on head_resolved) and `head_is_branch_tip` only when `--branch` is supplied (else true)." },
+  { id = "EX-3", text = "CLI `WorktreeCommand::VerifyWorker` gains `--branch: Option<String>`; the call site threads it through. Help/doc-comment list all five refusal tokens." },
+  { id = "EX-4", text = "Existing non-fallback verify-worker verdicts unchanged (behaviour-preservation gate): isolated/stamped/ancestor cases still `Ok`." },
+  { id = "EX-5", text = "`just gate` green (clippy zero-warning, fmt)." },
+]
+verification = [
+  { id = "VT-1", expects = "Pure golden `not_isolated_refuses_after_head_before_marker`: head✓ isolated✗ ⇒ NotIsolated, regardless of marker/base." },
+  { id = "VT-2", expects = "Pure golden `branch_mismatch_refuses_last`: head✓ isolated✓ marker✓ base✓ tip≠HEAD ⇒ BranchMismatch; and head_is_branch_tip=true (no --branch) ⇒ Ok." },
+  { id = "VT-3", expects = "Existing `classify_worker_verify_*` goldens updated for the two new args with verdicts unchanged (Ok/Unstamped/WrongBase)." },
+  { id = "VT-4", expects = "`run_verify_worker` integration: refuses `not-isolated` against a primary tree; refuses `branch-mismatch` when --branch tip ≠ worktree HEAD; `Ok` on a linked worktree on B with coherent --branch." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "dispatch-agent base-guard + pre-funnel footer gate"
+objective = """
+Make the claude arm fail closed by template, not ad hoc (design §5.4): embed the
+mandatory base-guard block in the worker prompt; replace the Post-spawn section
+with the pre-funnel footer gate (abort on missing `worktreePath:`/`worktreeBranch:`;
+run `verify-worker --base B --dir <path> --branch <branch>`; hand the branch to the
+funnel as S); add the Red Flags. The router funnel (`dispatch/SKILL.md`) is NOT
+touched. Bump the deliberate skill line-budget and pin content via presence asserts.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged: `verify-worker --branch` and the five refusal tokens exist (the skill documents a real interface)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dispatch-agent/SKILL.md` carries the base-guard block with all four checks (clean tree / git-dir≠common-dir / merge-base --is-ancestor B HEAD / prerequisite seams) and the STOP-and-report contract." },
+  { id = "EX-2", text = "Post-spawn section = the pre-funnel gate: missing-footer abort; `verify-worker … --branch`; the five refusal tokens; hand branch to funnel as S." },
+  { id = "EX-3", text = "Red Flags add: never funnel a no-`worktreePath:`-footer worker; always embed the base-guard. `dispatch/SKILL.md` unchanged." },
+  { id = "EX-4", text = "`e2e_skills_dispatch_shrinkage.rs` budget bump (≤61 → sized to additions) WITH new presence asserts (`base-guard`, `not-isolated`, `branch-mismatch`, `worktreePath`); router test untouched." },
+  { id = "EX-5", text = "`just gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "`dispatch_agent_skill_is_shrunk` passes the bumped cap AND the new presence asserts; `dispatch_router_skill_is_shrunk` unchanged and green." },
+  { id = "VA-1", expects = "Agent inspection: the base-guard block's four checks and the Post-spawn five-token gate are present and semantically correct in the skill prose." },
+  { id = "VH-1", expects = "Human confirms the base-guard wording is unambiguous and the footer-gate cadence is followable by an orchestrator (no line-budget-driven compression of safety prose)." },
+]
+specs        = []
+requirements = []
