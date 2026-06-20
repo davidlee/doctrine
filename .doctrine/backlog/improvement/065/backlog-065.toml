@@ -16,8 +16,8 @@ tags = ["area:dispatch"]
 # `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
-needs    = []                   # item→item hard prerequisite
-after    = [{ to = "ISS-011", rank = 0 }, { to = "IMP-052", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+needs    = ["ISS-011"]                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
