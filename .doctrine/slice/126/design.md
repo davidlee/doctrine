@@ -195,9 +195,18 @@ check passes untouched.
   + committed `journal.toml`): every variant incl. journal-unreadable, empty-oid,
   and **two `refs/heads/main` rows ⇒ `Blocked("ambiguous trunk row")`**
   (RV-codex F7-new — malformed-journal fail-closed).
+- **VT-8** (e2e, PHASE-02) the gate against a **real** journal, not a hand-built
+  fixture: reuse the `tests/e2e_dispatch_sync.rs` harness to run an actual
+  `prepare-review` + `integrate --trunk refs/heads/main`, then drive `slice status
+  → done`. (a) after integrate → succeeds; (b) prepared-but-not-integrated →
+  refused. Guards against the unit fixtures encoding a *wrong* row shape: the
+  journal under test is one git actually produced.
 
 Evidence lands as Rust tests beside `ledger`/`slice`, using the existing
-git-repo fixture pattern (cf. dispatch journal tests).
+git-repo fixture pattern (cf. dispatch journal tests). **The hand-built unit
+fixtures (VT-7) must be backstopped by the real-integrate e2e (VT-8)** — a unit
+test that encodes my assumed row shape would pass green even if that shape is
+wrong; only VT-8 tests it against reality.
 
 ## 6. Decisions & non-goals
 
