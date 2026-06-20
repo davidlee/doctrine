@@ -51,9 +51,11 @@ default at `refs/heads/main`.
    close's `--integrate` *write* line names the trunk without a literal (since (3)
    cannot overload absent-`--trunk`), and it also serves hand-driven git work.
 
-5. **Close prose.** Drop the *delivery* `refs/heads/main` literals (write line →
-   verb; read/compare lines → verb or config default) and the step-3a TODO. The
-   `--base refs/heads/main` literal (fork base, concept #1) stays — out of scope.
+5. **Close prose.** Drop ALL delivery `refs/heads/main` literals (codex F1):
+   `candidate create --base` (line 68), `--integrate --trunk` (74), the verify
+   read (95) and `git diff` compare (96) — each via the verb or config default —
+   plus the explanatory text (102) and step-3a TODO (105–107). The git.rs fork-base
+   *auto-resolver* (concept #1) has no literal here; it stays sealed.
 
 6. **Resolve IMP-124** on close.
 
@@ -69,11 +71,15 @@ default at `refs/heads/main`.
 
 ## Affected Surface
 
-- `src/dispatch_config.rs` — new field + tests
-- `src/slice.rs` — `TRUNK_REF` const → config read (gate seam)
-- `src/dispatch.rs` / `src/main.rs` — `--trunk` made optional, defaulted from config
-- `plugins/doctrine/skills/close/SKILL.md` — drop literal + TODO
-- new read verb wiring (location TBD in design)
+- `src/dispatch_config.rs` — new `deliver_to` field, hand `impl Default`, tests
+- `src/dtoml.rs` — neutral impure `load_doctrine_toml` reader (codex F2); drop the
+  `expect(dead_code)` on the `dispatch` field (R5); round-trip test
+- `src/slice.rs` — `TRUNK_REF` const → config read inside the `reconcile→done`
+  gate branch (codex F3 ordering); `load_conduct` → delegating wrapper
+- `src/main.rs` / `src/dispatch.rs` — `--show-journal-trunk-oid` default from
+  config (relax `requires="trunk"`); `--integrate` UNCHANGED; new `dispatch
+  deliver-to` verb
+- `plugins/doctrine/skills/close/SKILL.md` — drop all delivery literals + TODO
 
 ## Risks / Assumptions / Open Questions
 
