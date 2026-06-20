@@ -387,7 +387,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SL, ISS, IMP, CHR, RSK, IDE],
+        sources: &[SL],
         label: RelationLabel::Related,
         inbound_name: "related",
         target: TargetSpec::AnyNumbered,
@@ -1053,7 +1053,7 @@ mod tests {
             (RelationLabel::Slices, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
             (
                 RelationLabel::Related,
-                &["ADR", "CHR", "IDE", "IMP", "ISS", "POL", "RSK", "SL", "STD"],
+                &["ADR", "POL", "SL", "STD"],
             ),
             (RelationLabel::Reviews, &["RV"]),
             (RelationLabel::OwningSlice, &["REC"]),
@@ -1240,7 +1240,7 @@ mod tests {
     fn target_spec_matches_design() {
         for r in RELATION_RULES {
             match (r.label, r.sources) {
-                // gov related → SameKind; slice/backlog related → AnyNumbered.
+                // gov related → SameKind; slice related → AnyNumbered.
                 (RelationLabel::Related, s) => {
                     if s.iter().any(|k| *k == "ADR") {
                         assert!(
@@ -1250,7 +1250,7 @@ mod tests {
                     } else {
                         assert!(
                             matches!(r.target, TargetSpec::AnyNumbered),
-                            "slice/backlog related → AnyNumbered"
+                            "slice related → AnyNumbered"
                         );
                     }
                 }
