@@ -89,3 +89,26 @@ evidence bundle and will reach trunk at close.
   installed binary carries the ladder fix — they are correct until then (F-3).
 - ISS-039 (boundaries.toml) and IMP-128 (git-interaction tech spec) are durable
   backlog follow-ups, not reconcile writes.
+
+## Reconciliation Outcome
+
+**No-op reconcile.** The reconciliation brief carried no per-slice direct edits and
+no governance/spec REV — every finding was resolved without a reconcile write:
+
+### Direct edits applied
+- None. `design.md` remains accurate against the implementation.
+
+### REVs completed
+- None. No ADR/spec/requirement was wrong; SL-127 conformed to ADR-006/011/012 and
+  honoured RV-030 F-1.
+
+### Withdrawn / tolerated / fixed-in-audit
+- **F-1** (shrinkage budget): fixed within audit scope (budget 64→74) and folded
+  into the bundle on `dispatch/127`; review-surface candidate `cand-127-review-002`
+  re-admitted (`e1cd6fb`). Not a reconcile write.
+- **F-2** (0 phase cuts): tolerated; durable home ISS-039.
+- **F-3** (env-prefix vacuous): tolerated; memory updates deferred to /close
+  post-integrate.
+- **F-4** (`select_guidance` refactor): aligned; no action.
+
+Reconcile pass complete — handoff to /close.
