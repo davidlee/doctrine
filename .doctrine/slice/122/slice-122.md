@@ -71,8 +71,13 @@ with zero governance weight attached.
 - `src/entity.rs` — consumer of the new `Kind` const (no engine change expected).
 - New verb module `src/rfc.rs` (mirrors `src/adr.rs` shape) + CLI wiring in the
   command layer.
-- `src/integrity.rs::KINDS` — add the RFC kind ref.
-- `install/manifest.toml`, `.gitignore` — authored-tree wiring.
+- `src/integrity.rs::KINDS` — add the RFC kind ref (hand table).
+- `src/catalog/scan.rs::outbound_for` — explicit prefix dispatch for RFC (else
+  empty outbound edges in release; design §1 F1).
+- `src/revision.rs` + CLI — `originates_from` authoring (revision-owned verb/flag,
+  TypedVerbOnly; design §1 Decision 2 F2).
+- `install/manifest.toml` (`[dirs].create += .doctrine/rfc`), `.gitignore`
+  (`!.doctrine/rfc/`) — authored-tree wiring (design §4 F5).
 - `.doctrine/rfc/` (singular, design §3) — the authored tree.
 - Relation vocabulary: `RELATION_RULES` — add `RFC` to the `related`/`AnyNumbered`
   rule's sources (RFC's own edges) + a new `originates_from` row (REV→RFC). Design §1.
