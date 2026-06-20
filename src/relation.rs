@@ -98,6 +98,13 @@ pub(crate) enum RelationLabel {
     /// refused; the rule row exists for target validation + inbound-reciprocity naming
     /// (`inspect ADR-X` lists every REV that revises it), NOT a writable Tier-1 edge.
     Revises,
+    /// revision → RFC. A single provenance ref authored AT CREATION TIME via
+    /// `revision new --originates-from <RFC-NNN>` — the REV's `[[relation]]` block
+    /// carries ONE `originates_from` row. `LinkPolicy::TypedVerbOnly` — `doctrine
+    /// link … originates_from …` is refused; the rule row exists for target
+    /// validation + inbound-reciprocity naming (`inspect RFC-NNN` lists every REV
+    /// that originates from it as `precursor of`).
+    OriginatesFrom,
 }
 
 impl RelationLabel {
@@ -124,6 +131,7 @@ impl RelationLabel {
             RelationLabel::Drift => "drift",
             RelationLabel::DecisionRef => "decision_ref",
             RelationLabel::Revises => "revises",
+            RelationLabel::OriginatesFrom => "originates_from",
         }
     }
 
@@ -155,6 +163,7 @@ impl RelationLabel {
             "drift" => RelationLabel::Drift,
             "decision_ref" => RelationLabel::DecisionRef,
             "revises" => RelationLabel::Revises,
+            "originates_from" => RelationLabel::OriginatesFrom,
             _ => return None,
         };
         // Defence-in-depth: the spelling must round-trip, so `name()` stays the single
@@ -168,7 +177,7 @@ impl RelationLabel {
 use crate::entity::Kind;
 use crate::kinds::{
     ADR, ASM, BACKLOG, CHR, CM, CON, DEC, GOV, IDE, IMP, ISS, POL, PRD, QUE, REC, RECORD, REQ, REV,
-    RSK, RV, SL, SPEC, STD,
+    RFC, RSK, RV, SL, SPEC, STD,
 };
 
 /// What an outbound label's target ref is allowed to resolve to — the forward-edge
@@ -387,7 +396,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SL],
+        sources: &[SL, RFC],
         label: RelationLabel::Related,
         inbound_name: "related",
         target: TargetSpec::AnyNumbered,
@@ -436,6 +445,19 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         label: RelationLabel::Revises,
         inbound_name: "revises",
         target: TargetSpec::Kinds(&[SPEC, PRD, REQ, ADR, POL, STD]),
+        tier: Tier::Typed,
+        link: LinkPolicy::TypedVerbOnly,
+    },
+    // originates_from (SL-122) — REV → RFC: a single provenance ref authored at
+    // `revision new --originates-from <RFC-NNN>` creation time (NOT a `[[change]]`
+    // row). `LinkPolicy::TypedVerbOnly` — `doctrine link … originates_from …` is
+    // refused; the rule row exists for target validation + inbound-reciprocity naming
+    // (`inspect RFC-NNN` lists "precursor of: REV-NNN").
+    RelationRule {
+        sources: &[REV],
+        label: RelationLabel::OriginatesFrom,
+        inbound_name: "precursor of",
+        target: TargetSpec::Kinds(&[RFC]),
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
     },
@@ -1051,13 +1073,14 @@ mod tests {
             (RelationLabel::Members, &["PRD", "SPEC"]),
             (RelationLabel::Interactions, &["SPEC"]),
             (RelationLabel::Slices, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
-            (RelationLabel::Related, &["ADR", "POL", "SL", "STD"]),
+            (RelationLabel::Related, &["ADR", "POL", "RFC", "SL", "STD"]),
             (RelationLabel::Reviews, &["RV"]),
             (RelationLabel::OwningSlice, &["REC"]),
             (RelationLabel::Drift, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
             (RelationLabel::DecisionRef, &["REC"]),
             (RelationLabel::Shapes, &["ASM", "DEC", "QUE", "CON"]),
             (RelationLabel::Spawns, &["ASM", "DEC", "QUE", "CON"]),
+            (RelationLabel::OriginatesFrom, &["REV"]),
         ];
         for (label, want_prefixes) in expected {
             let mut got: Vec<&str> = RELATION_RULES
@@ -1093,6 +1116,7 @@ mod tests {
                     | RelationLabel::Contextualizes
                     | RelationLabel::Shapes
                     | RelationLabel::Spawns
+                    | RelationLabel::OriginatesFrom
             );
             if differs {
                 assert!(
@@ -1182,6 +1206,7 @@ mod tests {
             RelationLabel::Drift,
             RelationLabel::DecisionRef,
             RelationLabel::Revises,
+            RelationLabel::OriginatesFrom,
         ];
         // ALL is declared in enum order; assert it is sorted (catches a mis-ordered
         // literal) and that it equals the table's distinct-label sequence.
@@ -1585,6 +1610,7 @@ mod tests {
         assert_eq!(inbound_name(RelationLabel::GovernedBy), "governs");
         assert_eq!(inbound_name(RelationLabel::Consumes), "consumed_by");
         assert_eq!(inbound_name(RelationLabel::Supersedes), "superseded by");
+        assert_eq!(inbound_name(RelationLabel::OriginatesFrom), "precursor of");
         // Every non-inverted label renders its own name().
         for label in distinct_labels_in_decl_order() {
             let inverted = matches!(
@@ -1595,6 +1621,7 @@ mod tests {
                     | RelationLabel::Contextualizes
                     | RelationLabel::Shapes
                     | RelationLabel::Spawns
+                    | RelationLabel::OriginatesFrom
             );
             if !inverted {
                 assert_eq!(
