@@ -405,6 +405,7 @@ fn store<T: Serialize>(path: &Path, manifest: &T) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    #[expect(clippy::disallowed_methods, reason = "runtime coordination manifest")]
     std::fs::write(path, toml::to_string(manifest)?)?;
     Ok(())
 }
