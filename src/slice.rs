@@ -436,10 +436,6 @@ pub(crate) fn run_status(
     Ok(())
 }
 
-
-
-
-
 /// Read the project `doctrine.toml [conduct]` table into a [`conduct::ConductConfig`]
 /// — the impure shell seam that keeps `conduct` pure (ADR-001). An absent file
 /// falls back to the default config (= baked defaults on resolve); a present file
@@ -2436,7 +2432,11 @@ mod tests {
         // A genuinely malformed file surfaces an error (not silent) — but the
         // FSM gates are untouched (this is the conduct read, advisory only).
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join(crate::dtoml::DOCTRINE_TOML), "[conduct\nbroken =").unwrap();
+        fs::write(
+            dir.path().join(crate::dtoml::DOCTRINE_TOML),
+            "[conduct\nbroken =",
+        )
+        .unwrap();
         assert!(load_conduct(dir.path()).is_err());
     }
 

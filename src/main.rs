@@ -3206,7 +3206,9 @@ fn write_class(cmd: &Command) -> WriteClass {
             },
             // plan-next / status — read plan + phase sheets; never mutates a
             // ref or ledger row — Read-classed so it works under worker-mode.
-            DispatchCommand::PlanNext { .. } | DispatchCommand::Status { .. } | DispatchCommand::DeliverTo { .. } => Read,
+            DispatchCommand::PlanNext { .. }
+            | DispatchCommand::Status { .. }
+            | DispatchCommand::DeliverTo { .. } => Read,
         },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and

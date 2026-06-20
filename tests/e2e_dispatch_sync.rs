@@ -1229,7 +1229,11 @@ fn show_journal_trunk_oid_defaults_trunk_from_deliver_to() {
     let dir = repo.path();
     build_fixture(dir);
     assert!(prepare_review(dir).status.success());
-    assert!(integrate(dir, &["--trunk", "refs/heads/main"]).status.success());
+    assert!(
+        integrate(dir, &["--trunk", "refs/heads/main"])
+            .status
+            .success()
+    );
 
     let explicit = show_journal_trunk_oid(dir, "refs/heads/main");
     assert!(explicit.status.success(), "explicit: {}", stderr(&explicit));
@@ -1238,8 +1242,13 @@ fn show_journal_trunk_oid_defaults_trunk_from_deliver_to() {
         dir,
         None,
         &[
-            "dispatch", "sync", "--show-journal-trunk-oid",
-            "--slice", "64", "-p", dir.to_str().unwrap(),
+            "dispatch",
+            "sync",
+            "--show-journal-trunk-oid",
+            "--slice",
+            "64",
+            "-p",
+            dir.to_str().unwrap(),
         ],
     );
     assert!(
@@ -1263,7 +1272,11 @@ fn show_journal_trunk_oid_explicit_trunk_overrides_config() {
     let dir = repo.path();
     build_fixture(dir);
     assert!(prepare_review(dir).status.success());
-    assert!(integrate(dir, &["--trunk", "refs/heads/main"]).status.success());
+    assert!(
+        integrate(dir, &["--trunk", "refs/heads/main"])
+            .status
+            .success()
+    );
     std::fs::write(
         dir.join("doctrine.toml"),
         "[dispatch]\ndeliver-to = \"refs/heads/other\"\n",
@@ -1287,7 +1300,11 @@ fn dispatch_deliver_to_prints_default_and_override() {
     let dir = repo.path();
     build_fixture(dir);
 
-    let out = run(dir, None, &["dispatch", "deliver-to", "-p", dir.to_str().unwrap()]);
+    let out = run(
+        dir,
+        None,
+        &["dispatch", "deliver-to", "-p", dir.to_str().unwrap()],
+    );
     assert!(out.status.success(), "default: {}", stderr(&out));
     assert_eq!(stdout(&out).trim(), "refs/heads/main");
 
@@ -1296,7 +1313,11 @@ fn dispatch_deliver_to_prints_default_and_override() {
         "[dispatch]\ndeliver-to = \"refs/heads/release\"\n",
     )
     .unwrap();
-    let out = run(dir, None, &["dispatch", "deliver-to", "-p", dir.to_str().unwrap()]);
+    let out = run(
+        dir,
+        None,
+        &["dispatch", "deliver-to", "-p", dir.to_str().unwrap()],
+    );
     assert!(out.status.success(), "override: {}", stderr(&out));
     assert_eq!(stdout(&out).trim(), "refs/heads/release");
 }
@@ -1409,7 +1430,11 @@ fn vt2_close_integration_honours_deliver_to_override() {
     build_fixture(dir);
     assert!(prepare_review(dir).status.success());
     // Real trunk row lands on main.
-    assert!(integrate(dir, &["--trunk", "refs/heads/main"]).status.success());
+    assert!(
+        integrate(dir, &["--trunk", "refs/heads/main"])
+            .status
+            .success()
+    );
     // Redirect the delivery ref away from main via project config.
     let cfg = dir.join("doctrine.toml");
     let mut body = std::fs::read_to_string(&cfg).unwrap_or_default();

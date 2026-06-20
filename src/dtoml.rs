@@ -8,8 +8,9 @@
 //! parses to its sub-config's default (tolerant — the conduct precedent). Every
 //! other top-level key is ignored.
 //!
-//! **Pure leaf (ADR-001).** The file *read* lives in the shell; [`parse`] takes
-//! owned text only.
+//! **Layering (ADR-001).** [`parse`] is the pure leaf — owned text in, no IO.
+//! [`load_doctrine_toml`] is the one thin impure shell seam co-located here (read
+//! file → `parse` → absent ⇒ default), so every consumer shares a single reader.
 
 use anyhow::Context;
 use serde::Deserialize;
@@ -67,11 +68,8 @@ pub(crate) const DOCTRINE_TOML: &str = "doctrine.toml";
 pub(crate) fn load_doctrine_toml(root: &Path) -> anyhow::Result<DoctrineToml> {
     let path = root.join(DOCTRINE_TOML);
     match std::fs::read_to_string(&path) {
-        Ok(text) => parse(&text)
-            .with_context(|| format!("Failed to parse {}", path.display())),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            Ok(DoctrineToml::default())
-        }
+        Ok(text) => parse(&text).with_context(|| format!("Failed to parse {}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DoctrineToml::default()),
         Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
     }
 }
