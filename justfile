@@ -43,6 +43,20 @@ web-check:
 build:
   cargo build
 
+# Catches source-filter / asset-embed gaps `cargo build` can't (it reads the real
+# web/map/dist on disk; the nix sandbox builds the frontend hermetically). Slow
+# first run, crane-cached after. Host-real; a genuine failure exits non-zero, but
+# skipped with a notice where nix is absent (bubblewrap jails).
+# Validate the hermetic nix flake build.
+nix-build:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if command -v nix >/dev/null 2>&1; then
+    nix build .#doctrine --no-link --print-out-paths
+  else
+    echo "nix-build: nix not on PATH (jail) — skipped" >&2
+  fi
+
 # Root package only — fast.
 test:
   cargo test
@@ -54,5 +68,10 @@ test-all:
 install: web-build
   cargo install --path .
 
-publish:
+# Run before a version bump / tag — this is where flake breakage (a new embed
+# root absent from the crane source graft, a toolchain skew) actually bites.
+# Pre-release gate: full workspace gate + hermetic nix flake build.
+release-check: gate nix-build
+
+publish: release-check
   cargo publish
