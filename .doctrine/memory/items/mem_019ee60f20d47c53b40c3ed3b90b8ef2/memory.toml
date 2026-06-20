@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee60f20d47c53b40c3ed3b90b8ef2"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "fact"
+status = "active"
+title = "SL-129 PHASE-02: read_doc/set_status root parameter change"
+summary = "SL-129 PHASE-02: pipeline of read_doc/set_status callers must pass project root, not kind root"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["sl-129", "dispatch"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "e9390d79242ff22b62e724f975fa1f9b9c126088"
+tree = "d64e734bedb5ebdf772ba381ba87435af274ebbc"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "e9390d79242ff22b62e724f975fa1f9b9c126088"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
