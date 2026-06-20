@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee5f4900275339de3602badd7c5e9"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Dispatch pi RPC worker protocol"
+summary = "Dispatch pi RPC subprocess: fifo with keepalive, funnel cadence"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "pi-rpc"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a685c7fbf3b6ca2c3782f6ad93d0bc6bc908b0e5"
+ref_name = "refs/heads/main"
+checkout_state_id = "4a09a53382d87a45dd1a0969eceb33e4f29132ed3572582babe58f269986d326"
+base_commit = "a47c465def1280cd3f595ee41ed1d77b93d8b4c3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

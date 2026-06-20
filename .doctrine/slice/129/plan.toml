@@ -27,7 +27,7 @@ dependencies = []
 [[phase]]
 id        = "PHASE-01"
 name      = "Add stem field + entity::id_path + update Kind initializers"
-objective = "Add `stem: &'static str` to `entity::Kind`, `Ext` enum, `id_path` and `rel_path` helpers; update all 23 Kind initializers across the codebase. `KindRef` and `GovKind` still carry their own `stem` — the build compiles with duplication."
+objective = "Add `stem: &'static str` to `entity::Kind`, `Ext` enum, `id_path` and `rel_path` helpers; update all 36 Kind initializers (30 production + 6 test) across the codebase. `KindRef` and `GovKind` still carry their own `stem` — the build compiles with duplication."
 entrance_criteria = [
   { id = "EN-1", text = "design.md written and locked; adversarial review resolved" },
   { id = "EN-2", text = "plan.toml and plan.md scaffolded" },
@@ -35,11 +35,11 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "entity::Kind has `stem` field, entity::Ext and entity::id_path/rel_path exist" },
-  { id = "EX-2", text = "all 23 Kind { ... } initializers include stem:" },
+  { id = "EX-2", text = "all 36 Kind { ... } initializers include stem (30 production + 6 test)" },
   { id = "EX-3", text = "build compiles: cargo build passes" },
 ]
 verification = [
-  { id = "VT-1", expects = "full just check green — all workspace tests pass, zero clippy warnings" },
+  { id = "VT-1", expects = "full just check green (root-package build + test + clippy + fmt); gate-only surfaces in PHASE-02" },
   { id = "VA-1", expects = "grep for Kind { confirms every initializer has stem:" },
   { id = "VA-2", expects = "src/entity.rs contains pub(crate) fn id_path, pub(crate) fn rel_path, pub(crate) enum Ext" },
 ]
@@ -60,12 +60,14 @@ exit_criteria = [
   { id = "EX-2", text = "GovKind struct has no stem field; all g.stem refs use g.kind.stem" },
   { id = "EX-3", text = "zero format!(\"<stem>-{id}.toml\") or format!(\"<stem>-{id}.md\") in production code (exempting meta.rs internals and test full-path assertions)" },
   { id = "EX-4", text = "cargo build passes, all paths byte-identical to pre-change" },
+  { id = "EX-5", text = "just gate passes (workspace build + lint + test-all + fmt)" },
 ]
 verification = [
-  { id = "VT-1", expects = "just check green; full workspace tests pass unchanged; zero clippy warnings" },
-  { id = "VT-2", expects = "cargo test worksp; all tests pass" },
+  { id = "VT-1", expects = "just check green (root-package); zero clippy warnings" },
+  { id = "VT-2", expects = "cargo test --workspace; all tests pass" },
   { id = "VA-1", expects = "grep for hardcoded stem format! in production returns zero hits" },
   { id = "VA-2", expects = "set-diff of planned touched files vs actual git diff; no unintended mods" },
+  { id = "VT-3", expects = "just gate green (workspace-level: build, lint, test-all, fmt)" },
 ]
 specs             = ["SPEC-004"]
 requirements      = []

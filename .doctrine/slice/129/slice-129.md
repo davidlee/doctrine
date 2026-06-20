@@ -58,7 +58,7 @@ IMP-067 captures this improvement at the backlog level, re-scoped (per proposal
 - `src/entity.rs` — add `stem` field to `Kind`, add `Ext` enum, add helpers
 - `src/integrity.rs` — remove `stem` from `KindRef`, derive from `kind.stem`
 
-**Kind declarations (~23 sites, 11 files):**
+**Kind declarations (36 sites, 11 files — 30 production + 6 test):
 - `src/slice.rs` — SLICE_KIND, DESIGN_KIND, PLAN_KIND, NOTES_KIND
 - `src/revision.rs` — REV_KIND
 - `src/review.rs` — REVIEW_KIND
@@ -82,7 +82,7 @@ IMP-067 captures this improvement at the backlog level, re-scoped (per proposal
 **Replacement sites (~85 production + ~8 test-only, 17 files):**
 - `src/slice.rs` (8), `src/revision.rs` (7), `src/review.rs` (5), `src/rec.rs` (2),
   `src/rfc.rs` (1), `src/relation_graph.rs` (2), `src/reconcile.rs` (1),
-  `src/governance.rs` (1), `src/backlog.rs` (12), `src/knowledge.rs` (5),
+  `src/governance.rs` (3 — plus ~7 non-path g.stem refs auto-fixed by compiler), `src/backlog.rs` (12), `src/knowledge.rs` (5),
   `src/requirement.rs` (7), `src/spec.rs` (10), `src/main.rs` (8 — test-only),
   `src/lazyspec.rs` (3), `src/catalog/scan.rs` (2), `src/integrity.rs` (3),
   `src/map_server/markdown.rs` (1)
