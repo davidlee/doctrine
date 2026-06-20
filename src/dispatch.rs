@@ -128,10 +128,10 @@ pub(crate) fn run_prepare_review(path: Option<PathBuf>, slice: u32) -> anyhow::R
 /// CLI entry — print the committed `dispatch/<slice>` journal trunk-row's full
 /// `planned_new_oid` to stdout: the close step-3a read surface (SL-121 §3(b)). The
 /// row is named by `trunk` (`target_ref == trunk`). Tree-reads the journal from the
-/// coordination tip (`read_ledger` → `read_path_at`), so it returns the same value
-/// from any checkout — the `sync-tree-reads-ledger-not-worktree` invariant — never a
-/// transient `candidate admit` stdout. An absent row refuses (named token), emitting
-/// no oid, so the skill never diffs against an empty value.
+/// coordination tip (`ledger::read_journal_at_ref` → `read_path_at`), so it returns
+/// the same value from any checkout — the `sync-tree-reads-ledger-not-worktree`
+/// invariant — never a transient `candidate admit` stdout. An absent journal/row
+/// refuses (named token), emitting no oid, so the skill never diffs an empty value.
 pub(crate) fn run_show_journal_trunk_oid(
     path: Option<PathBuf>,
     slice: u32,
@@ -139,8 +139,9 @@ pub(crate) fn run_show_journal_trunk_oid(
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let slice3 = format!("{slice:03}");
-    let coord_ref = format!("refs/heads/dispatch/{slice3}");
-    let journal = read_ledger::<Journal>(&root, &coord_ref, &slice3, "journal.toml")?;
+    // Absent ref/journal folds to an empty journal — same "no journal row"
+    // refusal as before, now via the shared leaf tree-reader (DRY, EX-3).
+    let journal = crate::ledger::read_journal_at_ref(&root, slice)?.unwrap_or_default();
     let oid = journal
         .rows
         .iter()

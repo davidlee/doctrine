@@ -403,6 +403,25 @@ pub(crate) fn run_status(
             );
         }
     }
+    // Close-integration gate (PHASE-02, EX-1/EX-2; design §3.1): a THIRD gate
+    // BESIDE the blocker scan and the drift predicate, firing ONLY on the
+    // `reconcile → done` crossing. It COMPOSES — a separate `if` from the drift
+    // block, so any one of the three can independently refuse. Dispatched code
+    // that never integrated to trunk fails-closed here, in the binary, not in
+    // skill prose. The new in-crate edge is `slice → ledger` (command→leaf,
+    // downward — no cycle, ADR-001); `ledger` stays ref-agnostic, so the
+    // `TRUNK_REF` literal and the refusal copy live HERE in the shell.
+    if from == "reconcile" && to == "done" {
+        match crate::ledger::trunk_integration(&root, id, TRUNK_REF)? {
+            crate::ledger::TrunkIntegration::NotDispatched
+            | crate::ledger::TrunkIntegration::Integrated => {}
+            crate::ledger::TrunkIntegration::Blocked(reason) => anyhow::bail!(
+                "slice {} → {to}: refused — dispatched code not integrated to trunk: \
+                 {reason} (run close step-3a `dispatch sync --integrate`, verify, retry)",
+                canonical_id(id)
+            ),
+        }
+    }
     set_slice_status(&slice_root, id, &from, state, &crate::clock::today())?;
     // Advisory conduct posture (F15/F19): the SOURCE state's exit posture —
     // `autonomy` governs advancing *out* of `from`. Never blocks; surfaced only.
@@ -419,6 +438,13 @@ pub(crate) fn run_status(
 /// The project conduct filename — root-level user config (the structured sibling
 /// of `governance.md`), NOT a `.doctrine/` entity (design §5.3, F6).
 const DOCTRINE_TOML: &str = "doctrine.toml";
+
+/// The trunk delivery ref the close-integration gate (`run_status`, PHASE-02)
+/// checks dispatched code against. Mirrors close step-3a's `--trunk
+/// refs/heads/main` and the sync verb's trunk selector. Owned HERE in the shell
+/// (the config-reading seam) so `ledger` stays ref-agnostic; IMP-124 generalises
+/// it to a configured `[dispatch] deliver_to`.
+const TRUNK_REF: &str = "refs/heads/main";
 
 /// Read the project `doctrine.toml [conduct]` table into a [`conduct::ConductConfig`]
 /// — the impure shell seam that keeps `conduct` pure (ADR-001). An absent file
@@ -3482,5 +3508,241 @@ mod tests {
     #[test]
     fn nf001_gate_destructure_is_exhaustive_and_facet_free() {
         let Gate { extra_reqs: _ } = Gate::default();
+    }
+
+    // -----------------------------------------------------------------------
+    // PHASE-02 close-integration gate (EX-1/EX-2, VT-1..VT-6). The THIRD reverse
+    // close-gate: `reconcile → done` refuses when a DISPATCHED slice's code never
+    // integrated to trunk. Composes with the blocker + drift gates above.
+    //
+    // Fixtures mirror `ledger::tests::JournalRepo` — a `journal.toml` committed on
+    // an orphan `refs/heads/dispatch/<slice:03>` branch (the coordination ref tree
+    // the query reads, never the working filesystem), built BEFORE the slice
+    // entity so the slice's untracked working-tree files are never disturbed.
+    // -----------------------------------------------------------------------
+
+    /// A single journal row in on-disk TOML form (only the query-relevant fields
+    /// carry meaning; the rest satisfy the non-`default` serde requirements).
+    /// Mirrors `ledger::tests::journal_row_toml` (leaf-tier sibling — no shared
+    /// cross-module test harness).
+    fn dispatch_row_toml(target_ref: &str, planned_new_oid: &str) -> String {
+        format!(
+            "[[row]]\n\
+             source_oid = \"src\"\n\
+             target_ref = \"{target_ref}\"\n\
+             expected_old_oid = \"{zero}\"\n\
+             planned_new_oid = \"{planned_new_oid}\"\n\
+             status = \"pending\"\n",
+            zero = "0".repeat(40),
+        )
+    }
+
+    /// Commit `body` as `journal.toml` onto an orphan `dispatch/<slice:03>` branch,
+    /// leaving the working branch on `main`. Mirrors `JournalRepo::commit_journal`.
+    fn commit_dispatch_journal(root: &Path, slice: u32, body: &str) {
+        let branch = format!("dispatch/{slice:03}");
+        git(root, &["checkout", "-q", "--orphan", &branch]);
+        git(root, &["rm", "-rf", "--cached", "--ignore-unmatch", "."]);
+        let rel = format!(".doctrine/dispatch/{slice:03}/journal.toml");
+        let full = root.join(&rel);
+        fs::create_dir_all(full.parent().unwrap()).unwrap();
+        fs::write(&full, body).unwrap();
+        git(root, &["add", &rel]);
+        git(root, &["commit", "-q", "-m", "coordinate: journal"]);
+        git(root, &["checkout", "-f", "main"]);
+    }
+
+    /// Create a fresh dispatch branch carrying ONLY a placeholder (no `journal.toml`),
+    /// leaving the working branch on `main`.
+    fn commit_dispatch_no_journal(root: &Path, slice: u32) {
+        let branch = format!("dispatch/{slice:03}");
+        git(root, &["checkout", "-q", "--orphan", &branch]);
+        git(root, &["rm", "-rf", "--cached", "--ignore-unmatch", "."]);
+        fs::write(root.join("placeholder.txt"), "x").unwrap();
+        git(root, &["add", "placeholder.txt"]);
+        git(root, &["commit", "-q", "-m", "coordinate: no journal"]);
+        git(root, &["checkout", "-f", "main"]);
+    }
+
+    /// Drive `reconcile → done` to SUCCESS; panic if the gate refuses.
+    fn expect_close_succeeds(root: &Path) {
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None)
+            .expect("reconcile → done should succeed");
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
+    }
+
+    // VT-1: never dispatched (no `dispatch/001` ref) ⇒ the gate is silent; the
+    // crossing succeeds.
+    #[test]
+    fn vt1_close_integration_not_dispatched_succeeds() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        expect_close_succeeds(root);
+    }
+
+    // VT-1b: dispatch ref present but the journal has zero rows ⇒ NotDispatched ⇒
+    // the crossing succeeds (a coordinated-but-never-projected slice).
+    #[test]
+    fn vt1b_close_integration_dispatched_empty_journal_succeeds() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        commit_dispatch_journal(root, 1, "");
+        slice_at_reconcile(root);
+        expect_close_succeeds(root);
+    }
+
+    // VT-2: dispatched, the trunk row's planned oid IS an ancestor of
+    // `refs/heads/main` ⇒ Integrated ⇒ the crossing succeeds.
+    #[test]
+    fn vt2_close_integration_planned_on_trunk_succeeds() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        // Advance `main` so the recorded planned oid is a strict ancestor of the tip.
+        std::fs::write(root.join("src.rs"), "fn a() {}\nfn b() {}\n").unwrap();
+        git(root, &["add", "src.rs"]);
+        git(root, &["commit", "-q", "-m", "landed"]);
+        let landed = git(root, &["rev-parse", "HEAD"]);
+        std::fs::write(root.join("src.rs"), "fn a() {}\nfn b() {}\nfn c() {}\n").unwrap();
+        git(root, &["add", "src.rs"]);
+        git(root, &["commit", "-q", "-m", "advance trunk"]);
+        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &landed));
+        slice_at_reconcile(root);
+        expect_close_succeeds(root);
+    }
+
+    // VT-3: dispatched, the planned oid is NOT on trunk ⇒ Blocked ⇒ REFUSED. The
+    // refusal carries both the anomaly reason token AND the retry guidance.
+    #[test]
+    fn vt3_close_integration_planned_off_trunk_refuses() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        // A divergent commit on a side branch, never merged into main.
+        git(root, &["checkout", "-q", "-b", "side"]);
+        std::fs::write(root.join("side.rs"), "fn x() {}\n").unwrap();
+        git(root, &["add", "side.rs"]);
+        git(root, &["commit", "-q", "-m", "divergent"]);
+        let orphaned = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-f", "main"]);
+        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        slice_at_reconcile(root);
+
+        let err = expect_close_refused(root);
+        assert!(
+            err.contains("not integrated to trunk"),
+            "names the integration anomaly: {err}"
+        );
+        assert!(
+            err.contains("planned tip not on trunk"),
+            "carries the leaf reason token: {err}"
+        );
+        assert!(
+            err.contains("dispatch sync --integrate"),
+            "carries the retry guidance: {err}"
+        );
+        // Refused BEFORE the write — status stays at reconcile.
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    // VT-4: dispatched (journal HAS rows) but NO `refs/heads/main` row ⇒ Blocked ⇒
+    // REFUSED (fail-closed — integrate --trunk never completed).
+    #[test]
+    fn vt4_close_integration_no_trunk_row_refuses_fail_closed() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        let oid = git(root, &["rev-parse", "HEAD"]);
+        commit_dispatch_journal(root, 1, &dispatch_row_toml("refs/heads/edge", &oid));
+        slice_at_reconcile(root);
+
+        let err = expect_close_refused(root);
+        assert!(
+            err.contains("no trunk row") && err.contains("integrate --trunk never completed"),
+            "fail-closed on a missing trunk row: {err}"
+        );
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    // VT-5: the integration gate fires ONLY on `reconcile → done`. An unintegrated
+    // dispatched slice crossing `audit → reconcile` is NOT refused by THIS gate
+    // (the blocker gate runs there, but with no blocker the crossing passes).
+    #[test]
+    fn vt5_close_integration_does_not_fire_off_the_reconcile_done_crossing() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        // A planned oid off trunk — would Block the `reconcile → done` gate.
+        git(root, &["checkout", "-q", "-b", "side"]);
+        std::fs::write(root.join("side.rs"), "fn x() {}\n").unwrap();
+        git(root, &["add", "side.rs"]);
+        git(root, &["commit", "-q", "-m", "divergent"]);
+        let orphaned = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-f", "main"]);
+        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        // Slice at `audit` — the legal source for `→ reconcile`.
+        make_slice(root, "s", "S", "2026-06-12");
+        set_status_raw(root, 1, "audit");
+
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None)
+            .expect("audit → reconcile is not gated by the integration check");
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    // VT-6: composition — an unintegrated slice that ALSO has an unresolved blocker
+    // is refused; each gate independently suffices on the `reconcile → done`
+    // crossing (the blocker gate runs first and refuses here).
+    #[test]
+    fn vt6_close_integration_composes_with_the_blocker_gate() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        git(root, &["checkout", "-q", "-b", "side"]);
+        std::fs::write(root.join("side.rs"), "fn x() {}\n").unwrap();
+        git(root, &["add", "side.rs"]);
+        git(root, &["commit", "-q", "-m", "divergent"]);
+        let orphaned = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-f", "main"]);
+        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        slice_at_reconcile(root);
+        raise_blocker_rv(root, 1);
+
+        // Both gates would refuse; the crossing is refused (blocker first).
+        let err = expect_close_refused(root);
+        assert!(
+            err.contains("blocker review finding"),
+            "an unresolved blocker independently refuses: {err}"
+        );
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    // VT-6 (integration-alone half): the SAME unintegrated slice with NO blocker is
+    // still refused — proving the integration gate refuses on its own.
+    #[test]
+    fn vt6_close_integration_refuses_independently_of_the_blocker() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        git(root, &["checkout", "-q", "-b", "side"]);
+        std::fs::write(root.join("side.rs"), "fn x() {}\n").unwrap();
+        git(root, &["add", "side.rs"]);
+        git(root, &["commit", "-q", "-m", "divergent"]);
+        let orphaned = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-f", "main"]);
+        commit_dispatch_journal(root, 1, &dispatch_row_toml(TRUNK_REF, &orphaned));
+        slice_at_reconcile(root);
+
+        let err = expect_close_refused(root);
+        assert!(
+            err.contains("not integrated to trunk"),
+            "integration gate refuses with no blocker present: {err}"
+        );
+    }
+
+    // Belt-and-braces: silence the unused-helper lint if `commit_dispatch_no_journal`
+    // is the only at-ref-present-no-journal path exercised via the leaf unit suite;
+    // here it drives a NotDispatched success the gate must wave through.
+    #[test]
+    fn vt1c_close_integration_dispatch_ref_present_no_journal_succeeds() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        commit_dispatch_no_journal(root, 1);
+        slice_at_reconcile(root);
+        expect_close_succeeds(root);
     }
 }

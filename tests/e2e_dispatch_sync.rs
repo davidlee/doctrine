@@ -1248,3 +1248,100 @@ fn show_journal_trunk_oid_requires_trunk() {
         stderr(&out)
     );
 }
+
+// ====================================================================
+// PHASE-02 (SL-126) — close-integration gate, end-to-end against a REAL
+// journal. The keystone: PHASE-01's unit fixtures encode the row shape, but
+// only a real `prepare_review` + `integrate --trunk` proves git produces a
+// trunk row the gate reads as Integrated. Both arms drive a slice fixture at
+// `reconcile` to `done` via the BUILT binary's `slice status`.
+// ====================================================================
+
+/// Materialise slice 064's authored `slice-064.toml` at `status = "reconcile"` in
+/// the fixture's working tree (the legal source for `→ done`). The gate reads the
+/// working filesystem for the authored status; no reqs/coverage ⇒ the blocker and
+/// drift gates pass, leaving the integration gate as the sole arbiter.
+fn write_reconcile_slice_64(dir: &Path) {
+    let body = "id = 64\n\
+         slug = \"dispatched-slice\"\n\
+         title = \"Dispatched slice\"\n\
+         status = \"reconcile\"\n\
+         created = \"2026-06-20\"\n\
+         updated = \"2026-06-20\"\n\
+         \n[relationships]\nneeds = []\nafter = []\n";
+    let path = dir.join(".doctrine/slice/064/slice-064.toml");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, body).unwrap();
+}
+
+/// Drive `slice status 64 done -p <dir>` over the built binary.
+fn slice_status_done(dir: &Path) -> Output {
+    run(
+        dir,
+        None,
+        &["slice", "status", "64", "done", "-p", dir.to_str().unwrap()],
+    )
+}
+
+/// VT-7(a): after a real `prepare_review` + `integrate --trunk refs/heads/main`,
+/// the trunk row's planned oid is an ancestor of `main` — the gate reads the
+/// git-produced journal as Integrated and `reconcile → done` SUCCEEDS.
+#[test]
+fn vt7_close_integration_succeeds_after_real_trunk_integrate() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(
+        out.status.success(),
+        "trunk integrate; stderr: {}",
+        stderr(&out)
+    );
+
+    write_reconcile_slice_64(dir);
+    let out = slice_status_done(dir);
+    assert!(
+        out.status.success(),
+        "integrated slice closes; stderr: {}",
+        stderr(&out)
+    );
+    // The authored status advanced to done.
+    let toml = std::fs::read_to_string(dir.join(".doctrine/slice/064/slice-064.toml")).unwrap();
+    assert!(
+        toml.contains("status = \"done\""),
+        "close wrote the terminal status: {toml}"
+    );
+}
+
+/// VT-7(b): `prepare_review` ran but `--trunk` was NOT integrated, so the journal
+/// carries no `refs/heads/main` row — the gate fails closed and `reconcile → done`
+/// is REFUSED, naming the missing-trunk-row anomaly.
+#[test]
+fn vt7_close_integration_refused_without_trunk_integrate() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    // Default integrate (no `--trunk`) — replays review/phase refs, no trunk row.
+    assert!(integrate(dir, &[]).status.success());
+
+    write_reconcile_slice_64(dir);
+    let out = slice_status_done(dir);
+    assert!(
+        !out.status.success(),
+        "an unintegrated dispatched slice is refused close"
+    );
+    assert!(
+        stderr(&out).contains("not integrated to trunk")
+            && stderr(&out).contains("integrate --trunk never completed"),
+        "refusal names the no-trunk-row anomaly: {}",
+        stderr(&out)
+    );
+    // Refused before the write — the authored status stays at reconcile.
+    let toml = std::fs::read_to_string(dir.join(".doctrine/slice/064/slice-064.toml")).unwrap();
+    assert!(
+        toml.contains("status = \"reconcile\""),
+        "no write on refusal: {toml}"
+    );
+}
