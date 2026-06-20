@@ -57,10 +57,14 @@ wired through `dtoml.rs` as `doc.dispatch`. Existing keys
 reason = "consumed by a future dispatch-config display slice"))]` (`dtoml.rs:38`)
 — **this slice is that future consumer** (R5).
 
-**Prose literal inventory** (`close/SKILL.md`): `refs/heads/main` at lines 74, 95,
-96 (delivery — in scope), 102/107 (explanatory + TODO — in scope), and **line 68
-`--base refs/heads/main`** — the *fork base* (concept #1, ADR-006 D3),
-**deliberately out of scope** (D1 boundary).
+**Prose literal inventory** (`close/SKILL.md`): `refs/heads/main` at lines **68**
+(`dispatch candidate create --base` — the candidate base that is admitted and
+FF'd onto trunk; a *delivery-path* literal, **in scope** — RV codex F1), 74
+(`--integrate --trunk`), 95 (`--show-journal-trunk-oid --trunk`), 96 (`git diff`
+compare), 102/107 (explanatory + TODO). All are delivery-side and route through
+`deliver_to`/the verb. Concept #1 (the git.rs `trunk_tree_ish` *auto-resolver*)
+has **no literal in this prose** — it resolves silently; it stays sealed, but it
+was never the line-68 literal (an earlier mischaracterisation).
 
 ## 3. Forces & Constraints
 
@@ -147,16 +151,30 @@ delivery (it resolves to a commit-ish; delivery needs a writable ref — D3).
 
 - `deliver_to` lives in `doctrine.toml [dispatch]` — authored project config, not a
   `.doctrine/` entity. Owned by the operator.
-- **Single read seam (DRY).** Extract `load_doctrine_toml(root) -> DoctrineToml`
-  in `slice.rs` (absent file → `DoctrineToml::default()`; `DoctrineToml: Default`
-  confirmed, `dtoml.rs:18`). `load_conduct` stays as a **thin delegating wrapper**
-  (`load_doctrine_toml(root)?.conduct`) so its other caller (`slice.rs:1083`) and
-  tests (`2419–2450`) stay green. The gate reads `load_doctrine_toml(&root)?.
-  dispatch.deliver_to` (one parse in `run_status`, reused for `.conduct` at
-  `slice.rs:428`).
+- **Single impure reader in a NEUTRAL module (RV codex F2).** Add the impure
+  `load_doctrine_toml(root) -> DoctrineToml` to `dtoml.rs` (which already owns the
+  *pure* `parse`, `dtoml.rs:50`) — a thin shell: read file, `parse`, absent →
+  `DoctrineToml::default()` (`DoctrineToml: Default` confirmed, `dtoml.rs:18`).
+  All three consumers read through it: the gate (`slice.rs`), the sync handler
+  (`main.rs`), the verb. It must NOT live in `slice.rs`, or `main.rs`/verb couple
+  sideways into the slice command shell. `load_conduct` becomes a thin delegating
+  wrapper (`dtoml::load(root)?.conduct`) so its other caller (`slice.rs:1083`) +
+  tests (`2419–2450`) stay green. *(Pre-existing duplication: `coverage_store::
+  load_config` also reads `doctrine.toml` for `[verification]`; converging it on
+  `dtoml::load` is a noted follow-up, not this slice.)*
+- **NO shared parse with conduct — preserve `slice status` failure ordering (RV
+  codex F3).** The gate (`slice.rs:414`) runs **before** the authored write
+  (`set_slice_status`, `:425`) and the conduct read (`:428`). Hoisting one parse
+  up to feed both would turn malformed `doctrine.toml` from a *post-write* posture
+  failure into a *pre-write* refusal on **every** transition. Instead: the gate
+  reads `deliver_to` **inside its own `reconcile→done` branch only**; the conduct
+  read stays at `:428`, post-write, unchanged. On `reconcile→done` the gate gains
+  a pre-write config dependency (I4) — inherent: the gate cannot evaluate without
+  the ref. Other transitions are byte-for-byte unchanged.
 - **R5 — drop the dead-code expectation.** Reading `doc.dispatch` in non-test code
   makes the `#[cfg_attr(not(test), expect(dead_code, …))]` on `DoctrineToml.dispatch`
-  unfulfilled → a compile error. Remove that attribute as part of wiring the gate.
+  unfulfilled; the crate builds with `warnings = "deny"` (`Cargo.toml:128`), so it
+  is a hard build break. Remove that attribute as part of wiring the gate.
 - The `dispatch sync` handler (`main.rs`) resolves `--trunk` for the read stages
   from the same `DispatchConfig` (already reachable via dtoml parse).
 - `ledger` ownership unchanged: ref-agnostic, ref passed in.
@@ -176,6 +194,10 @@ delivery (it resolves to a commit-ish; delivery needs a writable ref — D3).
   serde-absent `==` `refs/heads/main`.
 - **I2 — edge-only preserved.** `--integrate` with no `--trunk` plans no trunk row.
 - **I3 — explicit override.** A passed `--trunk` always wins over config.
+- **I4 — gate config-read is branch-scoped.** Only the `reconcile→done` gate reads
+  `deliver_to` (pre-write); all other `slice status` transitions keep the current
+  ordering (conduct read post-write). Malformed `doctrine.toml` refuses *only* the
+  `reconcile→done` transition early — acceptable; the gate needs the ref.
 - **Bad ref:** `deliver_to` naming a nonexistent ref surfaces at git use-time
   (gate `resolve_ref` → "trunk ref … unresolved"; integrate FF-CAS). No new
   validation surface (matches A1 / out-of-scope).
@@ -195,8 +217,14 @@ delivery (it resolves to a commit-ish; delivery needs a writable ref — D3).
 ## 7. Decisions, Rationale & Alternatives
 
 - **D1 — delivery-target-only scope (A).** `deliver_to` feeds the delivery axis;
-  the ADR-006 D3 base resolver (`trunk_tree_ish`, env + ladder) is untouched.
-  *Rationale:* matches IMP-124's literal scope; keeps base machinery sealed;
+  the ADR-006 D3 *auto-resolver* `trunk_tree_ish` (env + ladder, picks the dispatch
+  fork-point silently) is untouched. **Clarified (codex F1):** the close-prose
+  `candidate create --base refs/heads/main` (`SKILL.md:68`) is NOT that resolver —
+  it is an explicit delivery-side literal (the candidate base that lands on trunk),
+  so it IS in scope and routes through `deliver_to`/the verb. The #1/#2 split holds
+  at the *mechanism* level (silent ladder vs named delivery ref); only the prose
+  inventory was miscategorised.
+  *Rationale:* matches IMP-124's literal scope; keeps the auto-resolver sealed;
   PR-delivery is a delivery-axis concern, so entangling it with base resolution
   (alt B) would foreclose the very thing we want to vary.
   *Alt B (unify base+delivery into one trunk identity)* — rejected: reopens
@@ -240,18 +268,24 @@ delivery (it resolves to a commit-ish; delivery needs a writable ref — D3).
 - **Config (unit, `dispatch_config.rs`):** absent `deliver-to` → `refs/heads/main`;
   present → override; `DispatchConfig::default().deliver_to` parity with
   serde-absent (I1); combined with existing keys still parses.
+- **Outer round-trip (`dtoml.rs`, codex F4):** extend the existing `[dispatch]`
+  outer-parse contract test (`dtoml.rs:91`) to cover `deliver-to` surviving the
+  full `DoctrineToml` parse (table present/absent).
+- **`dtoml::load` (impure reader):** absent file → defaults; malformed → error
+  (mirrors `load_conduct`'s current tests).
 - **Gate (`slice.rs`):** existing `trunk_integration` suites green **unchanged**
   (R3 proof); add a test that the gate honours a `deliver_to` override (config
   names a non-`main` ref → gate checks that ref).
-- **CLI:** `dispatch deliver-to` prints the resolved ref (default + override);
-  `--show-journal-trunk-oid` with no `--trunk` resolves from config, with
-  `--trunk` honours the explicit value (I3); `--integrate --edge` with no
-  `--trunk` still plans no trunk row (I2).
-- **Prose:** `close/SKILL.md` *delivery* literals removed — line 74 (write,
-  via verb), 95 (read, omit `--trunk` or verb), 96 (`git diff` compare, via verb),
-  102/107 (explanatory + TODO). **Line 68 `--base refs/heads/main` stays** (fork
-  base, concept #1, D1 boundary) — its presence is the proof base resolution was
-  consciously left alone, not missed.
+- **CLI (codex F4):** `dispatch deliver-to` prints the resolved ref (default +
+  override); **replace** the existing clap-refusal test
+  (`e2e_dispatch_sync.rs:1223`, which pins `--show-journal-trunk-oid` *requires*
+  `--trunk`) with behaviour tests — no flag → config/default, explicit `--trunk`
+  still wins (I3); `--integrate --edge` with no `--trunk` still plans no trunk row
+  (I2, the edge-only proof — stays green unchanged).
+- **Prose:** `close/SKILL.md` *delivery* literals removed — line 68 (`candidate
+  create --base`, via verb), 74 (write, via verb), 95 (read, omit `--trunk` or
+  verb), 96 (`git diff` compare, via verb), 102/107 (explanatory + TODO). No
+  `refs/heads/main` literal remains in the close delivery path.
 
 ## 10. Review Notes
 
@@ -271,4 +305,24 @@ Adversarial self-review (internal pass) integrated:
   edge-only `--integrate` is a live tested path (`e2e_dispatch_sync.rs:688`).
 
 No governance conflict surfaced (ADR-001/006/012 all honoured; base resolver
-sealed). Design ready for external/inquisition pass or `/plan`.
+sealed).
+
+**External adversarial pass (codex / GPT-5.5), thread
+`019ee568-611e-7641-a9f0-24ffa450cd35` — all accepted + integrated:**
+
+- **codex-F1 [MAJOR]** — `SKILL.md:68 candidate create --base` is a delivery-path
+  literal, not the fork-base resolver. → brought into scope (§2, §7 D1, §9); #1/#2
+  split re-grounded at the *mechanism* level.
+- **codex-F2 [MAJOR]** — impure `load_doctrine_toml` must live in a neutral module
+  (`dtoml.rs`), not `slice.rs`, else `main.rs`/verb couple into the slice shell. →
+  §5.3 rewritten; `coverage_store::load_config` convergence noted as follow-up.
+- **codex-F3 [MAJOR]** — sharing one parse for conduct changes `slice status`
+  failure ordering (post-write → pre-write for all transitions). → gate reads
+  config inside its `reconcile→done` branch only; conduct read unchanged (§5.3,
+  I4).
+- **codex-F4 [MINOR]** — add `dtoml.rs` round-trip coverage for `deliver_to`;
+  replace the clap-refusal test with behaviour tests. → §9.
+- **Confirmed correct by codex:** env base-only (`git.rs:1030`); edge-only
+  preserved (`dispatch.rs:1227`); R5 real (`Cargo.toml:128 warnings="deny"`).
+
+Design ready for `/plan`.
