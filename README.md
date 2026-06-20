@@ -188,30 +188,34 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [PRD-009 — Backlog](.doctrine/spec/product/009/spec-009.md) — `active`
 - [PRD-010 — Epistemic and Governance Records](.doctrine/spec/product/010/spec-010.md) — `active`
 - [PRD-011 — Graph-Derived Priority and Actionability](.doctrine/spec/product/011/spec-011.md) — `active`
-- [PRD-012 — Technical Specifications](.doctrine/spec/product/012/spec-012.md) — `draft`
+- [PRD-012 — Technical Specifications](.doctrine/spec/product/012/spec-012.md) — `active`
 - [PRD-013 — Requirement Reconciliation](.doctrine/spec/product/013/spec-013.md) — `active`
+- [PRD-014 — Estimation & Value](.doctrine/spec/product/014/spec-014.md) — `active`
+- [PRD-015 — Dispatch & worktree](.doctrine/spec/product/015/spec-015.md) — `active`
 
 ### Technical Specifications
 
 - [SPEC-001 — Graph-Derived Priority Engine](.doctrine/spec/tech/001/spec-001.md) — `active`
 - [SPEC-002 — Requirement Reconciliation Engine](.doctrine/spec/tech/002/spec-002.md) — `active`
-- [SPEC-003 — Doctrine](.doctrine/spec/tech/003/spec-003.md) — `draft`
-- [SPEC-004 — Entity engine](.doctrine/spec/tech/004/spec-004.md) — `draft`
-- [SPEC-005 — ADR entity surface](.doctrine/spec/tech/005/spec-005.md) — `draft`
-- [SPEC-006 — Spec composition machinery](.doctrine/spec/tech/006/spec-006.md) — `draft`
-- [SPEC-007 — Memory engine](.doctrine/spec/tech/007/spec-007.md) — `draft`
-- [SPEC-008 — Id lifecycle](.doctrine/spec/tech/008/spec-008.md) — `draft`
-- [SPEC-009 — Install & distribution](.doctrine/spec/tech/009/spec-009.md) — `draft`
-- [SPEC-010 — Skills distribution](.doctrine/spec/tech/010/spec-010.md) — `draft`
-- [SPEC-011 — Boot snapshot](.doctrine/spec/tech/011/spec-011.md) — `draft`
-- [SPEC-012 — Dispatch & worktree](.doctrine/spec/tech/012/spec-012.md) — `draft`
-- [SPEC-013 — CLI surface](.doctrine/spec/tech/013/spec-013.md) — `draft`
-- [SPEC-014 — Slice surface](.doctrine/spec/tech/014/spec-014.md) — `draft`
-- [SPEC-015 — Backlog entity surface](.doctrine/spec/tech/015/spec-015.md) — `draft`
-- [SPEC-016 — Governance kinds (POL/STD)](.doctrine/spec/tech/016/spec-016.md) — `draft`
-- [SPEC-017 — Tech-spec spine](.doctrine/spec/tech/017/spec-017.md) — `draft`
-- [SPEC-018 — Cross-corpus relation contract](.doctrine/spec/tech/018/spec-018.md) — `draft`
-- [SPEC-019 — Knowledge-record entity surface](.doctrine/spec/tech/019/spec-019.md) — `draft`
+- [SPEC-003 — Doctrine](.doctrine/spec/tech/003/spec-003.md) — `active`
+- [SPEC-004 — Entity engine](.doctrine/spec/tech/004/spec-004.md) — `active`
+- [SPEC-005 — ADR entity surface](.doctrine/spec/tech/005/spec-005.md) — `active`
+- [SPEC-006 — Spec composition machinery](.doctrine/spec/tech/006/spec-006.md) — `active`
+- [SPEC-007 — Memory engine](.doctrine/spec/tech/007/spec-007.md) — `active`
+- [SPEC-008 — Id lifecycle](.doctrine/spec/tech/008/spec-008.md) — `active`
+- [SPEC-009 — Install & distribution](.doctrine/spec/tech/009/spec-009.md) — `active`
+- [SPEC-010 — Skills distribution](.doctrine/spec/tech/010/spec-010.md) — `active`
+- [SPEC-011 — Boot snapshot](.doctrine/spec/tech/011/spec-011.md) — `active`
+- [SPEC-012 — Dispatch & worktree](.doctrine/spec/tech/012/spec-012.md) — `active`
+- [SPEC-013 — CLI surface](.doctrine/spec/tech/013/spec-013.md) — `active`
+- [SPEC-014 — Slice surface](.doctrine/spec/tech/014/spec-014.md) — `active`
+- [SPEC-015 — Backlog entity surface](.doctrine/spec/tech/015/spec-015.md) — `active`
+- [SPEC-016 — Governance kinds (POL/STD)](.doctrine/spec/tech/016/spec-016.md) — `active`
+- [SPEC-017 — Tech-spec spine](.doctrine/spec/tech/017/spec-017.md) — `active`
+- [SPEC-018 — Cross-corpus relation contract](.doctrine/spec/tech/018/spec-018.md) — `active`
+- [SPEC-019 — Knowledge-record entity surface](.doctrine/spec/tech/019/spec-019.md) — `active`
+- [SPEC-020 — Estimation facet](.doctrine/spec/tech/020/spec-020.md) — `active`
+- [SPEC-021 — Dispatch orchestrator process](.doctrine/spec/tech/021/spec-021.md) — `active`
 
 ### Architecture Decision Records
 
