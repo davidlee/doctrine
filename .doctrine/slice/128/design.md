@@ -54,7 +54,7 @@ later **PR-based delivery** (push a candidate as a PR rather than merging locall
 wired through `dtoml.rs` as `doc.dispatch`. Existing keys
 `preferred-subprocess-harness`, `claude-force-subprocess-dispatch`. The
 `DoctrineToml.dispatch` field carries `#[cfg_attr(not(test), expect(dead_code,
-reason = "consumed by a future dispatch-config display slice"))]` (`dtoml.rs:38`)
+reason = "consumed by a future dispatch-config display slice"))]` (`dtoml.rs:42`)
 — **this slice is that future consumer** (R5).
 
 **Prose literal inventory** (`close/SKILL.md`): `refs/heads/main` at lines **68**
@@ -126,6 +126,15 @@ pub(crate) struct DispatchConfig {
 (dtoml file-absent fallback) and serde absent-key path must yield
 `refs/heads/main` — a parity invariant (I1).
 
+The struct already carries a **container** `#[serde(rename_all = "kebab-case",
+default)]` (`dispatch_config.rs:26`): serde fills any absent field from the type's
+`Default`. So the hand `impl Default` is the single load-bearing mechanism — it
+backs *both* the file-absent path and serde's absent-key path through that
+container `default`. The per-field `#[serde(default = "default_deliver_to")]` is
+therefore **redundant** here; keep it only as explicit local documentation of the
+intended default, not as a second source of truth. `default_deliver_to()` stays
+the shared constant feeder for the `impl Default` body either way.
+
 **CLI** (`main.rs` / `dispatch.rs`):
 
 - `dispatch deliver-to` — NEW thin read verb; prints the resolved `deliver_to` to
@@ -153,8 +162,8 @@ delivery (it resolves to a commit-ish; delivery needs a writable ref — D3).
   `.doctrine/` entity. Owned by the operator.
 - **Single impure reader in a NEUTRAL module (RV codex F2).** Add the impure
   `load_doctrine_toml(root) -> DoctrineToml` to `dtoml.rs` (which already owns the
-  *pure* `parse`, `dtoml.rs:50`) — a thin shell: read file, `parse`, absent →
-  `DoctrineToml::default()` (`DoctrineToml: Default` confirmed, `dtoml.rs:18`).
+  *pure* `parse`, `dtoml.rs:52`) — a thin shell: read file, `parse`, absent →
+  `DoctrineToml::default()` (`DoctrineToml: Default` confirmed, `dtoml.rs:19`).
   All three consumers read through it: the gate (`slice.rs`), the sync handler
   (`main.rs`), the verb. It must NOT live in `slice.rs`, or `main.rs`/verb couple
   sideways into the slice command shell. `load_conduct` becomes a thin delegating
@@ -261,7 +270,7 @@ delivery (it resolves to a commit-ish; delivery needs a writable ref — D3).
   (DRY); no second loader.
 - **R5 — `expect(dead_code)` on `DoctrineToml.dispatch` fires once read live.**
   *Mitigate:* remove the `#[cfg_attr(not(test), expect(dead_code, …))]` attribute
-  (`dtoml.rs:38`) when the gate consumes the field. Caught in adversarial review.
+  (`dtoml.rs:42`) when the gate consumes the field. Caught in adversarial review.
 
 ## 9. Quality Engineering & Validation
 
@@ -293,14 +302,14 @@ Adversarial self-review (internal pass) integrated:
 
 - **IF1 — `expect(dead_code)` trap.** Reading `doc.dispatch` live makes the
   `DoctrineToml.dispatch` dead-code expectation fire → compile error. → R5;
-  remove the attr (`dtoml.rs:38`). Confirmed against source.
+  remove the attr (`dtoml.rs:42`). Confirmed against source.
 - **IF2 — prose-check overreach.** Original §9 said "no `refs/heads/main` literal".
   *(This internal note initially mislabelled `SKILL.md:68 --base` as an
   out-of-scope fork base — superseded by codex-F1 below: line 68 is an in-scope
   delivery literal. §2/§7/§9 reflect the corrected view.)*
 - **IF3 — `load_conduct` collateral.** It has a second caller + tests; kept as a
   delegating wrapper over `load_doctrine_toml`. → §5.3.
-- **Confirmed facts:** `DoctrineToml: Default` (`dtoml.rs:18`); `run_status` has
+- **Confirmed facts:** `DoctrineToml: Default` (`dtoml.rs:19`); `run_status` has
   `root` in scope and already parses `doctrine.toml` once (`slice.rs:428`), so the
   gate read adds no second parse; `--trunk` already `Option<String>` in clap;
   edge-only `--integrate` is a live tested path (`e2e_dispatch_sync.rs:688`).
