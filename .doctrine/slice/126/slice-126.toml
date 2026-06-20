@@ -1,7 +1,7 @@
 id = 126
 slug = "close-integration-gate"
 title = "structural close-gate: refuse reconcile→done when dispatched code unintegrated"
-status = "reconcile"
+status = "done"
 created = "2026-06-20"
 updated = "2026-06-20"
 
