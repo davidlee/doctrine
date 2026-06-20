@@ -1,21 +1,28 @@
-# Split-lineage dispatch close: conflicted close_target, direct-land escape
+# Dispatch candidate verb can't ingest a hand-resolved merge conflict — close dead-ends
 
-**Symptom.** At `/close` of a dispatched slice, `candidate create --role
-close_target --source refs/heads/review/<N> --base refs/heads/main` aborts:
-"3-way merge ... conflicts". `--worktree` parks the branch at base, but resolving
-+ committing there does NOT make it admittable — the recorded row stays
-`status=conflicted` with `merge_oid=""`. `admit` refuses ("no Doctrine merge to
-validate"); re-running `create` recomputes the same merge and re-conflicts; there
-is **no CLI verb to promote a manually-resolved parked candidate** to admittable.
-(admit-by-ref, mem [[mem_019ee33fa5717e838785bb5976a8f939]], only advances an
-*already-recorded* clean candidate — not a conflicted initial create.)
+**The defect (durable lesson).** `doctrine dispatch candidate create` is
+all-or-nothing: it runs its *own* internal 3-way merge and either records a clean
+candidate or, on *any* conflict, parks the worktree at base with
+`status=conflicted, merge_oid=""` and stops. There is **no verb to feed a manual
+resolution back in.** Resolving + committing in the parked worktree and
+`git checkout -B`-ing the branch does NOT help — `admit` validates the recorded
+`merge_oid`, which stays empty ("no Doctrine merge to validate"); re-running
+`create` recomputes the same conflict. So the close dead-ends even when the
+underlying git conflict is trivial to resolve by hand. (admit-by-ref, mem
+[[mem_019ee33fa5717e838785bb5976a8f939]], only advances an *already-recorded clean*
+candidate — not a conflicted initial create.) The fix — an "it's complicated" path
+that adopts a hand-made (base, source) merge — is tracked as **IMP-127**.
+Deliberately *not* a `--force`: the merge still happens and is still validated; the
+operator just performs it.
 
-**Root cause — split lineage.** The slice's work landed in two divergent places:
-a phase committed **directly on main** (SL-104 PHASE-01 `c403177b`) while the
-dispatch bundle `review/<N>` branched from a base (`844fe25b`) that *predated*
-that direct landing (and a later sibling close, SL-126). So the audited bundle's
-base is stale relative to main and the close_target merge can't auto-resolve. An
-add/add conflict on a test file both lineages created independently is the tell.
+**Trigger — base drift (split lineage is one form).** The auto-merge conflicts
+whenever trunk moves between bundle creation and close. SL-104: a phase landed
+**directly on main** (PHASE-01 `c403177b`, via a `WIP: dirty tree` rescue commit)
+while the dispatch bundle `review/<N>` branched from an earlier base (`844fe25b`)
+that predated it and a sibling close (SL-126). An add/add conflict on a file both
+lineages created independently is the tell. Same family: a sibling slice closing
+first, any dirty-tree rescue commit. Root prevention: don't author a slice's
+phases in the main tree while its dispatch bundle is in flight.
 
 **Escape (user-approved, SL-104).** Abandon the candidate/admitted-OID seam and
 direct-land:
