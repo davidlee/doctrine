@@ -40,3 +40,38 @@ mem.pattern.dispatch.reset-keep-cant-resync-already-advanced-ref (verified).
 disposition (`advanced+resynced`/`advanced+pure-ref`); the committed
 `dispatch/<slice>` journal trunk row carries `planned_new_oid` (=`applied_new_oid`
 on success) — the stable read surface OQ-5 needs. `short_oid` abbreviates to 12.
+
+## PHASE-03 — close-verify read surface + tree-true SKILL 3a (green)
+
+**OQ-5 resolved (Shape A).** New read surface
+`doctrine dispatch sync --slice <N> --show-journal-trunk-oid --trunk <ref>`:
+prints the committed `dispatch/<slice>` journal trunk row's **full**
+`planned_new_oid` (row where `target_ref == --trunk`) to stdout; absent row →
+refusal `show-journal-trunk-oid: no journal row for <ref> …` (no oid emitted).
+- `dispatch::run_show_journal_trunk_oid` tree-reads via `read_ledger::<Journal>`
+  (→ `git::read_path_at`), so VT-1 holds from any checkout — the
+  `sync-tree-reads-ledger-not-worktree` invariant. No transient admit stdout.
+- CLI: `show_journal_trunk_oid: bool` joined the `stage` single-choice group;
+  `--trunk` relaxed from `requires = "integrate"` to `conflicts_with =
+  "prepare_review"` (now valid under integrate **or** the read mode); read mode
+  carries `requires = "trunk"` (clap-enforced — names the row it reads).
+- Rejected Shape B (value-carrying flag — diverges from the skill's `--trunk`
+  idiom) and C (separate subcommand — diverges from design's literal `sync …`).
+- Read mode rides `Sync`'s wholesale Orchestrator class (refused under worker
+  mode); not carved into a worker-allowed hole — close runs in the orchestrator
+  session, so no functional cost. (Behaviour-preserving.)
+- T3 DRY check: `integrate` never reads `planned_new_oid` by trunk lookup (it uses
+  `any()` for freshness + pushes rows) — no duplication to lift; the inline `find`
+  is the right altitude.
+
+**SKILL 3a rewritten** (`close/SKILL.md`, EX-2/EX-3): stale `git diff --stat
+refs/heads/main~1..main -- src/` replaced by §3(a) `git diff --quiet HEAD` (whole
+tracked tree, ISS-030 phantom-reverse-diff detector — NOT path-limited) + §3(b)
+`planned=$(… --show-journal-trunk-oid --trunk refs/heads/main); git diff --quiet
+"$planned" refs/heads/main`. TODO's "verification is a stopgap" reliance dropped;
+only the config-derived-trunk-ref note (IMP-101 `deliver_to`) retained.
+
+**Evidence:** 3 new e2e in `e2e_dispatch_sync.rs` (VT-1 returns committed oid from
+a non-coordination checkout; absent-row refusal; `requires=--trunk` parse guard).
+Gate: clippy `--bin doctrine` clean · 2005 bin units · 24 e2e_dispatch_sync ·
+skills-shrinkage · fmt. VH-1 (human walkthrough of 3a) outstanding → audit.

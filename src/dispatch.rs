@@ -125,6 +125,34 @@ pub(crate) fn run_prepare_review(path: Option<PathBuf>, slice: u32) -> anyhow::R
     prepare_review(&root, slice)
 }
 
+/// CLI entry — print the committed `dispatch/<slice>` journal trunk-row's full
+/// `planned_new_oid` to stdout: the close step-3a read surface (SL-121 §3(b)). The
+/// row is named by `trunk` (`target_ref == trunk`). Tree-reads the journal from the
+/// coordination tip (`read_ledger` → `read_path_at`), so it returns the same value
+/// from any checkout — the `sync-tree-reads-ledger-not-worktree` invariant — never a
+/// transient `candidate admit` stdout. An absent row refuses (named token), emitting
+/// no oid, so the skill never diffs against an empty value.
+pub(crate) fn run_show_journal_trunk_oid(
+    path: Option<PathBuf>,
+    slice: u32,
+    trunk: &str,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let slice3 = format!("{slice:03}");
+    let coord_ref = format!("refs/heads/dispatch/{slice3}");
+    let journal = read_ledger::<Journal>(&root, &coord_ref, &slice3, "journal.toml")?;
+    let oid = journal
+        .rows
+        .iter()
+        .find(|r| r.target_ref == trunk)
+        .map(|r| r.planned_new_oid.as_str())
+        .with_context(|| {
+            format!("show-journal-trunk-oid: no journal row for {trunk} on dispatch/{slice3}")
+        })?;
+    writeln!(io::stdout(), "{oid}")?;
+    Ok(())
+}
+
 /// CLI entry — resolve the root and run stage-2 integrate for `slice`. `trunk`
 /// names the ref the code units project onto (ff-only); `edge` names an optional
 /// aggregate ref. Both default off ⇒ a pure idempotent journal replay (EX-1).
@@ -984,26 +1012,29 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
         &coord_ref,
         &mut journal,
         "journal: prepare-review",
-        |root, row| {
-            match git::update_ref_cas(root, &row.target_ref, &row.planned_new_oid, ZERO_OID)? {
-                RefCas::Updated => {
-                    row.status = LedgerStatus::Verified;
-                    row.applied_new_oid = row.planned_new_oid.clone();
-                    writeln!(io::stdout(), "{}", row.target_ref)?;
-                    Ok(RowOutcome::Done {
-                        disposition: Disposition::Created,
-                    })
-                }
-                RefCas::Moved { actual } => {
-                    row.status = LedgerStatus::Failed;
-                    Ok(RowOutcome::Refused {
-                        token: format!(
-                            "{} (exists at {})",
-                            row.target_ref,
-                            actual.as_deref().unwrap_or("?")
-                        ),
-                    })
-                }
+        |root, row| match git::update_ref_cas(
+            root,
+            &row.target_ref,
+            &row.planned_new_oid,
+            ZERO_OID,
+        )? {
+            RefCas::Updated => {
+                row.status = LedgerStatus::Verified;
+                row.applied_new_oid = row.planned_new_oid.clone();
+                writeln!(io::stdout(), "{}", row.target_ref)?;
+                Ok(RowOutcome::Done {
+                    disposition: Disposition::Created,
+                })
+            }
+            RefCas::Moved { actual } => {
+                row.status = LedgerStatus::Failed;
+                Ok(RowOutcome::Refused {
+                    token: format!(
+                        "{} (exists at {})",
+                        row.target_ref,
+                        actual.as_deref().unwrap_or("?")
+                    ),
+                })
             }
         },
     )?;
@@ -1623,8 +1654,15 @@ fn with_journaled_projection(
     message: &str,
     mut apply: impl FnMut(&Path, &mut JournalRow) -> anyhow::Result<RowOutcome>,
 ) -> anyhow::Result<Vec<RowOutcome>> {
-    let journal_commit =
-        commit_journal(root, tip_tree, tip, journal_path, coord_ref, journal, message)?;
+    let journal_commit = commit_journal(
+        root,
+        tip_tree,
+        tip,
+        journal_path,
+        coord_ref,
+        journal,
+        message,
+    )?;
     let mut outcomes = Vec::with_capacity(journal.rows.len());
     for row in &mut journal.rows {
         outcomes.push(apply(root, row)?);

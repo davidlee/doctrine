@@ -82,18 +82,29 @@ Inputs:
    **only** place `--integrate` runs — never at `/dispatch` conclude, only here,
    post-audit.
 
-   **Verify.** After `--integrate --trunk`, confirm the slice's code delta is on
-   the target branch:
+   **Verify (tree-true, ISS-030).** After `--integrate --trunk`, both checks
+   below must pass — do **not** proceed to step 4 unless they do:
    ```bash
-   git diff --stat refs/heads/main~1..refs/heads/main -- src/
+   # (a) No phantom reverse-diff: the tracked working tree matches HEAD. A nonzero
+   #     exit means integrate advanced the ref but desynced the live checkout — STOP.
+   git diff --quiet HEAD
+
+   # (b) The projected delta genuinely landed (not a silent dry-run): the committed
+   #     journal's trunk row holds the planned tip; it must equal the trunk ref.
+   planned=$(doctrine dispatch sync --slice <N> --show-journal-trunk-oid \
+     --trunk refs/heads/main)
+   git diff --quiet "$planned" refs/heads/main
    ```
-   The output must include the files the slice changed. If the delta is absent,
-   integration did not project code — do **not** proceed to step 4.
+   (a) is the ISS-030 detector — the **whole tracked tree**, not path-limited (a
+   phantom reverse-diff can span any file the slice projected, not just `src/`).
+   (b) reads the trunk row's `planned_new_oid` from the committed `dispatch/<N>`
+   journal — a tree-read, stable from this checkout (SL-121) — and diffs it against
+   `refs/heads/main`; a difference means trunk does not hold the projected tip, so
+   integration did not land.
 
    > **TODO:** Once project config (`doctrine.toml [dispatch] deliver_to`) lands,
-   > the trunk ref and verification will be derived from config, not hard-coded
-   > here. The mandatory `--trunk` requirement and the verification step are a
-   > stopgap against silent dry-run integration (see SL-102 close).
+   > the trunk ref will be derived from config rather than hard-coded
+   > `refs/heads/main` here.
 4. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
    `doctrine slice status <id> reconcile` if `/audit` didn't), then
    `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).
