@@ -1,0 +1,152 @@
+# Implementation plan for SL-115 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-115"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Verification baseline (the behaviour-preservation net)"
+objective = """
+Build the proof harness BEFORE any code moves, capturing the current CLI surface \
+so every later phase can assert byte-identity against it. Capture (a) a clap \
+`CommandFactory` `--help` snapshot for the top-level command + representative \
+nested subcommands, and (b) parse-regression tests (`Cli::try_parse_from`, \
+extending the existing seam at `main.rs:5284`) over the parser-only contracts a \
+`--help` diff cannot see: `CommonListArgs` `value_delimiter`; `FindRetrieveArgs` \
+`conflicts_with=\"offset\"` + `value_parser` on `memory::{MemoryType,Status,Lifespan}`; \
+`Retrieve` `value_parser=retrieve::parse_min_trust`; `After` `required_unless_present`; \
+`DispatchCommand::Sync` `requires=\"trunk\"`. Record the reference points: \
+`wc -l src/main.rs` and `[tangle_baseline] command = 120`. No relocation in this phase.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-115 design locked (codex round 2 folded); slice status = plan." },
+  { id = "EN-2", text = "SL-129 has landed (after edge: SL-115 after SL-129) OR user has explicitly authorised proceeding ahead of it." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A `--help` snapshot test (top-level + representative nested) exists and passes against the CURRENT main.rs." },
+  { id = "EX-2", text = "Parse-regression tests for the five flagged contracts exist and pass against the CURRENT main.rs." },
+  { id = "EX-3", text = "No production code relocated; `just gate` green; full existing suite green." },
+]
+verification = [
+  { id = "VT-1", expects = "New snapshot + parse-regression tests pass; `tests/e2e_*` goldens untouched." },
+  { id = "VA-1", expects = "Snapshot covers every parser surface SL-115 will move — incl. consumers outside `SPINE_KINDS` (e.g. `ConceptMapCommand::List`)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Orphan runner relocation → commands/ sink shells"
+objective = """
+Relocate the seven stranded `run_*` shell groups (and their private helpers + \
+`#[cfg(test)]` modules) out of `main.rs` into command-tier `commands/` modules that \
+call DOWN into existing data/policy: `commands/relation.rs` (run_link/run_unlink, \
+resolve_link_path), `commands/dep_seq.rs` (run_needs/after/after_remove/after_prune, \
+resolve_dep_seq_src*, is_work_like), `commands/supersede.rs` (run_supersede, \
+resolve_supersede_path, rel_array), `commands/validate.rs` (run_validate), \
+`commands/inspect.rs` (run_inspect), `commands/facet.rs` (run_estimate_set/clear + \
+run_value_set/clear + the four facet Args structs + resolve_entity_path_and_canonical), \
+`commands/guard.rs` (write_class, worker_guard, WriteClass). main.rs match arms now \
+call `commands::*::run_*`. Each relocated resolver carries a one-line SL-129 breadcrumb \
+(F-A). `commands` gains out-edges but stays a SINK (no inbound command-tier edge).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green: the verification net exists and passes on current main.rs." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "No relocated `run_*`, no `write_class`/`worker_guard`/`WriteClass`, no facet Args structs remain in `main.rs` (V5 grep)." },
+  { id = "EX-2", text = "Relocated `#[cfg(test)]` modules pass in their new homes with only `use super::*`/path fixups (assertions unchanged)." },
+  { id = "EX-3", text = "`commands` is still a sink — no kind/engine module imports `commands`; layering gate green, `command = 120` unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "`tests/architecture_layering.rs` green: no new `[[accepted_violation]]`, tangle `command = 120` unchanged (commands stays sink)." },
+  { id = "VT-2", expects = "Relocated test modules pass; `--help` snapshot + parse-regression (PHASE-01) byte-identical; `tests/e2e_*` goldens untouched; `just gate` green." },
+  { id = "VA-1", expects = "grep: no relocated `run_*`/`write_class` in `main.rs`; each relocated resolver carries the SL-129 breadcrumb." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Kind enum + dispatch relocation (D1), batched by domain"
+objective = """
+Move each kind's clap subcommand enum AND its dispatch arm body into the kind's own \
+command-tier module behind `pub(crate) fn dispatch(cmd, color)`; the call site \
+collapses to one line. Nested enums ride their parent. Lower-tier-backed surfaces get \
+`commands/` shells: `Coverage`→`commands/coverage.rs` (calls coverage_store/verify/view, \
+all engine), `Map`→`commands/map.rs` (exists). `FindRetrieveArgs` moves into `memory.rs` \
+with `MemoryCommand`. \
+ENFORCE the D1a rule: route a kind's dispatch to the module its `run_*` body actually \
+calls, NOT the nominal kind name. Two known instances: (i) `MemoryCommand::Sync`→`corpus::*` \
+(memory→corpus is new; corpus→memory exists) — its dispatch stays in the residual match \
+(→ `commands/cli.rs` in PHASE-04), NOT memory.rs; (ii) `SpecReqCommand`→`spec::run_req_*` \
+(impl lives in spec.rs; requirement.rs has no CLI) — folds into `spec.rs` own-module \
+(zero edge), NOT requirement.rs (which would mint requirement→spec). Execute in domain \
+batches; run the layering gate after EACH batch — any tangle growth past 120 HALTS the \
+batch for restructure, never an auto-accept.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green: orphan shells relocated, commands is a sink, gate at 120." },
+  { id = "EN-2", text = "The per-arm D1a audit is complete: every arm is routed to the module its `run_*` actually calls; cycle-formers (known: MemoryCommand::Sync→commands shell, SpecReq→spec.rs) are identified, no nominal-kind misroute remains." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every clean-kind subcommand enum + its dispatch lives in the module its body calls behind `dispatch(cmd, color)`; coverage in `commands/coverage.rs`; `FindRetrieveArgs` in `memory.rs`; `SpecReq` in `spec.rs` (NOT requirement.rs)." },
+  { id = "EX-2", text = "`MemoryCommand::Sync` dispatch is NOT in `memory.rs` — it remains in the match destined for `commands/cli.rs`; no relocated arm mints a new cross-command cycle." },
+  { id = "EX-3", text = "After every batch the layering gate is green with `command = 120` unchanged; no new kind→kind cycle introduced." },
+]
+verification = [
+  { id = "VT-1", expects = "Layering gate green per batch: tangle `command = 120` unchanged (D1a held — no new kind→kind cycle, memory→corpus avoided)." },
+  { id = "VT-2", expects = "`--help` snapshot + parse-regression byte-identical; relocated kind tests pass; `tests/e2e_*` goldens untouched; `just gate` green." },
+  { id = "VA-1", expects = "grep: no `enum *Command` other than the top-level `Command` remains in `main.rs`; the D1a audit log accounts for every sideways caller — known cycle-formers (MemoryCommand::Sync, SpecReq) routed per D1a, any newly-found one routed to its real home or a shell." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Collapse the dispatch core + final main.rs reduction"
+objective = """
+With every arm now a one-liner, move the top-level `Command` enum + the thin dispatch \
+match (including the `MemoryCommand::Sync`→`corpus` carve-out, now a sink-safe \
+`commands→corpus` out-edge) into `commands/cli.rs` behind `pub(crate) fn dispatch(cmd, \
+color)`. `main()` becomes `Cli::parse → resolve color → guard::worker_guard(&cmd)? → \
+cli::dispatch(cmd, color)`. `main.rs` retains ONLY `Cli` (the `clap::Parser` with the \
+`--color` global), the shared leaf-only clap bundles (`CommonListArgs` + `into_list_args`), \
+and `fn main()` — design §5 F-C: these are inert to the gate and must stay at crate root, \
+never in `commands/`. Refresh the `commands` dep-list comment in `layering.toml` (courtesy \
+only — no tier/row change). Confirm the closure LOC target.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green: all kind enums relocated; the dispatch match is one line per kind; gate at 120." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Command` enum + dispatch match live in `commands/cli.rs`; `main()` is the thin orchestration root; `main.rs` ≈ 250 LOC (Cli + CommonListArgs + main())." },
+  { id = "EX-2", text = "`main.rs` contains no `enum *Command`, no `run_*`, no `commands/`-bound shared-arg struct; `CommonListArgs` and `Cli` remain at crate root (NOT in commands/) — sink invariant held." },
+  { id = "EX-3", text = "No `layering.toml` tier/row edit; only the `commands` dep-list comment refreshed." },
+]
+verification = [
+  { id = "VT-1", expects = "Full layering gate green: no new `[[accepted_violation]]`; `command = 120` unchanged; `commands` still a sink." },
+  { id = "VT-2", expects = "`--help` snapshot + parse-regression byte-identical end-to-end; `tests/e2e_*` goldens untouched; full suite + `just gate` green." },
+  { id = "VA-1", expects = "`wc -l src/main.rs` ≈ 250 (down from 7264); grep: no `run_*`/`enum *Command` in main.rs; `CommonListArgs`+`Cli` at crate root." },
+]
+specs        = []
+requirements = []

@@ -33,11 +33,14 @@ mechanical and behaviour-preserving.
   own command-tier module behind a `dispatch(cmd, color)` entry, so a new kind no
   longer touches `main.rs`. Lower-tier-backed surfaces (coverage, estimate/value,
   map) get `commands/` shells instead.
-- Move the top-level `Cli` + `Command` enum + the thin dispatch match into
-  `commands/cli.rs`; `main.rs` reduces to a ~30-LOC orchestration entrypoint.
+- Move the top-level `Command` enum + the thin dispatch match into
+  `commands/cli.rs`; `Cli` + the shared leaf-only clap bundles (`CommonListArgs`)
+  stay at the crate root (design §5 F-C — they are inert to the gate and must not
+  enter `commands/`). `main.rs` reduces to a ~250-LOC orchestration entrypoint.
 - Convention resolved (design §1): one `commands/` folder, no parallel `cli/`.
 
-Closure intent: `main.rs` materially reduced (~7264 → ~30 LOC); no relocated
+Closure intent: `main.rs` materially reduced (~7264 → ~250 LOC; the residual is
+`Cli` + shared leaf-only clap bundles + `main()`, design §5 F-C); no relocated
 `run_*` or `enum *Command` remains in `main.rs`; clap surface lives under
 `commands/`; the convention is documented; the ADR-001 layering gate stays green
 (no new accepted violation, tangle baseline unchanged); existing CLI behaviour and
