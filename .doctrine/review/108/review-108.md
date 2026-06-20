@@ -96,3 +96,31 @@ not prose defects.
 ### Candidate admission
 - Admit `candidate/123/review-001` (tip `b8c80e8c`, includes the audit fix-now) against
   RV-108 as the reviewed surface.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- None to per-slice artefacts. The single per-slice gap (F-1, missing VT-4 tests) was
+  resolved fix-now on the candidate during audit (`b8c80e8c`); design ↔ implementation
+  are otherwise faithful, so no design-text correction was owed.
+
+### Backlog reconciliation (direct backlog writes — no REV; no governance/spec truth touched)
+- **ISS-034** (Defect A; covers RV-108 F-2): transitioned `resolved · mitigated`.
+  SL-123 delivered remedies #2 (base-guard template) + #3 (`verify-worker` belts +
+  footer gate), proven by test — wrong/moving base now fails closed loudly. Resolution
+  is **mitigated** not fixed: the isolation race persists by design; true pre-worker
+  elimination is deferred to IMP-072. Rationale recorded in backlog-034.md.
+- **IMP-052** (covers RV-108 F-3): left **open**; added a delivered-overlap note —
+  SL-123 §5.4b pre-funnel footer gate partly delivers the abort-un-isolated-worker
+  intent (claude rung, import-time), but the spawn-time / cross-arm orchestrator gate
+  remains. NOT auto-closed (design §9). Note in backlog-052.md.
+- **IMP-072** (follow-up context): left **open**; added an SL-123 trigger-context note —
+  SL-123 hardened the post-run §8.4 `verify-worker` belt this item defers against;
+  IMP-072 remains the deferred pre-run (`WorktreeCreate`) upgrade. Note in backlog-072.md.
+
+### Withdrawn / tolerated
+- RV-108 F-4: tolerated — redundant HEAD rev-parse; negligible and faithful to design
+  pseudocode. Rationale in the finding disposition.
+- RV-108 F-1, F-5: verified (F-1 fixed-now during audit; F-5 = VH-1 human sign-off, PASS).
+
+Reconcile pass complete — handoff to /close.

@@ -26,3 +26,16 @@ a dispatch-vs-benign discriminator with a misclassification race. Build only if 
 post-run `verify-worker` belt proves insufficient and true pre-worker fail-closed is
 demonstrably needed — that is now the **sole** justification (arbitrary-B base control
 is no longer one). See SL-064 design §8 + §8.5 (ADR-011 amendment).
+
+## Trigger context — SL-123 (2026-06-20)
+
+**SL-123** hardened exactly the **post-run `verify-worker` belt** this item defers
+against (the §8.4 belt named above): the `not-isolated` / `branch-mismatch` belts +
+pre-funnel footer gate now turn a contention-induced fallback-to-main into a loud,
+pre-import halt. That is the post-run, "loud-and-late" tier (ISS-034 mitigated).
+
+IMP-072 remains **open** as the deferred **pre-run** upgrade: a `WorktreeCreate`
+hook would abort a wrong-base worker *before its first command*, eliminating the
+wasted-worker-run residual (SL-123 §5.2 / OQ-2) that the post-run belt cannot. The
+gate is unchanged — build only if the now-hardened post-run belt proves
+insufficient.

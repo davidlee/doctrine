@@ -169,3 +169,21 @@ condition we can assume in the dispatch use case.
 No data lost. PHASE-01 + PHASE-04 are committed and intact on `dispatch/121`
 (`bbfc90bb`); the coordination tree is clean. PHASE-02 + PHASE-03 remain to land
 (awaiting a decision on arm: subprocess vs. pause-and-retry-claude).
+
+## Reconciliation — resolved/mitigated by SL-123 (2026-06-20)
+
+Delivered by **SL-123** (claude dispatch arm fail-closed base integrity), audited
+on RV-108. Remedies **#2** (base-guard first-class in the `dispatch-agent` worker
+template) and **#3** (`verify-worker` hardened with the `not-isolated` /
+`branch-mismatch` belts + pre-funnel footer gate) shipped and are proven by test —
+a contention-induced fallback-to-main (worker cwd == main worktree, or B not an
+ancestor of HEAD, or missing-isolation) now **fails closed with a clear cause
+before import**, independent of the ad-hoc prompt guard.
+
+**Resolution = mitigated, not fixed:** the isolation race itself is unchanged by
+design — SL-123 converts a *silent* wrong/moving base into a *loud halt*, it does
+not eliminate the race or restore throughput under churn. True pre-worker
+fail-closability (abort before the worker's first command) remains deferred to
+**IMP-072**, which carries SL-123 as trigger context. Out-of-scope remedies #1
+(repo-wide `baseRef` pinning), #4 (harness lock-retry), #6 (subprocess default)
+are untouched.

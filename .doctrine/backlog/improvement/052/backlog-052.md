@@ -55,3 +55,17 @@ fail-closed without the D6a contradiction.
 - Re-introducing the CLI fail-closed floor (explicitly rejected — Option C).
 - Confining the worker to its worktree (raw-tree confinement — ADR-006 D2b /
   ADR-008, separate).
+
+## Delivered-overlap note — SL-123 (2026-06-20, partial; do NOT close)
+
+**SL-123** added the claude-arm **pre-funnel footer gate** (§5.4b): a missing
+`worktreePath:`/`worktreeBranch:` footer halts before the funnel, and a
+`verify-worker --branch` coherence check binds the footer to one worker state.
+That partly delivers this item's intent — *abort an un-isolated / unstamped worker
+before task handoff* — for the **claude rung**, at the import step.
+
+It does **not** close IMP-052 (per SL-123 design §9): SL-123 ships a *prompt-cadence
++ import-time* gate on the claude arm only; this item's full intent is an
+**orchestrator post-spawn, behaviour-independent** marker-presence gate at spawn
+time (before any task handoff), and a small CLI affordance (`worktree status -p
+<fork>`) to drive it. The spawn-time / cross-arm coverage remains open.
