@@ -1,0 +1,35 @@
+id = 129
+slug = "entity-id-path-helper"
+title = "Corpus-wide entity id→path helper (entity::id_path over KINDS)"
+status = "ready"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = [{ to = "SL-115", rank = 0 }]  # SL-115 design § R1: must land after SL-129
+
+[[relation]]
+label = "specs"
+target = "SPEC-004"
+
+[[relation]]
+label = "specs"
+target = "SPEC-008"
+
+[[relation]]
+label = "related"
+target = "IMP-067"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
