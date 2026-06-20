@@ -1,0 +1,31 @@
+id = 125
+slug = "stamp-source-primary-worktree"
+title = "Stamp provision source from primary worktree"
+status = "design"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "governed_by"
+target = "ADR-006"
+
+[[relation]]
+label = "related"
+target = "ISS-011"
+
+[[relation]]
+label = "related"
+target = "IMP-046"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
