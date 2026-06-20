@@ -57,5 +57,11 @@ phase changes files that subsequent phases verify.
 - Error display format changes in relation.rs and map_server/routes.rs are
   cosmetic — no test assertions depend on error message strings. Documented in
   VT-6, not a risk.
+- The transform is behaviour-preserving for doctrine's normal authored files
+  (git-tracked `0644` TOML/MD), but rename-replace is not bit-for-bit equivalent
+  to in-place `fs::write` under chmod/metadata edge cases (new inode; mode/ACL/
+  xattrs/hardlinks not carried). Immaterial here per design E3 (no doctrine file
+  carries special mode/ACL, and write_atomic already rename-replaces authored
+  files today) — noted so PHASE-02 isn't read as bit-identical.
 - The clippy guard manual verification (VH-1) is a one-shot human gate. It proves
   the guard works once; `just check` prevents backsliding permanently.

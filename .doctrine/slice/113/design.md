@@ -14,7 +14,7 @@ read TOML → `toml_edit` splice → `std::fs::write(path, string)`. That byte-w
 bypasses `fsutil::write_atomic`, which exists precisely to make authored writes
 atomic (temp-write + rename).
 
-Two costs: (1) ~22 call sites re-spell the same non-atomic write — a
+Two costs: (1) 23 authored call sites re-spell the same non-atomic write — a
 parallel-implementation smell against "no parallel implementation"; (2)
 `std::fs::write` is non-atomic at the swap level — an interrupted userspace write
 leaves a truncated/half-written committed `*.toml` that a concurrent reader or
@@ -85,7 +85,7 @@ concept-map route).
 ### 5.1 System Model
 
 No new module, no new mutation abstraction. SL-113 has three moves:
-1. **Migrate** the ~22 authored byte-writes onto the existing
+1. **Migrate** the 23 authored byte-writes onto the existing
    `fsutil::write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()>`.
 2. **Harden** `write_atomic`'s temp-naming so concurrent same-process writers to
    one path do not collide (D4) — a contained change to the leaf seam itself.
