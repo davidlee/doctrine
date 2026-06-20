@@ -1,0 +1,34 @@
+id    = 118
+slug  = "reconciliation-review-of-sl-128"
+title = "reconciliation review of SL-128"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-128"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Delivered impl bundle is not rustfmt-clean — cargo fmt --check fails on 3 files (expected: project gate clean)"
+detail = "cargo fmt --check on candidate/128/review-001 reports diffs in src/slice.rs:436 (TRUNK_REF/DOCTRINE_TOML const removal left a 5-blank-line cluster; rustfmt caps at 1), src/main.rs:3206 (3-way WriteClass match pattern exceeds width, wants per-arm lines), and src/dtoml.rs:67 (load_doctrine_toml match arms want collapsing). Root cause: the project gate 'just check'/'gate' runs 'cargo fmt' (rewrite), but dispatch workers cannot run 'just check' (lint-js node_modules gap — known footgun), so phases verified via 'cargo clippy'+'cargo test' directly; cargo fmt was never in that path. Clippy clean, tests green, behaviour unaffected — but 'format' is a stated task-completion requirement and the bundle ships unformatted."
+disposition = "fix-now"
+response = "Fixed within audit scope on the impl bundle review/128 (commit 72527bbd): ran cargo fmt — corrected slice.rs blank-line cluster, main.rs WriteClass match arm, dtoml.rs match-arm width, and e2e_dispatch_sync.rs. cargo fmt --check now clean on review/128 and on the refreshed candidate/128/review-002. Clippy zero-warn, full suite green (2121 lib + all e2e). Root cause (workers can't run just check → cargo fmt skipped) harvested to memory for future dispatch drives."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "dtoml.rs module doc still claims 'the file read lives in the shell' but PHASE-02 added the impure load_doctrine_toml reader into this very module (expected: doc reflects the co-located thin reader)"
+detail = "src/dtoml.rs:11-12 header reads '**Pure leaf (ADR-001).** The file *read* lives in the shell; [parse] takes owned text only.' SL-128 (design codex F2) deliberately added load_doctrine_toml(root) — a thin impure shell seam doing std::fs::read_to_string — to this module. parse() stays pure and the ADR-001 layering claim (dtoml is a leaf, no cycles) still holds, so the substantive contract is intact; but the sentence 'the file read lives in the shell' now reads as false to anyone scanning the module, which 40 lines down reads a file. Doc-precision drift, not a behaviour or layering defect."
+disposition = "fix-now"
+response = "Fixed on review/128 (commit 72527bbd): dtoml.rs module doc rewritten — parse() named as the pure leaf, load_doctrine_toml named as the one thin impure shell seam co-located here. No behaviour change; doc now matches the design codex-F2 placement."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
