@@ -32,6 +32,27 @@ A hand-written close fn in the **allowlisted** `slice.rs` reading
 `Gate` input). This is the honest boundary of the structural proof — mitigated
 by review + the `audit.md` argument, per design §4 / VA-1.
 
+## PHASE-02 — confidence-residue recite + value-asymmetry test (committed `ced2dbdf`, dispatch/104)
+
+EX-1/EX-3: the 5 stale SL-102/SL-103 dead-code citations in `src/estimate.rs`
+(framing comment, `mod display`, `DEFAULT_LOWER_CONFIDENCE`,
+`DEFAULT_UPPER_CONFIDENCE`, `resolve_confidence`) re-cited to **IMP-112** (real
+future consumer) + "the confidence requirement landing at SL-104 reconcile".
+VA-1 verified: `grep -nE 'SL-102|SL-103' src/estimate.rs` is empty. All 5
+`expect(dead_code)` tripwires stay armed; no code change.
+
+### RECONCILE — confidence requirement placeholder
+The new reason strings cite "the confidence requirement landing at SL-104
+reconcile" descriptively. At reconcile, the REV allocates the concrete
+`REQ-NNN` (percentile model: lower/upper = project P-low/P-high band, defaults
+0.1/0.9 from `[estimation]`, finite/[0,1]/low<high, display-framing-only, no
+gating in v1) and these strings should be updated to cite it. This is the
+SL-101-stranded confidence governance, folded via Revision per design D2 /
+ADR-013 (REV-002 precedent).
+
+EX-2/VT-1: `value.rs::v5a_negative_finite` pins FR-008 — `[value] value = -5`
+parses + validates OK (no `>= 0` rule). Was uncovered.
+
 ## Environment gotchas observed (not slice deliverables)
 - **B carries pre-existing fmt drift.** Committed `src/status.rs` at base
   `844fe25b` is NOT rustfmt-clean under the pinned toolchain (rustfmt 1.9.0-beta);
