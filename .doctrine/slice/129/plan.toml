@@ -1,0 +1,71 @@
+# Implementation plan for SL-129 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-129"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# PHASE-01: Add stem to entity::Kind + helpers + update Kind initializers.
+# Must be atomic — adding a field to a const struct breaks every initializer.
+[[phase]]
+id        = "PHASE-01"
+name      = "Add stem field + entity::id_path + update Kind initializers"
+objective = "Add `stem: &'static str` to `entity::Kind`, `Ext` enum, `id_path` and `rel_path` helpers; update all 23 Kind initializers across the codebase. `KindRef` and `GovKind` still carry their own `stem` — the build compiles with duplication."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md written and locked; adversarial review resolved" },
+  { id = "EN-2", text = "plan.toml and plan.md scaffolded" },
+  { id = "EN-3", text = "baseline `just check` green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "entity::Kind has `stem` field, entity::Ext and entity::id_path/rel_path exist" },
+  { id = "EX-2", text = "all 23 Kind { ... } initializers include stem:" },
+  { id = "EX-3", text = "build compiles: cargo build passes" },
+]
+verification = [
+  { id = "VT-1", expects = "full just check green — all workspace tests pass, zero clippy warnings" },
+  { id = "VA-1", expects = "grep for Kind { confirms every initializer has stem:" },
+  { id = "VA-2", expects = "src/entity.rs contains pub(crate) fn id_path, pub(crate) fn rel_path, pub(crate) enum Ext" },
+]
+specs             = ["SPEC-004", "SPEC-008"]
+requirements      = []
+
+# PHASE-02: Remove stem from KindRef/GovKind + replace all format! sites.
+# Mechanical sweep: ~85 production + ~8 test format! calls become entity::id_path.
+[[phase]]
+id        = "PHASE-02"
+name      = "Remove KindRef/GovKind stem + replace all format! sites"
+objective = "Remove `stem` from `integrity::KindRef` and `governance::GovKind` (now derivable from `kind.stem`); update all KINDS rows and `g.stem` references; replace every inline `format!(\"<stem>-{name}.{ext}\")` production site with `entity::id_path` or `entity::rel_path`. Excludes `meta.rs` internals (already abstracted) and test assertion full-path strings (readability)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: stem field on Kind, helpers exist, baseline green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "KindRef struct has no stem field; all KINDS rows reference kind.stem" },
+  { id = "EX-2", text = "GovKind struct has no stem field; all g.stem refs use g.kind.stem" },
+  { id = "EX-3", text = "zero format!(\"<stem>-{id}.toml\") or format!(\"<stem>-{id}.md\") in production code (exempting meta.rs internals and test full-path assertions)" },
+  { id = "EX-4", text = "cargo build passes, all paths byte-identical to pre-change" },
+]
+verification = [
+  { id = "VT-1", expects = "just check green; full workspace tests pass unchanged; zero clippy warnings" },
+  { id = "VT-2", expects = "cargo test worksp; all tests pass" },
+  { id = "VA-1", expects = "grep for hardcoded stem format! in production returns zero hits" },
+  { id = "VA-2", expects = "set-diff of planned touched files vs actual git diff; no unintended mods" },
+]
+specs             = ["SPEC-004"]
+requirements      = []
