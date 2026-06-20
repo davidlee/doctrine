@@ -1,0 +1,46 @@
+memory_uid = "mem_019ee74f1aae72219c86b811fd851ba3"
+memory_key = "mem.pattern.entity.lazyspec-kind-root-exclusion"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "lazyspec.rs kind-root exclusion — id_path would double-join kind.dir"
+summary = "lazyspec.rs read_entity_toml/prose_body take kind-root (not project-root) — entity::id_path would double-join kind.dir"
+created = "2026-06-20"
+updated = "2026-06-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["entity", "path-construction", "exclusion"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d1e1f1d5e91bd9321a91a58367be1b4ebcb89b85"
+ref_name = "refs/heads/main"
+checkout_state_id = "378a59f64f507ad90d7d053fb2ffb265f471f70ae76a5bf25dde67aa304e184f"
+base_commit = "340c55f538859129774ad24ad4c82d248500a57f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "129"
+

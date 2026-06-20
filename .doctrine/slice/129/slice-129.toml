@@ -1,7 +1,7 @@
 id = 129
 slug = "entity-id-path-helper"
 title = "Corpus-wide entity id→path helper (entity::id_path over KINDS)"
-status = "ready"
+status = "reconcile"
 created = "2026-06-20"
 updated = "2026-06-20"
 
