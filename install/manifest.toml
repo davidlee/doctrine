@@ -13,7 +13,6 @@ create = [
   ".doctrine/requirement",
   ".doctrine/review",
   ".doctrine/revision",
-  ".doctrine/rfc",
   ".doctrine/scripts",
   ".doctrine/skills",
   ".doctrine/slice",

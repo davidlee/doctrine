@@ -132,11 +132,12 @@ Add `use crate::fsutil;` where absent.
 
 ### 5.3 Data, State & Ownership
 
-The 22 authored call sites (11 files):
+The 23 authored call sites (12 files):
 
 | File | Sites | Role |
 |---|---|---|
 | `dep_seq.rs` | 178, 246, 356, 378 | shared cores: append / remove / `set_authored_status` (7 kinds) / `append_string_array` |
+| `facet_write.rs` | 153 | `edit_in_place` — shared read→mutate→write-back core (oracle-found 2026-06-20; missed by the at-design sweep, caught by the §5.4 guard probe) |
 | `relation.rs` | 784, 803 | `append_edge` / `remove_edge` |
 | `memory.rs` | 2514, 2618, 2876 | memory edits |
 | `concept_map.rs` | 1491, 1506, 1556, 1651 | `set_dsl` writes |
@@ -158,8 +159,9 @@ editing. **The authored set above is the *known* starting set, not a proven-
 exhaustive hand count** — the `clippy` guard (§5.4) is the oracle: adding it and
 running `just gate` surfaces every remaining production `fs::write`, each then
 triaged by the rule *authored → migrate, runtime/derived → `#[allow]` + reason*.
-`corpus.rs` was itself a hand-count miss (caught by the external pass, §10),
-which is exactly why the guard, not the table, is authoritative.
+`corpus.rs` was itself a hand-count miss (caught by the external pass, §10), and
+`facet_write.rs:153` was a second miss (caught by the `/plan`-review oracle probe,
+2026-06-20) — which is exactly why the guard, not the table, is authoritative.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 

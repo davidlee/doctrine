@@ -28,7 +28,6 @@ node_modules
 !.doctrine/review/
 !.doctrine/rec/
 !.doctrine/revision/
-!.doctrine/rfc/
 !.doctrine/backlog/
 !.doctrine/knowledge/
 !.doctrine/requirement/
