@@ -1017,7 +1017,6 @@ struct SliceDoc {
 struct Gate {
     #[serde(default)]
     extra_reqs: Vec<String>,
-    estimate: (),
 }
 
 /// Parse a slice reference — `SL-025`, `sl-25`, or the bare id `25` — to its
