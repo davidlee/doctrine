@@ -24,4 +24,8 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "slices"
 target = "SL-124"
 
+[[relation]]
+label = "slices"
+target = "SL-125"
+
 
