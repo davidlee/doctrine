@@ -15,10 +15,6 @@ target = "ADR-006"
 
 [[relation]]
 label = "related"
-target = "ISS-011"
-
-[[relation]]
-label = "related"
 target = "IMP-046"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
