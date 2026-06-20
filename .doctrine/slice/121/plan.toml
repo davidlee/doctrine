@@ -128,15 +128,16 @@ objective = """
 Extract the duplicated journal cycle shared by `prepare_review` and `integrate`
 (commit-pre / per-row apply loop / commit-post / collect-failures — design §2.6,
 RV-030 F-7) as a THIN bracket `with_journaled_projection` taking an injected
-`apply: FnMut(&Path, &mut Row) -> Result<Option<String>>`. Refactor BOTH callers
-onto it with their CURRENT per-row bodies VERBATIM as closures — `prepare_review`'s
-zero-oid `update_ref_cas`/`stale` body and `integrate`'s 3-way `replay_ref`/`moved`
-body, each carrying its own status writes + stdout println inside the closure and
-returning only the failure string out. NO behaviour change in either caller — this
-phase is the IMP-075 refactor in isolation; the worktree-aware advance is PHASE-02.
-Bind the `apply` contract (codex §2.6): semantic per-row refusals return
-`Ok(Some(msg))` so the post-loop recovery commit still records status; `Err` is
-reserved for fatal operational failure (B3).
+`apply: FnMut(&Path, &mut Row) -> Result<RowOutcome>`, returning
+`Vec<RowOutcome>`. Refactor BOTH callers onto it with their CURRENT per-row bodies
+VERBATIM as closures — `prepare_review`'s zero-oid `update_ref_cas`/`stale` body and
+`integrate`'s 3-way `replay_ref`/`moved` body, each carrying its own status writes +
+stdout println inside the closure and returning a `RowOutcome` (`Done{disposition}`
+/ `Refused{token}`) per row. NO behaviour change in either caller — this phase is
+the IMP-075 refactor in isolation; the worktree-aware advance is PHASE-02. Bind the
+`apply` contract: semantic per-row refusals return `Ok(Refused{token})` so the
+post-loop recovery commit still records `status=Failed`; `Err` is reserved for
+fatal operational failure (B3).
 """
 entrance_criteria = [
   { id = "EN-1", text = "design.md §2.6 locked (thin bracket + injected closure; codex pass integrated)." },
