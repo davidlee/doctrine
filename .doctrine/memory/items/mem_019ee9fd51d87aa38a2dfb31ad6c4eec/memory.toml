@@ -1,0 +1,47 @@
+memory_uid = "mem_019ee9fd51d87aa38a2dfb31ad6c4eec"
+memory_key = "mem.fact.doctrine.toml-edit-root-insert-above-headers"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "toml_edit root insert lands above child table headers"
+summary = "toml_edit root key renders above all child table headers; root insert-if-missing is corruption-safe, F-1 bail is over-conservative"
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = ["src/dep_seq.rs", "src/backlog.rs", "src/tag.rs", "tests/spike_chr019_root_tag_insert.rs"]
+globs = ["src/**"]
+commands = ["doctrine tag"]
+tags = ["toml-edit", "entity-write", "sl-136"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "fa941b41e2d02d3df3b7eeb53739c8040116d159"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0a16195207eceb2ea6c3c1015e63429e48272bdad870d678fc1d3eeec7f004a3"
+base_commit = "54479ceb265dc7b7f7885b6e8182d99120d6f9b3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019ea4e4f03c72e1b9a0ef55dcde956d"
+
