@@ -23,6 +23,12 @@ Design implications captured by the POC:
 - `boot install` needs a Codex hook writer that targets `.codex/hooks.json`,
   not the Claude settings file.
 - Codex hook management is separate from MCP server registration, so `IMP-111`
-  should stay split from the hook wiring.
+  stays split from the hook wiring.
 - `boot --emit` is the right long-term hook target, but the current POC uses the
   existing boot-then-read shell wrapper until that verb exists.
+
+Related backlog item:
+
+- `IMP-111` tracks Codex MCP server registration during install. This POC keeps
+  that surface separate so the hook writer can be designed and shipped without
+  entangling the MCP config path.
