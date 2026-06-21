@@ -76,20 +76,28 @@ ignored (forward-compatible).
 Tag coefficients default to 1.0 when absent — scoring ships with or without
 tagging. The `after IMP-134` edge is a soft preference, not a hard blocker.
 
-## Governance note (architectural feedback)
+## Governance — ADR-015 (architectural feedback)
 
-The scoring formula currently lives in IMP-118 prose (backlog body). Before
-design proceeds, the design MUST explicitly mark which parts are durable
-policy vs. tunable implementation defaults:
+The scoring formula currently lives in IMP-118 prose (backlog body).
+Durable policy must be ratified in a governing artifact before
+implementation.
 
-- **Durable policy** (promote to SPEC/ADR): dimension semantics (value,
-  risk), two-pass model, config shape, sort integration contract
-- **Tunable defaults** (implementation-owned): coefficient values,
-  kind_weight defaults, tag_coefficient examples
+**Scope deliverable: ADR-015 — Multi-dimensional priority scoring**
 
-The first implementation may own its formula, but the design must draw the
-line between "this is how doctrine scores" and "these are the starting
-numbers."
+ADR-015 captures durable policy:
+- Dimension semantics (value, risk)
+- Two-pass computation model (base + consequence)
+- Config shape (`[priority]` section in `doctrine.toml`)
+- Sort integration contract (`survey` / `next` / `explain`)
+
+Tunable defaults remain implementation-owned:
+- Coefficient values
+- Kind-weight defaults
+- Tag-coefficient examples
+
+ADR-015 is authored during design phase and referenced by the
+implementation plan — it separates "this is how Doctrine scores"
+from "these are the starting numbers."
 
 ## Shared facet projection (architectural coupling risk)
 
@@ -134,7 +142,10 @@ same projection.
 
 ## Dependencies
 
-- **after**: SL-132 (display), SL-134 (risk CLI), IMP-134 (tagging)
+- **needs**: SL-132 (display) — scoring is untestable and unshippable
+  without a surface to render its output
+- **after**: SL-134 (risk CLI), IMP-134 (tagging) — additive, not
+  foundational; risk is authorable by hand, tags default to 1.0
 - Config parsing precedent: `[conduct]` (src/slice.rs:443), `[dispatch]`
   (src/dispatch_config.rs:29)
 - Risk model: `src/backlog.rs:382` — `RiskFacet`, `exposure()` → 1..=16

@@ -40,12 +40,19 @@ Before design proceeds:
   estimate/value currently. If other kinds gain facets later, the display
   should use the shared `EntityFacets` projection (see SL-133 scope doc).
 
-## Shared facet projection
+## Shared facet projection — design phase deliverable
 
 SL-132 and SL-133 both need estimate/value data. A shared `EntityFacets`
-projection (estimate, value, risk, tags) should be established before
-either slice grows its own facet parser. This slice's `format_show` should
-consume `EntityFacets`, not re-parse `SliceDoc`'s fields directly.
+projection (estimate, value, risk, tags) must be established before
+either slice grows its own facet parser.
+
+**Design phase deliverable:** Define `EntityFacets` struct and its
+scan-time hydration. SL-132 design owns this — it is the first consumer.
+SL-133 design references the projection shape as a gate.
+
+This slice's `format_show` consumes `EntityFacets`, not `SliceDoc`'s
+fields directly. The projection is not a separate slice — it is small
+enough to emerge from SL-132 design.
 
 ## Non-Goals
 
