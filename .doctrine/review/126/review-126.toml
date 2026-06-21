@@ -1,0 +1,34 @@
+id    = 126
+slug  = "reconciliation-review-of-sl-132"
+title = "reconciliation review of SL-132"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-132"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = 'format_value_normal uses {:.1} — integer values render as "5.0" not "5"'
+detail = """src/value.rs:135: format_value_normal always renders one decimal place via {:.1}. A value of 5.0 produces "value: 5.0 magic_beans". The design.md target behavior section shows "value: 5 magic_beans" (integer, no decimal). VT-3 asserts "5.0", which passed — so the {:.1} form is de-facto settled. The discrepancy is minor: the design's illustrative example differs from the settled implementation format. No functional impact; purely a prose fidelity question."""
+disposition = "aligned"
+response = """The design target-behavior section is an illustrative prose sketch. The settled implementation format (with {:.1}) is tested in VT-3 and is correct: value is always an f64 and one decimal place is the appropriate precision for the use case. The design's "5 magic_beans" was illustrative, not a formatting spec. No change needed to code or design."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "format_estimate_confidence debug_asserts won't fire in release — gated by resolve_confidence but a future caller bypassing the shell could panic silently"
+detail = "src/estimate/display.rs: format_estimate_confidence has three debug_assert! guards: bounds in [0,1], finite, and lower_pct < upper_pct. These are validated by resolve_confidence (called by run_show with ?), so the current call path is safe. However, a future caller that constructs a bare EntityFacets and calls format_estimate_confidence directly (bypassing the shell) would hit a release-mode panic on invalid bounds. This is belt-and-suspenders — the debug_assert catches dev-mode mistakes, and the shell validation catches all paths. Worth noting for future callers: format_estimate_confidence is pub(crate) and carries the contract in debug_asserts; a release-safe analogue would use assert! or return a Result. Current posture is acceptable — the single caller is disciplined."
+disposition = "aligned"
+response = "The debug_assert design is intentional: the shell's resolve_confidence validates before call, preventing invalid bounds from reaching the formatter. The debug_asserts serve as dev-mode documentation of the contract. A release-safe wrapper would add runtime checks on a hot display path with no current need — the single caller is disciplined and tested. Documented in notes.md as a standing risk for future callers. No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
