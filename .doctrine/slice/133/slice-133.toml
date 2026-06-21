@@ -6,8 +6,8 @@ created = "2026-06-21"
 updated = "2026-06-21"
 
 [relationships]
-needs = []                      # slice→work hard prerequisite
-after = [{ to = "SL-132", rank = 0 }, { to = "SL-134", rank = 0 }, { to = "IMP-134", rank = 0 }]                      # slice→work soft sequence: { to, rank }
+needs = ["SL-132"]                      # slice→work hard prerequisite
+after = [{ to = "SL-134", rank = 0 }, { to = "IMP-134", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
