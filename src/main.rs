@@ -42,6 +42,7 @@ mod mcp_server;
 mod memory;
 mod meta;
 mod plan;
+mod paths;
 mod policy;
 mod priority;
 mod projection;
@@ -1375,5 +1376,18 @@ mod write_class_tests {
         else {
             panic!("expected RecCommand::List");
         };
+    }
+
+    #[test]
+    fn parse_concept_map_show_with_json_flag() {
+        let r = Cli::try_parse_from(["doctrine", "concept-map", "show", "1", "--json"]);
+        let parsed = r.unwrap();
+        let Command::ConceptMap {
+            command: ConceptMapCommand::Show { json, .. },
+        } = parsed.command
+        else {
+            panic!("expected ConceptMapCommand::Show");
+        };
+        assert!(json, "--json flag should set json: true");
     }
 }

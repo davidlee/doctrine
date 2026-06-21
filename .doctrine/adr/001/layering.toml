@@ -61,6 +61,7 @@ coverage_verify = "engine"  # → coverage, coverage_store, git, requirement, ro
 coverage_view = "engine"    # → coverage, coverage_scan, listing, requirement, root, spec, tty; upward edges baselined
 supersede = "engine"        # → entity, knowledge; supersession policy gate; knowledge→cmd baselined
 backlog_order = "engine"    # → backlog, projection; ordering engine; backlog→ upward baselined
+paths = "engine"            # PHASE-01/SL-139: shared entity-file-path projection; engine-tier, no clap/command imports
 
 # ── command (22) ─────────────────────────────────────────────────────────
 # Import commands + engines + leaves. CLI layer, run_* functions, user-facing verbs.

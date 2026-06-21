@@ -663,6 +663,24 @@ pub(crate) enum RecCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each REC entity directory.
+    Paths {
+        /// REC reference(s) — `REC-007` or the bare id `7`.
+        refs: Vec<String>,
+
+        #[arg(short = 't', long)]
+        toml: bool,
+        #[arg(short = 'm', long)]
+        md: bool,
+        #[arg(short = 'e', long)]
+        entity: bool,
+        #[arg(short = 's', long)]
+        single: bool,
+
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: RecCommand, color: bool) -> anyhow::Result<()> {
@@ -689,6 +707,41 @@ pub(crate) fn dispatch(cmd: RecCommand, color: bool) -> anyhow::Result<()> {
             json,
             path,
         } => run_show(path, &reference, if json { Format::Json } else { format }),
+        RecCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => {
+            let root = crate::root::find(path, &crate::root::default_markers())?;
+            let rec_root = root.join(REC_DIR);
+            let sel = crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            };
+            let mut all_lines: Vec<String> = Vec::new();
+            for r in &refs {
+                let id = parse_ref(r)?;
+                let name = format!("{id:03}");
+                let entity_dir = rec_root.join(&name);
+                let toml_name = format!("rec-{name}.toml");
+                let md_name = format!("rec-{name}.md");
+                let set = crate::paths::scan_entity_dir(
+                    &entity_dir,
+                    &entity_dir.join(&toml_name),
+                    Some(&entity_dir.join(&md_name)),
+                    &root,
+                )?;
+                let lines = crate::paths::select_paths(&set, &sel)?;
+                all_lines.extend(lines);
+            }
+            write!(io::stdout(), "{}", all_lines.join("\n"))?;
+            Ok(())
+        }
     }
 }
 
