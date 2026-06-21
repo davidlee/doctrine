@@ -47,10 +47,15 @@ policy (**ADR-015**) and implements it.
 
 ## 3. Forces & Constraints
 
-- **ADR-001 (layering, no cycles).** A leaf (`facet`) and the engine
-  (`priority::graph`) must read risk data. The risk model lives in `backlog`
+- **ADR-001 (layering, no cycles) — and its BINDING tier map.** A leaf (`facet`) and
+  the engine (`priority::graph`) must read risk data. The risk model lives in `backlog`
   (**command**) — a leaf/engine→command import is an upward violation. Risk types
-  **must** move to a leaf (decisive, §7 D2).
+  **must** move to a leaf (decisive, §7 D2). Because `.doctrine/adr/001/layering.toml` is
+  the binding tier map consumed by `just gate` (NOT mere convention), the slice **must**
+  amend it in-slice: add `risk = "leaf"`, classify the new `priority::config` (leaf), and
+  update the `facet = "leaf"` entry whose comment currently reads "imports only estimate +
+  value" to permit the risk import. Omitting this fails the gate (RV-121/SL-132 was caught
+  on exactly this). See §7 D2.
 - **Pure/impure split.** Base-score computation must be pure over `(facets, config,
   kind)`; the consequence post-pass pure over the built graph; only config load + scan
   touch disk. The base pass must run **before** mint (it feeds the mint tiebreaker), so
@@ -77,7 +82,8 @@ policy (**ADR-015**) and implements it.
 
 ### 5.1 System Model
 
-Three pure stages bracketed by two impure reads (config load, scan):
+Three pure stages bracketed by impure reads — config load + scan + the per-entity
+`dep_seq_for` already performed inside `build_from` (graph.rs:221):
 
 ```
 load(root) ───────────────► PriorityConfig          [impure: doctrine.toml]
@@ -148,6 +154,16 @@ pub(crate) fn load(root: &Path) -> PriorityConfig;   // impure; missing [priorit
 Unknown keys ignored (no `deny_unknown`) → forward-compatible. Lookups
 (`kind_weight(kind)`, `tag_coeff(tag)`) return `1.0` on absence.
 
+**`load` policy (deliberate, advisory-config — NOT inherited from `dispatch_config`).**
+`dispatch_config` *hard-errors* malformed values (e.g. test `unknown_harness_is_error`);
+we choose differently because `[priority]` is advisory tuning, not a correctness gate:
+- *Missing* `[priority]` / missing field → default (per `#[serde(default)]`).
+- *Unknown key* → ignored (forward-compat).
+- *Malformed value* (wrong type / non-finite / negative coefficient) → **clamped**, not
+  fatal: NaN/±∞ → field default, negative → `0.0`, and every coefficient is bounded to a
+  finite sane max (`COEFF_MAX`) at load so downstream products cannot overflow to `∞`
+  (F-2, I2(a)). Silent (no telemetry) — config is advisory; OQ-1 resolved silent.
+
 **Scoring (`priority::graph` or a sibling pure `priority::score`, engine):**
 
 ```rust
@@ -162,15 +178,24 @@ fn base_score(f: &EntityFacets, kind: &entity::Kind, cfg: &PriorityConfig) -> Ba
 // directly, no ItemKind needed).
 ```
 
-**Build seam** (`graph::build`): now `load`s config and threads it; `build_from`
-gains `config: &PriorityConfig`. Surface fns (`survey`/`next`/`explain`) keep their
-`(root)` signatures — config is loaded inside the wrapper alongside the scan.
+**Build seam** (`graph::build_from`): `build_from` already takes `root` and already
+performs impure `dep_seq_for` reads (graph.rs:221) — so it `load`s `PriorityConfig` from
+that same `root` there, rather than threading a param or reaching `main.rs` (D4). This
+covers **every** `build_from` caller with NO signature change: `build` (scan→build_from),
+the `survey`/`next`/`explain` wrappers, AND the pre-scanned `actionability_block_from`
+(surface.rs:484, the `inspect` actionability-block path), which already retains `root`
+solely for `dep_seq_for` and now feeds config from the same handle. No caller is left on
+undocumented default config (F-4).
 
 **`PriorityGraph`** field changes:
-- `consequence: BTreeMap<EntityKey, u32>` → `score: BTreeMap<EntityKey, f64>` (the
-  post-pass result `base + consequence`), plus the per-node `base_score` lives on
-  `NodeAttr`. The raw weighted `consequence` is recoverable as `score − base` (kept as
-  a derived value for `explain`, not a stored third map — but see OQ-2).
+- `consequence: BTreeMap<EntityKey, u32>` → **two** `f64` maps from the post-pass:
+  `score: BTreeMap<EntityKey, f64>` (the final `base + consequence`) AND
+  `consequence: BTreeMap<EntityKey, f64>` (the weighted Σ, **stored** at the moment it is
+  computed — it exists exactly, pre-summation, in the post-pass). `explain` reads
+  `consequence` directly. We do **NOT** recover it as `score − base`: that subtraction is
+  floating-point cancellation, not exact in general, and `explain`'s published
+  `consequence` field must be accurate (OQ-2 resolved — store, not derive). Per-node
+  `base_score` lives on `NodeAttr`.
 
 `NodeAttr` gains `base_score: BaseScore` (the split — `value_dim`/`risk_dim`).
 `base_score.total()` is the value the mint comparator and consequence post-pass
@@ -184,8 +209,9 @@ consume.
 
 - **Authored** (read-only here): `[estimate]`/`[value]`/`[facet]` in entity TOMLs;
   `[priority]` in `doctrine.toml` (new — authored config, hand-edited).
-- **Derived** (in-memory, rebuilt each command): `base_score` per node, `score` map,
-  consequence. Nothing persisted. ADR-004 honoured — no reverse edges stored.
+- **Derived** (in-memory, rebuilt each command): `base_score` per node, and the `score`
+  + `consequence` `f64` maps on `PriorityGraph` (both stored at compute time, §5.2/§5.4).
+  Nothing persisted to disk. ADR-004 honoured — no reverse edges stored.
 - **Ownership**: the risk leaf owns risk types; `facet` owns the aggregation;
   `priority::config` owns the config schema + load; `priority::graph` owns the build
   pipeline and the two pure scoring passes; `surface`/`render` own presentation.
@@ -215,8 +241,11 @@ consequence to a **post**-pass):
    - **dep class**: `A.needs=[B]` emits `edge(dep_overlay, B→A)` — the prereq B is the
      edge **source**, so B's dependents are the **`out_edges(dep_overlay, B)`** targets
      (NOT in_edges). Weighted `× dep_edge_coeff`.
-   - `score(N) = base(N).total() + Σ`. Store in `PriorityGraph.score`. (Multi-label
-     double-counting across overlays matches the old per-edge `+=1` tally — unchanged.)
+   - `consequence(N) = Σ` — **stored** in `PriorityGraph.consequence` (exact, captured
+     pre-summation). `score(N) = base(N).total() + consequence(N)` — stored in
+     `PriorityGraph.score`. Both are `is_finite`-sanitized before storage (I2(b)).
+     (Multi-label double-counting across overlays matches the old per-edge `+=1` tally —
+     unchanged.)
 
 **Sort integration:**
 - `survey`: `actionability → score desc (total_cmp) → canonical-id asc`.
@@ -238,19 +267,25 @@ maintainability coefficient defaulting to 0.0).
 
 - **I1 — total order.** All score comparisons use `f64::total_cmp`; final tiebreak is
   canonical-id asc. Equal scores ⇒ deterministic id order.
-- **I2 — NaN-free.** Inputs are finite: `value`/`exposure` are bounded ints;
-  `kind_weight`/`tag_coeff`/edge coeffs are finite config (a non-finite authored coeff
-  is rejected/clamped at load — see edge cases). `estimate_midpoint` is guarded
-  `max(ε, mid)` so the division never produces ∞/NaN. ⇒ no NaN reaches a comparator.
+- **I2 — NaN/∞-free, by construction at BOTH ends.** (a) *Inputs*: `value`/`exposure`
+  are bounded ints; every config coefficient is clamped finite-non-negative AND bounded to
+  `COEFF_MAX` at load (§5.2); `estimate_midpoint` is guarded `max(ε, mid)`. (b) *Outputs*:
+  clamped inputs alone do NOT suffice — a product of finite-but-large coeffs can still
+  overflow to `+∞`, and a downstream `∞ − ∞` would mint a `NaN`. So `base_score`
+  **sanitizes every computed dimension and total** (`value_dim`, `risk_dim`, `total()`)
+  and the consequence post-pass sanitizes `consequence`/`score` with `is_finite` before
+  storage/comparison (non-finite → `0.0`). ⇒ no `∞`/`NaN` can reach the mint comparator,
+  the `survey` sort, or `explain`. (VT-6.)
 - **I3 — consequence excluded from structure.** Mint and `next` order on `base` only;
   consequence influences only the `survey` *display* sort and `explain`. (Prevents the
   feedback loop; keeps the structural order a pure function of authored dep/seq.)
 - **I4 — additive identity for absent facets.** A node with no authored facets scores
   `base = 0` and contributes `0` to dependents' consequence — exactly the pre-SL-133
   "unweighted" floor, so unauthored corpora degrade gracefully.
-- **Edge: non-finite / negative authored coeff.** `load` clamps each coefficient to a
-  finite non-negative `f64` (NaN/∞ → default; negative → 0.0) so I2 holds and a typo
-  can't invert ordering. Logged? — no; silent clamp (config is advisory). *(OQ-1.)*
+- **Edge: non-finite / negative / huge authored coeff.** `load` clamps each coefficient
+  finite-non-negative and ≤ `COEFF_MAX` (NaN/∞ → default; negative → 0.0; over-max → max)
+  so products stay finite and a typo can't invert or overflow ordering. Silent (config is
+  advisory) — OQ-1 resolved silent; §5.2 owns the full load policy.
 - **Edge: part-assessed risk.** `exposure` already returns 0 unless *both* axes
   present — assessment is all-or-nothing (existing contract, preserved).
 - **Edge: estimate midpoint of 0.** Cannot occur (a valid estimate has positive
@@ -260,13 +295,16 @@ maintainability coefficient defaulting to 0.0).
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 — clamp telemetry.** Should `load` warn on a clamped/garbage coefficient, or
-  clamp silently? Leaning silent (config is advisory, matches `dispatch_config`'s
-  tolerant parse). Revisit if it bites.
-- **OQ-2 — store consequence separately or derive `score − base`?** Storing only the
-  final `score` map keeps state minimal; `explain` recomputes the consequence term as
-  `score − base`. Acceptable (both are exact `f64` from the same pass) but slightly
-  implicit. Alt: store a second `consequence: BTreeMap<…, f64>`. Leaning derive.
+- **OQ-1 — clamp telemetry. RESOLVED (silent).** `load` clamps silently — `[priority]`
+  is advisory tuning, not a correctness gate. This is a *deliberate new policy*, NOT
+  inherited from `dispatch_config` (which hard-errors malformed values); the full load
+  contract is specified in §5.2. `explain` already exposes the live dimensions, so a
+  surprising rank is diagnosable without clamp logging.
+- **OQ-2 — store vs derive consequence. RESOLVED (store).** `PriorityGraph` stores
+  `consequence: BTreeMap<…, f64>` from the post-pass directly (the weighted Σ exists
+  exactly pre-summation). `score − base` is rejected: it is floating-point cancellation,
+  not exact in general, and `explain`'s published `consequence` field must be accurate.
+  §5.2 / §5.4 step 6 updated accordingly.
 - **OQ-3 — follow-up: collapse the two facet parse paths.** SL-132 left scan
   (`read_facets`) and the show path (`SliceDoc` serde) parsing the same facets twice.
   Unifying `ScannedEntity` onto a single `EntityFacets` carrier is a cohesion cleanup
@@ -285,29 +323,45 @@ maintainability coefficient defaulting to 0.0).
   (`priority::graph`) must read it. Importing upward violates layering. Mirrors the
   estimate/value leaf precedent (SL-103). Alt: expose `backlog::parse_risk` — rejected,
   upward dependency. Alt: re-parse risk inline in scan — rejected, parallel
-  implementation of the validator.
+  implementation of the validator. **Binding tier-map edits are part of this slice**
+  (`.doctrine/adr/001/layering.toml`, consumed by `just gate`): add `risk = "leaf"`;
+  classify `priority::config = "leaf"` (pure serde struct + a `std::fs` `load`, no
+  internal module deps — mirrors `fsutil`/`facet_write`, leaves that perform IO); and
+  relax the `facet` entry comment ("imports only estimate + value") to permit the risk
+  import. Without these `just gate` fails (§3, the F-1 forcing function).
 - **D3 — `EntityFacets` is the pure base-score input (carry risk on it now; defer
   unifying the parse paths).** Satisfies the scope's "build_priority_graph consumes
   EntityFacets" intent without disturbing SL-132's show path (behaviour-preservation).
   Collapsing the two parse paths is OQ-3, a separate cleanup. Alt: loose fields only —
   loses the shared projection; Alt: unify now — reworks done code, bigger blast radius.
-- **D4 — Load config at the `graph::build` seam, not `main.rs`.** `build` already owns
-  the impure touches (scan, `dep_seq_for`); reading `[priority]` there keeps one impure
-  entry and leaves `survey`/`next`/`explain` on their `(root)` signatures. (Deviates
-  from the scope's "main.rs parses config" — the build seam is more cohesive.) Alt:
-  thread a `PriorityConfig` from `main` through every surface fn — more plumbing, no
-  benefit.
+- **D4 — Load config inside `build_from`, not `main.rs`.** `build_from` already takes
+  `root` and already performs impure `dep_seq_for` reads (graph.rs:221) — so it `load`s
+  `[priority]` from that same `root`. More cohesive than threading a `PriorityConfig`
+  param and, crucially, covers **every** `build_from` caller with no signature change —
+  including the pre-scanned `actionability_block_from` (surface.rs:484), which would
+  otherwise miss a threaded param (F-4). `survey`/`next`/`explain` keep their `(root)`
+  signatures. (Deviates from the scope's "main.rs parses config" — the build seam is more
+  cohesive.) Alt: thread `PriorityConfig` from `main` through every surface fn — more
+  plumbing, easy to miss a caller. Alt: a separate `config: &PriorityConfig` param on
+  `build_from` — same miss-a-caller risk (F-4).
 - **D5 — Tag-coeff seam present but fed empty (Σ = 1.0) this slice.** Honours the soft
   `after IMP-134`: the formula carries the tag term from day one but reads no tags
   until SL-136 lands tag storage. Avoids coding scan against SL-136's unratified
   storage shape. Lighting it up later is a localized scan read, not a redesign.
-- **D6 — `f64::total_cmp` for every score comparison; NaN-free by construction
-  (I2).** Total order + clamped finite inputs. Alt: `partial_cmp().unwrap_or(Equal)` —
+- **D6 — `f64::total_cmp` for every score comparison; NaN/∞-free by construction
+  (I2).** Total order + clamped finite inputs **+ `is_finite` sanitization of every
+  computed dimension / total / consequence** (not inputs alone — finite inputs can still
+  overflow a product to `∞`; I2(b), F-2). Alt: `partial_cmp().unwrap_or(Equal)` —
   rejected, hides a NaN bug as a silent tie.
 - **D7 — `ReasonKind::Score { base, value_dim, risk_dim, consequence, total }`
   replaces `Consequence { inbound }`.** `explain` is the transparency surface; the raw
   inbound count is no longer the ranking quantity, so it is replaced by the dimensional
-  breakdown. `survey`/`next` rows show only the single `score` column.
+  breakdown. Render contract, made self-consistent with the view types: **`survey`** adds
+  a single `score` column (`SurveyRow` retyped `consequence: u32 → score: f64`).
+  **`next` adds NO row column** — `NextRow` (view.rs:103-112) carries no score field and
+  `NEXT_COLS` (render.rs:77) renders none; `next` surfaces score via its
+  `ReasonKind::Score` reason line (render.rs:181), consistent with §5.2 omitting
+  `NextRow` from the retype set (F-8).
 
 **ADR-015 boundary** — ratifies durable policy: dimension semantics, the two-pass
 model, the `[priority]` config shape + forward-compat rule, and the sort contract
@@ -345,10 +399,17 @@ Phasing (provisional, for `/plan`):
 Verification (criteria firm up in `/plan`):
 - **VT-1** — `risk::exposure` parity: the extracted leaf reproduces the former
   `backlog` results (existing tests pass post-move, unchanged).
+- **VT-1b** — scan-seam per-facet isolation preserved (F-7): existing catalog/scan
+  malformed-facet cases stay green unchanged, **plus** a new case proving a malformed
+  `[facet]` (risk) drops only `risk` to `None` + an `Error` diagnostic while sibling
+  `estimate`/`value` survive intact — the contract the new `read_facets` risk read must
+  preserve.
 - **VT-2** — `base_score` is pure & correct: value-only, risk-only, both, neither;
   absent estimate → midpoint 1.0; kind_weight/tag_coeff defaults applied.
 - **VT-3** — config: missing `[priority]` → all defaults; partial section → per-field
-  defaults; unknown key ignored; non-finite/negative coeff clamped (I2).
+  defaults; unknown key ignored; non-finite/negative/over-`COEFF_MAX` coeff clamped
+  (I2(a)); a malformed *value* clamps and does NOT hard-error — the deliberate
+  advisory-config policy (§5.2), distinct from `dispatch_config` (F-6).
 - **VT-4** — consequence post-pass **directions** (the F1/F2 fixes): a `needs`
   dependent's base flows to its prerequisite via `out_edges(dep_overlay)` (× dep coeff);
   a referencer's base flows to its target via `in_edges` over the `CONSEQUENCE_LABELS`
@@ -357,8 +418,10 @@ Verification (criteria firm up in `/plan`):
 - **VT-5** — **reordering scenario** (the point of the slice): a blocker gating one
   high-value slice outranks a blocker gating five ideas, where the old inbound-count
   ranked them opposite.
-- **VT-6** — determinism: equal scores tiebreak canonical-id asc; no NaN reaches a
-  comparator (property/targeted test over the guards).
+- **VT-6** — determinism + finite outputs: equal scores tiebreak canonical-id asc; AND
+  feeding near-`f64::MAX` coefficients proves no `∞`/`NaN` reaches mint, the `survey`
+  sort, or `explain` — i.e. `base_score` and the post-pass `is_finite`-sanitize the
+  computed dims/total/consequence, not just the inputs (I2(b), F-2).
 - **VT-7** — `next` structural order ignores consequence (mint = base only); `survey`
   display sort uses score.
 - **VA-1** — `explain --json` exposes `{ base, value_dim, risk_dim, consequence,
@@ -388,3 +451,23 @@ against source before locking, then found two bugs in the first draft:
 Open after the pass: OQ-1 (clamp telemetry), OQ-2 (store vs derive consequence),
 OQ-3 (parse-path unification follow-up). No governance conflict surfaced (ADR-001
 layering *drives* D2; ADR-004 upheld; ADR-015 authored this phase).
+
+**External inquisition RV-130 (2026-06-21, codex/GPT-5.5).** 8 findings (1 blocker,
+3 major, 4 minor) against this design; the §10 internal pass was treated as the
+accused's own alibi. The clean spine (edge directions, layering *direction*, ADR-004,
+no parallel validator) survived. All 8 reconciled here, all `design-wrong` (no code
+yet — the artifact was the defect):
+- **F-1 (blocker)** — binding tier-map (`layering.toml`) edits made in-slice: §3, D2,
+  Terrain. `risk = "leaf"`, `priority::config = "leaf"`, `facet` comment relaxed.
+- **F-2 (major)** — I2 made true at *both* ends: outputs `is_finite`-sanitized +
+  `COEFF_MAX` input bound. §5.2, §5.5 I2/edge, D6, VT-6.
+- **F-3 (major)** — OQ-2 closed by **storing** `consequence: f64` (not `score − base`).
+  §5.2, §5.4 step 6, §6 OQ-2.
+- **F-4 (major)** — every `build_from` caller covered by loading config inside
+  `build_from` from `root`; `actionability_block_from` (surface.rs:484) named. §5.2, D4.
+- **F-5 (minor)** — §5.1 impurity boundary now counts `dep_seq_for`.
+- **F-6 (minor)** — clamp owned as deliberate advisory-config policy; `dispatch_config`
+  miscitation dropped. §5.2, §6 OQ-1, VT-3.
+- **F-7 (minor)** — scan-seam isolation pinned by VT-1b.
+- **F-8 (minor)** — D7 render contract reconciled with view types (`next` has no score
+  column; reason line only).
