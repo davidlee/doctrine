@@ -78,6 +78,10 @@ ff:
 force-push-main:
   git push . edge:main
 
+# Push local edge and main to origin — works from any branch
+push-upstream:
+  git push origin edge:refs/heads/edge main:refs/heads/main
+
 # Run before a version bump / tag — this is where flake breakage (a new embed
 # root absent from the crane source graft, a toolchain skew) actually bites.
 # Pre-release gate: full workspace gate + hermetic nix flake build.
