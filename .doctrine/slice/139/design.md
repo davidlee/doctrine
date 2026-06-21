@@ -139,10 +139,13 @@ Reference rules:
 
 Selector rules:
 
-- no selector: all direct regular files in the entity folder, ordered as identity
-  TOML, identity Markdown, then other files sorted lexicographically;
-- `-t`, `--toml`: identity TOML only;
-- `-m`, `--md`: identity Markdown only;
+- if no selector is supplied: all direct regular files in the entity folder,
+  ordered as identity TOML, identity Markdown, then other files sorted
+  lexicographically;
+- once any selector is supplied, the default all-files set is disabled and only
+  the selected classes are emitted;
+- `-t`, `--toml`: identity TOML;
+- `-m`, `--md`: identity Markdown;
 - `-e`, `--entity`: identity TOML + identity Markdown;
 - selectors compose additively; `-t -m` is equivalent to `-e`;
 - selector flags do not reorder output; canonical path class order always wins;
@@ -238,7 +241,8 @@ Per-kind adapters:
 - Missing identity Markdown is an error when explicitly selected by `--md` or
   `--entity`; for default all-files mode it should be treated as absent only if
   the kind legitimately has no Markdown body. The current in-scope kinds all have
-  Markdown companions, so implementation can start strict.
+  Markdown companions, so implementation should start strict and let any contrary
+  discovery route through `/consult` rather than silently weakening the contract.
 - Other regular files are direct children only; recursive traversal is out of
   scope.
 - For multi-ref invocations, selectors apply independently per ref.
@@ -352,4 +356,22 @@ Add or extend tests for:
 
 ## 10. Review Notes
 
-Internal adversarial review pending.
+Internal adversarial pass completed after the first draft.
+
+Findings and dispositions:
+
+- **F1 — selector default ambiguity (major, fixed).** The draft said selectors
+  compose but did not explicitly say whether `--toml` adds to the default all-file
+  set or replaces it. Fixed in §5.2: no selector means all files; once any selector
+  is present, only selected classes emit.
+- **F2 — missing Markdown weakening risk (minor, fixed).** The draft allowed
+  absent Markdown in default mode for theoretical no-body kinds, but every
+  in-scope kind has a Markdown companion today. Fixed in §5.5: implementation
+  starts strict and must consult if a contrary kind is discovered.
+- **F3 — SPEC-013 drift (major, accepted/reconciled later).** A new uniform
+  `paths` verb conflicts with SPEC-013's current `new/list/show/status` wording.
+  The design names this explicitly in §6 and D7; per user direction, the spec
+  update is reconciliation work after implementation evidence exists.
+- **F4 — show JSON consumer risk (major, avoided by design).** The design no
+  longer adds paths to `show --json`, preserving existing full-inspection
+  consumers and goldens.
