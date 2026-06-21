@@ -82,3 +82,49 @@ No code moved yet (design + plan phase only). `just check` has not changed since
 - `commands/mod.rs` has `pub mod` for all 9 modules (dep_seq, facet, guard, inspect,
   map, relation, serve, supersede, validate)
 - Work is on disk but UNCOMMITTED — 10 files modified, +1619/-1524 lines
+
+---
+
+## 2026-06-21 — Layering gate fix (non-module extractor target)
+
+### Finding
+
+`cargo test --test architecture_layering tests::architecture_layering_gate` failed
+with `Unclassified("Command")`.
+
+Root cause: `src/commands/guard.rs` carries `use crate::Command;`. The edge
+extractor treats every `crate::<segment>` as a module reference, producing edge
+`commands -> Command`. But `Command` is a private `enum` in `main.rs` — it is not
+a module, and `main.rs` is deliberately excluded from `discover_units` (binary
+entrypoint). The layering map has no entry for it, so `check` flags it as
+unclassified.
+
+### Fix
+
+Filtered edges in `architecture_layering_gate` to drop targets that do not
+correspond to an actual source module (`src/<name>.rs`, `src/<name>/mod.rs`,
+or `src/<name>/<name>.rs` must exist). This is the same criterion `discover_units`
+uses.
+
+Reverted an earlier approach that filtered inside `extract_edges` itself — that
+broke 5 synthetic unit tests that create temp dirs without the target module
+files. The filter lives in the gate test only, where the real `src/` tree is
+present.
+
+### Verification
+
+- `tests::architecture_layering_gate` passes
+- All 18 layering tests pass (17 pass + 1 ignored)
+- `cargo clippy` (no `--all-targets`) zero-warn
+- `Command` is the **only** non-module target in the entire 394-edge graph (confirmed
+  via `dump_real_graph`)
+
+### Follow-up for audit/close
+
+- The extractor cannot distinguish `crate::module_name` from `crate::TypeFromMain` —
+  this limitation is latent for any crate-root type accessed across a module
+  boundary. The filter-by-existence heuristic is correct for the current codebase.
+- Architecturally cleaner: move `Command` to its own module (`src/command.rs` or
+  `src/commands/command.rs`). This would eliminate the false positive at its source
+  rather than filtering it. Consider as a future slice or a close-out
+  recommendation.

@@ -1,0 +1,252 @@
+id    = 120
+slug  = "sl-131-design-adversarial-review-of-mcp-memory-tools-design"
+title = "SL-131 design: adversarial review of MCP memory tools design"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "code-review (adversarial)"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-131"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "F-1: Fictional function memory::backlinks_index(root, &uid) — §4 implementation impossible"
+detail = """
+**Expected:** The design (§4) describes a backlinks enrichment for `memory_show` that "calls `memory::backlinks_index(root, &uid)` to build the backlink map."
+
+**Observed:** No such function exists. The actual `backlinks_index` lives in `src/links.rs` with signature `(wikilinks_by_uid: BTreeMap<&str, Vec<&Wikilink>>, relations_by_uid: BTreeMap<&str, Vec<&str>>) -> BTreeMap<String, BTreeSet<String>>` — a pure function over pre-built maps. To build those maps requires a full corpus scan of every memory (reading bodies for wikilinks, collecting relations), exactly as `run_backlinks` in `memory.rs:2080` does (~100 lines of collection logic).
+
+**Evidence:** The design's §4 "Implementation" paragraph cannot be implemented as written. The claimed one-liner `memory::backlinks_index(root, &uid)` is fiction. Either the design must specify a new helper function that wraps the full scan, or describe the actual multi-step implementation using the existing `links::backlinks_index` + `collect_all` + `read_body` + `extract_wikilinks`.
+
+**Severity:** Blocker — an implementer reading §4 would waste time searching for a non-existent function and then need to reverse-engineer `run_backlinks` to understand the actual implementation path."""
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "blocker"
+title = "F-2: Design silently contradicts scope risk mitigation without reconciliation"
+detail = """
+**Expected:** The scope document (§ "Risks and assumptions") explicitly states a risk-mitigation strategy: "Prefer adding a run_find_string() / run_retrieve_string() or a capture helper to avoid stdout pollution." It further says "This avoids touching the existing run_* shape" and notes that `src/retrieve.rs` is "out of scope unless necessary."
+
+**Observed:** The design (§1 "Writer abstraction") replaces this strategy with adding `writer: &mut impl Write` to `run_find`, `run_retrieve`, `expand_graph`, `run_show`, and `run_list` — touching both `src/retrieve.rs` and `src/memory.rs`. This is a different design choice with different blast radius. The design never acknowledges or reconciles this contradiction.
+
+**Evidence:** Scope: "Prefer adding a run_find_string() / run_retrieve_string() ... This avoids touching the existing run_* shape." Design: adds `writer: &mut impl Write` to every run_* function. No section of the design addresses why the scope's preferred approach was rejected.
+
+**Severity:** Blocker — either the scope or the design is wrong. One must be reconciled before implementation. If the design's approach is correct, the scope should be updated to reflect it. If the scope's concern (blast radius into retrieve.rs) is valid, the design needs a different approach."""
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = "F-3: memory_retrieve MCP parameter mapping critically underspecified"
+detail = """
+**Expected:** The design should specify every parameter value the MCP handler passes to `retrieve::run_retrieve()`, and every mapping from the MCP schema to the function signature.
+
+**Observed:** `run_retrieve` has 16 parameters: `(path, paths, globs, commands, tags, lifespan, free_query, type_f, status_f, include_draft, limit, min_trust, offset, format, expand)`. The design:
+- Shows `offset?` and `limit?` in the schema but specifies no defaults (CLI default is RETRIEVE_LIMIT_DEFAULT=5; what is the MCP default?)
+- Shows `include_draft?` as boolean but doesn't specify how `None → false` conversion works in the handler
+- Shows `format` as "hardcoded" to Table but doesn't state this value explicitly in the code-impact section
+- Never mentions the `expand` parameter (which the scope explicitly defers as out-of-scope). The handler must pass `expand: None` — the design should state this.
+- Doesn't show how `Lifespan` (an enum) is parsed from the `lifespan?` string
+- Doesn't show how `MemoryType` and `Status` strings are parsed to their enum equivalents
+
+**Severity:** Major — an implementer cannot write the MCP handler arm from this design alone. They would need to reverse-engineer the CLI call site in `main.rs`."""
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "F-4: memory_find MCP parameter mapping similarly underspecified"
+detail = """
+**Expected:** Complete parameter mapping from MCP schema to retrieve::run_find().
+
+**Observed:** Same class of gap as F-3: run_find has 13 parameters. The MCP schema lists offset?, limit?, include_draft?, type?, status?, lifespan? — but no defaults, parsing, or wiring are specified. Specifically:
+- lifespan? → Option<Lifespan>: the handler must call s.parse::<Lifespan>() (Lifespan implements FromStr). Not mentioned.
+- type? → Option<MemoryType>: handler must call MemoryType::parse(s)?. Not mentioned.
+- status? → Option<Status>: handler must call Status::parse(s)?. Not mentioned.
+- format → must be Format::Json for MCP (hardcoded per table in §3). Not stated in code-impact.
+- include_draft? → bool: Option<bool> → bool conversion (None → false). Not stated.
+- limit?: usize vs Option<usize>: run_find takes Option<usize>. Design does not specify the default.
+
+**Severity:** Major — same implementation-blocking gap as F-3."""
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "F-5: Backlinks schema (uid + title + type) doesn't match available data"
+detail = """
+**Expected:** The design §4 schema shows backlinks enriched as structured objects: `{ uid: "...", title: "...", type: "wikilink|relation" }`.
+
+**Observed:** `links::backlinks_index` returns `BTreeMap<String, BTreeSet<String>>` — just UID-to-source-UIDs. To get the title and type for each backlink source, the MCP handler must:
+1. Look up each source UID in the full corpus (requires collect_all + body reads)
+2. Determine whether each backlink came from wikilinks or relations (requires tracking provenance during collection)
+
+The `run_backlinks` code in `memory.rs:2080` shows the full implementation: it builds per-source method sets by re-extracting wikilinks from each source body and checking if any link target is in the query_targets set. The MCP handler would need a similar approach — or a new helper.
+
+**Evidence:** The design says "call memory::backlinks_index(root, &uid)" (fictional — see F-1) followed by "inject the backlinks key". Neither step accounts for the uid→title/type resolution needed for the schema shown.
+
+**Severity:** Major — the described implementation steps cannot produce the output schema shown."""
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "major"
+title = "F-6: Error mapping claim 'no changes needed' is misleading"
+detail = """
+**Expected:** The design §2 error-mapping section should accurately describe how memory tool errors flow through `map_review_error`.
+
+**Observed:** The design claims: "Memory errors fall through the ReviewError downcast (no match) and hit the final -32603 fallback — no changes needed to the mapper." This is misleading in two ways:
+
+1. Memory argument errors (e.g. invalid type string, bad lifespan) will produce anyhow errors with messages that *may* start with "invalid" — but the prefix check `msg.starts_with("invalid arguments:")` is specifically the `-32602` path. Whether a memory error hits `-32602` or `-32603` depends on the error message text, not the error type.
+
+2. While the *current* implementation plan (using ExtractFields, not serde deserialization) means memory argument errors will most likely produce different message patterns (e.g. "unknown memory_type"), the design should state this explicitly rather than claiming "no changes needed" based on an incorrect analysis of the code flow.
+
+**Severity:** Major — the error mapping contract is a correctness concern. An unexpected error code from an MCP tool can confuse agent harnesses."""
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "major"
+title = "F-7: No test coverage for trust holdback via MCP layer"
+detail = """
+**Expected:** The new evidence section should include a test that confirms the trust holdback (SPEC-007 D4) works through the MCP memory_retrieve tool.
+
+**Observed:** The test listed is: MCP memory_retrieve with min_trust: high suppresses low-trust high-severity. While a test is mentioned, the design gives no shape — no test fixture setup (how many memories, what trust/severity values, what expected row count), no assertion structure. Furthermore, testing this through the full MCP request/response cycle requires the MCP server to be running against a test corpus.
+
+The holdback is SPEC-007 most important security boundary. A weak test here is a real risk.
+
+**Severity:** Major — the trust holdback is the security boundary. If it fails silently, hostile-input memories enter agent context."""
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "minor"
+title = "F-8: memory_list MCP handler: no test for filter axes"
+detail = """
+**Expected:** Tests covering memory_list with type, substr, status, and tag filters to verify the MCP parameter mapping is correct.
+
+**Observed:** The only test mentioned is 'MCP memory_list returns full index as JSON' — no tests for any filter parameter. The memory_list tool is most useful with filters; without tests, filter parameters (type parsing, status set intersection, substr matching) are unverified at the MCP boundary.
+
+**Severity:** Minor — the tool works but filter correctness through the MCP layer is unverified."""
+
+[[finding]]
+id = "F-9"
+status = "open"
+severity = "minor"
+title = "F-9: opt_bool_field behavior for null/missing/non-bool inputs unspecified"
+detail = """
+**Expected:** Specification of what opt_bool_field returns for null, missing field, string true, integer 1.
+
+**Observed:** The design says only 'Parses JSON true/false via serde_json::Value::as_bool.' serde_json::Value::as_bool returns None for null, strings, numbers, and missing keys. This means invalid boolean representations silently become None (which maps to false for include_draft), rather than producing an error. The design should state whether this permissive behavior is intentional, and a test should verify it.
+
+**Severity:** Minor — silent default behavior is probably fine for a boolean flag, but should be explicit."""
+
+[[finding]]
+id = "F-10"
+status = "open"
+severity = "minor"
+title = "F-10: memory_show with invalid uid: error code not specified"
+detail = """
+**Expected:** The new evidence says 'MCP memory_show with invalid uid returns error' — but what error code? -32602 (invalid params) or -32000 (not found)?
+
+**Observed:** The error mapping §2 says bad arguments → -32602, not found/IO → -32603. A bad uid is arguably a parameter error (-32602), but the existing review_show maps 'review not found' to -32000 (a custom app-level code). The design should state which code memory_show returns for a bad reference so agent harnesses can rely on it.
+
+**Severity:** Minor — ambiguous error contract."""
+
+[[finding]]
+id = "F-11"
+status = "open"
+severity = "minor"
+title = "F-11: Code impact section doesn't specify Format parameter values passed from MCP handlers"
+detail = """
+**Expected:** The code impact summary should list the Format::Json or Format::Table passed by each MCP handler.
+
+**Observed:** §6 (Code impact) says tools.rs gets 'Add 4 call_tool match arms' but doesn't say which Format value each passes:
+- memory_find → Format::Json (per §3 table)
+- memory_retrieve → Format::Table (per §3 table)
+- memory_show → Format::Json (per §3 table)
+- memory_list → Format::Json (per §3 table)
+
+While this is stated in the §3 per-tool format table, the code impact section is the implementer checklist — it should be complete.
+
+**Severity:** Minor — the information exists elsewhere but the checklist is incomplete."""
+
+[[finding]]
+id = "F-12"
+status = "open"
+severity = "minor"
+title = "F-12: expand_graph writer parameter change not addressed"
+detail = """
+**Expected:** The design should note that expand_graph (which writes to stdout via println!/eprintln! internally) must also accept writer: &mut impl Write.
+
+**Observed:** §1 lists expand_graph as needing the writer param. But the scope defers --expand as out-of-scope. The MCP handler will always pass expand: None, so expand_graph is never called from MCP. However, the CLI path (main.rs) still calls expand_graph from run_retrieve. If expand_graph internally writes to stdout and the MCP path somehow triggers it, the output would be corrupted.
+
+This is a low-risk issue since expand is out-of-scope for MCP, but the design should state that the writer change to expand_graph is needed for consistency even though MCP never triggers it, or that expand_graph is excluded from the writer change because expand is out-of-scope.
+
+**Severity:** Minor — low risk in practice (expand is out-of-scope for MCP) but a hidden assumption."""
+
+[[finding]]
+id = "F-13"
+status = "open"
+severity = "nit"
+title = "F-13: memory_retrieve JSON format note — design says Table but run_retrieve supports Json too"
+detail = """
+**Expected:** The design should note that run_retrieve already supports Format::Json (format_retrieve_json produces structured JSON), and justify why the MCP tool uses Table format instead.
+
+**Observed:** §3 table says memory_retrieve uses Table format because of "Security-framed data blocks with nonce/staleness — SPEC-007 "data, not instruction" render." This is a sound rationale for the security boundary. However, the design does not note that Format::Json is also available and that the choice was deliberate (a decision, not an omission).
+
+**Severity:** Nit — no functionality gap, just missing explanatory context."""
+
+[[finding]]
+id = "F-14"
+status = "open"
+severity = "nit"
+title = "F-14: memory_list MCP tool: type? → MemoryType parsing from string"
+detail = """
+**Expected:** The design should specify the string-to-enum mapping for the type? parameter.
+
+**Observed:** The schema shows type? as an optional string parameter, but memory::run_list takes type_f: Option<MemoryType>, not Option<&str>. The MCP handler must call MemoryType::parse(s)? to convert. MemoryType::parse is infallible for known strings but returns an error for unknown ones. The design should specify whether a bad type value produces -32602 (invalid params) or -32603 (internal error).
+
+**Severity:** Nit — implementable from existing code, just not specified in design."""
+
+[[finding]]
+id = "F-15"
+status = "open"
+severity = "blocker"
+title = "F-15: handle_tools_call introduces JSON double-encoding if call_tool returns String"
+detail = '''
+**Expected:** When call_tool return type changes from anyhow::Result<ReviewOutput> to anyhow::Result<String>, handle_tools_call must NOT re-serialize the already-serialized String with serde_json::to_string.
+
+**Observed:** The design §2 shows call_tool returning String with review arms doing serde_json::to_string(&out)? (pre-serialized). But the current handle_tools_call does:
+
+
+
+If out is already a JSON string like {"rows":[...]}, then serde_json::to_string(&out) produces "{\"rows\":[...]}" — a JSON-encoded representation of the string. This gets stored in McpToolResult.text, then serialized again by serde_json::to_value(&tool_result), yielding TRIPLE encoding.
+
+**Evidence:** Current flow: ReviewOutput → serde_json::to_string → String → McpToolResult::text → serde_json::to_value. This works because there are exactly two serialization points. Design flow: ReviewOutput → serde_json::to_string (in call_tool) → String → serde_json::to_string (in handle_tools_call) → String → McpToolResult::text → serde_json::to_value. That adds a third serialization.
+
+**Fix:** handle_tools_call must change to pass out directly: McpToolResult::text(out). The design must explicitly describe this change.
+
+**Severity:** Blocker — the MCP server would return garbage to all review AND memory tools.'''
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "minor"
+title = "F-16: VT-3 test (tool_list_has_10_tools) must change but design says tests stay green unchanged"
+detail = """
+**Expected:** The design §7 says 'Existing evidence (must stay green, unchanged)' including 'All mcp_server tests.'
+
+**Observed:** The test tool_list_has_10_tools asserts exactly 10 tools. After adding 4 memory tools to the tools() vec, the count becomes 14. The test must be updated to assert 14. This contradicts the 'must stay green, unchanged' claim.
+
+**Severity:** Minor — a test number update is trivial, but the design's claim about existing tests staying unchanged is incorrect."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

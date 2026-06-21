@@ -1,9 +1,9 @@
 id = 131
 slug = "memory-mcp-tools"
 title = "MCP memory retrieval and find tools for agent harnesses"
-status = "design"
+status = "ready"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-06-21"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
