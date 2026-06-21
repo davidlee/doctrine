@@ -282,7 +282,9 @@ fn push_str_if_absent(array: &mut toml_edit::Array, value: &str) -> bool {
 /// - **F-1 strict refuse**: ANY managed key absent from the top-level table → the
 ///   entity is malformed (hand-edited); a tail `insert` would land the key inside a
 ///   trailing `[relationships]`/`[facet]` subtable (silent corruption). `bail!(hint)`,
-///   NEVER insert a missing key.
+///   NEVER insert a missing key. CHR-019 proved root `insert` is safe in
+///   `toml_edit` 0.22, but the status-path bail is kept as
+///   over-conservative-but-harmless per SL-136 D4 scoping.
 /// - Else: insert each pair → `Ok(true)`.
 pub(crate) fn apply_status(
     doc: &mut toml_edit::DocumentMut,

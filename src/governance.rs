@@ -95,7 +95,7 @@ fn key(g: &GovKind, m: &Meta) -> listing::FilterFields {
         slug: m.slug.clone(),
         title: m.title.clone(),
         status: m.status.clone(),
-        tags: Vec::new(),
+        tags: m.tags.clone(),
     }
 }
 
@@ -168,8 +168,6 @@ fn gov_rows(g: &GovKind, metas: &[Meta]) -> Vec<GovRow> {
 struct Relationships {
     #[serde(default)]
     superseded_by: Vec<String>,
-    #[serde(default)]
-    tags: Vec<String>,
 }
 
 /// The full `<stem>-NNN.toml` read as data for `show` — `Meta`'s four list fields
@@ -183,6 +181,8 @@ struct Doc {
     status: String,
     created: String,
     updated: String,
+    #[serde(default)]
+    tags: Vec<String>,
     #[serde(default)]
     relationships: Relationships,
 }
@@ -310,14 +310,14 @@ fn format_show(
     if !supersedes.is_empty()
         || !rel.superseded_by.is_empty()
         || !related.is_empty()
-        || !rel.tags.is_empty()
+        || !doc.tags.is_empty()
     {
         parts.push("\nrelationships:\n".to_string());
         for (label, refs) in [
             ("supersedes", &supersedes.to_vec()),
             ("superseded_by", &rel.superseded_by),
             ("related", &related.to_vec()),
-            ("tags", &rel.tags),
+            ("tags", &doc.tags),
         ] {
             if !refs.is_empty() {
                 parts.push(format!("  {label}: {}\n", refs.join(", ")));

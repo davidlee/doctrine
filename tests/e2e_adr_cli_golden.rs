@@ -65,12 +65,12 @@ fn adr001_toml() -> &'static str {
      status = \"accepted\"\n\
      created = \"2026-01-02\"\n\
      updated = \"2026-01-03\"\n\
+     tags = [\"lang\"]\n\
      \n\
      # hand-added comment — must survive a status edit\n\
      [relationships]\n\
      supersedes = []\n\
      superseded_by = []\n\
-     tags = [\"lang\"]\n\
      \n\
      [[relation]]\n\
      label = \"related\"\n\
@@ -89,12 +89,11 @@ fn minimal_toml(id: u32, slug: &str, title: &str, status: &str) -> String {
          status = \"{status}\"\n\
          created = \"2026-01-04\"\n\
          updated = \"2026-01-04\"\n\
-         \n\
+         tags = []\n\
          [relationships]\n\
          supersedes = []\n\
          superseded_by = []\n\
-         related = []\n\
-         tags = []\n"
+         related = []\n"
     )
 }
 
@@ -141,7 +140,7 @@ fn adr_show_json_is_byte_exact() {
     // PHASE-02's hand-built serde_json::Map must reproduce.
     assert_eq!(
         stdout(&out),
-        "{\n  \"adr\": {\n    \"created\": \"2026-01-02\",\n    \"id\": 1,\n    \"relationships\": {\n      \"related\": [\n        \"ADR-002\"\n      ],\n      \"superseded_by\": [],\n      \"supersedes\": [],\n      \"tags\": [\n        \"lang\"\n      ]\n    },\n    \"slug\": \"use-rust\",\n    \"status\": \"accepted\",\n    \"title\": \"Use Rust\",\n    \"updated\": \"2026-01-03\"\n  },\n  \"body\": \"# ADR-001: Use Rust\\n\\nbody text here.\\n\",\n  \"kind\": \"adr\"\n}"
+        "{\n  \"adr\": {\n    \"created\": \"2026-01-02\",\n    \"id\": 1,\n    \"relationships\": {\n      \"related\": [\n        \"ADR-002\"\n      ],\n      \"superseded_by\": [],\n      \"supersedes\": []\n    },\n    \"slug\": \"use-rust\",\n    \"status\": \"accepted\",\n    \"tags\": [\n      \"lang\"\n    ],\n    \"title\": \"Use Rust\",\n    \"updated\": \"2026-01-03\"\n  },\n  \"body\": \"# ADR-001: Use Rust\\n\\nbody text here.\\n\",\n  \"kind\": \"adr\"\n}"
     );
 }
 
@@ -209,8 +208,8 @@ fn adr_status_transition_prints_exact_and_preserves_edits() {
         "updated bumped"
     );
     // Edit-preservation (the toml_edit in-place contract): comment + rels survive.
-    // SL-048 PHASE-04: `related` is now a `[[relation]]` row (migrated out of the
-    // typed `[relationships]` table); the typed supersedes/superseded_by/tags stay.
+    // SL-048 PHASE-04: `related` is now a `[[relation]]` row. SL-136 PHASE-04:
+    // `tags` moved to root-level from `[relationships]`.
     assert!(after.contains("# hand-added comment"), "comment preserved");
     assert!(
         after.contains("[[relation]]") && after.contains("target = \"ADR-002\""),
@@ -249,12 +248,12 @@ fn adr_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
                 title = \"Bad\"\n\
                 created = \"2026-01-01\"\n\
                 updated = \"2026-01-01\"\n\
+                tags = []\n\
                 \n\
                 [relationships]\n\
                 supersedes = []\n\
                 superseded_by = []\n\
-                related = []\n\
-                tags = []\n";
+                related = []\n";
     seed(dir.path(), 50, toml, "# ADR-050\n");
     let path = dir.path().join(".doctrine/adr/050/adr-050.toml");
 
