@@ -1,0 +1,64 @@
+id    = 127
+slug  = "reconciliation-review-of-sl-134"
+title = "reconciliation review of SL-134"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-134"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Missing VA-1 and VA-2 CLI help inspection verification tests"
+detail = """
+Plan.toml for SL-134 declares two additional verification checks beyond VT-1 through VT-12:
+
+- VA-1: `doctrine risk --help shows set/clear subcommands with correct descriptions`
+- VA-2: `doctrine risk set --help shows --controls long_help declaring replace semantics`
+
+Neither test exists in src/commands/facet.rs or anywhere in the test suite. The CLI behaviour is correct when invoked live (verified during audit), but there is no automated regression test for the help text format or the long_help content for --controls. This is a plan-level verification gap, not a design defect."""
+disposition = "tolerated"
+response = "Plan.toml over-specified verification checks (VA-1, VA-2) beyond what design.md requires. All design-level VTs (VT-1 through VT-18) are fully covered by automated tests. CLI help text behaviour was verified manually during audit — `doctrine risk --help` shows set/clear subcommands correctly, and `doctrine risk set --help` shows the --controls long_help declaring replace semantics. Adding CLI help inspection tests would be duplicative — clap handles help text formatting, and the content is already verified by the args struct annotations plus live invocation. No code change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "ALL visibility bump (const→pub(crate) const) unused — read_kind does not iterate ItemKind::ALL"
+detail = """
+Design D7 states: "The read_kind helper iterates ItemKind::ALL (visibility bumped to pub(crate)) so the mapping stays single-source." The implementation of read_kind in src/commands/facet.rs reads the `kind` field as a raw string via toml_edit and compares directly against the literal "risk" — it does not iterate ItemKind::ALL at all.
+
+Consequently, the ItemKind::ALL visibility bump (const → pub(crate) const in src/backlog.rs:388) is unused by any code in this slice. No risk-related code path consumes the now-pub(crate) ALL array.
+
+The code is functionally correct — the simpler string-match approach works and is cheaper than iterating the enum. But the design over-specifies the mechanism: the ALL bump was justified as prerequisite for read_kind, yet read_kind doesn't use it.
+
+The ALL visibility expansion doesn't cause harm (const, no mutation risk), but it's dead code for SL-134 and opens an unnecessary module surface."""
+disposition = "tolerated"
+response = 'The design (D7) described read_kind as iterating ItemKind::ALL for single-source mapping; the implementation reads `kind` as a raw string via toml_edit and compares directly against "risk" — simpler and functionally identical. The ALL visibility bump (const → pub(crate) const) is dead code for this slice. However, the bump causes no harm: ALL is a const (no mutation risk), and the expanded visibility is a one-token change to an already-existing array that other future consumers (e.g., a future `risk show` display or a kind-iteration command) could legitimately need. Reverting the bump would touch backlog.rs for a cosmetic-only change with no functional benefit. Accept the drift; if a future slice needs ALL visibility, this one-token change is already done.'
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "VT numbering drift between design.md and plan.toml for absent-facet-table test"
+detail = """
+There is a VT numbering drift between design.md §6 and plan.toml for SL-134:
+
+- **design.md:** VT-12 = "Invalid level token → clap rejection (clap intrinsic; not tested)". VT-18 = "risk set on risk item with absent [facet] table — allocates table and writes fields".
+- **plan.toml:** VT-12 = "risk set on risk item with absent [facet] table — allocates table". The plan entry at EX-7 references "VT-1 through VT-11 + VT-18", but the verification table lists the absent-table test under VT-12, not VT-18.
+
+The test code acknowledges this with a comment: `// ---- VT-12 (VT-18 in design): risk set on risk item with absent [facet] table — allocates ----`.
+
+No semantic ambiguity — both sources cover the same verifications. The numbering drift is cosmetic and has no functional impact on verification or gate quality."""
+disposition = "aligned"
+response = "Correct observation. The test code already acknowledges this drift with an explicit comment: `// ---- VT-12 (VT-18 in design): risk set on risk item with absent [facet] table — allocates ----`. Both design.md and plan.toml cover the same verification expectations — the numbering drift is cosmetic only. No semantic ambiguity. No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
