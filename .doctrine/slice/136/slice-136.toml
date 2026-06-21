@@ -1,7 +1,7 @@
 id = 136
 slug = "extend-tagging-all-kinds"
 title = "Extend tagging to all entity types — generic cross-kind tag verb"
-status = "ready"
+status = "done"
 created = "2026-06-21"
 updated = "2026-06-21"
 
