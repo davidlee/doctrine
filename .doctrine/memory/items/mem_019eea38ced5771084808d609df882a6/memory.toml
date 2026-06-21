@@ -1,0 +1,43 @@
+memory_uid = "mem_019eea38ced5771084808d609df882a6"
+memory_key = "mem.pattern.lint.module-split-needs-layering-entry"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Module split under a layering.toml umbrella requires mixed-umbrella sub-classification entries or just gate fails"
+summary = ""
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = [".doctrine/adr/001/layering.toml"]
+globs = ["src/**"]
+commands = []
+tags = ["layering", "adr-001", "refactor", "gate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c72cb60be69e9996799246348acaa0e288c67328"
+ref_name = "refs/heads/edge"
+checkout_state_id = "371085b45875c6f05383b574fda1bd550c4ff9362bd4c307a5939d1cdaa46343"
+base_commit = "481a576fbcfe222fdfc6aaf530136b3d9d9ac497"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

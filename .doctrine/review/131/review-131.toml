@@ -1,0 +1,61 @@
+id    = 131
+slug  = "inquisition-sl-116-worktree-folder-split-design"
+title = "Inquisition: SL-116 worktree/ folder-split design"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-116"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "pub(super) widen set provably too small: 6 cross-file private helpers/consts omitted — design as written will not compile"
+detail = 'EXPECTED: the visibility section must widen to pub(super) EVERY file-private item that becomes cross-file once the per-machine split lands. OBSERVED: design.md §Visibility widens only {resolve_common_dir, resolve_commit, gather_tree_clean}, but call-site audit of src/worktree.rs proves these also cross the new boundaries and stay private: (1) read_allowlist (def L643, allowlist.rs) consumed by run_provision L757 (provision.rs); (2) ALLOWLIST_FILE (const L640, allowlist.rs) consumed by run_check_allowlist L813/L817 (provision.rs); (3) gather_fork_worktree (def L1229) consumed by run_land L1270 (land.rs), run_gc L1571 (gc.rs), coordinate L1977 (coordinate.rs) — THREE machines; (4) project_env_contract (def L1756, fork.rs) consumed by run_coordinate L2099 (coordinate.rs); (5) rollback_fork (def L1817, fork.rs) consumed by coordinate L2042 (coordinate.rs); (6) remove_worktree_dir (def L1782, fork.rs) consumed by coordinate L2043 (coordinate.rs). Each is currently bare `fn`/`const` (file-private); after the split the consumer sits in a different file → E0603 private-item compile error. The "pure mechanical, behaviour-preserving" plea is false: the design is not an executable partition. PENANCE: extend the explicit visibility map to the complete call-site-verified cross-file set (add read_allowlist, ALLOWLIST_FILE, gather_fork_worktree, project_env_contract, rollback_fork, remove_worktree_dir → pub(super)), OR relocate the cross-machine items (gather_fork_worktree, project_env_contract, rollback_fork, remove_worktree_dir) into shared.rs. Re-run the full call-site audit, not a sampled one.'
+disposition = "design-wrong"
+response = "Confirmed against source; design corrected. The real cross-file private set is 7, not 3: design.md §Visibility now tabulates resolve_common_dir, resolve_commit, gather_tree_clean, gather_fork_worktree, project_env_contract, rollback_fork, remove_worktree_dir → pub(super), each with its cross-boundary consumers. read_allowlist + ALLOWLIST_FILE are NOT widened — D4 co-locates them with their sole consumers (the two provision verbs) in provision.rs, which also keeps allowlist.rs a pure ADR-001 leaf. matches/target_dir_for_branch/is_linked_worktree already pub(crate), no change."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "12-file layout not exhaustive: 7 top-level production items have no assigned home — two are cross-machine"
+detail = 'EXPECTED: a partition design claiming completeness must assign EVERY top-level production item to a file. OBSERVED: design.md §Target layout omits: representative (L512), DOCTRINE_PREFIX (L896), CLAUDE_PREFIX (L897), gather_fork_worktree (L1229), gc_target_dir (L1466), gather_landed (L1519), remove_worktree_dir (L1782). Some are obvious-by-concern (representative→allowlist; DOCTRINE_PREFIX/CLAUDE_PREFIX→import; gc_target_dir/gather_landed→gc; remove_worktree_dir→fork) but gather_fork_worktree and remove_worktree_dir are CROSS-MACHINE dependencies (see F-1) whose home determines the visibility story — leaving them unplaced is not cosmetic. An unenumerated symbol is a latent compile break or a silent unauthorized re-home. PENANCE: make the layout exhaustive — enumerate every top-level enum/struct/impl/fn/const/static (≈42 items, grep `^(pub )?(fn|struct|enum|impl|trait|const|static|type) `) with its destination file; no "..." or pretty-subset.'
+disposition = "design-wrong"
+response = "Confirmed; design corrected. §Target layout replaced with an EXHAUSTIVE item→home→visibility map covering all 42 top-level production items (grep-enumerated). The 7 orphans are homed: representative→allowlist; DOCTRINE_PREFIX/CLAUDE_PREFIX→import; gc_target_dir/gather_landed→gc; gather_fork_worktree→shared (cross-machine, 3 callers); remove_worktree_dir→fork (pub(super), coordinate consumes). Also corrected base_has_slice_plan→coordinate (sole caller) not fork, and target_dir_for_branch→shared."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "ADR-001 binding layering.toml unamended and mis-classified: worktree is command not engine, mixed umbrella demands per-file sub-classification"
+detail = """EXPECTED: a design that splits a module into a mixed-tier umbrella must, in-slice, amend the BINDING tier map .doctrine/adr/001/layering.toml (consumed by `just gate` per ADR-001 enforcement) and classify each new sub-file truthfully. OBSERVED: (a) layering.toml currently carries `worktree = "command"` (@98, annotated "→ fsutil, git, root, slice"); (b) the file's own rule (@12-13) requires mixed umbrellas be sub-classified at module::submodule granularity, and units not sub-classified must have ALL files at the declared tier; (c) design.md §ADR-001 asserts "machines = engine" but coordinate calls crate::slice::run_phases at src/worktree.rs:2035 — an upward edge into a command-tier sibling, so coordinate is command, NOT engine (it is precisely why worktree is classified command today). The design names ZERO layering.toml edits. Shipping this trips the gate or, worse, encodes a false tier. SL-132 (RV-121) and SL-133 (RV-130 F-1) were both caught omitting exactly this — a repeat heresy. PENANCE: amend the design to require, in-slice, layering.toml entries for every worktree::<file> classified by ACTUAL imports — allowlist (leaf, pure: paths/strings only), shared/marker/provision/import/land/gc/fork (engine, if imports stay inward), coordinate (command — imports slice), mod.rs (command); cite ADR-001 as the forcing function and the worktree→slice edge (the slice's own Non-Goal) as the reason coordinate cannot be engine."""
+disposition = "design-wrong"
+response = "Confirmed; the gravest charge. layering.toml exists and carries worktree=command @98; the mixed-umbrella rule @12-13 forces module::submodule sub-classification; coordinate imports crate::slice::run_phases @2035 so it is command, not engine. design.md gains a new §ADR-001 layering obligation (BINDING, in-slice): regenerate via the architecture_layering dump_real_graph extractor, add worktree::<file> entries by actual imports, keep coordinate=command and allowlist=leaf, with just gate MixedUmbrella green as an exit criterion. slice-116.md scope amended to carry it as a deliverable. Cites the SL-132/SL-133 precedent as the forcing function."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "D2 'byte-identical relocation' asserted as proof while the production partition that makes it true is unspecified"
+detail = """EXPECTED: the behaviour-preservation proof (D2 / §Verification) may claim byte-identical test relocation only once every test's symbols are reachable from its new co-located home. OBSERVED: design.md §Decisions D2 asserts blanket byte-identity, but tests exercise items whose post-split reachability depends on the still-open F-1/F-2/F-3 gaps — e.g. primary_worktree_resolves... (L3222→primary_worktree), rollback_fork_retracts... (L3255→rollback_fork, cross-machine), base_has_slice_plan_tracks... (L3290), coordinate_refuses_create... (L3314→coordinate). Co-location (T1) does keep a test green IFF it lands in the same file as the private symbol it calls AND any helper it shares is reachable; that is only guaranteed after the visibility/home story is complete. As written, byte-identity is a contingent claim presented as settled proof. PENANCE: downgrade the claim to "byte-identical relocation holds once the cross-file visibility set (F-1) and exhaustive homes (F-2) are fixed"; after fixing, confirm test-by-test that each relocated body needs no edit (esp. tests calling cross-machine helpers)."""
+disposition = "design-wrong"
+response = "Confirmed; claim softened. §Verification now states byte-identity is contingent on the completed partition (F-1/F-2/F-3), holding only because each test co-locates with the file owning the private symbol it calls and every cross-machine helper it touches is in the pub(super) set. The four at-risk tests are spot-checked in the design: primary_worktree_resolves (→subagent, same-file private ✓), rollback_fork_retracts (→fork, now pub(super) ✓), base_has_slice_plan_tracks (→coordinate ✓), coordinate_refuses_create (→coordinate ✓). Execution re-confirms test-by-test."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Stale '9-symbol checklist' in migration-risks contradicts the corrected 8-symbol surface"
+detail = """EXPECTED: after F-1's 9→8 correction, every reference to the checklist count reads 8. OBSERVED: design.md §Public surface correctly lists 8 and explains gather_tree_clean is not external, but §Migration mechanics & risks still says "the 9-symbol checklist; cargo build catches a miss". Internal contradiction. PENANCE: change "9-symbol" to "8-symbol" in the migration-risks bullet."""
+disposition = "design-wrong"
+response = 'Confirmed; fixed. §Migration mechanics & risks now reads "8-symbol checklist", consistent with §Public surface.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

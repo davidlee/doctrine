@@ -32,6 +32,11 @@ pure/shell triplet structure makes the seams obvious and the split low-risk.
   changes.
 - Keep the pure `classify_*` / impure `run_*` split intact across the move (it is
   the existing seam, not a new one).
+- Amend the binding ADR-001 tier map `.doctrine/adr/001/layering.toml` in-slice:
+  `worktree` becomes a mixed umbrella, so add `worktree::<file>` sub-classification
+  by actual imports (extractor-generated). `coordinate` stays `command` (it imports
+  `slice::run_phases`); `allowlist` is `leaf`. `just gate` `MixedUmbrella`
+  assertion green is an exit criterion. (RV-131 F-3.)
 
 Closure intent: `worktree.rs` replaced by a `worktree/` folder; each concern in
 its own file; public paths unchanged; existing suites green unchanged
