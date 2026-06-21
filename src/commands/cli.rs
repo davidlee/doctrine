@@ -10,7 +10,9 @@ use std::str::FromStr;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::commands::facet::{EstimateClearArgs, EstimateSetArgs, ValueClearArgs, ValueSetArgs};
+use crate::commands::facet::{
+    EstimateClearArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs, ValueClearArgs, ValueSetArgs,
+};
 use crate::listing::Format;
 
 // ── shared action enums (Estimate / Value) ──────────────────────────────────
@@ -29,6 +31,15 @@ pub(crate) enum ValueAction {
     Set(ValueSetArgs),
     /// Clear the value facet
     Clear(ValueClearArgs),
+}
+
+/// `doctrine risk set` / `doctrine risk clear`
+#[derive(clap::Subcommand)]
+pub(crate) enum RiskAction {
+    /// Set risk likelihood/impact/origin/controls
+    Set(RiskSetArgs),
+    /// Clear the risk facet
+    Clear(RiskClearArgs),
 }
 
 // ── top-level Command enum ──────────────────────────────────────────────────
@@ -499,6 +510,11 @@ pub(crate) enum Command {
         #[command(subcommand)]
         action: ValueAction,
     },
+    /// Set or clear the [facet] on a risk item
+    Risk {
+        #[command(subcommand)]
+        action: RiskAction,
+    },
 }
 
 // ── ExportCommand ───────────────────────────────────────────────────────────
@@ -723,6 +739,10 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Value { action } => match action {
             ValueAction::Set(args) => crate::commands::facet::run_value_set(&args),
             ValueAction::Clear(args) => crate::commands::facet::run_value_clear(&args),
+        },
+        Command::Risk { action } => match action {
+            RiskAction::Set(args) => crate::commands::facet::run_risk_set(&args),
+            RiskAction::Clear(args) => crate::commands::facet::run_risk_clear(&args),
         },
         Command::Supersede { new, old, path } => {
             crate::commands::supersede::run_supersede(path, &new, &old)

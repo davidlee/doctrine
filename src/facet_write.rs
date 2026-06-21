@@ -41,6 +41,20 @@ fn toml_edit_value_as_f64(value: &toml_edit::Value) -> Option<f64> {
 }
 
 // ---------------------------------------------------------------------------
+// FacetField — mixed-type facet payload
+// ---------------------------------------------------------------------------
+
+/// A single field of a mixed-type facet: either a string value or a string array.
+#[derive(Debug, Clone)]
+pub(crate) enum FacetField {
+    Str { key: &'static str, value: String },
+    Arr {
+        key: &'static str,
+        values: Vec<String>,
+    },
+}
+
+// ---------------------------------------------------------------------------
 // Pure core — set
 // ---------------------------------------------------------------------------
 
@@ -133,6 +147,111 @@ pub(crate) fn clear_facet(doc: &mut toml_edit::DocumentMut, table: &str) -> bool
 }
 
 // ---------------------------------------------------------------------------
+// Pure core — set (mixed)
+// ---------------------------------------------------------------------------
+
+/// Mutate managed keys of a `[table]` facet where each field is either an
+/// `Str` (insert as a string value) or `Arr` (insert as an array of strings).
+/// Same shape rules as [`set_facet`]: absent allocates, non-table errors,
+/// identical values produce a no-op.
+pub(crate) fn set_facet_mixed(
+    doc: &mut toml_edit::DocumentMut,
+    table: &str,
+    fields: &[FacetField],
+) -> anyhow::Result<bool> {
+    let root = doc.as_table_mut();
+
+    match root.get_mut(table) {
+        None => {
+            // Allocate a fresh table.
+            let mut t = toml_edit::Table::new();
+            for field in fields {
+                match field {
+                    FacetField::Str { key, value } => {
+                        t.insert(key, toml_edit::value(value.as_str()));
+                    }
+                    FacetField::Arr { key, values } => {
+                        let arr: toml_edit::Array = values
+                            .iter()
+                            .map(|s| toml_edit::Value::from(s.as_str()))
+                            .collect();
+                        t.insert(key, toml_edit::value(arr));
+                    }
+                }
+            }
+            root.insert(table, toml_edit::Item::Table(t));
+            Ok(true)
+        }
+        Some(item) => {
+            // Shape check: must be a standard table.
+            let is_aot = item.is_array_of_tables();
+            let tbl = item.as_table_mut().with_context(|| {
+                if is_aot {
+                    format!("{table}: expected a standard table, found an array-of-tables")
+                } else {
+                    format!("{table}: expected a standard table, found a scalar or array-of-tables")
+                }
+            })?;
+
+            // No-op guard: compare every managed key.
+            let mut changed = false;
+            for field in fields {
+                match field {
+                    FacetField::Str { key, value } => {
+                        let current = tbl
+                            .get(key)
+                            .and_then(toml_edit::Item::as_value)
+                            .and_then(toml_edit::Value::as_str);
+                        if current != Some(value.as_str()) {
+                            changed = true;
+                            break;
+                        }
+                    }
+                    FacetField::Arr { key, values } => {
+                        let current_arr = tbl
+                            .get(key)
+                            .and_then(toml_edit::Item::as_value)
+                            .and_then(toml_edit::Value::as_array);
+                        let is_equal = current_arr.is_some_and(|arr| {
+                            if arr.len() != values.len() {
+                                return false;
+                            }
+                            arr.iter()
+                                .zip(values.iter())
+                                .all(|(v, expected)| v.as_str() == Some(expected.as_str()))
+                        });
+                        if !is_equal {
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if !changed {
+                return Ok(false);
+            }
+
+            // Overwrite managed keys.
+            for field in fields {
+                match field {
+                    FacetField::Str { key, value } => {
+                        tbl.insert(key, toml_edit::value(value.as_str()));
+                    }
+                    FacetField::Arr { key, values } => {
+                        let arr: toml_edit::Array = values
+                            .iter()
+                            .map(|s| toml_edit::Value::from(s.as_str()))
+                            .collect();
+                        tbl.insert(key, toml_edit::value(arr));
+                    }
+                }
+            }
+            Ok(true)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Shared IO envelope
 // ---------------------------------------------------------------------------
 
@@ -170,6 +289,16 @@ pub(crate) fn apply_set(path: &Path, table: &str, fields: &[(&str, f64)]) -> any
 /// `true` iff the table was present and removed.
 pub(crate) fn apply_clear(path: &Path, table: &str) -> anyhow::Result<bool> {
     edit_in_place(path, |doc| Ok(clear_facet(doc, table)))
+}
+
+/// Read an entity TOML and set mixed-type facet keys via [`set_facet_mixed`].
+/// Returns `true` iff the document changed.
+pub(crate) fn apply_set_mixed(
+    path: &Path,
+    table: &str,
+    fields: &[FacetField],
+) -> anyhow::Result<bool> {
+    edit_in_place(path, |doc| set_facet_mixed(doc, table, fields))
 }
 
 // ---------------------------------------------------------------------------
@@ -473,5 +602,152 @@ mod tests {
         let out = doc.to_string();
         assert!(out.contains("lower = 5.0"), "lower not updated:\n{out}");
         assert!(out.contains("upper = 3.0"), "upper lost:\n{out}");
+    }
+
+    // ---- VT-13: set_facet_mixed allocates absent table with Str and Arr ----
+
+    #[test]
+    fn vt13_set_mixed_allocates_absent() {
+        let mut doc = empty_doc();
+        let changed = set_facet_mixed(
+            &mut doc,
+            "facet",
+            &[
+                FacetField::Str {
+                    key: "description",
+                    value: "hello".into(),
+                },
+                FacetField::Arr {
+                    key: "tags",
+                    values: vec!["a".into(), "b".into()],
+                },
+            ],
+        )
+        .unwrap();
+        assert!(changed, "allocating a new table returns true");
+        let out = doc.to_string();
+        assert!(out.contains("[facet]"), "missing [facet] header in:\n{out}");
+        assert!(
+            out.contains("description = \"hello\""),
+            "missing description in:\n{out}"
+        );
+        assert!(
+            out.contains("tags = [\"a\", \"b\"]"),
+            "missing tags in:\n{out}"
+        );
+    }
+
+    // ---- VT-14: set_facet_mixed overwrites present managed keys ----
+
+    #[test]
+    fn vt14_set_mixed_overwrites_present() {
+        let mut doc = doc_from("[facet]\ndescription = \"old\"\ntags = [\"x\"]\n");
+        let changed = set_facet_mixed(
+            &mut doc,
+            "facet",
+            &[
+                FacetField::Str {
+                    key: "description",
+                    value: "new".into(),
+                },
+                FacetField::Arr {
+                    key: "tags",
+                    values: vec!["p".into(), "q".into()],
+                },
+            ],
+        )
+        .unwrap();
+        assert!(changed, "overwriting returns true");
+        let out = doc.to_string();
+        assert!(
+            out.contains("description = \"new\""),
+            "description not updated:\n{out}"
+        );
+        assert!(
+            out.contains("tags = [\"p\", \"q\"]"),
+            "tags not updated:\n{out}"
+        );
+    }
+
+    // ---- VT-15: set_facet_mixed no-op on identical Str ----
+
+    #[test]
+    fn vt15_set_mixed_noop_identical_str() {
+        let mut doc = doc_from("[facet]\ndescription = \"hello\"\ntags = [\"a\", \"b\"]\n");
+        let changed = set_facet_mixed(
+            &mut doc,
+            "facet",
+            &[
+                FacetField::Str {
+                    key: "description",
+                    value: "hello".into(),
+                },
+                FacetField::Arr {
+                    key: "tags",
+                    values: vec!["a".into(), "b".into()],
+                },
+            ],
+        )
+        .unwrap();
+        assert!(!changed, "identical values → no-op (false)");
+        let out = doc.to_string();
+        assert!(out.contains("description = \"hello\""));
+        assert!(out.contains("tags = [\"a\", \"b\"]"));
+    }
+
+    // ---- VT-16: set_facet_mixed no-op on identical Arr ----
+
+    #[test]
+    fn vt16_set_mixed_noop_identical_arr() {
+        let mut doc = doc_from("[facet]\ntags = [\"x\", \"y\"]\n");
+        let changed = set_facet_mixed(
+            &mut doc,
+            "facet",
+            &[FacetField::Arr {
+                key: "tags",
+                values: vec!["x".into(), "y".into()],
+            }],
+        )
+        .unwrap();
+        assert!(!changed, "identical array → no-op");
+        let out = doc.to_string();
+        assert!(out.contains("tags = [\"x\", \"y\"]"));
+    }
+
+    // ---- VT-17: set_facet_mixed forward-compat preserves unknown siblings ----
+
+    #[test]
+    fn vt17_set_mixed_forward_compat() {
+        let mut doc =
+            doc_from("[facet]\ndescription = \"old\"\ntags = [\"x\"]\nhistory = \"keep-me\"\n");
+        let changed = set_facet_mixed(
+            &mut doc,
+            "facet",
+            &[
+                FacetField::Str {
+                    key: "description",
+                    value: "updated".into(),
+                },
+                FacetField::Arr {
+                    key: "tags",
+                    values: vec!["p".into(), "q".into()],
+                },
+            ],
+        )
+        .unwrap();
+        assert!(changed, "overwriting returns true");
+        let out = doc.to_string();
+        assert!(
+            out.contains("description = \"updated\""),
+            "description not updated:\n{out}"
+        );
+        assert!(
+            out.contains("history = \"keep-me\""),
+            "unknown sibling lost:\n{out}"
+        );
+        assert!(
+            out.contains("tags = [\"p\", \"q\"]"),
+            "tags not updated:\n{out}"
+        );
     }
 }

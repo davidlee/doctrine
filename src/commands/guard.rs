@@ -283,9 +283,10 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         // Record a supersession — writes NEW.supersedes, OLD.superseded_by, OLD.status
         // in one transaction (SL-062 §5.4).
         Command::Supersede { .. } => Write("supersede"),
-        // Estimate / Value facet writes (SL-118 PHASE-03).
+        // Estimate / Value / Risk facet writes (SL-118 PHASE-03, SL-134 PHASE-02).
         Command::Estimate { .. } => Write("estimate"),
         Command::Value { .. } => Write("value"),
+        Command::Risk { .. } => Write("risk"),
     }
 }
 
