@@ -676,8 +676,14 @@ mod tests {
         run_risk_set(&args).unwrap();
 
         let after = std::fs::read_to_string(&toml_path).unwrap();
-        assert!(after.contains("likelihood = \"low\""), "missing likelihood:\n{after}");
-        assert!(after.contains("impact = \"medium\""), "missing impact:\n{after}");
+        assert!(
+            after.contains("likelihood = \"low\""),
+            "missing likelihood:\n{after}"
+        );
+        assert!(
+            after.contains("impact = \"medium\""),
+            "missing impact:\n{after}"
+        );
     }
 
     // ---- VT-2: risk set --likelihood only — partial write ----
@@ -701,8 +707,14 @@ mod tests {
         run_risk_set(&args).unwrap();
 
         let after = std::fs::read_to_string(&toml_path).unwrap();
-        assert!(after.contains("likelihood = \"high\""), "missing likelihood:\n{after}");
-        assert!(!after.contains("impact"), "impact should be absent:\n{after}");
+        assert!(
+            after.contains("likelihood = \"high\""),
+            "missing likelihood:\n{after}"
+        );
+        assert!(
+            !after.contains("impact"),
+            "impact should be absent:\n{after}"
+        );
     }
 
     // ---- VT-3: risk set with neither axis → error ----
@@ -749,10 +761,7 @@ mod tests {
             path: Some(root),
         };
         let err = run_risk_set(&args).unwrap_err().to_string();
-        assert!(
-            err.contains("risk set requires a risk item"),
-            "got: {err}"
-        );
+        assert!(err.contains("risk set requires a risk item"), "got: {err}");
     }
 
     // ---- VT-5: risk set on non-backlog entity → error ----
@@ -794,7 +803,10 @@ mod tests {
         run_risk_clear(&args).unwrap();
 
         let after = std::fs::read_to_string(&toml_path).unwrap();
-        assert!(!after.contains("[facet]"), "[facet] should be gone:\n{after}");
+        assert!(
+            !after.contains("[facet]"),
+            "[facet] should be gone:\n{after}"
+        );
     }
 
     // ---- VT-7: risk clear on absent facet → no-op echo ----
@@ -859,7 +871,10 @@ mod tests {
         run_risk_set(&args).unwrap();
 
         let after = std::fs::read_to_string(&toml_path).unwrap();
-        assert!(after.contains("origin = \"supply-chain\""), "missing origin:\n{after}");
+        assert!(
+            after.contains("origin = \"supply-chain\""),
+            "missing origin:\n{after}"
+        );
     }
 
     // ---- VT-10: risk set --controls A --controls B writes ["A", "B"] ----
@@ -896,9 +911,8 @@ mod tests {
         let (_tmp, root) = mk_project_root();
         let (toml_path, canonical) = seed_entity(&root, "RSK", 11);
         let body = std::fs::read_to_string(&toml_path).unwrap();
-        let with_kind_and_facet = format!(
-            "{body}kind = \"risk\"\n[facet]\nlikelihood = \"low\"\nnotes = \"keep me\"\n"
-        );
+        let with_kind_and_facet =
+            format!("{body}kind = \"risk\"\n[facet]\nlikelihood = \"low\"\nnotes = \"keep me\"\n");
         std::fs::write(&toml_path, with_kind_and_facet).unwrap();
 
         let args = RiskSetArgs {
@@ -943,7 +957,10 @@ mod tests {
         run_risk_set(&args).unwrap();
 
         let after = std::fs::read_to_string(&toml_path).unwrap();
-        assert!(after.contains("[facet]"), "[facet] should be allocated:\n{after}");
+        assert!(
+            after.contains("[facet]"),
+            "[facet] should be allocated:\n{after}"
+        );
         assert!(
             after.contains("likelihood = \"critical\""),
             "missing likelihood:\n{after}"
