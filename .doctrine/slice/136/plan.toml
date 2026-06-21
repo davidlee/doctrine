@@ -33,11 +33,11 @@ exit_criteria = [
   { id = "EX-1", text = "tag::apply_tags_set (root-level set-merge: absent→empty, sorted union∖removes, set-equality no-op guard with no seed/no stamp, insert-if-missing, updated stamped only if key present) lives in tag.rs." },
   { id = "EX-2", text = "tag::fold_filter_tag (lenient trim+lowercase, no reject) hoisted from backlog into tag.rs." },
   { id = "EX-3", text = "tag::TAGGABLE prefix const present (slice, ADR/POL/STD/RFC, ISS/IMP/CHR/RSK/IDE, ASM/DEC/QUE/CON, PRD/SPEC, REQ)." },
-  { id = "EX-4", text = "backlog::apply_tags / run_tag / list-filter delegate to tag::*; the stale F-1 corruption comment corrected; no parallel write path remains." },
+  { id = "EX-4", text = "backlog::apply_tags / run_tag / list-filter delegate to tag::*; the stale F-1 corruption comments in BOTH backlog::apply_tags and dep_seq::apply_status corrected to cite CHR-019 (root insert is safe; the status-path bail is kept as over-conservative-but-harmless per D4 scoping — behaviour unchanged); no parallel write path remains." },
 ]
 verification = [
   { id = "VT-1", expects = "tag.rs units: insert-if-missing seeds; no-op guard compares as SETS on an unsorted store (no spurious write/stamp); set algebra stores sorted union/diff; updated stamped-if-present, skipped-if-absent; clear-on-untagged is a clean no-op; fold_filter_tag lenient." },
-  { id = "VT-2", expects = "Regression locking the D4 probe: a root insert lands ABOVE a trailing [relationships] subtable and the doc re-parses with root.tags set." },
+  { id = "VT-2", expects = "D4 root-insert safety is already locked by the committed spike CHR-019 (tests/spike_chr019_root_tag_insert.rs, 7 tests over the LIVE corpus + worst-case fixtures — RV-129 F-1, premise FALSE). No new probe to author; the spike stays green as the VT-2 seed." },
   { id = "VT-3", expects = "Behaviour-preservation: the existing backlog tag suite stays green; the one backlog test asserting the F-1 bail is rewritten to assert self-heal." },
 ]
 specs        = []
@@ -65,18 +65,18 @@ requirements = []
 [[phase]]
 id        = "PHASE-03"
 name      = "Templates + Meta + full read-surface parity"
-objective = "Seed templates, add Meta.tags, and wire full read-surface parity — list-filter + show + json — for every newly-included kind (slice, spec/PRD/SPEC, REQ, gov/RFC), plus centralise the filter-fold (design §5.3, §5.4 list-fix, D2 full-parity rule)."
+objective = "Seed templates, add Meta.tags, and wire full read-surface parity — list-filter + show + json — for the Meta/spec-mediated kinds (slice, spec/PRD/SPEC, REQ), plus centralise the filter-fold (design §5.3, §5.4 list-fix, D2 full-parity rule). Governance/RFC parity lands atomically with the storage move in PHASE-04 — there is no root `tags` to read on a gov entity until then."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 verb landed: tags can be written to taggable entities." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Root `tags = []` seeded in the slice + requirement templates (backlog/knowledge/spec already seeded). meta::Meta gains `#[serde(default)] tags: Vec<String>`; the 5 Meta struct-literal sites fixed (A2)." },
-  { id = "EX-2", text = "List filter: slice::key() + governance::key() + spec::key() populate FilterFields.tags (REQ's req_key already does); the lenient --tag filter-fold centralised in listing::build, backlog's pre-fold removed." },
-  { id = "EX-3", text = "Full parity render: show table tag-row + show-json `tags` field for slice/spec/REQ/gov; `tags` added to ReqJsonRow and to show_json's member req object — no surface left write-only." },
+  { id = "EX-2", text = "List filter: slice::key() + spec::key() populate FilterFields.tags (REQ's req_key already does); the lenient --tag filter-fold centralised in listing::build, backlog's pre-fold removed. (governance::key() deferred to PHASE-04 with the storage move.)" },
+  { id = "EX-3", text = "Full parity render: show table tag-row + show-json `tags` field for slice/spec/REQ; `tags` added to ReqJsonRow (spec.rs:~1556) AND to show_json's member req object (spec.rs:~1167) — RV-129 F-5: ADDITIVE (both REQ JSON sites drop tags today), so parity asserts tag PRESENCE, not 'unchanged'. No surface left write-only. (gov/RFC render → PHASE-04.)" },
 ]
 verification = [
-  { id = "VT-1", expects = "slice + spec (PRD/SPEC) + governance + REQ `list --tag` match case-insensitively; Meta tags default absent→empty, present→read." },
-  { id = "VT-2", expects = "Full-parity test per newly-included kind: one written tag is visible on ALL THREE surfaces — list --tag filter, show table, and --json; assert none is write-only." },
+  { id = "VT-1", expects = "slice + spec (PRD/SPEC) + REQ `list --tag` match case-insensitively; Meta tags default absent→empty, present→read. (governance list --tag → PHASE-04.)" },
+  { id = "VT-2", expects = "Full-parity test for slice/spec/REQ: one written tag is visible on ALL THREE surfaces — list --tag filter, show table, and --json; assert none is write-only (REQ JSON asserts presence per F-5). gov/RFC parity asserted in PHASE-04 VT-3." },
   { id = "VT-3", expects = "Behaviour-preservation: existing list/show suites across kinds stay green." },
 ]
 specs        = []
@@ -84,20 +84,23 @@ requirements = []
 
 [[phase]]
 id        = "PHASE-04"
-name      = "Governance/RFC migration + REV obligation"
-objective = "Move governance/RFC tags from typed [relationships] to root in corpus + templates + struct, repoint render, update all goldens/guards, restore RFC-002's tags, and flag the spec-amendment Revision (design §5.4 migration, D1/D6)."
+name      = "Governance/RFC migration + read parity + REV obligation"
+objective = "Move governance/RFC tags from typed [relationships] to root in corpus + templates + struct, complete the gov/RFC three-surface read parity (key/show/json) atomically with the move, update all goldens/guards, restore RFC-002's tags, and flag the spec-amendment Revision (design §5.3 gov parity, §5.4 migration, D1/D6)."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-03 landed: root `tags` is readable on all three governance/RFC surfaces, so the storage move has a live read path to land on." },
+  { id = "EN-1", text = "PHASE-03 landed: Meta/spec read parity (slice/spec/REQ) is green and the verb writes root `tags`. Gov entities still carry typed [relationships].tags — this phase builds their root read path and moves the storage together." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`[relationships].tags` stripped from the ~28 ADR/POL/RFC corpus files + the 4 adr/policy/standard/rfc templates; Relationships drops typed `tags`, Doc gains root `tags`, show render + show-json repointed root-ward." },
-  { id = "EX-2", text = "Goldens/guards updated: e2e_adr/standard/catalog goldens, adr.rs:322, policy.rs:295, standard.rs:302; e2e_relation_migration_storage tags-stay-typed guard inverted and governance_files() extended to scan `rfc`; relation_graph.rs ADR fixtures (:1300,:1662-1668) repointed root-ward." },
-  { id = "EX-3", text = "RFC-002's live tags (program, consumption-surfaces, estimate, value, scoring) restored via one `doctrine tag set RFC-002 …` after the verb lands." },
+  { id = "EX-1", text = "`[relationships].tags` stripped from the ~28 ADR/POL/RFC corpus files + the 4 adr/policy/standard/rfc templates; Relationships drops typed `tags`, Doc gains root `tags` (#[serde(default)], A4); the `show` TABLE render repointed root-ward (governance.rs ~L313-320)." },
+  { id = "EX-2", text = "show-json needs NO builder change — serde `to_value(doc)` renders root `tags` automatically once storage is root (RV-129 F-2 root-expose); the supersedes/related splice is NOT extended to tags (pure relocation, nothing to reconstruct)." },
+  { id = "EX-3", text = "Goldens/guards updated: e2e_adr/standard/catalog goldens (root nesting), adr.rs:322, policy.rs:295, standard.rs:302 (drop `tags` from the typed-axis loop); e2e_relation_migration_storage tags-stay-typed + assert_governance_shape guards inverted to assert root, and governance_files() extended to scan `rfc`; relation_graph.rs ADR fixtures (:1300,:1662-1668) repointed root-ward." },
+  { id = "EX-4", text = "governance::key().tags wired (was hardcoded Vec::new(), governance.rs:98) so ADR/POL/STD/RFC `list --tag` matches — completing the gov/RFC three-surface parity (list+show+json) atomic with the storage move." },
+  { id = "EX-5", text = "RFC-002's live tags (program, consumption-surfaces, estimate, value, scoring) restored via one `doctrine tag set RFC-002 …` after the verb lands." },
 ]
 verification = [
-  { id = "VT-1", expects = "Scripted grep finds no residual `[relationships].tags` across corpus + templates (incl. rfc); governance `show` renders tags from root; the migration-guard asserts tags-at-root; full `just gate` green." },
+  { id = "VT-1", expects = "Residue grep SCOPED to install/templates + the committed corpus (.doctrine/{adr,policy,standard,rfc}/**), NEVER the gitignored derived .doctrine/templates (RV-129 F-3) — finds no residual `[relationships].tags`; PAIRED with the golden/compile gates (grep is blind to serde/loop-var reads). governance `show` renders root tags; the migration-guard asserts tags-at-root; full `just gate` green." },
   { id = "VT-2", expects = "RFC-002 round-trips root-side: its restored tags read back via show/list/json (asserted)." },
-  { id = "VA-1", expects = "The D6 REV obligation — one Revision amending SPEC-005 D2, SPEC-016, and SPEC-018 §relations to root-level — is recorded in design D6 + scope and carried forward; verified authored at /reconcile before /close (not closeable while the corpus is non-canonical against the specs)." },
+  { id = "VT-3", expects = "gov/RFC full-parity (§5.3): a tag written via `doctrine tag set` to an ADR/POL/STD/RFC is visible on ALL THREE surfaces — list --tag, show table, and --json (serde root) — asserted per kind; no surface write-only." },
+  { id = "VA-1", expects = "The D6 REV obligation — one Revision amending SPEC-005 D2, SPEC-016, and SPEC-018 §relations to root-level — is recorded in design D6 + scope and carried forward; verified authored at /reconcile before /close (not closeable while the corpus is non-canonical against the specs). D7 (RV-129 F-6): VA-1 stays a SOFT agent-checked gate by deliberate decision, not a hard PHASE-04→reconcile gate — the post-PHASE-04 canon gap is the expected intermediate state of a governance-changing slice." },
 ]
 specs        = []
 requirements = []
