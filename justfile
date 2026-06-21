@@ -2,6 +2,10 @@ mod? doctrine '.doctrine/doctrine.just'
 
 default: lint test install
 
+installer:
+  doctrine install -y
+  npx skills add davidlee/doctrine --agent universal -y
+
 # Fast inner-loop gate — root package only.
 check: fmt lint lint-js test build
 
