@@ -50,28 +50,34 @@ relationships:
 | `src/facet.rs` (new) | Define `EntityFacets` struct | `{ estimate: Option<EstimateFacet>, value: Option<ValueFacet> }` — pure data struct, no parsing. Wraps already-parsed fields from `SliceDoc` (show path) or `ScannedEntity` (catalog path). Extended with risk/tags when SL-133/136 need them. ADR-001: engine tier — no disk/clock/rng. |
 | `src/slice.rs:1062-1070` | `run_show` — resolve units inline, construct `EntityFacets`, pass to `format_show` | Resolve `estimation_unit`/`value_unit` from the already-loaded `DoctrineToml cfg` via `crate::estimate::resolve_unit` / `crate::value::resolve_unit`. Construct `EntityFacets { estimate: doc.estimate, value: doc.value }`. No catalog coupling — uses the same `cfg` the conduct load already read. |
 | `src/slice.rs:1126` | `format_show` — accept `facets: &EntityFacets`, `estimation_unit: &str`, `value_unit: &str`, render rows | Two `parts.push(...)` after dates line, before relationships |
-| `src/estimate.rs:26-28` | Remove `#[expect(dead_code)]` on `mod display` | `format_estimate_confidence` lives in this module and now has a call site |
+| `src/estimate.rs:26-28` | Remove `#[expect(dead_code)]` on `mod display` — `format_estimate_confidence` needs the module | Module-level gate removed; individual `#[expect(dead_code)]` added on `format_estimate_normal` and `format_estimate_verbose` (see D7) |
 | `src/estimate.rs:40-49` | Remove `#[expect(dead_code)]` on confidence constants | Consumed by confidence display |
 | `src/estimate.rs:86-90` | Remove `#[expect(dead_code)]` on `resolve_confidence` | Called by `format_show` to pick percentile band |
 | `src/estimate/display.rs` | Add `format_estimate_confidence` | Signature: `fn format_estimate_confidence(facet: &EstimateFacet, lower_pct: f64, upper_pct: f64, unit: &str) -> String` → `"2.6–7.4 espresso_shots (80% confidence)"` |
 | `src/value.rs` | Add `format_value_normal` | Signature: `fn format_value_normal(facet: &ValueFacet, unit: &str) -> String` → `"Value: 5 magic_beans"` |
+| `.doctrine/adr/001/layering.toml` | Add `facet = "leaf"` entry | Tier: leaf — pure data struct, imports only `estimate` + `value` (both leaf). Required by ADR-001 gate (`just gate`). |
 | `src/slice.rs` tests | Add unit + integration tests | Unit: `format_show` with facets present/absent/custom-bounds/zero-width. Integration: `run_show` against fixture (slice TOML with estimate + doctrine.toml with units). Malformed doctrine.toml → error propagated. |
 
 ## Design decisions
 
-### D1 — Units resolved inline, no catalog coupling
+### D1 — Full `DoctrineToml` parse replaces `load_conduct`
 
-`run_show` already loads `DoctrineToml` for conduct config (line 1068:
-`load_conduct(&root)`). Unit resolution reuses the same `cfg`:
+`run_show` currently calls `load_conduct(&root)?` which returns only
+`ConductConfig`. The design replaces it with a direct
+`crate::dtoml::load_doctrine_toml(&root)?` — the same function
+`load_conduct` delegates to internally. This yields the full
+`DoctrineToml` struct, from which both conduct and units are extracted:
 
 ```rust
+let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+let posture = crate::conduct::resolve(&cfg.conduct, &doc.status);
 let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
 let value_unit = crate::value::resolve_unit(&cfg.value);
 ```
 
-Passed to `format_show` as `&str`. No import of `catalog::hydrate`, no
-`Units` struct needed in the signature. Follows ADR-001: shell resolves,
-engine receives pure values.
+Single TOML read. No catalog coupling — `dtoml` is leaf tier, already
+imported via the old `load_conduct` path. Follows ADR-001: shell
+resolves, engine receives pure values.
 
 ### D2 — Confidence display formula
 
@@ -124,25 +130,35 @@ When SL-133 needs risk and SL-136 needs tags, they add fields to the
 struct and the call sites populate them. `format_show` ignores fields
 it doesn't render — no refactoring needed.
 
-### D7 — Existing `format_estimate_normal` / `format_estimate_verbose` kept gated
+### D7 — Module-level gate removed; function-level gates added
 
-These helpers remain behind `#[expect(dead_code)]` (still on `mod
-display` — the ungating applies only to the new `format_estimate_confidence`
-call site within the module). They are preserved for future verbose
-display modes (e.g. `slice show --detail`). They do not diverge — they
-render different aspects (simple bounds vs confidence-framed).
+The module-level `#[expect(dead_code)]` on `mod display` is removed
+because `format_estimate_confidence` lives in this module and now has
+a call site. Individual `#[expect(dead_code)]` attributes are added on
+`format_estimate_normal` and `format_estimate_verbose` with reason
+"preserved for future verbose display mode (e.g. slice show --detail)."
+They render different aspects (simple bounds vs confidence-framed) —
+no semantic divergence.
 
 ### D8 — Risk display deferred
 
 Risk facet not touched by this slice. `EntityFacets` will carry
 `risk: Option<RiskFacet>` when SL-133 adds it.
 
-### D9 — ADR-001 tier: `src/facet.rs` is engine tier
+### D9 — ADR-001 tier: `src/facet.rs` is leaf tier with `layering.toml` entry
 
 `EntityFacets` is a pure data struct — no disk I/O, no clock, no rng,
-no git. It sits in the engine tier alongside `src/estimate.rs` and
-`src/value.rs`. No `layering.toml` change needed (bins-only crate;
-layering enforcement is architectural convention, not tool-enforced).
+no git. It imports only `crate::estimate` and `crate::value`, both
+classified as leaf tier in `.doctrine/adr/001/layering.toml`. The
+new `facet` module is added to `layering.toml` as:
+
+```toml
+facet = "leaf"  # out=0: EntityFacets aggregation — pure data, imports only estimate + value
+```
+
+Required by ADR-001: the `just gate` layering check enforces every
+`src/` module has a tier entry. Failing to add this entry causes
+a gate failure.
 
 ## Verification
 
