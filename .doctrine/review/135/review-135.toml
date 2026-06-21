@@ -1,0 +1,43 @@
+id    = 135
+slug  = "sl-116-reconciliation-audit-worktree-folder-split"
+title = "SL-116 reconciliation audit — worktree folder split"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-116"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "base_has_slice_plan is pub(crate), not file-private as designed"
+detail = 'Design §Target layout marks base_has_slice_plan[p] (private, single-file) and §Visibility lists it under "Stay private — single owner file, sole production caller verified". Actual visibility in coordinate.rs: pub(crate). Root cause: the test base_has_slice_plan_tracks_presence_on_the_trunk_tree stayed in mod.rs (not co-located per D2), forcing cross-file access. pub(super) would suffice (mod.rs is the parent); pub(crate) is a mild over-widen. Handover documents the deviation. Impact: low — no external callers; pub(crate) is visible crate-wide but symbol is coordinate-only by semantics.'
+disposition = "tolerated"
+response = "The design expected base_has_slice_plan to be file-private because D2 says tests co-locate per machine. The test base_has_slice_plan_tracks_presence_on_the_trunk_tree remained in mod.rs rather than moving to coordinate.rs. Moving it would be a behaviour change (D2's byte-identical guarantee). Fixing would require either: (a) move the test to coordinate.rs (violates D2 byte-identical at this stage), or (b) narrow to pub(super) which is an equivalent scope (mod.rs is the parent). Accepted drift — pub(crate) vs pub(super) is semantically equivalent in this file tree (mod.rs is the only consumer), and the deviation is documented in handover."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = 'Six files carry #![expect(unused, reason = "extraction; PHASE-03 prunes")] — dead expect lint suppression'
+detail = """provision.rs, import.rs, land.rs, gc.rs, fork.rs, subagent.rs each carry `#![expect(unused, reason = "extraction; PHASE-03 prunes")]`. The handover claims "#![expect(unused_imports)] removed — zero escapes", but these are on the `unused` lint (dead_code etc.), not `unused_imports`. The reason string says PHASE-03 should have pruned them, suggesting they were intended to be temporary during extraction. However, clippy is zero-warn — if these expects are suppressing real warnings, removing them would regress the gate; if they're dead expects, unfulfilled_lint_expectations would fire (but clippy is green, so either they're needed or the lint is somehow silenced). Either way: these are PHASE-02 scaffolding that survived into the final shape. subagent.rs additionally carries #![expect(clippy::fn_params_excessive_bools)] which the handover says was "removed" — likely referring to a different instance, but the presence here (on classify_worker_verify's domain) is parallel scaffolding."""
+disposition = "tolerated"
+response = """The 7 #![expect] attributes on provision/import/land/gc/fork/subagent suppress real unused/dead_code lints — their presence means clippy is zero-warn, and removing them would fire warnings. The reason string "extraction; PHASE-03 prunes" documents intent: these were scaffolding that PHASE-03 should have pruned. The underlying items are likely structs/enums/fns that became privately-unused within their file post-split because consumption routes through mod.rs re-exports. Cleaning them properly requires refactoring each file to eliminate the unused items or re-export differently — scope creep for a mechanical split. The handover's "zero escapes" claim refers to the mod.rs #![expect(unused_imports)] removal, not to these file-level expects. Tolerated: the split's mechanical correctness is not diminished; the expects are honest about the state and don't mask bugs. A follow-up backlog item could clean them."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "D2 test co-location incomplete — lifecycle machine tests left in mod.rs"
+detail = """Design D2: "Each machine file carries its own #[cfg(test)] mod tests; machine-specific test helpers ride their machine." Actual: only allowlist.rs (10 tests), marker.rs (6 tests), and shared.rs (2 tests) received their tests. The 7 lifecycle machine files — provision.rs, import.rs, land.rs, gc.rs, fork.rs, coordinate.rs, subagent.rs — all have ZERO #[cfg(test)] blocks. Their tests (at least 20: classify_stamp_*, classify_gc_*, classify_land_*, classify_coordinate_*, classify_worker_verify_*, coord_refusal_*, etc.) remain in mod.rs's monolithic test block. The design explicitly rejected alternative T2 (single tests.rs) because it "reproduces the smell in tests and divorces tests from code." The current state reproduces exactly that rejected alternative: the tests are divorced from the machine files they test. Impact: structural — tests pass (behaviour-preservation holds), but the cohesion benefit of D2 is lost. Future maintainers editing a machine file must look in mod.rs for its tests."""
+disposition = "follow-up"
+response = """Confirmed: the 7 lifecycle machine files carry no tests; their tests remain in mod.rs (32 tests total). This violates D2's explicit choice of per-machine co-location over the T2 alternative. However, behaviour-preservation holds — all tests pass with byte-unchanged bodies. Moving them now exceeds audit scope (~20 tests across 7 files, plus helper relocation). A backlog item should capture this as post-close cleanup: extract remaining lifecycle tests to their machine files per D2. The design's argument against T2 ("reproduces the smell and divorces tests from code") applies to the current state — this is a cohesion gap, not a correctness gap."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
