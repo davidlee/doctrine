@@ -513,7 +513,7 @@ pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) 
         crate::boot::RefreshOutcome::None => {
             writeln!(out, "  {tag}claude: sync hook already current")?;
         }
-        crate::boot::RefreshOutcome::PrintedFallback => {
+        crate::boot::RefreshOutcome::PrintedFallback { .. } => {
             writeln!(
                 out,
                 "  claude: settings are malformed — add this hook manually:"

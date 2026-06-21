@@ -314,7 +314,7 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                             crate::boot::RefreshOutcome::Wired(_) => "wired",
                             crate::boot::RefreshOutcome::Refreshed(_) => "refreshed",
                             crate::boot::RefreshOutcome::None => "already current",
-                            crate::boot::RefreshOutcome::PrintedFallback => {
+                            crate::boot::RefreshOutcome::PrintedFallback { .. } => {
                                 "could not merge (settings left untouched)"
                             }
                         };
