@@ -137,9 +137,9 @@ same projection.
 | `src/facet.rs` | `EntityFacets` gains `risk: Option<RiskFacet>` |
 | `src/catalog/scan.rs` | `read_facets` reads the `[facet]` table; `ScannedEntity` gains risk |
 | `src/priority/config.rs` (new) | `PriorityConfig` serde struct + impure `load(root)`; advisory-config clamp policy (`COEFF_MAX`, silent) — F-6/OQ-1 |
-| `src/priority/graph.rs` | `NodeAttr` gains `base_score: BaseScore`; replace consequence pre-pass with base pre-pass; mint retie `(base desc, id asc)`; add consequence **post**-pass (ref-class `in_edges` over `CONSEQUENCE_LABELS`, dep-class `out_edges(dep_overlay)`); `PriorityGraph.consequence:u32 → score:f64` **+ stored `consequence:f64` map** (F-3); `is_finite` sanitize dims/total/consequence (F-2); `build_from` loads `&PriorityConfig` from `root` (covers all callers — F-4) |
-| `src/priority/surface.rs` | `consequence:u32 → score:f64` across `SurveyRow`/`ActionabilityNode`/`ActionabilityBlock`; sort on score; `policy_version` v2→v3 |
-| `src/priority/render.rs` | `survey` score column only (`next` has none — score via `ReasonKind::Score` reason line, F-8); `ReasonKind::Score{base,value_dim,risk_dim,consequence,total}` human + json |
+| `src/priority/graph.rs` | `NodeAttr` gains `base_score: BaseScore`; replace consequence pre-pass with base pre-pass; mint retie `(base desc, id asc)`; consequence **post**-pass = **recursive `needs`-leverage** DP (reverse-`ordered()`, SCC-condensed; D8) + **one-hop `ref`-optionality** over `CONSEQUENCE_LABELS` `in_edges` (D9); `PriorityGraph` drops `consequence:u32`, gains stored `leverage`/`optionality`/`score: f64` maps; `is_finite` sanitize; `build_from` loads `&PriorityConfig` from `root` (all callers — F-4) |
+| `src/priority/surface.rs` | `consequence:u32 → score:f64` across `SurveyRow`/`ActionabilityNode`/`ActionabilityBlock`; `survey` sort on score; **`next` sorts actionable frontier `(score desc, id)` + seq strict precedence** (I3/molecule ordering); `policy_version` v2→v3 |
+| `src/priority/render.rs` | `survey` **and `next`** score columns (`next` now score-ordered — supersedes F-8); `ReasonKind::Score{base,value_dim,risk_dim,leverage,optionality,total}` human + json |
 | `.doctrine/adr/001/layering.toml` | **Binding tier-map (F-1, ADR-001 forcing fn):** add `risk = "leaf"`, `priority::config = "leaf"`; relax `facet` comment to permit the risk import — `just gate` green |
 | `doctrine.toml` | New `[priority]` section |
 | `.doctrine/adr/015/**` | **ADR-015** — durable scoring policy (authored this phase) |

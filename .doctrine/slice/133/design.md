@@ -96,11 +96,29 @@ scan_entities(root) ──────► [ScannedEntity{ estimate, value, risk 
   NodeAttr.base_score   ──► mint order (base desc, id asc)   ──► edges ──► build()
         │
         ▼  post-pass (pure, over the built PriorityGraph)
-  consequence(node) = Σ base(dep).total() × edge_coeff
-        ref-class: in_edges over CONSEQUENCE_LABELS overlays × ref_edge_coeff
-        dep-class: out_edges(dep_overlay)  (needs B→A flip) × dep_edge_coeff
-  score(node)       = base(node).total() + consequence(node)
+  leverage(N)    = dep_coeff · Σ_{D ∈ needs-dependents(N)} ( base(D) + leverage(D) )
+                   — RECURSIVE over the acyclic `needs` backbone (reverse-topo DP)
+  optionality(N) = ref_coeff · Σ_{R ∈ ref-referencers(N)} base(R)
+                   — ONE-HOP over CONSEQUENCE_LABELS overlays (Reject, cyclic-safe)
+  consequence(N) = leverage(N) + optionality(N)
+  score(N)       = base(N) + consequence(N)
 ```
+
+Two structurally-distinct consequence mechanisms (ADR-015 thesis: an *enabler* accrues
+a coefficient-weighted share of the value it unlocks — the **value of optionality**):
+- **`needs`-leverage — recursive.** Completing N unblocks its whole downstream cone, so
+  N accrues the *decayed* intrinsic value of everything that transitively needs it. Safe
+  to recurse because the `needs` overlay is the acyclic ordering backbone (§3, D8).
+  `dep_coeff ∈ (0,1]` is a per-hop **retention** factor (so deep chains converge, never
+  amplify); contribution of a dependent at depth k is `dep_coeff^k · base`.
+- **`ref`/lineage-optionality — one-hop.** Associative "this unlocks the option of that"
+  — a flat single-hop share. NOT recursed: these overlays are `Reject` (cyclic-capable),
+  and recursion over them has no termination guarantee. `ref_coeff ≥ 0` is a flat weight
+  (no compounding, so its magnitude is unconstrained). (D9.)
+- **`after`/seq — NOT a weight contributor.** Seq stays a *structural* ordering
+  constraint (cordage's `OrderSpec`), realized strictly (B strictly before A, `base` the
+  continuous under-signal — the strict-`<` / ULP form, no manufactured ties). Deferred as
+  a weight class; escalate only on evidence the dumb constraint mis-sequences (D10, OQ-4).
 
 `value_dim = (value × kind_weight × Σ tag_coeff) / estimate_midpoint`
 `risk_dim  = exposure × risk_coeff` (presence-gated by the `[facet]`; non-risk → 0)
@@ -146,8 +164,14 @@ pub(crate) struct PriorityConfig {
     coefficients: Coefficients,                 // { value: f64=1.0, risk: f64=2.0 }
     kind_weights: BTreeMap<String, f64>,        // lookup default 1.0
     tag_coefficients: BTreeMap<String, f64>,    // lookup default 1.0 (unused this slice)
-    consequence: ConsequenceCoeffs,             // { ref_edge_coeff: f64=1.0, dep_edge_coeff: f64=2.0 }
+    consequence: ConsequenceCoeffs,             // { dep_coeff, ref_coeff } — see below
 }
+// dep_coeff: RECURSIVE retention, clamped to (0, 1] at load (>1 would amplify with
+//   depth and diverge on long needs chains; ≤0 disables leverage). Default illustrative
+//   (ADR-015 owns the number), e.g. 0.5.
+// ref_coeff: FLAT one-hop weight, clamped finite-non-negative ≤ COEFF_MAX (no
+//   compounding ⇒ magnitude unconstrained beyond the overflow guard). Default e.g. 1.0.
+// (No seq coeff — seq is a structural constraint, not a weight class, D10.)
 pub(crate) fn load(root: &Path) -> PriorityConfig;   // impure; missing [priority] → all defaults
 ```
 
@@ -188,14 +212,14 @@ solely for `dep_seq_for` and now feeds config from the same handle. No caller is
 undocumented default config (F-4).
 
 **`PriorityGraph`** field changes:
-- `consequence: BTreeMap<EntityKey, u32>` → **two** `f64` maps from the post-pass:
-  `score: BTreeMap<EntityKey, f64>` (the final `base + consequence`) AND
-  `consequence: BTreeMap<EntityKey, f64>` (the weighted Σ, **stored** at the moment it is
-  computed — it exists exactly, pre-summation, in the post-pass). `explain` reads
-  `consequence` directly. We do **NOT** recover it as `score − base`: that subtraction is
-  floating-point cancellation, not exact in general, and `explain`'s published
-  `consequence` field must be accurate (OQ-2 resolved — store, not derive). Per-node
-  `base_score` lives on `NodeAttr`.
+- `consequence: BTreeMap<EntityKey, u32>` → the post-pass stores its two `f64`
+  constituents directly: `leverage: BTreeMap<EntityKey, f64>` (recursive `needs` term)
+  and `optionality: BTreeMap<EntityKey, f64>` (one-hop `ref` term), plus the final
+  `score: BTreeMap<EntityKey, f64>`. `consequence = leverage + optionality` and
+  `score = base + consequence` are exact sums of stored values — `explain` reads all
+  three constituents directly, never recovering any term by subtraction (FP cancellation
+  is inexact; published fields must be accurate — OQ-2 resolved, store not derive).
+  Per-node `base_score` lives on `NodeAttr`.
 
 `NodeAttr` gains `base_score: BaseScore` (the split — `value_dim`/`risk_dim`).
 `base_score.total()` is the value the mint comparator and consequence post-pass
@@ -203,7 +227,10 @@ consume.
 
 **Surfaces** retype `consequence: u32 → score: f64` across `SurveyRow`,
 `ActionabilityNode`, `ActionabilityBlock`. `ReasonKind::Consequence { inbound: u32 }`
-→ `ReasonKind::Score { base, value_dim, risk_dim, consequence, total }` (all `f64`).
+→ `ReasonKind::Score { base, value_dim, risk_dim, leverage, optionality, total }` (all
+`f64`). `explain` surfaces the two consequence mechanisms separately (recursive
+`leverage` vs one-hop `optionality`) so a large number is diagnosable — `consequence =
+leverage + optionality`, `total = base + consequence`.
 
 ### 5.3 Data, State & Ownership
 
@@ -231,28 +258,46 @@ consequence to a **post**-pass):
 4. **Edges** — unchanged (ref/lineage overlays + dep/seq overlays).
 5. **`OrderSpec` + build** — unchanged.
 6. **Consequence post-pass** (pure, over the built graph; runs inside `build_from`
-   after `build()`, with `ref_by_label` + `dep_overlay` still in scope) — for each
-   node N, sum its dependents' `base_score.total()`:
-   - **ref class**: a referencer→target edge is emitted `src→dst`, so N's dependents
-     are the **`in_edges(ov, N)`** sources — iterated over the **`CONSEQUENCE_LABELS`
-     subset** of ref overlays ONLY (work/lineage; `reviews`/`owning_slice` bookkeeping
-     stay excluded, preserving the pre-SL-133 consequence semantics). Weighted
-     `× ref_edge_coeff`.
-   - **dep class**: `A.needs=[B]` emits `edge(dep_overlay, B→A)` — the prereq B is the
-     edge **source**, so B's dependents are the **`out_edges(dep_overlay, B)`** targets
-     (NOT in_edges). Weighted `× dep_edge_coeff`.
-   - `consequence(N) = Σ` — **stored** in `PriorityGraph.consequence` (exact, captured
-     pre-summation). `score(N) = base(N).total() + consequence(N)` — stored in
-     `PriorityGraph.score`. Both are `is_finite`-sanitized before storage (I2(b)).
-     (Multi-label double-counting across overlays matches the old per-edge `+=1` tally —
-     unchanged.)
+   after `build()`, with `ref_by_label` + `dep_overlay` still in scope) — two mechanisms:
+   - **`needs`-leverage — recursive DP.** `A.needs=[B]` emits `edge(dep_overlay, B→A)`,
+     so `out_edges(dep_overlay, N)` are N's dependents. Compute
+     `leverage(N) = dep_coeff · Σ_{D ∈ out_edges(dep_overlay,N)} (base(D).total() + leverage(D))`
+     by visiting nodes in **reverse `graph.ordered()` order** (dependents before their
+     prerequisites), so each `leverage(D)` is already resolved when N is reached — a
+     single O(V+E) sweep, no fixpoint. Termination rests on the `needs` backbone being
+     acyclic (§3): the `dep_overlay` is `Reject`, so a genuine `needs` cycle is *diagnosed*
+     (`dep_cycles()` / REQ-076), not silent. **Safety net:** any diagnosed cycle SCC is
+     *condensed* — members take leverage from dependents **outside** the SCC only (intra-SCC
+     edges contribute 0), so the DP terminates even on malformed data and the cycle is
+     surfaced as the authoring error it is (I5).
+   - **`ref`-optionality — one-hop.** A referencer→target edge is `src→dst`, so N's
+     referencers are `in_edges(ov, N)` over the **`CONSEQUENCE_LABELS` subset** of ref
+     overlays ONLY (`reviews`/`owning_slice` bookkeeping excluded — pre-SL-133 semantics).
+     `optionality(N) = ref_coeff · Σ_{R ∈ in_edges} base(R).total()`. **No recursion** —
+     these overlays are `Reject` (cyclic-capable), so a one-hop sum is the only
+     termination-safe read. (Multi-label double-counting across overlays between the same
+     pair matches the old per-edge `+=1` tally — unchanged.)
+   - `consequence(N) = leverage(N) + optionality(N)`; `score(N) = base(N).total() +
+     consequence(N)`. `leverage`, `optionality`, `score` are each `is_finite`-sanitized
+     before storage (I2(b)) and stored on `PriorityGraph` (§5.2).
 
 **Sort integration:**
 - `survey`: `actionability → score desc (total_cmp) → canonical-id asc`.
-- `next`: cordage `order_key`; the within-level tiebreaker is the **mint order**, now
-  `(base desc, id asc)`. Consequence is **deliberately excluded** from structural
-  ordering — including a graph-derived quantity in the structural tiebreak would
-  couple ordering to the very edges it orders (feedback loop). Mint uses `base` only.
+- `next`: ordering changes **wherever the precedence partial-order is silent** — which is
+  more than "between disconnected molecules." The visible set is the *actionable frontier*,
+  and an actionable item has by construction **no unsatisfied `needs`** (a pending
+  prerequisite would block it), so **no `needs`-precedence relates two actionable items.**
+  The only structural relation that can survive among them is `after` (soft seq —
+  non-blocking, so two seq-related items can both be actionable). Precedence is therefore a
+  **partial** order: it totally-orders items along a single seq *chain*, but leaves
+  **incomparable** any two items with no seq path between them — separate components, AND
+  sibling arms of a branch (a Y whose two arms share an upstream but have no edge to each
+  other: ordered within each arm, silent between them). Wherever the order is silent, the
+  differentiator is **`score` desc** (`total_cmp`), then `id`. Concretely: sort the
+  actionable set by `(score desc, id asc)`, then apply the seq edges as strict precedence
+  nudges (only comparable pairs move). This makes `next` leverage-aware — a ready item that
+  unblocks a large valuable cone leads, even with a modest own `base` — while the only
+  thing structure overrides is genuine same-chain sequencing.
 - `explain`: emits the full `Score` breakdown.
 
 `ActionabilityView.policy_version` bumps `"priority.v2" → "priority.v3"` — the
@@ -276,12 +321,33 @@ maintainability coefficient defaulting to 0.0).
   and the consequence post-pass sanitizes `consequence`/`score` with `is_finite` before
   storage/comparison (non-finite → `0.0`). ⇒ no `∞`/`NaN` can reach the mint comparator,
   the `survey` sort, or `explain`. (VT-6.)
-- **I3 — consequence excluded from structure.** Mint and `next` order on `base` only;
-  consequence influences only the `survey` *display* sort and `explain`. (Prevents the
-  feedback loop; keeps the structural order a pure function of authored dep/seq.)
+- **I3 — consequence excluded from *mint*, not from *display*.** The distinction is
+  mint-time vs display-time. **Mint** order (cordage's tier-3 structural fallback, which
+  feeds graph construction) uses `base` ONLY — a graph-derived quantity in the structural
+  tiebreak would couple ordering to the very edges it orders (feedback loop), and `score`
+  isn't even available at mint time (it's a post-build pass). **Display** order is a
+  pure post-hoc sort over the already-built graph: `survey` and `next` both rank by
+  `score`. No feedback — re-sorting built output by a derived quantity introduces no
+  cycle. (This is why `next` can be score-aware between molecules without violating the
+  no-feedback rule: the score sort happens *after* build, the mint/structural order does
+  not see it.)
 - **I4 — additive identity for absent facets.** A node with no authored facets scores
   `base = 0` and contributes `0` to dependents' consequence — exactly the pre-SL-133
   "unweighted" floor, so unauthored corpora degrade gracefully.
+- **I5 — leverage recursion terminates, always.** The recursive `needs`-leverage DP runs
+  over the `dep_overlay`, the acyclic ordering backbone. Reverse-`ordered()` traversal
+  guarantees dependents resolve first (single sweep, no fixpoint). A *diagnosed* `needs`
+  cycle (malformed data; `Reject` surfaces it) is condensed — intra-SCC edges contribute
+  0 — so the DP halts and the cycle is reported, never chased. `dep_coeff ∈ (0,1]`
+  guarantees convergence by depth (a dependent at depth k contributes `dep_coeff^k·base`);
+  `> 1` is clamped at load precisely so deep chains cannot diverge (§5.2). The one-hop
+  `ref`-optionality term needs no termination argument (it never recurses). (VT-4, VT-8.)
+- **Reconvergence is multiplicative — accepted as leverage.** In a `needs` diamond
+  (N gated-by {B, C}, both gated-by D), D's base reaches N through *both* paths, so D is
+  counted twice in `leverage(N)`. This is the honest meaning of "total value of the
+  downstream cone" — a node fronting a wide reconvergent fan genuinely has more leverage.
+  Accepted, not guarded; documented in ADR-015 and `explain` (the `leverage` term is
+  visible). (If it ever surprises, a path-dedup variant is the escalation — not this slice.)
 - **Edge: non-finite / negative / huge authored coeff.** `load` clamps each coefficient
   finite-non-negative and ≤ `COEFF_MAX` (NaN/∞ → default; negative → 0.0; over-max → max)
   so products stay finite and a typo can't invert or overflow ordering. Silent (config is
@@ -309,6 +375,16 @@ maintainability coefficient defaulting to 0.0).
   (`read_facets`) and the show path (`SliceDoc` serde) parsing the same facets twice.
   Unifying `ScannedEntity` onto a single `EntityFacets` carrier is a cohesion cleanup
   out of scope here — capture as a backlog improvement.
+- **OQ-4 — seq as a weight class (deferred, evidence-gated).** Seq ships as a structural
+  constraint (D10). IF the dumb constraint mis-sequences in practice, re-introduce `after`
+  as a diminished, **rank-modulated** optionality weight (coefficient `< dep_coeff`, with
+  the edge `rank` scaling the share). Acyclic-by-eviction (`Evict`), so it *could* recurse
+  — but start one-hop. Not this slice; revisit on evidence.
+- **OQ-5 — `next` fully score-driven / true-graph view (forward).** This slice makes
+  `next` score-aware *between molecules* (§5.4). A larger question — whether the whole
+  actionability ordering becomes score-primary with structure as a constraint layer, and
+  how the web view renders score on one axis of a true graph — is downstream. The design
+  keeps score exposed as first-class node data so that view is unblocked.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -353,21 +429,52 @@ maintainability coefficient defaulting to 0.0).
   computed dimension / total / consequence** (not inputs alone — finite inputs can still
   overflow a product to `∞`; I2(b), F-2). Alt: `partial_cmp().unwrap_or(Equal)` —
   rejected, hides a NaN bug as a silent tie.
-- **D7 — `ReasonKind::Score { base, value_dim, risk_dim, consequence, total }`
+- **D7 — `ReasonKind::Score { base, value_dim, risk_dim, leverage, optionality, total }`
   replaces `Consequence { inbound }`.** `explain` is the transparency surface; the raw
-  inbound count is no longer the ranking quantity, so it is replaced by the dimensional
-  breakdown. Render contract, made self-consistent with the view types: **`survey`** adds
-  a single `score` column (`SurveyRow` retyped `consequence: u32 → score: f64`).
-  **`next` adds NO row column** — `NextRow` (view.rs:103-112) carries no score field and
-  `NEXT_COLS` (render.rs:77) renders none; `next` surfaces score via its
-  `ReasonKind::Score` reason line (render.rs:181), consistent with §5.2 omitting
-  `NextRow` from the retype set (F-8).
+  inbound count is no longer the ranking quantity, so it is replaced by the full
+  breakdown — including the two consequence mechanisms split out (`leverage` vs
+  `optionality`) so a large number is attributable. Render contract: **`survey`** adds a
+  `score` column (`SurveyRow` retyped `consequence: u32 → score: f64`). **`next` now also
+  gains a `score` column** — it is no longer column-less (reversing the earlier F-8 call):
+  because `next` is now *ordered by* score between incomparable items (§5.4), the ranking
+  quantity must be visible on the row, so `NextRow` gains `score: f64` and `NEXT_COLS` a
+  column. (`explain` still carries the full reason breakdown.)
 
-**ADR-015 boundary** — ratifies durable policy: dimension semantics, the two-pass
-model, the `[priority]` config shape + forward-compat rule, and the sort contract
-(survey/next/explain, incl. consequence-excluded-from-structure). Implementation-owned
-(not in the ADR, tunable freely): the coefficient numbers, kind-weight defaults,
-tag-coeff examples, and the `total_cmp`/ε/clamp mechanics.
+- **D8 — `needs`-leverage is RECURSIVE over the acyclic backbone.** Consequence's core
+  is the transitive value a node unlocks, not a one-hop count — a deep blocker gating a
+  cheap chore that gates ten valuable slices *is* highly consequential. Computable as a
+  single-sweep reverse-topological DP precisely because the `needs` overlay is the
+  acyclic ordering backbone (a real cycle is a diagnosed authoring error, condensed as a
+  safety net). Alt: one-hop sum-of-base (original IMP-118 prose) — rejected, blind to
+  downstream leverage past one hop. Alt: full-graph fixpoint — unnecessary given
+  acyclicity, and unstable on cycles.
+- **D9 — `ref`/lineage-optionality is ONE-HOP, deliberately.** Lineage overlays are
+  `Reject` (cyclic-capable: `related` loops, lineage diamonds), so recursion has no
+  termination guarantee. Semantically lineage is associative ("unlocks the option of"),
+  for which a flat single-hop share is the right model anyway. So the two consequence
+  classes differ by *structure*: `needs` recurses (acyclic + causal), `ref` doesn't
+  (cyclic + associative). This is the clean resolution of the cycle problem — it's a
+  constraint on *which edges accumulate weight recursively*, not a wrinkle in the math.
+- **D10 — `after`/seq is a STRUCTURAL constraint, not a weight class.** Seq stays in
+  cordage's `OrderSpec`, enforced strictly (B `<` A, not `≤` — the ULP/`next_down` form),
+  so it sequences without manufacturing ties and needs no weight aggregation. Modelling
+  seq as a score *clamp* was the tempting-but-wrong path (non-strict ⇒ ties); strict
+  structural precedence (which cordage already realizes) is both simpler and tie-free.
+  Escalation path if the dumb constraint ever mis-sequences: re-introduce seq as a
+  *diminished, rank-modulated optionality weight* (lower than `needs`) — deferred, evidence-
+  gated (OQ-4). Coefficients are asymmetric by structure: `dep_coeff ∈ (0,1]` (recursive
+  retention, must not amplify), `ref_coeff` flat-non-negative (one-hop, no compounding).
+
+**ADR-015 boundary** — opens with the **thesis**: an *enabler* accrues a
+coefficient-weighted share of the value it unlocks (the value of optionality); `score`
+is a reusable ordering primitive exposed as first-class node data (forward: a true-graph
+web actionability view orders one axis by it). Ratifies durable policy: dimension
+semantics; the two-pass model; **consequence = recursive `needs`-leverage (D8) +
+one-hop `ref`-optionality (D9)**; seq-as-structural-constraint (D10); the
+mint-vs-display ordering rule (I3); the `[priority]` config shape + forward-compat rule;
+the sort contract (survey/next/explain). Implementation-owned (not in the ADR, tunable
+freely): the coefficient *numbers* (incl. the `dep_coeff ∈ (0,1]` default), kind-weight
+defaults, tag-coeff examples, and the `total_cmp`/clamp/condensation mechanics.
 
 ## 8. Risks & Mitigations
 
@@ -391,9 +498,11 @@ Phasing (provisional, for `/plan`):
 - **P2 — scan + config.** `read_facets` reads `[facet]`; `priority::config` +
   `load`; thread into `build`/`build_from`.
 - **P3 — scoring passes.** `base_score` pre-pass + `NodeAttr.base_score` + mint
-  retie; consequence post-pass + `score` map.
-- **P4 — surfaces.** Retype `consequence → score`; `Score` reason; render columns;
-  goldens.
+  retie; consequence post-pass — recursive `needs`-leverage DP (reverse-`ordered()`,
+  SCC-condensed) + one-hop `ref`-optionality; `leverage`/`optionality`/`score` maps.
+- **P4 — surfaces.** Retype `consequence → score`; `Score` reason (leverage/optionality
+  split); `survey` + `next` score columns; `next` frontier sort `(score, id)` + seq
+  precedence; goldens.
 - **P5 — ADR-015 + `doctrine.toml` `[priority]` seed.**
 
 Verification (criteria firm up in `/plan`):
@@ -410,22 +519,34 @@ Verification (criteria firm up in `/plan`):
   defaults; unknown key ignored; non-finite/negative/over-`COEFF_MAX` coeff clamped
   (I2(a)); a malformed *value* clamps and does NOT hard-error — the deliberate
   advisory-config policy (§5.2), distinct from `dispatch_config` (F-6).
-- **VT-4** — consequence post-pass **directions** (the F1/F2 fixes): a `needs`
-  dependent's base flows to its prerequisite via `out_edges(dep_overlay)` (× dep coeff);
-  a referencer's base flows to its target via `in_edges` over the `CONSEQUENCE_LABELS`
-  overlays only (× ref coeff); a `reviews`/`owning_slice` edge contributes **0** (subset
-  exclusion); a dangling target contributes 0; ADR-004 (no stored reverse) upheld.
+- **VT-4** — consequence post-pass **directions & classes** (F1/F2 + D8/D9): (a)
+  `needs`-leverage flows `out_edges(dep_overlay)` (prereq accrues dependents); (b)
+  `ref`-optionality flows `in_edges` over `CONSEQUENCE_LABELS` overlays only, one-hop;
+  (c) a `reviews`/`owning_slice` edge contributes **0** (subset exclusion); (d) a dangling
+  target contributes 0; ADR-004 (no stored reverse) upheld.
+- **VT-4b** — **leverage is recursive (D8)**: a 3-deep `needs` chain A←B←C (C needs B
+  needs A) gives A `leverage = dep_coeff·(base(B)+leverage(B)) = dep_coeff·base(B) +
+  dep_coeff²·base(C)` — i.e. depth-k decay `dep_coeff^k`; a reconvergent diamond
+  double-counts the shared leaf through both paths (accepted). Contrast: `ref` is one-hop
+  (no transitive accumulation).
 - **VT-5** — **reordering scenario** (the point of the slice): a blocker gating one
   high-value slice outranks a blocker gating five ideas, where the old inbound-count
-  ranked them opposite.
+  ranked them opposite; AND a deep blocker gating a cheap chore that gates a valuable cone
+  outranks a shallow blocker fronting one modest item (recursive-leverage proof).
 - **VT-6** — determinism + finite outputs: equal scores tiebreak canonical-id asc; AND
   feeding near-`f64::MAX` coefficients proves no `∞`/`NaN` reaches mint, the `survey`
   sort, or `explain` — i.e. `base_score` and the post-pass `is_finite`-sanitize the
-  computed dims/total/consequence, not just the inputs (I2(b), F-2).
-- **VT-7** — `next` structural order ignores consequence (mint = base only); `survey`
-  display sort uses score.
-- **VA-1** — `explain --json` exposes `{ base, value_dim, risk_dim, consequence,
-  total }`; human render reads correctly.
+  computed dims/total/leverage/optionality, not just the inputs (I2(b), F-2).
+- **VT-7** — ordering split (I3): **mint** uses `base` only (consequence excluded from the
+  structural tier-3 fallback); **`survey`** display sorts by `score`; **`next`** sorts the
+  actionable frontier by `(score desc, id)` with `after`-seq applied as strict precedence —
+  proven by a Y-fixture: two seq-incomparable ready arms order by score, while a same-chain
+  seq pair keeps structural order regardless of score.
+- **VT-8** — **leverage terminates on malformed data (I5)**: a hand-authored `needs`
+  cycle is diagnosed (`dep_cycles()`), the SCC is condensed (intra-SCC edges contribute 0),
+  the DP halts, and leverage is finite for every node.
+- **VA-1** — `explain --json` exposes `{ base, value_dim, risk_dim, leverage,
+  optionality, total }`; human render reads correctly.
 - Goldens (`survey`/`next`/`explain` human + `--json`) updated to the score contract.
 
 ## 10. Review Notes
@@ -470,4 +591,30 @@ yet — the artifact was the defect):
   miscitation dropped. §5.2, §6 OQ-1, VT-3.
 - **F-7 (minor)** — scan-seam isolation pinned by VT-1b.
 - **F-8 (minor)** — D7 render contract reconciled with view types (`next` has no score
-  column; reason line only).
+  column; reason line only). **SUPERSEDED below** — the consequence-model revision makes
+  `next` score-ordered, so `next` now *does* carry a score column.
+
+**Consequence-model revision (2026-06-21, design dialogue — POST-RV-130).** RV-130 and
+the internal pass above reviewed a **one-hop** consequence (flat sum of direct
+dependents' base, symmetric coeffs). A subsequent design conversation replaced it; the
+mechanics below are NOT yet externally reviewed:
+- **Recursive `needs`-leverage + one-hop `ref`-optionality (D8/D9).** Consequence splits
+  into a transitive, depth-decayed leverage term over the acyclic `needs` backbone, and a
+  flat one-hop optionality term over the cyclic-capable lineage overlays. Resolves the
+  cycle question as "which edges may accumulate *recursively*" (only the acyclic backbone),
+  not a calculation wrinkle. Coefficients become asymmetric: `dep_coeff ∈ (0,1]` retention,
+  `ref_coeff` flat.
+- **Seq stays a structural constraint (D10).** The score-clamp temptation is tie-prone
+  only when non-strict; strict (`<`/ULP) precedence — which cordage's `OrderSpec` already
+  realizes — sequences without ties, so seq needs no weight class. Escalation deferred
+  (OQ-4).
+- **Ordering is mint-vs-display (I3 refined).** Consequence excluded from *mint* (feedback
+  + not-yet-computed), but `survey`/`next` *display* sorts use `score`. `next` orders the
+  actionable frontier by `score` wherever the precedence partial-order is silent —
+  including sibling Y-arms within one component, not just disconnected molecules (VT-7).
+- **Forward.** Score is exposed as first-class node data for an eventual true-graph web
+  actionability view (OQ-5).
+
+**Re-review needed:** the recursive DP (termination/condensation, depth decay,
+reconvergence), the asymmetric coefficient domains, and the molecule/Y ordering of `next`
+postdate RV-130 — they want a fresh external adversarial pass before planning.
