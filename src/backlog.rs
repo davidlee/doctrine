@@ -385,7 +385,7 @@ impl ItemKind {
 
     /// Every kind in DECLARATION order — the single source for the cross-kind
     /// `list` read (each tree in turn) and the `ordinal` grouping key.
-    const ALL: [ItemKind; 5] = [
+    pub(crate) const ALL: [ItemKind; 5] = [
         ItemKind::Issue,
         ItemKind::Improvement,
         ItemKind::Chore,
@@ -509,7 +509,7 @@ pub(crate) enum RiskLevel {
 
 impl RiskLevel {
     /// The kebab string for render (matches the serde rename). Pure.
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             RiskLevel::Low => "low",
             RiskLevel::Medium => "medium",
