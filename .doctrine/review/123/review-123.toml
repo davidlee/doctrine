@@ -1,0 +1,33 @@
+id    = 123
+slug  = "reconciliation-review-of-sl-131"
+title = "reconciliation review of SL-131"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "self-audit"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-131"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Missing audit/SKILL.md MCP tool preference preamble (PHASE-05 EX-3 unsatisfied)"
+detail = """
+Design §5 specifies three skill surface updates:
+1. retrieve-memory/SKILL.md — MCP tool preference preamble ✓ (present)
+2. reviewing-memory/SKILL.md — MCP shortcut note ✓ (present)
+3. audit/SKILL.md — MCP tool preference preamble ✗ (absent)
+
+The plan (PHASE-05 EX-3) explicitly lists audit/SKILL.md as an exit criterion. Only 2 of 3 planned skill files were updated. The audit skill currently has no MCP tool preference preamble, which means agents auditing via CLI will not be guided toward the MCP review tools (review_new, review_raise, review_dispose, review_verify, review_prime, review_list, review_show, review_status) even when connected to the doctrine MCP server.
+
+This is a minor divergence (the audit skill functions correctly via CLI; the MCP shortcut is an optimisation)."""
+disposition = "fix-now"
+response = "Confirmed: audit/SKILL.md lacks the MCP tool preference preamble specified in design §5. The retrieve-memory and reviewing-memory skill files were updated, but audit/SKILL.md was not. Adding the preamble is a one-line edit. Fix applied inline now."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
