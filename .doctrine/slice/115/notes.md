@@ -59,3 +59,26 @@ No code moved yet (design + plan phase only). `just check` has not changed since
 ### Durable items for memory
 
 - **D1a rule** (dispatch routing by actual body calls, not nominal kind) — should be recorded as a `pattern` (or `design`?) memory for the dispatch layer.
+
+---
+
+## 2026-06-21 — PHASE-02 complete
+
+### Done
+
+- 5 remaining command modules populated: `commands/inspect.rs`, `commands/relation.rs`,
+  `commands/dep_seq.rs`, `commands/supersede.rs`, `commands/validate.rs`
+- Match arms in `main.rs` updated to qualified `commands::<module>::run_*()` paths
+- All moved test modules pass in new homes with only `use super::*` path fixups
+- `main.rs` reduced from ~7264 → ~5247 lines (~2100 lines removed)
+- Verification: 2142 tests pass, `cargo clippy --bin doctrine` zero-warn, fmt clean
+- PHASE-01 verification net (21 tests) — all pass; `tests/e2e_*` goldens untouched
+
+### Notes
+
+- `run_inspect` has no tests (golden-covered via e2e); its class-test reference in
+  write_class_tests stayed in main.rs (uses `Commands::Inspect` variant, not the fn)
+- All relocated modules carry `//! SL-129: uses entity::id_path` breadcrumb on line 2
+- `commands/mod.rs` has `pub mod` for all 9 modules (dep_seq, facet, guard, inspect,
+  map, relation, serve, supersede, validate)
+- Work is on disk but UNCOMMITTED — 10 files modified, +1619/-1524 lines
