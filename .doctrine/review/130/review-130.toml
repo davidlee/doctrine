@@ -14,59 +14,75 @@ ref   = "SL-133"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "ADR-001 binding tier-map unamended: new risk leaf + priority::config + facet's new risk import have no layering.toml entry"
 detail = "EXPECTED: a design introducing a leaf src/risk.rs and src/priority/config.rs, and adding a risk import to the facet leaf, must require the matching entries in the BINDING tier map .doctrine/adr/001/layering.toml (consumed by 'just gate' per ADR-001 enforcement) — not lean on convention. OBSERVED: design.md §5.2/§7 D2 extract risk to a leaf and add priority::config but never mention layering.toml; layering.toml has NO 'risk' entry, NO 'priority::config' sub-classification (only 'priority::graph = engine' @108, 'priority = command' @85), and 'facet = leaf' @28 is annotated 'imports only estimate + value' — adding a risk import breaks that annotation and the gate. SL-132 (RV-121) was caught omitting exactly this. PENANCE: amend the design to require, in-slice, layering.toml edits — add risk='leaf', classify priority::config (leaf, or engine w/ rationale), update the facet entry/comment to permit the risk import — and cite ADR-001 as the forcing function."
+disposition = "design-wrong"
+response = 'Agreed — binding tier-map omission. Reconciled in-slice: §3 (ADR-001 bullet) and D2 now REQUIRE the `.doctrine/adr/001/layering.toml` edits as part of the slice, and the Terrain manifest (slice-133.md) adds the file row: `risk = "leaf"`, `priority::config = "leaf"` (pure serde + std::fs load, no internal module deps — mirrors fsutil/facet_write leaves that perform IO), and relax the `facet = "leaf"` comment ("imports only estimate + value") to permit the risk import. ADR-001 cited as the forcing function; `just gate` green is the exit proof. RV-121/SL-132 precedent acknowledged.'
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "major"
 title = "I2 'NaN-free by construction' is unsound: clamp bounds inputs finite but products overflow to inf, and OQ-2's score-base then yields NaN"
 detail = "EXPECTED: if §5.5 I2 asserts no NaN reaches a comparator 'by construction', the construction must guarantee it. OBSERVED: §5.5 clamps each authored coefficient to finite non-negative (INPUTS) but never sanitizes the COMPUTED dims/total; value_dim = value×kind_weight×Σtag/midpoint and risk_dim = exposure×risk_coeff can overflow finite inputs to +inf with large authored coeffs, and OQ-2's derived consequence = score-base computes inf-inf = NaN — violating I2/VT-6 and the very rationale for D6 (total_cmp chosen to avoid NaN-as-tie). PENANCE: make the contract real — bound each authored coefficient to a sane finite max at load AND/OR sanitize every computed dimension and total with is_finite before storage/comparison; add a VT feeding near-f64::MAX coefficients proving no inf/NaN reaches mint or the survey sort."
+disposition = "design-wrong"
+response = "Agreed — clamping inputs alone does not make I2 true; finite-but-large coeffs overflow a product to +∞ and a downstream ∞−∞ mints NaN. I2 rewritten to hold at BOTH ends (§5.5): (a) inputs bounded to a finite `COEFF_MAX` at load (§5.2 load policy); (b) `base_score` and the consequence post-pass `is_finite`-sanitize every COMPUTED dimension/total/consequence before storage/comparison (non-finite → 0.0). D6 updated to state sanitization explicitly. VT-6 now feeds near-`f64::MAX` coefficients and proves no ∞/NaN reaches mint, the survey sort, or explain."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "major"
 title = "OQ-2 left open yet §5.2 commits to deriving consequence = score-base and calls it 'exact'; explain emits a field that may not be stored"
 detail = "EXPECTED: explain's published contract ReasonKind::Score { base, value_dim, risk_dim, consequence, total } must have a well-defined, accurate source for every field. OBSERVED: §6 OQ-2 leaves store-vs-derive 'leaning derive' while §5.2 (lines 169-181) already commits to recovering consequence as score-base and §6 claims it 'exact (both are exact f64 from the same pass)'. False: score is computed as base + Σ(weighted deps); recovering Σ by subtracting base is subject to floating-point cancellation, NOT exact in general. PENANCE: close OQ-2 in the design — STORE consequence as its own BTreeMap<EntityKey,f64> from the post-pass (the value exists pre-summation), or strike 'consequence' from the public explain contract; drop the 'exact' claim."
+disposition = "design-wrong"
+response = """Agreed — `score − base` is floating-point cancellation, not exact, and explain's published `consequence` field must be accurate. OQ-2 CLOSED by STORE: `PriorityGraph` now carries `consequence: BTreeMap<EntityKey,f64>` captured directly in the post-pass at the moment the weighted Σ is computed (it exists exactly, pre-summation). The "exact (both are exact f64)" claim is struck. Updated §5.2 (two f64 maps), §5.4 step 6 (store consequence then score), §5.3 ownership, §6 OQ-2 (RESOLVED — store)."""
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Config seam incomplete: build_from gains config param but the pre-scanned direct caller actionability_block_from (surface.rs:484) has no config-load path"
 detail = "EXPECTED: D4 threads config through build_from; every build_from caller must obtain config. OBSERVED: §5.2/D4 describe only survey/next/explain wrappers loading config 'inside the wrapper alongside the scan', but surface.rs:484 (graph::build_from(scanned, root) — the inspect/actionability-block path, retyped in-scope via ActionabilityBlock) calls build_from directly with a pre-scanned corpus and is unaddressed. As written the design either won't compile (missing arg) or silently leaves that surface on undocumented default config. PENANCE: name the seam for EVERY build_from caller — require all callers to thread &PriorityConfig (state where the pre-scanned caller loads it) or add a dedicated pre-scanned wrapper; enumerate surface.rs:484 explicitly."
+disposition = "design-wrong"
+response = "Agreed — the pre-scanned `actionability_block_from` (surface.rs:484) was unaddressed and a threaded param would either fail to compile or leave it on default config. Resolved by loading config INSIDE `build_from` from its existing `root` arg (build_from already holds `root` for the impure `dep_seq_for` reads) rather than a threaded param — this covers EVERY caller with no signature change: `build`, the survey/next/explain wrappers, AND `actionability_block_from`. surface.rs:484 named explicitly. Updated §5.2 build seam, D4, and the Terrain note. This also tightens F-5."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "§5.1 impurity model undercounts: claims 'two impure reads (config load, scan)' but build_from also does per-entity dep_seq_for disk reads"
 detail = "EXPECTED: the System Model's impurity boundary must be accurate. OBSERVED: §5.1 says 'three pure stages bracketed by two impure reads (config load, scan)', but build_from (graph.rs:153; root RETAINED @145) performs per-entity relation_graph::dep_seq_for disk reads at graph.rs:221 — a third impure seam, which D4 itself acknowledges ('build already owns the impure touches (scan, dep_seq_for)'). §5.1 and D4 contradict. PENANCE: correct §5.1 to name dep_seq_for as an existing impure read inside build_from (the pure stages being base_score + the consequence post-pass) so the impurity boundary is honest."
+disposition = "design-wrong"
+response = """Agreed — §5.1 undercounted the impurity boundary and contradicted D4. Corrected: §5.1 now reads "impure reads — config load + scan + the per-entity `dep_seq_for` already performed inside `build_from` (graph.rs:221)", reconciling it with D4's "build_from already owns the impure touches". The pure stages are base_score + the consequence post-pass."""
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "dispatch_config cited as precedent for silent tolerance of garbage coefficient VALUES, but it hard-errors malformed values"
 detail = "EXPECTED: a cited precedent must support the borrowed behaviour. OBSERVED: §2 and §5.5/OQ-1 justify 'silent clamp' of non-finite/negative coeffs as matching 'dispatch_config's tolerant parse', but dispatch_config only defaults MISSING fields and unknown KEYS — malformed VALUES are hard errors (test unknown_harness_is_error, dispatch_config.rs ~line 90, asserts unwrap_err). The clamp-vs-reject policy is a NEW choice, not inherited precedent. PENANCE: specify PriorityConfig::load precisely — what is fatal, what defaults, what clamps, at what granularity — and present silent clamp as a deliberate new policy (advisory config), not borrowed precedent; fold OQ-1 into that contract."
+disposition = "design-wrong"
+response = 'Agreed — `dispatch_config` hard-errors malformed VALUES (test `unknown_harness_is_error`), so silent clamp is a NEW choice, not borrowed precedent. §5.2 now specifies `PriorityConfig::load` precisely as a DELIBERATE advisory-config policy: missing → default, unknown key → ignored, malformed value (wrong type / non-finite / negative / over-max) → clamped (not fatal), silent. The dispatch_config "tolerant parse" miscitation is dropped and explicitly contrasted. OQ-1 folded into that contract (RESOLVED — silent). VT-3 updated to assert clamp-not-error.'
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Behaviour-preservation proof names backlog risk/exposure suites but not the scan per-facet-isolation contract the new risk read must preserve"
 detail = "EXPECTED: §3 behaviour-preservation gate covers BOTH the risk-type extraction AND the new scan read. OBSERVED: §8 R1 / VT-1 name only the backlog risk/exposure tests; the scan seam's per-facet error isolation (a malformed present facet drops to None + Error diagnostic, siblings intact — scan.rs ~216-277) is the contract the new risk [facet] read must preserve, but no VT pins it. PENANCE: add a scan-seam VT — existing catalog/scan malformed-facet isolation cases stay green unchanged, plus a new case proving a malformed [facet] drops only risk and preserves sibling estimate/value."
+disposition = "design-wrong"
+response = "Agreed — the scan per-facet isolation contract the new `[facet]` read must preserve was described in prose but pinned by no VT. Added VT-1b (§9): existing catalog/scan malformed-facet isolation cases stay green unchanged, PLUS a new case proving a malformed `[facet]` (risk) drops only `risk` to None + an Error diagnostic while sibling estimate/value survive intact."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "D7 claims 'survey/next rows show only the single score column', but NextRow carries no score/consequence field and NEXT_COLS renders none"
 detail = "EXPECTED: the design's render claims must match the view/render types. OBSERVED: D7 (line 310) says survey AND next rows show a single score column; but NextRow (view.rs:103-112) has no consequence/score field — next surfaces consequence only via its ReasonKind reason lines (render.rs:181), and NEXT_COLS (render.rs:77) has no such column. §5.2 correctly omits NextRow from the retype set, contradicting D7's 'next ... score column'. PENANCE: clarify D7 — next exposes score via its ReasonKind::Score reason line, not a row column (or, if a column is truly intended, add score:f64 to NextRow plus the NEXT_COLS change). Make the render contract self-consistent."
+disposition = "design-wrong"
+response = """Agreed — D7's "survey/next rows show only the single score column" contradicted the view types: `NextRow` (view.rs:103-112) has no score field and `NEXT_COLS` (render.rs:77) renders none. D7 corrected to a self-consistent render contract: `survey` adds the single `score` column (SurveyRow retyped); `next` adds NO row column and surfaces score via its `ReasonKind::Score` reason line (render.rs:181) — consistent with §5.2 omitting NextRow from the retype set. Terrain render.rs row updated to match."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

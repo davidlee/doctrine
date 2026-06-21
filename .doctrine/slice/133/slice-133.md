@@ -136,16 +136,19 @@ same projection.
 | `src/backlog.rs` | Re-use the leaf risk types (command→leaf); behaviour-preserving |
 | `src/facet.rs` | `EntityFacets` gains `risk: Option<RiskFacet>` |
 | `src/catalog/scan.rs` | `read_facets` reads the `[facet]` table; `ScannedEntity` gains risk |
-| `src/priority/config.rs` (new) | `PriorityConfig` serde struct + impure `load(root)` |
-| `src/priority/graph.rs` | `NodeAttr` gains `base_score: BaseScore`; replace consequence pre-pass with base pre-pass; mint retie `(base desc, id asc)`; add consequence **post**-pass (ref-class `in_edges` over `CONSEQUENCE_LABELS`, dep-class `out_edges(dep_overlay)`); `PriorityGraph.consequence:u32 → score:f64`; `build`/`build_from` thread `&PriorityConfig` |
+| `src/priority/config.rs` (new) | `PriorityConfig` serde struct + impure `load(root)`; advisory-config clamp policy (`COEFF_MAX`, silent) — F-6/OQ-1 |
+| `src/priority/graph.rs` | `NodeAttr` gains `base_score: BaseScore`; replace consequence pre-pass with base pre-pass; mint retie `(base desc, id asc)`; add consequence **post**-pass (ref-class `in_edges` over `CONSEQUENCE_LABELS`, dep-class `out_edges(dep_overlay)`); `PriorityGraph.consequence:u32 → score:f64` **+ stored `consequence:f64` map** (F-3); `is_finite` sanitize dims/total/consequence (F-2); `build_from` loads `&PriorityConfig` from `root` (covers all callers — F-4) |
 | `src/priority/surface.rs` | `consequence:u32 → score:f64` across `SurveyRow`/`ActionabilityNode`/`ActionabilityBlock`; sort on score; `policy_version` v2→v3 |
-| `src/priority/render.rs` | Score column (survey/next); `ReasonKind::Score{base,value_dim,risk_dim,consequence,total}` human + json |
+| `src/priority/render.rs` | `survey` score column only (`next` has none — score via `ReasonKind::Score` reason line, F-8); `ReasonKind::Score{base,value_dim,risk_dim,consequence,total}` human + json |
+| `.doctrine/adr/001/layering.toml` | **Binding tier-map (F-1, ADR-001 forcing fn):** add `risk = "leaf"`, `priority::config = "leaf"`; relax `facet` comment to permit the risk import — `just gate` green |
 | `doctrine.toml` | New `[priority]` section |
 | `.doctrine/adr/015/**` | **ADR-015** — durable scoring policy (authored this phase) |
 
-Config loads at the `graph::build` seam (the existing impure wrapper), **not**
-`src/main.rs` — D4. Tag coefficients are a **stub** (`Σ = 1.0`, no scan read) this
-slice; the seam exists in the formula, lit up once SL-136 lands tag storage — D5.
+Config loads **inside `build_from`** from its `root` arg (which already drives the impure
+`dep_seq_for` reads), **not** `src/main.rs` — D4. This covers every `build_from` caller
+(incl. the pre-scanned `actionability_block_from`, surface.rs:484) with no signature
+change — F-4. Tag coefficients are a **stub** (`Σ = 1.0`, no scan read) this slice; the
+seam exists in the formula, lit up once SL-136 lands tag storage — D5.
 
 ## Dependencies
 
