@@ -267,6 +267,7 @@ mod tests {
                 slug: "two-space-indent".to_string(),
                 title: "Two-space indent".to_string(),
                 status: "draft".to_string(),
+                tags: vec![],
             }
         );
         // status seeds draft, the date is injected, no token survives.
@@ -292,7 +293,7 @@ mod tests {
         // The [relationships] table parses as a whole document …
         let doc: toml::Value = toml::from_str(&body).unwrap();
         // SL-095: `supersedes` is no longer a typed field; it's now a `[[relation]]` row.
-        for axis in ["superseded_by", "tags"] {
+        for axis in ["superseded_by"] {
             assert!(
                 doc["relationships"][axis].as_array().unwrap().is_empty(),
                 "{axis} should seed empty"

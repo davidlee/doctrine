@@ -177,6 +177,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             KnowledgeCommand::Status { .. } => Write("knowledge status"),
             KnowledgeCommand::List { .. } | KnowledgeCommand::Show { .. } => Read,
         },
+        Command::Tag { .. } => Write("tag"),
         Command::Serve { .. } => Read,
         Command::Boot { command, .. } => match command {
             None => Write("boot"),

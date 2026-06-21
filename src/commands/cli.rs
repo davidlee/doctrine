@@ -330,6 +330,12 @@ pub(crate) enum Command {
         command: crate::knowledge::KnowledgeCommand,
     },
 
+    /// Add or remove tags on entity kinds that surface tags (SL-136).
+    Tag {
+        #[command(subcommand)]
+        command: crate::commands::tag::TagCommand,
+    },
+
     /// Start the MCP stdio server (`serve --mcp`).
     Serve {
         #[command(flatten)]
@@ -672,6 +678,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         },
         Command::Backlog { command } => crate::backlog::dispatch(command, color),
         Command::Knowledge { command } => crate::knowledge::dispatch(command, color),
+        Command::Tag { command } => crate::commands::tag::dispatch(command),
         Command::Serve { args } => crate::commands::serve::run_serve(args),
         Command::Boot {
             command,
