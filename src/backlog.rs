@@ -4769,12 +4769,7 @@ tags = []
     // --- PHASE-04 paths verb golden tests ---
 
     /// Scaffold one backlog item and write an extra file into its entity dir.
-    fn backlog_fixture(
-        root: &Path,
-        item_kind: ItemKind,
-        id: u32,
-        extra: &[&str],
-    ) {
+    fn backlog_fixture(root: &Path, item_kind: ItemKind, id: u32, extra: &[&str]) {
         let name = format!("{id:03}");
         let dir = root.join(item_kind.kind().dir).join(&name);
         fs::create_dir_all(&dir).unwrap();
@@ -4799,13 +4794,9 @@ tags = []
         let entity_dir = root.join(ItemKind::Issue.kind().dir).join("001");
         let identity_toml = entity_dir.join("backlog-001.toml");
         let identity_md = entity_dir.join("backlog-001.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         let output = lines.join("\n");
         assert!(output.contains(".doctrine/backlog/issue/001/backlog-001.toml"));
@@ -4828,13 +4819,9 @@ tags = []
         let entity_dir = root.join(ItemKind::Issue.kind().dir).join("001");
         let identity_toml = entity_dir.join("backlog-001.toml");
         let identity_md = entity_dir.join("backlog-001.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0], ".doctrine/backlog/issue/001/backlog-001.toml");
@@ -4854,13 +4841,9 @@ tags = []
         let entity_dir = root.join(ItemKind::Chore.kind().dir).join("002");
         let identity_toml = entity_dir.join("backlog-002.toml");
         let identity_md = entity_dir.join("backlog-002.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines, vec![".doctrine/backlog/chore/002/backlog-002.toml"]);
     }
@@ -4879,13 +4862,9 @@ tags = []
         let entity_dir = root.join(ItemKind::Risk.kind().dir).join("003");
         let identity_toml = entity_dir.join("backlog-003.toml");
         let identity_md = entity_dir.join("backlog-003.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines, vec![".doctrine/backlog/risk/003/backlog-003.md"]);
     }
@@ -4904,13 +4883,9 @@ tags = []
         let entity_dir = root.join(ItemKind::Idea.kind().dir).join("004");
         let identity_toml = entity_dir.join("backlog-004.toml");
         let identity_md = entity_dir.join("backlog-004.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(
             lines,
@@ -4928,17 +4903,11 @@ tags = []
         backlog_fixture(root, ItemKind::Issue, 1, &[]);
         let result = parse_ref("ISS-99999");
         assert!(result.is_ok()); // parses fine, but entity dir doesn't exist
-        let entity_dir = root
-            .join(ItemKind::Issue.kind().dir)
-            .join("99999");
+        let entity_dir = root.join(ItemKind::Issue.kind().dir).join("99999");
         let identity_toml = entity_dir.join("backlog-99999.toml");
         let identity_md = entity_dir.join("backlog-99999.md");
-        let scan = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        );
+        let scan =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root);
         assert!(scan.is_err());
     }
 
@@ -4955,10 +4924,7 @@ tags = []
             single: false,
         };
         let mut all_lines: Vec<String> = Vec::new();
-        for (kind, n) in [
-            (ItemKind::Issue, "001"),
-            (ItemKind::Improvement, "001"),
-        ] {
+        for (kind, n) in [(ItemKind::Issue, "001"), (ItemKind::Improvement, "001")] {
             let entity_dir = root.join(kind.kind().dir).join(n);
             let toml_name = format!("{BACKLOG_STEM}-{n}.toml");
             let md_name = format!("{BACKLOG_STEM}-{n}.md");

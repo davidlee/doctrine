@@ -517,12 +517,8 @@ pub(crate) fn run_paths(
         let md_name = format!("{}-{name}.md", g.kind.stem);
         let identity_toml = entity_dir.join(&toml_name);
         let identity_md = entity_dir.join(&md_name);
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            &root,
-        )?;
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), &root)?;
         let lines = crate::paths::select_paths(&set, sel)?;
         all_lines.extend(lines);
     }
@@ -1356,13 +1352,9 @@ mod tests {
         let entity_dir = gov_root.join("001");
         let identity_toml = entity_dir.join("adr-001.toml");
         let identity_md = entity_dir.join("adr-001.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(
             lines.join("\n"),
