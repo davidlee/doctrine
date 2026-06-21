@@ -1,0 +1,50 @@
+memory_uid = "mem_019eec3285e471c287a0c3d74c235b25"
+memory_key = "mem.pattern.dispatch.worker-fork-missing-gitignored-embed"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch worker fork omits gitignored build artifacts → spurious gate/test failures"
+summary = "Dispatch worker fork lacks gitignored build artifacts (web/map/dist RustEmbed) → spurious map_server test + lint-js gate failures; verify on coord tree"
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = ["src/map_server/assets.rs", "web/map/dist"]
+globs = ["plugins/doctrine/skills/dispatch/**"]
+commands = ["doctrine worktree", "just gate"]
+tags = ["dispatch", "worktree", "funnel", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "016aeabeed0af63c62cb92ce4eb3f431a5c4661f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d952b03e90841ce53c00a1db0fef3913d4076c27a4c6403df5bef75754e392e2"
+base_commit = "8a523d2c43035b6d69d272f1a5f2c1b15d069413"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-133"
+
+[[source]]
+kind = "phase"
+ref = "PHASE-04"
+
