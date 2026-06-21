@@ -66,6 +66,7 @@ exit_criteria = [
   { id = "EX-1", text = "RiskLevel/RiskFacet/RawRiskFacet/parse_optional/exposure live in src/risk.rs (leaf, extracted verbatim); backlog re-uses them; no parallel validator." },
   { id = "EX-2", text = "EntityFacets (src/facet.rs) gains `risk: Option<RiskFacet>`; all constructors updated." },
   { id = "EX-3", text = ".doctrine/adr/001/layering.toml: add `risk = \"leaf\"`; relax the `facet` entry comment to permit the risk import. `just gate` green (the binding tier-map is consumed by the gate — RV-121 precedent)." },
+  { id = "EX-4", text = "Gate-green seam: `EntityFacets.risk` has no lib consumer until PHASE-04 (base_score) — the lib-only gate (no --all-targets) sees test-only reads as dead. Carry a transitional `#[allow(dead_code)]` on the field (comment: `// consumed PHASE-04`), removed at PHASE-04; OR first confirm the gate tolerates the serde/constructor-written field and skip the allow." },
 ]
 verification = [
   { id = "VT-1", expects = "risk::exposure parity — the existing backlog risk/exposure suites pass unchanged post-move (behaviour-preservation gate is the proof)." },
@@ -91,6 +92,7 @@ exit_criteria = [
   { id = "EX-1", text = "read_facets reads [facet] via risk::parse_optional; ScannedEntity gains a risk field; per-facet isolation preserved (a malformed [facet] drops only risk to None + an Error diagnostic, estimate/value intact)." },
   { id = "EX-2", text = "src/priority/config.rs: PriorityConfig serde struct (#[serde(default)], unknown keys ignored) + impure `load(root)`; advisory clamp at load (NaN/±∞ → field default, negative → 0.0, over-COEFF_MAX → COEFF_MAX; silent). NOT threaded into build_from this phase." },
   { id = "EX-3", text = ".doctrine/adr/001/layering.toml: classify `priority::config = \"leaf\"`. `just gate` green." },
+  { id = "EX-4", text = "Gate-green seam: `ScannedEntity.risk` and `PriorityConfig` (+ its fields) have no lib consumer until PHASE-04 (base_score) — same transitional `#[allow(dead_code)]` treatment as PHASE-02/EX-4 (comment: `// consumed PHASE-04`), removed at PHASE-04; or confirm the gate tolerates the written-but-unread serde fields first." },
 ]
 verification = [
   { id = "VT-1b", expects = "scan per-facet isolation — a malformed risk [facet] drops only risk (None + Error), estimate/value survive; existing catalog/scan malformed-facet cases stay green unchanged (F-7)." },
@@ -120,6 +122,7 @@ exit_criteria = [
   { id = "EX-2", text = "build_from loads PriorityConfig from its existing `root` arg (D4) — covering every caller incl. actionability_block_from (surface.rs:484) with no signature change; base pre-pass computes a BTreeMap<EntityKey,BaseScore> carried onto NodeAttr.base_score." },
   { id = "EX-3", text = "Consequence post-pass on the built graph: needs-leverage = recursive DP over out_edges(dep_overlay) in reverse graph.ordered() order, with the explicit dep-component graph (SCCs from provenance().cycles() filtered to dep_overlay; singletons otherwise; intra-component edges contribute 0; every member gets the same component leverage); ref-optionality = one-hop ref_coeff·Σ in_edges over the CONSEQUENCE_LABELS subset only. leverage/optionality/score maps stored on PriorityGraph; each is_finite-sanitized before storage." },
   { id = "EX-4", text = "ADDITIVE: old consequence:u32 field + pre-pass, mint order, surfaces, and existing goldens are untouched and green. No surface reads the new maps yet." },
+  { id = "EX-5", text = "Gate-green seams: remove the transitional `#[allow(dead_code)]` from PHASE-02/03 additions now consumed by base_score (EntityFacets.risk, ScannedEntity.risk, PriorityConfig). The new PriorityGraph maps (leverage/optionality/score) + NodeAttr.base_score have no lib reader until PHASE-05 mint/surface cutover — carry the same transitional allow on them (comment: `// consumed PHASE-05`); NodeAttr.base_score is exempt iff the post-pass reads it in-phase. `just gate` green." },
 ]
 verification = [
   { id = "VT-2",  expects = "base_score pure & correct — value-only / risk-only / both / neither; absent estimate → midpoint 1.0; kind_weight & tag_coeff (Σ=1.0 stub) defaults applied." },
@@ -150,6 +153,7 @@ exit_criteria = [
   { id = "EX-2", text = "Mint order cutover to (base.total() desc via f64::total_cmp, id asc); the old consequence:u32 field + pre-pass are removed — no parallel implementation remains." },
   { id = "EX-3", text = "survey sorts actionability → score desc (total_cmp) → id asc; `next` runs its OWN Kahn-style induced-frontier sort over the SURVIVING seq edges (seq_overlay minus provenance().evictions()) with (score desc, id asc) as the ready-set priority — explicitly NOT cordage order_key (it ranks Level before NodeId, demoting score-promoted successors; RV-132 F-3). survey + next gain a score column; policy_version \"priority.v2\" → \"priority.v3\"." },
   { id = "EX-4", text = "doctrine.toml gains an illustrative [priority] section; all survey/next/explain goldens (human + --json) updated to the score contract." },
+  { id = "EX-5", text = "Gate-green seam: all transitional `#[allow(dead_code)]` from PHASE-02/03/04 are removed — every field now has a live lib consumer (surfaces/mint/explain). No suppression survives the slice. `just gate` green." },
 ]
 verification = [
   { id = "VT-5",  expects = "reordering scenario (the point of the slice): a blocker gating one high-value slice outranks a blocker gating five ideas (old inbound-count ranked them opposite); AND a deep blocker gating a cheap chore that gates a valuable cone outranks a shallow blocker fronting one modest item (recursive-leverage proof)." },

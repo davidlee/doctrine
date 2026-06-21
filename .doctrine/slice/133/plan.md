@@ -95,6 +95,19 @@ evicted-seq guard.
 - **Behaviour-preservation backstop.** PHASE-02 (risk move) and PHASE-04
   (additive engine) both rely on the *existing* suites staying green unchanged as
   the proof of no regression; only PHASE-05 deliberately rewrites goldens.
+- **Gate-green vs. scaffold-then-consume.** `just gate` runs lib-only clippy (no
+  `--all-targets`, AGENTS.md) at zero warnings, so a field/struct introduced in
+  phase N but consumed only in N+1 trips `dead_code` "never read" — its only
+  readers are tests the gate doesn't compile. This is a per-phase artefact (the
+  single-slice design never hit it; everything is consumed by slice-end). The
+  mechanism, carried in each phase's EX criteria: a **transitional
+  `#[allow(dead_code)]`** on the not-yet-consumed addition, commented with the
+  phase that consumes it, **removed by that phase** — PHASE-04 clears PHASE-02/03's,
+  PHASE-05 clears PHASE-04's, none survives the slice (PHASE-05/EX-5). Before
+  reaching for the allow, the cheaper check is whether the gate already tolerates a
+  serde/constructor-written-but-unread field — if so, skip it. This is the main
+  execution-time wrinkle the small-phase split buys in exchange for reviewing the
+  correctness-critical engine in isolation; it is deliberate, not drift.
 - **Assumptions to confirm at execution** (carried into `/phase-plan`, not yet
   source-verified): (1) `provenance().cycles()` is populated for the `dep_overlay`
   specifically (it is the `Reject` overlay — design §3) and exposes member
