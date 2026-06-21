@@ -68,6 +68,12 @@ test-all:
 install: web-build
   cargo install --path .
 
+ff:
+  git fetch . edge:main
+
+force-push-main:
+  git push . edge:main
+
 # Run before a version bump / tag — this is where flake breakage (a new embed
 # root absent from the crane source graft, a toolchain skew) actually bites.
 # Pre-release gate: full workspace gate + hermetic nix flake build.

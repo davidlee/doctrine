@@ -29,6 +29,25 @@ or `/dispatch` accordingly.
 
 commit as soon as work is coherent; git add specifies paths, don't use -A unless asked.
 
+The one thing to watch with the edge/main
+split: dispatch setup forks from trunk
+(ladder → main). If main hasn't been
+promoted from edge before dispatch starts,
+the worktree won't include the latest
+authored content. So the pre-dispatch ritual
+becomes:
+
+ ```bash
+   git fetch . edge:main   # promote edge
+ → main (bring dispatch landing zone
+ current)
+   dispatch setup --slice N
+   dispatch sync --prepare-review
+   # ... phases ...
+   dispatch sync --integrate --trunk
+ refs/heads/main  # land on main
+ ```
+
 ---
 
 ## storage model (the storage rule)
