@@ -14,7 +14,7 @@ responsibilities = [
   "Define the two governance kinds — policy (POL) and standard (STD) — each as a thin per-kind module binding a `GovKind` descriptor (kind dir/prefix/scaffold, `stem`, `statuses`, `hidden`) onto the shared command-tier governance spine.",
   "Fix each kind's status vocabulary: policy is draft/required/deprecated/retired; standard adds `default` (recommended-unless-justified). Each vocab doubles as the `--status` known-set, kept in lockstep with its clap enum by a drift-canary test.",
   "Own the per-kind default-list hide-set (deprecated, retired) bound as `GovKind.hidden`, revealed again by `--all` or an explicit `--status`.",
-  "Carry the scaffold/render contract: a `<stem>-NNN.{toml,md}` fileset plus `NNN-slug` symlink, a frontmatter-free Statement/Rationale/Scope/Verification/References prose body, and a reserved inert `[relationships]` seam (supersedes, superseded_by, related, tags).",
+  "Carry the scaffold/render contract: a `<stem>-NNN.{toml,md}` fileset plus `NNN-slug` symlink, a frontmatter-free Statement/Rationale/Scope/Verification/References prose body, root-level `tags` (moved from the typed `[relationships]` seam in SL-136), and a reserved `[relationships]` table (`superseded_by` only; `supersedes` and `related` migrated to `[[relation]]` per SL-048/SL-095).",
   "Project each kind's in-force rows into the governance boot snapshot via `governance::list_rows` — Active Policies (required) and Active Standards (default + required) — using the kind descriptor plus an in-force status set.",
   "Model supersession as a `relationships.supersedes` link, never a status, so the status enum carries no Superseded variant.",
 ]

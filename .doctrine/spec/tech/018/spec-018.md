@@ -101,8 +101,9 @@ appends arrays only at EOF. A hand-edit that violates the ordering is an
 and `superseded_by` stay typed *together* — the forward edge is meaningless to move
 while its sanctioned reverse carve-out has no transactional owning verb (that verb
 is IMP-006's cross-kind lifecycle axis; building it gov-only here would be parallel
-implementation). Only governance `related` migrates. `tags` is classification, not a
-relation, and stays typed.
+implementation). Only governance `related` migrates and `supersedes` (SL-095).
+`tags` is classification, not a
+relation; it moved to root-level uniform storage in SL-136.
 
 ### Validation policy: write-strict, read-tolerant
 
