@@ -18,7 +18,7 @@ SL-132 — Wire estimate/value display in show path
 wire-estimate-value-display-in-show-path · proposed
 conduct: self/auto
 created 2026-06-21 · updated 2026-06-21
-estimate: 80% confident this takes 3–5 espresso_shots
+estimate: 3–5 espresso_shots (80% confidence)
 value: 5 magic_beans
 
 relationships:
@@ -27,8 +27,9 @@ relationships:
 # body text
 ```
 
-- **Estimate row**: confidence-framed percentile bounds from config
-  (`lower_confidence` / `upper_confidence`), displayed with resolved unit
+- **Estimate row**: confidence-framed bounds with parenthetical confidence level
+  (`"3–5 espresso_shots (80% confidence)"`), using config-driven percentile
+  bounds and resolved unit
 - **Value row**: magnitude + resolved unit (`"Value: {magnitude} {unit}"`)
 - **Absent facets → no row**. An unauthored slice's output is byte-identical
   to the current output. No "none recorded" placeholder.
@@ -45,7 +46,7 @@ relationships:
 | `src/estimate.rs:26-28` | Remove `#[expect(dead_code)]` on `mod display` | Display helpers gain a live call site |
 | `src/estimate.rs:40-49` | Remove `#[expect(dead_code)]` on confidence constants | Consumed by confidence display |
 | `src/estimate.rs:86-90` | Remove `#[expect(dead_code)]` on `resolve_confidence` | Called by `format_show` to pick percentile band |
-| `src/estimate/display.rs` | Add `format_estimate_confidence` | Signature: `fn format_estimate_confidence(facet: &EstimateFacet, lower_pct: f64, upper_pct: f64, unit: &str) -> String` |
+| `src/estimate/display.rs` | Add `format_estimate_confidence` | Signature: `fn format_estimate_confidence(facet: &EstimateFacet, lower_pct: f64, upper_pct: f64, unit: &str) -> String` → `"2.6–7.4 espresso_shots (80% confidence)"` |
 | `src/value.rs` | Add `format_value_normal` | Signature: `fn format_value_normal(facet: &ValueFacet, unit: &str) -> String` → `"Value: 5 magic_beans"` |
 | `src/slice.rs` tests | Add `format_show` cases with facets present + absent + custom bounds | Both present, estimate-only, value-only, neither (golden), custom confidence, zero-width estimate |
 
@@ -70,14 +71,14 @@ lower_bound = facet.lower + lower_pct × (facet.upper - facet.lower)
 upper_bound = facet.lower + upper_pct × (facet.upper - facet.lower)
 ```
 
-Output: `"{:.0}% confident this takes {:.1}–{:.1} {unit}"`
+Output: `"{:.1}–{:.1} {unit} ({:.0}% confidence)"`
 
 Defaults: `lower_pct = 0.1`, `upper_pct = 0.9` → 80% band.
 Configurable via `doctrine.toml` `[estimation].lower_confidence` /
 `[estimation].upper_confidence`.
 
 Example: `EstimateFacet { lower: 2.0, upper: 8.0 }` with (0.1, 0.9) →
-`"80% confident this takes 2.6–7.4 espresso_shots"`
+`"2.6–7.4 espresso_shots (80% confidence)"`
 
 ### D3 — Absent facets → no row
 
@@ -120,7 +121,7 @@ Risk facet not touched by this slice. `EntityFacets` will carry
 
 | ID | What | How |
 |----|------|-----|
-| VT-1 | Estimate present → confidence row rendered | Unit test: `format_show` with `estimate = Some(...)` produces confidence-framed row |
+| VT-1 | Estimate present → confidence row rendered | Unit test: `format_show` with `estimate = Some(...)` produces `"3–5 espresso_shots (80% confidence)"` |
 | VT-2 | Estimate absent → no row | Unit test: no estimate line in output |
 | VT-3 | Value present → row rendered | Unit test: value row with correct unit |
 | VT-4 | Value absent → no row | Unit test: no value line |
@@ -129,7 +130,7 @@ Risk facet not touched by this slice. `EntityFacets` will carry
 | VT-7 | JSON unchanged | Existing `show_json` tests pass unchanged |
 | VT-8 | Gate zero warnings | `just check` passes; `just gate` passes |
 | VT-9 | Custom confidence bounds from config | Unit test: `lower_confidence=0.25, upper_confidence=0.75` → "50% confident..." |
-| VT-10 | Zero-width estimate (lower==upper) | Unit test: `{lower:5, upper:5}` + (0.1,0.9) → "80% confident this takes 5.0–5.0 espresso_shots" |
+| VT-10 | Zero-width estimate (lower==upper) | Unit test: `{lower:5, upper:5}` + (0.1,0.9) → `"5.0–5.0 espresso_shots (80% confidence)"` |
 
 ## Non-goals
 
