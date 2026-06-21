@@ -73,7 +73,7 @@ severity = "major"
 title = "Expected ADR-001 placement for new src/facet.rs; observed no tier assignment or layering.toml plan"
 detail = "Evidence: ADR-001 makes `.doctrine/adr/001/layering.toml` the authoritative tier assignment and the fitness gate checks new module edges. `.doctrine/slice/132/design.md` creates `src/facet.rs` but does not classify it as leaf/engine/command, list expected imports, or mention updating `layering.toml`. Because `EntityFacets` imports `EstimateFacet` and `ValueFacet` and is intended for both show and priority consumers, its tier is an architectural decision, not an implementation detail."
 disposition = "fixed"
-response = 'D9 corrected: src/facet.rs classified as leaf tier (imports only estimate + value, both leaf). layering.toml entry specified: facet = "leaf" with rationale. Code-impact table includes the layering.toml row. ADR-001 gate (just gate) enforces this — the previous claim of "no change needed" was wrong.'
+response = 'Code impact row corrected: "ADR-001: leaf tier — imports only estimate + value (both leaf)." Now consistent with D9 and the layering.toml entry. All three surfaces (code impact table, D9 prose, layering.toml row) agree on leaf tier.'
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
