@@ -69,12 +69,11 @@ symlink by token substitution over embedded templates. The prose body is prose
 only with **no YAML frontmatter** — a Statement / Rationale / Scope / Verification
 / References structure — with all queryable metadata in the sister TOML. Relations
 follow the **cross-corpus relation contract in SPEC-018** (governed by ADR-010 over
-ADR-004's outbound-only rule), not re-told here: `related` is a tier-1
-`[[relation]]` edge (migrated in SL-048), while the supersession pair `supersedes` /
-`superseded_by` and free-text `tags` stay a typed `[relationships]` table — inert
-until the transactional supersede verb ([[IMP-006]]) wires them. The reverse
-`superseded_by` is the ADR-004 §5 carve-out, verb-written, never hand-authored on
-both sides.
+ADR-004's outbound-only rule), not re-told here: `related` and the supersession
+pair `supersedes` / `superseded_by` are tier-1 `[[relation]]` edges (migrated in
+SL-048 and SL-095, with the transactional supersede verb landed in SL-062);
+`tags` moved to root-level (SL-136) and is uniform across kinds. `superseded_by`
+is the ADR-004 §5 carve-out, verb-written, never hand-authored on both sides.
 
 ### Boot-snapshot projection
 
