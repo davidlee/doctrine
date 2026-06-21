@@ -21,3 +21,14 @@ and derive status/title/facets from the one parsed table, eliminating both the s
 parse and the divergent-read window. Out of scope for SL-103; not a defect — the
 shipped code matches the ratified design. Touches the `read_meta`/`Meta` seam SL-101
 deliberately kept facet-free, so scope it carefully.
+
+## Companion debt: scan↔show facet parse-path duplication (SL-133 OQ-3)
+
+SL-133's design (§5.1, §7 D2/D3, OQ-3) surfaced the *other half* of the same
+read_facets smell: the **scan** path (`read_facets`) and the **show** path
+(`SliceDoc` serde) parse the same `[estimate]`/`[value]` facets twice through two
+separate code paths. The single-carrier fix unifies both — collapse `ScannedEntity`
+onto one `EntityFacets` carrier so scan and show derive facets from one projection.
+SL-133 deferred it (D2/D3): unifying now reworks done code with a bigger blast
+radius. Resolving IMP-109's single-table read and this scan↔show carrier together is
+the cohesive cleanup; do them as one piece of work.
