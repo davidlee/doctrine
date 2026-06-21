@@ -572,9 +572,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 note,
             },
         ),
-        Command::Coverage { command } => {
-            crate::commands::coverage::dispatch(command, color)
-        }
+        Command::Coverage { command } => crate::commands::coverage::dispatch(command, color),
         Command::Inspect {
             id,
             format,

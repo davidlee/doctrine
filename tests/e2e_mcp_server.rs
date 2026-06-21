@@ -757,17 +757,17 @@ fn memory_find_and_list_roundtrip() {
     let mut reader = BufReader::new(stdout);
 
     // memory_find: scoped query for "safe"
-    let params = tools_call_params(
-        "memory_find",
-        serde_json::json!({ "query": "safe" }),
-    );
+    let params = tools_call_params("memory_find", serde_json::json!({ "query": "safe" }));
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
     assert!(resp.get("error").is_none(), "memory_find: {resp:?}");
 
     let text = tool_result_text(&resp);
     let out: Value = serde_json::from_str(text).expect("parse memory_find JSON");
     assert_eq!(out["kind"], "memory_find");
-    assert!(out["total"].as_u64().unwrap() >= 1, "should find at least 1 memory");
+    assert!(
+        out["total"].as_u64().unwrap() >= 1,
+        "should find at least 1 memory"
+    );
     let rows = out["rows"].as_array().unwrap();
     for row in rows {
         assert!(row.get("uid").is_some());
@@ -777,10 +777,7 @@ fn memory_find_and_list_roundtrip() {
     }
 
     // memory_list with type filter
-    let params = tools_call_params(
-        "memory_list",
-        serde_json::json!({ "type": "fact" }),
-    );
+    let params = tools_call_params("memory_list", serde_json::json!({ "type": "fact" }));
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
     assert!(resp.get("error").is_none(), "memory_list: {resp:?}");
 
@@ -818,7 +815,10 @@ fn memory_retrieve_min_trust_suppression() {
         }),
     );
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
-    assert!(resp.get("error").is_none(), "memory_retrieve high: {resp:?}");
+    assert!(
+        resp.get("error").is_none(),
+        "memory_retrieve high: {resp:?}"
+    );
 
     let text = tool_result_text(&resp);
     assert!(
@@ -832,7 +832,10 @@ fn memory_retrieve_min_trust_suppression() {
         serde_json::json!({ "query": "Low-Trust" }),
     );
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
-    assert!(resp.get("error").is_none(), "memory_retrieve default: {resp:?}");
+    assert!(
+        resp.get("error").is_none(),
+        "memory_retrieve default: {resp:?}"
+    );
 
     let text = tool_result_text(&resp);
     assert!(
@@ -873,13 +876,28 @@ fn memory_show_consumable_notes_backlinks() {
 
     let memory = &out["memory"];
     assert!(memory.get("consumable").is_some(), "missing consumable");
-    assert!(memory.get("held_back_on_retrieve").is_some(), "missing held_back");
+    assert!(
+        memory.get("held_back_on_retrieve").is_some(),
+        "missing held_back"
+    );
     assert!(memory.get("backlinks").is_some(), "missing backlinks");
-    assert!(memory.get("backlinks_total").is_some(), "missing backlinks_total");
-    assert!(memory["consumable"].as_bool().unwrap(), "high-trust active should be consumable");
-    assert!(memory["backlinks_total"].as_u64().unwrap() >= 1, "MEM_C should have backlinks from MEM_D");
+    assert!(
+        memory.get("backlinks_total").is_some(),
+        "missing backlinks_total"
+    );
+    assert!(
+        memory["consumable"].as_bool().unwrap(),
+        "high-trust active should be consumable"
+    );
+    assert!(
+        memory["backlinks_total"].as_u64().unwrap() >= 1,
+        "MEM_C should have backlinks from MEM_D"
+    );
 
-    assert!(out.get("body").is_none(), "summary view should exclude body");
+    assert!(
+        out.get("body").is_none(),
+        "summary view should exclude body"
+    );
 
     kill(child);
 }
@@ -907,7 +925,9 @@ fn memory_retrieve_reference_to_held_back_memory_returns_error() {
     );
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
 
-    let err = resp.get("error").expect("should have error for held-back memory");
+    let err = resp
+        .get("error")
+        .expect("should have error for held-back memory");
     assert_eq!(err["code"], -32603, "held-back should be internal error");
     assert!(
         err["data"]["message"]
