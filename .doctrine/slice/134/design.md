@@ -46,7 +46,16 @@ unchanged — this is additive, not a rewire.
 
 **No-op guard per type:**
 - `Str`: read back via `Value::as_str()`, compare string-equal
-- `Arr`: read back via `as_array()` → `get_str()`, element-wise ordered compare
+- `Arr`: read back via `as_array()` → iterate `.get(i).and_then(Value::as_str)`,
+  element-wise ordered compare. Non-string array elements (integer, nested
+  table) are treated as "not equal" → triggers overwrite, matching the
+  integer-tolerance pattern from `set_facet`'s float guard.
+
+**Silent correction of malformed managed keys:** Both `set_facet` and
+`set_facet_mixed` overwrite managed keys when their current value has the wrong
+type (scalar where array expected, integer where string expected) — never bail
+on a malformed managed key inside a valid table. This is consistent with the
+existing `set_facet` behaviour for float fields.
 
 **Behaviour-preservation gate:** All existing `set_facet` callers and VT tests
 stay unchanged. `set_facet_mixed` is additive; the shared leaf compiles and
@@ -80,11 +89,18 @@ Options:
   -p, --path <PATH>     explicit project root (default: auto-detect)
 ```
 
+The `controls` field annotation:
+
+```rust
+#[arg(long, long_help = "Controls — each occurrence replaces the entire list (not additive)")]
+pub(crate) controls: Vec<String>,
+```
+
 Rules:
 - At least one of `--likelihood` / `--impact` required — error if neither supplied
 - `--origin` optional — sets the free-text `origin` field
 - `--controls` repeatable — `--controls A --controls B` sets `controls = ["A", "B"]`
-  (replaces the whole list; help text states this explicitly)
+  (replaces the whole list; `long_help` states this explicitly)
 - Levels auto-complete from `RiskLevel::ValueEnum` variants
 - Kind gate enforced (see §2.3)
 
@@ -109,6 +125,7 @@ Matches `estimate`/`value` pattern:
 
 - Set changed: `risk set: RSK-008 likelihood=medium impact=high origin="supply chain" controls=["ci-check"]`
 - Set unchanged: `risk unchanged: RSK-008 likelihood=medium impact=high`
+  (includes all supplied fields — origin and controls also named if supplied but unchanged)
 - Clear: `risk cleared: RSK-008`
 - Clear no-op: `no risk facet to clear: RSK-008`
 
@@ -161,6 +178,7 @@ Files NOT changed: `estimate.rs`, `value.rs`, all other modules.
 | VT-10 | facet.rs | `set` with `--controls A --controls B` writes `["A", "B"]` |
 | VT-11 | facet.rs | `set` preserves non-managed facet keys (origin survives likelihood-only set) |
 | VT-12 | — | Invalid level token → clap rejection (clap intrinsic; not tested — `RiskLevel::ValueEnum` parse is clap's contract) |
+| VT-18 | facet.rs | `set` on risk item with absent `[facet]` table — allocates table and writes fields |
 | VT-13 | facet_write.rs | `set_facet_mixed` allocates absent `[facet]` with Str/Arr fields |
 | VT-14 | facet_write.rs | `set_facet_mixed` overwrites present Str/Arr managed keys |
 | VT-15 | facet_write.rs | `set_facet_mixed` no-op on identical Str values |
@@ -197,10 +215,20 @@ Files NOT changed: `estimate.rs`, `value.rs`, all other modules.
   handles the float-only path for estimate/value. Adding a `Float` variant now
   would create parallel vocabulary — add it later if a facet needs it.
 
-- **D6 — Kind gate reads `kind` via `toml_edit`, not full `BacklogItem` parse.**
+- **D6 — `ItemKind::ALL` visibility bump.** `ALL` is in declaration order
+  (Issue, Improvement, Chore, Risk, Idea), not priority order. Modules consuming
+  it must use `ordinal()` for priority grouping — the `ALL` array is for
+  iteration only. The existing `from_prefix` method already iterates `ALL`
+  internally and serves as precedent for this pattern being safe.
+
+- **D7 — Kind gate reads `kind` via `toml_edit`, not full `BacklogItem` parse.**
   Cheaper, no need to parse the full entity. The `read_kind` helper iterates
   `ItemKind::ALL` (visibility bumped to `pub(crate)`) so the mapping stays
   single-source.
+
+- **D8 — Empty `--origin` is indistinguishable from cleared.** The scaffold
+  seeds `origin = ""`, so setting `--origin ""` is a no-op (same as the seeded
+  value). The Str no-op guard handles this transparently — no special case needed.
 
 ## 8. Risks & open questions
 
