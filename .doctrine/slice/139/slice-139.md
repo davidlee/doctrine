@@ -8,7 +8,7 @@ Today that contract is uneven. Some kinds already have a `show` surface and JSON
 
 This slice scopes the cross-kind read-surface normalization. It is governed by SPEC-013's uniform CLI grammar, SPEC-004's entity storage rule, SPEC-014's slice surface, ADR-001's layering boundary, and ADR-005's read-via-`show` discipline.
 
-Related but not governing backlog context: IMP-133 and IMP-135 cover broader CLI UX/help consistency; IMP-125 covers per-kind reference parsing consolidation; IMP-145 covers a richer future entity `info` surface. This slice is narrower: entity `show` parity and a dedicated file path verb.
+Related but not governing backlog context: IMP-133 and IMP-135 cover broader CLI UX/help consistency; IMP-125 covers per-kind reference parsing consolidation. An info/summary surface was explored during design but found to be a design dead-end (IMP-145, closed wont-do). This slice is narrower: entity `show` parity and a dedicated file path verb.
 
 ## Scope & Objectives
 
@@ -21,7 +21,7 @@ Related but not governing backlog context: IMP-133 and IMP-135 cover broader CLI
 - Add `--single` to `paths` as an explicit shorthand for returning only the primary path (`| head -n 1` without shell dependence).
 - Preserve existing `show --json` semantics as body/reconstruction plus kind-owned structured/embedded data; do not add file path data to `show --json`.
 - Prefer a shared paths projection helper and reference-resolution wiring over per-kind bespoke implementations, preserving ADR-001 layering: filesystem access stays out of `listing.rs` and isolated from kind-specific renderers.
-- Keep the broader `info` / summary read-surface question out of scope; it is captured as follow-up IMP-145.
+- Keep the broader `info` / summary read-surface question out of scope. An info/summary surface was explored during this slice's design and found to be a design dead-end (IMP-145, closed wont-do). It does not belong as a follow-up.
 
 ## Non-Goals
 
@@ -45,7 +45,7 @@ Related but not governing backlog context: IMP-133 and IMP-135 cover broader CLI
 - `show --json` is already a relied-on full-inspection surface (body plus structured/embedded data for specs, memory, review, slice, etc.); adding operational file paths there would conflate two intents and create planned rework toward `info`.
 - A dedicated `paths` verb is a wider CLI grammar change than a show flag; SPEC-013 may need a revision because the uniform verb set expands beyond `new/list/show/status`.
 - Reference parsing remains per-kind today; implement with minimal adapters unless the design proves IMP-125's broader consolidation is required.
-- Show-parity scope: the normalization objective is CLI-grammar parity (`--json` shorthand on every kind), not JSON-output-shape uniformity. JSON shape normalization across kinds belongs to IMP-145. See design §7 D8.
+- Show-parity scope: the normalization objective is CLI-grammar parity (`--json` shorthand on every kind), not JSON-output-shape uniformity. JSON shape normalization across kinds is a dead-end (IMP-145, closed wont-do) — the info-surface work was explored and withdrawn. See design §7 D8.
 
 ## Verification / Closure Intent
 
@@ -61,5 +61,5 @@ Normalize entity `show` across authored kinds and make backing file paths discov
 ## Follow-Ups
 
 - Broader CLI UX/help consistency remains with IMP-133 / IMP-135.
-- Entity summary/info command exploration is captured as IMP-145.
+- Entity summary/info command exploration was captured as IMP-145 (closed wont-do). No follow-up is needed.
 - Reference parsing consolidation remains with IMP-125 unless the design finds it is directly required for this slice.
