@@ -163,7 +163,7 @@ fn vt1_initialize_handshake() {
     kill(child);
 }
 
-// ── VT-2: tools/list returns 10 tools ────────────────────────────────────
+// ── VT-2: tools/list returns 14 tools ────────────────────────────────────
 
 #[test]
 fn vt2_tools_list() {
@@ -184,7 +184,7 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 10, "expected 10 tools, got {tools:?}");
+    assert_eq!(tools.len(), 14, "expected 14 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -198,6 +198,10 @@ fn vt2_tools_list() {
         "review_withdraw",
         "review_status",
         "review_prime",
+        "memory_find",
+        "memory_retrieve",
+        "memory_show",
+        "memory_list",
     ] {
         assert!(
             names.contains(expected),
