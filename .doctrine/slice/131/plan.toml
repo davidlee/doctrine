@@ -1,0 +1,133 @@
+# Implementation plan for SL-131 — the authored, durable phase plan.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-131"
+
+[specs]
+primary       = ["SPEC-007"]
+collaborators = ["PRD-004"]
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Writer abstraction"
+objective = "Add `writer: &mut impl Write` param to all five memory run_* functions, replace stdout writes, wire CLI call sites. Existing tests stay green with byte-identical output."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §1 and §6 are approved and coherent" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "run_find, run_retrieve, expand_graph (retrieve.rs) accept writer: &mut impl Write as first param" },
+  { id = "EX-2", text = "run_show, run_list (memory.rs) accept writer: &mut impl Write as first param" },
+  { id = "EX-3", text = "All write!(io::stdout(), …) and related stdout writes replaced with write!(writer, …)" },
+  { id = "EX-4", text = "CLI call sites in main.rs pass &mut io::stdout() as first arg" },
+  { id = "EX-5", text = "run_find rejects limit=0; run_retrieve rejects limit=0 and caps at RETRIEVE_LIMIT_MAX (20). run_find does NOT cap — CLI --limit 9999 passes through." },
+  { id = "EX-6", text = "all existing tests pass — byte-identical output (no behavioural change)" },
+]
+verification = [
+  { id = "VT-1", expects = "retrieve::run_find(&mut Vec<u8>, …) writes expected JSON to buffer" },
+  { id = "VT-2", expects = "retrieve::run_retrieve(&mut Vec<u8>, …) writes framed blocks to buffer" },
+  { id = "VT-3", expects = "memory::run_show(&mut Vec<u8>, …) writes expected JSON to buffer" },
+  { id = "VT-4", expects = "memory::run_list(&mut Vec<u8>, …) writes expected output to buffer" },
+  { id = "VT-5", expects = "CLI doctrine memory find/retrieve/show/list produce byte-identical output" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Structured helpers and visibility bumps"
+objective = "Add check_retrievable, retrieve_reference, find_for_mcp, filtered_list, list_for_mcp, backlink_rows_for. Bump private functions to pub(crate). No MCP wiring yet — helpers are inert."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — writer params in place, all tests green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "check_retrievable(m, part, include_draft, min_trust, today) added to retrieve.rs — applies base_filter → thread_expiry → held_back in order" },
+  { id = "EX-2", text = "retrieve_reference(writer, root, reference, include_draft, min_trust) added — resolve → check_retrievable → staleness → render_show" },
+  { id = "EX-3", text = "find_for_mcp(…) added — reuses load_query→query, returns FindForMcp { rows, total } with key/held_back_on_retrieve fields" },
+  { id = "EX-4", text = "filtered_list(root, type_f, filter) added — shared helper for list_rows and list_for_mcp, reusing listing::retain" },
+  { id = "EX-5", text = "list_for_mcp(root, …, limit: usize) added — validate_statuses → listing::build → filtered_list → paginate → ListForMcp" },
+  { id = "EX-6", text = "backlink_rows_for(root, all: &[Memory], uid) added — factored from run_backlinks, accepts pre-collected memories" },
+  { id = "EX-7", text = "list_rows internally delegates to filtered_list (no behaviour change)" },
+  { id = "EX-8", text = "Visibility bumps: holdback_floor, held_back, staleness, git_facts (retrieve.rs); resolve_memory_from_all (memory.rs) → pub(crate)" },
+  { id = "EX-9", text = "BacklinkRow struct and fields → pub(crate)" },
+]
+verification = [
+  { id = "VT-1", expects = "check_retrievable correctly blocks: wrong workspace, wrong repo, quarantined, retracted, archived, superseded, draft, expired thread, held-back memory" },
+  { id = "VT-2", expects = "check_retrievable admits: active memory in same workspace/repo, verified thread, high-trust memory" },
+  { id = "VT-3", expects = "retrieve_reference writes security-framed block for valid reference" },
+  { id = "VT-4", expects = "retrieve_reference errors on: quarantined/retracted/draft(no include_draft)/held-back/expired-thread memory" },
+  { id = "VT-5", expects = "find_for_mcp returns rows with key field, held_back_on_retrieve computed correctly" },
+  { id = "VT-6", expects = "filtered_list applies substr (key+title), status, tag filters identically to list_rows" },
+  { id = "VT-7", expects = "list_for_mcp with limit=50 returns at most 50 rows; limit=0 returns all" },
+  { id = "VT-8", expects = "backlink_rows_for returns wikilink + relation backlinks with method provenance" },
+  { id = "VT-9", expects = "all PHASE-01 tests still green; list_rows behaviour unchanged" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "MCP dispatch unification and memory tool definitions"
+objective = "Change call_tool return type to String, wrap review arms, fix double-encoding. Add 4 memory tool definitions, parse helpers, and handler match arms. Wire handlers to PHASE-02 helpers."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — all structured helpers present and tested" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "call_tool returns anyhow::Result<String>; 10 review arms wrapped with .map(|o| serde_json::to_string(&o)?)" },
+  { id = "EX-2", text = "handle_tools_call Ok arm uses McpToolResult::text(out) directly (no double-encoding)" },
+  { id = "EX-3", text = "ExtractFields gains opt_bool_field(name) -> Option<bool>" },
+  { id = "EX-4", text = "parse_memory_type, parse_status, parse_lifespan helpers added — wrap errors with invalid arguments: prefix" },
+  { id = "EX-5", text = "4 memory tool definitions added to tools() vec: memory_find, memory_retrieve, memory_show, memory_list" },
+  { id = "EX-6", text = "memory_find handler: find_for_mcp + pagination envelope; no-selector caps at 20" },
+  { id = "EX-7", text = "memory_retrieve handler: mutual exclusivity validated; ref branch → retrieve_reference; scope branch → run_retrieve" },
+  { id = "EX-8", text = "memory_show handler: run_show JSON → collect_all + freeze → resolve Memory → check_retrievable + backlink_rows_for → enriched JSON; view, include_body, and backlinks_limit honoured" },
+  { id = "EX-9", text = "memory_list handler: limit resolved (default 50, 0→all) → list_for_mcp → pagination envelope" },
+  { id = "EX-10", text = "memory_retrieve validates min_trust via parse_min_trust before branching" },
+]
+verification = [
+  { id = "VT-1", expects = "review_new/list/show/raise/dispose/verify/contest/withdraw/status/prime produce byte-identical JSON after call_tool→String" },
+  { id = "VT-2", expects = "MCP response content[0].text parses as JSON object, not quoted string (double-encoding guard)" },
+  { id = "VT-3", expects = "tool_list_has_10_tools updated to 14; tool_list_names includes 4 new names" },
+  { id = "VT-4", expects = "memory_find with no args returns capped 20 rows with total/offset/limit/next_offset" },
+  { id = "VT-5", expects = "memory_find rows include key and held_back_on_retrieve fields" },
+  { id = "VT-6", expects = "memory_retrieve with min_trust: banana returns -32602" },
+  { id = "VT-7", expects = "memory_retrieve with reference + query probe returns -32602 (mutual exclusivity)" },
+  { id = "VT-8", expects = "memory_show with view: summary excludes body; with invalid uid returns error" },
+  { id = "VT-9", expects = "memory_show with backlinks_limit: 5 returns ≤5 backlinks + backlinks_total" },
+  { id = "VT-10", expects = "memory_list defaults to 50 rows; limit: 0 returns all" },
+  { id = "VT-11", expects = "all PHASE-01 + PHASE-02 tests still green" },
+  { id = "VT-12", expects = "cargo clippy zero warnings" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Integration tests and skill updates"
+objective = "Add MCP integration tests against a live server, update skill files, final gates."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — all MCP handlers wired and unit-tested" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "retrieve-memory/SKILL.md: MCP tool preference preamble added" },
+  { id = "EX-2", text = "reviewing-memory/SKILL.md: MCP shortcut note added" },
+  { id = "EX-3", text = "audit/SKILL.md: MCP tool preference preamble added" },
+  { id = "EX-4", text = "Integration tests: memory_find + memory_list round-trip against repo's own corpus" },
+  { id = "EX-5", text = "Integration tests: memory_retrieve with trust holdback (low-trust high-severity suppressed)" },
+  { id = "EX-6", text = "Integration tests: memory_show with consumable/notes/backlinks enrichment" },
+  { id = "EX-7", text = "just check green" },
+  { id = "EX-8", text = "cargo clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "MCP memory_find + memory_list request-response cycle succeeds against doctrine repo corpus" },
+  { id = "VT-2", expects = "MCP memory_retrieve with min_trust: high suppresses low-trust high-severity memory" },
+  { id = "VT-3", expects = "MCP memory_show returns consumable: false and notes for quarantined memory" },
+  { id = "VT-4", expects = "MCP memory_retrieve with reference to held-back memory returns error" },
+  { id = "VA-1", expects = "Skill files contain correct MCP preamble text; no formatting errors" },
+  { id = "VT-5", expects = "just check green" },
+]
+specs        = []
+requirements = []
