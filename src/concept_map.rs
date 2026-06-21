@@ -1530,6 +1530,191 @@ pub(crate) fn relabel_edge_in_dsl(
 }
 
 // ---------------------------------------------------------------------------
+// Pure: rename_node_occurrence_in_dsl
+// ---------------------------------------------------------------------------
+
+/// Which endpoint of an edge triple a single-occurrence rename targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum EdgeEndpoint {
+    Source,
+    Target,
+}
+
+/// Rewrite **one** edge's named endpoint label. Finds the first line matching
+/// `(source, rel, target)` by label and rewrites only the `cell` segment to
+/// `new_label`; other rows using the old label are byte-unchanged.
+///
+/// Same shape as [`relabel_edge_in_dsl`]: a no-op (the rewritten endpoint
+/// equals its current value) returns the DSL unchanged, and the duplicate guard
+/// is key-based — distinct label spellings can derive the same node key, so a
+/// label-only check would miss a collision and corrupt the DSL.
+pub(crate) fn rename_node_occurrence_in_dsl(
+    old_dsl: &str,
+    source: &str,
+    rel: &str,
+    target: &str,
+    cell: EdgeEndpoint,
+    new_label: &str,
+) -> Result<String, ConceptMapMutationError> {
+    let source = source.trim();
+    let rel = rel.trim();
+    let target = target.trim();
+    let new_label = new_label.trim();
+
+    if source.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("source".into()));
+    }
+    if rel.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("relation".into()));
+    }
+    if target.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("target".into()));
+    }
+    if new_label.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("new label".into()));
+    }
+
+    // No-op short-circuit (before the scan, mirroring relabel_edge_in_dsl): the
+    // endpoint we would rewrite is one of the match inputs, so an unchanged
+    // value means there is nothing to do.
+    let current = match cell {
+        EdgeEndpoint::Source => source,
+        EdgeEndpoint::Target => target,
+    };
+    if current == new_label {
+        return Ok(old_dsl.to_string());
+    }
+
+    // Find the first line matching (source, rel, target) by label.
+    let mut matched_line: Option<usize> = None;
+    let mut lines: Vec<String> = Vec::new();
+    for (idx, line_str) in old_dsl.lines().enumerate() {
+        let m = idx + 1; // 1-based, matching parse_dsl
+        let trimmed = line_str.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            lines.push(line_str.to_string());
+            continue;
+        }
+        let segments: Vec<&str> = line_str.split(" > ").collect();
+        if segments.len() == 3 && matched_line.is_none() {
+            let ls = segments.first().map_or("", |s| s.trim());
+            let lr = segments.get(1).map_or("", |s| s.trim());
+            let lt = segments.get(2).map_or("", |s| s.trim());
+            if ls == source && lr == rel && lt == target {
+                matched_line = Some(m);
+                // Rewrite only the named endpoint; the other two segments keep
+                // their original bytes.
+                let raw_s = segments.first().copied().unwrap_or_default();
+                let raw_r = segments.get(1).copied().unwrap_or_default();
+                let raw_t = segments.get(2).copied().unwrap_or_default();
+                let (out_s, out_t) = match cell {
+                    EdgeEndpoint::Source => (new_label, raw_t),
+                    EdgeEndpoint::Target => (raw_s, new_label),
+                };
+                lines.push([out_s, raw_r, out_t].join(" > "));
+                continue;
+            }
+        }
+        lines.push(line_str.to_string());
+    }
+
+    let Some(m) = matched_line else {
+        return Err(ConceptMapMutationError::EdgeNotFound);
+    };
+
+    // Key-based duplicate guard: the rewritten triple must not collide with
+    // another existing edge on a different line.
+    let (new_source, new_target) = match cell {
+        EdgeEndpoint::Source => (new_label, target),
+        EdgeEndpoint::Target => (source, new_label),
+    };
+    let new_from_key = derive_node_key(new_source);
+    let new_to_key = derive_node_key(new_target);
+    let parsed = parse_dsl(old_dsl);
+    if let Some(dup) = parsed.edges.iter().find(|e| {
+        e.from_key == new_from_key && e.rel == rel && e.to_key == new_to_key && e.line != m
+    }) {
+        return Err(ConceptMapMutationError::DuplicateEdge { line: dup.line });
+    }
+
+    Ok(lines.join("\n"))
+}
+
+// ---------------------------------------------------------------------------
+// Pure: relabel_rel_all_in_dsl
+// ---------------------------------------------------------------------------
+
+/// Rewrite the `rel` segment of **every** line whose `rel == old_rel` to
+/// `new_rel`. A no-op (`old_rel == new_rel`) returns the DSL unchanged.
+///
+/// The duplicate guard is **atomic**: if any rewritten line would collide
+/// (key-based) with an existing line or another rewritten line, the whole op is
+/// rejected (`DuplicateEdge { line }`) and the original DSL is left untouched —
+/// the pure layer returns `Err`, so the shell never performs a partial write.
+pub(crate) fn relabel_rel_all_in_dsl(
+    old_dsl: &str,
+    old_rel: &str,
+    new_rel: &str,
+) -> Result<String, ConceptMapMutationError> {
+    let old_rel = old_rel.trim();
+    let new_rel = new_rel.trim();
+
+    if old_rel.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("old relation".into()));
+    }
+    if new_rel.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("new relation".into()));
+    }
+    if old_rel == new_rel {
+        return Ok(old_dsl.to_string());
+    }
+
+    // Rewrite every matching line's rel segment; remember which lines changed.
+    let mut lines: Vec<String> = Vec::new();
+    let mut rewritten: Vec<usize> = Vec::new();
+    for (idx, line_str) in old_dsl.lines().enumerate() {
+        let m = idx + 1; // 1-based, matching parse_dsl
+        let trimmed = line_str.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            lines.push(line_str.to_string());
+            continue;
+        }
+        let segments: Vec<&str> = line_str.split(" > ").collect();
+        if segments.len() == 3 && segments.get(1).map_or("", |s| s.trim()) == old_rel {
+            let s = segments.first().copied().unwrap_or_default();
+            let t = segments.get(2).copied().unwrap_or_default();
+            lines.push([s, new_rel, t].join(" > "));
+            rewritten.push(m);
+        } else {
+            lines.push(line_str.to_string());
+        }
+    }
+
+    // Atomic key-based duplicate guard. Parse the full candidate: parse_dsl
+    // collapses a colliding triple into a `DuplicateEdge` diagnostic (the
+    // second line is dropped from `edges`), so collisions surface there, not in
+    // `edges`. Any collision that involves a rewritten line — whether against an
+    // existing line or another rewritten line — rejects the whole op before it
+    // is returned (no partial write).
+    let candidate = lines.join("\n");
+    let parsed = parse_dsl(&candidate);
+    for diag in &parsed.diagnostics {
+        if let ConceptMapDiagnostic::DuplicateEdge {
+            line,
+            existing_line,
+            ..
+        } = diag
+            && (rewritten.contains(line) || rewritten.contains(existing_line))
+        {
+            return Err(ConceptMapMutationError::DuplicateEdge { line: *line });
+        }
+    }
+
+    Ok(candidate)
+}
+
+// ---------------------------------------------------------------------------
 // Pure: rename_node_in_dsl
 // ---------------------------------------------------------------------------
 
@@ -3113,6 +3298,158 @@ mod tests {
         assert!(matches!(
             rename_node_in_dsl(&dsl, "X", ""),
             Err(ConceptMapMutationError::EmptyField(_))
+        ));
+    }
+
+    // --- rename_node_occurrence_in_dsl tests ---
+
+    #[test]
+    fn rename_node_occurrence_rewrites_source_leaves_sibling_unchanged() {
+        // "User" appears in two rows; renaming the source of row 1 only must
+        // leave row 2 (also using "User") byte-unchanged.
+        let dsl = make_dsl(&["User > likes > Apple", "User > hates > Onion"]);
+        let result = rename_node_occurrence_in_dsl(
+            &dsl,
+            "User",
+            "likes",
+            "Apple",
+            EdgeEndpoint::Source,
+            "Customer",
+        )
+        .unwrap();
+        assert_eq!(result, "Customer > likes > Apple\nUser > hates > Onion");
+    }
+
+    #[test]
+    fn rename_node_occurrence_rewrites_target_leaves_sibling_unchanged() {
+        // "Apple" appears in two rows; renaming the target of row 1 only.
+        let dsl = make_dsl(&["User > likes > Apple", "Vendor > sells > Apple"]);
+        let result = rename_node_occurrence_in_dsl(
+            &dsl,
+            "User",
+            "likes",
+            "Apple",
+            EdgeEndpoint::Target,
+            "Cherry",
+        )
+        .unwrap();
+        assert_eq!(result, "User > likes > Cherry\nVendor > sells > Apple");
+    }
+
+    #[test]
+    fn rename_node_occurrence_duplicate_by_key_collision() {
+        // Rewriting row 1's target to "Cherry" collides with row 2's triple.
+        let dsl = make_dsl(&["User > likes > Apple", "User > likes > Cherry"]);
+        let result = rename_node_occurrence_in_dsl(
+            &dsl,
+            "User",
+            "likes",
+            "Apple",
+            EdgeEndpoint::Target,
+            "Cherry",
+        );
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { line: 2 })
+        ));
+    }
+
+    #[test]
+    fn rename_node_occurrence_no_triple_match_is_not_found() {
+        let dsl = make_dsl(&["User > likes > Apple"]);
+        let result = rename_node_occurrence_in_dsl(
+            &dsl,
+            "User",
+            "hates",
+            "Apple",
+            EdgeEndpoint::Target,
+            "Cherry",
+        );
+        assert!(matches!(result, Err(ConceptMapMutationError::EdgeNotFound)));
+    }
+
+    #[test]
+    fn rename_node_occurrence_rejects_empty_new_label() {
+        let dsl = make_dsl(&["User > likes > Apple"]);
+        let result = rename_node_occurrence_in_dsl(
+            &dsl,
+            "User",
+            "likes",
+            "Apple",
+            EdgeEndpoint::Target,
+            "   ",
+        );
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::EmptyField(_))
+        ));
+    }
+
+    #[test]
+    fn rename_node_occurrence_no_op_returns_unchanged() {
+        let dsl = make_dsl(&["User > likes > Apple"]);
+        let result = rename_node_occurrence_in_dsl(
+            &dsl,
+            "User",
+            "likes",
+            "Apple",
+            EdgeEndpoint::Target,
+            "Apple",
+        )
+        .unwrap();
+        assert_eq!(result, dsl);
+    }
+
+    // --- relabel_rel_all_in_dsl tests ---
+
+    #[test]
+    fn relabel_rel_all_rewrites_every_line_sharing_rel() {
+        let dsl = make_dsl(&["A > rel1 > B", "C > rel1 > D", "E > other > F"]);
+        let result = relabel_rel_all_in_dsl(&dsl, "rel1", "rel2").unwrap();
+        assert_eq!(result, "A > rel2 > B\nC > rel2 > D\nE > other > F");
+    }
+
+    #[test]
+    fn relabel_rel_all_no_op_when_equal_returns_unchanged() {
+        let dsl = make_dsl(&["A > rel1 > B", "C > rel1 > D"]);
+        let result = relabel_rel_all_in_dsl(&dsl, "rel1", "rel1").unwrap();
+        assert_eq!(result, dsl);
+    }
+
+    #[test]
+    fn relabel_rel_all_rejects_empty_fields() {
+        let dsl = make_dsl(&["A > rel1 > B"]);
+        assert!(matches!(
+            relabel_rel_all_in_dsl(&dsl, "", "rel2"),
+            Err(ConceptMapMutationError::EmptyField(_))
+        ));
+        assert!(matches!(
+            relabel_rel_all_in_dsl(&dsl, "rel1", "  "),
+            Err(ConceptMapMutationError::EmptyField(_))
+        ));
+    }
+
+    #[test]
+    fn relabel_rel_all_atomic_reject_vs_existing_line() {
+        // Row 1 rewritten to rel2 would collide with the existing row 2.
+        let dsl = make_dsl(&["A > rel1 > B", "A > rel2 > B"]);
+        let result = relabel_rel_all_in_dsl(&dsl, "rel1", "rel2");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { line: 2 })
+        ));
+    }
+
+    #[test]
+    fn relabel_rel_all_atomic_reject_vs_other_rewritten_line() {
+        // Distinct label spellings deriving the same key: both rows share the
+        // rel, so both get rewritten and then collide with each other. The
+        // whole op must be rejected — no partial write.
+        let dsl = make_dsl(&["Foo Bar > rel1 > Z", "Foo-Bar > rel1 > Z"]);
+        let result = relabel_rel_all_in_dsl(&dsl, "rel1", "rel2");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { .. })
         ));
     }
 

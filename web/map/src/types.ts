@@ -108,21 +108,29 @@ export interface CmNeighbourhood {
   edges: CmEdge[];
 }
 
-export interface EditingNode {
-  key: string;
-  label: string;
-}
+/** Which cell of an edge-table row a pencil/click targets. */
+export type CmCell = 'from' | 'rel' | 'to';
+
+/** The backend op a (cell × edit-all scope) edit resolves to. */
+export type CmEditOp =
+  | 'rename_node_occurrence'
+  | 'rename_node'
+  | 'relabel_edge'
+  | 'relabel_rel_all';
 
 /**
- * The concept-map edge-table cell the user has selected (a single click,
- * no inline input yet). Identities carry LABELS — every CM mutation is
- * label-based, and distinct labels can derive the same key
- * (`User Story` vs `User-Story`) — so we capture the clicked cell's label.
- * A node cell also retains `key` for the `cmFocus` highlight path.
+ * The cell whose hover-pencil is active (the inline `<input>`). Carries the
+ * full edge LABELS (to locate the row) plus which segment is being edited.
+ * Identities are label-based — every CM mutation matches by label, and distinct
+ * labels can derive the same key (`User Story` vs `User-Story`) — so the labels,
+ * not a derived key, are what the rename/relabel submits.
  */
-export type CmSelectedField =
-  | { kind: 'node'; key: string; label: string }
-  | { kind: 'rel'; from_label: string; rel: string; to_label: string };
+export interface CmEditingCell {
+  from_label: string;
+  rel: string;
+  to_label: string;
+  cell: CmCell;
+}
 
 // Mutable application state
 export interface AppState {
@@ -139,12 +147,10 @@ export interface AppState {
   conceptMapCache: Map<string, ConceptMap>;
 
   // Concept map editing
-  editingConceptMap: boolean;
-  editingNode: EditingNode | null;
-  /** The cell selected by a single click (plain navigation, no input yet). */
-  cmSelectedField: CmSelectedField | null;
-  /** Which selected field is being inline-edited ('Edit this'), independent of editingConceptMap. */
-  editingField: 'node' | 'rel' | null;
+  /** Scope toggle: a single instance (off) vs all rows sharing the label (on). */
+  cmEditAll: boolean;
+  /** Which cell's hover-pencil is active (the inline input); null = none. */
+  cmEditingCell: CmEditingCell | null;
   cmFocusNode: CmNode | null;
   renderedCmFocus: string | null;
   cmCacheMutationSeq: number;

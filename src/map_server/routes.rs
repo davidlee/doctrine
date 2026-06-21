@@ -61,6 +61,22 @@ enum MutationAction {
         new_rel: String,
         target: String,
     },
+    #[serde(rename = "rename_node_occurrence")]
+    RenameNodeOccurrence {
+        source: String,
+        rel: String,
+        target: String,
+        cell: concept_map::EdgeEndpoint,
+        #[serde(alias = "new")]
+        new_label: String,
+    },
+    #[serde(rename = "relabel_rel_all")]
+    RelabelRelAll {
+        #[serde(alias = "old")]
+        old_rel: String,
+        #[serde(alias = "new")]
+        new_rel: String,
+    },
 }
 
 /// A pending concept-map mutation with optional optimistic concurrency hash.
@@ -399,6 +415,24 @@ async fn mutate_concept_map(
             target,
         } => {
             let dsl = concept_map::relabel_edge_in_dsl(&old_dsl, source, old_rel, new_rel, target)
+                .map_err(MapServerError::from)?;
+            (dsl, None)
+        }
+        MutationAction::RenameNodeOccurrence {
+            source,
+            rel,
+            target,
+            cell,
+            new_label,
+        } => {
+            let dsl = concept_map::rename_node_occurrence_in_dsl(
+                &old_dsl, source, rel, target, *cell, new_label,
+            )
+            .map_err(MapServerError::from)?;
+            (dsl, None)
+        }
+        MutationAction::RelabelRelAll { old_rel, new_rel } => {
+            let dsl = concept_map::relabel_rel_all_in_dsl(&old_dsl, old_rel, new_rel)
                 .map_err(MapServerError::from)?;
             (dsl, None)
         }
@@ -1150,6 +1184,78 @@ mod tests {
         assert_eq!(parsed["ok"], true);
         let edges = parsed["edges"].as_array().unwrap();
         assert_eq!(edges[0]["rel"], "creates");
+    }
+
+    #[tokio::test]
+    async fn mutate_rename_node_occurrence_returns_200() {
+        // "Apple" appears in two rows; renaming the target of row 1 only.
+        let (_root, app) = seeded_cm_app("User > likes > Apple\nVendor > sells > Apple").await;
+        let body = Body::from(
+            r#"{"action":"rename_node_occurrence","source":"User","rel":"likes","target":"Apple","cell":"target","new_label":"Cherry"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        let edges = parsed["edges"].as_array().unwrap();
+        // Row 1 endpoint rewritten; row 2 (also "Apple") untouched.
+        assert!(edges.iter().any(|e| e["from_label"] == "User"
+            && e["rel"] == "likes"
+            && e["to_label"] == "Cherry"));
+        assert!(
+            edges
+                .iter()
+                .any(|e| e["from_label"] == "Vendor" && e["to_label"] == "Apple")
+        );
+    }
+
+    #[tokio::test]
+    async fn mutate_rename_node_occurrence_not_found_returns_404() {
+        let (_root, app) = seeded_cm_app("User > likes > Apple").await;
+        let body = Body::from(
+            r#"{"action":"rename_node_occurrence","source":"User","rel":"hates","target":"Apple","cell":"target","new_label":"Cherry"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 404, "body: {body_str}");
+        assert!(body_str.contains("edge_not_found"));
+    }
+
+    #[tokio::test]
+    async fn mutate_relabel_rel_all_returns_200() {
+        let (_root, app) = seeded_cm_app("A > rel1 > B\nC > rel1 > D").await;
+        let body = Body::from(r#"{"action":"relabel_rel_all","old_rel":"rel1","new_rel":"rel2"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        let edges = parsed["edges"].as_array().unwrap();
+        assert_eq!(edges.len(), 2);
+        assert!(edges.iter().all(|e| e["rel"] == "rel2"));
+    }
+
+    #[tokio::test]
+    async fn mutate_relabel_rel_all_conflict_returns_409() {
+        // Rewriting rel1→rel2 makes row 1 collide with the existing row 2.
+        let (_root, app) = seeded_cm_app("A > rel1 > B\nA > rel2 > B").await;
+        let body = Body::from(r#"{"action":"relabel_rel_all","old_rel":"rel1","new_rel":"rel2"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 409, "body: {body_str}");
     }
 
     #[tokio::test]

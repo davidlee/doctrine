@@ -308,43 +308,37 @@ export function setActionabilityView(view: ActionabilityView | null): void {
 type ViewMode = 'semantic' | 'actionability';
 
 /**
- * A concept-map entity renders ONLY in the semantic graph, so focusing one
- * forces semantic mode. Every other kind (and `undefined`) imposes no mode.
- * Reuses the same CM-kind test as `isConceptMap` (kindPrefix === 'CM').
- */
-function requiredMode(node: CatalogNode | undefined): 'semantic' | null {
-  return node?.kindPrefix === 'CM' ? 'semantic' : null;
-}
-
-/**
  * Pure transition computed on every focus change. DOM/clock-free.
  *
- * | case                                  | viewMode        | priorityZoomId          |
- * |---------------------------------------|-----------------|-------------------------|
- * | CM node (requiredMode === 'semantic') | 'semantic'      | null                    |
- * | actionability + member                | 'actionability' | node.id                 |
- * | actionability + non-member            | 'actionability' | null (clears stale)     |
- * | else (semantic, non-CM)               | current         | currentPriorityZoomId   |
+ * Revision 2 (D2 reversed, RV-098 F-5):
  *
- * `currentPriorityZoomId` is echoed by the "leave alone" row, which otherwise
- * could not express "unchanged".
+ * | case                       | viewMode        | priorityZoomId          |
+ * |----------------------------|-----------------|-------------------------|
+ * | actionability + member     | 'actionability' | focusId (zoom to it)    |
+ * | actionability + non-member | 'semantic'      | null (switch + clear)   |
+ * | current is semantic        | 'semantic'      | currentPriorityZoomId   |
+ *
+ * On the actionability graph, focusing a member zooms to it; focusing anything
+ * else switches to Semantic (where it is visible) and clears the now-stale zoom.
+ * In Semantic, focus never auto-switches — the user chose it (deliberate
+ * asymmetry; Semantic shows everything, so it is never a dead-end). A concept
+ * map is never an actionability member, so the old CM-forces-semantic case is
+ * subsumed by the non-member row — `requiredMode` and the `node` arg are gone;
+ * the only use of `node` was its id, which equals `focusId`. The semantic row
+ * echoes `currentPriorityZoomId` (it cannot otherwise express "unchanged").
  */
 export function focusTransition(
   current: ViewMode,
-  node: CatalogNode | undefined,
+  focusId: string | null,
   isActionabilityMember: boolean,
   currentPriorityZoomId: string | null,
 ): { viewMode: ViewMode; priorityZoomId: string | null } {
-  if (requiredMode(node) === 'semantic') {
-    return { viewMode: 'semantic', priorityZoomId: null };
-  }
   if (current === 'actionability') {
-    return {
-      viewMode: 'actionability',
-      priorityZoomId: isActionabilityMember && node !== undefined ? node.id : null,
-    };
+    return isActionabilityMember
+      ? { viewMode: 'actionability', priorityZoomId: focusId }
+      : { viewMode: 'semantic', priorityZoomId: null };
   }
-  return { viewMode: current, priorityZoomId: currentPriorityZoomId };
+  return { viewMode: 'semantic', priorityZoomId: currentPriorityZoomId };
 }
 
 /* ------------------------------------------------------------------ */
