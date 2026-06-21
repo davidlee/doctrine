@@ -385,8 +385,13 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 _ => crate::listing::Format::Table,
             };
             let summary = arguments.get("view").and_then(|v| v.as_str()) == Some("summary");
-            let out = review::run_show(Some(root.to_path_buf()), &reference, fmt)
-                .map(|out| if summary { project_show_summary(out) } else { out })?;
+            let out = review::run_show(Some(root.to_path_buf()), &reference, fmt).map(|out| {
+                if summary {
+                    project_show_summary(out)
+                } else {
+                    out
+                }
+            })?;
             Ok(serde_json::to_string(&out)?)
         }
         "review_raise" => {
@@ -528,8 +533,7 @@ impl ExtractFields {
 #[expect(dead_code, reason = "will be used in MCP tools wiring")]
 fn parse_memory_type(s: Option<String>) -> anyhow::Result<Option<crate::memory::MemoryType>> {
     s.map(|v| {
-        crate::memory::MemoryType::parse(&v)
-            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+        crate::memory::MemoryType::parse(&v).map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
     })
     .transpose()
 }
@@ -539,8 +543,7 @@ fn parse_memory_type(s: Option<String>) -> anyhow::Result<Option<crate::memory::
 #[expect(dead_code, reason = "will be used in MCP tools wiring")]
 fn parse_status(s: Option<String>) -> anyhow::Result<Option<crate::memory::Status>> {
     s.map(|v| {
-        crate::memory::Status::parse(&v)
-            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+        crate::memory::Status::parse(&v).map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
     })
     .transpose()
 }
@@ -550,8 +553,7 @@ fn parse_status(s: Option<String>) -> anyhow::Result<Option<crate::memory::Statu
 #[expect(dead_code, reason = "will be used in MCP tools wiring")]
 fn parse_lifespan(s: Option<String>) -> anyhow::Result<Option<crate::memory::Lifespan>> {
     s.map(|v| {
-        crate::memory::Lifespan::from_str(&v)
-            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+        crate::memory::Lifespan::from_str(&v).map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
     })
     .transpose()
 }
