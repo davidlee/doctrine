@@ -14,7 +14,7 @@ ref   = "SL-131"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "F-1: Fictional function memory::backlinks_index(root, &uid) — §4 implementation impossible"
 detail = """
@@ -25,10 +25,12 @@ detail = """
 **Evidence:** The design's §4 "Implementation" paragraph cannot be implemented as written. The claimed one-liner `memory::backlinks_index(root, &uid)` is fiction. Either the design must specify a new helper function that wraps the full scan, or describe the actual multi-step implementation using the existing `links::backlinks_index` + `collect_all` + `read_body` + `extract_wikilinks`.
 
 **Severity:** Blocker — an implementer reading §4 would waste time searching for a non-existent function and then need to reverse-engineer `run_backlinks` to understand the actual implementation path."""
+disposition = "design-wrong"
+response = 'Design §4 originally referenced a fictional `memory::backlinks_index(root, &uid)` function. This was corrected in design revision 8e4f1224 ("design(SL-131): close data-path gaps — structured helpers, retrieve_reference, consumability") which replaced it with `backlink_rows_for(root, all, uid)` — a function factored from the existing `run_backlinks` internals with accurate signature and provenance-aware rows.'
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "F-2: Design silently contradicts scope risk mitigation without reconciliation"
 detail = """
@@ -39,6 +41,8 @@ detail = """
 **Evidence:** Scope: "Prefer adding a run_find_string() / run_retrieve_string() ... This avoids touching the existing run_* shape." Design: adds `writer: &mut impl Write` to every run_* function. No section of the design addresses why the scope's preferred approach was rejected.
 
 **Severity:** Blocker — either the scope or the design is wrong. One must be reconciled before implementation. If the design's approach is correct, the scope should be updated to reflect it. If the scope's concern (blast radius into retrieve.rs) is valid, the design needs a different approach."""
+disposition = "design-wrong"
+response = "The scope document's `run_find_string()` proposal was a provisional sketch; the design chose `writer: &mut impl Write` as the canonical abstraction. The design was updated in 8e4f1224 and subsequent revisions to close all data-path gaps, adding structured MCP helpers (`find_for_mcp`, `list_for_mcp`, `retrieve_reference`) that provide the same benefit without the narrow `_string()` coupling. The scope-design coherence was achieved through the design's §2 (§6 code impact summary) which maps every change to the affected surface."
 
 [[finding]]
 id = "F-3"
@@ -218,7 +222,7 @@ detail = """
 
 [[finding]]
 id = "F-15"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "F-15: handle_tools_call introduces JSON double-encoding if call_tool returns String"
 detail = '''
@@ -235,6 +239,8 @@ If out is already a JSON string like {"rows":[...]}, then serde_json::to_string(
 **Fix:** handle_tools_call must change to pass out directly: McpToolResult::text(out). The design must explicitly describe this change.
 
 **Severity:** Blocker — the MCP server would return garbage to all review AND memory tools.'''
+disposition = "design-wrong"
+response = 'The original design did not address the double-encoding risk. The design was updated in 0522e856 ("design(SL-131): close 5 implementability gaps — single-gate, single-scan, single-filter") to add an explicit "handle_tools_call: double-encoding trapdoor" subsection (§2) specifying `McpToolResult::text(out)` directly instead of re-serializing. The implementation (tools.rs:331) correctly follows this specification.'
 
 [[finding]]
 id = "F-16"
