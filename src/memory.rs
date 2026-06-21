@@ -1851,7 +1851,12 @@ fn show_json(m: &Memory, body: &str, wikilinks: &[ShowWikilink]) -> Result<Strin
 }
 
 /// `doctrine memory show <uid|key> [--format F | --json]`.
-pub(crate) fn run_show(path: Option<PathBuf>, reference: &str, format: Format) -> Result<()> {
+pub(crate) fn run_show(
+    writer: &mut impl Write,
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let items_root = root.join(MEMORY_ITEMS_DIR);
     let mref = MemoryRef::parse(reference)?;
@@ -1868,7 +1873,7 @@ pub(crate) fn run_show(path: Option<PathBuf>, reference: &str, format: Format) -
         }
         Format::Json => show_json(&memory, &body, &wikilinks)?,
     };
-    write!(io::stdout(), "{out}")?;
+    write!(writer, "{out}")?;
     Ok(())
 }
 
@@ -1977,12 +1982,13 @@ pub(crate) fn boot_keys(root: &Path) -> Result<Vec<String>> {
 /// find the root, lower the args, print verbatim (`list_rows` carries the
 /// renderer's own trailing newline). `--type` is the one kind-specific axis.
 pub(crate) fn run_list(
+    writer: &mut impl Write,
     path: Option<PathBuf>,
     type_f: Option<MemoryType>,
     args: ListArgs,
 ) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    write!(io::stdout(), "{}", list_rows(&root, type_f, args)?)?;
+    write!(writer, "{}", list_rows(&root, type_f, args)?)?;
     Ok(())
 }
 
@@ -7071,6 +7077,116 @@ verified_sha = ""
             updated_content.contains("verified_sha = \"checkout456\""),
             "Should stamp checkout_state_id when allow_dirty=true: {}",
             updated_content
+        );
+    }
+
+    // === PHASE-01 writer-capture tests (VT-3, VT-4) ==========================
+
+    /// Helper: temp project with one recorded memory.
+    fn temp_project_with_one_memory() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q", "-b", "main"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.email", "t@example.com"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.name", "Test"])
+            .output()
+            .unwrap();
+        std::fs::create_dir_all(root.path().join(".doctrine")).unwrap();
+        std::fs::write(root.path().join(".doctrine/.keep"), "").unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["add", ".doctrine/.keep"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["commit", "-q", "-m", "base"])
+            .output()
+            .unwrap();
+        let sources: Vec<Provenance> = vec![];
+        let paths: Vec<String> = vec![];
+        let globs: Vec<String> = vec![];
+        let commands: Vec<String> = vec![];
+        let tags: Vec<String> = vec![];
+        let args = RecordArgs {
+            title: "Writer capture test",
+            memory_type: MemoryType::Fact,
+            key: Some("fact.writer-capture-test"),
+            status: Status::Active,
+            summary: None,
+            tags: &tags,
+            repo: None,
+            lifespan: None,
+            review_by: None,
+            sources: &sources,
+            paths: &paths,
+            globs: &globs,
+            commands: &commands,
+            global: false,
+            trust_level: None,
+            severity: None,
+        };
+        run_record(Some(root.path().to_path_buf()), &args).unwrap();
+        root
+    }
+
+    /// VT-3: writer-capture — run_show with &mut Vec<u8> writes expected output.
+    #[test]
+    fn writer_capture_run_show() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        run_show(
+            &mut buf,
+            Some(root.path().to_path_buf()),
+            "mem.fact.writer-capture-test",
+            Format::Table,
+        )
+        .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(!output.is_empty(), "run_show must write to buffer");
+        assert!(
+            output.contains("Writer capture test"),
+            "output must contain the memory title"
+        );
+    }
+
+    /// VT-4: writer-capture — run_list with &mut Vec<u8> writes expected output.
+    #[test]
+    fn writer_capture_run_list() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        let args = crate::listing::ListArgs {
+            substr: None,
+            regexp: None,
+            case_insensitive: false,
+            status: vec![],
+            tags: vec![],
+            all: true,
+            format: Format::Table,
+            json: false,
+            columns: None,
+            render: crate::listing::RenderOpts::default(),
+        };
+        run_list(&mut buf, Some(root.path().to_path_buf()), None, args).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(!output.is_empty(), "run_list must write to buffer");
+        assert!(
+            output.contains("Writer capture test"),
+            "output must contain the memory title"
         );
     }
 }

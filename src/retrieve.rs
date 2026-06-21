@@ -18,7 +18,7 @@
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{self, Write};
+use std::io::Write;
 
 use serde::Serialize;
 
@@ -776,6 +776,7 @@ fn load_query(
 /// bodies).
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_find(
+    writer: &mut impl Write,
     path: Option<PathBuf>,
     paths: Vec<String>,
     globs: Vec<String>,
@@ -790,6 +791,10 @@ pub(crate) fn run_find(
     offset: usize,
     limit: Option<usize>,
 ) -> Result<()> {
+    // Validate limit (moved from CLI).
+    if let Some(0) = limit {
+        anyhow::bail!("--limit must be >= 1");
+    }
     let Loaded {
         root,
         mems,
@@ -823,7 +828,7 @@ pub(crate) fn run_find(
         parts.push(format_truncation_notice(shown, total, offset, page_size));
     }
     let output = parts.concat();
-    write!(io::stdout(), "{output}")?;
+    write!(writer, "{output}")?;
     Ok(())
 }
 
@@ -933,6 +938,7 @@ fn format_retrieve_json(cands: &[&Candidate<'_>]) -> Result<String> {
 /// truncation notice is suppressed (D4).
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_retrieve(
+    writer: &mut impl Write,
     path: Option<PathBuf>,
     paths: Vec<String>,
     globs: Vec<String>,
@@ -949,6 +955,11 @@ pub(crate) fn run_retrieve(
     format: crate::listing::Format,
     expand: Option<usize>,
 ) -> Result<()> {
+    // Validate limit (moved from CLI).
+    if limit == 0 {
+        anyhow::bail!("--limit must be >= 1");
+    }
+    let limit = limit.min(RETRIEVE_LIMIT_MAX);
     let Loaded {
         root,
         mems,
@@ -997,18 +1008,23 @@ pub(crate) fn run_retrieve(
         }
     }
     let output = parts.concat();
-    write!(io::stdout(), "{output}")?;
+    write!(writer, "{output}")?;
 
     // PHASE-06: --expand N graph expansion
     if let Some(expand_depth) = expand {
-        expand_graph(&visible, expand_depth, &root)?;
+        expand_graph(writer, &visible, expand_depth, &root)?;
     }
 
     Ok(())
 }
 
 /// PHASE-06: Graph expansion for --expand N flag
-fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Result<()> {
+fn expand_graph(
+    writer: &mut impl Write,
+    visible: &[&Candidate<'_>],
+    max_depth: usize,
+    root: &Path,
+) -> Result<()> {
     // Build edge set from all memories
     let all_memories = collect_all(root)?;
     let mut edges = BTreeMap::new();
@@ -1065,7 +1081,7 @@ fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Re
         }
 
         if !first {
-            writeln!(io::stdout())?; // blank line separator between depth groups
+            writeln!(writer)?; // blank line separator between depth groups
         }
         first = false;
 
@@ -1096,7 +1112,7 @@ fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Re
             let wikilinks = Vec::new(); // Empty for now
             let rendered =
                 memory::render_show(memory, &body, guard, Some(&staleness_line), &wikilinks);
-            write!(io::stdout(), "{rendered}")?;
+            write!(writer, "{rendered}")?;
         }
     }
 
@@ -2704,5 +2720,217 @@ weight = {weight}
         assert_eq!(v2.len(), 2);
         let v10: Vec<&Candidate<'_>> = eligible.iter().take(10).copied().collect();
         assert_eq!(v10.len(), 3);
+    }
+
+    // === PHASE-01 writer-capture tests (VT-1, VT-2) ==========================
+
+    /// Helper: init a git dir with a `.doctrine/` marker, seed one memory, and
+    /// return the tempdir handle.
+    fn temp_project_with_one_memory() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        // Minimal git init so root::find resolves and anchoring works.
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q", "-b", "main"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.email", "t@example.com"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.name", "Test"])
+            .output()
+            .unwrap();
+        std::fs::create_dir_all(root.path().join(".doctrine")).unwrap();
+        std::fs::write(root.path().join(".doctrine/.keep"), "").unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["add", ".doctrine/.keep"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["commit", "-q", "-m", "base"])
+            .output()
+            .unwrap();
+        // Seed one memory via run_record.
+        let sources: Vec<crate::memory::Provenance> = vec![];
+        let paths: Vec<String> = vec![];
+        let globs: Vec<String> = vec![];
+        let commands: Vec<String> = vec![];
+        let tags: Vec<String> = vec![];
+        let args = crate::memory::RecordArgs {
+            title: "Writer capture test",
+            memory_type: crate::memory::MemoryType::Fact,
+            key: Some("fact.writer-capture-test"),
+            status: crate::memory::Status::Active,
+            summary: None,
+            tags: &tags,
+            repo: None,
+            lifespan: None,
+            review_by: None,
+            sources: &sources,
+            paths: &paths,
+            globs: &globs,
+            commands: &commands,
+            global: false,
+            trust_level: None,
+            severity: None,
+        };
+        crate::memory::run_record(Some(root.path().to_path_buf()), &args).unwrap();
+        root
+    }
+
+    /// VT-1: writer-capture — run_find with &mut Vec<u8> writes expected output.
+    #[test]
+    fn writer_capture_run_find() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        run_find(
+            &mut buf,
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true,
+            crate::listing::Format::Table,
+            0,
+            None,
+        )
+        .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(!output.is_empty(), "run_find must write to buffer");
+        assert!(
+            output.contains("Writer capture test"),
+            "output must contain the seeded memory title"
+        );
+    }
+
+    /// VT-2: writer-capture — run_retrieve with &mut Vec<u8> writes framed blocks.
+    #[test]
+    fn writer_capture_run_retrieve() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        run_retrieve(
+            &mut buf,
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true,
+            5,
+            None,
+            0,
+            crate::listing::Format::Table,
+            None,
+        )
+        .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(!output.is_empty(), "run_retrieve must write to buffer");
+    }
+
+    /// EX-5: run_find rejects limit=Some(0).
+    #[test]
+    fn run_find_rejects_limit_zero() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        let err = run_find(
+            &mut buf,
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true,
+            crate::listing::Format::Table,
+            0,
+            Some(0),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("--limit must be >= 1"),
+            "must reject limit=0: {err}"
+        );
+    }
+
+    /// EX-5: run_retrieve rejects limit=0.
+    #[test]
+    fn run_retrieve_rejects_limit_zero() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        let err = run_retrieve(
+            &mut buf,
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true,
+            0,
+            None,
+            0,
+            crate::listing::Format::Table,
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("--limit must be >= 1"),
+            "must reject limit=0: {err}"
+        );
+    }
+
+    /// EX-5: run_retrieve caps at RETRIEVE_LIMIT_MAX.
+    #[test]
+    fn run_retrieve_caps_at_max() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        // Limit 9999 should be silently capped at RETRIEVE_LIMIT_MAX, not error.
+        run_retrieve(
+            &mut buf,
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true,
+            9999,
+            None,
+            0,
+            crate::listing::Format::Table,
+            None,
+        )
+        .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(!output.is_empty(), "still works with capped limit");
     }
 }
