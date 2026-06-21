@@ -184,32 +184,22 @@ pub(crate) fn retrieve_reference(
     let mref = crate::memory::MemoryRef::parse(reference)?;
     let memory = crate::memory::resolve_memory_from_all(&all, &mref)?;
 
-    // 3. Lifecycle suppression (quarantined / retracted — never surfaced)
-    if memory.status == Status::Quarantined || memory.status == Status::Retracted {
-        anyhow::bail!("memory {reference} is {}", memory.status.as_str());
+    // 3. Single gate — check_consumable applies lifecycle, draft, holdback
+    let (ok, reason) = check_consumable(memory, include_draft, min_trust);
+    if !ok {
+        anyhow::bail!("memory {reference}: {}", reason.unwrap_or("not consumable"));
     }
 
-    // 4. Draft handling
-    if memory.status == Status::Draft && !include_draft {
-        anyhow::bail!("memory {reference} is draft (use include_draft to surface)");
-    }
-
-    // 5. Trust holdback
-    let floor = holdback_floor(min_trust);
-    if held_back(memory, floor) {
-        anyhow::bail!("memory {reference} held back: low trust ∧ high severity");
-    }
-
-    // 6. Staleness (same computation as the scope-based path)
+    // 4. Staleness (same computation as the scope-based path)
     let snap = freeze(root);
     let facts = snap.facts_for(&memory.anchor);
     let today = &snap.today;
     let st = staleness(memory, facts, today);
 
-    // 7. Read body
+    // 5. Read body
     let body = crate::memory::read_body(root, &memory.uid);
 
-    // 8. Security-framed render (same render_show as run_retrieve's per-block loop)
+    // 6. Security-framed render (same render_show as run_retrieve's per-block loop)
     let nonce = uuid::Uuid::new_v4().simple().to_string();
     let rendered = crate::memory::render_show(
         memory,
@@ -226,8 +216,8 @@ pub(crate) fn retrieve_reference(
 **Visibility bumps needed:**
 - `memory::resolve_memory_from_all` → `pub(crate)` (currently private)
 - `staleness` → `pub(crate)` (currently private)
-- `holdback_floor` → `pub(crate)` (currently private)
-- `held_back` → `pub(crate)` (currently private)
+- `holdback_floor` → `pub(crate)` (currently private) — needed by `check_consumable`
+- `held_back` → `pub(crate)` (currently private) — needed by `check_consumable`
 
 Already `pub(crate)`: `collect_all`, `MemoryRef`, `MemoryRef::parse`, `read_body`,
 `render_show`, `freeze`, `Status`.
@@ -339,6 +329,30 @@ pub(crate) fn find_for_mcp(
 the `memory_list` MCP handler.
 
 ```rust
+// In src/memory.rs — factored shared filtered-list helper
+/// Returns all memories matching the standard filter + type axis, in default
+/// sort order. Used by both list_rows (CLI) and list_for_mcp (MCP).
+pub(crate) fn filtered_list(
+    root: &Path,
+    type_f: Option<MemoryType>,
+    filter: &crate::listing::Filter,
+) -> Result<Vec<Memory>> {
+    let mut rows = crate::listing::retain(collect_all(root)?, filter, is_hidden, key);
+    rows.retain(|m| type_f.is_none_or(|t| m.kind == t));
+    sort_default(&mut rows);
+    Ok(rows)
+}
+```
+
+`list_rows` delegates to `filtered_list` for the core pipeline, then formats
+(Table or Json). `list_for_mcp` calls `filtered_list`, paginates, and returns
+`ListForMcp`. Zero duplication — the full filter contract (`listing::retain`:
+substr over key+title, status validation, default hide-set, tag OR-match)
+is shared.
+
+**`memory::list_for_mcp`** — thin pagination wrapper over `filtered_list`:
+
+```rust
 // In src/memory.rs
 pub(crate) struct ListForMcp {
     pub(crate) rows: Vec<MemoryRow>,
@@ -354,17 +368,13 @@ pub(crate) fn list_for_mcp(
     offset: usize,
     limit: Option<usize>,
 ) -> Result<ListForMcp> {
-    // Reuse list_rows' filter + sort pipeline, skip the format/render step
-    let all = collect_all(root)?;
-    let mut rows: Vec<Memory> = all.into_iter()
-        .filter(|m| type_f.is_none_or(|t| m.kind == t))
-        .filter(|m| substr.is_none_or(|s| {
-            m.title.to_lowercase().contains(&s.to_lowercase())
-        }))
-        .filter(|m| status.is_empty() || status.contains(&m.status.as_str().to_string()))
-        .filter(|m| tags.is_empty() || tags.iter().any(|t| m.scope.tags.contains(t)))
-        .collect();
-    sort_default(&mut rows);
+    let filter = crate::listing::Filter {
+        substr: substr.map(str::to_owned),
+        status: status.to_vec(),
+        tags: tags.to_vec(),
+        ..Default::default()
+    };
+    let rows = filtered_list(root, type_f, &filter)?;
     let total = rows.len();
     let cap = limit.unwrap_or(DEFAULT_MEMORY_LIST_LIMIT);
     let page: Vec<MemoryRow> = json_rows(
@@ -374,9 +384,8 @@ pub(crate) fn list_for_mcp(
 }
 ```
 
-`DEFAULT_MEMORY_LIST_LIMIT = 50`. `list_for_mcp` reuses the private `json_rows`
-and `sort_default` — no parallel implementation. The `MemoryRow` struct already
-carries `uid, type, status, trust, key, title` — matches the MCP schema.
+`DEFAULT_MEMORY_LIST_LIMIT = 50`. The `MemoryRow` struct already carries
+`uid, type, status, trust, key, title` — matches the MCP schema.
 
 ### ExtractFields extension
 
@@ -470,16 +479,35 @@ branch 2 in `tools.rs`. The same pattern applies to `parse_memory_type` and
 
 Two branches: `reference` present → `retrieve::retrieve_reference` (single-memory
 through full holdback); else → `retrieve::run_retrieve` (scope-based search).
+Mutual exclusivity enforced: `reference` with any query/scope probe → `-32602`.
 
 ```rust
 "memory_retrieve" => {
     let fields = ExtractFields::from_value(arguments, &[]);
     let reference = fields.opt_str_field("reference");
-    let min_trust = fields.opt_str_field("min_trust");
     let include_draft = fields.opt_bool_field("include_draft").unwrap_or(false);
 
+    // Validate min_trust before use — holdback_floor silently defaults on bad input
+    let min_trust_str = fields.opt_str_field("min_trust");
+    let min_trust = min_trust_str.as_deref().map(|s| {
+        retrieve::parse_min_trust(s)
+            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+    }).transpose()?;
+
     if let Some(ref_str) = reference {
-        // Single-memory path: resolve → holdback → security-framed render
+        // Validate mutual exclusivity: reference alone, no probes
+        let has_probes = fields.opt_str_field("query").is_some()
+            || !fields.vec_str_field("path_scope").is_empty()
+            || !fields.vec_str_field("glob").is_empty()
+            || !fields.vec_str_field("command").is_empty()
+            || !fields.vec_str_field("tag").is_empty()
+            || fields.opt_str_field("type").is_some()
+            || fields.opt_str_field("status").is_some()
+            || fields.opt_str_field("lifespan").is_some();
+        if has_probes {
+            anyhow::bail!("invalid arguments: reference is mutually exclusive with query/path_scope/glob/command/tag/type/status/lifespan");
+        }
+        // Single-memory path: resolve → check_consumable → staleness → render
         let mut buf = Vec::new();
         retrieve::retrieve_reference(
             &mut buf,
@@ -703,8 +731,9 @@ Calls `memory::list_for_mcp` (structured), then builds the pagination envelope:
 
 ### Backlink computation cost
 
-Building the backlink index scans the full memory corpus (collect_all + body read
-for wikilinks + relations walk). Acceptable for typical corpus sizes (<1000
+Building the backlink index scans the full memory corpus (one `collect_all` per
+`memory_show` call, shared between `check_consumable` resolution and
+`backlink_rows_for` — no double scan). Acceptable for typical corpus sizes (<1000
 memories, <100ms). If the corpus grows past 10k items, this should be cached or
 moved to build-on-record. For now, every `memory_show` call pays this cost, same
 as `doctrine memory backlinks <REF>`.
@@ -733,7 +762,9 @@ The MCP handler for `memory_show` post-processes the JSON output from
 full backlink pipeline — target normalization, uid-prefix resolution,
 wikilink-vs-relation distinction. Do not duplicate it in `tools.rs`.
 
-Instead, factor a pure helper from `run_backlinks`'s internals:
+Instead, factor a pure helper from `run_backlinks`'s internals. It accepts
+pre-collected memories so callers that also need the `Memory` for
+`check_consumable` avoid a double `collect_all` scan:
 
 ```rust
 // In memory.rs — factored from run_backlinks
@@ -741,36 +772,43 @@ pub(crate) struct BacklinkRow {
     pub(crate) uid: String,
     pub(crate) memory_type: String,
     pub(crate) title: String,
-    pub(crate) method: String,  // "wikilink" | actual relation label (e.g. "specs", "governed_by")
+    pub(crate) method: String,  // "wikilink" | actual relation label
 }
 
 pub(crate) fn backlink_rows_for(
     root: &Path,
+    all: &[Memory],
     uid: &str,
 ) -> Result<Vec<BacklinkRow>> {
-    // collect_all, build wikilink + relation maps (with method provenance),
+    // build wikilink + relation maps (with method provenance) from `all`,
     // call crate::links::backlinks_index, filter to uid targets,
     // resolve source memory titles, return Vec<BacklinkRow>
 }
 ```
 
 `run_backlinks` delegates to this helper for the core computation, then
-formats/renders. The MCP `enrich_with_backlinks` also calls it and applies
-the `backlinks_limit` cap (default 20). Zero duplication — the method
-provenance (wikilink vs relation label) is preserved from the source.
+formats/renders. The MCP `memory_show` handler also calls it — see below. Zero
+duplication — the method provenance (wikilink vs relation label) is preserved
+from the source.
 
-The enrichment itself: call `run_show(&mut buf, …)` with `Format::Json`,
-deserialize the result with `serde_json::from_str`, then apply two enrichments:
-1. **Backlinks** — call `backlink_rows_for(root, &uid)`, apply `backlinks_limit`
-   cap, inject `backlinks` array + `backlinks_total` into the `memory` object.
-2. **Consumability** — extract `trust_level`/`severity`/`status` from the
-   deserialized memory object, call `retrieve::check_consumable(m, false, None)`,
-   inject `consumable`, `held_back_on_retrieve`, and `notes` (present when
-   `!consumable`).
-Re-serialize the enriched JSON. Zero changes to `show_json` or `run_show`.
+### MCP memory_show handler
 
-The MCP handler for `memory_show` does both enrichments inline; no separate
-helper function.
+The handler does one `collect_all` scan, then enriches in two passes:
+
+1. Call `run_show(&mut buf, root, reference, Format::Json)` — get JSON
+2. Deserialize, extract `uid`
+3. `let all = memory::collect_all(root)?;` — one scan
+4. Resolve the `Memory`: `memory::resolve_memory_from_all(&all, &mref)?`
+5. Call `retrieve::check_consumable(memory, false, None)` → set `consumable`,
+   `held_back_on_retrieve`, `notes`
+6. Call `memory::backlink_rows_for(root, &all, &uid)` — get typed backlinks
+7. Apply `backlinks_limit` cap, inject `backlinks` array + `backlinks_total`
+8. Re-serialize enriched JSON
+
+Zero changes to `show_json` or `run_show`. The `backlink_rows_for` signature
+change (`all: &[Memory]` instead of `root: &Path`) is the sole API shift —
+callers that already have collected memories pass them in; `run_backlinks`
+does `collect_all` first then delegates.
 
 ## 5. Skill surface updates
 
@@ -822,10 +860,10 @@ an MCP equivalent.
 
 | Path | Change |
 |---|---|
-| `src/retrieve.rs` | Add `writer: &mut impl Write` param to `run_find`, `run_retrieve`, `expand_graph`. Replace `write!(io::stdout(), …)` → `write!(writer, …)`. Add `retrieve_reference(writer, root, reference, include_draft, min_trust)` — single-memory retrieve through full holdback. Add `find_for_mcp(...) -> FindForMcp` — structured find with `key`/`held_back_on_retrieve` fields and pre-pagination `total`. Add `check_consumable(m, include_draft, min_trust) -> (bool, Option<&str>)` — shared eligibility helper. Bump `holdback_floor`, `held_back`, `staleness` to `pub(crate)`. |
-| `src/memory.rs` | Add `writer: &mut impl Write` param to `run_show`, `run_list`. Replace `write!(io::stdout(), …)` → `write!(writer, …)`. Add `list_for_mcp(root, type_f, substr, status, tags, offset, limit) -> ListForMcp` — paginated structured list. Factor `backlink_rows_for(root, uid)` from `run_backlinks` internals. `BacklinkRow` + fields `pub(crate)`. Bump `resolve_memory_from_all` to `pub(crate)`. |
+| `src/retrieve.rs` | Add `writer: &mut impl Write` param to `run_find`, `run_retrieve`, `expand_graph`. Replace `write!(io::stdout(), …)` → `write!(writer, …)`. Add `retrieve_reference(writer, root, reference, include_draft, min_trust)` — delegates to `check_consumable` for the full gate. Add `find_for_mcp(…) -> FindForMcp` — structured find reusing `load_query`→`query`, with `key`/`held_back_on_retrieve` fields. Add `check_consumable(m, include_draft, min_trust) -> (bool, Option<&str>)` — lifecycle + draft + holdback in one gate. Bump `holdback_floor`, `held_back`, `staleness` to `pub(crate)`. |
+| `src/memory.rs` | Add `writer: &mut impl Write` param to `run_show`, `run_list`. Replace `write!(io::stdout(), …)` → `write!(writer, …)`. Add `filtered_list(root, type_f, filter) -> Vec<Memory>` — shared filtered-list helper used by both `list_rows` (CLI) and `list_for_mcp` (MCP), reusing `listing::retain`. Add `list_for_mcp(…) -> ListForMcp` — paginated wrapper over `filtered_list`. Refactor `backlink_rows_for(root, all: &[Memory], uid) -> Vec<BacklinkRow>` — accepts pre-collected memories so callers avoid double `collect_all`. `BacklinkRow` + fields `pub(crate)`. Bump `resolve_memory_from_all` to `pub(crate)`. `list_rows` delegates to `filtered_list` (internal refactor, no behaviour change). |
 | `src/main.rs` | 4 CLI call sites pass `&mut io::stdout()` as first arg. |
-| `src/mcp_server/tools.rs` | Add 4 tool definitions with agent-facing descriptions. Add 4 `call_tool` match arms (memory_find: `find_for_mcp` + pagination envelope; memory_retrieve: ref branch → `retrieve_reference`, scope branch → `run_retrieve`; memory_show: `run_show` JSON → deserialize → enrich backlinks + `consumable`/`notes`; memory_list: `list_for_mcp` + pagination envelope). Change `call_tool` return type to `String`. Wrap 10 review arms with `.map(|o| serde_json::to_string(&o)?)`. Change `handle_tools_call` Ok arm to `McpToolResult::text(out)` directly. Add `opt_bool_field` to `ExtractFields`. Add `parse_lifespan`, `parse_memory_type`, `parse_status` helpers. No-selector `memory_find` defaults limit to 20. |
+| `src/mcp_server/tools.rs` | Add 4 tool definitions with agent-facing descriptions. Add 4 `call_tool` match arms. `memory_find`: `find_for_mcp` + pagination envelope. `memory_retrieve`: validate mutual exclusivity (`reference` vs probes → `-32602`) + validate `min_trust` via `parse_min_trust` before branch; ref branch → `retrieve_reference`, scope branch → `run_retrieve`. `memory_show`: `run_show` JSON → deserialize → `collect_all` once → resolve Memory → `check_consumable` + `backlink_rows_for` → enrich + re-serialize. `memory_list`: `list_for_mcp` + pagination envelope. Change `call_tool` return type to `String`. Wrap 10 review arms with `.map(|o| serde_json::to_string(&o)?)`. Change `handle_tools_call` Ok arm to `McpToolResult::text(out)` directly. Add `opt_bool_field` to `ExtractFields`. Add `parse_lifespan`, `parse_memory_type`, `parse_status` helpers. |
 | `src/retrieve.rs` | Move `limit=0` reject into `run_retrieve`; cap at `RETRIEVE_LIMIT_MAX` in `run_retrieve` only (not `run_find`). |
 | `src/mcp_server/protocol.rs` | Unchanged. |
 | `src/mcp_server/mod.rs` | Unchanged. |
@@ -864,6 +902,10 @@ an MCP equivalent.
 - `memory_retrieve` with `limit: 9999` is capped to 20
 - `memory_retrieve` with `limit: 0` returns error (`-32602`)
 - `memory_retrieve` with `min_trust: "banana"` returns error (`-32602`)
+- `memory_retrieve` with `reference` + query probe returns error (`-32602`, mutual exclusivity)
+- `memory_retrieve` with `reference` alone returns security-framed block
+- `memory_retrieve` with `reference` to quarantined memory returns error (check_consumable gate)
+- `memory_retrieve` with `reference` to draft memory without `include_draft` returns error
 - `memory_show` with valid uid returns JSON with `held_back_on_retrieve`, `consumable`, `notes` fields
 - `memory_show` with `view: summary` excludes body
 - `memory_show` with `include_body: false` excludes body (metadata + links only)
