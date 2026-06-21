@@ -62,6 +62,10 @@ pub(crate) enum ConceptMapCommand {
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
         format: Format,
 
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
         /// Show edges table from parsed DSL.
         #[arg(long)]
         edges: bool,
@@ -128,6 +132,24 @@ pub(crate) enum ConceptMapCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each concept-map entity directory.
+    Paths {
+        /// Concept-map reference(s) — `CM-001` or the bare id `1`.
+        refs: Vec<String>,
+
+        #[arg(short = 't', long)]
+        toml: bool,
+        #[arg(short = 'm', long)]
+        md: bool,
+        #[arg(short = 'e', long)]
+        entity: bool,
+        #[arg(short = 's', long)]
+        single: bool,
+
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: ConceptMapCommand, color: bool) -> anyhow::Result<()> {
@@ -137,10 +159,17 @@ pub(crate) fn dispatch(cmd: ConceptMapCommand, color: bool) -> anyhow::Result<()
         ConceptMapCommand::Show {
             reference,
             format,
+            json,
             edges,
             nodes,
             path,
-        } => run_show(path, &reference, format, edges, nodes),
+        } => run_show(
+            path,
+            &reference,
+            if json { Format::Json } else { format },
+            edges,
+            nodes,
+        ),
         ConceptMapCommand::Check { id, path } => run_check(path, &id),
         ConceptMapCommand::Add {
             id,
@@ -166,6 +195,41 @@ pub(crate) fn dispatch(cmd: ConceptMapCommand, color: bool) -> anyhow::Result<()
             path,
         } => run_rename_node(path, &id, &old, &new, dry_run, case_sensitive),
         ConceptMapCommand::Export { id, format, path } => run_export(path, &id, &format),
+        ConceptMapCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => {
+            let root = crate::root::find(path, &crate::root::default_markers())?;
+            let cm_root = root.join(CONCEPT_MAP_DIR);
+            let sel = crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            };
+            let mut all_lines: Vec<String> = Vec::new();
+            for r in &refs {
+                let id = parse_ref(r)?;
+                let name = format!("{id:03}");
+                let entity_dir = cm_root.join(&name);
+                let toml_name = format!("concept-map-{name}.toml");
+                let md_name = format!("concept-map-{name}.md");
+                let set = crate::paths::scan_entity_dir(
+                    &entity_dir,
+                    &entity_dir.join(&toml_name),
+                    Some(&entity_dir.join(&md_name)),
+                    &root,
+                )?;
+                let lines = crate::paths::select_paths(&set, &sel)?;
+                all_lines.extend(lines);
+            }
+            write!(io::stdout(), "{}", all_lines.join("\n"))?;
+            Ok(())
+        }
     }
 }
 
@@ -2218,6 +2282,34 @@ mod tests {
         assert!(json.contains("\"body\""));
     }
 
+    #[test]
+    fn show_json_flag_matches_format_json() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        run_new(Some(root.to_path_buf()), Some("Map".into()), None).unwrap();
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        // Add DSL so edges/nodes appear in JSON output
+        let toml_path = cm_root.join("001").join("concept-map-001.toml");
+        let mut text = std::fs::read_to_string(&toml_path).unwrap();
+        text = text.replace(
+            "dsl = '''\n'''",
+            "dsl = '''\nUser > creates > Document\n'''",
+        );
+        std::fs::write(&toml_path, text).unwrap();
+        let (doc, _toml_text, body) = read_concept_map(&cm_root, 1).unwrap();
+        let parsed = parse_dsl(&doc.dsl);
+        let json = show_json(&doc, &body, true, true, Some(&parsed)).unwrap();
+        // Golden: verify the JSON output shape.
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["id"], "CM-001");
+        assert_eq!(v["status"], "draft");
+        assert_eq!(v["title"], "Map");
+        assert!(v["dsl"].is_string());
+        assert!(v["body"].is_string());
+        assert!(v["nodes"].is_array());
+        assert!(v["edges"].is_array());
+    }
+
     // --- statuses ---
 
     #[test]
@@ -3791,5 +3883,82 @@ mod tests {
             result,
             Err(ConceptMapMutationError::DuplicateEdge { .. })
         ));
+    }
+
+    // --- SL-139 PHASE-03 paths verb tests ---
+
+    fn paths_cm_fixture(root: &Path, id: u32, extra: &[&str]) {
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        let name = format!("{id:03}");
+        let dir = cm_root.join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("concept-map-{name}.toml")),
+            "toml",
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("concept-map-{name}.md")), "md").unwrap();
+        for e in extra {
+            std::fs::write(dir.join(e), e).unwrap();
+        }
+    }
+
+    #[test]
+    fn paths_cm_full_output() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        paths_cm_fixture(root, 1, &["diagram.dot"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        let entity_dir = cm_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("concept-map-001.toml"),
+            Some(&entity_dir.join("concept-map-001.md")),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines,
+            vec![
+                ".doctrine/concept-map/001/concept-map-001.toml",
+                ".doctrine/concept-map/001/concept-map-001.md",
+                ".doctrine/concept-map/001/diagram.dot"
+            ]
+        );
+    }
+
+    #[test]
+    fn paths_cm_single() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        paths_cm_fixture(root, 1, &["a.txt", "z.txt"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: true,
+        };
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        let entity_dir = cm_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("concept-map-001.toml"),
+            Some(&entity_dir.join("concept-map-001.md")),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(
+            lines[0],
+            ".doctrine/concept-map/001/concept-map-001.toml"
+        );
     }
 }

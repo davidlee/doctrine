@@ -1383,6 +1383,39 @@ pub(crate) fn run_status(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// `knowledge paths` — file paths for each knowledge record entity directory
+// ---------------------------------------------------------------------------
+
+/// `doctrine knowledge paths <ref>…` — resolve each ref to its entity directory
+/// and print the root-relative paths according to the selection.
+fn run_paths(
+    path: Option<PathBuf>,
+    refs: &[String],
+    sel: &crate::paths::PathSelection,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mut all_lines: Vec<String> = Vec::new();
+    for r in refs {
+        let (kind, id) = resolve_ref(r)?;
+        let name = format!("{id:03}");
+        let entity_dir = root.join(kind.kind().dir).join(&name);
+        let toml_name = format!("{RECORD_STEM}-{name}.toml");
+        let md_name = format!("{RECORD_STEM}-{name}.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join(&toml_name),
+            Some(&entity_dir.join(&md_name)),
+            &root,
+        )?;
+        let lines = crate::paths::select_paths(&set, sel)?;
+        all_lines.extend(lines);
+    }
+    write!(io::stdout(), "{}", all_lines.join("\n"))?;
+    Ok(())
+}
+
 // ── CLI dispatch ───────────────────────────────────────────────────────────
 
 use std::str::FromStr;
@@ -1421,6 +1454,29 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each knowledge record entity directory.
+    Paths {
+        /// Knowledge record reference(s) — `ASM-007`, `DEC-012`, etc.
+        refs: Vec<String>,
+
+        /// Show only the identity TOML file.
+        #[arg(short = 't', long)]
+        toml: bool,
+        /// Show only the identity Markdown body.
+        #[arg(short = 'm', long)]
+        md: bool,
+        /// Show the identity TOML + Markdown (equivalent to -t -m).
+        #[arg(short = 'e', long)]
+        entity: bool,
+        /// Return only the first (primary) path per ref.
+        #[arg(short = 's', long)]
+        single: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()> {
@@ -1439,6 +1495,23 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             path,
         } => run_show(path, &id, if json { Format::Json } else { format }),
         KnowledgeCommand::Status { id, state, path } => run_status(path, &id, &state, color),
+        KnowledgeCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => run_paths(
+            path,
+            &refs,
+            &crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            },
+        ),
     }
 }
 
@@ -2067,5 +2140,228 @@ target = \"ADR-001\"
         assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::GovernedBy);
         assert_eq!(r.tier1[0].target, "ADR-001");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // --- PHASE-04 paths verb golden tests ---
+
+    /// Scaffold one knowledge record entity dir with identity files + optional extras.
+    fn record_fixture(root: &Path, kind: RecordKind, id: u32, extra: &[&str]) {
+        let name = format!("{id:03}");
+        let dir = root.join(kind.kind().dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{RECORD_STEM}-{name}.toml")), "toml").unwrap();
+        std::fs::write(dir.join(format!("{RECORD_STEM}-{name}.md")), "md").unwrap();
+        for e in extra {
+            std::fs::write(dir.join(e), e).unwrap();
+        }
+    }
+
+    #[test]
+    fn paths_full_shows_toml_md_and_extras_in_canonical_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        record_fixture(root, RecordKind::Assumption, 1, &["notes.md", "z.log"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root
+            .join(RecordKind::Assumption.kind().dir)
+            .join("001");
+        let identity_toml = entity_dir.join("record-001.toml");
+        let identity_md = entity_dir.join("record-001.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        let output = lines.join("\n");
+        assert!(output.contains(".doctrine/knowledge/assumption/001/record-001.toml"));
+        assert!(output.contains(".doctrine/knowledge/assumption/001/record-001.md"));
+        assert!(output.contains(".doctrine/knowledge/assumption/001/notes.md"));
+        assert!(output.contains(".doctrine/knowledge/assumption/001/z.log"));
+    }
+
+    #[test]
+    fn paths_single_truncates_to_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        record_fixture(root, RecordKind::Decision, 1, &["notes.md"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: true,
+        };
+        let entity_dir = root
+            .join(RecordKind::Decision.kind().dir)
+            .join("001");
+        let identity_toml = entity_dir.join("record-001.toml");
+        let identity_md = entity_dir.join("record-001.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(
+            lines[0],
+            ".doctrine/knowledge/decision/001/record-001.toml"
+        );
+    }
+
+    #[test]
+    fn paths_toml_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        record_fixture(root, RecordKind::Question, 2, &["notes.md"]);
+        let sel = crate::paths::PathSelection {
+            toml: true,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root
+            .join(RecordKind::Question.kind().dir)
+            .join("002");
+        let identity_toml = entity_dir.join("record-002.toml");
+        let identity_md = entity_dir.join("record-002.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines,
+            vec![".doctrine/knowledge/question/002/record-002.toml"]
+        );
+    }
+
+    #[test]
+    fn paths_md_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        record_fixture(root, RecordKind::Constraint, 3, &[]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: true,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root
+            .join(RecordKind::Constraint.kind().dir)
+            .join("003");
+        let identity_toml = entity_dir.join("record-003.toml");
+        let identity_md = entity_dir.join("record-003.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines,
+            vec![".doctrine/knowledge/constraint/003/record-003.md"]
+        );
+    }
+
+    #[test]
+    fn paths_entity_gives_toml_and_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        record_fixture(root, RecordKind::Assumption, 4, &["extra.txt"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: true,
+            single: false,
+        };
+        let entity_dir = root
+            .join(RecordKind::Assumption.kind().dir)
+            .join("004");
+        let identity_toml = entity_dir.join("record-004.toml");
+        let identity_md = entity_dir.join("record-004.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines,
+            vec![
+                ".doctrine/knowledge/assumption/004/record-004.toml",
+                ".doctrine/knowledge/assumption/004/record-004.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn paths_invalid_ref_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        record_fixture(root, RecordKind::Assumption, 1, &[]);
+        let (_, id) = resolve_ref("ASM-99999").unwrap();
+        let entity_dir = root
+            .join(RecordKind::Assumption.kind().dir)
+            .join(format!("{id:03}"));
+        let identity_toml = entity_dir.join(format!("record-{id:03}.toml"));
+        let identity_md = entity_dir.join(format!("record-{id:03}.md"));
+        let scan = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        );
+        assert!(scan.is_err());
+    }
+
+    #[test]
+    fn paths_multi_ref_splat_preserves_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        record_fixture(root, RecordKind::Assumption, 1, &[]);
+        record_fixture(root, RecordKind::Decision, 1, &[]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let mut all_lines: Vec<String> = Vec::new();
+        for (kind, n) in [
+            (RecordKind::Assumption, "001"),
+            (RecordKind::Decision, "001"),
+        ] {
+            let entity_dir = root.join(kind.kind().dir).join(n);
+            let toml_name = format!("{RECORD_STEM}-{n}.toml");
+            let md_name = format!("{RECORD_STEM}-{n}.md");
+            let set = crate::paths::scan_entity_dir(
+                &entity_dir,
+                &entity_dir.join(&toml_name),
+                Some(&entity_dir.join(&md_name)),
+                root,
+            )
+            .unwrap();
+            all_lines.extend(crate::paths::select_paths(&set, &sel).unwrap());
+        }
+        assert_eq!(all_lines.len(), 4);
+        assert!(all_lines[0].contains("assumption/001/record-001.toml"));
+        assert!(all_lines[2].contains("decision/001/record-001.toml"));
     }
 }
