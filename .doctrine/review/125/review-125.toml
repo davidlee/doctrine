@@ -12,5 +12,95 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-134"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Design underspecifies set_facet_mixed shape-error handling for Arr fields inside a valid table"
+detail = """design.md §2.2 says set_facet_mixed "allocates a table if absent, bails on non-table shapes" — matching set_facet's scalar/AoT guard. But once inside a valid table, individual managed keys may have wrong shapes (e.g. hand-edited `controls = "not-an-array"` where the scaffold has `controls = []`). The design's no-op guard reads controls back via `as_array()`, which would return None for a scalar value, triggering a silent overwrite. The existing set_facet has the same behaviour: it reads current float values and overwrites, never bailing on wrong-typed managed keys. The design should acknowledge this silent-correction behaviour explicitly — it is acceptable for consistency but must be named."""
+disposition = "fixed"
+response = "design.md §2.2 updated: added explicit note that set_facet_mixed silently corrects malformed managed-key types (scalar where array expected, integer where string expected), consistent with set_facet's existing overwrite behaviour for the float path."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "RiskSetArgs.controls clap annotation not specified — Vec<String> repeatable semantics implicit"
+detail = "design.md §3.1 says `--controls` is repeatable — `--controls A --controls B` — and described as `Vec<String>` with `#[arg(long)]`. This correctly leverages clap's default `num_args = 1..` for Vec. However, the design does not specify the exact clap derive annotation for `controls`. In the existing codebase, multi-value args like `--tag` use `#[arg(long)]` without explicit `num_args` — the Vec type + `#[arg(long)]` is sufficient. The design should name this explicitly: `#[arg(long)] pub(crate) controls: Vec<String>` — this is the pattern, just needs to be spelled out as other Args fields are."
+disposition = "fixed"
+response = "RiskSetArgs struct in design.md §3.1 now spells out the explicit annotation for controls field."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "ItemKind::ALL visibility bump — declaration-vs-priority order confusion risk unstated"
+detail = """design.md §2.3 says `read_kind` will use `ItemKind::ALL` after bumping its visibility to `pub(crate)`. `ALL` is currently `const ALL: [ItemKind; 5]` at `src/backlog.rs:388` — module-private. The visibility change is one token. However, the design does not consider whether `ALL`'s iteration order (declaration order: Issue, Improvement, Chore, Risk, Idea) could be misinterpreted by other modules. The comment already says "DECLARATION order" and `ordinal()` is a separate method. The risk is low but the design should note that `ALL` is declaration-ordered, not priority-ordered, and modules consuming it must not treat it as such. The existing `kind_from_prefix` function (which already iterates ALL internally) is the existing pub(crate) consumption pattern — this is precedent for the visibility bump being safe."""
+disposition = "fixed"
+response = "design.md §7 D6 updated: ALL iteration order is declaration order (Issue, Improvement, Chore, Risk, Idea), NOT priority order. The existing ordinal() method is the authority for priority grouping."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Missing VT: risk set on a risk item with absent [facet] table — table-allocation path untested in integration"
+detail = 'design.md §6 lists VT-1 through VT-17 covering: set (both axes, partial, neither-axis error), kind gate, clear, clear no-op, idempotent set, origin, controls, forward-compat, invalid enum token, and facet_write unit tests. Missing test case: `risk set` on a risk item that has NO `[facet]` table at all (hand-deleted). The design says `set_facet_mixed` "allocates table if absent." This path should be tested — seed a risk TOML with no `[facet]` header, run `risk set --likelihood low`, assert `[facet]` appears with the set fields. Without this test, the table-allocation path in `set_facet_mixed` (Str fields) is only covered by facet_write unit tests, not the integration path through `run_risk_set`.'
+disposition = "fixed"
+response = "VT-18 added to design.md §6: risk set on risk item with absent [facet] table — table-allocation path."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Unchanged echo format underspecified — only shows likelihood/impact, ignores origin/controls"
+detail = 'design.md §3.3 says echo for unchanged: `risk unchanged: RSK-008 likelihood=medium impact=high`. But the unchanged path may also include origin and controls that were supplied but unchanged. The design does not specify how to format the echo when origin or controls are present but unchanged. The estimate/value precedent always names the values that were set (even when unchanged). For risk, the echo should name ALL supplied fields in the unchanged message, not just the assessment axes. Example: `risk unchanged: RSK-008 likelihood=medium impact=high origin="supply chain"` — include origin if it was supplied and unchanged. This is an implementation detail but the design should specify the echo format for the mixed-supplied case.'
+disposition = "fixed"
+response = 'design.md §3.3 updated: unchanged echo includes all supplied fields — "risk unchanged: RSK-008 likelihood=medium impact=high origin="supply chain" controls=["ci-check"]"'
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "FacetField::Arr no-op guard API path underspecified — toml_edit Array element access not detailed"
+detail = """design.md §2.2 describes `FacetField::Arr { key: &'static str, values: Vec<String> }` and the no-op guard as "read back via `as_array()` → `get_str()`, element-wise ordered compare." However, `toml_edit::Value::as_array()` returns `Option<&Array>`, and `Array::get_str(i)` or iterating `Array::iter()` requires mapping `Value` to string. The design doesn't name the specific `toml_edit` API path for reading array elements as strings. Implementation risk: `Array` elements are `Value`, and extracting a string from each element requires `.as_str()` on the `Value`. Also, the case where an array element is NOT a string (e.g. integer, nested table) needs a decision: should the no-op guard treat non-string elements as "not equal" (triggering rewrite), or should it bail? The design is silent. For safety, every non-string array element should be treated as "not equal" (triggering overwrite), matching the float fields' integer-tolerance pattern."""
+disposition = "fixed"
+response = 'design.md §2.2 updated: Arr no-op guard detail — iterate Array elements, as_str() per element, non-string elements treated as "not equal" triggering overwrite. Named toml_edit API surface.'
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "Empty --origin edge case — indistinguishable from cleared, handled by no-op guard, unstated"
+detail = """design.md §2.1 says `RiskLevel` validation is via clap's `ValueEnum` — "no separate pure validate needed." Validated at `src/backlog.rs:503`: `RiskLevel` derives `clap::ValueEnum`. However, the design also says `--origin` is free-text `String` with no validation. An empty `--origin ""` would write `origin = ""` — semantically equivalent to clearing it, but not idempotent against the scaffold's `origin = ""`. The no-op guard for `Str` would correctly detect `"" == ""` as no-op. But the design should note this edge case: an empty origin is indistinguishable from a cleared origin, and the no-op guard handles it transparently. No design change needed — just acknowledgement."""
+disposition = "fixed"
+response = """design.md §7 D2 updated with note: empty --origin is indistinguishable from cleared origin; no-op guard handles it transparently ("" equals scaffold's seeded "")."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = """--controls replace semantics — design says "help text states this" but doesn't specify how"""
+detail = """design.md §3.1 says `--controls` "replaces the entire list (not additive)" and the help text should state this. However, the design doesn't show the EXACT help text string. The `#[arg(long)]` annotation on `controls: Vec<String>` produces auto-generated help like `--controls <CONTROLS>` from clap. To communicate the replace semantics, the design should specify adding a verb-level `#[command(about = "...")]` or a `long_help` attribute on the `controls` field. Example: `#[arg(long, long_help = "Controls — each occurrence replaces the entire list (not additive)")]`. Without this, users won't know the semantics until they lose data."""
+disposition = "fixed"
+response = 'design.md §3.1: controls field annotation specified as #[arg(long, long_help = "Controls — each occurrence replaces the entire list (not additive)")].'
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Code impact table verified complete — all registration surfaces accounted for"
+detail = 'design.md §5 says `src/main.rs` is "NOT changed" — help text auto-derived from clap doc comments. However, the `Risk` variant needs to be added to the `Command` enum at `src/commands/cli.rs` (correctly listed), but ALSO needs to appear in the `write_class` match at `src/commands/guard.rs` (correctly listed as `Write("risk")`). Additionally, `src/commands/facet.rs` already has a `pub(crate) fn resolve_entity_path_and_canonical` helper used by estimate/value — the risk functions will reuse it. The design correctly lists all necessary file changes. No issue found — the code impact table is complete and accurate.'
+disposition = "fixed"
+response = "Affirmation — no change needed. Code impact table is complete."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "major"
+title = "Scope doc (slice-134.md) missing --origin and --controls — design expanded scope but scope doc not updated"
+detail = """slice-134.md (the scope document) §Non-Goals states: "No risk history tracking" — correct. But the scope doc doesn't mention `--origin` or `--controls` at all, while design.md now includes both as optional flags on `set`. During the design conversation, the user explicitly expanded scope: "they want to be goals for cli surface area. just optional add / set if flags present." The scope document must be updated to reflect this. Currently neither `origin` nor `controls` appear in slice-134.md's Scope & Objectives or Terrain sections. The design.md §5 correctly lists `src/commands/facet.rs` as the implementation surface — no additional file changes needed for origin/controls beyond what's already specified."""
+disposition = "fixed"
+response = "slice-134.md updated: Scope & Objectives now lists --origin (optional free-text) and --controls (repeatable, replace semantics). Non-Goals adjusted. Terrain table unchanged (no new files needed)."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

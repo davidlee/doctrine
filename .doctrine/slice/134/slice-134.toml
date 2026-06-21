@@ -1,7 +1,7 @@
 id = 134
 slug = "risk-facet-cli-verb"
 title = "Risk facet CLI verb — set/clear likelihood/impact"
-status = "design"
+status = "plan"
 created = "2026-06-21"
 updated = "2026-06-21"
 
