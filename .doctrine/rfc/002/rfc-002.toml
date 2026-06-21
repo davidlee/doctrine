@@ -1,0 +1,60 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 2
+slug = "consumption-surfaces-program-estimate-value-scoring"
+title = "Consumption surfaces program: estimate, value, and scoring outward pipeline"
+status = "open"
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+tags          = ["program", "consumption-surfaces", "estimate", "value", "scoring"]
+
+[[relation]]
+label = "related"
+target = "RFC-001"
+
+[[relation]]
+label = "related"
+target = "SL-132"
+
+[[relation]]
+label = "related"
+target = "IMP-112"
+
+[[relation]]
+label = "related"
+target = "SL-133"
+
+[[relation]]
+label = "related"
+target = "IMP-118"
+
+[[relation]]
+label = "related"
+target = "SL-134"
+
+[[relation]]
+label = "related"
+target = "IMP-132"
+
+[[relation]]
+label = "related"
+target = "IMP-133"
+
+[[relation]]
+label = "related"
+target = "IMP-134"
+
+[[relation]]
+label = "related"
+target = "SL-118"
+
+[[relation]]
+label = "related"
+target = "ISS-040"
+
