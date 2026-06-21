@@ -1,0 +1,221 @@
+id    = 134
+slug  = "inquisition-sl-139-design-uniform-entity-show-and-file-paths"
+title = "Inquisition: SL-139 design — uniform entity show and file paths"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-139"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Show-parity scope conflates CLI-flag existence with JSON output-shape normalization"
+detail = """
+The design's "Scope & Objectives" says "preserve and normalize `show` parity" and "Ensure every in-scope entity command has a `show` verb that renders the entity's readable Markdown/prose reconstruction plus embedded child/facet content." But it only identifies ONE concrete deviation: concept-map lacks the `--json` shorthand flag. It never inventories the actual JSON output shapes across the 13 in-scope kinds to determine whether they are already "normalized."
+
+Evidence from the codebase:
+- `concept_map::show_json` returns a flat JSON: `{ "id": "CM-001", "slug": "...", "title": "...", "status": "...", "body": "..." }` (plus optional edges/nodes).
+- `slice::show_json` returns: `{ "kind": "slice", "slice": { ... }, "body": "..." }` — a wrapped envelope.
+- `governance::show_json` (for ADR/policy/standard/rfc) returns a different shape with supersedes/related arrays.
+- `review::show_json` carries findings arrays.
+- `spec::show_json` carries members, requirements, interactions.
+- `memory::show_json` carries relations, wikilinks, scope, trust data.
+
+Expected: if "normalize show parity" is a design objective, the design should define what normalization means beyond the `--json` flag — does it prescribe a common JSON envelope shape? A common kind-key? Or is it solely about the CLI grammar (the flag exists)? Currently the objective is ambiguous, and a reader cannot tell whether the resulting implementation has satisfied "show parity."
+
+The design's internal review (F4) says "The design no longer adds paths to `show --json`, preserving existing full-inspection consumers and goldens." This addresses preservation but does not answer whether the existing diversity of JSON shapes across kinds is itself a deviation from the "uniform" intent SPEC-013 mandates.
+"""
+disposition = "design-wrong"
+response = """
+The design's §1 ("Design Problem") correctly states two targets: preserve/normalize show parity, and add a paths verb. The Scope (§ in scope body) correctly lists "Ensure every in-scope entity command has a `show` verb that renders the entity's readable Markdown/prose reconstruction plus embedded child/facet content." But the design never answers the "how normalized is normalized?" question for JSON shapes.
+
+Design correction required: add a short subsection or a decision (D-n) that explicitly defines the show-parity contract:
+- CLI-grammar parity: every entity command MUST accept `--json` as a boolean shorthand alongside `--format json`. This is the concrete deviation (concept-map) and the full extent of SL-139's show-parity scope.
+- JSON output-shape parity: OUT OF SCOPE for SL-139. Each kind's show JSON shape is kind-owned (per ADR-005's per-kind surface responsibility); normalization of JSON envelope shapes across kinds belongs to IMP-145 (the info/summary follow-up) or a future slice.
+- Rationale: the scope body already says "Keep the broader `info` / summary read-surface question out of scope; it is captured as follow-up IMP-145." Normalizing JSON output shapes IS the info-surface question. Show --json today is a full-inspection surface per kind — its shape diversity is expected and intentional.
+"""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "paths.rs ADR-001 tier assignment is deferred to implementation, risking layering drift"
+detail = """
+The design proposes a new shared module `src/paths.rs` with these properties:
+- Contains types `EntityPathSet` and `PathSelection` (clap-free structs).
+- Owns "scanning an entity directory for direct regular files" and "converting absolute paths under `root` to root-relative display strings."
+- Must not import clap (command tier); must not live in `listing.rs` (pure leaf).
+
+ADR-001 (governing doctrine for SL-139) establishes three tiers: leaf (no domain knowledge, no filesystem I/O) ← engine (core domain, pure-first) ← command (thin CLI shells).
+
+The design §5.3 says: "It should not live in `src/listing.rs` because `listing.rs` is the pure list spine under SPEC-013. It should not grow `src/entity.rs` unless implementation finds a small path helper belongs there."
+
+But it NEVER assigns `paths.rs` to a specific tier. Two unresolved tensions:
+1. **Filesystem I/O**: scanning entity directories for regular files is filesystem I/O. That makes it at minimum engine tier (may depend on leaf, not command). But the design's `EntityPathSet` and `PathSelection` are pure data types — the scanning function is the impure part. Should the pure types live in one module and the impure scanner in another?
+2. **Clap-free but command-adjacent**: the types are clap-free (correct) but seem intended to be called by command modules. If `paths.rs` lives in the engine tier, command→engine is downward (correct). If it drifts into leaf, it violates the no-fs-IO rule. If it drifts into command, it can't be shared upward.
+
+The design's §8 acknowledges "Risk: helper placement violates layering" with mitigation "keep filesystem path projection out of `listing.rs`; keep clap out of the shared helper" — but this only forbids two wrong placements without naming the RIGHT one. Expected: the design should explicitly state which tier `paths.rs` belongs to, and which tier boundary the scanning function crosses.
+"""
+disposition = "fix-now"
+response = """
+The design correctly identifies the tension — `paths.rs` must be clap-free and fs-capable — but leaves the tier assignment unresolved. 
+
+Design correction: add to §5.3 an explicit tier assignment:
+
+"Tier assignment: `src/paths.rs` is an **engine-tier** module. It depends only on leaf-tier modules (stdlib, `src/entity.rs` for `rel_path`/`id_path` helpers) and is depended on by command-tier modules (per-kind CLI dispatch). The pure types (`EntityPathSet`, `PathSelection`) and the pure selection logic live directly in the module; the filesystem-scanning function (`scan_entity_dir` or similar) is also engine-tier because it reads the filesystem — the existing engine already carries filesystem access (entity.rs `id_path`, `scan_ids`, `materialise`). The module imports no clap types and no command-tier modules." 
+
+Rationale: the entity engine (`src/entity.rs`) is already engine-tier and already does filesystem I/O (scanning, materialising). A path-projection helper that reads directory entries is conceptually adjacent — it's discovering authored-file metadata, which is the engine's job. The command tier only supplies the args (ref, selectors) and writes stdout.
+"""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Design is silent on MCP surface implications despite MCP being a primary agent interface"
+detail = """
+The design's "Affected Surface" section lists CLI definitions and dispatch, per-kind command modules, shared read/projection seams, tests/goldens, and specs/docs — but never mentions the MCP (Model Context Protocol) server tools (`mcp_server/`, `doctrine_review_show`, `doctrine_memory_show`, etc.).
+
+Evidence: The MCP tools already expose `review_show` with `--json` semantics as their primary contract. The design does not address:
+- Whether `paths` should get an MCP analog (e.g., `doctrine_slice_paths`).
+- Whether MCP consumers that call `show --json` would be affected by any normalization of the JSON output shape.
+- Whether the MCP server's entity resolution (which already resolves refs for show/list) would need a `paths` projection.
+
+Expected: the design should either (a) explicitly state MCP is out of scope with a rationale, or (b) identify the MCP tools that would need a `paths` surface and whether it follows the same pattern. The Non-Goals section is a natural home for an explicit exclusion.
+"""
+disposition = "tolerated"
+response = """
+The MCP surface is a derived reflection of the CLI surface — MCP tools (`doctrine_review_show`, `doctrine_memory_show`, etc.) are wrappers that call the same Rust functions the CLI does. Adding a `paths` verb to the CLI will automatically make the same functionality available to any future MCP binding if one is desired, without design changes.
+
+However, the design should explicitly exclude MCP from scope. Add to § Non-Goals: "Do not add an MCP `paths` surface. The MCP tools reflect the CLI surface; a future MCP `paths` binding is a follow-up concern, not part of this slice."
+
+Rationale for tolerated (not fix-now): MCP omission is not a correctness defect — the feature works without it. The explicit exclusion is a clarity improvement but doesn't change any implementation decision.
+"""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "In-scope entity-command enumeration is incomplete: sub-kind surface not addressed"
+detail = """
+The design's §2 "Current State" enumerates 13 in-scope authored entity commands. But several of these are multi-kind umbrellas:
+
+- `backlog` dispatches across 4-5 sub-kinds: `ISSUE_KIND`, `IMPROVEMENT_KIND`, `CHORE_KIND`, `RISK_KIND`, `IDEA_KIND` (all in `src/backlog.rs`).
+- `spec` dispatches across `PRODUCT_SPEC_KIND` and `TECH_SPEC_KIND` (in `src/spec.rs`).
+- `knowledge` dispatches across `ASSUMPTION_KIND`, `DECISION_KIND`, `QUESTION_KIND`, `CONSTRAINT_KIND` (in `src/knowledge.rs`).
+
+Evidence from `src/integrity.rs`: the `KINDS` table lists each sub-kind independently with its own `dir`, `prefix`, and `stem`.
+
+The design's §5.4 per-kind adapter section says:
+- "`backlog` resolves the prefix (`ISS`, `IMP`, `CHR`, `RSK`, `IDE`) to the backlog kind tree."
+- "`knowledge` resolves the prefix (`ASM`, `DEC`, `QUE`, `CON`) to the knowledge kind tree."
+- "`spec` resolves `PRD-NNN` or `SPEC-NNN` to the product/tech tree."
+
+This acknowledges the dispatch but never states whether `paths` returns files from the umbrella directory (`.doctrine/backlog/`) or the per-kind subdirectory (`.doctrine/backlog/issue/`, etc.). The current storage layout puts all backlog items under `.doctrine/backlog/<prefix>/<NNN>/` — the `<prefix>` nesting level is part of the path and must be resolved correctly.
+
+Expected: the design should clarify whether the per-kind adapter for umbrellas (backlog, spec, knowledge) resolves to the sub-kind directory or the umbrella root, and whether the identity file names use the sub-kind stem (e.g., `issue-NNN.toml`) or a shared stem.
+"""
+disposition = "fix-now"
+response = """
+The design's §5.4 per-kind adapter descriptions are correct but incomplete — they describe prefix-to-sub-kind dispatch for backlog, spec, and knowledge but don't explicitly state which directory the identity files live in. The current storage layout is clear from the codebase:
+
+- Backlog: `.doctrine/backlog/<prefix>/NNN/` where prefix ∈ {issue, improvement, chore, risk, idea}. Identity files: `<prefix>-NNN.toml`, `<prefix>-NNN.md`.
+- Spec: `.doctrine/spec/<subdir>/NNN/` where subdir ∈ {product, tech}. Identity files: `product-NNN.toml`, `product-NNN.md` or `tech-NNN.toml`, `tech-NNN.md`.
+- Knowledge: `.doctrine/knowledge/<prefix>/NNN/` where prefix ∈ {assumption, decision, question, constraint}. Identity files: `<prefix>-NNN.toml`, `<prefix>-NNN.md`.
+
+Design correction: In §5.4, for each umbrella kind, add the explicit sub-directory path. E.g., for backlog: "`backlog` resolves the prefix (`ISS`, `IMP`, `CHR`, `RSK`, `IDE`) to the sub-kind directory `.doctrine/backlog/{issue|improvement|chore|risk|idea}/NNN/` with identity files following the sub-kind stem (`issue-NNN.toml`, etc.)." Same for spec and knowledge.
+
+This is fix-now because during implementation, an incorrect directory path would produce wrong output — the design must say where the files are.
+"""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "`--entity` flag is syntactic sugar with zero unique semantics: `--entity` ≡ `-t -m`"
+detail = """
+The design §5.2 defines:
+- `-t`/`--toml`: identity TOML
+- `-m`/`--md`: identity Markdown  
+- `-e`/`--entity`: identity TOML + identity Markdown
+- Explicitly states: "selectors compose additively; `-t -m` is equivalent to `-e`"
+
+If the identity file set is always exactly `{TOML, MD}` (no third identity file class), then `--entity` adds a flag to the CLI surface, help text, clap definition, and maintenance burden for zero unique behaviour that `-t -m` does not already express. The design acknowledges this equivalence — the question is whether the flag earns its keep.
+
+Rejected alternatives the design could consider:
+1. Drop `--entity` and document `-t -m` as the way to get both identity files.
+2. Redefine `--entity` as the *default* (no selector = all files including others; `--entity` = only identity TOML+MD, excluding other siblings). This would give it distinct semantics.
+
+Expected: a design decision (D-n) explaining why `--entity` is worth adding given it is pure sugar over `-t -m`, or removal.
+"""
+disposition = "tolerated"
+response = """
+The `--entity` flag is indeed syntactic sugar — `--entity` ≡ `-t -m`. However:
+
+1. It documents intent — the user says "give me the entity files" rather than "toml and md" — which matters for discoverability.
+2. The flag count is 4 (toml, md, entity, single), which is modest. Adding `--entity` does not meaningfully inflate the CLI surface.
+3. The design is explicit about the equivalence, so no ambiguity exists.
+
+Removing `--entity` would save one flag but lose the discoverability of the most common case. Keeping it at a cost of one clap arg definition is a reasonable tradeoff.
+
+Rationale for tolerated: the cost is trivial, the benefit (user intent) is real albeit small. This is a design taste decision, not a correctness issue.
+"""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Concept-map body-read tolerance silently contradicts the design's strict missing-Markdown contract"
+detail = """
+The design §5.5 states: "Missing identity Markdown is an error when explicitly selected by `--md` or `--entity`; for default all-files mode it should be treated as absent only if the kind legitimately has no Markdown body. The current in-scope kinds all have Markdown companions, so implementation should start strict and let any contrary discovery route through `/consult`."
+
+However, `concept_map::read_concept_map` (line ~250 of src/concept_map.rs) currently reads the Markdown body as:
+```rust
+let body = std::fs::read_to_string(&md_path).unwrap_or_default();
+```
+This silently tolerates a missing `concept-map-NNN.md` file, returning an empty string. The design correctly notes that every in-scope kind has a Markdown companion — but concept-map's own code doesn't enforce this as an error. If an existing concept-map somehow lost its `.md` file, `show` would silently show an empty body, and `paths --md` would (per design) error.
+
+Expected: the design should either (a) note concept-map's `unwrap_or_default()` as a pre-existing tolerance that `paths` will tighten, or (b) specify that missing Markdown is an error for `paths` but remains tolerated for `show` (explaining the asymmetry).
+"""
+disposition = "fix-now"
+response = """
+The design is correct in its §5.5 strictness rule — `paths --md` should error on a missing Markdown file. But it should also name the pre-existing tolerance in concept_map as a known asymmetry to be respected.
+
+Design correction: Add to §5.5: "Note: `concept_map::read_concept_map` currently tolerates a missing Markdown body via `unwrap_or_default()`. This pre-existing tolerance is preserved for `concept-map show` (show is a content-reader, not a file-existence assertion) but `concept-map paths --md` will enforce the design's strict contract and error on a missing body file. The asymmetry is intentional: `show` displays what exists; `paths` asserts file location."
+
+This is fix-now because the implementation will encounter the `unwrap_or_default()` during testing and may be uncertain whether to replicate or override it.
+"""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Design does not address behaviour when an entity folder contains non-authored files"
+detail = """
+The design §5.1 and §5.5 specify that `paths` output includes "direct regular files" and excludes "symlink aliases, directories, and runtime state." But it does not define what happens when an authored entity directory contains:
+
+1. **Hidden files** (e.g., `.DS_Store`, `.gitkeep`) — these are direct regular files. Should they appear in `paths` output?
+2. **Editor artifacts** (e.g., `slice-139.md~`, `#slice-139.toml#`, `*.swp`) — also direct regular files.
+3. **TOML fragments created by tools** — e.g., a future `plan.toml`, `design.md` in a slice directory.
+
+The design says "other direct regular files in the entity's authored folder in deterministic order." If hidden files and editor temporaries are included, the output is noisy and non-deterministic across environments. If they're excluded, the design needs an explicit exclusion rule (by prefix `.`, by suffix `~`, by pattern).
+
+Expected: the design should define an exclusion filter for non-authored regular files — at minimum a statement of intent about hidden-files (`.*` prefix) and common editor temporaries, or an explicit declaration that ALL regular files are emitted (accepting the noise).
+"""
+disposition = "fix-now"
+response = """
+Valid concern. The design must define what counts as an "authored" regular file vs. a non-authored artifact. Otherwise `paths` output will include editor temporaries, OS metadata files, and tool artifacts — making the output environment-dependent and violating the "deterministic" contract.
+
+Design correction: Add to §5.5: "Exclusion filter: the paths helper excludes (a) entries whose name starts with `.` (hidden files, e.g. `.DS_Store`, `.gitkeep`), (b) entries whose name starts with `#` or ends with `~` or `.swp` (editor temporaries), and (c) entries matching known tool-artifact patterns (`.orig`, `.bak`). The exclusion is applied at the file-listing stage before classification into TOML/MD/other. This is a conservative whitelist-adjacent policy: only files matching the kind's expected identity stems plus non-artifact regular files are emitted."
+
+This is fix-now because otherwise a macOS developer will see `.DS_Store` in paths output, breaking the deterministic contract.
+"""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
