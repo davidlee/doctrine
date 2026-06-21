@@ -18,3 +18,10 @@ provisioning, or a payload side-channel carrying the orchestrator path.
 
 **Trigger to act:** any addition to `.worktreeinclude` beyond worktree-invariant
 static artifacts. Conditional, low-likelihood — captured so it is not rediscovered.
+
+**Related (concrete instances feeding this mechanism).** CHR-017 — worker forks
+lack gitignored build deps (`node_modules` for lint-js; `web/map/dist` RustEmbed
+source for `map_server` tests), the actionable umbrella whose option B/B′ provisions
+gitignored deps via `.worktreeinclude`. Two distinct gitignored targets now observed
+(see `mem.pattern.dispatch.worker-fork-missing-gitignored-embed`), so the provisioning
+source question this idea raises is the natural next altitude once CHR-017 lands.
