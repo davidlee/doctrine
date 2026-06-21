@@ -7758,9 +7758,8 @@ weight = 0
     #[test]
     fn paths_multi_uid_splat_preserves_order() {
         let root = temp_project_with_two_memories();
-        let uids: Vec<String> = {
-            crate::entity::scan_named(&root.path().join(MEMORY_ITEMS_DIR)).unwrap()
-        };
+        let uids: Vec<String> =
+            { crate::entity::scan_named(&root.path().join(MEMORY_ITEMS_DIR)).unwrap() };
         assert_eq!(uids.len(), 2);
         let sel = crate::paths::PathSelection {
             toml: false,

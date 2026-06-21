@@ -4095,12 +4095,7 @@ parent = \"SPEC-002\"
     // --- PHASE-04 paths verb golden tests ---
 
     /// Scaffold one spec entity dir with identity files + optional extras.
-    fn spec_fixture(
-        root: &Path,
-        subtype: SpecSubtype,
-        id: u32,
-        extra: &[&str],
-    ) {
+    fn spec_fixture(root: &Path, subtype: SpecSubtype, id: u32, extra: &[&str]) {
         let name = format!("{id:03}");
         let dir = root.join(subtype.kind().dir).join(&name);
         fs::create_dir_all(&dir).unwrap();
@@ -4115,7 +4110,12 @@ parent = \"SPEC-002\"
     fn paths_full_shows_toml_md_and_members_in_canonical_order() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        spec_fixture(root, SpecSubtype::Tech, 1, &["members.toml", "interactions.toml"]);
+        spec_fixture(
+            root,
+            SpecSubtype::Tech,
+            1,
+            &["members.toml", "interactions.toml"],
+        );
         let sel = crate::paths::PathSelection {
             toml: false,
             md: false,
@@ -4125,13 +4125,9 @@ parent = \"SPEC-002\"
         let entity_dir = root.join(SpecSubtype::Tech.kind().dir).join("001");
         let identity_toml = entity_dir.join("spec-001.toml");
         let identity_md = entity_dir.join("spec-001.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         let output = lines.join("\n");
         assert!(output.contains(".doctrine/spec/tech/001/spec-001.toml"));
@@ -4154,13 +4150,9 @@ parent = \"SPEC-002\"
         let entity_dir = root.join(SpecSubtype::Product.kind().dir).join("001");
         let identity_toml = entity_dir.join("spec-001.toml");
         let identity_md = entity_dir.join("spec-001.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0], ".doctrine/spec/product/001/spec-001.toml");
@@ -4180,13 +4172,9 @@ parent = \"SPEC-002\"
         let entity_dir = root.join(SpecSubtype::Tech.kind().dir).join("002");
         let identity_toml = entity_dir.join("spec-002.toml");
         let identity_md = entity_dir.join("spec-002.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines, vec![".doctrine/spec/tech/002/spec-002.toml"]);
     }
@@ -4205,13 +4193,9 @@ parent = \"SPEC-002\"
         let entity_dir = root.join(SpecSubtype::Product.kind().dir).join("003");
         let identity_toml = entity_dir.join("spec-003.toml");
         let identity_md = entity_dir.join("spec-003.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines, vec![".doctrine/spec/product/003/spec-003.md"]);
     }
@@ -4220,7 +4204,12 @@ parent = \"SPEC-002\"
     fn paths_entity_gives_toml_and_md() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        spec_fixture(root, SpecSubtype::Tech, 4, &["members.toml", "interactions.toml"]);
+        spec_fixture(
+            root,
+            SpecSubtype::Tech,
+            4,
+            &["members.toml", "interactions.toml"],
+        );
         let sel = crate::paths::PathSelection {
             toml: false,
             md: false,
@@ -4230,13 +4219,9 @@ parent = \"SPEC-002\"
         let entity_dir = root.join(SpecSubtype::Tech.kind().dir).join("004");
         let identity_toml = entity_dir.join("spec-004.toml");
         let identity_md = entity_dir.join("spec-004.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(
             lines,
@@ -4259,12 +4244,8 @@ parent = \"SPEC-002\"
             .join(format!("{id:03}"));
         let identity_toml = entity_dir.join(format!("spec-{id:03}.toml"));
         let identity_md = entity_dir.join(format!("spec-{id:03}.md"));
-        let scan = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        );
+        let scan =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root);
         assert!(scan.is_err());
     }
 
@@ -4281,10 +4262,7 @@ parent = \"SPEC-002\"
             single: false,
         };
         let mut all_lines: Vec<String> = Vec::new();
-        for (subtype, n) in [
-            (SpecSubtype::Tech, "001"),
-            (SpecSubtype::Product, "001"),
-        ] {
+        for (subtype, n) in [(SpecSubtype::Tech, "001"), (SpecSubtype::Product, "001")] {
             let entity_dir = root.join(subtype.kind().dir).join(n);
             let toml_name = format!("{SPEC_STEM}-{n}.toml");
             let md_name = format!("{SPEC_STEM}-{n}.md");

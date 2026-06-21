@@ -91,17 +91,14 @@ pub(crate) fn scan_entity_dir(
     let mut found_md: Option<PathBuf> = None;
     let mut others: Vec<PathBuf> = Vec::new();
 
-    let entries = fs::read_dir(dir)
-        .with_context(|| format!("Failed to read directory {}", dir.display()))?;
+    let entries =
+        fs::read_dir(dir).with_context(|| format!("Failed to read directory {}", dir.display()))?;
 
     for entry in entries {
         let entry = entry.with_context(|| format!("Failed to read entry in {}", dir.display()))?;
-        let file_type = entry.file_type().with_context(|| {
-            format!(
-                "Failed to get file type for entry in {}",
-                dir.display()
-            )
-        })?;
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Failed to get file type for entry in {}", dir.display()))?;
 
         // Only regular files — skip symlinks and subdirs.
         if !file_type.is_file() {
@@ -187,9 +184,10 @@ pub(crate) fn select_paths(
             paths.push(set.toml.to_string_lossy().into_owned());
         }
         if need_md {
-            let md = set.md.as_ref().context(
-                "MD file selected (--md or --entity) but not found in entity directory",
-            )?;
+            let md = set
+                .md
+                .as_ref()
+                .context("MD file selected (--md or --entity) but not found in entity directory")?;
             paths.push(md.to_string_lossy().into_owned());
         }
     } else {
@@ -243,13 +241,8 @@ mod tests {
             fs::write(dir.join(e), e).unwrap();
         }
 
-        let set = scan_entity_dir(
-            &dir,
-            Path::new(toml_name),
-            md_name.map(Path::new),
-            root,
-        )
-        .unwrap();
+        let set =
+            scan_entity_dir(&dir, Path::new(toml_name), md_name.map(Path::new), root).unwrap();
         (tmp, set)
     }
 
@@ -267,7 +260,10 @@ mod tests {
         )
         .unwrap();
         // canonical order: TOML → MD → others (lexicographic)
-        assert_eq!(paths, vec!["dir/item.toml", "dir/item.md", "dir/a.txt", "dir/z.txt"]);
+        assert_eq!(
+            paths,
+            vec!["dir/item.toml", "dir/item.md", "dir/a.txt", "dir/z.txt"]
+        );
     }
 
     #[test]
@@ -439,13 +435,7 @@ mod tests {
         fs::write(dir.join("thing.toml"), "x").unwrap();
         fs::write(dir.join("extra.log"), "y").unwrap();
 
-        let set = scan_entity_dir(
-            &dir,
-            Path::new("thing.toml"),
-            None,
-            root,
-        )
-        .unwrap();
+        let set = scan_entity_dir(&dir, Path::new("thing.toml"), None, root).unwrap();
 
         assert_eq!(set.toml.to_string_lossy(), "a/b/thing.toml");
         assert_eq!(set.others, vec![PathBuf::from("a/b/extra.log")]);
@@ -457,11 +447,7 @@ mod tests {
 
     #[test]
     fn canonical_ordering_is_toml_then_md_then_others_sorted() {
-        let (_tmp, set) = temp_set(
-            "item.toml",
-            Some("item.md"),
-            &["z.md", "a.toml", "m.txt"],
-        );
+        let (_tmp, set) = temp_set("item.toml", Some("item.md"), &["z.md", "a.toml", "m.txt"]);
         let paths = select_paths(
             &set,
             &PathSelection {
@@ -496,13 +482,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("extra.txt"), "x").unwrap();
 
-        let err = scan_entity_dir(
-            &dir,
-            Path::new("item.toml"),
-            None,
-            root,
-        )
-        .unwrap_err();
+        let err = scan_entity_dir(&dir, Path::new("item.toml"), None, root).unwrap_err();
         assert!(err.to_string().contains("not found"));
         assert!(err.to_string().contains("item.toml"));
     }

@@ -3892,11 +3892,7 @@ mod tests {
         let name = format!("{id:03}");
         let dir = cm_root.join(&name);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join(format!("concept-map-{name}.toml")),
-            "toml",
-        )
-        .unwrap();
+        std::fs::write(dir.join(format!("concept-map-{name}.toml")), "toml").unwrap();
         std::fs::write(dir.join(format!("concept-map-{name}.md")), "md").unwrap();
         for e in extra {
             std::fs::write(dir.join(e), e).unwrap();
@@ -3956,9 +3952,6 @@ mod tests {
         .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines.len(), 1);
-        assert_eq!(
-            lines[0],
-            ".doctrine/concept-map/001/concept-map-001.toml"
-        );
+        assert_eq!(lines[0], ".doctrine/concept-map/001/concept-map-001.toml");
     }
 }
