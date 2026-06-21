@@ -26,3 +26,15 @@ target = "SPEC-018"
 label = "related"
 target = "SL-130"
 
+[[relation]]
+label = "related"
+target = "IDE-013"
+
+[[relation]]
+label = "related"
+target = "IMP-112"
+
+[[relation]]
+label = "related"
+target = "ISS-008"
+

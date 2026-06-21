@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 13
-slug = "estimate-change-history"
-title = "Estimate/value change history (time-series of facet edits)"
-kind = "idea"
+id = 132
+slug = "risk-facet-cli-verb-set-clear-likelihood-impact"
+title = "Risk facet CLI verb — set/clear likelihood/impact on existing risk items"
+kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-06-19"
-updated = "2026-06-19"
-tags = []
+created = "2026-06-21"
+updated = "2026-06-21"
+tags = ["area:cli", "area:risk"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
@@ -17,5 +17,9 @@ tags = []
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = [{ to = "IMP-112", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "slices"
+target = "SL-134"
