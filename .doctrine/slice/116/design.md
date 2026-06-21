@@ -2,9 +2,10 @@
 
 ## Status
 
-Design draft for adversarial review. Granularity, test disposition, and the
-target layout are user-approved (this session). Verification + migration mechanics
-follow.
+Design reviewed — internal hostile pass + external inquisition (RV-131, codex
+GPT-5.5) integrated; all 5 ledger findings disposed and the partition made
+executable. Granularity (D1), test disposition (D2), and the exhaustive layout
+are settled. Ready for `/plan` on user lock.
 
 ## Problem
 
@@ -47,10 +48,16 @@ state-machine, or allowlist-semantics change.
   `map_server/mod.rs` keep verbs/router at root). `dispatch` routes to each
   machine's `run_*`.
 
-- **D4 — allowlist-bound helpers stay with the allowlist, not in `shared.rs`.**
-  `read_allowlist`, `ALLOWLIST_FILE`, `glob_matches`, `MATCH_OPTS` are
-  allowlist-cohesive → `allowlist.rs`. `shared.rs` holds only the genuinely
-  cross-machine worktree/git helpers.
+- **D4 — `allowlist.rs` is the PURE LEAF; impure allowlist I/O moves to
+  `provision.rs`.** Only the pure core (`Tier`/`WITHHELD`/`parse_allowlist`/
+  `is_withheld`/`select_copies`/`allowlist_violations`/`glob_matches`/`MATCH_OPTS`)
+  stays in `allowlist.rs` — no disk, no git → ADR-001 **leaf**. The impure
+  `read_allowlist` + `ALLOWLIST_FILE` (disk reads) are consumed ONLY by the two
+  provision verbs (`run_provision` L757, `run_check_allowlist` L813/817), so they
+  co-locate in `provision.rs` and stay **file-private** — no widening, and
+  `allowlist.rs` keeps its leaf purity. (Corrects RV-131 F-1: the first draft put
+  `read_allowlist`/`ALLOWLIST_FILE` in `allowlist.rs`, which both forced a
+  cross-file widen AND polluted the leaf with an impure seam.)
 
 - **D5 — `CoordOutcome` moves to `coordinate.rs`.** Today it is stranded in the
   allowlist region (L371); the split returns it to its owner.
@@ -66,41 +73,60 @@ state-machine, or allowlist-semantics change.
   `worker_verify.rs`. (D1 per-machine targets the lifecycle *family*; concern 4 is
   a single domain.)
 
-## Target layout
+## Target layout — EXHAUSTIVE item→home→visibility map
+
+Every top-level production item in `src/worktree.rs` (42 items; `grep -nE
+'^(pub\(crate\) |pub )?(fn|struct|enum|impl|trait|const|static|type) '`) is
+assigned below. `[X]` external (re-exported, §Public surface); `[s]` widen
+private→`pub(super)`; `[p]` stays private (single-file); unmarked = existing
+`pub(crate)`, no change.
 
 ```
-src/worktree/
-  mod.rs        WorktreeCommand enum + dispatch router + pub(crate) use re-exports
-                (public surface) + shared root() helper
-  shared.rs     genuinely cross-machine helpers (call-site verified, F-3):
-                is_linked_worktree, resolve_common_dir, resolve_commit,
-                matches (branch ref-eq), gather_tree_clean
-  allowlist.rs  Tier/Withhold/WITHHELD/DERIVED_RUNTIME/MATCH_OPTS/glob_matches/
-                Allowlist/ParseError/parse_allowlist/is_withheld/Selection/
-                select_copies/Violation/allowlist_violations + ALLOWLIST_FILE/
-                read_allowlist
-  marker.rs     Cause/StatusLine/describe_mode + marker_path/marker_present/
-                env_worker_set/write_marker/remove_marker/resolve_mode/DUAL_CAUSE/
-                run_status/run_marker_clear + DISPATCH_WORKER_AGENT_TYPE
-  provision.rs  run_provision, run_check_allowlist + verify_sibling_worktree,
-                enumerate_candidates (private, single-machine — F-3)
-  import.rs     Apply/Refusal/classify_import/run_import
-  land.rs       Merge/LandRefusal/ForkState/classify_land/run_land
-  coordinate.rs CoordOutcome/CoordAction/CoordRefusal/classify_coordinate/
-                coordinate/run_coordinate/run_branch_point_check
-  gc.rs         GcState/GcPlan/GcRefusal/GcVerdict/classify_gc/reap_targets/run_gc
-  fork.rs       target_dir_for_branch/project_env_contract/rollback_fork/run_fork/
-                base_has_slice_plan
-  subagent.rs   Stamp/StampRefusal/classify_stamp/SubagentPayload/cwd_shares_repo/
-                run_stamp_subagent + WorkerVerify/WorkerVerifyRefusal/
-                classify_worker_verify/run_verify_worker + primary_worktree
-                (private, single-machine — F-3)
-  test_helpers.rs  #[cfg(test)] cross-cutting git/init_repo
+src/worktree/  — tier per ADR-001 (see §ADR-001 obligation)
+  mod.rs       (command)  WorktreeCommand[X], dispatch[X], pub(crate) use re-exports,
+                          root() helper
+  shared.rs    (engine)   is_linked_worktree[X], matches, target_dir_for_branch,
+                          resolve_common_dir[s], resolve_commit[s],
+                          gather_tree_clean[s], gather_fork_worktree[s]
+  allowlist.rs (LEAF)     Tier, impl Display(Tier), Withhold, w[p], WITHHELD,
+                          DERIVED_RUNTIME, MATCH_OPTS[p], glob_matches[p], Allowlist,
+                          ParseError, parse_allowlist, is_withheld, Withheld,
+                          Selection, select_copies, Violation, representative[p],
+                          allowlist_violations
+  marker.rs    (engine)   Cause, impl Cause, StatusLine, impl StatusLine,
+                          describe_mode, DISPATCH_WORKER_AGENT_TYPE[X], marker_path,
+                          marker_present, env_worker_set[X], write_marker,
+                          remove_marker, resolve_mode[X], DUAL_CAUSE[X], run_status,
+                          run_marker_clear
+  provision.rs (engine)   ALLOWLIST_FILE[p], read_allowlist[p], verify_sibling_worktree[p],
+                          enumerate_candidates[p], run_provision, run_check_allowlist
+  import.rs    (engine)   DOCTRINE_PREFIX[p], CLAUDE_PREFIX[p], Apply, Refusal,
+                          impl Refusal, classify_import, run_import
+  land.rs      (engine)   Merge, LandRefusal, impl LandRefusal, ForkState,
+                          classify_land, run_land
+  coordinate.rs(command)  CoordOutcome, CoordAction, CoordRefusal, impl CoordRefusal,
+                          classify_coordinate, base_has_slice_plan[p], coordinate[X],
+                          run_coordinate, run_branch_point_check
+  gc.rs        (engine)   GcState, GcPlan, GcRefusal, impl GcRefusal, GcVerdict,
+                          classify_gc, gc_target_dir[p], reap_targets[p],
+                          gather_landed[p], run_gc
+  fork.rs      (engine)   project_env_contract[s], remove_worktree_dir[s],
+                          rollback_fork[s], run_fork
+  subagent.rs  (engine)   Stamp, StampRefusal, impl StampRefusal, classify_stamp,
+                          SubagentPayload[p], cwd_shares_repo[p], primary_worktree[p],
+                          run_stamp_subagent, WorkerVerify, WorkerVerifyRefusal,
+                          impl WorkerVerifyRefusal, classify_worker_verify,
+                          run_verify_worker
+  test_helpers.rs (cfg-test) git, init_repo  [pub(crate) within cfg(test)]
 ```
 
-**ADR-001 layering:** allowlist pure core = leaf; machines = engine; `mod.rs`
-command = command tier. Sibling deps point inward (machines → `shared`/`allowlist`);
-no cycle. `mod worktree;` in `main.rs` resolves the folder identically — no parent
+Re-homings worth flagging: `CoordOutcome` was stranded in the allowlist region
+(L371) → `coordinate.rs` (its owner); `run_branch_point_check` → `coordinate.rs`
+(dispatch-coordination family; uses `resolve_commit`/`matches`); `base_has_slice_plan`
+is **coordinate-only** (sole caller `coordinate` L2005) → `coordinate.rs`, not
+`fork.rs`; `target_dir_for_branch` (gc L1471 + fork L1761) → `shared.rs`.
+
+`mod worktree;` in `main.rs:71` resolves `worktree/` identically — no parent
 change.
 
 ## Public surface (re-export checklist)
@@ -118,25 +144,80 @@ internal (`shared.rs`, `pub(super)`), consumed by `run_import` + `run_land`.
 
 Miss a real symbol → caller breaks at `cargo build` (the re-export proof).
 
-## Visibility
+## Visibility — complete cross-file widen set
 
-The only non-mechanical change: helpers currently file-private (`fn`, no vis) but
-used by **multiple** machines once split widen to **`pub(super)`** (visible within
-the `worktree` module only, **not** re-exported). Call-site-verified set (F-3):
-`resolve_common_dir`, `resolve_commit`, `gather_tree_clean`. (`is_linked_worktree`
-and `matches` are already `pub(crate)`.)
+The only non-mechanical change: items currently file-private (`fn`/`const`, no
+vis) that become cross-file once split widen to **`pub(super)`** (visible within
+the `worktree` module only, **not** re-exported). Full call-site-verified set (7),
+each with its consumers across the new boundaries:
 
-Single-machine helpers stay **private** in their owner file — no widening:
-`verify_sibling_worktree` + `enumerate_candidates` (provision-only),
-`primary_worktree` (subagent-only). Rule: widen to `pub(super)`, never
-`pub(crate)`, for internal helpers — minimal surface, no external leak. Any
-helper the move reveals as cross-machine joins the `pub(super)` set; the call-site
-audit is re-run at execution.
+| item | home | consumed by (file) |
+|---|---|---|
+| `resolve_common_dir` | shared | shared (`is_linked_worktree`), provision (`verify_sibling_worktree`), subagent (`cwd_shares_repo` L2370/2373) |
+| `resolve_commit` | shared | coordinate (`run_branch_point_check` L879), import (`run_import` L1005) |
+| `gather_tree_clean` | shared | import (L1010/1022), land (`run_land` L1255) |
+| `gather_fork_worktree` | shared | land (L1270), gc (L1571), coordinate (L1977) |
+| `project_env_contract` | fork | fork (L1928), coordinate (`run_coordinate` L2099) |
+| `rollback_fork` | fork | fork (L1913), coordinate (L2042) |
+| `remove_worktree_dir` | fork | fork (`rollback_fork` L1819), coordinate (L2043) |
+
+Already `pub(crate)` (no change, trivially sibling-reachable): `is_linked_worktree`
+(also external), `matches`, `target_dir_for_branch`.
+
+Stay **private** — single owner file, sole production caller verified:
+`w`/`glob_matches`/`representative`/`MATCH_OPTS` (allowlist); `ALLOWLIST_FILE`/
+`read_allowlist`/`verify_sibling_worktree`/`enumerate_candidates` (provision);
+`DOCTRINE_PREFIX`/`CLAUDE_PREFIX` (import); `gc_target_dir`/`reap_targets`/
+`gather_landed` (gc); `base_has_slice_plan` (coordinate); `SubagentPayload`/
+`cwd_shares_repo`/`primary_worktree` (subagent).
+
+Rule: widen private→`pub(super)`, never `pub(crate)`, for internal items — minimal
+surface, no external leak. The audit above is the checklist; `cargo build` (E0603)
+catches any miss at execution.
+
+## ADR-001 layering obligation (BINDING — in-slice)
+
+`.doctrine/adr/001/layering.toml` is the **binding** tier map, enforced by `just
+gate`'s `MixedUmbrella` assertion. It currently carries one entry,
+`worktree = "command"` (@98). Splitting the module makes `worktree` a **mixed
+umbrella** (files spanning altitudes), which the map's rule (@12–13) requires be
+sub-classified at `module::submodule` granularity — the same treatment `catalog`
+already receives (`"catalog::scan" = "command"`, `"catalog::hydrate" = "engine"`,
+… @104–107).
+
+The slice **must, in-slice**, regenerate and commit the sub-classification:
+
+1. Run the authoritative extractor —
+   `cargo test --test architecture_layering dump_real_graph -- --nocapture --ignored`
+   (the same tool that generated the map, SL-112) — and enter the resulting
+   `"worktree::<file>"` entries, classified by **actual imports**, not by cohesion
+   labels.
+2. Expected shape (to be confirmed by the extractor, not asserted here):
+   `worktree` umbrella + `mod.rs` = **command**; `"worktree::allowlist" = "leaf"`
+   (pure — D4); `"worktree::coordinate" = "command"`; the remaining machine files
+   (`shared`/`marker`/`provision`/`import`/`land`/`gc`/`fork`/`subagent`) =
+   **engine** *iff* their imports stay inward.
+3. **`coordinate` is COMMAND, not engine.** `coordinate` calls
+   `crate::slice::run_phases` (`src/worktree.rs:2035`) — an upward edge into the
+   command-tier `slice` module. This is the exact `worktree → slice` upward edge
+   named in the slice's Non-Goals; it is **why `worktree` is `command` today** and
+   why `coordinate` cannot be downgraded. The split does not fix or worsen it — but
+   the layering entry must tell the truth about it.
+
+`just gate` green (incl. `MixedUmbrella`) is an **exit criterion**. Omitting this
+is the heresy RV-130 F-1 (SL-133) and RV-121 (SL-132) were caught committing.
 
 ## Verification
 
 - **Behaviour-preservation gate is the proof.** 46 tests relocate (D2), bodies
-  byte-unchanged → green = correctness. (VT)
+  byte-unchanged → green = correctness. (VT) **Contingent on the partition being
+  complete** (RV-131 F-4): byte-identity holds only because every test co-locates
+  with the file owning the private symbol it exercises, and every cross-machine
+  helper it touches is in the `pub(super)` set above. Spot-confirm at execution for
+  tests reaching cross-machine helpers — `primary_worktree_resolves...` (L3222,
+  → subagent, private, same file ✓), `rollback_fork_retracts...` (L3255, → fork,
+  now `pub(super)` ✓), `base_has_slice_plan_tracks...` (L3290, → coordinate ✓),
+  `coordinate_refuses_create...` (L3314, → coordinate ✓).
 - **No new production tests** — pure mechanical move. New evidence is structural
   (VA):
   - `src/worktree.rs` gone; `src/worktree/` present; `mod worktree;` in `main.rs`
@@ -144,23 +225,28 @@ audit is re-run at execution.
   - 8 caller files compile **untouched** → public surface preserved.
   - `every_runtime_gitignore_glob_is_classified` green → `DERIVED_RUNTIME` still
     reachable (it rides `allowlist.rs` tests, const + guard together).
-- **Gate:** `just gate` (workspace `cargo clippy` zero-warn; dead_code denied) +
-  `cargo test`.
+  - `architecture_layering` green → `worktree::<file>` sub-classification present
+    and accurate (the ADR-001 obligation above).
+- **Gate:** `just gate` (workspace `cargo clippy` zero-warn; dead_code denied;
+  `MixedUmbrella` layering assertion) + `cargo test`.
 
 ## Migration mechanics & risks
 
 **Mechanics:** extract concern-by-concern into the new files; `mod.rs` carries
-`mod` decls + `pub(crate) use` re-exports; widen the shared private helpers to
-`pub(super)`; relocate each test block to its machine; delete `worktree.rs`. Git
-sees a content split, not a rename — no `git mv`.
+`mod` decls + `pub(crate) use` re-exports; widen the 7-item `pub(super)` set
+(§Visibility); add the `worktree::<file>` layering entries (§ADR-001 obligation);
+relocate each test block to its machine; delete `worktree.rs`. Git sees a content
+split, not a rename — no `git mv`.
 
-**Risks (all low, mechanical):**
-- **Visibility drift** — under-widen → compile error (caught immediately);
-  over-widen → leak. Mitigate: `pub(super)` only for internal helpers.
-- **De-interleaving** — land/coordinate/fork are interleaved today; clean
-  separation may surface a helper used by two machines → `shared.rs`.
-- **Re-export completeness** — the 9-symbol checklist; `cargo build` catches a
-  miss.
+**Risks (low, mechanical):**
+- **Visibility drift** — under-widen → E0603 (caught immediately); over-widen →
+  leak. Mitigate: the §Visibility table is the complete checklist; `pub(super)`
+  only.
+- **De-interleaving** — land/coordinate/fork are interleaved today; the cut is
+  clean per the exhaustive map, but `cargo build` is the backstop.
+- **Re-export completeness** — the **8**-symbol checklist (§Public surface);
+  `cargo build` catches a miss.
+- **Layering omission** — the binding `MixedUmbrella` gate (above); not optional.
 - **Phasing** is `/plan`'s call (likely 1 mechanical phase, or split by
   file-group if isolation wanted).
 
@@ -173,25 +259,44 @@ sees a content split, not a rename — no `git mv`.
 
 ## Adversarial review
 
-Internal hostile pass (call-site verified against `src/worktree.rs`):
+### Internal hostile pass (IR-n, call-site verified against `src/worktree.rs`)
 
-- **F-1 — re-export checklist was over-stated (9→8).** `gather_tree_clean` is
+- **IR-1 — re-export checklist over-stated (9→8).** `gather_tree_clean` is
   private; its only out-of-file occurrence is a doc comment in `git.rs:1168`, not
-  a caller. Removed from the public surface; relocated to `shared.rs` `pub(super)`
-  (real callers `run_import` + `run_land`). Integrated.
-- **F-2 — `matches` placement confirmed.** Production callers in coordinate
-  (branch-point), import, gc → genuinely cross-machine → `shared.rs`. No change.
-- **F-3 — over-widening in the visibility list.** `verify_sibling_worktree`,
-  `enumerate_candidates` (provision-only) and `primary_worktree` (subagent-only)
-  are single-machine — they stay private in their owner files, contradicting the
-  first draft's "widen these 3". Corrected widen set:
-  `{resolve_common_dir, resolve_commit, gather_tree_clean}`. Integrated.
-- **Scope-text note (not a design defect):** slice `§Scope` cites
-  `worktree::run_phases`; `run_phases` lives in `slice.rs` (`slice::run_phases`) —
-  the upward edge named in Non-Goals. The design's checklist is grep-derived and
+  a caller. Removed from the public surface; `shared.rs` `pub(super)`.
+- **IR-2 — `matches` cross-machine confirmed** (coordinate/import/gc) → `shared.rs`.
+- **IR-3 — over-widening corrected** (first draft "widen these 3"):
+  `verify_sibling_worktree`/`enumerate_candidates`/`primary_worktree` are
+  single-machine, stay private.
+- **Scope-text note:** slice `§Scope` cites `worktree::run_phases`; it is
+  `slice::run_phases` (the Non-Goal upward edge). Design checklist grep-derived,
   did not inherit the error.
 
-Residual: exact `pub(super)` set is execution-time call-site truth; the
-preliminary set above is the checklist, re-audited during the move.
+### External pass — RV-131, codex (GPT-5.5), inquisitor posture
 
-_Next: optional `/inquisition` or external adversarial pass, else `/plan`._
+The external adversary broke the "pure mechanical" plea. Five findings, all
+verified against source and integrated:
+
+- **F-1 (blocker) — `pub(super)` widen set too small.** Draft widened 3; real
+  cross-file set is **7** (added `gather_fork_worktree`, `project_env_contract`,
+  `rollback_fork`, `remove_worktree_dir`; `read_allowlist`/`ALLOWLIST_FILE`
+  resolved by co-locating in `provision.rs` per D4 instead of widening). →
+  §Visibility table. **Fixed.**
+- **F-2 (blocker) — layout not exhaustive.** 7 orphans (incl. cross-machine
+  `gather_fork_worktree`, `remove_worktree_dir`). → §Target layout now enumerates
+  all 42 items with home + visibility. **Fixed.**
+- **F-3 (blocker) — ADR-001 `layering.toml` unamended + mis-classified.** Binding
+  map carries `worktree = "command"`; split → mixed umbrella needs per-file
+  sub-classification; `coordinate` is command (imports `slice`), not engine. →
+  new §ADR-001 obligation. **Fixed.**
+- **F-4 (major) — byte-identity claim premature.** Now stated contingent on the
+  completed partition, with the four at-risk tests spot-checked. → §Verification.
+  **Fixed.**
+- **F-5 (minor) — stale "9-symbol checklist".** → §Migration now "8-symbol".
+  **Fixed.**
+- **Acquittal:** codex confirmed the external re-export surface is exactly the 8
+  named symbols and `gather_tree_clean` is not external — IR-1 / §Public surface
+  stand.
+
+The ledger (RV-131) carries the structured findings and their dispositions;
+synthesis sealed there.
