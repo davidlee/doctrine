@@ -69,7 +69,6 @@ mod value;
 mod verify;
 mod worktree;
 
-
 use std::str::FromStr;
 
 use clap::{Args, Parser};
@@ -170,7 +169,7 @@ fn main() -> anyhow::Result<()> {
 }
 #[cfg(test)]
 mod tests {
-    use {clap::Parser, crate::Cli};
+    use {crate::Cli, clap::Parser};
     #[test]
     fn only_memory_conflicts_with_skill() {
         let r = Cli::try_parse_from([
@@ -219,7 +218,6 @@ mod tests {
 #[cfg(test)]
 
 mod write_class_tests {
-    use std::path::PathBuf;
     use super::*;
     use crate::commands::cli::{Command, EstimateAction, ValueAction};
     use crate::commands::facet::{EstimateSetArgs, ValueSetArgs};
@@ -228,6 +226,7 @@ mod write_class_tests {
     use crate::dispatch::DispatchCommand;
     use crate::memory::{FindRetrieveArgs, MemoryCommand, SyncCommand};
     use crate::review::ReviewCommand;
+    use std::path::PathBuf;
 
     // Read => None, Write(label) => Some(label). The compiler's totality (no
     // wildcard in `write_class`) proves every variant is *handled*; this table

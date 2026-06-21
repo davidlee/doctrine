@@ -2,8 +2,8 @@
 //! `doctrine` worker-mode guard — `WriteClass`, `write_class`, `worker_guard`.
 //! SL-129: uses `entity::id_path`, `clock::today`
 
-use crate::commands::cli::Command;
 use crate::boot::BootCommand;
+use crate::commands::cli::Command;
 use crate::knowledge::KnowledgeCommand;
 use crate::policy::PolicyCommand;
 use crate::rec::RecCommand;
