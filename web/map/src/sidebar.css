@@ -43,8 +43,9 @@
 
   .filter-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
     margin-bottom: 0.35rem;
   }
 
