@@ -12,6 +12,7 @@ use crate::review::{self, NewArgs, PrimeArgs, ReviewOutput};
 use anyhow::Context;
 use serde_json::{Value, json};
 use std::path::Path;
+use std::str::FromStr;
 
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
 
@@ -250,9 +251,7 @@ fn handle_tools_list(id: Option<Id>) -> JsonRpcResponse {
 fn handle_tools_call(id: Option<Id>, params: Option<&Value>, root: &Path) -> JsonRpcResponse {
     match call_tool(id.clone(), params, root) {
         Ok(out) => {
-            let json_text = serde_json::to_string(&out)
-                .unwrap_or_else(|e| json!({"serialization_error": e.to_string()}).to_string());
-            let tool_result = McpToolResult::text(json_text);
+            let tool_result = McpToolResult::text(out);
             let result_val = serde_json::to_value(&tool_result)
                 .unwrap_or_else(|e| json!({"error": e.to_string()}));
             JsonRpcResponse::success(id, result_val)
@@ -262,7 +261,7 @@ fn handle_tools_call(id: Option<Id>, params: Option<&Value>, root: &Path) -> Jso
 }
 
 /// Inner function that can use `?` for clean error propagation.
-fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Result<ReviewOutput> {
+fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Result<String> {
     let params = params.context("params is required for tools/call")?;
 
     let name = params
@@ -276,7 +275,8 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
         "review_new" => {
             let args: NewArgs = serde_json::from_value(arguments)
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
-            review::run_new(Some(root.to_path_buf()), &args)
+            let out = review::run_new(Some(root.to_path_buf()), &args)?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_list" => {
             // Hand-extract the optional filter axes (matching the other read verbs)
@@ -291,7 +291,9 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 ..Default::default()
             };
             let cap = effective_cap(fields.opt_usize_field("limit"));
-            review::run_list(Some(root.to_path_buf()), args).map(|out| project_list_cap(out, cap))
+            let out = review::run_list(Some(root.to_path_buf()), args)
+                .map(|out| project_list_cap(out, cap))?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_show" => {
             let reference = arguments
@@ -308,13 +310,9 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 _ => crate::listing::Format::Table,
             };
             let summary = arguments.get("view").and_then(|v| v.as_str()) == Some("summary");
-            review::run_show(Some(root.to_path_buf()), &reference, fmt).map(|out| {
-                if summary {
-                    project_show_summary(out)
-                } else {
-                    out
-                }
-            })
+            let out = review::run_show(Some(root.to_path_buf()), &reference, fmt)
+                .map(|out| if summary { project_show_summary(out) } else { out })?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_raise" => {
             let args: review::RaiseArgs = serde_json::from_value(arguments.clone())
@@ -322,7 +320,8 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             let role_str = arguments.get("as").and_then(|v| v.as_str());
             let role =
                 review::parse_role(role_str, review::Role::Raiser).context("invalid role")?;
-            review::run_raise(Some(root.to_path_buf()), &args, role)
+            let out = review::run_raise(Some(root.to_path_buf()), &args, role)?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_dispose" => {
             let args: review::DisposeArgs = serde_json::from_value(arguments.clone())
@@ -330,54 +329,60 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             let role_str = arguments.get("as").and_then(|v| v.as_str());
             let role =
                 review::parse_role(role_str, review::Role::Responder).context("invalid role")?;
-            review::run_dispose(Some(root.to_path_buf()), &args, role)
+            let out = review::run_dispose(Some(root.to_path_buf()), &args, role)?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_verify" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
             let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
                 .context("invalid role")?;
-            review::run_verify(
+            let out = review::run_verify(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
                 &fields.str_field("finding"),
                 fields.opt_str_field("note").as_deref(),
                 role,
-            )
+            )?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_contest" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
             let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
                 .context("invalid role")?;
-            review::run_contest(
+            let out = review::run_contest(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
                 &fields.str_field("finding"),
                 fields.opt_str_field("note").as_deref(),
                 role,
-            )
+            )?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_withdraw" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
             let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
                 .context("invalid role")?;
-            review::run_withdraw(
+            let out = review::run_withdraw(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
                 &fields.str_field("finding"),
                 role,
-            )
+            )?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_status" => {
             let fields = ExtractFields::from_value(arguments, &["reference"]);
-            review::run_status(Some(root.to_path_buf()), &fields.str_field("reference"))
+            let out = review::run_status(Some(root.to_path_buf()), &fields.str_field("reference"))?;
+            Ok(serde_json::to_string(&out)?)
         }
         "review_prime" => {
             let args: PrimeArgs = serde_json::from_value(arguments)
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
-            review::run_prime(Some(root.to_path_buf()), &args)
+            let out = review::run_prime(Some(root.to_path_buf()), &args)?;
+            Ok(serde_json::to_string(&out)?)
         }
         _ => anyhow::bail!("Tool not found: {name}"),
     }
@@ -431,6 +436,45 @@ impl ExtractFields {
             .and_then(serde_json::Value::as_u64)
             .and_then(|n| usize::try_from(n).ok())
     }
+
+    /// Extract an optional boolean (missing or non-boolean ⇒ `None`).
+    /// Used for the `include_draft` flag.
+    fn opt_bool_field(&self, name: &str) -> Option<bool> {
+        self.inner.get(name).and_then(serde_json::Value::as_bool)
+    }
+}
+
+// ── Argument parse helpers for memory tools ─────────────────────────────
+
+/// Parse a `MemoryType` from an optional string, wrapping errors with the
+/// load-bearing "invalid arguments: " prefix so the MCP error mapper (§2,
+/// branch 2) routes them to `-32602` (Invalid params) rather than `-32603`.
+fn parse_memory_type(s: Option<String>) -> anyhow::Result<Option<crate::memory::MemoryType>> {
+    s.map(|v| {
+        crate::memory::MemoryType::parse(&v)
+            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+    })
+    .transpose()
+}
+
+/// Parse a memory `Status` from an optional string, wrapping errors with the
+/// load-bearing "invalid arguments: " prefix.
+fn parse_status(s: Option<String>) -> anyhow::Result<Option<crate::memory::Status>> {
+    s.map(|v| {
+        crate::memory::Status::parse(&v)
+            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+    })
+    .transpose()
+}
+
+/// Parse a `Lifespan` from an optional string via `FromStr`, wrapping errors
+/// with the load-bearing "invalid arguments: " prefix.
+fn parse_lifespan(s: Option<String>) -> anyhow::Result<Option<crate::memory::Lifespan>> {
+    s.map(|v| {
+        crate::memory::Lifespan::from_str(&v)
+            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+    })
+    .transpose()
 }
 
 /// Trim a `Showed` output to its summary projection (IMP-113 #2): blank the brief
