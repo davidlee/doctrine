@@ -68,7 +68,7 @@ response = "VT-5 now specified as: capture current format_show output for a fixt
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected ADR-001 placement for new src/facet.rs; observed no tier assignment or layering.toml plan"
 detail = "Evidence: ADR-001 makes `.doctrine/adr/001/layering.toml` the authoritative tier assignment and the fitness gate checks new module edges. `.doctrine/slice/132/design.md` creates `src/facet.rs` but does not classify it as leaf/engine/command, list expected imports, or mention updating `layering.toml`. Because `EntityFacets` imports `EstimateFacet` and `ValueFacet` and is intended for both show and priority consumers, its tier is an architectural decision, not an implementation detail."

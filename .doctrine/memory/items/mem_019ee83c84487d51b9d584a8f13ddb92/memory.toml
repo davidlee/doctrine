@@ -1,0 +1,41 @@
+memory_uid = "mem_019ee83c84487d51b9d584a8f13ddb92"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "MCP handler tests with seeded memories: seeds need empty repo scope since temp dirs produce None repo from freeze(); find_for_mcp returns ALL ranked candidates, test for containment not count; memory_show does two freezes (run_show + handler enrichment) needing matching partition; clippy flags indexing_slicing on json value indexing - use get() chains; collapsible if blocks - use if-let chains (stable since 1.65)."
+summary = ""
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["sl-131", "mcp", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e9a76f3af8ede4a94b326cf5aefefc853f65ecbe"
+ref_name = "refs/heads/edge"
+checkout_state_id = "7cf22d59a2165b3c9badd81eca958b5a0691420e383ec122475e70b774ac8095"
+base_commit = "8b64f9177a2ab0de6a3059a7dfd4319ef3d5b81d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
