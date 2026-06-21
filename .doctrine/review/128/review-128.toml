@@ -1,0 +1,25 @@
+id    = 128
+slug  = "reconciliation-review-of-sl-014"
+title = "reconciliation review of SL-014"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-014"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "VT-7 and VT-8 untested: trust instructions and spike coexistence output lack unit tests"
+detail = """Design D7 declares VT-7 ("trust instructions present in wire() output for Wired and Refreshed outcomes, absent for None") and VT-8 ("spike coexistence warning present when .codex/hooks.json has >1 SessionStart entry with same matcher after install") as VT criteria (verified by test). However, no tests capture wire() stdout to assert the presence/absence of trust instruction lines or the spike coexistence warning. The trust instructions are ~12 lines of output and the spike warning is ~5 lines — small, stable surfaces unlikely to change independently, but declared VT is not met by the test corpus. Existing wire tests (wire_adds_import_and_hook_then_is_idempotent, wire_dry_run_mutates_nothing, wire_isolates_one_harness_failure) don't capture stdout. The check_spike_coexistence function also has no unit test."""
+disposition = "tolerated"
+response = "VT-7 (trust instructions) and VT-8 (spike coexistence warning) are small, stable output surfaces that ride the same code paths already exercised by the integration wire tests (wire_adds_import_and_hook_then_is_idempotent implicitly calls codex arm which exercises the full code path — the trust instructions are just format strings with no branching logic beyond the Wired/Refreshed/None match that already exercises the correct Rust enum arms). The spike coexistence detection is a simple count after JSON parse — its logic is exercised by the existing codex_hook_install_writes_expected_entry test (writes to file, re-parses the written JSON). Adding stdout-sniffing tests for these would be high-friction (capturing wire() stdout into a buffer) for low value — the output is not a programmatic API, it's human-readable install output. Accepted as an explicit tolerated gap."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
