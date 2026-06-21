@@ -125,3 +125,58 @@ Both VH findings from old handover remain uninvestigated:
 
 These were pre-existing on the candidate branch; not regressions from merge.
 Investigate separately — file new backlog items if confirmed.
+
+---
+
+## Build adventures (2026-06-21, second session)
+
+Two nits surfaced post-merge:
+
+### 1. Release packaging (`cargo package` / `cargo publish`)
+
+**Symptom**: `RustEmbed` failed at compile time — `web/map/dist/` not found in
+`target/package/doctrine-0.6.0/`.
+
+**Cause**: `web/map/dist/` is gitignored; `cargo package` excludes gitignored
+files. The `#[derive(RustEmbed)]` folder attribute needs the directory at
+compile time.
+
+**First attempt** (rejected): commit `dist/` to git. Removes from `.gitignore`,
+commits the built output. User vetoed — dist is generated, not authored.
+
+**Second attempt** (rejected by `cargo publish`): `build.rs` that creates a
+minimal `web/map/dist/` stub when absent. Compilation succeeds, but `cargo
+publish` rejects source-tree modifications by build scripts (`--no-verify` is
+required to proceed).
+
+**Third attempt** (rejected): switch `Cargo.toml` from `exclude` to `include`
+with `web/map/dist/**` listed. User had previously converted the other way and
+didn't want to revisit.
+
+**Final fix**: `build.rs` stub + `just publish` passes `cargo publish
+--no-verify`. The real verification gate is `release-check` (gate +
+nix-build). The nix flake grafts the real dist hermetically; `--no-verify`
+just skips the tarball integrity check that would otherwise reject the
+build.rs source-tree write.
+
+Also simplified `assets.rs`: both `cfg_attr` branches pointed at
+`web/map/dist/` after `abc94b26`; collapsed to a single `#[folder]`.
+
+**Commits**: `daee7513` (first fix), `a03d6b4c` (--no-verify adjustment).
+`build.rs` exists only on edge/main after `daee7513`.
+
+### 2. Filter "all" checkbox alignment
+
+**Symptom**: the "all" toggle checkbox in the filter sidebar didn't align with
+the kind checkboxes below.
+
+**Root causes** (two layers):
+- `.filter-toggle-all` and `.kind-checkbox` used `align-items: baseline` with
+  `vertical-align: middle` on `<input>` — dead declaration inside flex.
+  Changed to `align-items: center`, dropped `vertical-align`.
+- `.filter-header` used `justify-content: space-between` (row), pushing the
+  "all" checkbox to the right while the kind checkbox grid was left-aligned.
+  Changed to `flex-direction: column; align-items: flex-start`.
+
+**Commits**: `53dbd43c` in `daee7513` chain, then `53dbd43c` / `81a63780`
+(left-align fix).
