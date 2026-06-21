@@ -1,0 +1,52 @@
+id    = 132
+slug  = "sl-133-design-consequence-model-revision-review"
+title = "SL-133 design consequence-model revision review"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-133"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "I5/D8 claims dep_coeff convergence, but fan-out makes recursive leverage amplify exponentially"
+detail = "Expected: §5.1/I5/D8 should state a mathematically sound bound for recursive needs-leverage. Observed: the design says dep_coeff ∈ (0,1] means deep chains converge/never amplify, but in a reconvergent DAG a leaf contributes once per path; with branching factor b the multiplier is roughly (b·dep_coeff)^k, so any b·dep_coeff > 1 amplifies exponentially and finite-but-huge values rely on the later is_finite sanitize rather than the coefficient domain. Fix: either define leverage intentionally as a path-sum and document the fan-out amplification/COEFF_MAX+overflow behavior in ADR-015 and VT-4b/VT-6, or switch to a deduped/normalized transitive-cone model; do not claim convergence beyond simple chains."
+disposition = "design-wrong"
+response = "Accepted — the convergence claim was wrong. leverage is a finite **path-sum over a finite DAG** (always terminates/finite via the single-sweep DP), not a convergent series; `dep_coeff ≤ 1` decays per-hop *along a path* but does NOT bound total magnitude under reconvergent fan-out (a node reached by many paths accrues each). The §5.5 reconvergence note already accepted the multiplicative meaning, but I5/§5.1/§5.2/D10 still framed `(0,1]` as preventing amplification/divergence — that prose is corrected. Finiteness is now stated as structural; the only unbounded risk is f64 overflow to ∞, fenced by COEFF_MAX (input) + is_finite (output, I2(b)), not by the coefficient domain. Fan-out amplification documented as intentional path-sum leverage (the chosen first option, not a switch to a deduped/normalized cone). Edits: §5.1 dep-leverage bullet, §5.2 dep_coeff comment, I5, D10. VT-4b (diamond double-count accepted) + VT-6 (near-f64::MAX → no ∞/NaN) already cover the test obligation."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "§5.4 step 6/I5/VT-8 says SCC condensation, but the component semantics and data source are not specified"
+detail = "Expected: a diagnosed needs-cycle safety net must say exactly which SCC partition is used and what value each member receives. Observed: cordage keeps post-arity degraded_sccs private, while the public surface exposes provenance().cycles(); the design simply says 'condensed' and 'intra-SCC edges contribute 0' without specifying whether to use provenance cycles/new accessor/recomputed Tarjan, or whether external dependents of one SCC member contribute to all members or only that member. This leaves VT-8 unimplementable and ambiguous for cases like A↔B with B→C. Fix: define an explicit dep component graph (SCCs from provenance().cycles() or a new cordage accessor, singletons otherwise), drop intra-component edges, topologically DP components, and state the member assignment rule; add VT-8 fixtures for self-loop and multi-member SCC with external dependents."
+disposition = "design-wrong"
+response = """Accepted — "condensed" was underspecified. §5.4 step 6 now defines an explicit dep-component graph: SCCs read from the PUBLIC `provenance().cycles()` filtered to `dep_overlay` (`.nodes()` = member set), singletons otherwise — confirmed against cordage source (`degraded_sccs` IS private as the finding states, but `cycles()` is the public Reject-cycle surface, so no new accessor needed). Intra-component `out_edges(dep_overlay)` edges contribute 0; components are DP'd in reverse topo order; a component's leverage = `dep_coeff · Σ_{external dependents}(base+leverage)` counted once per component, and **every member receives that same value** — resolving the A↔B-with-B→C ambiguity (external dependents flow to the whole component, once). VT-8 gains the two fixtures requested: (a) self-loop `A needs A`, (b) multi-member `A↔B` with external dependent `C needs B`. Now implementable."""
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "I3/D10/VT-7 hand-waves next's score sort plus seq precedence and can lose cordage's structural guarantee"
+detail = "Expected: replacing next's order_key consumption must define an implementable partial-order sort that preserves the same surviving structural constraints cordage enforces. Observed: §5.4 says to sort actionable rows by (score desc, id) and then apply seq edges as 'strict precedence nudges'. That is not an algorithm: raw seq_overlay edges may include edges cordage evicted from the composed U to break cycles, while cordage does not expose the surviving U-edge set; ad hoc nudges can either re-impose evicted contradictions or fail transitive seq precedence. Fix: specify a real induced-frontier topological sort with score/id as the priority among currently unconstrained nodes, and define its constraint source (e.g. a cordage accessor for surviving seq constraints, or a temporary cordage graph minted in score/id order); VT-7 must include a Y-branch, a same-chain override, and an evicted/cyclic seq case."
+disposition = "design-wrong"
+response = """Accepted — "strict precedence nudges" was not an algorithm and the eviction hazard is real. Confirmed against source: `next` *already* consumes cordage `channels::order_key` (composed seq-respecting order, mint tiebreak = `age`), and the seq overlay is `Evict`, so raw `seq_overlay` edges include ones cordage broke to linearize. §5.4 now specifies a real induced-frontier topological sort whose precedence relation is the **surviving** seq edges only — `seq_overlay` minus `provenance().evictions()` for that overlay — with `(score desc, id asc)` as the priority among ready nodes. Preferred realization (named): mint a temporary cordage ordering over the surviving constraints with mint order `(score, id)` and read its `order_key` — i.e. today's `next` with the mint tiebreaker swapped from `base` to `score`, reusing cordage's proven precedence/eviction machinery instead of re-deriving it. VT-7 gains the evicted/cyclic-seq case (an Evict-broken edge must NOT re-impose precedence) alongside the Y-branch and same-chain cases."""
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "ADR-015 boundary treats coefficient domains as tunable implementation detail though they are scoring policy"
+detail = "Expected: §7's ADR boundary should keep durable scoring semantics in ADR-015 and only leave numeric defaults/mechanical clamps to implementation. Observed: the design says implementation-owned includes coefficient numbers 'incl. the dep_coeff ∈ (0,1] default', but the domain/role split is not a mere default: dep_coeff as a retention factor ≤1 and ref_coeff as flat non-negative are part of the recursive-vs-one-hop policy and affect the validity of D8/D9. Fix: have ADR-015 own coefficient roles and allowed domains (dep retention factor in (0,1], ref flat non-negative, seq none); implementation owns default values, COEFF_MAX, silent-clamp mechanics, and examples."
+disposition = "design-wrong"
+response = """Accepted — §7 mis-assigned the coefficient *domains* to implementation-owned. The role/domain split (`dep_coeff` recursive retention in `(0,1]`, `ref_coeff` flat non-negative one-hop, seq no weight class) is exactly the recursive-vs-one-hop policy that makes D8/D9 valid — not a tunable default. §7 ADR-015 boundary now ratifies the coefficient role/domain split as durable policy and leaves only the default *numbers* (e.g. `dep_coeff = 0.5` — the value, never the `(0,1]` domain), kind-weight defaults, tag-coeff examples, `COEFF_MAX`, and `total_cmp`/silent-clamp/condensation mechanics to implementation. D10's "asymmetric by structure" line already named the split; §7 is now consistent with it."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,0 +1,34 @@
+[[area]]
+name = "SL-133 design revision"
+purpose = "Multi-dimensional priority scoring design under review, with focus on revised consequence model and acceptance criteria."
+paths = [".doctrine/slice/133/design.md", ".doctrine/slice/133/slice-133.md"]
+
+[[area]]
+name = "priority graph and next surfaces"
+purpose = "Existing priority/actionability graph construction and command display semantics that the design claims to extend without breaking."
+paths = ["src/priority/channels.rs", "src/priority/graph.rs", "src/priority/mod.rs", "src/priority/partition.rs", "src/priority/render.rs", "src/priority/surface.rs", "src/priority/view.rs", "src/backlog.rs", "src/catalog/scan.rs"]
+
+[[area]]
+name = "facets and layering"
+purpose = "Facet parsing/projection and ADR-001 layering boundary relevant to risk-leaf extraction and shared scoring inputs."
+paths = ["src/facet.rs", ".doctrine/adr/001/layering.toml"]
+
+[[area]]
+name = "cordage ordering and cycle policy"
+purpose = "OrderSpec, overlay composition, CyclePolicy, SCC degradation, and ordered traversal semantics used by the proposed DP."
+paths = ["crates/cordage/src/lib.rs"]
+
+[[invariant]]
+text = "Recursive needs leverage must be computed over a traversal order that is topologically valid for the dep overlay actually being folded, not merely for a composed display order."
+
+[[invariant]]
+text = "Seq remains a structural constraint; score sorting must not erase authored precedence guarantees for visible/actionable outputs."
+
+[[invariant]]
+text = "Facet extraction obeys ADR-001 leaf←engine←command layering; shared facet projection must not create upward imports or duplicate parsers."
+
+[[risk]]
+text = "Wide reconvergent dependency fans can inflate leverage/path counts beyond intuitive priority meaning even when cycles are diagnosed."
+
+[[risk]]
+text = "Current RV-130 findings may be stale after the consequence-model revision; do not copy them forward without re-verifying against the revised design."
