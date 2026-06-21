@@ -2,7 +2,14 @@
 //! `doctrine` worker-mode guard — `WriteClass`, `write_class`, `worker_guard`.
 //! SL-129: uses `entity::id_path`, `clock::today`
 
-use crate::Command;
+use crate::commands::cli::Command;
+use crate::boot::BootCommand;
+use crate::knowledge::KnowledgeCommand;
+use crate::policy::PolicyCommand;
+use crate::rec::RecCommand;
+use crate::rfc::RfcCommand;
+use crate::skills::SkillsCommand;
+use crate::standard::StandardCommand;
 
 /// Mutation classification for the worker-mode guard (ADR-006 D2a). `Write`
 /// carries the verb label named in the refusal. EXHAUSTIVE by design (§7-D6):
@@ -34,13 +41,17 @@ pub(crate) enum WriteClass {
     reason = "consecutive Read arms across different nested-match shapes; merging would degrade readability"
 )]
 pub(crate) fn write_class(cmd: &Command) -> WriteClass {
-    use super::super::{
-        AdrCommand, BacklogCommand, BootCommand, CandidateCommand, ConceptMapCommand,
-        CoverageCommand, DispatchCommand, ExportCommand, KnowledgeCommand, MemoryCommand,
-        PolicyCommand, RecCommand, ReviewCommand, RevisionChangeCommand, RevisionCommand,
-        RfcCommand, SkillsCommand, SpecCommand, SpecReqCommand, StandardCommand, SyncCommand,
-        WorktreeCommand,
-    };
+    use super::cli::ExportCommand;
+    use super::coverage::CoverageCommand;
+    use crate::adr::AdrCommand;
+    use crate::backlog::BacklogCommand;
+    use crate::concept_map::ConceptMapCommand;
+    use crate::dispatch::{CandidateCommand, DispatchCommand};
+    use crate::memory::{MemoryCommand, SyncCommand};
+    use crate::review::ReviewCommand;
+    use crate::revision::{RevisionChangeCommand, RevisionCommand};
+    use crate::spec::{SpecCommand, SpecReqCommand};
+    use crate::worktree::WorktreeCommand;
     use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
@@ -59,14 +70,14 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             | ConceptMapCommand::Export { .. } => Read,
         },
         Command::Slice { command } => match command {
-            super::super::SliceCommand::New { .. } => Write("slice new"),
-            super::super::SliceCommand::Design { .. } => Write("slice design"),
-            super::super::SliceCommand::Plan { .. } => Write("slice plan"),
-            super::super::SliceCommand::Phases { .. } => Write("slice phases"),
-            super::super::SliceCommand::Notes { .. } => Write("slice notes"),
-            super::super::SliceCommand::Phase { .. } => Write("slice phase"),
-            super::super::SliceCommand::Status { .. } => Write("slice status"),
-            super::super::SliceCommand::List { .. } | super::super::SliceCommand::Show { .. } => {
+            crate::slice::SliceCommand::New { .. } => Write("slice new"),
+            crate::slice::SliceCommand::Design { .. } => Write("slice design"),
+            crate::slice::SliceCommand::Plan { .. } => Write("slice plan"),
+            crate::slice::SliceCommand::Phases { .. } => Write("slice phases"),
+            crate::slice::SliceCommand::Notes { .. } => Write("slice notes"),
+            crate::slice::SliceCommand::Phase { .. } => Write("slice phase"),
+            crate::slice::SliceCommand::Status { .. } => Write("slice status"),
+            crate::slice::SliceCommand::List { .. } | crate::slice::SliceCommand::Show { .. } => {
                 Read
             }
         },

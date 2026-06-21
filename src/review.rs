@@ -25,7 +25,407 @@
     )
 )]
 
+use std::str::FromStr;
+
+use clap::Subcommand;
+
 use crate::tomlfmt::toml_string;
+
+#[derive(Subcommand)]
+pub(crate) enum ReviewCommand {
+    /// Open a new review ledger targeting an entity via the `reviews` edge.
+    /// The `--target` ref is validated up front — a dangling ref is refused
+    /// before any id is allocated. Findings are added later with `review raise`.
+    New {
+        /// What this review reviews (the facet): scope | design | plan |
+        /// phase-plan | implementation | code-review | reconciliation.
+        #[arg(long, value_parser = Facet::parse)]
+        facet: Facet,
+
+        /// The subject canonical ref the review targets, e.g. `SL-024`.
+        #[arg(long)]
+        target: String,
+
+        /// Optional phase scope for a phase-scoped facet, e.g. `PHASE-03`.
+        #[arg(long)]
+        phase: Option<String>,
+
+        /// Review title (default: derived from facet + target).
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Raiser role label (cooperative; default `raiser`).
+        #[arg(long)]
+        raiser: Option<String>,
+
+        /// Responder role label (cooperative; default `responder`).
+        #[arg(long)]
+        responder: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List reviews by id: id, derived status (+ await), facet, target, title.
+    List {
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one review: derived status, the `reviews` edge, and the brief.
+    Show {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Raise a finding on a review (the raiser's verb) — appends an `open`
+    /// finding with a fixed, raiser-owned severity/title/detail.
+    Raise {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Severity: blocker | major | minor | nit (only `blocker` gates close).
+        #[arg(long, value_parser = Severity::parse)]
+        severity: Severity,
+
+        /// The finding's title (fixed at raise).
+        #[arg(long)]
+        title: String,
+
+        /// The finding's detail (fixed at raise).
+        #[arg(long)]
+        detail: String,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Dispose a finding (the responder's verb) — answer an open/contested
+    /// finding, setting the responder-owned disposition + response.
+    Dispose {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// The disposition (free-text; e.g. fixed / design-wrong / tolerated).
+        #[arg(long)]
+        disposition: String,
+
+        /// The response detail (free-text).
+        #[arg(long)]
+        response: String,
+
+        /// Cooperative role assertion (default: responder).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Verify an answered finding (the raiser's verb) — accept it (terminal).
+    Verify {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// Ephemeral handoff chatter for the baton log — NOT durable rationale
+        /// (durable justification belongs in a finding).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Contest an answered finding (the raiser's verb) — hand it back to the
+    /// responder (answered → contested).
+    Contest {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// Ephemeral handoff chatter for the baton log — NOT durable rationale
+        /// (durable justification belongs in a finding).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Withdraw a finding (the raiser's verb) — retract an open/answered finding
+    /// (terminal).
+    Withdraw {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Report a review's derived state and rebuild its baton (cache == recompute).
+    Status {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Populate the reviewer-context warm-cache from a curated `domain_map`, or
+    /// (`--seed`) emit git-changed candidate paths to curate from (ADR-007 D-C10).
+    Prime {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Emit git-changed candidate paths (a starting point, not authority) and
+        /// exit, instead of priming. Writes nothing.
+        #[arg(long)]
+        seed: bool,
+
+        /// Read the curated `domain_map` from a file (default: stdin).
+        #[arg(long)]
+        from: Option<PathBuf>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Remove a stale per-review lock left by a hard kill (escape hatch).
+    Unlock {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        ReviewCommand::New {
+            facet,
+            target,
+            phase,
+            title,
+            raiser,
+            responder,
+            path,
+        } => {
+            use std::io::Write;
+            let out = run_new(
+                path,
+                &NewArgs {
+                    facet,
+                    target,
+                    phase,
+                    title,
+                    raiser,
+                    responder,
+                },
+            )?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::List { list, path } => {
+            use std::io::Write;
+            let out = run_list(path, list.into_list_args(color))?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Show {
+            reference,
+            format,
+            json,
+            path,
+        } => {
+            use std::io::Write;
+            let out = run_show(path, &reference, if json { Format::Json } else { format })?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Raise {
+            reference,
+            severity,
+            title,
+            detail,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let out = run_raise(
+                path,
+                &RaiseArgs {
+                    reference,
+                    severity,
+                    title,
+                    detail,
+                },
+                role,
+            )?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Dispose {
+            reference,
+            finding,
+            disposition,
+            response,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Responder)?;
+            let out = run_dispose(
+                path,
+                &DisposeArgs {
+                    reference,
+                    finding,
+                    disposition,
+                    response,
+                },
+                role,
+            )?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Verify {
+            reference,
+            finding,
+            note,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let out = run_verify(path, &reference, &finding, note.as_deref(), role)?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Contest {
+            reference,
+            finding,
+            note,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let out = run_contest(path, &reference, &finding, note.as_deref(), role)?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Withdraw {
+            reference,
+            finding,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let out = run_withdraw(path, &reference, &finding, role)?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Status { reference, path } => {
+            use std::io::Write;
+            let out = run_status(path, &reference)?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Prime {
+            reference,
+            seed,
+            from,
+            path,
+        } => {
+            use std::io::Write;
+            let out = run_prime(
+                path,
+                &PrimeArgs {
+                    reference,
+                    seed,
+                    from,
+                },
+            )?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Unlock { reference, path } => {
+            use std::io::Write;
+            let out = run_unlock(path, &reference)?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Closed vocabulary enums (each: `as_str` render mirror + a `&[&str]` known-set,
