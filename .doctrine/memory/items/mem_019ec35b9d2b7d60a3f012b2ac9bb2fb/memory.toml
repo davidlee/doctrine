@@ -2,11 +2,11 @@ memory_uid = "mem_019ec35b9d2b7d60a3f012b2ac9bb2fb"
 memory_key = "mem.pattern.distribution.skill-frontmatter-yaml-no-colon-no-quote"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "SKILL.md frontmatter description must avoid colon-space and double-quotes (YAML scalar)"
 summary = "SKILL.md frontmatter is YAML — a description with colon-space or embedded double-quotes breaks the embed parse"
 created = "2026-06-13"
-updated = "2026-06-13"
+updated = "2026-06-21"
 
 [scope]
 paths = ["src/skills.rs"]
@@ -43,3 +43,7 @@ weight = 0
 [[relation]]
 label = "related"
 target = "mem.pattern.distribution.skill-refresh-command"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019edd5ba93c74f3a2384b166a7b70b2"
