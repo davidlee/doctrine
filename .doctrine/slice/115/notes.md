@@ -189,3 +189,69 @@ E (1): Memory+Sync (D1a carve-out — Sync stays residual)
   the module boundary when enums relocate from main.rs. The edge extractor can't
   distinguish module names from type names. The source-file existence filter is
   the minimal correct fix — recorded as memory `mem_019ee7d35d0d`.
+
+---
+
+## 2026-06-21 — PHASE-04 complete
+
+### Done
+
+- `Command` + `ExportCommand` enums + full dispatch match → `commands/cli.rs`
+- `main.rs` production code: 2086 → **173 LOC**
+- `fn main()` = 3-line orchestration root: parse → guard → dispatch
+- `Command` is now in a real module (`commands::cli::Command`) — the gate
+  extractor false positive from PHASE-03 resolves naturally
+
+### Notes
+
+- `Cli` stays at crate root (binary entrypoint — unimportable from `commands/`)
+- `CommonListArgs` stays at crate root (sink invariant — design §4 F-B)
+- `commands/guard.rs` now imports from `crate::commands::cli::Command`
+- `layering.toml` dep-list comment refreshed (courtesy — no tier/row change)
+- Test modules (~1200 LOC of `write_class_tests` + parse tests) remain in
+  `main.rs` for now; could move to `tests/cli_verification.rs` as a follow-up
+- `MemoryCommand::Sync` D1a residual moved with the match as a sink-safe
+  `commands→corpus` out-edge
+
+### Verification
+
+- 2142 tests pass, `cargo clippy --bin doctrine` zero-warn
+- `tests::architecture_layering_gate`: **command = 120 unchanged**
+- No `enum` definitions remain in main.rs
+- All phases complete — slice ready for audit
+
+### Durable items
+
+- **Gate pre-filter pattern:** crate-root type references (`crate::TypeName`) cross
+  the module boundary when enums relocate from main.rs. The edge extractor can't
+  distinguish module names from type names. The source-file existence filter is
+  the minimal correct fix — recorded as memory `mem_019ee7d35d0d`.
+
+---
+
+## 2026-06-21 — Audit complete (RV-122)
+
+### Evidence
+
+- 2142 tests pass; layering gate green (`command = 120` unchanged)
+- `cargo clippy --bin doctrine` + `cargo clippy --workspace --exclude cordage` zero-warn
+- `main.rs` production code: 170 LOC (target ~250)
+- All 5 core invariants confirmed: D1a (Sync carve-out + SpecReq→spec), sink, completeness, gate pre-filter, behaviour preservation
+
+### RV-122 findings (4, all resolved)
+
+| Finding | Severity | Disposition | Note |
+|---------|----------|-------------|------|
+| F-1 | minor | aligned | Trunk merge surfaced unfulfilled lint expectations — fixed by removing `#[expect]` + adding `#[cfg(test)]` |
+| F-2 | minor | tolerated | ~1200 LOC test module remains in main.rs — never in scope; backlog CHR-018 filed |
+| F-3 | minor | tolerated | Stale review/phase refs needed manual cleanup before prepare-review |
+| F-4 | nit | aligned | Gate pre-filter by source-file existence is a heuristic — known tradeoff, recorded in memory |
+
+### Harvest
+
+- **CHR-018**: Move main.rs test module (~1200 LOC) to `tests/cli_verification.rs`
+- **Commit on dispatch/115**: `482a90c8` — audit fix (unfulfilled lint expectations)
+- **Candidate admitted**: `cand-115-review-001` at a786fd2b (review_surface, RV-122)
+- No spec/governance changes required — reconciliation brief is empty of REV items
+
+### Next: /reconcile → /close
