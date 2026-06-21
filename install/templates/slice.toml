@@ -4,6 +4,7 @@ title = {{title}}
 status = "proposed"
 created = "{{date}}"
 updated = "{{date}}"
+tags = []
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
