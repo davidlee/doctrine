@@ -1170,6 +1170,7 @@ fn show_json(
                 "title": req.title,
                 "kind": req.kind.as_str(),
                 "status": req.status.as_str(),
+                "tags": req.tags,
             });
             if let Some(prose) = req_bodies.get(i).and_then(|b| b.as_ref())
                 && let Some(obj) = req_obj.as_object_mut()
@@ -1349,7 +1350,7 @@ fn key(subtype: SpecSubtype, m: &Meta) -> listing::FilterFields {
         slug: m.slug.clone(),
         title: m.title.clone(),
         status: m.status.clone(),
-        tags: Vec::new(),
+        tags: m.tags.clone(),
     }
 }
 
@@ -1558,6 +1559,8 @@ struct ReqJsonRow {
     kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    tags: Vec<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     dangling: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1718,13 +1721,14 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
             let json_rows: Vec<ReqJsonRow> = kept
                 .into_iter()
                 .map(|(row, req)| match req {
-                    Some(_) => {
+                    Some(ref req) => {
                         let prose_val = Some(row.prose == "\u{2713}");
                         ReqJsonRow {
                             id: row.id,
                             label: row.label,
                             kind: Some(row.kind),
                             status: Some(row.status),
+                            tags: req.tags.clone(),
                             dangling: false,
                             load_error: None,
                             prose: prose_val,
@@ -1735,6 +1739,7 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
                         label: row.label,
                         kind: None,
                         status: None,
+                        tags: vec![],
                         dangling: true,
                         // `kind` held the load-error note for the table row.
                         load_error: Some(row.kind),

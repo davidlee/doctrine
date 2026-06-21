@@ -1771,6 +1771,7 @@ confidence = \"bogus\"
                 slug: "token-expiry".to_string(),
                 title: "Token expiry".to_string(),
                 status: "proposed".to_string(),
+                tags: vec![],
             }
         );
     }

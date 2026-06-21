@@ -932,7 +932,7 @@ fn key(m: &Meta) -> listing::FilterFields {
         slug: m.slug.clone(),
         title: m.title.clone(),
         status: m.status.clone(),
-        tags: Vec::new(),
+        tags: m.tags.clone(),
     }
 }
 
@@ -1178,6 +1178,8 @@ struct SliceDoc {
     created: String,
     updated: String,
     #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
     gate: Gate,
     #[serde(default)]
     estimate: Option<crate::estimate::EstimateFacet>,
@@ -1332,6 +1334,10 @@ fn format_show(
     parts.push(format!("{} · {}\n", doc.slug, doc.status));
     // Advisory conduct posture for the current state (F15/F19) — Table only.
     parts.push(format!("conduct: {}\n", posture.label()));
+    // Tags — rendered only when non-empty (additive).
+    if !doc.tags.is_empty() {
+        parts.push(format!("tags: {}\n", doc.tags.join(", ")));
+    }
     parts.push(format!(
         "created {} · updated {}\n",
         doc.created, doc.updated
@@ -1477,6 +1483,7 @@ mod tests {
             slug: slug.to_string(),
             title: title.to_string(),
             status: status.to_string(),
+            tags: Vec::new(),
         }
     }
 
