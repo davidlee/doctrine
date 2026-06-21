@@ -1,0 +1,21 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 19
+slug = "spike-toml-edit-022-root-tag-stripinsert-vs-real-worst-case-corpus-shapes-sl-136-f1rv-129"
+title = "Spike: toml_edit 0.22 root-tag strip+insert vs real worst-case corpus shapes (SL-136 F1/RV-129)"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-21"
+updated = "2026-06-21"
+tags = []
+
+# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
+# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
