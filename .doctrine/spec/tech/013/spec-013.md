@@ -32,7 +32,7 @@ The surface is a two-level clap subcommand tree. A top-level `Command` enum
 names each entity kind (`Slice`, `Memory`, `Adr`, `Policy`, `Standard`, `Spec`,
 `Backlog`, …), each delegating to a per-kind subcommand enum (`AdrCommand`,
 `PolicyCommand`, …). The verbs within are the shared set — `new`, `list`,
-`show`, and (for lifecycle kinds) `status` — so the invocation shape is
+`show`, `paths`, and (for lifecycle kinds) `status` — so the invocation shape is
 identical across kinds: `doctrine <kind> <verb>`. A `show` reassembles one
 entity's metadata, relationships, and prose body; a `list` enumerates the
 corpus. The grammar is the predictability contract; the engine seam each verb
