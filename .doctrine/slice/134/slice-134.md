@@ -14,6 +14,10 @@ adjust risk assessment.
 ## Scope & Objectives
 
 - `doctrine risk set <ID> --likelihood <LEVEL> --impact <LEVEL>` — set both axes
+  (at least one required; both allowed)
+- `doctrine risk set <ID> --origin <TEXT>` — optional free-text origin description
+- `doctrine risk set <ID> --controls <CTRL>...` — repeatable, replaces the whole
+  `controls` list (not additive)
 - `doctrine risk clear <ID>` — clear the facet back to empty
 - Validation: levels must be `low | medium | high | critical`
 - Refuse for non-risk item kinds (the `kind = "risk"` auth gate)
@@ -27,6 +31,8 @@ adjust risk assessment.
   (SL-132 covers estimate/value display; risk display is analogous but
   deferred)
 - No risk history tracking
+- No additive `risk controls add/remove` subcommand — `--controls` replaces
+  the whole list. Additive semantics deferred to a separate improvement
 - Risk facet model (`RiskFacet`, `RiskLevel`, `exposure()`) already exists
   in `src/backlog.rs:382` — reused as-is
 
