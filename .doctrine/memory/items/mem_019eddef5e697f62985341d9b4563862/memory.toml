@@ -2,11 +2,11 @@ memory_uid = "mem_019eddef5e697f62985341d9b4563862"
 memory_key = "mem.fact.pi.default-tool-set"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "superseded"
 title = "pi v0.79.6 default built-in tool set is read, write, edit, bash only"
 summary = "pi v0.79.6 default built-in tools are read, write, edit, bash — grep/find/ls require --tools flag"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-21"
 
 [scope]
 paths = []
@@ -47,4 +47,8 @@ ref = "SL-108"
 [[source]]
 kind = "review"
 ref = "RV-090"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019ede16728471d39ec92b052b42d9a0"
 

@@ -2,11 +2,11 @@ memory_uid = "mem_019eddf0157d7ff0a0cc275a5e8c0611"
 memory_key = "mem.pattern.design.timeout-spec-must-be-concrete"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "Design-stage timeout specifications must be concrete: value + mechanism + abort"
 summary = "Design-stage timeout specs must include concrete value, enforcement mechanism, and abort semantics — 'should' is not a decision"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-21"
 
 [scope]
 paths = []
@@ -47,4 +47,8 @@ ref = "SL-108"
 [[source]]
 kind = "review"
 ref = "RV-090"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019ede166900749096ced5441373d753"
 
