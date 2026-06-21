@@ -34,3 +34,31 @@ The Inquisition (RV-134) raised 7 findings against the design. All resolved.
 - Slice moved to `ready`
 
 See RV-134 for full findings and dispositions.
+
+## 2026-06-22 — Audit RV-136: reconciliation review
+
+Audit completed against candidate `candidate/139/review-001` (cand-139-review-001).
+
+### Evidence
+- 2304 tests pass (3 pre-existing unrelated failures)
+- Clippy zero warnings across all changed files
+- `just check` passes (rust side; eslint pre-existing failure in web/map/)
+- concept-map --json byte-identical to --format json (md5sum verified)
+- All 13 kinds accept paths with correct selectors (live CLI tested)
+- Multi-ref splats preserve input order; invalid ref → non-zero exit + empty stdout
+- Output: root-relative, one per line, no table/JSON/headers
+
+### Findings (4 raised, 4 verified)
+- F-1 (aligned): paths.rs conforms to design §5.3/§5.5
+- F-2 (aligned): concept-map --json parity confirmed
+- F-3 (aligned): paths verb wired for all 13 kinds
+- F-4 (verified): SPEC-013 verb-set drift → reconciliation brief delegates to /reconcile
+
+### Reconciliation brief
+- SPEC-013: amend uniform-verb set to include `paths` → REV modify
+- No per-slice edits needed
+
+### Harvested
+- No durable risks, decisions, or gotchas beyond those already in notes.md.
+- No backlog items warranted.
+- No new memory facts — the implementation followed established patterns.

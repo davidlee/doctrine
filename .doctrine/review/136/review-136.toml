@@ -1,0 +1,52 @@
+id    = 136
+slug  = "reconciliation-review-of-sl-139"
+title = "reconciliation review of SL-139"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-139"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "paths.rs conforms to design §5.3/§5.5 — engine-tier, no clap, correct selectors"
+detail = "paths.rs imports only std::fs, std::path, and anyhow::Context — no clap types, no command-tier modules. EntityPathSet and PathSelection are defined clap-free. Exclusion filter covers dot-prefixed (.), hash-prefixed (#), tilde-suffixed (~), .swp, .orig, .bak. Scanner skips symlinks and subdirs. Selector logic: no selector = all files in canonical order (TOML → MD → lexicographic others); any selector = only selected classes; --single truncates. Missing MD errors when --md/--entity selected; tolerated in default mode. Registered as engine tier in .doctrine/adr/001/layering.toml. All unit tests (VT-1 through VT-5) pass."
+disposition = "aligned"
+response = "Implementation matches design §5.3/§5.5 exactly. No clap imports, no command-tier deps, correct exclusion filter, correct selector logic, correct canonical ordering. Layering.toml registered as engine. All unit tests pass. No code change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "concept-map --json shorthand is byte-identical to --format json (PHASE-02)"
+detail = "ConceptMapCommand::Show now has json: bool with #[arg(long)]. Dispatch converts: if json { Format::Json } else { format }. Verified: doctrine concept-map show CM-001 --json and --format json produce identical md5sum (cd703c5bc49ece57c1904f9757e6867f). D8 scope (CLI-grammar parity only, no JSON shape normalization) respected — no changes to render_json_value or show_json functions. All existing concept-map tests stay green."
+disposition = "aligned"
+response = "concept-map --json is a true shorthand producing byte-identical output to --format json. D8 scope boundary (CLI-grammar parity only) is respected — no JSON shape changes. Existing tests green. No code change needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "paths verb wired for all 13 entity kinds with correct selectors"
+detail = "All 13 in-scope kinds accept paths: numeric-stem (adr, policy, standard, rfc, slice, review, rec, revision, concept-map) and umbrella/named (backlog, spec, knowledge, memory). Governance kinds share governance::run_paths. Prefix-to-sub-kind resolution correct: backlog ISS→issue, IMP→improvement, CHR→chore, RSK→risk, IDE→idea; spec PRD→product, SPEC→tech; knowledge ASM→assumption, DEC→decision, QUE→question, CON→constraint; memory uid→concrete directory. All accept --toml/-t, --md/-m, --entity/-e, --single/-s. Multi-ref splats preserve input order. Invalid ref yields non-zero exit with empty stdout. All existing show suites green. 2304 tests pass (3 pre-existing unrelated failures). Clippy zero warnings."
+disposition = "aligned"
+response = "All 13 entity kinds correctly accept paths with full selector support. Governance kinds share governance::run_paths. Prefix-to-sub-kind resolution correct for backlog/spec/knowledge. Memory uid resolution correct. Multi-ref order preserved, invalid ref errors correctly. 2304 tests pass, clippy zero warnings. No code change needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "SPEC-013 verb-set drift — paths verb not recorded in the uniform-verb spec"
+detail = "Design §6 / D7 explicitly names this as reconciliation work: 'A new uniform paths verb conflicts with SPEC-013's current new/list/show/status wording. The design names this explicitly in §6 and D7; per user direction, the spec update is reconciliation work after implementation evidence exists.' The implementation evidence now exists — paths is a working, tested verb across 13 entity commands. SPEC-013 must be amended to include paths in its uniform-verb set. This is a governance finding, not a code defect. Remediation belongs to /reconcile."
+disposition = "verified"
+response = "Confirmed: SPEC-013 does not yet include paths in its uniform-verb set. Design §6/D7 recorded this as intentional deferred reconciliation work. Implementation evidence now exists — paths is a proven, tested verb across all 13 entity commands. Remediation: /reconcile must amend SPEC-013's verb-set wording to include paths. See reconciliation brief for exact target and write surface."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,0 +1,100 @@
+[[area]]
+name = "SL-139 slice canon and phase evidence"
+purpose = "Approved scope/design/plan and runtime phase sheets that define the reconciliation target."
+paths = [
+  ".doctrine/slice/139/slice-139.md",
+  ".doctrine/slice/139/slice-139.toml",
+  ".doctrine/slice/139/design.md",
+  ".doctrine/slice/139/plan.toml",
+  ".doctrine/slice/139/plan.md",
+  ".doctrine/state/slice/139/phases/phase-01.md",
+  ".doctrine/state/slice/139/phases/phase-01.toml",
+  ".doctrine/state/slice/139/phases/phase-02.md",
+  ".doctrine/state/slice/139/phases/phase-02.toml",
+  ".doctrine/state/slice/139/phases/phase-03.md",
+  ".doctrine/state/slice/139/phases/phase-03.toml",
+  ".doctrine/state/slice/139/phases/phase-04.md",
+  ".doctrine/state/slice/139/phases/phase-04.toml",
+]
+
+[[area]]
+name = "Candidate review surface — paths.rs (PHASE-01)"
+purpose = "Engine-tier shared paths helper: EntityPathSet, PathSelection, scanner, exclusions, selectors."
+paths = [
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/paths.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/.doctrine/adr/001/layering.toml",
+]
+
+[[area]]
+name = "Candidate review surface — concept_map.rs (PHASE-02)"
+purpose = "--json shorthand for concept-map show; CLI-grammar parity per D8."
+paths = [
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/concept_map.rs",
+]
+
+[[area]]
+name = "Candidate review surface — numeric stem kinds (PHASE-03)"
+purpose = "Paths verb for adr, policy, standard, rfc, slice, review, rec, revision, concept-map."
+paths = [
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/governance.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/adr.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/policy.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/standard.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/rfc.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/slice.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/review.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/rec.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/revision.rs",
+]
+
+[[area]]
+name = "Candidate review surface — umbrella/named kinds (PHASE-04)"
+purpose = "Paths verb for backlog, spec, knowledge, memory with prefix-to-sub-kind dispatch."
+paths = [
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/backlog.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/spec.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/knowledge.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/memory.rs",
+]
+
+[[area]]
+name = "Candidate review surface — cross-cutting"
+purpose = "Test goldens, main dispatch wiring, guard changes."
+paths = [
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/main.rs",
+  ".doctrine/state/dispatch/candidate/cand-139-review-001/src/commands/guard.rs",
+
+]
+
+[[invariant]]
+text = "paths.rs imports no clap types and no command-tier modules (ADR-001 engine tier)."
+
+[[invariant]]
+text = "Exclusion filter excludes dot-prefixed files, editor temporaries (#/~/.swp), and known artifacts (.orig/.bak)."
+
+[[invariant]]
+text = "Selector logic: no selector = all files; any selector present = only selected classes; --single truncates per ref."
+
+[[invariant]]
+text = "Canonical output order: identity TOML → identity MD → other files lexicographically sorted."
+
+[[invariant]]
+text = "Output lines are root-relative, one per line, no table/JSON/headers/grouping labels."
+
+[[invariant]]
+text = "Multi-ref splats preserve input order; invalid ref yields non-zero exit and empty stdout (no partial output)."
+
+[[invariant]]
+text = "Every in-scope kind (13 total) accepts --toml/-t, --md/-m, --entity/-e, --single/-s selectors."
+
+[[invariant]]
+text = "Existing show suites for all 13 kinds stay green unchanged."
+
+[[invariant]]
+text = "concept-map show --json produces identical output to --format json."
+
+[[risk]]
+text = "ADR-001 layering.toml must register paths in the engine tier; omission would fail the architecture_layering test."
+
+[[risk]]
+text = "Each kind has its own identity file naming convention; per-kind wiring could diverge from the design's expected identity paths."
