@@ -1844,7 +1844,7 @@ confidence = \"bogus\"
                 slug: "token-expiry".to_string(),
                 title: "Token expiry".to_string(),
                 status: "proposed".to_string(),
-                tags: vec![],
+                tags: vec!["auth".to_string(), "security".to_string()],
             }
         );
     }
@@ -2167,18 +2167,12 @@ target = \"ADR-001\"
             entity: false,
             single: false,
         };
-        let entity_dir = root
-            .join(RecordKind::Assumption.kind().dir)
-            .join("001");
+        let entity_dir = root.join(RecordKind::Assumption.kind().dir).join("001");
         let identity_toml = entity_dir.join("record-001.toml");
         let identity_md = entity_dir.join("record-001.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         let output = lines.join("\n");
         assert!(output.contains(".doctrine/knowledge/assumption/001/record-001.toml"));
@@ -2198,24 +2192,15 @@ target = \"ADR-001\"
             entity: false,
             single: true,
         };
-        let entity_dir = root
-            .join(RecordKind::Decision.kind().dir)
-            .join("001");
+        let entity_dir = root.join(RecordKind::Decision.kind().dir).join("001");
         let identity_toml = entity_dir.join("record-001.toml");
         let identity_md = entity_dir.join("record-001.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(lines.len(), 1);
-        assert_eq!(
-            lines[0],
-            ".doctrine/knowledge/decision/001/record-001.toml"
-        );
+        assert_eq!(lines[0], ".doctrine/knowledge/decision/001/record-001.toml");
     }
 
     #[test]
@@ -2229,18 +2214,12 @@ target = \"ADR-001\"
             entity: false,
             single: false,
         };
-        let entity_dir = root
-            .join(RecordKind::Question.kind().dir)
-            .join("002");
+        let entity_dir = root.join(RecordKind::Question.kind().dir).join("002");
         let identity_toml = entity_dir.join("record-002.toml");
         let identity_md = entity_dir.join("record-002.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(
             lines,
@@ -2259,18 +2238,12 @@ target = \"ADR-001\"
             entity: false,
             single: false,
         };
-        let entity_dir = root
-            .join(RecordKind::Constraint.kind().dir)
-            .join("003");
+        let entity_dir = root.join(RecordKind::Constraint.kind().dir).join("003");
         let identity_toml = entity_dir.join("record-003.toml");
         let identity_md = entity_dir.join("record-003.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(
             lines,
@@ -2289,18 +2262,12 @@ target = \"ADR-001\"
             entity: true,
             single: false,
         };
-        let entity_dir = root
-            .join(RecordKind::Assumption.kind().dir)
-            .join("004");
+        let entity_dir = root.join(RecordKind::Assumption.kind().dir).join("004");
         let identity_toml = entity_dir.join("record-004.toml");
         let identity_md = entity_dir.join("record-004.md");
-        let set = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        )
-        .unwrap();
+        let set =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root)
+                .unwrap();
         let lines = crate::paths::select_paths(&set, &sel).unwrap();
         assert_eq!(
             lines,
@@ -2322,12 +2289,8 @@ target = \"ADR-001\"
             .join(format!("{id:03}"));
         let identity_toml = entity_dir.join(format!("record-{id:03}.toml"));
         let identity_md = entity_dir.join(format!("record-{id:03}.md"));
-        let scan = crate::paths::scan_entity_dir(
-            &entity_dir,
-            &identity_toml,
-            Some(&identity_md),
-            root,
-        );
+        let scan =
+            crate::paths::scan_entity_dir(&entity_dir, &identity_toml, Some(&identity_md), root);
         assert!(scan.is_err());
     }
 
