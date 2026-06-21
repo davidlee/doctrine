@@ -1,0 +1,42 @@
+memory_uid = "mem_019eeac33cf373d3949d04a6f9780351"
+memory_key = "mem.pattern.dispatch.coord-worktree-missing-build-artifacts"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch coordination worktree omits gitignored build artifacts — funnel verify fails to compile until provisioned"
+summary = "dispatch setup coordination worktree omits gitignored build artifacts (e.g. web/map/dist); funnel verify can't compile until you copy them from main"
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch"]
+tags = ["dispatch", "worktree", "gate", "provisioning"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "24efb94e41e2db074cfc574757decebacf611626"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b40425c11c0a0eea16c53aebf887ea02fbc31d8ae1b3680f9b7c59e908693269"
+base_commit = "2b73013fd815efab4d17850bb1b8015546df117f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
