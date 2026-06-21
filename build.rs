@@ -7,19 +7,19 @@
 //!
 //! This build script creates a minimal fallback so the crate always compiles;
 //! the nix flake grafts the real dist on top for the production binary.
+//!
+//! `cargo publish` rejects source-tree modifications by build scripts, so the
+//! `just publish` recipe passes `--no-verify` — the real gate is `just
+//! release-check` (gate + nix-build).
 
 use std::path::Path;
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "build script — ephemeral stub for cargo package"
-)]
+#[expect(clippy::disallowed_methods, reason = "build script — ephemeral stub for cargo package")]
 fn main() {
     let dist = Path::new("web/map/dist");
     let index = dist.join("index.html");
 
     if !index.exists() {
-        // dist/ missing — minimal stub so RustEmbed doesn't fail at compile time.
         let assets = dist.join("assets");
         let vendor = dist.join("vendor");
 
@@ -44,8 +44,5 @@ fn main() {
         println!("cargo:warning=web/map/dist/ not found — using stub frontend");
     }
 
-    // Re-run if the dist directory appears or changes.
-    // In dev (dist present): re-builds when vite outputs change.
-    // In packaging (dist absent): the path is recorded absent; no rerun.
     println!("cargo:rerun-if-changed=web/map/dist/index.html");
 }
