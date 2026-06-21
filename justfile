@@ -78,6 +78,9 @@ ff:
 force-push-main:
   git push . edge:main
 
+commit-doctrine:
+  git reset && git add .doctrine && git add .doctrine/ && git ci -m doctrine
+
 # Push local edge and main to origin — works from any branch
 push-upstream:
   git push origin edge:refs/heads/edge main:refs/heads/main
