@@ -69,6 +69,7 @@ mod value;
 mod verify;
 mod worktree;
 
+use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -3117,7 +3118,12 @@ fn main() -> anyhow::Result<()> {
                 format,
                 json,
                 path,
-            } => memory::run_show(path, &reference, if json { Format::Json } else { format }),
+            } => memory::run_show(
+                &mut io::stdout(),
+                path,
+                &reference,
+                if json { Format::Json } else { format },
+            ),
             MemoryCommand::Verify {
                 reference,
                 allow_dirty,
@@ -3143,7 +3149,12 @@ fn main() -> anyhow::Result<()> {
                 memory_type,
                 list,
                 path,
-            } => memory::run_list(path, memory_type, list.into_list_args(color)),
+            } => memory::run_list(
+                &mut io::stdout(),
+                path,
+                memory_type,
+                list.into_list_args(color),
+            ),
             MemoryCommand::Find { query, args } => {
                 // Merge positional query + --query; mutually exclusive.
                 let free_query = match (query, args.flag_query) {
@@ -3152,10 +3163,6 @@ fn main() -> anyhow::Result<()> {
                     }
                     (q, None) | (None, q) => q,
                 };
-                // Validate --limit.
-                if args.limit == Some(0) {
-                    anyhow::bail!("--limit must be >= 1");
-                }
                 // Resolve offset: page sugar or explicit.
                 let page_size = args.limit.unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT);
                 let offset = match args.page {
@@ -3165,6 +3172,7 @@ fn main() -> anyhow::Result<()> {
                 };
                 let resolved_format = if args.json { Format::Json } else { args.format };
                 retrieve::run_find(
+                    &mut io::stdout(),
                     args.path,
                     args.path_scope,
                     args.glob,
@@ -3181,14 +3189,6 @@ fn main() -> anyhow::Result<()> {
                 )
             }
             MemoryCommand::Retrieve { args, min_trust } => {
-                // Validate --limit.
-                if args.limit == Some(0) {
-                    anyhow::bail!("--limit must be >= 1");
-                }
-                let retrieve_limit = args
-                    .limit
-                    .unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT)
-                    .min(retrieve::RETRIEVE_LIMIT_MAX);
                 // Resolve offset: page sugar or explicit.
                 let page_size = args.limit.unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT);
                 let offset = match args.page {
@@ -3197,7 +3197,11 @@ fn main() -> anyhow::Result<()> {
                     None => args.offset,
                 };
                 let resolved_format = if args.json { Format::Json } else { args.format };
+                // limit is passed as Option<usize>; run_retrieve resolves through
+                // default/max internally.
+                let retrieve_limit = args.limit.unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT);
                 retrieve::run_retrieve(
+                    &mut io::stdout(),
                     args.path,
                     args.path_scope,
                     args.glob,
