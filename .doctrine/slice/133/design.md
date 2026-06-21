@@ -90,8 +90,10 @@ scan_entities(root) ──────► [ScannedEntity{ estimate, value, risk 
   NodeAttr.base_score   ──► mint order (base desc, id asc)   ──► edges ──► build()
         │
         ▼  post-pass (pure, over the built PriorityGraph)
-  consequence(node) = Σ_dependents base(dep) × edge_coeff      [ref-class + dep-class]
-  score(node)       = base(node) + consequence(node)
+  consequence(node) = Σ base(dep).total() × edge_coeff
+        ref-class: in_edges over CONSEQUENCE_LABELS overlays × ref_edge_coeff
+        dep-class: out_edges(dep_overlay)  (needs B→A flip) × dep_edge_coeff
+  score(node)       = base(node).total() + consequence(node)
 ```
 
 `value_dim = (value × kind_weight × Σ tag_coeff) / estimate_midpoint`
@@ -149,8 +151,15 @@ Unknown keys ignored (no `deny_unknown`) → forward-compatible. Lookups
 **Scoring (`priority::graph` or a sibling pure `priority::score`, engine):**
 
 ```rust
-fn base_score(f: &EntityFacets, kind: &entity::Kind, cfg: &PriorityConfig) -> f64;
-// pure; value_dim + risk_dim, NaN-free by construction (§5.5)
+pub(crate) struct BaseScore { pub value_dim: f64, pub risk_dim: f64 }
+impl BaseScore { pub fn total(&self) -> f64 { self.value_dim + self.risk_dim } }
+
+fn base_score(f: &EntityFacets, kind: &entity::Kind, cfg: &PriorityConfig) -> BaseScore;
+// pure; NaN-free by construction (§5.5). Returns the SPLIT (not a bare sum) so
+// `explain` can surface value_dim / risk_dim. `kind_weight` keys on the kind's
+// canonical name (entity::Kind carries a distinct Kind per backlog sub-kind —
+// ISSUE_KIND/IMPROVEMENT_KIND/IDEA_KIND/… — so improvement/issue/idea resolve
+// directly, no ItemKind needed).
 ```
 
 **Build seam** (`graph::build`): now `load`s config and threads it; `build_from`
@@ -163,7 +172,9 @@ gains `config: &PriorityConfig`. Surface fns (`survey`/`next`/`explain`) keep th
   `NodeAttr`. The raw weighted `consequence` is recoverable as `score − base` (kept as
   a derived value for `explain`, not a stored third map — but see OQ-2).
 
-`NodeAttr` gains `base_score: f64`.
+`NodeAttr` gains `base_score: BaseScore` (the split — `value_dim`/`risk_dim`).
+`base_score.total()` is the value the mint comparator and consequence post-pass
+consume.
 
 **Surfaces** retype `consequence: u32 → score: f64` across `SurveyRow`,
 `ActionabilityNode`, `ActionabilityBlock`. `ReasonKind::Consequence { inbound: u32 }`
@@ -187,18 +198,25 @@ consequence to a **post**-pass):
 1. **Scan** (caller-supplied) — entities + outbound edges + status + title +
    estimate/value/**risk**.
 2. **Base pre-pass** (pure) — `base_score` per node from its own facets + config +
-   kind. Store on `NodeAttr.base_score`. *(Replaces the consequence pre-pass.)*
-3. **Mint** in `(base desc, id asc)` via `f64::total_cmp` then canonical-id. *(Was
-   `consequence desc`.)*
+   kind into a `BTreeMap<EntityKey, BaseScore>`. *(Replaces the consequence pre-pass;
+   runs before mint because it feeds the tiebreaker, and needs no graph.)*
+3. **Mint** in `(base.total() desc via f64::total_cmp, id asc)`. *(Was `consequence
+   desc`.)* The `BaseScore` is carried onto `NodeAttr` at the 3c attrs pass.
 4. **Edges** — unchanged (ref/lineage overlays + dep/seq overlays).
 5. **`OrderSpec` + build** — unchanged.
-6. **Consequence post-pass** (pure, over the built graph) — for each node, sum its
-   dependents' `base_score`:
-   - **ref class**: dependents reached via the `REF_LABELS` inbound overlays (the
-     existing consequence-input overlays), weighted `× ref_edge_coeff`.
-   - **dep class**: dependents reached via the `dep_overlay` inbound edges (`needs`),
-     weighted `× dep_edge_coeff`.
-   - `score(node) = base(node) + Σ`. Store in `PriorityGraph.score`.
+6. **Consequence post-pass** (pure, over the built graph; runs inside `build_from`
+   after `build()`, with `ref_by_label` + `dep_overlay` still in scope) — for each
+   node N, sum its dependents' `base_score.total()`:
+   - **ref class**: a referencer→target edge is emitted `src→dst`, so N's dependents
+     are the **`in_edges(ov, N)`** sources — iterated over the **`CONSEQUENCE_LABELS`
+     subset** of ref overlays ONLY (work/lineage; `reviews`/`owning_slice` bookkeeping
+     stay excluded, preserving the pre-SL-133 consequence semantics). Weighted
+     `× ref_edge_coeff`.
+   - **dep class**: `A.needs=[B]` emits `edge(dep_overlay, B→A)` — the prereq B is the
+     edge **source**, so B's dependents are the **`out_edges(dep_overlay, B)`** targets
+     (NOT in_edges). Weighted `× dep_edge_coeff`.
+   - `score(N) = base(N).total() + Σ`. Store in `PriorityGraph.score`. (Multi-label
+     double-counting across overlays matches the old per-edge `+=1` tally — unchanged.)
 
 **Sort integration:**
 - `survey`: `actionability → score desc (total_cmp) → canonical-id asc`.
@@ -207,6 +225,9 @@ consequence to a **post**-pass):
   ordering — including a graph-derived quantity in the structural tiebreak would
   couple ordering to the very edges it orders (feedback loop). Mint uses `base` only.
 - `explain`: emits the full `Score` breakdown.
+
+`ActionabilityView.policy_version` bumps `"priority.v2" → "priority.v3"` — the
+ranking contract changed (count → weighted score).
 
 **Config dynamics:** absent `[priority]` → all defaults → behaviour is "weighted by
 value/risk with unit kind weights". An operator tunes coefficients without code
@@ -328,9 +349,11 @@ Verification (criteria firm up in `/plan`):
   absent estimate → midpoint 1.0; kind_weight/tag_coeff defaults applied.
 - **VT-3** — config: missing `[priority]` → all defaults; partial section → per-field
   defaults; unknown key ignored; non-finite/negative coeff clamped (I2).
-- **VT-4** — consequence post-pass: a dependent's base flows to its prerequisite,
-  ref-class vs dep-class weighted distinctly; dangling target contributes 0; ADR-004
-  (no stored reverse) upheld.
+- **VT-4** — consequence post-pass **directions** (the F1/F2 fixes): a `needs`
+  dependent's base flows to its prerequisite via `out_edges(dep_overlay)` (× dep coeff);
+  a referencer's base flows to its target via `in_edges` over the `CONSEQUENCE_LABELS`
+  overlays only (× ref coeff); a `reviews`/`owning_slice` edge contributes **0** (subset
+  exclusion); a dangling target contributes 0; ADR-004 (no stored reverse) upheld.
 - **VT-5** — **reordering scenario** (the point of the slice): a blocker gating one
   high-value slice outranks a blocker gating five ideas, where the old inbound-count
   ranked them opposite.
@@ -344,4 +367,24 @@ Verification (criteria firm up in `/plan`):
 
 ## 10. Review Notes
 
-(reserved for adversarial pass)
+**Internal adversarial pass (2026-06-21).** Verified two correctness-critical facts
+against source before locking, then found two bugs in the first draft:
+
+- **Verified:** cordage exposes both `out_edges`/`in_edges`
+  (`crates/cordage/src/lib.rs:768,783`); backlog sub-kinds are distinct `entity::Kind`
+  rows (`ISSUE_KIND`/`IMPROVEMENT_KIND`/`IDEA_KIND`/…), so config kind-weights resolve
+  without an `ItemKind` (worry dissolved).
+- **F1 (fixed) — dep-class edge direction.** First draft walked `dep_overlay`
+  *in_edges*; correct is **`out_edges`** (the `needs` B→A flip puts the prereq on the
+  edge source). §5.2/§5.4/VT-4 corrected.
+- **F2 (fixed) — ref-class label set.** First draft used all `REF_LABELS`,
+  re-including `reviews`/`owning_slice`; restored to the **`CONSEQUENCE_LABELS`**
+  subset to preserve pre-SL-133 consequence semantics. §5.2/§5.4/VT-4 corrected.
+- **F3 (fixed) — `base_score` returns `BaseScore { value_dim, risk_dim }`** (split,
+  not bare sum) so `explain` can surface dimensions.
+- **F4/F6 (fixed)** — base computed into a map pre-mint then carried onto `NodeAttr`;
+  `policy_version` bumps `v2→v3`.
+
+Open after the pass: OQ-1 (clamp telemetry), OQ-2 (store vs derive consequence),
+OQ-3 (parse-path unification follow-up). No governance conflict surfaced (ADR-001
+layering *drives* D2; ADR-004 upheld; ADR-015 authored this phase).

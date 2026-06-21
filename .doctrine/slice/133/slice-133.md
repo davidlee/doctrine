@@ -128,17 +128,24 @@ same projection.
 
 ## Terrain
 
+(Revised at design — risk-leaf extraction + build-seam config; see `design.md` §7 D2/D4.)
+
 | File | Change |
 |------|--------|
-| `src/priority/graph.rs:51` | `NodeAttr` — add `base_score: f64` |
-| `src/priority/graph.rs:106` | Remove `counts_toward_consequence` |
-| `src/priority/graph.rs:162` | Consequence pre-pass → replace with base-score pre-pass |
-| `src/priority/graph.rs` | Add consequence post-pass over built graph |
-| `src/priority/surface.rs:93,140` | Replace `consequence: u32` with `score: f64`, sort change |
-| `src/priority/render.rs` | Display rendering for score in survey/next rows |
-| `src/relation.rs:93` | `CONSEQUENCE_LABELS` — reuse for ref edge class |
+| `src/risk.rs` (new) | Extract risk facet types from `backlog` to a **leaf** (forced by ADR-001 — D2): `RiskLevel`, `RiskFacet`, `RawRiskFacet`, parse/validate, `exposure()` |
+| `src/backlog.rs` | Re-use the leaf risk types (command→leaf); behaviour-preserving |
+| `src/facet.rs` | `EntityFacets` gains `risk: Option<RiskFacet>` |
+| `src/catalog/scan.rs` | `read_facets` reads the `[facet]` table; `ScannedEntity` gains risk |
+| `src/priority/config.rs` (new) | `PriorityConfig` serde struct + impure `load(root)` |
+| `src/priority/graph.rs` | `NodeAttr` gains `base_score: BaseScore`; replace consequence pre-pass with base pre-pass; mint retie `(base desc, id asc)`; add consequence **post**-pass (ref-class `in_edges` over `CONSEQUENCE_LABELS`, dep-class `out_edges(dep_overlay)`); `PriorityGraph.consequence:u32 → score:f64`; `build`/`build_from` thread `&PriorityConfig` |
+| `src/priority/surface.rs` | `consequence:u32 → score:f64` across `SurveyRow`/`ActionabilityNode`/`ActionabilityBlock`; sort on score; `policy_version` v2→v3 |
+| `src/priority/render.rs` | Score column (survey/next); `ReasonKind::Score{base,value_dim,risk_dim,consequence,total}` human + json |
 | `doctrine.toml` | New `[priority]` section |
-| `src/main.rs` | Parse `[priority]` from config |
+| `.doctrine/adr/015/**` | **ADR-015** — durable scoring policy (authored this phase) |
+
+Config loads at the `graph::build` seam (the existing impure wrapper), **not**
+`src/main.rs` — D4. Tag coefficients are a **stub** (`Σ = 1.0`, no scan read) this
+slice; the seam exists in the formula, lit up once SL-136 lands tag storage — D5.
 
 ## Dependencies
 
