@@ -25,6 +25,275 @@ use crate::fsutil::{self, CopyOutcome};
 use crate::git;
 use crate::root;
 
+use clap::Subcommand;
+
+// ---------------------------------------------------------------------------
+// CLI enum & dispatch (PHASE-03 relocation from main.rs)
+// ---------------------------------------------------------------------------
+
+#[derive(Subcommand)]
+pub(crate) enum WorktreeCommand {
+    /// Copy allowlisted gitignored files from the source tree into `<fork>` —
+    /// the sole copy path; the coordination/runtime tier is always excluded.
+    Provision {
+        /// The target sibling worktree to populate.
+        fork: PathBuf,
+
+        /// Explicit source project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Static smell test: nonzero exit if any `.worktreeinclude` pattern names a
+    /// withheld tier or uses unsupported syntax (`!`/anchoring).
+    CheckAllowlist {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// HEAD-stationarity assert at the batch-commit boundary (SL-031, D5
+    /// concurrency extension): exit 0 if coordination HEAD still equals the
+    /// orchestrator's pre-spawn base, 1 otherwise (→ re-dispatch). Not a
+    /// merge-base compute (C-V).
+    BranchPointCheck {
+        /// The orchestrator's pre-spawn captured base commit `B`.
+        #[arg(long)]
+        base: String,
+
+        /// HEAD to compare against (default: `git rev-parse HEAD`).
+        #[arg(long)]
+        head: Option<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Create an orchestrator-owned worktree fork off `<base>` on a NEW branch,
+    /// provision it (the sole copier), optionally stamp the worker marker, and emit
+    /// the per-worktree env contract on stdout (SL-056 PHASE-06). Orchestrator-classed
+    /// — refused under worker-mode. Atomic via compensating rollback.
+    Fork {
+        /// The base commit `B` the fork is created from (the orchestrator's
+        /// captured coordination HEAD).
+        #[arg(long)]
+        base: String,
+
+        /// The NEW branch to create at `<base>` for the fork.
+        #[arg(long)]
+        branch: String,
+
+        /// The fork worktree directory (must not already exist; unique per branch).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Stamp the worker-mode marker so the fork resolves to worker mode.
+        #[arg(long)]
+        worker: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Create OR resume the dispatch coordination worktree for a slice on branch
+    /// `dispatch/<slice>` off the resolved trunk (SL-064 §2). MARKERLESS — the
+    /// coordination tree IS the orchestrator, so no worker marker is stamped;
+    /// provisions via the sole copier and regenerates the runtime phase sheets
+    /// from committed `plan.toml`. A live worktree already on `dispatch/<slice>`
+    /// is refused (`coordination-live`); a branch with no live worktree resumes
+    /// (reattach, never a second branch). Orchestrator-classed — refused under
+    /// worker-mode.
+    Coordinate {
+        /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
+        /// coordination worktree to create or resume.
+        #[arg(long)]
+        slice: u32,
+
+        /// The coordination worktree directory (must not already exist).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Import a worker fork's single-commit delta into the coordination index,
+    /// NON-committing (SL-056 PHASE-07, ADR-006 D7: import ≠ commit). Stationary-
+    /// head case only — fails closed with a distinct token on any precond/belt
+    /// violation (`head-moved`/`tree-unclean`/`multi-commit`/`doctrine-touch`/
+    /// `claude-touch`); never auto-merges. Orchestrator-classed — refused under
+    /// worker-mode.
+    Import {
+        /// The orchestrator's pre-spawn captured base commit `B`.
+        #[arg(long)]
+        base: String,
+
+        /// The fork branch carrying the single non-merge commit `S` (`S^ == B`).
+        #[arg(long)]
+        fork: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Land a solo multi-commit isolated-worktree TDD branch onto the coordination
+    /// branch with ancestry PRESERVED via `git merge --no-ff` (NEVER `--squash` —
+    /// the verb cannot express a squash; SL-056 PHASE-08, design §6). Solo
+    /// `/execute`'s analog of `import`. Fails closed with a distinct token on any
+    /// precond/merge violation (`tree-unclean`/`no-such-fork`/`worktree-gone`/
+    /// `dispatch-fork`/`merge-conflict`/`wedged-merge`/`inconsistent-merge-state`).
+    /// Orchestrator-classed — refused under worker-mode.
+    Land {
+        /// The solo fork branch to merge onto the coordination branch.
+        #[arg(long)]
+        fork: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Reap a spent worktree fork in ONE idempotent act (SL-056 PHASE-09, design
+    /// §8) — deletes ONLY when the fork has provably landed via the two-leg
+    /// (ancestry ∪ patch-id) durable-git oracle (§8.1). Fails closed with a distinct
+    /// token (`not-landed`/`squash-uncertifiable`); `--superseded-head <SHA>` reaps
+    /// iff the SHA equals the branch's current head (a movement-guard, not a landing
+    /// proof); `--force` bypasses the oracle; `--dry-run` prints the verdict and
+    /// destroys nothing. A crash-interrupted gc completes (or names the leftover) on
+    /// rerun (§8.2). Orchestrator-classed — refused under worker-mode.
+    Gc {
+        /// The fork branch to reap.
+        #[arg(long)]
+        fork: String,
+
+        /// Reap iff this SHA equals the branch's current head (the moved-HEAD
+        /// re-dispatch case: a spent-yet-never-landed fork). A movement-guard, not a
+        /// landing proof.
+        #[arg(long)]
+        superseded_head: Option<String>,
+
+        /// Bypass the landed oracle and reap knowingly.
+        #[arg(long)]
+        force: bool,
+
+        /// Compute and print the per-fork verdict, destroying nothing.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
+    /// non-zero `stale-marker` exit from the SAME state the human line reads.
+    /// Read-classed — open to workers.
+    Status {
+        /// Gate exit: non-zero with a `stale-marker` token if a stray marker sits
+        /// in this linked worktree (clean direct-writer entry ⇒ exit 0).
+        #[arg(long)]
+        assert: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Post-spawn base==B check for the claude `/dispatch` arm (SL-064 §8): prove
+    /// the spawned worker worktree's HEAD descends from the base `B` it was meant
+    /// to fork off. Diagnostic only — fail-loud, NEVER removes the fork. Read-classed
+    /// (callable under worker-mode). Distinct token per refusal
+    /// (`no-worker-head`/`not-isolated`/`unstamped`/`wrong-base`/`branch-mismatch`).
+    VerifyWorker {
+        /// The base commit `B` the worker was meant to fork off (the
+        /// orchestrator's coordination HEAD at spawn).
+        #[arg(long)]
+        base: String,
+
+        /// The worker worktree to verify — the git `-C` root for every probe.
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// The worker fork branch S — binds HEAD(--dir) == tip(S) (dir↔branch coherence).
+        #[arg(long)]
+        branch: Option<String>,
+    },
+
+    /// Manage the worker-mode disk marker (SL-056 §3). `--clear` removes it at the
+    /// cwd tree root with a loud receipt — the self-brick cure; never refused by
+    /// the marker conjunct itself.
+    Marker {
+        /// Remove the marker at the cwd tree root.
+        #[arg(long)]
+        clear: bool,
+
+        /// Confirm a clear inside a linked worktree (the accident-fence).
+        #[arg(long)]
+        operator: bool,
+
+        /// Provision + stamp the worker marker into the `SubagentStart` payload's
+        /// worktree (SL-056 PHASE-10). Reads `{cwd, agent_type}` JSON on stdin;
+        /// the claude harness spawn path's mark step.
+        #[arg(long)]
+        stamp_subagent: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
+    match cmd {
+        WorktreeCommand::Provision { fork, path } => run_provision(path, &fork),
+        WorktreeCommand::CheckAllowlist { path } => run_check_allowlist(path),
+        WorktreeCommand::BranchPointCheck { base, head, path } => {
+            run_branch_point_check(path, &base, head)
+        }
+        WorktreeCommand::Fork {
+            base,
+            branch,
+            dir,
+            worker,
+            path,
+        } => run_fork(path, &base, &branch, &dir, worker),
+        WorktreeCommand::Coordinate { slice, dir, path } => run_coordinate(path, slice, &dir),
+        WorktreeCommand::Import { base, fork, path } => run_import(path, &base, &fork),
+        WorktreeCommand::Land { fork, path } => run_land(path, &fork),
+        WorktreeCommand::Gc {
+            fork,
+            superseded_head,
+            force,
+            dry_run,
+            path,
+        } => run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
+        WorktreeCommand::Status { assert, path } => run_status(path, assert),
+        WorktreeCommand::VerifyWorker { base, dir, branch } => {
+            run_verify_worker(&base, &dir, branch.as_deref())
+        }
+        WorktreeCommand::Marker {
+            clear,
+            operator,
+            stamp_subagent,
+            path,
+        } => {
+            if stamp_subagent {
+                run_stamp_subagent(path)
+            } else if clear {
+                run_marker_clear(path, operator)
+            } else {
+                anyhow::bail!("`worktree marker` requires `--clear` or `--stamp-subagent`")
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 /// The coordination/runtime tier a fork must never receive, categorised.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tier {

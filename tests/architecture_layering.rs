@@ -543,9 +543,39 @@ fn check(
 ) -> Vec<Violation> {
     let mut violations = Vec::new();
 
+    // ── pre-filter: drop edges whose targets are crate-root types (not modules) ──
+    // crate::CommonListArgs, crate::Command etc. are types defined in main.rs,
+    // not source modules. The edge extractor sees crate::<name> and can't
+    // distinguish a module ref from a type ref; filtering by source-file
+    // existence removes the false positives without loosening the gate.
+    //
+    // For unit tests (synthetic modules like "leaf_mod"), the filter is a no-op
+    // because those names won't be found on disk; we pass those edges through.
+    let is_module = |name: &str| -> bool {
+        let src = std::path::PathBuf::from("src");
+        let exists_on_disk = src.join(format!("{name}.rs")).exists()
+            || src.join(format!("{name}/mod.rs")).exists()
+            || src.join(format!("{name}/{name}.rs")).exists();
+        // In unit tests, units are synthetic (not on disk) → keep all edges.
+        // In the real gate, units come from discover_units (on-disk) → filter.
+        if !units.iter().any(|u| {
+            src.join(format!("{u}.rs")).exists() || src.join(format!("{u}/mod.rs")).exists()
+        }) {
+            // No unit has a source file on disk → synthetic test mode, keep all edges.
+            true
+        } else {
+            exists_on_disk
+        }
+    };
+    let filtered_edges: BTreeSet<_> = edges
+        .iter()
+        .filter(|(_from, to)| is_module(to))
+        .cloned()
+        .collect();
+
     // ── assertion 1 — completeness ──
     // Every unit appearing in edges must be a key in map.
-    for (from, to) in edges {
+    for (from, to) in &filtered_edges {
         if !map.0.contains_key(from) {
             violations.push(Violation::Unclassified(from.clone()));
         }
@@ -583,7 +613,7 @@ fn check(
         .collect();
 
     // ── assertion 2 — cross-tier direction ──
-    for (from, to) in edges {
+    for (from, to) in &filtered_edges {
         // Skip modules that are sub-classified; their edges come from files
         // that may have higher assigned tiers.
         if sub_classified_modules.contains(from.as_str()) {
@@ -606,7 +636,7 @@ fn check(
     }
     // Stale accepted: each entry in Accepted must appear in edges.
     for (from, to) in &accepted.0 {
-        if !edges.contains(&(from.clone(), to.clone())) {
+        if !filtered_edges.contains(&(from.clone(), to.clone())) {
             violations.push(Violation::StaleAccepted {
                 from: from.clone(),
                 to: to.clone(),
@@ -626,7 +656,7 @@ fn check(
         // Check all outbound edges from this module
         let mut upward_edges: Vec<&String> = Vec::new();
         let mut all_upward_accepted = true;
-        for (from, to) in edges {
+        for (from, to) in &filtered_edges {
             if *from != *mod_name {
                 continue;
             }
@@ -657,7 +687,7 @@ fn check(
 
     // ── assertion 4 — per-tier tangle ratchet ──
     for (tier, bl_count) in &baseline.0 {
-        let actual = count_tangle_edges(units, edges, map, *tier);
+        let actual = count_tangle_edges(units, &filtered_edges, map, *tier);
         if actual > *bl_count {
             violations.push(Violation::TangleGrew {
                 tier: *tier,
