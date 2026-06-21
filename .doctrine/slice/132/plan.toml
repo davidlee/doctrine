@@ -1,0 +1,47 @@
+# Implementation plan for SL-132 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-132"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Wire estimate/value display in show path"
+objective = "Create EntityFacets projection, ungate and extend display helpers, write format_value_normal, and wire estimate/value rows into slice show output — all guarded by TDD with the golden absent-facet test passing first."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md approved and RV-121 resolved" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "cargo build passes with zero dead_code warnings" },
+  { id = "EX-2", text = "all VT items pass (VT-1 through VT-12 from design.md §Verification)" },
+  { id = "EX-3", text = "just gate passes (layering check includes new facet.rs entry)" },
+  { id = "EX-4", text = "cargo fmt clean" },
+]
+verification = [
+  { id = "VT-1", expects = "estimate present → confidence row rendered: 'estimate: 3–5 espresso_shots (80% confidence)'" },
+  { id = "VT-2", expects = "estimate absent → no estimate: line in output" },
+  { id = "VT-3", expects = "value present → 'value: 5 magic_beans' appears" },
+  { id = "VT-4", expects = "value absent → no value: line" },
+  { id = "VT-5", expects = "both facets absent → byte-identical to current format_show output (golden)" },
+  { id = "VT-6", expects = "cargo build produces zero dead_code warnings" },
+  { id = "VT-7", expects = "existing show_json tests pass unchanged" },
+  { id = "VT-8", expects = "just check passes; just gate passes" },
+  { id = "VT-9", expects = "custom confidence bounds in doctrine.toml → correct percentile band in output" },
+  { id = "VT-10", expects = "zero-width estimate (lower==upper) → '5.0–5.0 espresso_shots (80% confidence)'" },
+  { id = "VT-11", expects = "shell integration: run_show with fixture slice + doctrine.toml → confidence row in output" },
+  { id = "VT-12", expects = "malformed doctrine.toml → run_show returns Err (not silently defaulted)" },
+]
+specs             = []
+requirements      = []
