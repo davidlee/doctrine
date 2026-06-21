@@ -498,6 +498,38 @@ pub(crate) fn run_show(
     Ok(())
 }
 
+/// `doctrine <kind> paths <ref>…` — resolve each ref to its entity directory and
+/// print the root-relative paths according to the selection.
+pub(crate) fn run_paths(
+    g: &GovKind,
+    path: Option<PathBuf>,
+    refs: &[String],
+    sel: &crate::paths::PathSelection,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let gov_root = root.join(g.kind.dir);
+    let mut all_lines: Vec<String> = Vec::new();
+    for r in refs {
+        let id = parse_ref(g, r)?;
+        let name = format!("{id:03}");
+        let entity_dir = gov_root.join(&name);
+        let toml_name = format!("{}-{name}.toml", g.kind.stem);
+        let md_name = format!("{}-{name}.md", g.kind.stem);
+        let identity_toml = entity_dir.join(&toml_name);
+        let identity_md = entity_dir.join(&md_name);
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            &root,
+        )?;
+        let lines = crate::paths::select_paths(&set, sel)?;
+        all_lines.extend(lines);
+    }
+    write!(io::stdout(), "{}", all_lines.join("\n"))?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Tests — the shared-spine behaviour, driven by the ADR descriptor (SL-030
 // PHASE-02 VT-2; relocated from adr.rs). The ADR-specific render/scaffold tests
@@ -1292,5 +1324,200 @@ mod tests {
             !msg.contains("regenerate") && !msg.contains(" new`") && !msg.contains("scaffold"),
             "F-1 refuse must be non-destructive: {msg}"
         );
+    }
+
+    // --- PHASE-03 paths verb golden tests ---
+
+    /// Build a temp project root with one ADR entity (dir + identity files + an extra file).
+    fn adr_fixture(id: u32, extra: &[&str]) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        let name = format!("{id:03}");
+        let dir = adr_root(tmp.path()).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(format!("adr-{name}.toml")), "toml").unwrap();
+        fs::write(dir.join(format!("adr-{name}.md")), "md").unwrap();
+        for e in extra {
+            fs::write(dir.join(e), e).unwrap();
+        }
+        tmp
+    }
+
+    #[test]
+    fn paths_full_output_shows_toml_md_and_extras_in_canonical_order() {
+        let tmp = adr_fixture(1, &["notes.md", "z.log"]);
+        let root = tmp.path();
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let gov_root = root.join(ADR_KIND.kind.dir);
+        let entity_dir = gov_root.join("001");
+        let identity_toml = entity_dir.join("adr-001.toml");
+        let identity_md = entity_dir.join("adr-001.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines.join("\n"),
+            ".doctrine/adr/001/adr-001.toml\n.doctrine/adr/001/adr-001.md\n.doctrine/adr/001/notes.md\n.doctrine/adr/001/z.log"
+        );
+    }
+
+    #[test]
+    fn paths_single_truncates_to_first() {
+        let tmp = adr_fixture(1, &["notes.md"]);
+        let root = tmp.path();
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: true,
+        };
+        let gov_root = root.join(ADR_KIND.kind.dir);
+        let entity_dir = gov_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("adr-001.toml"),
+            Some(&entity_dir.join("adr-001.md")),
+            &root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], ".doctrine/adr/001/adr-001.toml");
+    }
+
+    #[test]
+    fn paths_toml_only() {
+        let tmp = adr_fixture(1, &["notes.md"]);
+        let root = tmp.path();
+        let sel = crate::paths::PathSelection {
+            toml: true,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let gov_root = root.join(ADR_KIND.kind.dir);
+        let entity_dir = gov_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("adr-001.toml"),
+            Some(&entity_dir.join("adr-001.md")),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines, vec![".doctrine/adr/001/adr-001.toml"]);
+    }
+
+    #[test]
+    fn paths_md_only() {
+        let tmp = adr_fixture(1, &[]);
+        let root = tmp.path();
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: true,
+            entity: false,
+            single: false,
+        };
+        let gov_root = root.join(ADR_KIND.kind.dir);
+        let entity_dir = gov_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("adr-001.toml"),
+            Some(&entity_dir.join("adr-001.md")),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines, vec![".doctrine/adr/001/adr-001.md"]);
+    }
+
+    #[test]
+    fn paths_entity_gives_toml_and_md() {
+        let tmp = adr_fixture(1, &["extra.txt"]);
+        let root = tmp.path();
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: true,
+            single: false,
+        };
+        let gov_root = root.join(ADR_KIND.kind.dir);
+        let entity_dir = gov_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("adr-001.toml"),
+            Some(&entity_dir.join("adr-001.md")),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines,
+            vec![
+                ".doctrine/adr/001/adr-001.toml",
+                ".doctrine/adr/001/adr-001.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn paths_multi_ref_splat_preserves_order() {
+        let tmp = adr_fixture(1, &[]);
+        let root = tmp.path();
+        // Add a second ADR at id 2.
+        {
+            let dir = adr_root(root).join("002");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("adr-002.toml"), "toml").unwrap();
+            fs::write(dir.join("adr-002.md"), "md").unwrap();
+        }
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let gov_root = root.join(ADR_KIND.kind.dir);
+        let mut all_lines: Vec<String> = Vec::new();
+        for n in ["001", "002"] {
+            let entity_dir = gov_root.join(n);
+            let set = crate::paths::scan_entity_dir(
+                &entity_dir,
+                &entity_dir.join(format!("adr-{n}.toml")),
+                Some(&entity_dir.join(format!("adr-{n}.md"))),
+                root,
+            )
+            .unwrap();
+            all_lines.extend(crate::paths::select_paths(&set, &sel).unwrap());
+        }
+        assert_eq!(all_lines.len(), 4);
+        assert!(all_lines[0].contains("001/adr-001.toml"));
+        assert!(all_lines[2].contains("002/adr-002.toml"));
+    }
+
+    #[test]
+    fn paths_invalid_ref_errors() {
+        let tmp = adr_fixture(1, &[]);
+        let root = tmp.path();
+        // Parse a ref to a non-existent entity.
+        let _id = parse_ref(&ADR_KIND, "ADR-99999").unwrap();
+        let gov_root = root.join(ADR_KIND.kind.dir);
+        let entity_dir = gov_root.join("99999");
+        let result = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("adr-99999.toml"),
+            Some(&entity_dir.join("adr-99999.md")),
+            root,
+        );
+        assert!(result.is_err());
     }
 }

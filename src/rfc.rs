@@ -206,6 +206,22 @@ pub(crate) enum RfcCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each RFC entity directory.
+    Paths {
+        /// RFC reference(s) — `RFC-007` or the bare id `7`.
+        refs: Vec<String>,
+        #[arg(short = 't', long)]
+        toml: bool,
+        #[arg(short = 'm', long)]
+        md: bool,
+        #[arg(short = 'e', long)]
+        entity: bool,
+        #[arg(short = 's', long)]
+        single: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: RfcCommand, color: bool) -> anyhow::Result<()> {
@@ -219,6 +235,24 @@ pub(crate) fn dispatch(cmd: RfcCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => run_show(path, &reference, if json { Format::Json } else { format }),
         RfcCommand::Status { id, status, path } => run_status(path, id, status, color),
+        RfcCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => governance::run_paths(
+            &RFC_KIND,
+            path,
+            &refs,
+            &crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            },
+        ),
     }
 }
 

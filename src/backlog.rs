@@ -194,6 +194,29 @@ pub(crate) enum BacklogCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each backlog item's entity directory.
+    Paths {
+        /// Backlog item reference(s) — `ISS-007`, `IMP-003`, etc.
+        refs: Vec<String>,
+
+        /// Show only the identity TOML file.
+        #[arg(short = 't', long)]
+        toml: bool,
+        /// Show only the identity Markdown body.
+        #[arg(short = 'm', long)]
+        md: bool,
+        /// Show the identity TOML + Markdown (equivalent to -t -m).
+        #[arg(short = 'e', long)]
+        entity: bool,
+        /// Return only the first (primary) path per ref.
+        #[arg(short = 's', long)]
+        single: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
@@ -246,6 +269,23 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
             remove,
             path,
         } => run_tag(path, &id, &tags, &remove),
+        BacklogCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => run_paths(
+            path,
+            &refs,
+            &crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            },
+        ),
     }
 }
 
@@ -1972,6 +2012,39 @@ pub(crate) fn run_tag(
         "Tagged {}: {listed}",
         item_kind.canonical_id(id),
     )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `backlog paths` — file paths for each backlog item's entity directory
+// ---------------------------------------------------------------------------
+
+/// `doctrine backlog paths <ref>…` — resolve each ref to its entity directory and
+/// print the root-relative paths according to the selection.
+fn run_paths(
+    path: Option<PathBuf>,
+    refs: &[String],
+    sel: &crate::paths::PathSelection,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mut all_lines: Vec<String> = Vec::new();
+    for r in refs {
+        let (item_kind, id) = parse_ref(r)?;
+        let name = format!("{id:03}");
+        let entity_dir = root.join(item_kind.kind().dir).join(&name);
+        let toml_name = format!("{BACKLOG_STEM}-{name}.toml");
+        let md_name = format!("{BACKLOG_STEM}-{name}.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join(&toml_name),
+            Some(&entity_dir.join(&md_name)),
+            &root,
+        )?;
+        let lines = crate::paths::select_paths(&set, sel)?;
+        all_lines.extend(lines);
+    }
+    write!(io::stdout(), "{}", all_lines.join("\n"))?;
     Ok(())
 }
 
@@ -4691,5 +4764,215 @@ tags = []
             out.contains("ISS-099") && out.contains("absent"),
             "absent ref named: {out}"
         );
+    }
+
+    // --- PHASE-04 paths verb golden tests ---
+
+    /// Scaffold one backlog item and write an extra file into its entity dir.
+    fn backlog_fixture(
+        root: &Path,
+        item_kind: ItemKind,
+        id: u32,
+        extra: &[&str],
+    ) {
+        let name = format!("{id:03}");
+        let dir = root.join(item_kind.kind().dir).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(format!("{BACKLOG_STEM}-{name}.toml")), "toml").unwrap();
+        fs::write(dir.join(format!("{BACKLOG_STEM}-{name}.md")), "md").unwrap();
+        for e in extra {
+            fs::write(dir.join(e), e).unwrap();
+        }
+    }
+
+    #[test]
+    fn paths_full_shows_toml_md_and_extras_in_canonical_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        backlog_fixture(root, ItemKind::Issue, 1, &["notes.md", "z.log"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root.join(ItemKind::Issue.kind().dir).join("001");
+        let identity_toml = entity_dir.join("backlog-001.toml");
+        let identity_md = entity_dir.join("backlog-001.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        let output = lines.join("\n");
+        assert!(output.contains(".doctrine/backlog/issue/001/backlog-001.toml"));
+        assert!(output.contains(".doctrine/backlog/issue/001/backlog-001.md"));
+        assert!(output.contains(".doctrine/backlog/issue/001/notes.md"));
+        assert!(output.contains(".doctrine/backlog/issue/001/z.log"));
+    }
+
+    #[test]
+    fn paths_single_truncates_to_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        backlog_fixture(root, ItemKind::Issue, 1, &["notes.md"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: true,
+        };
+        let entity_dir = root.join(ItemKind::Issue.kind().dir).join("001");
+        let identity_toml = entity_dir.join("backlog-001.toml");
+        let identity_md = entity_dir.join("backlog-001.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], ".doctrine/backlog/issue/001/backlog-001.toml");
+    }
+
+    #[test]
+    fn paths_toml_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        backlog_fixture(root, ItemKind::Chore, 2, &["notes.md"]);
+        let sel = crate::paths::PathSelection {
+            toml: true,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root.join(ItemKind::Chore.kind().dir).join("002");
+        let identity_toml = entity_dir.join("backlog-002.toml");
+        let identity_md = entity_dir.join("backlog-002.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines, vec![".doctrine/backlog/chore/002/backlog-002.toml"]);
+    }
+
+    #[test]
+    fn paths_md_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        backlog_fixture(root, ItemKind::Risk, 3, &[]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: true,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root.join(ItemKind::Risk.kind().dir).join("003");
+        let identity_toml = entity_dir.join("backlog-003.toml");
+        let identity_md = entity_dir.join("backlog-003.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines, vec![".doctrine/backlog/risk/003/backlog-003.md"]);
+    }
+
+    #[test]
+    fn paths_entity_gives_toml_and_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        backlog_fixture(root, ItemKind::Idea, 4, &["extra.txt"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: true,
+            single: false,
+        };
+        let entity_dir = root.join(ItemKind::Idea.kind().dir).join("004");
+        let identity_toml = entity_dir.join("backlog-004.toml");
+        let identity_md = entity_dir.join("backlog-004.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines,
+            vec![
+                ".doctrine/backlog/idea/004/backlog-004.toml",
+                ".doctrine/backlog/idea/004/backlog-004.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn paths_invalid_ref_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        backlog_fixture(root, ItemKind::Issue, 1, &[]);
+        let result = parse_ref("ISS-99999");
+        assert!(result.is_ok()); // parses fine, but entity dir doesn't exist
+        let entity_dir = root
+            .join(ItemKind::Issue.kind().dir)
+            .join("99999");
+        let identity_toml = entity_dir.join("backlog-99999.toml");
+        let identity_md = entity_dir.join("backlog-99999.md");
+        let scan = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root,
+        );
+        assert!(scan.is_err());
+    }
+
+    #[test]
+    fn paths_multi_ref_splat_preserves_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        backlog_fixture(root, ItemKind::Issue, 1, &[]);
+        backlog_fixture(root, ItemKind::Improvement, 1, &[]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let mut all_lines: Vec<String> = Vec::new();
+        for (kind, n) in [
+            (ItemKind::Issue, "001"),
+            (ItemKind::Improvement, "001"),
+        ] {
+            let entity_dir = root.join(kind.kind().dir).join(n);
+            let toml_name = format!("{BACKLOG_STEM}-{n}.toml");
+            let md_name = format!("{BACKLOG_STEM}-{n}.md");
+            let set = crate::paths::scan_entity_dir(
+                &entity_dir,
+                &entity_dir.join(&toml_name),
+                Some(&entity_dir.join(&md_name)),
+                root,
+            )
+            .unwrap();
+            all_lines.extend(crate::paths::select_paths(&set, &sel).unwrap());
+        }
+        assert_eq!(all_lines.len(), 4);
+        assert!(all_lines[0].contains("issue/001/backlog-001.toml"));
+        assert!(all_lines[2].contains("improvement/001/backlog-001.toml"));
     }
 }
