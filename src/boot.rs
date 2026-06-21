@@ -433,6 +433,9 @@ pub(crate) fn run_emit(path: Option<PathBuf>) -> anyhow::Result<()> {
 /// gitignored (the absolute exec path belongs out of git, §5.3/D6).
 const SETTINGS_REL: &str = ".claude/settings.local.json";
 
+/// Codex hooks file (CLI codex) — project-root JSON under `.codex/`.
+const CODE_HOOKS_REL: &str = ".codex/hooks.json";
+
 /// The project-root `.mcp.json` Claude Code reads for project-scoped MCP servers
 /// (CHR-013). Unlike `SETTINGS_REL` this is a committed, team-shared file — it
 /// carries the doctrine MCP server registration (`doctrine serve --mcp`).
@@ -446,6 +449,10 @@ const MCP_SERVER_KEY: &str = "doctrine";
 /// (`clear` firing a `SessionStart` hook is already witnessed; the OR-token is
 /// confirmed live at closure, §6/PHASE-06).
 const SESSION_MATCHER: &str = "startup|clear";
+
+/// The Codex `SessionStart` matcher token — fires on startup, resume, clear,
+/// and compact events.
+const SESSION_MATCHER_CODEX: &str = "startup|resume|clear|compact";
 
 // ---------------------------------------------------------------------------
 // The harness seam (R2) — enum + match, one local id per wired harness.
@@ -718,7 +725,10 @@ pub(crate) enum RefreshOutcome {
     Refreshed(String),
     /// The settings file was malformed (or oddly shaped); left untouched, snippet
     /// printed by the caller — never clobbered (§5.3/D3).
-    PrintedFallback,
+    PrintedFallback {
+        hook_file: &'static str,
+        snippet: String,
+    },
     /// Nothing to do: the doctrine hook is already current, or pi (import-only).
     None,
 }
@@ -730,18 +740,16 @@ struct HookPlan {
     new_json: Option<String>,
 }
 
-fn printed_fallback() -> HookPlan {
-    HookPlan {
-        outcome: RefreshOutcome::PrintedFallback,
-        new_json: None,
-    }
-}
-
 /// The hook command for `exec`: `<exec> boot`. A **single** space-free argument
 /// (`boot`) — the invariant the ownership match leans on (see
 /// `is_doctrine_boot_command`).
 fn boot_command(exec: &Path) -> String {
     format!("{} boot", exec.display())
+}
+
+/// The emit command for `exec`: `<exec> boot --emit`.
+fn emit_command(exec: &Path) -> String {
+    format!("{} boot --emit", exec.display())
 }
 
 /// The canonical hook entry doctrine writes for `spec` — the matcher is the
@@ -799,6 +807,16 @@ fn is_doctrine_sync_command(cmd: &str) -> bool {
     is_doctrine_program(program)
 }
 
+/// Whether `cmd` is doctrine's own emit command — `<program> boot --emit`.
+/// Strip the fixed ` boot --emit` suffix and check the remaining program's file
+/// name is `doctrine`.
+fn is_doctrine_emit_command(cmd: &str) -> bool {
+    let Some(program) = cmd.trim().strip_suffix(" boot --emit") else {
+        return false;
+    };
+    is_doctrine_program(program)
+}
+
 /// The `SubagentStart` stamp hook command for `exec`:
 /// `<exec> worktree marker --stamp-subagent` (SL-056 PHASE-10). Multi-arg, so
 /// ownership matches by suffix-strip (see `is_doctrine_stamp_command`).
@@ -840,6 +858,16 @@ impl HookSpec {
             is_ours: is_doctrine_boot_command,
             event: "SessionStart",
             matcher: SESSION_MATCHER,
+        }
+    }
+
+    /// The `<exec> boot --emit` hook (SL-014) — a Codex `SessionStart` entry.
+    fn boot_emit(exec: &Path) -> Self {
+        Self {
+            command: emit_command(exec),
+            is_ours: is_doctrine_emit_command,
+            event: "SessionStart",
+            matcher: SESSION_MATCHER_CODEX,
         }
     }
 
@@ -991,11 +1019,25 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
         None | Some("") => Value::Object(Map::new()),
         Some(text) => match serde_json::from_str(text) {
             Ok(parsed) => parsed,
-            Err(_) => return printed_fallback(),
+            Err(_) => {
+                return HookPlan {
+                    outcome: RefreshOutcome::PrintedFallback {
+                        hook_file: "",
+                        snippet: String::new(),
+                    },
+                    new_json: None,
+                };
+            }
         },
     };
     let Some(arr) = hook_array_mut(&mut value, spec.event) else {
-        return printed_fallback();
+        return HookPlan {
+            outcome: RefreshOutcome::PrintedFallback {
+                hook_file: "",
+                snippet: String::new(),
+            },
+            new_json: None,
+        };
     };
     // Normalize to exactly one canonical, doctrine-sole entry (D2). No-write iff a
     // single canonical sole entry already exists; otherwise drop every owned hook
@@ -1030,7 +1072,13 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
             outcome,
             new_json: Some(json),
         },
-        Err(_) => printed_fallback(),
+        Err(_) => HookPlan {
+            outcome: RefreshOutcome::PrintedFallback {
+                hook_file: "",
+                snippet: String::new(),
+            },
+            new_json: None,
+        },
     }
 }
 
@@ -1041,9 +1089,25 @@ pub(crate) fn fallback_for(spec: &HookSpec) -> String {
     serde_json::to_string_pretty(&entry).unwrap_or_else(|_| spec.command.clone())
 }
 
-/// `boot install`'s fallback snippet over the generic `fallback_for`.
-fn fallback_snippet(exec: &Path) -> String {
-    fallback_for(&HookSpec::boot(exec))
+/// Check whether `.codex/hooks.json` carries more than one `SessionStart` entry
+/// with the codex matcher — a spike coexistence that will fire both hooks
+/// concurrently.
+fn check_spike_coexistence(root: &Path) -> bool {
+    let hooks_path = root.join(CODE_HOOKS_REL);
+    if let Ok(raw) = fs::read_to_string(&hooks_path)
+        && let Ok(val) = serde_json::from_str::<Value>(&raw)
+        && let Some(arr) = val
+            .get("hooks")
+            .and_then(|h| h.get("SessionStart"))
+            .and_then(Value::as_array)
+    {
+        return arr
+            .iter()
+            .filter(|e| e.get("matcher").and_then(Value::as_str) == Some(SESSION_MATCHER_CODEX))
+            .count()
+            > 1;
+    }
+    false
 }
 
 /// Imperative per-harness refresh. Claude merges the `SessionStart` hook into
@@ -1061,16 +1125,23 @@ fn install_refresh(
 ) -> anyhow::Result<RefreshReport> {
     match h {
         Harness::Codex => {
+            let hook = install_codex_hook(root, &HookSpec::boot_emit(exec), dry_run)?;
+            let spike_warning = if dry_run {
+                false
+            } else {
+                check_spike_coexistence(root)
+            };
             let append_system = install_append_system(root, dry_run)?;
             let extension = install_pi_extension(root, exec, dry_run)?;
             let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
             Ok(RefreshReport {
-                hook: RefreshOutcome::None,
+                hook,
                 baseref: BaseRefOutcome::NotApplicable,
                 mcp: RefreshOutcome::None,
                 append_system,
                 extension,
                 mcp_extension,
+                spike_warning,
             })
         }
         Harness::Claude => {
@@ -1090,6 +1161,7 @@ fn install_refresh(
                 append_system: AppendSystemOutcome::NotApplicable,
                 extension: ExtOutcome::NotApplicable,
                 mcp_extension: ExtOutcome::NotApplicable,
+                spike_warning: false,
             })
         }
     }
@@ -1112,6 +1184,9 @@ struct RefreshReport {
     /// The `.pi/extensions/doctrine/mcp.ts` MCP extension outcome (SL-120);
     /// Claude carries `NotApplicable`.
     mcp_extension: ExtOutcome,
+    /// Whether a foreign `SessionStart` hook with the same codex matcher
+    /// coexists — surfaced as a warning.
+    spike_warning: bool,
 }
 
 /// What the `worktree.baseRef="head"` install did, for reporting (SL-064 §8.3).
@@ -1238,7 +1313,10 @@ struct McpPlan {
 
 fn mcp_fallback() -> McpPlan {
     McpPlan {
-        outcome: RefreshOutcome::PrintedFallback,
+        outcome: RefreshOutcome::PrintedFallback {
+            hook_file: "",
+            snippet: String::new(),
+        },
         new_json: None,
     }
 }
@@ -1340,7 +1418,49 @@ fn install_mcp(root: &Path, exec: &Path, dry_run: bool) -> anyhow::Result<Refres
         }
         fsutil::write_atomic(&path, json.as_bytes())?;
     }
-    Ok(plan.outcome)
+    Ok(match plan.outcome {
+        RefreshOutcome::PrintedFallback { .. } => RefreshOutcome::PrintedFallback {
+            hook_file: MCP_REL,
+            snippet: mcp_fallback_snippet(exec),
+        },
+        other => other,
+    })
+}
+
+/// Annotate a refresh outcome with a hook file path and a fallback snippet.
+fn annotate_fallback(
+    outcome: RefreshOutcome,
+    hook_file: &'static str,
+    spec: &HookSpec,
+) -> RefreshOutcome {
+    match outcome {
+        RefreshOutcome::PrintedFallback { .. } => RefreshOutcome::PrintedFallback {
+            hook_file,
+            snippet: fallback_for(spec),
+        },
+        other => other,
+    }
+}
+
+/// Generic hook installer: merge `spec` into `rel_path` under `root`, writing
+/// only on change (unless `dry_run`).
+fn install_hook_to_file(
+    root: &Path,
+    rel_path: &'static str,
+    spec: &HookSpec,
+    dry_run: bool,
+) -> anyhow::Result<RefreshOutcome> {
+    let path = root.join(rel_path);
+    let existing = fs::read_to_string(&path).ok();
+    let plan = plan_hook(existing.as_deref(), spec);
+    if let (Some(json), false) = (&plan.new_json, dry_run) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        fsutil::write_atomic(&path, json.as_bytes())?;
+    }
+    Ok(annotate_fallback(plan.outcome, rel_path, spec))
 }
 
 /// Merge a `HookSpec`'s `SessionStart` hook into `.claude/settings.local.json`,
@@ -1351,17 +1471,18 @@ pub(crate) fn install_claude_hook(
     spec: &HookSpec,
     dry_run: bool,
 ) -> anyhow::Result<RefreshOutcome> {
-    let path = root.join(SETTINGS_REL);
-    let existing = fs::read_to_string(&path).ok();
-    let plan = plan_hook(existing.as_deref(), spec);
-    if let (Some(json), false) = (&plan.new_json, dry_run) {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create {}", parent.display()))?;
-        }
-        fsutil::write_atomic(&path, json.as_bytes())?;
-    }
-    Ok(plan.outcome)
+    install_hook_to_file(root, SETTINGS_REL, spec, dry_run)
+}
+
+/// Merge a `HookSpec`'s `SessionStart` hook into `.codex/hooks.json`,
+/// writing only on change (unless `dry_run`). The Codex hook installer for
+/// `boot install` (SL-014).
+fn install_codex_hook(
+    root: &Path,
+    spec: &HookSpec,
+    dry_run: bool,
+) -> anyhow::Result<RefreshOutcome> {
+    install_hook_to_file(root, CODE_HOOKS_REL, spec, dry_run)
 }
 
 // ---------------------------------------------------------------------------
@@ -1658,19 +1779,73 @@ pub(crate) fn wire(
                 match report.hook {
                     RefreshOutcome::Wired(cmd) => {
                         writeln!(stdout, "  {tag}{}: wired hook: {cmd}", harness_label(h))?;
+                        if matches!(h, Harness::Codex) {
+                            writeln!(
+                                stdout,
+                                "  {tag}{}: wrote {CODE_HOOKS_REL}. To activate:",
+                                harness_label(h)
+                            )?;
+                            writeln!(
+                                stdout,
+                                "    1. Ensure [features] hooks = true in .codex/config.toml."
+                            )?;
+                            writeln!(
+                                stdout,
+                                "    2. Start codex in this project and accept the project trust prompt."
+                            )?;
+                            writeln!(
+                                stdout,
+                                "    3. Run /hooks in codex to trust the doctrine hook."
+                            )?;
+                        }
                     }
                     RefreshOutcome::Refreshed(cmd) => {
                         writeln!(stdout, "  {tag}{}: refreshed hook: {cmd}", harness_label(h))?;
+                        if matches!(h, Harness::Codex) {
+                            writeln!(
+                                stdout,
+                                "  {tag}{}: wrote {CODE_HOOKS_REL}. To activate:",
+                                harness_label(h)
+                            )?;
+                            writeln!(
+                                stdout,
+                                "    1. Ensure [features] hooks = true in .codex/config.toml."
+                            )?;
+                            writeln!(
+                                stdout,
+                                "    2. Start codex in this project and accept the project trust prompt."
+                            )?;
+                            writeln!(
+                                stdout,
+                                "    3. Run /hooks in codex to trust the doctrine hook."
+                            )?;
+                        }
                     }
-                    RefreshOutcome::PrintedFallback => {
+                    RefreshOutcome::PrintedFallback { hook_file, snippet } => {
                         writeln!(
                             stdout,
-                            "  {}: {SETTINGS_REL} is malformed — add this hook manually:",
+                            "  {}: {hook_file} is malformed — add this hook manually:",
                             harness_label(h)
                         )?;
-                        writeln!(stdout, "{}", fallback_snippet(exec))?;
+                        writeln!(stdout, "{snippet}")?;
                     }
                     RefreshOutcome::None => {}
+                }
+                if report.spike_warning {
+                    writeln!(
+                        stdout,
+                        "  {}: warning — a foreign SessionStart hook with the same matcher",
+                        harness_label(h)
+                    )?;
+                    writeln!(
+                        stdout,
+                        "    ({SESSION_MATCHER_CODEX}) exists alongside the doctrine hook."
+                    )?;
+                    writeln!(
+                        stdout,
+                        "    Both will fire concurrently. Remove the old entry to avoid"
+                    )?;
+                    writeln!(stdout, "    duplicate snapshot injection.")?;
                 }
                 // baseRef leg (SL-064 §8): report a fresh set or a respected
                 // non-head override. AlreadyHead / PrintedFallback / NotApplicable
@@ -1712,13 +1887,13 @@ pub(crate) fn wire(
                             harness_label(h)
                         )?;
                     }
-                    RefreshOutcome::PrintedFallback => {
+                    RefreshOutcome::PrintedFallback { hook_file, snippet } => {
                         writeln!(
                             stdout,
-                            "  {}: {MCP_REL} has a foreign or malformed 'doctrine' entry — register manually:",
+                            "  {}: {hook_file} has a foreign or malformed 'doctrine' entry — register manually:",
                             harness_label(h)
                         )?;
-                        writeln!(stdout, "{}", mcp_fallback_snippet(exec))?;
+                        writeln!(stdout, "{snippet}")?;
                     }
                     RefreshOutcome::None => {}
                 }
@@ -3163,7 +3338,10 @@ mod tests {
     #[test]
     fn plan_session_hook_fails_soft_on_malformed_json() {
         let plan = plan_session_hook(Some("{ not json"), Path::new("/abs/doctrine"));
-        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(matches!(
+            plan.outcome,
+            RefreshOutcome::PrintedFallback { .. }
+        ));
         assert!(plan.new_json.is_none(), "malformed → never clobber");
     }
 
@@ -3209,9 +3387,12 @@ mod tests {
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
         assert!(matches!(out.mcp, RefreshOutcome::None));
 
-        // pi is import-only — no hook, no settings/baseRef, no .mcp.json.
+        // Codex arm: hook is wired into .codex/hooks.json, no Claude settings/MCP.
         let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
-        assert!(matches!(out.hook, RefreshOutcome::None));
+        assert!(matches!(
+            out.hook,
+            RefreshOutcome::Wired(_) | RefreshOutcome::None
+        ));
         assert!(matches!(out.baseref, BaseRefOutcome::NotApplicable));
         assert!(matches!(out.mcp, RefreshOutcome::None));
     }
@@ -3360,7 +3541,10 @@ mod tests {
         // is a deliberate user entry — leave it untouched, surface a snippet.
         let existing = r#"{"mcpServers":{"doctrine":{"command":"/x/tool","args":["run"]}}}"#;
         let plan = plan_mcp(Some(existing), &mcp_exec());
-        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(matches!(
+            plan.outcome,
+            RefreshOutcome::PrintedFallback { .. }
+        ));
         assert!(
             plan.new_json.is_none(),
             "foreign entry must not be clobbered"
@@ -3370,7 +3554,10 @@ mod tests {
     #[test]
     fn plan_mcp_malformed_left_untouched() {
         let plan = plan_mcp(Some("{ not json"), &mcp_exec());
-        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(matches!(
+            plan.outcome,
+            RefreshOutcome::PrintedFallback { .. }
+        ));
         assert!(
             plan.new_json.is_none(),
             "malformed file must not be clobbered"
@@ -3381,7 +3568,10 @@ mod tests {
     fn plan_mcp_non_object_servers_left_untouched() {
         let existing = r#"{"mcpServers":[1,2,3]}"#;
         let plan = plan_mcp(Some(existing), &mcp_exec());
-        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(matches!(
+            plan.outcome,
+            RefreshOutcome::PrintedFallback { .. }
+        ));
         assert!(plan.new_json.is_none());
     }
 
@@ -4564,5 +4754,147 @@ weight = 0
         let on_disk = std::fs::read_to_string(root.join(".doctrine/state/boot.md")).unwrap();
         let built = build_and_render(root, &exec);
         assert_eq!(on_disk, built);
+    }
+    // =======================================================================
+    // SL-014 PHASE-02 — codex SessionStart hook install + trust
+    // =======================================================================
+
+    fn codex_exec(root: &Path) -> PathBuf {
+        let exec = root.join("doctrine");
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::write(&exec, b"fake").unwrap();
+        exec
+    }
+
+    #[test]
+    fn codex_hook_install_writes_expected_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = codex_exec(root);
+        let out = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        let raw = std::fs::read_to_string(root.join(CODE_HOOKS_REL)).unwrap();
+        let val: Value = serde_json::from_str(&raw).unwrap();
+        let arr = val["hooks"]["SessionStart"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["matcher"], SESSION_MATCHER_CODEX);
+        let hooks = arr[0]["hooks"].as_array().unwrap();
+        assert_eq!(hooks.len(), 1);
+        assert_eq!(
+            hooks[0]["command"],
+            format!("{} boot --emit", exec.display())
+        );
+    }
+
+    #[test]
+    fn codex_hook_install_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = codex_exec(root);
+        let out1 = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        assert!(matches!(out1, RefreshOutcome::Wired(_)));
+        let out2 = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        assert!(matches!(out2, RefreshOutcome::None));
+    }
+
+    #[test]
+    fn codex_hook_preserves_foreign_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = codex_exec(root);
+        std::fs::create_dir_all(root.join(".codex")).unwrap();
+        let foreign = serde_json::json!({
+            "hooks": {
+                "SessionStart": [{
+                    "matcher": "startup",
+                    "hooks": [{"type": "command", "command": "/usr/bin/other"}]
+                }]
+            }
+        });
+        std::fs::write(
+            root.join(CODE_HOOKS_REL),
+            serde_json::to_string_pretty(&foreign).unwrap(),
+        )
+        .unwrap();
+        install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        let raw = std::fs::read_to_string(root.join(CODE_HOOKS_REL)).unwrap();
+        let val: Value = serde_json::from_str(&raw).unwrap();
+        let arr = val["hooks"]["SessionStart"].as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn codex_hook_malformed_json_printed_fallback() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = codex_exec(root);
+        std::fs::create_dir_all(root.join(".codex")).unwrap();
+        std::fs::write(root.join(CODE_HOOKS_REL), "not json").unwrap();
+        let out = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        match out {
+            RefreshOutcome::PrintedFallback { hook_file, snippet } => {
+                assert_eq!(hook_file, CODE_HOOKS_REL);
+                assert!(!snippet.is_empty());
+            }
+            _ => panic!("expected PrintedFallback"),
+        }
+    }
+
+    #[test]
+    fn codex_hook_stale_exec_path_refreshed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::create_dir_all(root.join(".codex")).unwrap();
+        // Use old and new subdirectories so the file name stays "doctrine"
+        let old_dir = root.join("old");
+        let new_dir = root.join("new");
+        std::fs::create_dir_all(&old_dir).unwrap();
+        std::fs::create_dir_all(&new_dir).unwrap();
+        let old_exec = old_dir.join("doctrine");
+        let new_exec = new_dir.join("doctrine");
+        std::fs::write(&old_exec, b"fake").unwrap();
+        std::fs::write(&new_exec, b"fake").unwrap();
+        install_codex_hook(root, &HookSpec::boot_emit(&old_exec), false).unwrap();
+        let out = install_codex_hook(root, &HookSpec::boot_emit(&new_exec), false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Refreshed(_)));
+    }
+
+    #[test]
+    fn emit_ownership_predicate_full_matrix() {
+        // Positive cases
+        assert!(is_doctrine_emit_command("/abs/doctrine boot --emit"));
+        assert!(is_doctrine_emit_command("doctrine boot --emit"));
+        assert!(is_doctrine_emit_command(
+            "/path with spaces/doctrine boot --emit"
+        ));
+        assert!(is_doctrine_emit_command(
+            "/abs/doctrine (deleted) boot --emit"
+        ));
+        // Negative cases
+        assert!(!is_doctrine_emit_command("/abs/doctrine boot"));
+        assert!(!is_doctrine_emit_command(
+            "/abs/doctrine boot --emit --verbose"
+        ));
+        assert!(!is_doctrine_emit_command("sh -c 'doctrine boot --emit'"));
+        assert!(!is_doctrine_emit_command("/abs/doctrine memory sync"));
+        assert!(!is_doctrine_emit_command(
+            "/abs/doctrine worktree marker --stamp-subagent"
+        ));
+        assert!(!is_doctrine_emit_command("/abs/other-tool boot --emit"));
+    }
+
+    #[test]
+    fn claude_hook_unchanged_after_dry_refactor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = root.join("doctrine");
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::create_dir_all(root.join(".claude")).unwrap();
+        std::fs::write(&exec, b"fake").unwrap();
+        let out = install_claude_hook(root, &HookSpec::boot(&exec), false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        let raw = std::fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        assert!(raw.contains(&format!("{} boot", exec.display())));
     }
 }
