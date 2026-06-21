@@ -58,6 +58,7 @@ fn root_insert_tags(doc: &mut DocumentMut, tags: &[&str]) {
 
 /// Strip the typed `[relationships].tags`, returning its values — the relocation
 /// SOURCE half of the migration. `None` if the table/key is absent.
+#[allow(dead_code)]
 fn strip_relationship_tags(doc: &mut DocumentMut) -> Option<Vec<String>> {
     let rel = doc.get_mut("relationships")?.as_table_mut()?;
     let removed = rel.remove("tags")?;
@@ -210,100 +211,110 @@ fn h1_status_scalar_insert_mirrors_apply_status() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn h2_rfc002_live_tags_relocate_16_relations_preserved() {
-    // The ONLY non-empty live tag set + 16× [[relation]]. The migration's worst case.
+fn h2_rfc002_live_tags_at_root_16_relations_preserved() {
+    // RFC-002's live tags are now at root (SL-136 PHASE-04 migrated the corpus).
     let mut doc = load("rfc/002/rfc-002.toml");
-    let moved = strip_relationship_tags(&mut doc).expect("RFC-002 must carry [relationships].tags");
     let expected = vec![
-        "program",
         "consumption-surfaces",
         "estimate",
-        "value",
+        "program",
         "scoring",
+        "value",
     ];
-    assert_eq!(
-        moved, expected,
-        "live tag values must be captured before relocation"
-    );
-    root_insert_tags(
-        &mut doc,
-        &moved.iter().map(String::as_str).collect::<Vec<_>>(),
-    );
-
-    let rendered = doc.to_string();
-    assert_root_tags_above_subtables(&rendered);
+    // Verify the post-migration shape: root tags, no typed tags.
     let parsed = reparse(&doc);
-    assert_eq!(
-        root_tags(&parsed),
-        expected,
-        "all 5 live tags must survive relocation"
-    );
+    assert_eq!(root_tags(&parsed), expected, "live tags at root");
     assert!(
         parsed["relationships"].get("tags").is_none(),
-        "typed tags must be stripped from [relationships]"
+        "no typed [relationships].tags"
     );
     assert!(
         parsed["relationships"].get("superseded_by").is_some(),
-        "sibling superseded_by axis lost"
+        "sibling superseded_by axis present"
     );
-    assert_eq!(
-        relation_count(&parsed),
-        16,
-        "all 16 [[relation]] rows must survive"
+    assert_eq!(relation_count(&parsed), 16, "all 16 [[relation]] rows survive");
+
+    // Exercise a root-insert edit that replaces the tags array. Root tags + 16 relations survive.
+    let existing_tags = root_tags(&parsed);
+    let mut all_tags = existing_tags.clone();
+    all_tags.push("new-tag".to_string());
+    all_tags.sort();
+    root_insert_tags(
+        &mut doc,
+        &all_tags.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+    );
+    let rendered = doc.to_string();
+    assert_root_tags_above_subtables(&rendered);
+    let parsed2 = reparse(&doc);
+    assert_eq!(root_tags(&parsed2), all_tags, "root tags survive insert edit");
+    assert_eq!(relation_count(&parsed2), 16, "relations survive edit");
+    assert!(
+        parsed2["relationships"].get("superseded_by").is_some(),
+        "superseded_by survives edit"
     );
 }
 
 #[test]
-fn h2_adr014_same_file_root_status_and_relationship_tags_overlap() {
+fn h2_adr014_same_file_root_status_and_root_tags_survive_edit() {
     let mut doc = load("adr/014/adr-014.toml");
     assert_eq!(
         doc.get("status").and_then(Item::as_str),
         Some("accepted"),
         "precondition: root status"
     );
-    let moved = strip_relationship_tags(&mut doc).expect("ADR-014 carries [relationships].tags");
-    root_insert_tags(
-        &mut doc,
-        &moved.iter().map(String::as_str).collect::<Vec<_>>(),
-    );
-
+    // Post-migration (SL-136 PHASE-04): tags at root or absent; no typed tags.
     let parsed = reparse(&doc);
-    assert_eq!(
-        root_tags(&parsed),
-        Vec::<String>::new(),
-        "empty tag set relocates as empty root array"
-    );
     assert!(
         parsed["relationships"].get("tags").is_none(),
-        "stripped from [relationships]"
+        "no typed [relationships].tags"
     );
-    // The same-file overlap: root `status` must be UNTOUCHED by the tag relocation.
     assert_eq!(
         parsed.get("status").and_then(Item::as_str),
         Some("accepted"),
-        "root status must survive untouched"
+        "root status untouched pre-edit"
     );
     assert!(parsed["relationships"].get("superseded_by").is_some());
     assert_eq!(relation_count(&parsed), 1);
+
+    // Exercise a root-insert edit: set a tag. Root status + relations survive.
+    root_insert_tags(&mut doc, &["x"]);
+    let parsed2 = reparse(&doc);
+    assert_eq!(root_tags(&parsed2), vec!["x".to_string()]);
+    assert!(
+        parsed2["relationships"].get("tags").is_none(),
+        "no typed tags after root edit"
+    );
+    assert_eq!(
+        parsed2.get("status").and_then(Item::as_str),
+        Some("accepted"),
+        "root status must survive untouched"
+    );
+    assert!(parsed2["relationships"].get("superseded_by").is_some());
+    assert_eq!(relation_count(&parsed2), 1);
 }
 
 #[test]
-fn h2_pol001_same_file_root_status_and_relationship_tags_overlap() {
+fn h2_pol001_same_file_root_status_and_root_tags_survive_edit() {
     let mut doc = load("policy/001/policy-001.toml");
     assert_eq!(doc.get("status").and_then(Item::as_str), Some("required"));
-    let moved = strip_relationship_tags(&mut doc).expect("POL-001 carries [relationships].tags");
-    root_insert_tags(
-        &mut doc,
-        &moved.iter().map(String::as_str).collect::<Vec<_>>(),
-    );
-
+    // Post-migration (SL-136 PHASE-04): tags at root or absent; no typed tags.
     let parsed = reparse(&doc);
-    assert!(parsed.get("tags").is_some(), "root tags seeded");
     assert!(parsed["relationships"].get("tags").is_none());
     assert_eq!(
         parsed.get("status").and_then(Item::as_str),
         Some("required"),
-        "root status untouched"
+        "root status untouched pre-edit"
+    );
+
+    // Exercise a root-insert edit: set a tag. Root status survives.
+    root_insert_tags(&mut doc, &["x"]);
+    let parsed2 = reparse(&doc);
+    assert_eq!(root_tags(&parsed2), vec!["x".to_string()]);
+    assert!(parsed2["relationships"].get("tags").is_none());
+    assert_eq!(
+        parsed2.get("status").and_then(Item::as_str),
+        Some("required"),
+        "root status untouched after edit"
     );
 }
 
