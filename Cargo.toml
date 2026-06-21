@@ -7,9 +7,24 @@ license = "GPL-3.0-only"
 repository = "https://github.com/davidlee/doctrine"
 keywords = ["cli", "project"]
 categories = ["command-line-utilities"]
-# exclude (not include): keeps cargo on git-based file listing, so the gitignored
-# .direnv symlink-loop cache is never walked (no "File system loop" warnings).
-exclude = ["/.claude-plugin", "/.doctrine", "/.gitignore", "/clippy.toml", "/crates", "/doc", "/doctrine.png", "/flake.lock", "/flake.nix", "/skills-lock.json", "/todo.md"]
+# include (not exclude): the package MUST carry generated web/map/dist/, which is
+# gitignored — git-based listing (exclude-mode) drops it from the tarball and the
+# embedded map server ships broken. An explicit allow-list also never walks the
+# .direnv symlink-loop cache (no "File system loop" warnings). Every compile-time
+# embed root must be listed: web/map/dist (RustEmbed map — run `just web-build`
+# before publish), install/ plugins/ memory/ (RustEmbed), .pi/.../mcp.ts
+# (include_str! in boot.rs). Cargo.toml + Cargo.lock are always included.
+include = [
+  "/src/**",
+  "/web/map/dist/**",
+  "/install/**",
+  "/plugins/**",
+  "/memory/**",
+  "/.pi/extensions/doctrine/mcp.ts",
+  "/README.md",
+  "/LICENSE-GPL-3.0",
+  "/LICENSE-MIT",
+]
 
 [dependencies]
 anyhow.workspace = true

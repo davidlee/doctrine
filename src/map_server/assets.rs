@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn assets_get_index_html() {
-        // index.html is embedded as a placeholder
+        // index.html is embedded from web/map/dist/ (built by `just web-build`)
         let asset = Assets::get("index.html");
         assert!(asset.is_some(), "index.html should be embedded");
     }
