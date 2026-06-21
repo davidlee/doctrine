@@ -1,0 +1,52 @@
+id    = 122
+slug  = "reconciliation-review-of-sl-115"
+title = "reconciliation review of SL-115"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-115"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Trunk merge surfaced unfulfilled lint expectations in main.rs test module"
+detail = "Evidence: after `dispatch refresh-base --slice 115` merged 10 trunk commits into the coordination branch, `cargo test --bin doctrine` failed with two `unfulfilled-lint-expectations` errors on `#[expect(unused_imports)]` in `src/main.rs:172,174`. The `use {clap::Parser, crate::Cli}` import is actually used (the test functions call `Cli::try_parse_from` which needs the `Parser` trait), so the `expect` was checking for a warning that no longer fires after the trunk merge. Fix: removed both `#[expect(...)]` attributes and added `#[cfg(test)]` to the test module so clippy doesn't flag the imports as unused in non-test builds. This is a merge-adjustment artefact — the behaviour-preservation gate is intact (2142 tests pass, layering gate green)."
+disposition = "aligned"
+response = "Confirmed. The `#[expect(unused_imports)]` → `#[cfg(test)]` fix was applied during audit. The root cause is that trunk commits changed what the linter sees in non-test builds, making the `expect` unfulfilled. The fix (removing the `expect` attributes + gating the test module with `#[cfg(test)]`) is minimal and correct. Commit this fix on the audit worktree before close. No design or governance change needed — this is a routine merge-adjustment artefact."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Test module (~1200 LOC) remains in main.rs — follow-up not actioned"
+detail = 'Evidence: `src/main.rs` contains ~1200 lines of test code (`mod tests { ... }` from line 171 onward, plus a preceding `#[cfg(test)]` line) housing `write_class_tests` (~1100 LOC) and parse-regression tests (~80 LOC). The handover at `.doctrine/slice/115/handover.md` lists this as item 6: "Test module hygiene — `write_class_tests` (~1100 LOC) still in main.rs; consider moving to `tests/cli_verification.rs`". The design §3 does not require test relocation — only production `run_*`, enums, and dispatch. The exit criteria (EX-2 in PHASE-04) only concern production code. The handover flags it as a consideration, not a requirement. The test code is functionally correct (all 2142 tests pass). This is a housekeeping item for a future slice or backlog item.'
+disposition = "tolerated"
+response = """Acknowledged. The design §3 does not require test relocation — only production code (enums, dispatch, run_*). The PHASE-04 exit criteria only gate on production code removal. The handover flags this as a "consider" — not a requirement. Rationale for toleration: (a) no test code was touched by the slice — only production code was relocated, tests were moved with their runners or left intact; (b) moving the test module from main.rs to a separate file is a pure-code-move with zero behavioural risk; (c) it's better handled as a small follow-up backlog item than blocking audit closure. The test code is functionally correct (2142 tests pass, PHASE-01 parse-regression passes)."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Stale review refs required manual cleanup before prepare-review"
+detail = 'Evidence: `doctrine dispatch sync --prepare-review --slice 115` refused with "1 stale ref(s) reported, not clobbered: refs/heads/review/115". A prior prepare-review cycle from the PHASE-01/PHASE-02 era left `refs/heads/review/115` (at 7aa2c0c) and `refs/heads/phase/115-01` / `phase/115-02` orphaned. The binary correctly refuses to clobber (safety-first), but offers no `--force` flag and no `dispatch cleanup` subcommand. Manual `git update-ref -d refs/heads/review/115 refs/heads/phase/115-01 refs/heads/phase/115-02` was required. This is a tooling sharp edge — not a slice defect — but worth recording for the dispatch workflow.'
+disposition = "tolerated"
+response = "Acknowledged. The stale refs are an artefact of the multi-phase dispatch workflow — prepare-review was run during PHASE-01/PHASE-02, then phases continued from the coordination worktree. The binary correctly refuses to clobber existing refs (safety-first). The manual cleanup (`git update-ref -d`) is correct and safe. This is a tooling UX issue, not a slice defect. The `dispatch cleanup` command would be a useful addition but is out of scope for SL-115. No design or governance change needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Gate pre-filter by source-file existence is a heuristic, not a structural fix"
+detail = "Evidence: `tests/architecture_layering.rs:538-565` filters out edges whose target is not a real source file (`src/<name>.rs`, `src/<name>/mod.rs`, or `src/<name>/<name>.rs`). This prevents false positives when `crate::Command`, `crate::CommonListArgs`, etc. appear in edge extraction (the extractor sees `crate::<segment>` and can't distinguish module refs from type refs). The filter is correct for the current codebase (verified: no real module edge is masked) and was necessary after PHASE-03 when `commands/guard.rs` imported `crate::Command`. The design §5 notes and handover acknowledge the limitation. Architecturally cleaner: move `Command` to its own module (e.g. `src/command.rs`) to eliminate the false positive at its source. This is a known design tradeoff, not a defect — recorded in notes and memory `mem_019ee7d35d0d`."
+disposition = "aligned"
+response = "Acknowledged. The source-file existence filter is the correct minimal fix for the current codebase. It correctly prevents false positives from crate-root types (Command, CommonListArgs) while preserving detection of real module edges. The architectural alternative (moving Command to its own module) is noted in the handover and notes as a potential future improvement. The filter was verified during PHASE-03: `Command` is the only non-module target in the 394-edge graph (confirmed via `dump_real_graph`). No action needed now — this is a known design tradeoff recorded in `mem_019ee7d35d0d`."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
