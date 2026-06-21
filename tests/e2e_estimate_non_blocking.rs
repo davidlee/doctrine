@@ -64,6 +64,7 @@ const ALLOWLIST: &[&str] = &[
     "catalog/hydrate.rs",
     "slice.rs",
     "main.rs",
+    "commands/facet.rs",
 ];
 
 fn src_dir() -> PathBuf {
