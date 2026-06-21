@@ -110,5 +110,5 @@ release bump:
   git tag "v${version}"
   echo "released v${version} (committed + tagged) — push with: git push && git push --tags"
 
-publish: release-check
-  cargo publish --no-verify
+publish: web-build release-check
+  cargo publish
