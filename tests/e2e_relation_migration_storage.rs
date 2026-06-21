@@ -83,7 +83,7 @@ fn slice_files() -> Vec<PathBuf> {
 }
 
 fn governance_files() -> Vec<PathBuf> {
-    ["adr", "policy", "standard"]
+    ["adr", "policy", "standard", "rfc"]
         .into_iter()
         .flat_map(|stem| entity_tomls(&doctrine_root().join(stem), stem))
         .collect()
@@ -425,20 +425,24 @@ fn assert_slice_shape(label: &str, text: &str) {
 }
 
 /// Governance kinds (adr/policy/standard): `related` and `supersedes` migrated OUT
-/// (SL-048 / SL-095). Only `superseded_by` (ADR-004 §5 typed carve-out) + `tags`
-/// stay typed. `tags` is free-form classification, NOT a relation axis — it is
-/// asserted here only because it shares the `[relationships]` table the migration
-/// rewrites, so "the cut" must leave it untouched. Its presence is a migration-blast-
-/// radius guard, not a relation-vocabulary claim.
+/// (SL-048 / SL-095). Only `superseded_by` stays typed. `tags` moved to root-level
+/// (SL-136) — asserted via root-position grep (outside `[relationships]`).
 fn assert_governance_shape(label: &str, text: &str) {
     let v = line_view(text);
     assert_no_migrated_key_left(Path::new(label), &v, &["related", "supersedes"]);
-    for kept in ["superseded_by", "tags"] {
-        assert!(
-            v.relationships_keys.iter().any(|k| k == kept),
-            "{label}: governance template must keep `{kept}` typed in [relationships]:\n{text}"
-        );
-    }
+    assert!(
+        v.relationships_keys.iter().any(|k| k == "superseded_by"),
+        "{label}: governance template must keep `superseded_by` typed in [relationships]:\n{text}"
+    );
+    // tags now lives at root level (SL-136). Grep for `^tags` before any header.
+    let has_root_tags = text
+        .lines()
+        .take_while(|l| !l.trim_start().starts_with('['))
+        .any(|l| l.trim_start().starts_with("tags"));
+    assert!(
+        has_root_tags,
+        "{label}: governance template must have `tags` at root (SL-136):\n{text}"
+    );
     assert_guidance_comment_present(label, text);
 }
 

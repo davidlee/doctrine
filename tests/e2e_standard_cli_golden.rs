@@ -90,12 +90,12 @@ fn minimal_toml(id: u32, slug: &str, title: &str, status: &str) -> String {
          status = \"{status}\"\n\
          created = \"2026-01-04\"\n\
          updated = \"2026-01-04\"\n\
+         tags = []\n\
          \n\
          [relationships]\n\
          supersedes = []\n\
          superseded_by = []\n\
-         related = []\n\
-         tags = []\n"
+         related = []\n"
     )
 }
 
@@ -255,8 +255,7 @@ fn standard_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
                 [relationships]\n\
                 supersedes = []\n\
                 superseded_by = []\n\
-                related = []\n\
-                tags = []\n";
+                related = []\n";
     seed(dir.path(), 50, toml, "# STD-050\n");
     let path = dir.path().join(".doctrine/standard/050/standard-050.toml");
 
