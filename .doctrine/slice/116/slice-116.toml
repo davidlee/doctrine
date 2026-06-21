@@ -1,9 +1,9 @@
 id = 116
 slug = "worktree-folder-split"
 title = "Split worktree.rs into a submodule folder"
-status = "proposed"
+status = "ready"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-21"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
