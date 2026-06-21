@@ -166,9 +166,17 @@ Output contract:
 
 ### 5.3 Data, State & Ownership
 
-Add a small shared path projection module, e.g. `src/paths.rs`.
+Add a small shared path projection module, `src/paths.rs`.
 
-It should not live in `src/listing.rs` because `listing.rs` is the pure list
+**ADR-001 tier: engine.** The module depends only on leaf-tier modules (stdlib,
+`src/entity.rs` for `rel_path`/`id_path` helpers) and is depended on by
+command-tier modules (per-kind CLI dispatch). The pure types (`EntityPathSet`,
+`PathSelection`) and the pure selection logic live directly in the module; the
+filesystem-scanning function is also engine-tier because the existing engine
+already carries filesystem access (`entity.rs` `id_path`, `scan_ids`,
+`materialise`). The module imports no clap types and no command-tier modules.
+
+It must not live in `src/listing.rs` because `listing.rs` is the pure list
 spine under SPEC-013. It should not grow `src/entity.rs` unless implementation
 finds a small path helper belongs there; `entity.rs` owns materialisation,
 claiming, and id path construction, not command read projection.
@@ -224,11 +232,15 @@ Per-kind adapters:
 - numeric stem kinds (`adr`, `policy`, `standard`, `rfc`, `slice`, `review`,
   `rec`, `revision`, `concept-map`) parse refs and derive paths from their kind
   descriptor/stem.
-- `spec` resolves `PRD-NNN` or `SPEC-NNN` to the product/tech tree.
 - `backlog` resolves the prefix (`ISS`, `IMP`, `CHR`, `RSK`, `IDE`) to the
-  backlog kind tree.
-- `knowledge` resolves the prefix (`ASM`, `DEC`, `QUE`, `CON`) to the knowledge
-  kind tree.
+  sub-kind directory `.doctrine/backlog/{issue|improvement|chore|risk|idea}/{id}/`
+  with identity files following the sub-kind stem (`issue-NNN.toml`, etc.).
+- `spec` resolves `PRD-NNN` or `SPEC-NNN` to the sub-kind directory
+  `.doctrine/spec/{product|tech}/{id}/` with identity files following the
+  sub-kind stem (`product-NNN.toml`, `tech-NNN.toml`).
+- `knowledge` resolves the prefix (`ASM`, `DEC`, `QUE`, `CON`) to the sub-kind
+  directory `.doctrine/knowledge/{assumption|decision|question|constraint}/{id}/`
+  with identity files following the sub-kind stem (`assumption-NNN.toml`, etc.).
 - `memory` resolves uid/key to its concrete memory directory; identity files are
   `memory.toml` and `memory.md`.
 
@@ -237,12 +249,23 @@ Per-kind adapters:
 - Output paths are always root-relative.
 - Symlink aliases such as `139-slug` or memory key links are not emitted.
 - Directories and runtime-state links/files are not emitted.
+- **Exclusion filter.** The paths helper excludes non-authored regular files:
+  (a) entries whose name starts with `.` (hidden files, e.g. `.DS_Store`,
+  `.gitkeep`); (b) entries whose name starts with `#` or ends with `~` or `.swp`
+  (editor temporaries); (c) entries matching known tool-artifact patterns
+  (`.orig`, `.bak`). The exclusion is applied at the file-listing stage before
+  classification into TOML/MD/other.
 - Missing identity TOML is an error.
 - Missing identity Markdown is an error when explicitly selected by `--md` or
   `--entity`; for default all-files mode it should be treated as absent only if
   the kind legitimately has no Markdown body. The current in-scope kinds all have
   Markdown companions, so implementation should start strict and let any contrary
   discovery route through `/consult` rather than silently weakening the contract.
+  **Note:** `concept_map::read_concept_map` currently tolerates a missing
+  Markdown body via `unwrap_or_default()`. This pre-existing tolerance is
+  preserved for `concept-map show` (show is a content-reader, not a
+  file-existence assertion) but `concept-map paths --md` will enforce the
+  design's strict contract and error on a missing body file.
 - Other regular files are direct children only; recursive traversal is out of
   scope.
 - For multi-ref invocations, selectors apply independently per ref.
@@ -301,6 +324,16 @@ forced.
 
 The design deliberately notes the SPEC-013 mismatch. Reconciliation should update
 SPEC-013 after implementation proves the final verb shape.
+
+### D8 — show-parity scope is CLI-grammar parity, not JSON-output-shape uniformity
+
+The design's show-parity objective is: every in-scope entity command MUST accept
+`--json` as a boolean shorthand alongside `--format json`. The concrete deviation
+is concept-map's missing `--json` flag — fixing it achieves the objective. JSON
+output-shape normalization across kinds (e.g., a common top-level envelope or
+kind-key) is explicitly out of scope for SL-139; it belongs to IMP-145's
+info/summary surface work. The scope body already carries this deferral in its
+Summary and Follow-Ups; this decision crystallises the boundary.
 
 ## 8. Risks & Mitigations
 

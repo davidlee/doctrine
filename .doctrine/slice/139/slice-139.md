@@ -31,6 +31,7 @@ Related but not governing backlog context: IMP-133 and IMP-135 cover broader CLI
 - Do not rewrite every kind's show renderer for file path concerns; `show` remains the body/reconstruction surface.
 - Do not include runtime `.doctrine/state/` phase files, symlink aliases, or subdirectories in the authored file path list.
 - Do not add a slice sibling/current/details read surface here; expose existing authored sibling files only as regular files when they sit in the slice folder.
+- Do not add an MCP `paths` surface. The MCP tools mirror the CLI surface; a future MCP `paths` binding is a follow-up concern, not part of this slice.
 
 ## Affected Surface
 
@@ -44,6 +45,7 @@ Related but not governing backlog context: IMP-133 and IMP-135 cover broader CLI
 - `show --json` is already a relied-on full-inspection surface (body plus structured/embedded data for specs, memory, review, slice, etc.); adding operational file paths there would conflate two intents and create planned rework toward `info`.
 - A dedicated `paths` verb is a wider CLI grammar change than a show flag; SPEC-013 may need a revision because the uniform verb set expands beyond `new/list/show/status`.
 - Reference parsing remains per-kind today; implement with minimal adapters unless the design proves IMP-125's broader consolidation is required.
+- Show-parity scope: the normalization objective is CLI-grammar parity (`--json` shorthand on every kind), not JSON-output-shape uniformity. JSON shape normalization across kinds belongs to IMP-145. See design §7 D8.
 
 ## Verification / Closure Intent
 
