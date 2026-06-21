@@ -26,8 +26,11 @@ ratifies).
   `apply_tags_set` + `fold_filter_tag` are *hoists* of logic backlog already runs,
   so the existing backlog tag suite is the behaviour-preservation proof — it must
   stay green with backlog reduced to a pure delegate. The D4 root-insert decision
-  lands here too (VT-2 locks the probe as a regression). No verb, no read changes
-  yet: this phase is provably behaviour-neutral or it is wrong.
+  is already settled (RV-129 F-1): the committed spike CHR-019 proved a root insert
+  lands above all trailing subtables (structural to TOML), so VT-2 is satisfied by
+  that spike rather than a probe-to-write, and the stale F-1 corruption comments in
+  both backlog::apply_tags and dep_seq::apply_status are corrected. No verb, no read
+  changes yet: this phase is provably behaviour-neutral or it is wrong.
 
 - **PHASE-02 (Generic verb) second** — once the core is trustworthy, expose it.
   The verb is a thin command-tier shell over the leaf: resolve, guard, gate on
@@ -39,19 +42,25 @@ ratifies).
 
 - **PHASE-03 (Read-surface parity) third** — make the newly-taggable kinds
   actually *show* their tags. This is the phase the three Codex passes reshaped:
-  full parity means list-filter **and** show **and** json for slice, spec, REQ,
-  and gov/RFC — partial wiring is the write-only smell D2 killed, only quieter.
-  Breadth, not depth: one `key()` line, one show row, one json field per kind.
-  Must precede PHASE-04 so the governance storage move has a live root read path
-  to land on (EN-1).
+  full parity means list-filter **and** show **and** json — partial wiring is the
+  write-only smell D2 killed, only quieter. Scope here is the **Meta/spec-mediated
+  kinds** (slice, spec, REQ); breadth, not depth: one `key()` line, one show row,
+  one json field per kind. Governance/RFC are deliberately **not** wired here —
+  there is no root `tags` on a gov entity to read until the storage move, so their
+  parity is built atomically inside PHASE-04 (RV-129 F-2). REQ's two JSON sites are
+  *additive* (they drop tags today), so PHASE-03 asserts tag **presence** (F-5).
 
-- **PHASE-04 (Governance/RFC migration) last** because it is the only
+- **PHASE-04 (Governance/RFC migration + parity) last** because it is the only
   irreversible, canon-touching step and it depends on every prior phase: the verb
-  (to restore RFC-002's tags), the leaf (to write them), and the root read
-  surfaces (to render them). The storage move contradicts SPEC-005/016/018, so
-  the corpus lands non-canonical **by design** until the D6 Revision amends the
-  specs at `/reconcile`. VA-1 is the tripwire: closure cannot silently skip the
-  REV.
+  (to restore RFC-002's tags), the leaf (to write them), plus the struct move and
+  the gov read path it builds in-phase. The migration and the gov/RFC three-surface
+  parity land together: drop typed `tags` from `Relationships`, add root `tags` to
+  `Doc`, repoint the `show` table render, wire `governance::key()` for `list --tag`
+  — and `--json` falls out of the serde `to_value(doc)` for free (root-expose, no
+  builder change). The storage move contradicts SPEC-005/016/018, so the corpus
+  lands non-canonical **by design** until the D6 Revision amends the specs at
+  `/reconcile`. VA-1 is the tripwire (kept soft by D7): closure cannot silently
+  skip the REV.
 
 ## Notes
 
