@@ -67,7 +67,8 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             ConceptMapCommand::List { .. }
             | ConceptMapCommand::Show { .. }
             | ConceptMapCommand::Check { .. }
-            | ConceptMapCommand::Export { .. } => Read,
+            | ConceptMapCommand::Export { .. }
+            | ConceptMapCommand::Paths { .. } => Read,
         },
         Command::Slice { command } => match command {
             crate::slice::SliceCommand::New { .. } => Write("slice new"),
@@ -77,9 +78,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::slice::SliceCommand::Notes { .. } => Write("slice notes"),
             crate::slice::SliceCommand::Phase { .. } => Write("slice phase"),
             crate::slice::SliceCommand::Status { .. } => Write("slice status"),
-            crate::slice::SliceCommand::List { .. } | crate::slice::SliceCommand::Show { .. } => {
-                Read
-            }
+            crate::slice::SliceCommand::List { .. }
+            | crate::slice::SliceCommand::Show { .. }
+            | crate::slice::SliceCommand::Paths { .. } => Read,
         },
         Command::Memory { command } => match command {
             MemoryCommand::Record { .. } => Write("memory record"),
@@ -97,7 +98,8 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             | MemoryCommand::Find { .. }
             | MemoryCommand::Retrieve { .. }
             | MemoryCommand::ResolveLinks { .. }
-            | MemoryCommand::Backlinks { .. } => Read,
+            | MemoryCommand::Backlinks { .. }
+            | MemoryCommand::Paths { .. } => Read,
         },
         Command::Review { command } => match command {
             ReviewCommand::New { .. } => Write("review new"),
@@ -110,16 +112,17 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             ReviewCommand::List { .. }
             | ReviewCommand::Show { .. }
             | ReviewCommand::Status { .. }
-            | ReviewCommand::Prime { .. } => Read,
+            | ReviewCommand::Prime { .. }
+            | ReviewCommand::Paths { .. } => Read,
         },
         Command::Rec { command } => match command {
             RecCommand::New { .. } => Write("rec new"),
-            RecCommand::List { .. } | RecCommand::Show { .. } => Read,
+            RecCommand::List { .. } | RecCommand::Show { .. } | RecCommand::Paths { .. } => Read,
         },
         Command::Revision { command } => match command {
             RevisionCommand::New { .. } => Write("revision new"),
             RevisionCommand::Status { .. } => Write("revision status"),
-            RevisionCommand::Show { .. } => Read,
+            RevisionCommand::Show { .. } | RevisionCommand::Paths { .. } => Read,
             RevisionCommand::Change { command } => match command {
                 RevisionChangeCommand::Add { .. } => Write("revision change add"),
             },
@@ -131,22 +134,26 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         Command::Adr { command } => match command {
             AdrCommand::New { .. } => Write("adr new"),
             AdrCommand::Status { .. } => Write("adr status"),
-            AdrCommand::List { .. } | AdrCommand::Show { .. } => Read,
+            AdrCommand::List { .. } | AdrCommand::Show { .. } | AdrCommand::Paths { .. } => Read,
         },
         Command::Policy { command } => match command {
             PolicyCommand::New { .. } => Write("policy new"),
             PolicyCommand::Status { .. } => Write("policy status"),
-            PolicyCommand::List { .. } | PolicyCommand::Show { .. } => Read,
+            PolicyCommand::List { .. }
+            | PolicyCommand::Show { .. }
+            | PolicyCommand::Paths { .. } => Read,
         },
         Command::Standard { command } => match command {
             StandardCommand::New { .. } => Write("standard new"),
             StandardCommand::Status { .. } => Write("standard status"),
-            StandardCommand::List { .. } | StandardCommand::Show { .. } => Read,
+            StandardCommand::List { .. }
+            | StandardCommand::Show { .. }
+            | StandardCommand::Paths { .. } => Read,
         },
         Command::Rfc { command } => match command {
             RfcCommand::New { .. } => Write("rfc new"),
             RfcCommand::Status { .. } => Write("rfc status"),
-            RfcCommand::List { .. } | RfcCommand::Show { .. } => Read,
+            RfcCommand::List { .. } | RfcCommand::Show { .. } | RfcCommand::Paths { .. } => Read,
         },
         Command::Spec { command } => match command {
             SpecCommand::New { .. } => Write("spec new"),
@@ -156,9 +163,10 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
                 // Read-only authored roster (design §5.3).
                 SpecReqCommand::List { .. } => Read,
             },
-            SpecCommand::List { .. } | SpecCommand::Show { .. } | SpecCommand::Validate { .. } => {
-                Read
-            }
+            SpecCommand::List { .. }
+            | SpecCommand::Show { .. }
+            | SpecCommand::Validate { .. }
+            | SpecCommand::Paths { .. } => Read,
         },
         // Export is read-only (RO proof): load + serialize, no mutation path.
         Command::Export { command } => match command {
@@ -170,12 +178,16 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             BacklogCommand::Needs { .. } => Write("backlog needs"),
             BacklogCommand::After { .. } => Write("backlog after"),
             BacklogCommand::Tag { .. } => Write("backlog tag"),
-            BacklogCommand::List { .. } | BacklogCommand::Show { .. } => Read,
+            BacklogCommand::List { .. }
+            | BacklogCommand::Show { .. }
+            | BacklogCommand::Paths { .. } => Read,
         },
         Command::Knowledge { command } => match command {
             KnowledgeCommand::New { .. } => Write("knowledge new"),
             KnowledgeCommand::Status { .. } => Write("knowledge status"),
-            KnowledgeCommand::List { .. } | KnowledgeCommand::Show { .. } => Read,
+            KnowledgeCommand::List { .. }
+            | KnowledgeCommand::Show { .. }
+            | KnowledgeCommand::Paths { .. } => Read,
         },
         Command::Tag { .. } => Write("tag"),
         Command::Serve { .. } => Read,
