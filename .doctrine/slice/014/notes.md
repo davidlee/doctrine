@@ -32,3 +32,15 @@ Related backlog item:
 - `IMP-111` tracks Codex MCP server registration during install. This POC keeps
   that surface separate so the hook writer can be designed and shipped without
   entangling the MCP config path.
+
+## Audit (2026-06-21)
+
+RV-128 reconciliation review completed. Implementation conforms to design —
+zero deviation surfaced. Single finding (F-1) tolerated: VT-7/VT-8
+(trust-instruction and spike-warning stdout assertions) are low-value stdout
+sniffing on exercised code paths.
+
+Evidence: `cargo clippy` zero warnings, 2235+ tests green, code review against
+design.md D1–D8.
+
+Ready for reconcile → close.
