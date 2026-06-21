@@ -29,9 +29,8 @@ string and array fields too. Extend the shared leaf with one new public core:
 // src/facet_write.rs
 
 pub(crate) enum FacetField {
-    Float { key: &'static str, value: f64 },
-    Str   { key: &'static str, value: String },
-    Arr   { key: &'static str, values: Vec<String> },
+    Str { key: &'static str, value: String },
+    Arr { key: &'static str, values: Vec<String> },
 }
 
 pub(crate) fn set_facet_mixed(
@@ -46,7 +45,6 @@ pub(crate) fn set_facet_mixed(
 unchanged — this is additive, not a rewire.
 
 **No-op guard per type:**
-- `Float`: read back via `as_float().or(as_integer())` — same as today
 - `Str`: read back via `Value::as_str()`, compare string-equal
 - `Arr`: read back via `as_array()` → `get_str()`, element-wise ordered compare
 
@@ -162,7 +160,7 @@ Files NOT changed: `estimate.rs`, `value.rs`, all other modules.
 | VT-9 | facet.rs | `set` with `--origin` writes origin string |
 | VT-10 | facet.rs | `set` with `--controls A --controls B` writes `["A", "B"]` |
 | VT-11 | facet.rs | `set` preserves non-managed facet keys (origin survives likelihood-only set) |
-| VT-12 | facet.rs | Invalid level token → clap rejection (integration test) |
+| VT-12 | — | Invalid level token → clap rejection (clap intrinsic; not tested — `RiskLevel::ValueEnum` parse is clap's contract) |
 | VT-13 | facet_write.rs | `set_facet_mixed` allocates absent `[facet]` with Str/Arr fields |
 | VT-14 | facet_write.rs | `set_facet_mixed` overwrites present Str/Arr managed keys |
 | VT-15 | facet_write.rs | `set_facet_mixed` no-op on identical Str values |
@@ -194,7 +192,12 @@ Files NOT changed: `estimate.rs`, `value.rs`, all other modules.
   at-least-one guard prevents accidental empty `set` without adding a
   no-op-in-disguise path.
 
-- **D5 — Kind gate reads `kind` via `toml_edit`, not full `BacklogItem` parse.**
+- **D5 — `FacetField` starts with `Str` and `Arr` only (no `Float`).**
+  Risk has no float fields. The existing `set_facet(&[(&str, f64)])` already
+  handles the float-only path for estimate/value. Adding a `Float` variant now
+  would create parallel vocabulary — add it later if a facet needs it.
+
+- **D6 — Kind gate reads `kind` via `toml_edit`, not full `BacklogItem` parse.**
   Cheaper, no need to parse the full entity. The `read_kind` helper iterates
   `ItemKind::ALL` (visibility bumped to `pub(crate)`) so the mapping stays
   single-source.
