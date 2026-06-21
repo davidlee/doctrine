@@ -254,6 +254,24 @@ pub(crate) enum ReviewCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each review entity directory.
+    Paths {
+        /// Review reference(s) — `RV-007` or the bare id `7`.
+        refs: Vec<String>,
+
+        #[arg(short = 't', long)]
+        toml: bool,
+        #[arg(short = 'm', long)]
+        md: bool,
+        #[arg(short = 'e', long)]
+        entity: bool,
+        #[arg(short = 's', long)]
+        single: bool,
+
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
@@ -422,6 +440,42 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             let out = run_unlock(path, &reference)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => {
+            use std::io::Write;
+            let root = crate::root::find(path, &crate::root::default_markers())?;
+            let review_root = root.join(REVIEW_DIR);
+            let sel = crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            };
+            let mut all_lines: Vec<String> = Vec::new();
+            for r in &refs {
+                let id = parse_ref(r)?;
+                let name = format!("{id:03}");
+                let entity_dir = review_root.join(&name);
+                let toml_name = format!("review-{name}.toml");
+                let md_name = format!("review-{name}.md");
+                let set = crate::paths::scan_entity_dir(
+                    &entity_dir,
+                    &entity_dir.join(&toml_name),
+                    Some(&entity_dir.join(&md_name)),
+                    &root,
+                )?;
+                let lines = crate::paths::select_paths(&set, &sel)?;
+                all_lines.extend(lines);
+            }
+            write!(std::io::stdout(), "{}", all_lines.join("\n"))?;
             Ok(())
         }
     }

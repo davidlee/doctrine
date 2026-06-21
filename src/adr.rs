@@ -84,6 +84,29 @@ pub(crate) enum AdrCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each ADR entity directory.
+    Paths {
+        /// ADR reference(s) — `ADR-007` or the bare id `7`.
+        refs: Vec<String>,
+
+        /// Show only the identity TOML file.
+        #[arg(short = 't', long)]
+        toml: bool,
+        /// Show only the identity Markdown body.
+        #[arg(short = 'm', long)]
+        md: bool,
+        /// Show the identity TOML + Markdown (equivalent to -t -m).
+        #[arg(short = 'e', long)]
+        entity: bool,
+        /// Return only the first (primary) path per ref.
+        #[arg(short = 's', long)]
+        single: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: AdrCommand, color: bool) -> anyhow::Result<()> {
@@ -97,6 +120,24 @@ pub(crate) fn dispatch(cmd: AdrCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => run_show(path, &reference, if json { Format::Json } else { format }),
         AdrCommand::Status { id, status, path } => run_status(path, id, status, color),
+        AdrCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => governance::run_paths(
+            &ADR_KIND,
+            path,
+            &refs,
+            &crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            },
+        ),
     }
 }
 
