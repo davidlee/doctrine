@@ -406,6 +406,29 @@ pub(crate) enum MemoryCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each memory entity directory.
+    Paths {
+        /// Memory reference(s) — uid (`mem_<hex>`), uid prefix, or key.
+        refs: Vec<String>,
+
+        /// Show only the identity TOML file.
+        #[arg(short = 't', long)]
+        toml: bool,
+        /// Show only the identity Markdown body.
+        #[arg(short = 'm', long)]
+        md: bool,
+        /// Show the identity TOML + Markdown (equivalent to -t -m).
+        #[arg(short = 'e', long)]
+        entity: bool,
+        /// Return only the first (primary) path per ref.
+        #[arg(short = 's', long)]
+        single: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -641,6 +664,23 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
             };
             run_edit(path, &reference, &fields)
         }
+        MemoryCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => run_paths(
+            path,
+            &refs,
+            &crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            },
+        ),
         MemoryCommand::Sync { .. } => {
             anyhow::bail!("MemoryCommand::Sync is handled by the residual main.rs dispatch")
         }
@@ -3576,6 +3616,37 @@ pub(crate) fn run_edit(
     }
 
     writeln!(io::stdout(), "Edited memory {reference}")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `memory paths` — file paths for each memory entity directory
+// ---------------------------------------------------------------------------
+
+/// `doctrine memory paths <ref>…` — resolve each ref (uid, uid prefix, or key)
+/// to its entity directory and print the root-relative paths.
+fn run_paths(
+    path: Option<PathBuf>,
+    refs: &[String],
+    sel: &crate::paths::PathSelection,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mut all_lines: Vec<String> = Vec::new();
+    for r in refs {
+        let mref = MemoryRef::parse(r)?;
+        let toml_path = resolve_memory_toml_path(&root, &mref)?;
+        let entity_dir = toml_path
+            .parent()
+            .context("memory.toml path has no parent")?;
+        let identity_toml = entity_dir.join("memory.toml");
+        let identity_md = entity_dir.join("memory.md");
+        let set =
+            crate::paths::scan_entity_dir(entity_dir, &identity_toml, Some(&identity_md), &root)?;
+        let lines = crate::paths::select_paths(&set, sel)?;
+        all_lines.extend(lines);
+    }
+    write!(io::stdout(), "{}", all_lines.join("\n"))?;
     Ok(())
 }
 
@@ -7533,6 +7604,187 @@ weight = 0
         let result = list_for_mcp(root.path(), None, None, &[], &[], 1, 50).unwrap();
         assert_eq!(result.total, 2);
         assert_eq!(result.rows.len(), 1);
+    }
+
+    // --- PHASE-04 paths verb golden tests ---
+
+    /// Helper: scan items/ for the first (and only) uid.
+    fn first_uid(root: &Path) -> String {
+        let items = crate::entity::scan_named(&root.join(MEMORY_ITEMS_DIR)).unwrap();
+        assert!(!items.is_empty(), "expected at least one memory in items/");
+        items.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn paths_full_shows_toml_md_in_canonical_order() {
+        let root = temp_project_with_two_memories();
+        let uid = first_uid(root.path());
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root.path().join(MEMORY_ITEMS_DIR).join(&uid);
+        let identity_toml = entity_dir.join("memory.toml");
+        let identity_md = entity_dir.join("memory.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root.path(),
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        let output = lines.join("\n");
+        assert!(output.contains(".doctrine/memory/items/"));
+        assert!(output.contains("/memory.toml"));
+        assert!(output.contains("/memory.md"));
+        // Canonical order: TOML first
+        assert!(output.find("memory.toml").unwrap() < output.find("memory.md").unwrap());
+    }
+
+    #[test]
+    fn paths_single_truncates_to_first() {
+        let root = temp_project_with_two_memories();
+        let uid = first_uid(root.path());
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: true,
+        };
+        let entity_dir = root.path().join(MEMORY_ITEMS_DIR).join(&uid);
+        let identity_toml = entity_dir.join("memory.toml");
+        let identity_md = entity_dir.join("memory.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root.path(),
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].ends_with("memory.toml"));
+    }
+
+    #[test]
+    fn paths_toml_only() {
+        let root = temp_project_with_two_memories();
+        let uid = first_uid(root.path());
+        let sel = crate::paths::PathSelection {
+            toml: true,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root.path().join(MEMORY_ITEMS_DIR).join(&uid);
+        let identity_toml = entity_dir.join("memory.toml");
+        let identity_md = entity_dir.join("memory.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root.path(),
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].ends_with("memory.toml"));
+    }
+
+    #[test]
+    fn paths_md_only() {
+        let root = temp_project_with_two_memories();
+        let uid = first_uid(root.path());
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: true,
+            entity: false,
+            single: false,
+        };
+        let entity_dir = root.path().join(MEMORY_ITEMS_DIR).join(&uid);
+        let identity_toml = entity_dir.join("memory.toml");
+        let identity_md = entity_dir.join("memory.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root.path(),
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].ends_with("memory.md"));
+    }
+
+    #[test]
+    fn paths_entity_gives_toml_and_md() {
+        let root = temp_project_with_two_memories();
+        let uid = first_uid(root.path());
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: true,
+            single: false,
+        };
+        let entity_dir = root.path().join(MEMORY_ITEMS_DIR).join(&uid);
+        let identity_toml = entity_dir.join("memory.toml");
+        let identity_md = entity_dir.join("memory.md");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &identity_toml,
+            Some(&identity_md),
+            root.path(),
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].ends_with("memory.toml"));
+        assert!(lines[1].ends_with("memory.md"));
+    }
+
+    #[test]
+    fn paths_invalid_ref_errors() {
+        let root = temp_project_with_two_memories();
+        let result = MemoryRef::parse("mem_00000000000000000000000000000000");
+        assert!(result.is_ok()); // parses fine, but memory doesn't exist
+        let mref = result.unwrap();
+        let err = resolve_memory_toml_path(root.path(), &mref).unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn paths_multi_uid_splat_preserves_order() {
+        let root = temp_project_with_two_memories();
+        let uids: Vec<String> = {
+            crate::entity::scan_named(&root.path().join(MEMORY_ITEMS_DIR)).unwrap()
+        };
+        assert_eq!(uids.len(), 2);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let mut all_lines: Vec<String> = Vec::new();
+        for uid in &uids {
+            let entity_dir = root.path().join(MEMORY_ITEMS_DIR).join(uid);
+            let set = crate::paths::scan_entity_dir(
+                &entity_dir,
+                &entity_dir.join("memory.toml"),
+                Some(&entity_dir.join("memory.md")),
+                root.path(),
+            )
+            .unwrap();
+            all_lines.extend(crate::paths::select_paths(&set, &sel).unwrap());
+        }
+        assert_eq!(all_lines.len(), 4);
+        assert!(all_lines[0].contains(&format!("{}/memory.toml", uids[0])));
+        assert!(all_lines[1].contains(&format!("{}/memory.md", uids[0])));
+        assert!(all_lines[2].contains(&format!("{}/memory.toml", uids[1])));
+        assert!(all_lines[3].contains(&format!("{}/memory.md", uids[1])));
     }
 }
 

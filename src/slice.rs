@@ -167,6 +167,24 @@ pub(crate) enum SliceCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the file paths of each slice entity directory.
+    Paths {
+        /// Slice reference(s) — `SL-025` or the bare id `25`.
+        refs: Vec<String>,
+
+        #[arg(short = 't', long)]
+        toml: bool,
+        #[arg(short = 'm', long)]
+        md: bool,
+        #[arg(short = 'e', long)]
+        entity: bool,
+        #[arg(short = 's', long)]
+        single: bool,
+
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
@@ -196,6 +214,41 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             json,
             path,
         } => run_show(path, &reference, if json { Format::Json } else { format }),
+        SliceCommand::Paths {
+            refs,
+            toml,
+            md,
+            entity,
+            single,
+            path,
+        } => {
+            let root = crate::root::find(path, &crate::root::default_markers())?;
+            let slice_root = root.join(SLICE_DIR);
+            let sel = crate::paths::PathSelection {
+                toml,
+                md,
+                entity,
+                single,
+            };
+            let mut all_lines: Vec<String> = Vec::new();
+            for r in &refs {
+                let id = parse_ref(r)?;
+                let name = format!("{id:03}");
+                let entity_dir = slice_root.join(&name);
+                let toml_name = format!("slice-{name}.toml");
+                let md_name = format!("slice-{name}.md");
+                let set = crate::paths::scan_entity_dir(
+                    &entity_dir,
+                    &entity_dir.join(&toml_name),
+                    Some(&entity_dir.join(&md_name)),
+                    &root,
+                )?;
+                let lines = crate::paths::select_paths(&set, &sel)?;
+                all_lines.extend(lines);
+            }
+            write!(io::stdout(), "{}", all_lines.join("\n"))?;
+            Ok(())
+        }
     }
 }
 
@@ -4358,5 +4411,90 @@ mod tests {
         commit_dispatch_no_journal(root, 1);
         slice_at_reconcile(root);
         expect_close_succeeds(root);
+    }
+
+    // --- SL-139 PHASE-03 paths verb tests ---
+
+    fn paths_slice_fixture(root: &Path, id: u32, extra: &[&str]) {
+        let slice_root = root.join(SLICE_DIR);
+        let name = format!("{id:03}");
+        let dir = slice_root.join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("slice-{name}.toml")), "toml").unwrap();
+        std::fs::write(dir.join(format!("slice-{name}.md")), "md").unwrap();
+        for e in extra {
+            std::fs::write(dir.join(e), e).unwrap();
+        }
+    }
+
+    #[test]
+    fn paths_slice_full_output() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        paths_slice_fixture(root, 1, &["notes.md"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: false,
+        };
+        let slice_root = root.join(SLICE_DIR);
+        let entity_dir = slice_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("slice-001.toml"),
+            Some(&entity_dir.join("slice-001.md")),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(
+            lines,
+            vec![
+                ".doctrine/slice/001/slice-001.toml",
+                ".doctrine/slice/001/slice-001.md",
+                ".doctrine/slice/001/notes.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn paths_slice_single() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        paths_slice_fixture(root, 1, &["design.md"]);
+        let sel = crate::paths::PathSelection {
+            toml: false,
+            md: false,
+            entity: false,
+            single: true,
+        };
+        let slice_root = root.join(SLICE_DIR);
+        let entity_dir = slice_root.join("001");
+        let set = crate::paths::scan_entity_dir(
+            &entity_dir,
+            &entity_dir.join("slice-001.toml"),
+            Some(&entity_dir.join("slice-001.md")),
+            root,
+        )
+        .unwrap();
+        let lines = crate::paths::select_paths(&set, &sel).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], ".doctrine/slice/001/slice-001.toml");
+    }
+
+    #[test]
+    fn paths_slice_missing_entity_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // No slice dir at all.
+        let slice_root = root.join(SLICE_DIR);
+        let result = crate::paths::scan_entity_dir(
+            &slice_root.join("999"),
+            &slice_root.join("999/slice-999.toml"),
+            Some(&slice_root.join("999/slice-999.md")),
+            root,
+        );
+        assert!(result.is_err());
     }
 }
