@@ -12,8 +12,10 @@
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::Context;
+use clap::Subcommand;
 use serde::Serialize;
 
 use crate::entity::{
@@ -24,6 +26,148 @@ use crate::meta::{self, Meta};
 use crate::tomlfmt::toml_string;
 use regex_lite::Regex;
 use std::collections::BTreeMap;
+
+#[derive(Subcommand)]
+pub(crate) enum ConceptMapCommand {
+    /// Create a new concept map.
+    New {
+        /// Concept-map title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List concept maps.
+    List {
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show a concept map's metadata and DSL.
+    Show {
+        /// Concept-map reference — `CM-001` or the bare id `1`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Show edges table from parsed DSL.
+        #[arg(long)]
+        edges: bool,
+
+        /// Show nodes table from parsed DSL.
+        #[arg(long)]
+        nodes: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Parse the DSL and run heuristic checks.
+    Check {
+        /// Concept-map reference — `CM-001` or the bare id `1`.
+        id: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Add an edge to a concept map's DSL.
+    Add {
+        id: String,
+        source: String,
+        rel: String,
+        target: String,
+        #[arg(long)]
+        force: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Remove an edge from a concept map's DSL.
+    Remove {
+        id: String,
+        source: String,
+        rel: String,
+        target: String,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Rename a node label across all DSL edges.
+    RenameNode {
+        id: String,
+        old: String,
+        new: String,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        case_sensitive: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Export a concept map to DOT, Mermaid, or JSON.
+    Export {
+        id: String,
+        #[arg(long, value_enum)]
+        format: ExportFormat,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: ConceptMapCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        ConceptMapCommand::New { title, slug, path } => run_new(path, title, slug),
+        ConceptMapCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+        ConceptMapCommand::Show {
+            reference,
+            format,
+            edges,
+            nodes,
+            path,
+        } => run_show(path, &reference, format, edges, nodes),
+        ConceptMapCommand::Check { id, path } => run_check(path, &id),
+        ConceptMapCommand::Add {
+            id,
+            source,
+            rel,
+            target,
+            force,
+            path,
+        } => run_add(path, &id, &source, &rel, &target, force),
+        ConceptMapCommand::Remove {
+            id,
+            source,
+            rel,
+            target,
+            path,
+        } => run_remove(path, &id, &source, &rel, &target),
+        ConceptMapCommand::RenameNode {
+            id,
+            old,
+            new,
+            dry_run,
+            case_sensitive,
+            path,
+        } => run_rename_node(path, &id, &old, &new, dry_run, case_sensitive),
+        ConceptMapCommand::Export { id, format, path } => run_export(path, &id, &format),
+    }
+}
 
 /// Relative dir of the concept-map tree inside the project root.
 pub(crate) const CONCEPT_MAP_DIR: &str = ".doctrine/concept-map";

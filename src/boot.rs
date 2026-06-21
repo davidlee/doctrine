@@ -1783,6 +1783,51 @@ pub(crate) fn wire(
     Ok(())
 }
 
+// ── CLI dispatch ───────────────────────────────────────────────────────────
+
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub(crate) enum BootCommand {
+    /// Wire the `@`-import into CLAUDE.md/AGENTS.md and refresh each harness's
+    /// session hook.
+    Install {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+
+        /// Target harness(es): claude, codex. Repeatable. Default: auto-detect.
+        #[arg(long = "agent")]
+        agent: Vec<String>,
+
+        /// Compute and report the plan without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+}
+
+pub(crate) fn dispatch(
+    command: Option<BootCommand>,
+    check: bool,
+    path: Option<PathBuf>,
+    _color: bool,
+) -> anyhow::Result<()> {
+    match command {
+        None if check => run_check(path),
+        None => run(path),
+        Some(BootCommand::Install {
+            path: install_path,
+            agent,
+            dry_run,
+            yes,
+        }) => run_install(install_path, &agent, dry_run, yes),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

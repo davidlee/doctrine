@@ -626,6 +626,73 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
 }
 
 // ---------------------------------------------------------------------------
+// CLI dispatch
+// ---------------------------------------------------------------------------
+
+use std::str::FromStr;
+
+use crate::CommonListArgs;
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub(crate) enum RecCommand {
+    New {
+        #[arg(long = "move", value_parser = RecMove::parse)]
+        r#move: RecMove,
+        #[arg(long)]
+        owning_slice: Option<String>,
+        #[arg(long = "decision")]
+        decision_ref: Option<String>,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    Show {
+        reference: String,
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+        #[arg(long)]
+        json: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: RecCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        RecCommand::New {
+            r#move,
+            owning_slice,
+            decision_ref,
+            title,
+            path,
+        } => run_new(
+            path,
+            &NewArgs {
+                r#move,
+                owning_slice,
+                decision_ref,
+                title,
+            },
+        ),
+        RecCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+        RecCommand::Show {
+            reference,
+            format,
+            json,
+            path,
+        } => run_show(path, &reference, if json { Format::Json } else { format }),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

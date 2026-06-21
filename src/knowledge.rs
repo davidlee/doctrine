@@ -1383,6 +1383,65 @@ pub(crate) fn run_status(
     Ok(())
 }
 
+// ── CLI dispatch ───────────────────────────────────────────────────────────
+
+use std::str::FromStr;
+
+use crate::CommonListArgs;
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub(crate) enum KnowledgeCommand {
+    New {
+        kind: RecordKind,
+        title: Option<String>,
+        #[arg(long)]
+        slug: Option<String>,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    Show {
+        id: String,
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+        #[arg(long)]
+        json: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    Status {
+        id: String,
+        state: String,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        KnowledgeCommand::New {
+            kind,
+            title,
+            slug,
+            path,
+        } => run_new(path, kind, title, slug),
+        KnowledgeCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+        KnowledgeCommand::Show {
+            id,
+            format,
+            json,
+            path,
+        } => run_show(path, &id, if json { Format::Json } else { format }),
+        KnowledgeCommand::Status { id, state, path } => run_status(path, &id, &state, color),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
