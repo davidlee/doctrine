@@ -107,6 +107,17 @@ worktree = "command"        # → fsutil, git, root, slice; worktree fork/coordi
 "catalog::diagnostic" = "engine"  # pure diagnostic dump
 "priority::graph" = "engine"      # pure relation_graph consumer
 "status::run_status" = "command"  # the run_* CLI entry — reaches backlog, boot, priority
+"worktree::shared" = "engine"     # cross-machine helpers; imports git (leaf)
+"worktree::allowlist" = "leaf"    # pure tier-classification core; imports glob (external) only — no domain, disk, git, clock, or rng (D4)
+"worktree::marker" = "engine"
+"worktree::provision" = "engine"   # provision is impure shell; imports engine + leaf
+"worktree::import" = "engine"      # import classify+run; imports engine + leaf
+"worktree::land" = "engine"        # land classify+run; imports engine + leaf
+"worktree::gc" = "engine"          # gc classify+run; imports engine + leaf
+"worktree::fork" = "engine"        # fork; imports engine + leaf
+"worktree::subagent" = "engine"    # subagent stamp+verify; imports engine + leaf
+"worktree::coordinate" = "command"  # coordinate calls crate::slice::run_phases (upward edge, Non-Goal)
+     # worker-identity marker; imports root (leaf), shared (engine); file I/O for marker state
 
 # ── relation_graph (mixed, not sub-classified) ────────────────────────────
 # relation_graph imports adr, backlog, catalog, dep_seq, entity, governance,
