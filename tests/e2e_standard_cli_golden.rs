@@ -57,8 +57,8 @@ fn stderr(out: &Output) -> String {
 
 // --- fixtures -------------------------------------------------------------
 
-/// STD-001: default, a non-empty `related` + `tags` axis, and a hand-added comment
-/// — exercises the relationships block (show) and edit-preservation (status).
+/// STD-001: default, a non-empty `related` + root `tags` axis, and a hand-added
+/// comment — exercises the relationships block (show) and edit-preservation (status).
 fn std001_toml() -> &'static str {
     "id = 1\n\
      slug = \"two-space-indent\"\n\
@@ -66,12 +66,12 @@ fn std001_toml() -> &'static str {
      status = \"default\"\n\
      created = \"2026-01-02\"\n\
      updated = \"2026-01-03\"\n\
+     tags = [\"style\"]\n\
      \n\
      # hand-added comment — must survive a status edit\n\
      [relationships]\n\
      supersedes = []\n\
      superseded_by = []\n\
-     tags = [\"style\"]\n\
      \n\
      [[relation]]\n\
      label = \"related\"\n\
@@ -142,7 +142,7 @@ fn standard_show_json_is_byte_exact() {
     // hand-built serde_json::Map.
     assert_eq!(
         stdout(&out),
-        "{\n  \"body\": \"# STD-001: Two-space indent\\n\\nbody text here.\\n\",\n  \"kind\": \"standard\",\n  \"standard\": {\n    \"created\": \"2026-01-02\",\n    \"id\": 1,\n    \"relationships\": {\n      \"related\": [\n        \"STD-002\"\n      ],\n      \"superseded_by\": [],\n      \"supersedes\": [],\n      \"tags\": [\n        \"style\"\n      ]\n    },\n    \"slug\": \"two-space-indent\",\n    \"status\": \"default\",\n    \"title\": \"Two-space indent\",\n    \"updated\": \"2026-01-03\"\n  }\n}"
+        "{\n  \"body\": \"# STD-001: Two-space indent\\n\\nbody text here.\\n\",\n  \"kind\": \"standard\",\n  \"standard\": {\n    \"created\": \"2026-01-02\",\n    \"id\": 1,\n    \"relationships\": {\n      \"related\": [\n        \"STD-002\"\n      ],\n      \"superseded_by\": [],\n      \"supersedes\": []\n    },\n    \"slug\": \"two-space-indent\",\n    \"status\": \"default\",\n    \"tags\": [\n      \"style\"\n    ],\n    \"title\": \"Two-space indent\",\n    \"updated\": \"2026-01-03\"\n  }\n}"
     );
 }
 
@@ -212,7 +212,7 @@ fn standard_status_transition_prints_exact_and_preserves_edits() {
     );
     // Edit-preservation (the toml_edit in-place contract): comment + rels survive.
     // SL-048 PHASE-04: `related` migrated to a `[[relation]]` row; the row + the typed
-    // supersedes/superseded_by/tags all survive the in-place status edit.
+    // supersedes/superseded_by axes and SL-136 root tags survive the in-place status edit.
     assert!(after.contains("# hand-added comment"), "comment preserved");
     assert!(
         after.contains("[[relation]]") && after.contains("target = \"STD-002\""),
