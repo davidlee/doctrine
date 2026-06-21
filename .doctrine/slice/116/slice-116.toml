@@ -1,7 +1,7 @@
 id = 116
 slug = "worktree-folder-split"
 title = "Split worktree.rs into a submodule folder"
-status = "reconcile"
+status = "done"
 created = "2026-06-19"
 updated = "2026-06-21"
 
