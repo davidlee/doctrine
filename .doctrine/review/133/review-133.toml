@@ -1,0 +1,50 @@
+id    = 133
+slug  = "sl-136-audit-generic-cross-kind-root-tags-reconciliation"
+title = "SL-136 audit: generic cross-kind root tags reconciliation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "implementer"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-136"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "PHASE-04 says standard goldens migrated to root tags; e2e_standard_cli_golden still seeds and expects typed relationship tags"
+detail = 'Evidence on reviewed surface `candidate/136/review-001` (`898e6bd2`): `tests/e2e_standard_cli_golden.rs:68-75` still puts `tags = ["style"]` under `[relationships]`, and `standard_show_json_is_byte_exact` still expects `relationships.tags` instead of root `standard.tags`. Running `CARGO_TARGET_DIR=target/audit-sl136 cargo test --test e2e_standard_cli_golden -- --nocapture` after materialising the ignored `web/map/dist/` produced 2 failures: `standard_show_table_is_byte_exact` omits `tags: style` because `Doc.tags` is empty, and `standard_show_json_is_byte_exact` emits root `"tags": []` rather than the expected nested relationship tags. This violates SL-136 plan PHASE-04 EX-3/VT-1 and keeps the gate red.'
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "CHR-019 spike VT-2 broken: 3 h2 tests still assert pre-migration typed-tag shapes on ADR-014, POL-001, RFC-002"
+detail = """
+The design plan VT-2 (and VT-2 of plan.toml PHASE-01) states "CHR-019 spike stays green as the VT-2 seed." PHASE-04 migrated ADR-014, POL-001, and RFC-002's tags from `[relationships].tags` to root, but did not update the spike's shape assertions. 3 of 7 spike tests now fail:
+- `h2_adr014_same_file_root_status_and_relationship_tags_overlap` — asserts `ADR-014 carries [relationships].tags` (stale post-migration)
+- `h2_pol001_same_file_root_status_and_relationship_tags_overlap` — same for POL-001
+- `h2_rfc002_live_tags_relocate_16_relations_preserved` — asserts `RFC-002 must carry [relationships].tags` (stale)
+
+The root-insert safety proof (the spike's purpose) is still valid — it was proven on the pre-migration corpus. But the regression guard VT-2 required is now red, so a future code change could silently break the root-insert invariant without a failing test."""
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "blocker"
+title = "Unit tests don't compile: 21 struct-literal sites missing `tags` field + 1 stale `relationships.tags` in governance.rs"
+detail = """
+21 compile errors in unit tests (`cargo test`):
+- 7 Meta struct literal sites missing `tags` field: `adr.rs:286`, `governance.rs:1150`, `policy.rs:265`, `requirement.rs:458`, `rfc.rs:241`, `spec.rs:2049` (plus `backlog.rs:2336` already fixed)
+- 12 `SliceDoc` struct literals in `slice.rs` (lines 2382,2425,2474,2516,2550,2588,2622,2664,2765,2831,2851,2876,2899) missing `tags` field
+- 1 `Doc` struct literal at `governance.rs:1035` missing `tags` field
+- 1 stale `relationships.tags` field at `governance.rs:1044` (should be `doc.tags`)
+
+The e2e test suites pass because they test via the compiled binary, not `#[cfg(test)]` code. Design A2 explicitly enumerated the Meta struct-literal sites to fix; the dispatch workers' test runs didn't cover `cargo test` (unit tests)."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

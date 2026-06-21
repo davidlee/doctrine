@@ -1,0 +1,48 @@
+[[area]]
+name = "SL-136 slice canon and phase evidence"
+purpose = "Approved scope/design/plan and runtime phase sheets that define the reconciliation target."
+paths = [".doctrine/slice/136/slice-136.md", ".doctrine/slice/136/design.md", ".doctrine/slice/136/plan.toml", ".doctrine/slice/136/plan.md", ".doctrine/state/slice/136/phases/phase-01.md", ".doctrine/state/slice/136/phases/phase-01.toml", ".doctrine/state/slice/136/phases/phase-02.md", ".doctrine/state/slice/136/phases/phase-02.toml", ".doctrine/state/slice/136/phases/phase-03.md", ".doctrine/state/slice/136/phases/phase-03.toml", ".doctrine/state/slice/136/phases/phase-04.md", ".doctrine/state/slice/136/phases/phase-04.toml"]
+
+[[area]]
+name = "Candidate review surface"
+purpose = "Dispatched implementation bundle to audit, materialised from refs/heads/candidate/136/review-001."
+paths = [".doctrine/state/dispatch/candidate/cand-136-review-001/src/tag.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/backlog.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/listing.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/meta.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/commands/tag.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/commands/cli.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/commands/mod.rs"]
+
+[[area]]
+name = "Read-surface parity"
+purpose = "List filter, show row, and JSON field parity for each taggable kind included by design D2."
+paths = [".doctrine/state/dispatch/candidate/cand-136-review-001/src/slice.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/governance.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/spec.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/src/requirement.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/install/templates/slice.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/install/templates/requirement.toml"]
+
+[[area]]
+name = "Governance/RFC migration and REV obligation"
+purpose = "Root-level governance/RFC tags in corpus/templates, affected goldens, and the intentionally deferred SPEC-005/SPEC-016/SPEC-018 amendment."
+paths = [".doctrine/state/dispatch/candidate/cand-136-review-001/.doctrine/adr/014/adr-014.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/.doctrine/policy/001/policy-001.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/.doctrine/rfc/001/rfc-001.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/.doctrine/rfc/002/rfc-002.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/install/templates/adr.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/install/templates/policy.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/install/templates/standard.toml", ".doctrine/state/dispatch/candidate/cand-136-review-001/install/templates/rfc.toml", ".doctrine/spec/tech/005/spec-005.md", ".doctrine/spec/tech/016/spec-016.md", ".doctrine/spec/tech/018/spec-018.md", ".doctrine/spec/tech/018/relation-vocabulary.md"]
+
+[[area]]
+name = "Verification suites"
+purpose = "Phase VT proof points and behaviour-preservation gate for generic tags, read surfaces, and governance storage migration."
+paths = [".doctrine/state/dispatch/candidate/cand-136-review-001/tests/e2e_adr_cli_golden.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/tests/e2e_standard_cli_golden.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/tests/e2e_catalog_cli.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/tests/e2e_relation_migration_storage.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/tests/e2e_tag_cli.rs", ".doctrine/state/dispatch/candidate/cand-136-review-001/tests/spike_chr019_root_tag_insert.rs"]
+
+[[invariant]]
+text = "For taggable non-memory kinds, the canonical authored storage is a root-level tags array; stale [relationships].tags must not survive in governance/RFC corpus or templates."
+
+[[invariant]]
+text = "Every included taggable kind has read-surface parity: list --tag admission, show table tags row, and JSON tags field."
+
+[[invariant]]
+text = "The generic doctrine tag verb must dispatch through the shared root write leaf, preserve backlog semantics, and reject excluded or non-numbered kinds with a useful error."
+
+[[invariant]]
+text = "Memory tagging remains out of scope on its existing [scope].tags surface; concept-map/review/REC/revision remain excluded until IMP-144."
+
+[[invariant]]
+text = "SPEC-005 D2, SPEC-016, and SPEC-018 remain intentionally non-canonical until a reconciliation REV amends them to root-level tags before close."
+
+[[risk]]
+text = "A root-write implementation that is sound for newly-created root keys could still leave an included kind write-only if one of list/show/json was not wired."
+
+[[risk]]
+text = "Governance migration can appear correct in code while live ADR/POL/STD/RFC authored files or install templates still carry stale typed tag slots."
+
+[[risk]]
+text = "The current parent worktree contains unrelated dirty files; evidence must be gathered from candidate/136/review-001, not from the parent tree's working copy."
