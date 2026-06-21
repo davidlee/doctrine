@@ -279,10 +279,11 @@ fn push_str_if_absent(array: &mut toml_edit::Array, value: &str) -> bool {
 ///   identity, so it must not by itself force a write nor block the no-op. This
 ///   matches every donor: gov/slice keyed the no-op on `status` alone, backlog on
 ///   `status`+`resolution`; none compared `updated`.
-/// - **F-1 strict refuse**: ANY managed key absent from the top-level table → the
-///   entity is malformed (hand-edited); a tail `insert` would land the key inside a
-///   trailing `[relationships]`/`[facet]` subtable (silent corruption). `bail!(hint)`,
-///   NEVER insert a missing key.
+/// - **F-1 strict refuse (kept over-conservative per SL-136 D4 scoping)**: ANY
+///   managed key absent from the top-level table → the entity is malformed
+///   (hand-edited); `bail!(hint)`, NEVER insert a missing key. CHR-019 proved root
+///   insert is safe in `toml_edit` 0.22 — the bail is kept here as a deliberate
+///   conservatism for the status write seam, not because the tooling requires it.
 /// - Else: insert each pair → `Ok(true)`.
 pub(crate) fn apply_status(
     doc: &mut toml_edit::DocumentMut,
@@ -300,8 +301,10 @@ pub(crate) fn apply_status(
     }
 
     let table = doc.as_table_mut();
-    // F-1: the managed keys are scaffold-seeded — edit in place, never create. A
-    // missing key means a malformed entity; refuse rather than tail-insert.
+    // F-1 (kept over-conservative per SL-136 D4): the managed keys are
+    // scaffold-seeded — edit in place, never create. A missing key means a malformed
+    // entity; refuse rather than insert. CHR-019 proved root insert is safe in
+    // toml_edit 0.22, but the status seam keeps the bail as deliberate conservatism.
     if managed.iter().any(|(k, _)| !table.contains_key(k)) {
         anyhow::bail!("{hint}");
     }
