@@ -398,9 +398,10 @@ pub(crate) fn list_for_mcp(
     status: &[String],
     tags: &[String],
     offset: usize,
-    limit: Option<usize>,
+    limit: usize,  // resolved by handler (default 50, 0 → usize::MAX)
 ) -> Result<ListForMcp> {
-    // Build filter through the same validation pipeline as list_rows
+    // Validate statuses (same gate as list_rows — listing::build doesn't)
+    listing::validate_statuses(status, MEMORY_STATUSES)?;
     let args = crate::listing::ListArgs {
         substr: substr.map(str::to_owned),
         status: status.to_vec(),
@@ -410,13 +411,8 @@ pub(crate) fn list_for_mcp(
     let (filter, _format) = crate::listing::build(args)?;
     let rows = filtered_list(root, type_f, &filter)?;
     let total = rows.len();
-    // limit: 0 = all (unbounded), per schema contract
-    let cap = match limit {
-        Some(0) | None => usize::MAX,
-        Some(n) => n,
-    };
     let page: Vec<serde_json::Value> = json_rows(
-        &rows.into_iter().skip(offset).take(cap).collect::<Vec<_>>()
+        &rows.into_iter().skip(offset).take(limit).collect::<Vec<_>>()
     ).into_iter()
       .map(|r| serde_json::to_value(r).unwrap())
       .collect();
@@ -425,9 +421,9 @@ pub(crate) fn list_for_mcp(
 ```
 
 `DEFAULT_MEMORY_LIST_LIMIT = 50`. `filtered_list` delegates to `listing::retain`
-for the full filter contract. `list_for_mcp` builds the filter through
-`listing::build` (status validation, substr lowercasing, regex compilation) —
-the same path as `list_rows`.
+for the full filter contract. `list_for_mcp` validates statuses via
+`listing::validate_statuses` then builds the filter through `listing::build`
+(substr lowercasing, regex compilation) — the same path as `list_rows`.
 
 ### ExtractFields extension
 
@@ -739,7 +735,13 @@ Calls `memory::list_for_mcp` (structured), then builds the pagination envelope:
 ```rust
 "memory_list" => {
     let fields = ExtractFields::from_value(arguments, &[]);
-    let limit = fields.opt_usize_field("limit");
+    // Resolve limit before passing: default 50, 0 = all (unbounded)
+    let limit_raw = fields.opt_usize_field("limit");
+    let limit = match limit_raw {
+        Some(0) => usize::MAX,
+        None => 50,
+        Some(n) => n,
+    };
     let result = memory::list_for_mcp(
         root,
         parse_memory_type(fields.opt_str_field("type"))?,
@@ -750,9 +752,8 @@ Calls `memory::list_for_mcp` (structured), then builds the pagination envelope:
         limit,
     )?;
     let offset = fields.opt_usize_field("offset").unwrap_or(0);
-    let cap = limit.unwrap_or(50);
-    let next_offset = if offset + cap < result.total {
-        Some(offset + cap)
+    let next_offset = if offset + limit < result.total {
+        Some(offset + limit)
     } else {
         None
     };
@@ -761,7 +762,7 @@ Calls `memory::list_for_mcp` (structured), then builds the pagination envelope:
         "rows": result.rows,
         "total": result.total,
         "offset": offset,
-        "limit": cap,
+        "limit": if limit == usize::MAX { result.total } else { limit },
         "next_offset": next_offset,
     }))?)
 }
