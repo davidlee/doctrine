@@ -1,0 +1,729 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! Top-level CLI dispatch — the `Command` enum, its sub-enums, and the thin
+//! dispatch match that routes each verb. Moved here from `main.rs` in SL-115
+//! PHASE-04 so `main.rs` is reduced to the binary entrypoint stub (~250 LOC).
+
+use std::io::Write;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use anyhow::Result;
+use clap::Subcommand;
+
+use crate::commands::facet::{EstimateClearArgs, EstimateSetArgs, ValueClearArgs, ValueSetArgs};
+use crate::listing::Format;
+
+// ── shared action enums (Estimate / Value) ──────────────────────────────────
+
+#[derive(clap::Subcommand)]
+pub(crate) enum EstimateAction {
+    /// Set estimate bounds
+    Set(EstimateSetArgs),
+    /// Clear the estimate facet
+    Clear(EstimateClearArgs),
+}
+
+#[derive(clap::Subcommand)]
+pub(crate) enum ValueAction {
+    /// Set value bounds
+    Set(ValueSetArgs),
+    /// Clear the value facet
+    Clear(ValueClearArgs),
+}
+
+// ── top-level Command enum ──────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+pub(crate) enum Command {
+    /// Install doctrine files into a project.
+    Install {
+        /// Explicit project root (default: auto-detect by walking up
+        /// from CWD looking for .git, .jj, .project, etc.).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+
+        /// Target agent(s); repeatable. Default: auto-detect.
+        #[arg(short = 'a', long)]
+        agent: Vec<String>,
+
+        /// Skill id(s) to install; repeatable. Default: all.
+        #[arg(short = 's', long)]
+        skill: Vec<String>,
+
+        /// Domain(s) to install; repeatable. Default: all.
+        #[arg(short = 'd', long)]
+        domain: Vec<String>,
+
+        /// Install only the memory skills (record-memory + retrieve-memory).
+        /// Mutually exclusive with --skill / --domain.
+        #[arg(long, conflicts_with_all = ["skill", "domain"])]
+        only_memory: bool,
+
+        /// Install to the user directory instead of the project.
+        #[arg(short = 'g', long)]
+        global: bool,
+
+        /// Print the plan and exit without making changes.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+
+    /// Debug catalog inspection — thin JSON dump of the hydrated entity corpus
+    /// (`scan`) and its graph projection (`graph`). Developer-facing; not gating
+    /// for acceptance (SL-071 D12).
+    Catalog {
+        #[command(subcommand)]
+        command: crate::catalog::CatalogCommand,
+    },
+
+    /// List available skills and their install status. Hidden deprecated alias
+    /// — the consolidated `install` surface is the primary path.
+    #[command(hide = true)]
+    Skills {
+        #[command(subcommand)]
+        command: crate::skills::SkillsCommand,
+    },
+
+    /// Start the local map explorer web server.
+    Map {
+        #[command(subcommand)]
+        command: crate::commands::map::MapCommand,
+    },
+
+    /// Create, list, and show concept maps — DSL-driven relationship diagrams.
+    ConceptMap {
+        #[command(subcommand)]
+        command: crate::concept_map::ConceptMapCommand,
+    },
+
+    /// Create and list slices — the unit of intentional change.
+    Slice {
+        #[command(subcommand)]
+        command: crate::slice::SliceCommand,
+    },
+
+    /// Record, show, and list memories.
+    Memory {
+        #[command(subcommand)]
+        command: crate::memory::MemoryCommand,
+    },
+
+    /// Create, show, and list adversarial-review ledgers (the RV kind, ADR-007).
+    Review {
+        #[command(subcommand)]
+        command: crate::review::ReviewCommand,
+    },
+
+    /// Create, show, and list reconciliation records (the REC kind, SPEC-002).
+    Rec {
+        #[command(subcommand)]
+        command: crate::rec::RecCommand,
+    },
+
+    /// Create, show, and transition revisions (the REV change-axis kind, ADR-013).
+    Revision {
+        #[command(subcommand)]
+        command: crate::revision::RevisionCommand,
+    },
+
+    /// Reconcile ONE requirement against observed coverage — the sole author of
+    /// reconciled requirement status (SL-044). Applies exactly one move and emits
+    /// one atomic REC. `--to` is required for accept/revise, omitted for redesign.
+    Reconcile {
+        /// The requirement to reconcile, canonical `REQ-NNN`.
+        req: String,
+
+        /// The owning slice this act is recorded against, canonical `SL-NNN`.
+        #[arg(long)]
+        slice: String,
+
+        /// The reconciliation move: accept | revise | redesign.
+        #[arg(long = "move", value_parser = crate::rec::RecMove::parse)]
+        r#move: crate::rec::RecMove,
+
+        /// The explicit target status (required for accept/revise; omit for
+        /// redesign). The WRITTEN status — never derived from coverage (NF-001).
+        #[arg(long, value_enum)]
+        to: Option<crate::requirement::ReqStatus>,
+
+        /// Optional operator note (surfaced; not stored in the REC).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Requirement coverage: the read-only drift view (`show`) plus the
+    /// observed-tier write path (`record`/`verify`/`forget`, SL-057).
+    Coverage {
+        #[command(subcommand)]
+        command: crate::commands::coverage::CoverageCommand,
+    },
+
+    /// Read-only cross-kind relation view of one entity (`<ID>` = SL-NNN, ADR-NNN,
+    /// …): its authored outbound relations, the derived inbound relations, and any
+    /// unresolved / free-text dangling targets — grouped, direct-only (one hop).
+    Inspect {
+        /// Canonical ref of the entity to inspect (e.g. `SL-046`, `ADR-004`).
+        id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only cross-kind importance survey: every ELIGIBLE entity in importance
+    /// order (actionability, then consequence desc, then canonical-id), each blocked
+    /// row carrying a BLOCKED badge and its direct blocker. Terminal and
+    /// promoted-backlog items are excluded unless `--all`. Advisory — never writes.
+    Survey {
+        /// Include terminal + promoted-backlog items (the complete view).
+        #[arg(long)]
+        all: bool,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only advisory worklist: the ACTIONABLE entities (eligible AND unblocked),
+    /// in composed dependency/sequence order. Blocked items are absent (the divergence
+    /// from `survey`). Mutates nothing.
+    Next {
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only blocker view of one entity (`<ID>` = SL-NNN, ISS-NNN, …): its direct
+    /// blocked-by prerequisites + the items it is blocking. `--transitive` walks both
+    /// chains. Display depth never reorders.
+    Blockers {
+        /// Canonical ref of the entity (e.g. `ISS-007`, `SL-046`).
+        id: String,
+
+        /// Walk the full transitive blocked-by / blocking chains.
+        #[arg(long)]
+        transitive: bool,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only structured explanation of one entity's priority (`<ID>`): its
+    /// eligibility reason, the transitive blocker chain, the order-key contributors,
+    /// any evicted soft-sequence edges, and its consequence — always to root.
+    Explain {
+        /// Canonical ref of the entity (e.g. `ISS-007`, `SL-046`).
+        id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Create and list architecture decision records.
+    Adr {
+        #[command(subcommand)]
+        command: crate::adr::AdrCommand,
+    },
+
+    /// Create and list governance policies (standing rules).
+    Policy {
+        #[command(subcommand)]
+        command: crate::policy::PolicyCommand,
+    },
+
+    /// Create and list governance standards (standing conventions of practice).
+    Standard {
+        #[command(subcommand)]
+        command: crate::standard::StandardCommand,
+    },
+
+    /// Create and list RFC discussion artifacts — governance-neutral deliberation.
+    Rfc {
+        #[command(subcommand)]
+        command: crate::rfc::RfcCommand,
+    },
+
+    /// Create and list product / technical specifications.
+    Spec {
+        #[command(subcommand)]
+        command: crate::spec::SpecCommand,
+    },
+
+    /// Export the doctrine corpus to an external interchange format.
+    Export {
+        #[command(subcommand)]
+        command: ExportCommand,
+    },
+
+    /// Capture and survey backlog work-intake items (issue / improvement /
+    /// chore / risk / idea).
+    Backlog {
+        #[command(subcommand)]
+        command: crate::backlog::BacklogCommand,
+    },
+
+    /// Capture and survey durable knowledge records (assumption / decision /
+    /// question / constraint).
+    Knowledge {
+        #[command(subcommand)]
+        command: crate::knowledge::KnowledgeCommand,
+    },
+
+    /// Start the MCP stdio server (`serve --mcp`).
+    Serve {
+        #[command(flatten)]
+        args: crate::commands::serve::ServeArgs,
+    },
+
+    /// Regenerate the cache-friendly governance snapshot, or `boot install` to wire it.
+    Boot {
+        /// Wire the `@`-import + per-harness session refresh (omit to regenerate).
+        #[command(subcommand)]
+        command: Option<crate::boot::BootCommand>,
+
+        /// Report disk staleness + unpopulated sections without writing (the
+        /// disk sentry). Ignored when the `install` subcommand is given.
+        #[arg(long)]
+        check: bool,
+
+        /// Explicit project root (default: auto-detect). Used by the bare
+        /// regenerate; `boot install` carries its own `-p`.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Provision a worktree fork (allowlisted copy, coordination tier excluded).
+    Worktree {
+        #[command(subcommand)]
+        command: crate::worktree::WorktreeCommand,
+    },
+
+    /// Dispatch coordination-branch projection (SL-064 / ADR-012): the
+    /// integration-sync seam that materialises reviewable refs from
+    /// `dispatch/<slice>`. Orchestrator-classed — refused under worker-mode.
+    Dispatch {
+        #[command(subcommand)]
+        command: crate::dispatch::DispatchCommand,
+    },
+
+    /// Scan every numbered entity kind for id-integrity violations (ADR-006 D3
+    /// detect-half): dir basename == toml id, no intra-kind duplicate id, and
+    /// alias target equality. Exits non-zero on any violation.
+    Validate {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Renumber an entity's canonical id (ADR-006 D3 repair). Takes a canonical
+    /// ref (`SL-031`), moves it to the next free trunk-aware id or `--to <NNN>`,
+    /// and reports inbound prose citations as danglers (never rewrites them).
+    Reseat {
+        /// Canonical ref to renumber, e.g. `SL-031` (never a bare id).
+        reference: String,
+
+        /// Explicit target id (default: the next free trunk-aware id).
+        #[arg(long)]
+        to: Option<u32>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Author a tier-1 `[[relation]]` edge: `link SL-048 governed_by ADR-010`
+    /// (SL-048 §5.4). The label must be `link`-writable for the source kind, and the
+    /// target must resolve to an entity of a legal kind (forward-edge validation,
+    /// §5.5). Idempotent — re-linking an existing edge is a no-op.
+    Link {
+        /// The source entity's canonical ref (e.g. `SL-048`) or memory ref (`mem_<uid>`, `mem.<key>`).
+        source: String,
+        /// The relation label, e.g. `governed_by`, `consumes`, `related`.
+        label: String,
+        /// The target — a canonical ref (`ADR-010`) for validated labels, free text
+        /// for `drift`.
+        target: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Remove a tier-1 `[[relation]]` edge authored by `link` (SL-048 §5.4). Symmetric
+    /// on the same write seam; idempotent — unlinking an absent edge is a no-op.
+    Unlink {
+        /// The source entity's canonical ref (e.g. `SL-048`) or memory ref (`mem_<uid>`, `mem.<key>`).
+        source: String,
+        /// The relation label to remove, e.g. `governed_by`.
+        label: String,
+        /// The target ref the edge points at.
+        target: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Append a hard prerequisite to a source entity's `needs` axis: `needs SL-060
+    /// SL-047` (SL-060 §5.4). Generic cross-kind: SRC and TGT resolve via the same
+    /// canonical-ref seam as `link`. SRC must be a dep/seq-authoring kind (slice or a
+    /// backlog kind); TGT must resolve AND be work-like (slice or backlog) — a
+    /// free-text or non-work-like target is refused at author time. Idempotent.
+    Needs {
+        /// The source entity's canonical ref, e.g. `SL-060`.
+        source: String,
+        /// The prerequisite target's canonical ref, e.g. `SL-047`.
+        target: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Append a soft-sequence edge to a source entity's `after` axis: `after SL-060
+    /// SL-047 [--rank N]` (SL-060 §5.4). Generic cross-kind with the same author-time
+    /// target gate as `needs`. Records `{ to, rank }` (rank default 0). Idempotent.
+    After {
+        /// The source entity's canonical ref, e.g. `SL-060`.
+        source: String,
+        /// The predecessor target's canonical ref, e.g. `SL-047`.
+        /// Required unless --prune is set (PHASE-03 pre-wire).
+        #[arg(required_unless_present = "prune")]
+        target: Option<String>,
+        /// Per-edge manual tie-break rank. On append: sets the new edge's rank
+        /// (default 0). On --remove: upper bound — only edges with rank ≤ N are
+        /// removed. Ignored with --prune.
+        #[arg(long, default_value_t = 0)]
+        rank: i32,
+        /// Remove matching after edges instead of appending.
+        #[arg(long, conflicts_with = "prune")]
+        remove: bool,
+        /// Drop every dangling after edge from the source entity.
+        #[arg(long, conflicts_with = "remove")]
+        prune: bool,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only project orientation dashboard: active work, blocked items, boot
+    /// staleness, recent commits. 10–20 lines human output; structured JSON.
+    Status {
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Record that NEW supersedes OLD: `supersede ADR-012 ADR-004` (SL-062 §5.4).
+    /// ADR-first — one parse-once / hold-both / write-once transaction writes
+    /// `NEW.supersedes += OLD`, `OLD.superseded_by += NEW` (the single sanctioned
+    /// reverse carve-out, ADR-004 §5), and flips `OLD.status → superseded`. Refuses
+    /// a self-edge, cross-kind refs, a non-ADR kind, and an OLD already superseded by
+    /// a different ADR. Idempotent — a re-run with all three surfaces present is a no-op.
+    Supersede {
+        /// The superseding entity's canonical ref, e.g. `ADR-012`.
+        new: String,
+        /// The superseded entity's canonical ref, e.g. `ADR-004`.
+        old: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Set or clear the [estimate] facet
+    Estimate {
+        #[command(subcommand)]
+        action: EstimateAction,
+    },
+    /// Set or clear the [value] facet
+    Value {
+        #[command(subcommand)]
+        action: ValueAction,
+    },
+}
+
+// ── ExportCommand ───────────────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+pub(crate) enum ExportCommand {
+    /// Emit the corpus as a single lazyspec Brief (JSON) on stdout (SL-026).
+    Lazyspec {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+// ── dispatch ────────────────────────────────────────────────────────────────
+
+pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
+    match cmd {
+        Command::Install {
+            path,
+            agent,
+            skill,
+            domain,
+            only_memory,
+            global,
+            dry_run,
+            yes,
+        } => crate::install::run(
+            path,
+            &crate::install::InstallArgs {
+                agents: &agent,
+                skills: &skill,
+                domains: &domain,
+                only_memory,
+                global,
+                dry_run,
+                yes,
+            },
+        ),
+        Command::Skills { command } => crate::skills::dispatch(command, color),
+        Command::ConceptMap { command } => crate::concept_map::dispatch(command, color),
+        Command::Slice { command } => crate::slice::dispatch(command, color),
+        Command::Memory {
+            command:
+                crate::memory::MemoryCommand::Sync {
+                    command,
+                    dry_run: sync_dry_run,
+                    yes: sync_yes,
+                    path: sync_path,
+                },
+        } => match command {
+            None => crate::corpus::run_sync(sync_path, sync_dry_run, sync_yes),
+            Some(crate::memory::SyncCommand::Install { path, dry_run, yes }) => {
+                crate::corpus::run_sync_install(path, dry_run, yes)
+            }
+        },
+        Command::Memory { command } => crate::memory::dispatch(command, color),
+        Command::Review { command } => crate::review::dispatch(command, color),
+        Command::Rec { command } => crate::rec::dispatch(command, color),
+        Command::Revision { command } => crate::revision::dispatch(command, color),
+        Command::Reconcile {
+            req,
+            slice,
+            r#move,
+            to,
+            note,
+            path,
+        } => crate::reconcile::run(
+            path,
+            &crate::reconcile::ReconcileArgs {
+                req,
+                slice,
+                r#move,
+                to,
+                note,
+            },
+        ),
+        Command::Coverage { command } => {
+            crate::commands::coverage::dispatch(command, color)
+        }
+        Command::Inspect {
+            id,
+            format,
+            json,
+            path,
+        } => crate::commands::inspect::run_inspect(path, &id, format, json),
+        Command::Survey {
+            all,
+            format,
+            json,
+            path,
+        } => crate::priority::run_survey(
+            path,
+            all,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color,
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
+        Command::Next { format, json, path } => crate::priority::run_next(
+            path,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color,
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
+        Command::Blockers {
+            id,
+            transitive,
+            format,
+            json,
+            path,
+        } => crate::priority::run_blockers(
+            path,
+            &id,
+            transitive,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color,
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
+        Command::Explain {
+            id,
+            format,
+            json,
+            path,
+        } => crate::priority::run_explain(
+            path,
+            &id,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color,
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
+        Command::Adr { command } => crate::adr::dispatch(command, color),
+        Command::Policy { command } => crate::policy::dispatch(command, color),
+        Command::Standard { command } => crate::standard::dispatch(command, color),
+        Command::Rfc { command } => crate::rfc::dispatch(command, color),
+        Command::Spec { command } => crate::spec::dispatch(command, color),
+        Command::Export { command } => match command {
+            ExportCommand::Lazyspec { path } => {
+                let root = crate::root::find(path, &crate::root::default_markers())?;
+                let now = crate::clock::now_timestamp()?;
+                let version = env!("CARGO_PKG_VERSION");
+                let json = crate::lazyspec::run_export_lazyspec(&root, &now, version)?;
+                writeln!(std::io::stdout(), "{json}")?;
+                Ok(())
+            }
+        },
+        Command::Backlog { command } => crate::backlog::dispatch(command, color),
+        Command::Knowledge { command } => crate::knowledge::dispatch(command, color),
+        Command::Serve { args } => crate::commands::serve::run_serve(args),
+        Command::Boot {
+            command,
+            check,
+            path,
+        } => crate::boot::dispatch(command, check, path, color),
+        Command::Catalog { command } => crate::catalog::dispatch(command, color),
+        Command::Worktree { command } => crate::worktree::dispatch(command),
+        Command::Dispatch { command } => crate::dispatch::dispatch(command, color),
+        Command::Validate { path } => crate::commands::validate::run_validate(path),
+        Command::Reseat {
+            reference,
+            to,
+            path,
+        } => crate::integrity::run_reseat(path, &reference, to),
+        Command::Link {
+            source,
+            label,
+            target,
+            path,
+        } => crate::commands::relation::run_link(path, &source, &label, &target),
+        Command::Unlink {
+            source,
+            label,
+            target,
+            path,
+        } => crate::commands::relation::run_unlink(path, &source, &label, &target),
+        Command::Needs {
+            source,
+            target,
+            path,
+        } => crate::commands::dep_seq::run_needs_edge(path, &source, &target),
+        Command::After {
+            source,
+            target,
+            rank,
+            remove,
+            prune,
+            path,
+        } => {
+            if prune {
+                crate::commands::dep_seq::run_after_prune(path, &source)
+            } else if remove {
+                crate::commands::dep_seq::run_after_remove(
+                    path,
+                    &source,
+                    target.as_deref().unwrap_or(""),
+                    rank,
+                )
+            } else {
+                crate::commands::dep_seq::run_after_edge(
+                    path,
+                    &source,
+                    target.as_deref().unwrap_or(""),
+                    rank,
+                )
+            }
+        }
+        Command::Status { format, json, path } => crate::status::run(path, format, json),
+        Command::Estimate { action } => match action {
+            EstimateAction::Set(args) => crate::commands::facet::run_estimate_set(&args),
+            EstimateAction::Clear(args) => crate::commands::facet::run_estimate_clear(&args),
+        },
+        Command::Value { action } => match action {
+            ValueAction::Set(args) => crate::commands::facet::run_value_set(&args),
+            ValueAction::Clear(args) => crate::commands::facet::run_value_clear(&args),
+        },
+        Command::Supersede { new, old, path } => {
+            crate::commands::supersede::run_supersede(path, &new, &old)
+        }
+        Command::Map { command } => crate::commands::map::dispatch(command),
+    }
+}

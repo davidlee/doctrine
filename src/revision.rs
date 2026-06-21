@@ -37,6 +37,198 @@ use crate::listing::{self, Format};
 use crate::requirement::ReqStatus;
 use crate::tomlfmt::toml_string;
 
+use std::str::FromStr;
+
+use clap::Subcommand;
+
+// ---------------------------------------------------------------------------
+// CLI enums & dispatch (PHASE-03 relocation from main.rs)
+// ---------------------------------------------------------------------------
+
+#[derive(Subcommand)]
+pub(crate) enum RevisionChangeCommand {
+    /// Append one `[[change]]` row to a revision (design §4.4). Shape-routed by
+    /// `--action`: a creation op (`introduce`/`create`) takes `--new-label` (required,
+    /// frozen) + `--member-of` (a live SPEC); an existing-target op
+    /// (`modify`/`retire`/`move`/`status`) takes `--target` (a live peer FK), with
+    /// `--to-status` and an auto-captured `from` for a `status` row.
+    Add {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// The change action.
+        #[arg(long)]
+        action: ChangeAction,
+
+        /// Existing-target ops: the live peer FK (`REQ-201`, `ADR-006`).
+        #[arg(long)]
+        target: Option<String>,
+
+        /// `status` rows: the requested target status.
+        #[arg(long = "to-status")]
+        to_status: Option<String>,
+
+        /// Creation ops: the frozen membership label (required for `introduce`/`create`).
+        #[arg(long = "new-label")]
+        new_label: Option<String>,
+
+        /// Creation ops: the destination spec (a live `SPEC-NNN`).
+        #[arg(long = "member-of")]
+        member_of: Option<String>,
+
+        /// `introduce`: the new requirement's statement line (optional).
+        #[arg(long = "new-statement")]
+        new_statement: Option<String>,
+
+        /// Mark this row the revision's headline subject (display-only; at most one).
+        #[arg(long)]
+        primary: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum RevisionCommand {
+    /// Open a new revision — a pending revise-intent against authored truth (the
+    /// REV change-axis kind, ADR-013). A fresh REV is a skeleton (`proposed`,
+    /// `approval=none`, no change rows); `revision change add` (PHASE-03) populates
+    /// the typed `[[change]]` payload.
+    New {
+        /// REV title.
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Provenance RFC reference (e.g. `RFC-007`). Authors ONE `originates_from`
+        /// relation row — a typed provenance edge, NOT a `[[change]]` payload.
+        #[arg(long)]
+        originates_from: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one revision: status, approval, change rows, rationale.
+    Show {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Transition a revision's lifecycle: `revision status <REV-N> <state>`
+    /// (proposed→started→done; abandoned from any non-terminal). Approval-blind.
+    Status {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Target lifecycle state.
+        state: RevStatus,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Author the typed `[[change]]` payload — the `revises` rows (the touched-entity
+    /// set). The ONLY writer of a `revises` edge; `doctrine link … revises …` is
+    /// refused (`TypedVerbOnly`).
+    Change {
+        #[command(subcommand)]
+        command: RevisionChangeCommand,
+    },
+
+    /// Record an explicit approval (`approval = approved`) on the orthogonal approval
+    /// axis — the enabling act for the apply checkpoint. `revision apply` refuses unless
+    /// approved (invoker-blind: a solo dev self-approves; ADR-009).
+    Approve {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Apply an approved revision: auto-land its `status` rows (each via the requirement
+    /// status setter + one REC), surface introduce/create/modify/move/prose rows for
+    /// manual handling. Refused unless `approval = approved`. A pre-flight all-or-nothing
+    /// from-guard aborts the whole apply if any target moved since the change was drafted.
+    Apply {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: RevisionCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        RevisionCommand::New {
+            title,
+            slug,
+            path,
+            originates_from,
+        } => run_new(path, title, slug, originates_from.as_deref()),
+        RevisionCommand::Show {
+            reference,
+            format,
+            json,
+            path,
+        } => run_show(path, &reference, if json { Format::Json } else { format }),
+        RevisionCommand::Status {
+            reference,
+            state,
+            path,
+        } => run_status(path, &reference, state, color),
+        RevisionCommand::Change { command } => match command {
+            RevisionChangeCommand::Add {
+                reference,
+                action,
+                target,
+                to_status,
+                new_label,
+                member_of,
+                new_statement,
+                primary,
+                path,
+            } => run_change_add(
+                path,
+                &reference,
+                &ChangeAddArgs {
+                    action,
+                    target,
+                    to_status,
+                    new_label,
+                    member_of,
+                    new_statement,
+                    primary,
+                },
+            ),
+        },
+        RevisionCommand::Approve { reference, path } => run_approve(path, &reference),
+        RevisionCommand::Apply { reference, path } => run_apply(path, &reference),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Pure core — the two closed vocabularies REV owns (`status`, `approval`), each
 // with a kebab serde derive (the single variant↔string source) + an `as_str`

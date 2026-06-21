@@ -31,6 +31,176 @@ use crate::meta::{self, Meta};
 use crate::plan::Plan;
 use crate::tomlfmt::toml_string;
 
+use std::str::FromStr;
+
+use clap::Subcommand;
+
+// ---------------------------------------------------------------------------
+// CLI enum & dispatch (PHASE-03 relocation from main.rs)
+// ---------------------------------------------------------------------------
+
+#[derive(Subcommand)]
+pub(crate) enum SliceCommand {
+    /// Allocate the next id and scaffold a new slice.
+    New {
+        /// Slice title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Scaffold a design-doc sibling into an existing slice.
+    Design {
+        /// Slice id to attach the design doc to.
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Scaffold an implementation plan (plan.toml + plan.md) into a slice.
+    Plan {
+        /// Slice id to attach the plan to.
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Materialise phase tracking from a slice's plan into the state tree.
+    Phases {
+        /// Slice id whose plan declares the phases.
+        id: u32,
+
+        /// Remove orphan tracking whose plan phase is gone (destructive).
+        #[arg(long)]
+        prune: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Scaffold a durable notes.md scratchpad into a slice (on-demand).
+    Notes {
+        /// Slice id to attach the notes file to.
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Record a phase status transition into its runtime tracking.
+    Phase {
+        /// Slice id owning the phase.
+        id: u32,
+
+        /// Canonical phase id, e.g. PHASE-01.
+        phase_id: String,
+
+        /// New status.
+        #[arg(long)]
+        status: crate::state::PhaseStatus,
+
+        /// Optional note appended to the progress log.
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Classify and write a slice lifecycle transition; prints the move's
+    /// classification (advance / back-edge / skip / abandon). Refuses the closure
+    /// seam (→ reconcile only from audit, → done only from reconcile) and leaving
+    /// a terminal status (done / abandoned).
+    Status {
+        /// Slice id to transition.
+        id: u32,
+
+        /// Target lifecycle state.
+        state: SliceStatus,
+
+        /// Optional note — surfaced in the transition output, not stored.
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List slices by id: id, status, phases, slug, title.
+    List {
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one slice: its metadata and scope body (not design/plan/notes).
+    Show {
+        /// Slice reference — `SL-025` or the bare id `25`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        SliceCommand::New { title, slug, path } => run_new(path, title, slug),
+        SliceCommand::Design { id, path } => run_design(path, id),
+        SliceCommand::Plan { id, path } => run_plan(path, id),
+        SliceCommand::Phases { id, prune, path } => run_phases(path, id, prune),
+        SliceCommand::Notes { id, path } => run_notes(path, id),
+        SliceCommand::Phase {
+            id,
+            phase_id,
+            status,
+            note,
+            path,
+        } => run_phase(path, id, &phase_id, status, note.as_deref()),
+        SliceCommand::Status {
+            id,
+            state,
+            note,
+            path,
+        } => run_status(path, id, state, note.as_deref()),
+        SliceCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+        SliceCommand::Show {
+            reference,
+            format,
+            json,
+            path,
+        } => run_show(path, &reference, if json { Format::Json } else { format }),
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 /// Relative dir of the slice tree inside the project root.
 const SLICE_DIR: &str = ".doctrine/slice";
 
