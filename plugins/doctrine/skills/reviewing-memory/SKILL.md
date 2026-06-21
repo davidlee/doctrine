@@ -5,6 +5,10 @@ description: Structured audit for stability gates — before releases, migration
 
 # Reviewing Memory
 
+> **MCP shortcut:** If the doctrine MCP server is connected, use `memory_show`
+> via MCP tool instead of `doctrine memory show` for machine-parseable JSON results with
+> backlinks.
+
 A stability-gate audit: systematically pull the highest-impact memories,
 inspect their quality, and produce an auditable outcome for each. Run before a
 release, a schema migration, an ADR that shifts subsystem boundaries, or when

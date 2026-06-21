@@ -40,6 +40,15 @@ Inputs:
 - `design.md` (canonical), `slice-nnn.md`, `plan.toml`
 - relevant ADRs and tech specs (see `/canon`)
 
+## Tool preference
+
+If your harness supports MCP tools and doctrine's MCP server is connected
+(you see `review_new`, `review_raise`, `review_dispose`, `review_verify`,
+`review_prime`, `review_list`, `review_show`, `review_status` in your
+tool list), **prefer these MCP tools over the CLI** — they return machine-parseable
+JSON text in the MCP content block and eliminate shell overhead. Every review verb has
+an MCP equivalent.
+
 ## Audit lens
 
 **Subject is always the slice — target-ladder rung 1.** An audit targets its slice
