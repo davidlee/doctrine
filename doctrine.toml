@@ -7,3 +7,7 @@ preferred-subprocess-harness = "pi"
 # pi arm to fix the claude arm's wrong-base bug — running the fix on the broken
 # arm is the bootstrap hazard we avoid here.
 claude-force-subprocess-dispatch = true
+# IMP-129 / IMP-124: trunk delivery ref dispatch advances to / the
+# close-integration gate checks against. `main` is the dispatch landing zone
+# (low-noise); `edge` is the daily authoring branch (high-churn).
+deliver-to = "refs/heads/main"
