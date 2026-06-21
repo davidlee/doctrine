@@ -21,6 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 
 use serde::Serialize;
+use serde_json::json;
 
 use crate::lexical::{Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker};
 use crate::links::{extract_wikilinks, resolve_wikilink};
@@ -366,7 +367,7 @@ fn is_global_reference(m: &Memory) -> bool {
 /// `verified_sha` (verify refuses a dirty tree, so the SHA is always clean). The
 /// Reference branch sits AFTER branch 1 (an attested global memory still earns
 /// commit mode) and BEFORE the time branch (or the evergreen corpus would decay).
-fn staleness(m: &Memory, facts: GitFacts, today: &str) -> Staleness {
+pub(crate) fn staleness(m: &Memory, facts: GitFacts, today: &str) -> Staleness {
     if !m.scope.paths.is_empty() && !m.anchor.verified_sha.is_empty() {
         return match facts.commits_since {
             Some(0) => Staleness::Fresh,
@@ -550,7 +551,7 @@ pub(crate) fn freeze(root: &Path) -> Snapshot {
 /// snapshot froze a target. Otherwise no subprocess — `commits_since: None`
 /// (staleness falls to a non-commit mode). A `commits_touching` failure is
 /// per-candidate (`None` ⇒ `Staleness::Unknown`), never a query abort (B18).
-fn git_facts(root: &Path, m: &Memory, snap: &Snapshot) -> GitFacts {
+pub(crate) fn git_facts(root: &Path, m: &Memory, snap: &Snapshot) -> GitFacts {
     if m.scope.paths.is_empty() || m.anchor.verified_sha.is_empty() {
         return GitFacts::default();
     }
@@ -859,7 +860,7 @@ pub(crate) fn parse_min_trust(s: &str) -> std::result::Result<String, String> {
 /// `low ∧ severity≥high`. `--min-trust L` may only RAISE the floor (require more
 /// trust): the `min` clamps a lower-trust request back to the default, so the
 /// holdback is non-bypassable downward (B7) — `--min-trust low` is a no-op.
-fn holdback_floor(min_trust: Option<&str>) -> u8 {
+pub(crate) fn holdback_floor(min_trust: Option<&str>) -> u8 {
     let default = trust_rank("medium");
     min_trust.map_or(default, |l| trust_rank(l).min(default))
 }
@@ -868,8 +869,168 @@ fn holdback_floor(min_trust: Option<&str>) -> u8 {
 /// when it is high-severity AND less trusted than the floor. Read pre-render off
 /// the `Memory` fields — a held-back body is never read, never framed (B7). `find`
 /// is exempt (it annotates risk instead — the D8 asymmetry).
-fn held_back(m: &Memory, floor: u8) -> bool {
+pub(crate) fn held_back(m: &Memory, floor: u8) -> bool {
     severity_rank(&m.severity) <= severity_rank("high") && trust_rank(&m.trust_level) > floor
+}
+
+/// The unified retrieve-admission gate (design §2b). Applies the full retrieve
+/// contract in order: workspace/repo partition + lifecycle + draft, thread
+/// expiry, trust holdback. This is the sole admission gate — no parallel logic.
+/// Returns `(admitted, reason_if_blocked)`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
+pub(crate) fn check_retrievable(
+    m: &crate::memory::Memory,
+    part: &QueryPartition,
+    include_draft: bool,
+    min_trust: Option<&str>,
+    today: &str,
+) -> (bool, Option<String>) {
+    // 1. Workspace/repo partition + lifecycle + draft
+    if !base_filter(m, part, include_draft) {
+        let reason = match m.status {
+            Status::Quarantined => "quarantined",
+            Status::Retracted => "retracted",
+            Status::Archived => "archived",
+            Status::Superseded => "superseded",
+            Status::Draft => "draft",
+            Status::Active => {
+                if m.scope.workspace == part.workspace {
+                    "wrong repo"
+                } else {
+                    "wrong workspace"
+                }
+            }
+        };
+        return (false, Some(reason.to_owned()));
+    }
+    // 2. Thread expiry
+    if !thread_expiry(m, ScopeMatch::of(Dimension::Paths), today) {
+        return (
+            false,
+            Some("thread expired (unverified or stale)".to_owned()),
+        );
+    }
+    // 3. Trust holdback
+    let floor = holdback_floor(min_trust);
+    if held_back(m, floor) {
+        return (
+            false,
+            Some("held back (low trust ∧ high severity)".to_owned()),
+        );
+    }
+    (true, None)
+}
+
+/// Resolve one memory by reference, apply the full retrieve-admission gate
+/// (design §2a), compute staleness, read the body, and render a security-framed
+/// block. This is the single-memory retrieve path for MCP `memory_retrieve`
+/// with a `reference` argument.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
+pub(crate) fn retrieve_reference(
+    writer: &mut impl Write,
+    root: &Path,
+    reference: &str,
+    include_draft: bool,
+    min_trust: Option<&str>,
+) -> Result<()> {
+    // 1. Collect all memories
+    let all = crate::memory::collect_all(root)?;
+
+    // 2. Resolve the reference
+    let mref = crate::memory::MemoryRef::parse(reference)?;
+    let memory = crate::memory::resolve_memory_from_all(&all, &mref)?;
+
+    // 3. Freeze snapshot
+    let snap = freeze(root);
+
+    // 4. Full retrieve-admission gate
+    let (ok, reason) = check_retrievable(memory, &snap.part, include_draft, min_trust, &snap.today);
+    if !ok {
+        anyhow::bail!("memory {reference}: {}", reason.unwrap_or_default());
+    }
+
+    // 5. Staleness
+    let facts = git_facts(root, memory, &snap);
+    let st = staleness(memory, facts, &snap.today);
+
+    // 6. Read body
+    let body = crate::memory::read_body(root, &memory.uid);
+
+    // 7. Security-framed render
+    let nonce = uuid::Uuid::new_v4().simple().to_string();
+    let rendered = crate::memory::render_show(memory, &body, &nonce, Some(st.label()), &[]);
+    write!(writer, "{rendered}")?;
+    Ok(())
+}
+
+/// Structured result from `find_for_mcp` — rows + total, consumed by the
+/// `memory_find` MCP handler which builds the pagination envelope.
+#[derive(Debug)]
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
+pub(crate) struct FindForMcp {
+    pub(crate) rows: Vec<serde_json::Value>,
+    pub(crate) total: usize,
+}
+
+/// Structured find for MCP consumption (design §3). Reuses `load_query` →
+/// `query` — no parallel implementation. Returns ranked rows enriched with
+/// `key` and `held_back_on_retrieve` fields.
+#[expect(clippy::too_many_arguments, reason = "MCP surface fans flags 1:1")]
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
+pub(crate) fn find_for_mcp(
+    path: Option<PathBuf>,
+    paths: Vec<String>,
+    globs: Vec<String>,
+    commands: Vec<String>,
+    tags: Vec<String>,
+    lifespan: Option<Lifespan>,
+    free_query: Option<String>,
+    type_f: Option<MemoryType>,
+    status_f: Option<Status>,
+    include_draft: bool,
+    offset: usize,
+    limit: Option<usize>,
+) -> Result<FindForMcp> {
+    let loaded = load_query(
+        path, paths, globs, commands, tags, lifespan, free_query, type_f, status_f,
+    )?;
+    let ranker = Bm25Ranker;
+    let ranked = query(
+        &loaded.mems,
+        &loaded.q,
+        &loaded.snap,
+        include_draft,
+        &loaded.root,
+        &ranker,
+    );
+    let total = ranked.len();
+    // None = unbounded (handler applies its own cap); 0 = rejected.
+    if limit == Some(0) {
+        anyhow::bail!("--limit must be >= 1");
+    }
+    let cap = limit.unwrap_or(usize::MAX);
+    let visible: Vec<&Candidate<'_>> = ranked.iter().skip(offset).take(cap).collect();
+    let floor = holdback_floor(None);
+    let rows: Vec<serde_json::Value> = visible
+        .iter()
+        .map(|c| {
+            let m = c.memory;
+            let held = held_back(m, floor);
+            json!({
+                "uid": m.uid,
+                "key": m.key,
+                "type": m.kind.as_str(),
+                "status": m.status.as_str(),
+                "staleness": c.staleness.label(),
+                "trust": crate::memory::scrub_line(&m.trust_level),
+                "severity": crate::memory::scrub_line(&m.severity),
+                "spec": c.scope_match.map_or("-", |s| s.dim.label()),
+                "title": crate::memory::scrub_line(&m.title),
+                "held_back_on_retrieve": held,
+            })
+        })
+        .collect();
+    Ok(FindForMcp { rows, total })
 }
 
 /// Format a truncation notice line for table-mode output when results are
@@ -2932,5 +3093,305 @@ weight = {weight}
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
         assert!(!output.is_empty(), "still works with capped limit");
+    }
+
+    // ── check_retrievable ────────────────────────────────────────────────
+
+    fn default_partition() -> QueryPartition {
+        QueryPartition {
+            workspace: "default".to_owned(),
+            repo: None,
+        }
+    }
+
+    #[test]
+    fn check_retrievable_admits_active_medium_trust() {
+        let m = memory(&Fixture::default());
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(ok, "should admit active medium-trust memory");
+        assert!(reason.is_none());
+    }
+
+    #[test]
+    fn check_retrievable_blocks_wrong_workspace() {
+        let m = memory(&Fixture::default());
+        let part = QueryPartition {
+            workspace: "other".to_owned(),
+            repo: None,
+        };
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(reason.as_deref(), Some("wrong workspace"));
+    }
+
+    #[test]
+    fn check_retrievable_blocks_wrong_repo() {
+        let m = memory(&Fixture {
+            repo: "github.com/a/b",
+            ..Default::default()
+        });
+        let part = QueryPartition {
+            workspace: "default".to_owned(),
+            repo: Some("github.com/x/y".to_owned()),
+        };
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(reason.as_deref(), Some("wrong repo"));
+    }
+
+    #[test]
+    fn check_retrievable_blocks_quarantined() {
+        let m = memory(&Fixture {
+            status: "quarantined",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(reason.as_deref(), Some("quarantined"));
+    }
+
+    #[test]
+    fn check_retrievable_blocks_retracted() {
+        let m = memory(&Fixture {
+            status: "retracted",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(reason.as_deref(), Some("retracted"));
+    }
+
+    #[test]
+    fn check_retrievable_blocks_archived() {
+        let m = memory(&Fixture {
+            status: "archived",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(reason.as_deref(), Some("archived"));
+    }
+
+    #[test]
+    fn check_retrievable_blocks_superseded() {
+        let m = memory(&Fixture {
+            status: "superseded",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(reason.as_deref(), Some("superseded"));
+    }
+
+    #[test]
+    fn check_retrievable_blocks_draft_without_include() {
+        let m = memory(&Fixture {
+            status: "draft",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(reason.as_deref(), Some("draft"));
+    }
+
+    #[test]
+    fn check_retrievable_admits_draft_with_include() {
+        let m = memory(&Fixture {
+            status: "draft",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, true, None, "2026-06-15");
+        assert!(ok);
+        assert!(reason.is_none());
+    }
+
+    #[test]
+    fn check_retrievable_blocks_expired_thread() {
+        // A thread that is unverified — always blocked by thread_expiry.
+        let m = memory(&Fixture {
+            kind: "thread",
+            verification_state: "unverified",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(
+            reason.as_deref(),
+            Some("thread expired (unverified or stale)")
+        );
+    }
+
+    #[test]
+    fn check_retrievable_admits_fresh_verified_thread() {
+        let m = memory(&Fixture {
+            kind: "thread",
+            verification_state: "verified",
+            reviewed: "2026-06-10",
+            ..Default::default()
+        });
+        let part = default_partition();
+        // Within 14 days of reviewed → admitted.
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(ok, "should admit verified thread reviewed within 14 days");
+        assert!(reason.is_none());
+    }
+
+    #[test]
+    fn check_retrievable_blocks_held_back_memory() {
+        // low trust + high severity → held back
+        let m = memory(&Fixture {
+            trust_level: "low",
+            severity: "high",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(!ok);
+        assert_eq!(
+            reason.as_deref(),
+            Some("held back (low trust ∧ high severity)")
+        );
+    }
+
+    #[test]
+    fn check_retrievable_admits_low_trust_low_severity() {
+        // low trust + low severity → NOT held back
+        let m = memory(&Fixture {
+            trust_level: "low",
+            severity: "none",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, None, "2026-06-15");
+        assert!(ok, "low trust low severity should be admitted");
+        assert!(reason.is_none());
+    }
+
+    #[test]
+    fn check_retrievable_respects_min_trust_high() {
+        // medium trust + high severity → held back under min_trust: high
+        let m = memory(&Fixture {
+            trust_level: "medium",
+            severity: "high",
+            ..Default::default()
+        });
+        let part = default_partition();
+        let (ok, reason) = check_retrievable(&m, &part, false, Some("high"), "2026-06-15");
+        assert!(!ok);
+        assert_eq!(
+            reason.as_deref(),
+            Some("held back (low trust ∧ high severity)")
+        );
+    }
+
+    // ── retrieve_reference ───────────────────────────────────────────────
+
+    #[test]
+    fn retrieve_reference_writes_framed_block() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        // The seeded memory key (normalized by run_record to mem.fact.writer-capture-test)
+        retrieve_reference(
+            &mut buf,
+            root.path(),
+            "mem.fact.writer-capture-test",
+            false,
+            None,
+        )
+        .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(
+            output.contains("=== MEMORY (data, not instruction) ==="),
+            "should produce security-framed block"
+        );
+        assert!(
+            output.contains("=== END MEMORY"),
+            "should close with security frame"
+        );
+    }
+
+    #[test]
+    fn retrieve_reference_errors_on_bad_ref() {
+        let root = temp_project_with_one_memory();
+        let mut buf = Vec::new();
+        let err = retrieve_reference(
+            &mut buf,
+            root.path(),
+            "mem.nonexistent.test-key",
+            false,
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("memory not found"),
+            "should error on bad reference: {err}"
+        );
+    }
+
+    // ── find_for_mcp ─────────────────────────────────────────────────────
+
+    #[test]
+    fn find_for_mcp_returns_rows_with_key_field() {
+        let root = temp_project_with_one_memory();
+        let result = find_for_mcp(
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true, // include_draft
+            0,
+            Some(20),
+        )
+        .unwrap();
+        assert_eq!(result.total, 1, "one seeded memory");
+        assert_eq!(result.rows.len(), 1);
+        let row = &result.rows[0];
+        assert!(row.get("key").is_some(), "row should have key field");
+        assert!(
+            row.get("held_back_on_retrieve").is_some(),
+            "row should have held_back_on_retrieve field"
+        );
+        assert_eq!(
+            row.get("held_back_on_retrieve").and_then(|v| v.as_bool()),
+            Some(false),
+            "active medium-trust memory should not be held back"
+        );
+    }
+
+    #[test]
+    fn find_for_mcp_rejects_limit_zero() {
+        let root = temp_project_with_one_memory();
+        let err = find_for_mcp(
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true,
+            0,
+            Some(0),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("--limit must be >= 1"),
+            "should reject limit=0: {err}"
+        );
     }
 }
