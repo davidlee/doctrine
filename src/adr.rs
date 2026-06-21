@@ -19,6 +19,89 @@ use crate::governance::{self, GovKind};
 use crate::listing::{Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
+use std::str::FromStr;
+
+use clap::Subcommand;
+
+// ---------------------------------------------------------------------------
+// CLI enum & dispatch (PHASE-03 relocation from main.rs)
+// ---------------------------------------------------------------------------
+
+#[derive(Subcommand)]
+pub(crate) enum AdrCommand {
+    /// Allocate the next id and scaffold a new ADR.
+    New {
+        /// ADR title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List ADRs by id: ADR-id, status, slug, title.
+    List {
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one ADR: its metadata, relationships, and prose body.
+    Show {
+        /// ADR reference — `ADR-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Set an ADR's status (edit-preserving; a no-op if unchanged).
+    Status {
+        /// ADR id (numeric).
+        id: u32,
+
+        /// New status (required): proposed|accepted|rejected|superseded|deprecated.
+        #[arg(long)]
+        status: AdrStatus,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: AdrCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        AdrCommand::New { title, slug, path } => run_new(path, title, slug),
+        AdrCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+        AdrCommand::Show {
+            reference,
+            format,
+            json,
+            path,
+        } => run_show(path, &reference, if json { Format::Json } else { format }),
+        AdrCommand::Status { id, status, path } => run_status(path, id, status, color),
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 /// Relative dir of the ADR tree inside the project root. Distinct top-level tree,
 /// not nested under slice (D2 — ADRs are project-global governance).
 const ADR_DIR: &str = ".doctrine/adr";

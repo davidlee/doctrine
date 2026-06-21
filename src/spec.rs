@@ -41,6 +41,181 @@ use crate::registry::{
 use crate::requirement::{self, ReqKind, ReqStatus, Requirement};
 use crate::tomlfmt::toml_string;
 
+use std::str::FromStr;
+
+use clap::Subcommand;
+
+// ---------------------------------------------------------------------------
+// CLI enums & dispatch (PHASE-03 relocation from main.rs)
+// ---------------------------------------------------------------------------
+
+#[derive(Subcommand)]
+pub(crate) enum SpecReqCommand {
+    /// Reserve a requirement and append it to a spec as a labelled member.
+    Add {
+        /// Canonical spec ref: `PRD-NNN` (product) or `SPEC-NNN` (tech).
+        spec_ref: String,
+
+        /// Requirement title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Requirement kind: functional | quality.
+        #[arg(long)]
+        kind: ReqKind,
+
+        /// Explicit membership label (default: next free FR-/NF- for the kind).
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Explicit slug (default: derived from the title, bounded to a safe length).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Transition a requirement's authored status (free any→any, edit-preserving).
+    Status {
+        /// Canonical requirement ref: `REQ-NNN` (by id only — no slug derivation).
+        req_ref: String,
+
+        /// Target status: pending | in-progress | active | deprecated | retired |
+        /// superseded.
+        #[arg(long)]
+        to: ReqStatus,
+
+        /// Operator note (accepted for v1; not yet stored on the requirement).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List a spec's requirement members — authored roster (id, label, kind,
+    /// status).
+    List {
+        /// Canonical spec ref: PRD-NNN | SPEC-NNN.
+        spec_ref: String,
+
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SpecCommand {
+    /// Allocate the next id in the subtype's namespace and scaffold a new spec.
+    New {
+        /// Spec subtype: product | tech.
+        subtype: SpecSubtype,
+
+        /// Spec title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List specs per subtype: id, status, slug, #members.
+    List {
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Reassemble a spec into its readable whole and print it to stdout.
+    Show {
+        /// Canonical spec ref: `PRD-NNN` (product) or `SPEC-NNN` (tech).
+        spec_ref: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Check FK integrity across the corpus (or one spec): dangling member /
+    /// interaction FKs, duplicate labels, and (corpus-wide) orphan requirements.
+    Validate {
+        /// Canonical spec ref to scope the check to (`PRD-NNN` / `SPEC-NNN`);
+        /// omitted → the whole corpus (the only mode that checks for orphans).
+        spec_ref: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Operate on a spec's requirements (membership).
+    Req {
+        #[command(subcommand)]
+        command: SpecReqCommand,
+    },
+}
+
+pub(crate) fn dispatch(cmd: SpecCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        SpecCommand::New {
+            subtype,
+            title,
+            slug,
+            path,
+        } => run_new(path, subtype, title, slug),
+        SpecCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+        SpecCommand::Show {
+            spec_ref,
+            format,
+            json,
+            path,
+        } => run_show(path, &spec_ref, if json { Format::Json } else { format }),
+        SpecCommand::Validate { spec_ref, path } => run_validate(path, spec_ref.as_deref()),
+        SpecCommand::Req { command } => match command {
+            SpecReqCommand::Add {
+                spec_ref,
+                title,
+                kind,
+                label,
+                slug,
+                path,
+            } => run_req_add(path, &spec_ref, title, kind, label, slug),
+            SpecReqCommand::Status {
+                req_ref,
+                to,
+                note,
+                path,
+            } => run_req_status(path, &req_ref, to, note),
+            SpecReqCommand::List {
+                spec_ref,
+                list,
+                path,
+            } => run_req_list(path, &spec_ref, list.into_list_args(color)),
+        },
+    }
+}
+
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`PRD`/`SPEC`) and from the tree dirs below.
 pub(crate) const SPEC_STEM: &str = "spec";

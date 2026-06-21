@@ -168,6 +168,62 @@ pub(crate) fn run_status(
 // behaviour tests (list/show/status/parse) live in `governance.rs`.
 // ---------------------------------------------------------------------------
 
+// ── CLI dispatch ───────────────────────────────────────────────────────────
+
+use std::str::FromStr;
+
+use crate::CommonListArgs;
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub(crate) enum RfcCommand {
+    New {
+        title: Option<String>,
+        #[arg(long)]
+        slug: Option<String>,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    Show {
+        reference: String,
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+        #[arg(long)]
+        json: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    Status {
+        id: u32,
+        #[arg(long)]
+        status: RfcStatus,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: RfcCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        RfcCommand::New { title, slug, path } => run_new(path, title, slug),
+        RfcCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+        RfcCommand::Show {
+            reference,
+            format,
+            json,
+            path,
+        } => run_show(path, &reference, if json { Format::Json } else { format }),
+        RfcCommand::Status { id, status, path } => run_status(path, id, status, color),
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;

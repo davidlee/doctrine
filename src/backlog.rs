@@ -43,6 +43,214 @@ use crate::entity::{
 use crate::listing::{self, Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
+use std::str::FromStr;
+
+use clap::Subcommand;
+
+// ---------------------------------------------------------------------------
+// CLI enum & dispatch (PHASE-03 relocation from main.rs)
+// ---------------------------------------------------------------------------
+
+#[derive(Subcommand)]
+pub(crate) enum BacklogCommand {
+    /// Allocate the next id in the kind's namespace and scaffold a new item.
+    New {
+        /// Item kind: issue | improvement | chore | risk | idea.
+        kind: ItemKind,
+
+        /// Item title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Survey items across all kinds; filters AND together. Hides terminal
+    /// (resolved/closed) by default — `--all` or an explicit `--status` reveals.
+    List {
+        /// Only this kind.
+        #[arg(long)]
+        kind: Option<ItemKind>,
+
+        /// Row order: `sequence` (the composed `needs`/`after` work order, default) or
+        /// `id` (the classic kind-then-id grouping).
+        #[arg(long = "by", value_enum, default_value_t = OrderBy::Sequence)]
+        by: OrderBy,
+
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Title substring filter (DEPRECATED alias of `--filter`; `--filter` wins).
+        substr: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Reassemble one item by id (`ISS-007`) — kind auto-detected from the prefix.
+    Show {
+        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Transition one item's status (and resolution) in place — kind auto-detected
+    /// from the prefix. Coupling holds: a terminal status requires a resolution, a
+    /// non-terminal forbids one (re-opening auto-clears it).
+    Edit {
+        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// The target status (open | triaged | started | resolved | closed).
+        #[arg(long)]
+        status: Status,
+
+        /// The resolution (required by a terminal status, forbidden otherwise).
+        #[arg(long)]
+        resolution: Option<Resolution>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Append hard prerequisites to an item's `needs` axis — kind auto-detected from
+    /// the prefix. Validates every ref exists, then refuses a closing dependency
+    /// cycle (naming the members; nothing written).
+    Needs {
+        /// The dependent item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// One or more prerequisite refs the item must wait on.
+        #[arg(required = true)]
+        prereqs: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Append one soft-sequence edge to an item's `after` axis — kind auto-detected
+    /// from the prefix. Validates the target exists; never rejects a cycle (a soft
+    /// preference, surfaced and evicted at `order` time).
+    After {
+        /// The item ref that should run after the target (e.g. ISS-007).
+        id: String,
+
+        /// The predecessor ref this item should follow.
+        /// Required unless --prune is set.
+        #[arg(required_unless_present = "prune")]
+        to: Option<String>,
+
+        /// Per-edge rank (a manual tie-break hint; default 0).
+        #[arg(long, default_value_t = 0)]
+        rank: i32,
+
+        /// Remove matching after edges instead of appending.
+        #[arg(long, conflicts_with = "prune")]
+        remove: bool,
+
+        /// Drop every dangling after edge from the source item.
+        #[arg(long, conflicts_with = "remove")]
+        prune: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Add and/or remove tags on an item — kind auto-detected from the prefix. Tags
+    /// are lowercased and validated `[a-z0-9_:-]` (colon namespacing, e.g.
+    /// `area:backlog`); the stored set is sorted. At least one add or remove required.
+    Tag {
+        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// Tags to add (positional, repeatable).
+        tags: Vec<String>,
+
+        /// Tags to remove, repeatable (`-d security -d area:backlog`).
+        #[arg(long = "remove", short = 'd')]
+        remove: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        BacklogCommand::New {
+            kind,
+            title,
+            slug,
+            path,
+        } => run_new(path, kind, title, slug),
+        BacklogCommand::List {
+            kind,
+            by,
+            mut list,
+            substr,
+            path,
+        } => {
+            // A-7: the positional `[SUBSTR]` is a DEPRECATED alias of `--filter`;
+            // `--filter` WINS when both are given (the positional folds in only
+            // when `--filter` is absent). Documented precedence, not an error.
+            if list.filter.is_none() {
+                list.filter = substr;
+            }
+            run_list(path, kind, by, list.into_list_args(color))
+        }
+        BacklogCommand::Show {
+            id,
+            format,
+            json,
+            path,
+        } => run_show(path, &id, if json { Format::Json } else { format }),
+        BacklogCommand::Edit {
+            id,
+            status,
+            resolution,
+            path,
+        } => run_edit(path, &id, status, resolution),
+        BacklogCommand::Needs { id, prereqs, path } => run_needs(path, &id, &prereqs),
+        BacklogCommand::After {
+            id,
+            to,
+            rank,
+            remove,
+            prune,
+            path,
+        } => run_after(path, &id, to.as_deref(), rank, remove, prune),
+        BacklogCommand::Tag {
+            id,
+            tags,
+            remove,
+            path,
+        } => run_tag(path, &id, &tags, &remove),
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 /// The toml/md file stem — shared by all five kinds (`backlog-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`ISS`/`IMP`/…) and from the per-kind tree dirs.
 const BACKLOG_STEM: &str = "backlog";
