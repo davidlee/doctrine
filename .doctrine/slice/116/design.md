@@ -105,7 +105,7 @@ src/worktree/  — tier per ADR-001 (see §ADR-001 obligation)
   land.rs      (engine)   Merge, LandRefusal, impl LandRefusal, ForkState,
                           classify_land, run_land
   coordinate.rs(command)  CoordOutcome, CoordAction, CoordRefusal, impl CoordRefusal,
-                          classify_coordinate, base_has_slice_plan[p], coordinate[X],
+                          classify_coordinate, base_has_slice_plan[pc], coordinate[X],
                           run_coordinate, run_branch_point_check
   gc.rs        (engine)   GcState, GcPlan, GcRefusal, impl GcRefusal, GcVerdict,
                           classify_gc, gc_target_dir[p], reap_targets[p],
@@ -168,7 +168,7 @@ Stay **private** — single owner file, sole production caller verified:
 `w`/`glob_matches`/`representative`/`MATCH_OPTS` (allowlist); `ALLOWLIST_FILE`/
 `read_allowlist`/`verify_sibling_worktree`/`enumerate_candidates` (provision);
 `DOCTRINE_PREFIX`/`CLAUDE_PREFIX` (import); `gc_target_dir`/`reap_targets`/
-`gather_landed` (gc); `base_has_slice_plan` (coordinate); `SubagentPayload`/
+`gather_landed` (gc); `SubagentPayload`/
 `cwd_shares_repo`/`primary_worktree` (subagent).
 
 Rule: widen private→`pub(super)`, never `pub(crate)`, for internal items — minimal

@@ -80,3 +80,21 @@ cleaning the existing ones first.
 
 ### Governance/spec (REV)
 (none — F-2 and F-3 are code concerns, not governance/spec changes)
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md §Target layout line 108: `base_has_slice_plan[p]` → `base_has_slice_plan[pc]`
+  (reflects actual `pub(crate)` visibility; RV-135 F-1)
+- design.md §Visibility line 171: removed `base_has_slice_plan` from the "Stay private" list
+  (it is no longer file-private; RV-135 F-1)
+
+### REVs completed
+(none — no governance/spec changes in this reconciliation brief)
+
+### Tolerated / follow-up
+- RV-135 F-1: tolerated — `pub(crate)` vs `pub(super)` over-widen; rationale in finding disposition
+- RV-135 F-2: tolerated — `#![expect(unused)]` scaffolding; rationale in finding disposition
+- RV-135 F-3: follow-up → IMP-146; test co-location deferred to post-close cleanup
+
+Reconcile pass complete — handoff to /close.
