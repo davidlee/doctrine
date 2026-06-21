@@ -2,7 +2,7 @@ memory_uid = "mem_019eeaec3c7f7023b9d0a86bc4a2ae2f"
 memory_key = "mem.pattern.dispatch.fork-env-contract-stdout-status-line"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "worktree fork emits a human status line on stdout before the env contract"
 summary = "doctrine worktree fork prints a 'provisioned …' status line on stdout before the KEY=VALUE env contract; capturing $fork_env unfiltered breaks env $fork_env cmd (rc 127)."
 created = "2026-06-21"
