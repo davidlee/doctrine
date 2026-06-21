@@ -39,14 +39,15 @@ relationships:
 
 | File | Change | Detail |
 |------|--------|--------|
-| `src/slice.rs:1062-1070` | `run_show` — resolve units, pass to `format_show` | Add `let units = crate::catalog::hydrate::resolve_units(&root)?` (or inline equivalent); pass `&units` |
-| `src/slice.rs:1126` | `format_show` — accept `units: &Units`, render estimate/value rows | Two `parts.push(...)` after dates line, before relationships |
+| `src/facet.rs` (new) | Define `EntityFacets` struct | `{ estimate: Option<EstimateFacet>, value: Option<ValueFacet> }` — risk and tags added when SL-133/134/136 need them |
+| `src/slice.rs:1062-1070` | `run_show` — resolve units, construct `EntityFacets`, pass to `format_show` | Resolve units from `doctrine.toml`; construct `EntityFacets` from `doc.estimate`/`doc.value` |
+| `src/slice.rs:1126` | `format_show` — accept `facets: &EntityFacets, units: &Units`, render estimate/value rows | Two `parts.push(...)` after dates line, before relationships |
 | `src/estimate.rs:26-28` | Remove `#[expect(dead_code)]` on `mod display` | Display helpers gain a live call site |
 | `src/estimate.rs:40-49` | Remove `#[expect(dead_code)]` on confidence constants | Consumed by confidence display |
 | `src/estimate.rs:86-90` | Remove `#[expect(dead_code)]` on `resolve_confidence` | Called by `format_show` to pick percentile band |
-| `src/estimate/display.rs` | Add `format_estimate_confidence` | New function: bounds + confidence → "80% confident this takes 3–5 unit" |
-| `src/value.rs` | Add `format_value_normal` | New function: magnitude + unit → "Value: 5 magic_beans" |
-| `src/slice.rs` tests | Add `format_show` cases with facets present + absent | Both present, estimate-only, value-only, neither (golden) |
+| `src/estimate/display.rs` | Add `format_estimate_confidence` | Signature: `fn format_estimate_confidence(facet: &EstimateFacet, lower_pct: f64, upper_pct: f64, unit: &str) -> String` |
+| `src/value.rs` | Add `format_value_normal` | Signature: `fn format_value_normal(facet: &ValueFacet, unit: &str) -> String` → `"Value: 5 magic_beans"` |
+| `src/slice.rs` tests | Add `format_show` cases with facets present + absent + custom bounds | Both present, estimate-only, value-only, neither (golden), custom confidence, zero-width estimate |
 
 ## Design decisions
 
@@ -89,16 +90,26 @@ byte-identical to pre-change.
 Value is a single `f64` magnitude — no range, so no percentile selection
 applies. Display is `"Value: {magnitude} {unit}"`.
 
-### D5 — EntityFacets deferred
+### D5 — EntityFacets defined now, extended later
 
-`format_show` receives individual `Option<&EstimateFacet>` /
-`Option<&ValueFacet>` fields, not an `EntityFacets` struct. The shared
-projection is created when SL-133 design needs it — at that point,
-`src/facet.rs` defines `EntityFacets { estimate, value, risk, tags }`
-and the call site is refactored to construct and pass it.
+Per architect feedback (§6): establish the shared projection before either
+slice grows its own parser. `src/facet.rs` is created in this slice with:
 
-Memory stub `mem.trigger.entity-facets-struct` records the trigger
-condition and handoff.
+```rust
+pub(crate) struct EntityFacets {
+    pub(crate) estimate: Option<EstimateFacet>,
+    pub(crate) value: Option<ValueFacet>,
+}
+```
+
+`format_show` consumes `&EntityFacets` — a single struct, not individual
+fields. When SL-133 needs risk and SL-136 needs tags, they extend the struct
+(add `risk: Option<RiskFacet>`, `tags: Vec<String>`) and the call site in
+`run_show` populates the new fields. No refactoring of `format_show` needed
+— it just ignores fields it doesn't render.
+
+This avoids the parallel-parsing anti-pattern: SL-132 and SL-133 both
+consume the same projection from day one.
 
 ### D6 — Risk display deferred
 
@@ -117,6 +128,8 @@ Risk facet not touched by this slice. `EntityFacets` will carry
 | VT-6 | No `dead_code` warnings post-change | `cargo build` passes clean |
 | VT-7 | JSON unchanged | Existing `show_json` tests pass unchanged |
 | VT-8 | Gate zero warnings | `just check` passes; `just gate` passes |
+| VT-9 | Custom confidence bounds from config | Unit test: `lower_confidence=0.25, upper_confidence=0.75` → "50% confident..." |
+| VT-10 | Zero-width estimate (lower==upper) | Unit test: `{lower:5, upper:5}` + (0.1,0.9) → "80% confident this takes 5.0–5.0 espresso_shots" |
 
 ## Non-goals
 
