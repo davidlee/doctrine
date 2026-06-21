@@ -3,77 +3,89 @@
 ## Context
 
 `doctrine backlog tag` and `doctrine memory tag` exist but use separate,
-forked implementations with different TOML storage locations. Seven entity
-kinds need tagging: backlog (done), memory (done, forked), ADR/POL/STD/RFC
-(have tags in schema, no write verb, broken list filter), knowledge (has
-tags, no write verb), spec (has tags, no write verb), slice (no tags at
-all).
+forked implementations over different TOML storage locations. Most kinds
+cannot be tagged at all (no write verb), and `list --tag` silently matches
+nothing for governance (the filter reads no tags). Provide one cross-kind
+`doctrine tag` verb and make `list --tag` work.
 
-Tag coefficients in IMP-118 (SL-133) are a key motivation — but broader
-tagging is also a general cross-cutting classification axis for filtering
-and grouping.
+Tag coefficients in IMP-118 (SL-133) are a key motivation — a project-global
+per-tag coefficient (default 1.0) feeding graph-traversal prioritisation — but
+broader tagging is also a general cross-cutting classification axis for
+filtering and grouping. This slice keeps tag normalisation stable so those
+coefficient lookups key consistently; it does not build the coefficient.
+
+Design decision (see `design.md` D1): rather than dispatch over per-kind tag
+locations, storage is **unified to a root-level `tags` array** for every
+taggable kind. Governance/RFC migrate out of `[relationships].tags`. This
+collapses the verb to a single code path and makes the list-filter fix fall
+out of one shared `Meta` field.
 
 ## Scope & Objectives
 
-### Phase 1: Generic write verb
+### Phase 1: Shared write leaf
 
-`doctrine tag set <ID> <TAGS...>` + `doctrine tag clear <ID>` — works
-across all entity kinds. Resolves the tag storage location per-kind:
+`tag::apply_tags_set` — a root-level, edit-preserving set-merge write core,
+generalised from `backlog::apply_tags` (insert-if-missing, not F-1 bail —
+safe at root in toml_edit 0.22, see design D4/§5.5). Hoist
+`backlog::fold_filter_tag` into `tag.rs`. Backlog's `apply_tags`/`run_tag`/
+list-filter delegate. Behaviour-preserving (one backlog bail-test rewritten to
+assert self-heal).
 
-| Kind | Tag location in TOML |
-|------|---------------------|
-| Backlog | root-level `tags` |
-| Memory | `[scope].tags` |
-| ADR/POL/STD/RFC | `[relationships].tags` |
-| Knowledge | root-level `tags` |
-| Spec (PRD/SPEC) | root-level `tags` |
-| Slice | root-level `tags` (new) |
+### Phase 2: Generic verb
 
-Reuses `tag::normalize_tag` (shared) and `tag::apply_tags_set` (extracted
-from backlog's `apply_tags` into a kind-parameterised leaf).
+`doctrine tag set <ID> <TAGS...> [-d/--remove …]` + `doctrine tag clear <ID>`,
+across **any resolvable canonical numbered ref** (no whitelist). New
+`commands/tag.rs` + `Command::Tag` wiring. `set` mirrors backlog semantics
+(additive + `--remove`); `clear` removes all. Memory/non-numbered refs fail
+resolution with a friendly redirect.
 
-### Phase 2: Slice model addition
+### Phase 3: Templates + Meta + list filter fix
 
-Add `tags = []` to the slice TOML scaffold. Add `tags: Vec<String>` to
-`SliceDoc` struct. Migration: existing slices with no `tags` key default to
-empty.
+Seed root `tags = []` in the slice, requirement (REQ), and concept-map (CM)
+templates (backlog/knowledge/spec already seeded). Add
+`#[serde(default)] tags` to `meta::Meta`; `slice::key()` + `governance::key()`
+populate `FilterFields.tags` (governance covers ADR/POL/STD/RFC). Centralise
+the lenient `--tag` filter-fold in `listing::build` so every list kind matches
+case-insensitively.
 
-### Phase 3: Governance list filter fix
+### Phase 4: Governance/RFC migration
 
-`governance::key()` currently returns `Vec::new()` for tags (Codex
-BLOCKER-2). Read tags from `[relationships].tags` and populate the
-`FilterFields` so `list --tag` works.
-
-### Phase 4: Per-kind tag subcommands (nice-to-have)
-
-`doctrine adr tag` / `doctrine spec tag` / `doctrine rfc tag` — thin
-wrappers around the generic verb, for discoverability.
+Strip `tags` from `[relationships]` in the ~29 ADR/POL/STD/RFC files + the 4
+templates; drop the typed `tags` from governance's `Relationships`, add root
+`tags` to its `Doc`, repoint the `show` render to root. Restore RFC-002's live
+tags via one `doctrine tag set RFC-002 …`.
 
 ## Non-Goals
 
-- No tag display in list columns (that's a separate display/UX pass)
-- No tag completion or suggestion
-- No tag hierarchy/namespace enforcement beyond charset
-- No migration of existing knowledge/spec/requirement tags (they already
-  parse correctly)
+- No tag display in list columns (separate display/UX pass).
+- No tag completion, suggestion, or hierarchy/namespace beyond charset.
+- No tag coefficient (SL-133 / IMP-118 owns it).
+- Memory tagging stays on its own forked verb (`[scope].tags`) — out of scope.
+- No full hoist of backlog's tag *presentation* into the shared module
+  (deferred; `design.md` OQ-1).
 
 ## Terrain
 
 | File | Change |
 |------|--------|
-| `src/tag.rs` | Extract `apply_tags_set` from backlog — kind-parameterised write leaf with per-kind tag location |
-| `src/commands/tag.rs` (new) | `doctrine tag set`/`clear` CLI handler |
-| `src/main.rs` | Register `Tag` subcommand |
-| `src/slice.rs` | Add `tags` field to `SliceDoc`, scaffold template |
-| `src/governance.rs` | Fix `key()` to return tags from `[relationships].tags` |
-| `install/templates/slice.toml` | Add `tags = []` |
-| `src/backlog.rs` | Refactor `apply_tags` to call shared `tag::apply_tags_set` |
-| `src/memory.rs` | Refactor memory tag write to call shared leaf (optional) |
+| `src/tag.rs` | New `apply_tags_set` (root-level write core) + hoisted `fold_filter_tag` |
+| `src/commands/tag.rs` (new) | `doctrine tag set`/`clear` handler + dispatch |
+| `src/commands/cli.rs` | Register `Command::Tag` |
+| `src/backlog.rs` | Delegate `apply_tags`/`run_tag`/list-filter to `tag::*`; rewrite bail-test |
+| `src/meta.rs` | `Meta` gains `#[serde(default)] tags`; update test helper |
+| `src/slice.rs` | `slice::key()` populates tags |
+| `src/governance.rs` | `key()` populates tags; drop `Relationships.tags`; `Doc` root tags; repoint `show`; fix 2 `Meta` literals |
+| `src/adr.rs`, `src/policy.rs` | Fix `Meta` struct-literal sites (A2) |
+| `src/listing.rs` | Centralise `--tag` filter-fold (calls `tag::fold_filter_tag`) |
+| `install/templates/{slice,requirement,concept-map}.toml` | Seed root `tags = []` |
+| `install/templates/{adr,policy,standard,rfc}.toml` | Move `tags` to root |
+| `.doctrine/{adr,policy,rfc}/**` | Strip stale `[relationships].tags` (~29 files) |
 
 ## Dependencies
 
-- `src/tag.rs` — shared `normalize_tag` already exists
-- Tag validation charset `[a-z0-9_:-]` — shared, unchanged
-- `listing.rs` — `FilterFields` + `tags_admit()` already support filtering
-- IMP-118 (SL-133) — tag coefficients consume tag data; this slice is a
-  soft prerequisite (defaults to 1.0 when absent)
+- `tag::normalize_tag` — shared write chokepoint, already exists (SL-100).
+- `integrity::parse_canonical_ref` + `entity::id_path` — the universal
+  resolver + path builder (reused, no parallel impl).
+- `listing.rs` — `FilterFields` + `tags_admit()` already filter; `--tag` clap
+  arg already on shared `ListArgs`.
+- IMP-118 (SL-133) — consumes tag data; soft downstream (defaults to 1.0).
