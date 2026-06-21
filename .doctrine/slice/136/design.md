@@ -70,20 +70,29 @@ lookups key consistently (`tag::normalize_tag` already canonicalises).
 
 ### 5.1 System Model
 
-Every taggable entity stores a **root-level `tags: Vec<String>`**. Taggable =
-*any resolvable canonical numbered ref* (`parse_canonical_ref` succeeds) — all 21
-numbered kinds, no whitelist to maintain. Memory is excluded for free (its
-`mem.*` ref fails `parse_canonical_ref`).
+Every taggable entity stores a **root-level `tags: Vec<String>`** (governance/RFC
+migrate root-ward — governance-changing, see D6). Taggable = a **curated set
+whose read surfaces render tags** (D2): slice, ADR/POL/STD/RFC, backlog
+(ISS/IMP/CHR/RSK/IDE), knowledge (ASM/DEC/QUE/CON), spec (PRD/SPEC), **REQ**.
+**Excluded** — concept-map, review (RV), REC, revision (REV): their
+`show`/`--json`/`list` do **not** render tags, so writing would create
+**write-only metadata** that silently vanishes (Codex MAJOR-1). Wiring their read
+surfaces is deferred to **IMP-144**; until then the verb refuses them with a
+pointer to IMP-144. A `TAGGABLE` prefix const in `tag.rs` is the gate; storage
+stays uniform root, so there is no per-kind *location* dispatch — only a
+membership check. Memory excludes itself (its `mem.*` ref fails
+`parse_canonical_ref`).
 
 ```
 doctrine tag set <ID> <TAGS...> [-d/--remove <TAGS>...]   # additive-merge
 doctrine tag clear <ID>                                    # remove all
 ```
 
-Resolution (the whole dispatch — no per-kind location logic):
+Resolution (no per-kind location logic; only a taggability gate):
 
 ```rust
 let (kref, id) = integrity::parse_canonical_ref(reference)?;   // SL-136 → (slice, 136)
+ensure!(tag::TAGGABLE.contains(&kref.kind.prefix), "{} not taggable yet (IMP-144)", kref.kind.prefix);
 let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
 let changed = tag::apply_tags_set(&mut doc, &adds, &removes, &today)?;
 ```
@@ -126,10 +135,13 @@ enum TagCommand {
   (filter), `apply_tags_set` (write core).
 - `meta::Meta` gains `#[serde(default)] tags: Vec<String>` — absent parses as
   empty (no migration of existing files needed for the read path).
-- Template seeding (`tags = []` at root): add to **slice, requirement (REQ),
-  concept-map (CM)**; backlog/knowledge/spec already seeded; gov/RFC seeded via
-  the §5.4 migration. Low-traffic status-less kinds (review/RV, REC, REV) not
-  seeded — self-heal on first tag.
+- Template seeding (`tags = []` at root): add to **slice, requirement (REQ)**;
+  backlog/knowledge/spec already seeded; gov/RFC seeded via the §5.4 migration.
+  Excluded kinds (CM/RV/REC/REV) get no seed — not taggable until IMP-144.
+- **REQ read surfaces** must be wired so REQ tags are not write-only: its
+  `key()` (or `Meta` path) populates `FilterFields.tags`, and its `show` renders
+  the tag axis. (REQ is included precisely because this wiring is in scope; the
+  excluded kinds are excluded because theirs is not — IMP-144.)
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -160,27 +172,45 @@ List `--tag` fix:
   trim+lowercase via `tag::fold_filter_tag`); remove backlog's redundant
   pre-fold. Idempotent → every list kind gets case-insensitive `--tag` uniformly.
 
-Governance/RFC migration (one commit):
-- **Files (~29):** strip the `tags` line from `[relationships]`. Existing files
-  need **no** root `tags=[]` seeded — `Meta`/`Doc` read root tags with
-  `#[serde(default)]`, so absent = empty (A4, less churn). RFC-002's live tags
-  (`program, consumption-surfaces, estimate, value, scoring`) are restored by one
-  `doctrine tag set RFC-002 …` after the verb lands (re-seeds root).
-- **Templates (4):** adr/policy/standard/rfc — remove `tags` from `[relationships]`,
-  add root `tags = []`.
-- **Struct surgery:** drop the typed `tags` from governance's `Relationships`;
-  add root `tags` to its `Doc`; **repoint the `show` render** from
-  `doc.relationships.tags` to `doc.tags` (A3, `governance.rs` ~L313-320).
+Governance/RFC migration — **governance-changing** (D6). The storage move
+contradicts two tech specs that pin governance tags as typed; the amendment rides
+a **Revision authored at reconciliation** (ADR-013), the in-slice code/test/corpus
+changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
+
+- **Canon (the REV, at closure):** SPEC-005 §Decisions D2 ("`tags` remain in the
+  typed `[relationships]` table") and SPEC-018 §relations ("`tags` … stays typed")
+  both amended to root-level by one Revision.
+- **Struct surgery (`governance.rs`):** drop typed `tags` from `Relationships`;
+  add root `tags` to `Doc`; **repoint the `show` render** `doc.relationships.tags`
+  → `doc.tags` (~L313-320); fix the two `Meta` literals (A2).
+- **Corpus (~28 files):** strip the `[relationships].tags` line from ADR/POL/RFC
+  tomls. No root `tags=[]` seed needed — `Doc`/`Meta` read root with
+  `#[serde(default)]` (A4). **RFC-002's live tags**
+  (`program, consumption-surfaces, estimate, value, scoring`) restored by one
+  `doctrine tag set RFC-002 …` after the verb lands.
+- **Templates (4):** adr/policy/standard/rfc — move `tags` from `[relationships]`
+  to root.
+- **Goldens to rewrite (mechanical):** `tests/e2e_adr_cli_golden.rs` (fixture,
+  `show` render, JSON envelope nesting, status-edit-preserve, refusal fixture),
+  `tests/e2e_standard_cli_golden.rs` (mirror), `tests/e2e_catalog_cli.rs`
+  (fixture), `src/adr.rs:322` (typed-tags assert). **Invert**
+  `tests/e2e_relation_migration_storage.rs` — its
+  `governance_corpus_..._tags_stay_typed` + `assert_governance_shape` guards now
+  assert tags are root, not typed.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **Root insert-if-missing is safe in toml_edit 0.22** (D4). Probe: parse a
-  slice-shaped doc, `as_table_mut().insert("tags", …)`, render — the key lands
-  **above** the trailing `[relationships]` in every shape tested (no blank line /
-  inline comments / multi-subtable / leading doc-comment). The corruption premise
-  in `backlog::apply_tags`' F-1 comment and in
-  `mem.pattern.entity.edit-preserving-status-transition` is stale for root
-  inserts; both get corrected.
+- **Root insert-if-missing is safe in toml_edit 0.22** (D4). Probe (standalone
+  crate, toml_edit 0.22): `as_table_mut().insert("tags", …)` lands the key
+  **above** all trailing subtables AND `[[relation]]` array-of-tables in every
+  shape tested (no blank line / inline comments / multi-subtable / doc-comment
+  header / `[[relation]]` block), and the rendered doc **re-parses with
+  `root.tags` set** (semantic check, not just textual). The corruption premise in
+  `backlog::apply_tags`' F-1 comment is stale **for root inserts via this API**.
+  Scope of the change is the **tag write path only** — the status-refusal goldens
+  (`set_adr_status`/requirement, which lock byte-unchanged refusal on a *missing
+  status* key) are **not** touched; that paranoia stays. Insert-if-missing is
+  thus a tag-path decision, not a repo-wide reversal.
 - No-op guard MUST compare as **sets** (not ordered vecs) so an idempotent re-add
   against an unsorted hand-authored store does not spuriously write + stamp.
 - `updated` stamp is **conditional on key presence** — status-less kinds without
@@ -195,46 +225,71 @@ Governance/RFC migration (one commit):
   the shared module is deferred — the verb shell prints it directly for now. If a
   second presentation surface appears, extract `tag::format_tag_line`. Tracked as
   a possible follow-up (user note), not done here.
-- OQ-2: REQ/CM templates seeded now; review/REC/REV left to self-heal. If those
-  kinds turn out to want visible seeded fields, a one-line template add each — no
-  code change (uniform).
+- OQ-2: Excluded kinds (CM/RV/REC/REV) gain tags once their read surfaces are
+  wired — **IMP-144**. With uniform root storage that is read-surface work per
+  kind plus one `TAGGABLE` const entry; no write-path code.
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D1 — Uniform root-level `tags` for all kinds.** Alt: keep per-kind locations
-  (`[relationships].tags` for gov, root for others) with a `TagLoc` dispatch.
-  Rejected: a location enum + per-kind table is exactly the special-casing this
-  slice removes; uniform root collapses dispatch to nothing and makes the list
-  filter-fix fall out of `Meta` gaining one field. Cost: migrate gov/RFC (§5.4).
-- **D2 — No taggability whitelist.** Taggable = any `parse_canonical_ref` hit.
-  Alt: curated whitelist. Rejected: uniform storage makes every numbered kind
-  free to tag; a whitelist is maintenance with no payoff. Memory excludes itself
-  by ref shape.
+- **D1 — Uniform root-level `tags` for all taggable kinds.** Alt A: keep per-kind
+  locations (`[relationships].tags` for gov, root for others) with a `TagLoc`
+  dispatch — canonical today, zero migration, but a permanent location split.
+  Chosen uniform-root instead: collapses dispatch to a membership check and makes
+  the list filter-fix fall out of `Meta` gaining one field. Cost: migrate gov/RFC
+  + a governance Revision (D6). Weighed and accepted: blast radius is bounded and
+  mechanical (§5.4), buys permanent uniformity.
+- **D2 — Curated taggable set, read-surface-gated (NOT "tag anything").** Alt:
+  taggable = any `parse_canonical_ref` hit. **Rejected (Codex MAJOR-1):** kinds
+  whose `show`/`--json`/`list` do not render tags (CM/RV/REC/REV) would accept
+  **write-only metadata** that silently vanishes — that is "accept hidden data",
+  not "no whitelist". The gate is a `TAGGABLE` const = kinds wired to *read* tags:
+  slice, gov/RFC, backlog, knowledge, spec, REQ. Excluded kinds wait on IMP-144
+  (their read-surface wiring). Memory excludes itself by ref shape.
 - **D3 — `set` mirrors backlog (additive `tags` + `--remove`); `clear` removes
   all.** Alt: `set` = full-replace. Rejected: divergence from backlog would block
   clean delegation and break the behaviour-preservation gate. Backlog becomes a
   pure delegate.
-- **D4 — Insert-if-missing, not F-1 bail.** Empirically safe at root (§5.5).
-  Backlog's only behaviour change: a malformed/hand-trimmed file self-heals
-  instead of bailing. The one backlog test asserting the bail is rewritten to
-  assert self-heal (gate stays meaningful). The stale corruption comment + memory
-  are corrected.
+- **D4 — Insert-if-missing on the tag write path, not F-1 bail.** Empirically
+  safe at root incl. `[[relation]]` shapes (§5.5). Scoped to tagging only — the
+  status-refusal goldens stay. Backlog's only behaviour change: a
+  malformed/hand-trimmed file self-heals instead of bailing; the one backlog test
+  asserting that bail is rewritten to assert self-heal. The stale corruption
+  comment on `backlog::apply_tags` is corrected.
 - **D5 — Centralise the filter-fold in `listing::build`.** Alt: fold in each
   `run_list`. Rejected: three call sites + every future kind; one fold site is
   DRY and uniform. Idempotent, so backlog's removed pre-fold is behaviour-neutral.
+- **D6 — SL-136 is governance-changing; the spec amendment rides a Revision at
+  reconciliation.** D1 contradicts SPEC-005 D2 and SPEC-018 §relations, which pin
+  governance tags as typed in `[relationships]` (Codex BLOCKER, verified in
+  source). A slice design cannot overrule a tech spec. Per ADR-013 a governance
+  dependency routes through a **Revision (REV)**; per the project's governance
+  note small changes may proceed with the amendment recorded at reconciliation.
+  Chosen: **revision-at-reconciliation** — the code/test/corpus changes land
+  in-slice, the REV amending both specs is authored at `/reconcile` before
+  `/close`. Alt: revision-first (author the REV, then build) — heavier sequencing
+  for no correctness gain given the bounded, reversible blast radius. The REV
+  obligation is recorded here and in the scope so closure cannot silently skip
+  it.
 
 ## 8. Risks & Mitigations
 
-- R1 — Governance struct surgery (drop `Relationships.tags`, add root `tags` to
-  `Doc`) breaks a `show`/JSON golden. Mitigation: governance `show`/list suites
-  are the gate; update goldens deliberately, assert RFC-002 round-trips.
+- R1 — Governance struct surgery breaks `show`/JSON/migration goldens. Mitigation:
+  the inventory in §5.4 is the work-list (adr/standard/catalog goldens +
+  migration-guard inversion + `adr.rs:322`); update deliberately, assert RFC-002
+  round-trips root-side.
 - R2 — A backlog test asserts the F-1 bail. Mitigation: known (D4) — rewrite to
   assert self-heal; grep before coding.
 - R3 — `meta::Meta` gaining `tags` perturbs an unrelated Meta consumer.
-  Mitigation: `#[serde(default)]` keeps every existing file parsing; run the full
-  list/show suites across kinds.
+  Mitigation: `#[serde(default)]` keeps every existing file parsing; fix the named
+  literal sites (A2); run the full list/show suites across kinds.
 - R4 — Migration misses a gov file or drops RFC-002's tags. Mitigation: scripted
   grep for residual `[relationships].tags`; explicit RFC-002 restore + assertion.
+- R5 — Closure forgets the REV (D6), leaving the corpus non-canonical against
+  SPEC-005/018. Mitigation: obligation recorded in design D6 + scope Phase 4 +
+  carried to `/reconcile`; `/close` verifies spec-coherence.
+- R6 — REQ read-surface wiring is larger than assumed (REQ may not ride the `Meta`
+  list path). Mitigation: confirm REQ's list/show path in Phase 3 (phase-plan);
+  if non-trivial, REQ joins IMP-144 and drops from this slice's `TAGGABLE`.
 
 ## 9. Quality Engineering & Validation
 
@@ -244,27 +299,34 @@ Per §6 of the scope and §5.5 invariants:
   set algebra sorted union/diff; `updated` stamped-if-present / skipped-if-absent;
   clear-on-untagged = no-op; `fold_filter_tag` lenient; **regression: root insert
   lands above a trailing `[relationships]`** (locks the probe).
-- `commands/tag.rs`: set/clear round-trip on real scaffolds across kinds
-  (slice/adr/knowledge/spec/REQ/CM); overlap reject; memory-ref friendly error.
-- `meta`: tags default absent→empty, present→read. **A2: update the 5 `Meta`
+- `commands/tag.rs`: set/clear round-trip on real scaffolds across taggable kinds
+  (slice/adr/knowledge/spec/REQ); overlap reject; **excluded kind (e.g. `CM-1`)
+  refused with the IMP-144 pointer**; memory-ref friendly error.
+- `meta`: tags default absent→empty, present→read. **A2: update the `Meta`
   struct-literal sites** (`adr.rs`, `policy.rs`, `governance.rs` ~L1150,
   `meta.rs` test helper, `backlog.rs` ~L2411) with `tags: vec![]` — literals
   need the field even with serde-default.
-- list: slice + governance `list --tag` match case-insensitively.
+- list: slice + governance + REQ `list --tag` match case-insensitively.
+- REQ read surface: a REQ tag renders in `show` and filters in `list` (not
+  write-only).
 - migration: no residual `[relationships].tags`; RFC-002 restored (asserted);
-  governance `show` renders tags from root.
+  governance `show` renders tags from root; the migration-guard test inverted.
 - Behaviour-preservation: backlog tag + gov/slice list suites green; the bail
   test rewritten.
 
 Phasing:
 
 1. **Shared leaf** — `apply_tags_set` + `fold_filter_tag` hoist into `tag.rs`;
-   backlog `apply_tags`/`run_tag`/list-filter delegate. Behaviour-preserving.
-2. **Generic verb** — `commands/tag.rs` (`set`/`clear`) + `Command::Tag` wiring.
-3. **Templates + Meta + list fix** — seed slice/REQ/CM templates; `Meta.tags`;
-   `slice::key()`/`governance::key()`; centralise fold in `listing::build`.
+   `TAGGABLE` const; backlog `apply_tags`/`run_tag`/list-filter delegate.
+   Behaviour-preserving.
+2. **Generic verb** — `commands/tag.rs` (`set`/`clear`) + `Command::Tag` wiring;
+   taggability gate (excluded kinds → IMP-144 error).
+3. **Templates + Meta + list fix** — seed slice/REQ templates; `Meta.tags`;
+   `slice::key()`/`governance::key()`/REQ read surface; centralise fold in
+   `listing::build`.
 4. **Governance/RFC migration** — root-ward move in files + 4 templates + struct
-   surgery; RFC-002 restore.
+   surgery + golden/migration-guard updates; RFC-002 restore. **REV obligation
+   (D6) flagged for `/reconcile`.**
 
 ## 10. Review Notes
 
@@ -287,4 +349,25 @@ Internal adversarial pass (integrated above):
   (`kind_by_prefix` first-match is unambiguous); only the `TK` test-kind dupes,
   outside KINDS. No action.
 
-No finding overturned a §7 decision; all are execute-time mechanics.
+No internal finding overturned a §7 decision; all are execute-time mechanics.
+
+External adversarial pass — Codex (GPT-5.5), all claims verified in source:
+
+- **BLOCKER-1 — D1 breaks live contracts.** Governance `show`/`--json` read
+  `relationships.tags`; goldens pin it (`e2e_adr_cli_golden`,
+  `e2e_standard_cli_golden`), and `e2e_relation_migration_storage:428` guards it.
+  **Accepted** — full inventory + rewrites folded into §5.4/§8 R1; the storage
+  move is now explicitly governance-changing (D6).
+- **BLOCKER-2 — D4 unproven / contradicts repo paranoia.** **Partially upheld.**
+  The safety claim is now proven (standalone probe incl. `[[relation]]` + semantic
+  re-parse, §5.5) and scoped to the tag path only — the status-refusal goldens are
+  untouched, so no repo-wide reversal. Documented, not hand-waved.
+- **MAJOR-1 — D2 creates write-only metadata** on CM/RV/REC/REV. **Accepted —
+  decision reversed.** D2 is now a curated, read-surface-gated `TAGGABLE` set;
+  excluded kinds deferred to IMP-144.
+- **MAJOR-2 — design overrules canon** (SPEC-005 + SPEC-018 pin typed tags).
+  **Accepted.** Resolved via D6: revision-at-reconciliation (ADR-013), REV
+  amending both specs, obligation recorded (R5).
+
+Net: Codex reversed D2 outright and forced D1 to declare itself governance-changing
+(D6) with a measured blast radius. D3/D4/D5 stand (D4 with proof + scoping).
