@@ -214,7 +214,10 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
 - **Goldens to rewrite (mechanical):** `tests/e2e_adr_cli_golden.rs` (fixture,
   `show` render, JSON envelope nesting, status-edit-preserve, refusal fixture),
   `tests/e2e_standard_cli_golden.rs` (mirror), `tests/e2e_catalog_cli.rs`
-  (fixture), `src/adr.rs:322` (typed-tags assert). **Invert**
+  (fixture), `src/adr.rs:322` (typed-tags assert), and the two render-unit tests
+  `src/policy.rs:295` + `src/standard.rs:302`
+  (`render_*_toml_relationships_are_preserved…` loop over `["superseded_by",
+  "tags"]` — drop `tags` from the typed-axis loop; Codex 3rd-pass). **Invert**
   `tests/e2e_relation_migration_storage.rs` — its
   `governance_corpus_..._tags_stay_typed` + `assert_governance_shape` guards now
   assert tags are root, not typed; **extend `governance_files()` (`:86`) to
@@ -443,4 +446,19 @@ Second external pass — Codex (GPT-5.5), all claims verified in source:
 
 Net second pass: no decision overturned, but the worklist was materially
 incomplete — full read-surface parity (D2/§5.3), `spec::key()` + REQ-JSON wiring,
-and three migration-inventory additions. Design now coherent for `/plan`.
+and three migration-inventory additions.
+
+Third (focused) pass — Codex (GPT-5.5), confirmed in source:
+
+- **Parity worklist complete.** No included kind has an unwired read surface
+  outside the §5.3/§5.4 worklist; backlog/knowledge already render on all three
+  (`backlog.rs:1041`, `knowledge.rs:971/1099/1258`).
+- **MINOR ×2 — two more typed-tag unit tests** to migrate: `policy.rs:295` +
+  `standard.rs:302` (`["superseded_by","tags"]` axis loop). Folded into §5.4.
+- **Reviewed, not migration sites:** `relation.rs:1559` (synthetic
+  trailing-typed-table refusal trap — `tags` incidental, not governance storage)
+  and `relation_graph.rs:852` (asserts tags are not relation *edges* — stays true
+  post-move). No change.
+
+Net third pass: two mechanical test-site additions, no new decisions, parity
+confirmed complete. Design coherent and converged — ready for `/plan`.
