@@ -14,19 +14,6 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-// SL-107 EX-4 / D1: the blanket `#![allow(dead_code)]` is gone, so the display
-// renderers (display wiring deferred to IMP-112) need their own tripwire. They have no live call site until
-// the facet data carried on `SliceDoc` is rendered on the show path — owned by a
-// later slice, not SL-107 (D2 narrow boundary: SL-107 does not touch display).
-// `expect` (not `allow`) self-clears: when display is wired in, it fires
-// unfulfilled and forces removal of this attribute.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "estimate display rendering — no live call site until facet data renders on the show path (display wiring deferred to IMP-112)"
-    )
-)]
 pub(crate) mod display;
 
 // ---------------------------------------------------------------------------
@@ -34,21 +21,7 @@ pub(crate) mod display;
 // ---------------------------------------------------------------------------
 
 pub(crate) const DEFAULT_ESTIMATION_UNIT: &str = "espresso_shots";
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "confidence percentile band — consumed when estimate display is wired (IMP-112); homed by REQ-310 (FR-011)"
-    )
-)]
 pub(crate) const DEFAULT_LOWER_CONFIDENCE: f64 = 0.1;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "confidence percentile band — consumed when estimate display is wired (IMP-112); homed by REQ-310 (FR-011)"
-    )
-)]
 pub(crate) const DEFAULT_UPPER_CONFIDENCE: f64 = 0.9;
 
 // ---------------------------------------------------------------------------
@@ -80,13 +53,6 @@ pub(crate) fn resolve_unit(cfg: &EstimationConfig) -> String {
 
 /// Resolve the default confidence bounds. Pure. Each bound falls back to its
 /// default when absent; validated: finite, in [0.0, 1.0], lower < upper.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "confidence percentile band — consumed when estimate display is wired (IMP-112); homed by REQ-310 (FR-011)"
-    )
-)]
 pub(crate) fn resolve_confidence(cfg: &EstimationConfig) -> anyhow::Result<(f64, f64)> {
     let lower = cfg.lower_confidence.unwrap_or(DEFAULT_LOWER_CONFIDENCE);
     let upper = cfg.upper_confidence.unwrap_or(DEFAULT_UPPER_CONFIDENCE);

@@ -21,6 +21,7 @@ mod dispatch_config;
 mod dtoml;
 mod entity;
 mod estimate;
+mod facet;
 mod facet_write;
 mod fsutil;
 mod git;
