@@ -7,11 +7,10 @@ title = {{title}}
 status = "draft"
 created = "{{date}}"
 updated = "{{date}}"
+tags = []
 
 [relationships]
 # The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
 # SL-048). Author them with `doctrine link STD-NNN supersedes|related <target>`.
-# `doctrine inspect STD-NNN` renders them. `superseded_by` (ADR-004) and `tags` stay typed.
 superseded_by = []   # reverse link is derived
-tags          = []   # free-form classification
 
