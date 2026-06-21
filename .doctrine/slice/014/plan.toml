@@ -1,0 +1,80 @@
+# Implementation plan for SL-014 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-014"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# PHASE-01: `boot --emit` — standalone CLI addition, tested in isolation.
+# No coupling to the hook install; rides existing build_sections + render_boot.
+[[phase]]
+id        = "PHASE-01"
+name      = "boot --emit CLI flag"
+objective = "Add `doctrine boot --emit`: regenerate the snapshot and emit its exact bytes to stdout. Factor a single-render build_and_render helper shared with the existing regenerate path."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §D3 committed and approved" },
+  { id = "EN-2", text = "existing boot tests green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`boot --emit` prints the snapshot to stdout" },
+  { id = "EX-2", text = "stdout bytes == on-disk boot.md bytes after write" },
+  { id = "EX-3", text = "`boot --emit` and `--check` are mutually exclusive" },
+  { id = "EX-4", text = "build_and_render helper shared by regenerate() and run_emit() — no double-render" },
+]
+verification = [
+  { id = "VT-1", expects = "run_emit writes boot.md + emits same bytes to stdout (capture, compare)" },
+  { id = "VT-2", expects = "build_and_render is byte-deterministic on repeated calls with same root+exec" },
+  { id = "VT-3", expects = "regenerate behaviour unchanged (existing tests stay green)" },
+  { id = "VT-4", expects = "clap rejects `boot --emit --check` together" },
+]
+specs             = []
+requirements      = []
+
+# PHASE-02: Codex hook install — HookSpec, ownership predicate, merge,
+# install_refresh wiring, trust surfacing, spike coexistence warning.
+# Rides the existing plan_hook merge core; install_hook_to_file extracted as DRY helper.
+[[phase]]
+id        = "PHASE-02"
+name      = "Codex SessionStart hook install + trust surfacing"
+objective = "Wire `boot install --agent codex` to write a SessionStart hook into `.codex/hooks.json` via the existing plan_hook merge core. Add HookSpec::boot_emit, is_doctrine_emit_command ownership predicate, install_hook_to_file DRY extraction, PrintedFallback struct variant with path+snippet, trust instructions, and spike coexistence warning."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and green" },
+  { id = "EN-2", text = "design.md §§D4–D5 committed and approved" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`boot install --agent codex` writes a canonical SessionStart hook into .codex/hooks.json" },
+  { id = "EX-2", text = "idempotent re-run is a no-op (RefreshOutcome::None)" },
+  { id = "EX-3", text = "foreign codex hooks survive the merge" },
+  { id = "EX-4", text = "malformed .codex/hooks.json → PrintedFallback with correct path+snippet, no clobber" },
+  { id = "EX-5", text = "stale exec path is refreshed on re-install" },
+  { id = "EX-6", text = "ownership predicate full command matrix (10 rows) all pass" },
+  { id = "EX-7", text = "trust instructions print on Wired/Refreshed, not on None" },
+  { id = "EX-8", text = "spike coexistence warning prints when a foreign same-matcher SessionStart entry exists" },
+  { id = "EX-9", text = "install_claude_hook behaviour unchanged (existing Claude tests green)" },
+  { id = "EX-10", text = "install_hook_to_file extraction DRY — install_claude_hook and install_codex_hook both call it" },
+]
+verification = [
+  { id = "VT-1", expects = "install_refresh(Codex) writes expected hook entry: parse .codex/hooks.json, assert hooks.SessionStart[0] shape matches desired_entry(&HookSpec::boot_emit)" },
+  { id = "VT-2", expects = "second install_refresh(Codex) returns RefreshOutcome::None" },
+  { id = "VT-3", expects = "pre-existing non-doctrine SessionStart entry survives install_refresh" },
+  { id = "VT-4", expects = "bad JSON in .codex/hooks.json → PrintedFallback { hook_file: CODE_HOOKS_REL, snippet: fallback_for(boot_emit) }, file untouched" },
+  { id = "VT-5", expects = "stale exec path: install with old path, re-install with new path → Refreshed, command updated" },
+  { id = "VT-6", expects = "emit ownership predicate: every row in D4.3 matrix passes (positive: bare exec, spaced exec, poisoned exec; negative: boot, boot --emit --verbose, shell wrapper, sync, stamp, other-tool)" },
+  { id = "VT-7", expects = "trust instructions present in wire() output for Wired and Refreshed outcomes, absent for None" },
+  { id = "VT-8", expects = "spike coexistence warning present when .codex/hooks.json has >1 SessionStart entry with same matcher after install" },
+  { id = "VT-9", expects = "Claude hook install unchanged: existing install_refresh(Claude) tests pass unmodified" },
+  { id = "VT-10", expects = "install_claude_hook calls install_hook_to_file(root, SETTINGS_REL, ...) — test verifies the same path" },
+]
+specs             = []
+requirements      = []
