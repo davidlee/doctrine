@@ -2,50 +2,20 @@
 
 @layer components {
   /* ---------------------------------------------------------------------------
-   * Edit/Done toggle button in focus header
+   * Edit-all scope checkbox (top of the edge table — a scope toggle, not a mode)
    * ------------------------------------------------------------------------- */
-  .cm-edit-toggle {
-    margin-left: 0.75rem;
-    padding: 0.2rem 0.6rem;
-    font-size: 0.8rem;
-    border: 1px solid var(--cm-primary);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--cm-primary);
-    cursor: pointer;
-    vertical-align: middle;
-  }
-
-  .cm-edit-toggle:hover {
-    background: var(--cm-primary);
-    color: var(--cm-btn-text);
-  }
-
-  /* Two-button group: "Edit this" / "Edit all" */
-  .cm-edit-controls {
+  .cm-edit-all {
     display: inline-flex;
-    gap: 0.4rem;
-    vertical-align: middle;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    cursor: pointer;
   }
 
-  .cm-edit-controls .cm-edit-toggle {
-    margin-left: 0;
-  }
-
-  /* "Edit this" carries a pencil affordance and disables with no selection. */
-  .cm-edit-this::before {
-    content: '\270E';
-    margin-right: 0.3rem;
-  }
-
-  .cm-edit-this:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  .cm-edit-this:disabled:hover {
-    background: transparent;
-    color: var(--cm-primary);
+  .cm-edit-all input {
+    cursor: pointer;
   }
 
   /* ---------------------------------------------------------------------------
@@ -145,41 +115,50 @@
     background: var(--hover-bg);
   }
 
-  .cm-edge-label {
-    color: var(--fg);
+  /* Edge-table cell label */
+  .cm-edge-cell {
+    border-radius: 3px;
+    padding: 0.05rem 0.2rem;
+    margin: -0.05rem -0.2rem;
   }
 
-  .cm-editable-node {
+  /* Node cells are plain-clickable (cmFocus); relation cells are inert. */
+  .cm-edge-node {
     cursor: pointer;
     color: var(--cm-primary);
     text-decoration: underline;
     text-decoration-style: dotted;
   }
 
-  .cm-editable-node:hover {
+  .cm-edge-node:hover {
     color: var(--cm-primary-hover);
-  }
-
-  /* Selectable cells (plain-navigation click target) */
-  .cm-edge-cell {
-    cursor: pointer;
-    border-radius: 3px;
-    padding: 0.05rem 0.2rem;
-    margin: -0.05rem -0.2rem;
-  }
-
-  .cm-edge-cell:hover {
     background: var(--hover-bg);
   }
 
-  /* Selected-cell affordance */
-  .cm-selected {
-    background: color-mix(in srgb, var(--cm-primary) 18%, transparent);
-    outline: 1px solid var(--cm-primary);
+  /* Per-cell hover-revealed pencil — hidden until the row is hovered. */
+  .cm-pencil {
+    margin-left: 0.3rem;
+    padding: 0 0.2rem;
+    border: none;
+    background: transparent;
+    color: var(--cm-primary);
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.1s ease;
   }
 
-  /* Inline relabel input (single-field 'Edit this' on a relation) */
-  .cm-relabel-input {
+  .cm-edge-row:hover .cm-pencil {
+    opacity: 0.55;
+  }
+
+  .cm-pencil:hover {
+    opacity: 1;
+  }
+
+  /* Inline cell-edit input (node or relation, in place) */
+  .cm-cell-input {
     padding: 0.2rem 0.35rem;
     border: 1px solid var(--cm-primary);
     border-radius: 3px;
@@ -188,13 +167,13 @@
     box-sizing: border-box;
   }
 
-  .cm-relabel-input:focus {
+  .cm-cell-input:focus {
     outline: none;
     border-color: var(--cm-primary);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--cm-primary) 20%, transparent);
   }
 
-  /* Remove button */
+  /* Remove button — always visible per row */
   .cm-remove-btn {
     padding: 0.15rem 0.4rem;
     border: 1px solid transparent;
@@ -209,22 +188,6 @@
   .cm-remove-btn:hover {
     background: var(--cm-error-bg);
     border-color: var(--cm-error-border);
-  }
-
-  /* Inline rename input */
-  .cm-rename-input {
-    padding: 0.2rem 0.35rem;
-    border: 1px solid var(--cm-primary);
-    border-radius: 3px;
-    font-size: 0.85rem;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .cm-rename-input:focus {
-    outline: none;
-    border-color: var(--cm-primary);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--cm-primary) 20%, transparent);
   }
 
   /* ---------------------------------------------------------------------------
