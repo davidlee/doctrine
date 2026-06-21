@@ -84,3 +84,18 @@ _No per-slice design edits needed._ The implementation conforms to design.md.
 
 _No governance or spec changes needed._ All design decisions were correctly
 implemented; no ADR, spec, or policy surfaces need updating.
+
+## Reconciliation Outcome
+
+All findings were resolved with fix applied inline (F-1). No design or
+governance/spec writes needed.
+
+### Direct edits applied
+- `.agents/skills/audit/SKILL.md`: MCP tool preference preamble added — matches
+  authored source at `plugins/doctrine/skills/audit/SKILL.md` (RV-123 F-1)
+
+### REVs completed
+_None required._
+
+### Withdrawn / tolerated
+_None._
