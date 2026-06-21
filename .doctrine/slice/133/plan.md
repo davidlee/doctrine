@@ -100,12 +100,15 @@ evicted-seq guard.
   phase N but consumed only in N+1 trips `dead_code` "never read" — its only
   readers are tests the gate doesn't compile. This is a per-phase artefact (the
   single-slice design never hit it; everything is consumed by slice-end). The
-  mechanism, carried in each phase's EX criteria: a **transitional
-  `#[allow(dead_code)]`** on the not-yet-consumed addition, commented with the
-  phase that consumes it, **removed by that phase** — PHASE-04 clears PHASE-02/03's,
-  PHASE-05 clears PHASE-04's, none survives the slice (PHASE-05/EX-5). Before
-  reaching for the allow, the cheaper check is whether the gate already tolerates a
-  serde/constructor-written-but-unread field — if so, skip it. This is the main
+  mechanism, carried in each phase's EX criteria: house-style **`#[cfg_attr(not(test),
+  expect(dead_code, reason = "consumed PHASE-NN"))]`** on the not-yet-consumed
+  addition — `expect` not `allow`, because it is **self-clearing** (when the
+  consumer lands the expect fires *unfulfilled*, forcing its own removal — debt
+  cannot rot). PHASE-04's consumers clear PHASE-02/03's, PHASE-05's clear PHASE-04's,
+  none survives the slice (PHASE-05/EX-5). Before reaching for the expect, the
+  cheaper check: a field read by a `#[derive(Debug/Clone/PartialEq)]` impl is
+  already "used" and will not warn — e.g. `EntityFacets` derives Debug+Clone, so
+  its new `risk` field likely needs no suppression at all. This is the main
   execution-time wrinkle the small-phase split buys in exchange for reviewing the
   correctness-critical engine in isolation; it is deliberate, not drift.
 - **Assumptions to confirm at execution** (carried into `/phase-plan`, not yet
