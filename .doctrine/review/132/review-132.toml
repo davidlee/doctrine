@@ -32,7 +32,7 @@ response = """Accepted — "condensed" was underspecified. §5.4 step 6 now defi
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "I3/D10/VT-7 hand-waves next's score sort plus seq precedence and can lose cordage's structural guarantee"
 detail = "Expected: replacing next's order_key consumption must define an implementable partial-order sort that preserves the same surviving structural constraints cordage enforces. Observed: §5.4 says to sort actionable rows by (score desc, id) and then apply seq edges as 'strict precedence nudges'. That is not an algorithm: raw seq_overlay edges may include edges cordage evicted from the composed U to break cycles, while cordage does not expose the surviving U-edge set; ad hoc nudges can either re-impose evicted contradictions or fail transitive seq precedence. Fix: specify a real induced-frontier topological sort with score/id as the priority among currently unconstrained nodes, and define its constraint source (e.g. a cordage accessor for surviving seq constraints, or a temporary cordage graph minted in score/id order); VT-7 must include a Y-branch, a same-chain override, and an evicted/cyclic seq case."
