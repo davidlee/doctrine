@@ -47,7 +47,7 @@ relationships:
 
 | File | Change | Detail |
 |------|--------|--------|
-| `src/facet.rs` (new) | Define `EntityFacets` struct | `{ estimate: Option<EstimateFacet>, value: Option<ValueFacet> }` — pure data struct, no parsing. Wraps already-parsed fields from `SliceDoc` (show path) or `ScannedEntity` (catalog path). Extended with risk/tags when SL-133/136 need them. ADR-001: engine tier — no disk/clock/rng. |
+| `src/facet.rs` (new) | Define `EntityFacets` struct | `{ estimate: Option<EstimateFacet>, value: Option<ValueFacet> }` — pure data struct, no parsing. Wraps already-parsed fields from `SliceDoc` (show path) or `ScannedEntity` (catalog path). Extended with risk/tags when SL-133/136 need them. ADR-001: leaf tier — imports only `estimate` + `value` (both leaf). |
 | `src/slice.rs:1062-1070` | `run_show` — resolve units inline, construct `EntityFacets`, pass to `format_show` | Resolve `estimation_unit`/`value_unit` from the already-loaded `DoctrineToml cfg` via `crate::estimate::resolve_unit` / `crate::value::resolve_unit`. Construct `EntityFacets { estimate: doc.estimate, value: doc.value }`. No catalog coupling — uses the same `cfg` the conduct load already read. |
 | `src/slice.rs:1126` | `format_show` — accept `facets: &EntityFacets`, `estimation_unit: &str`, `value_unit: &str`, render rows | Two `parts.push(...)` after dates line, before relationships |
 | `src/estimate.rs:26-28` | Remove `#[expect(dead_code)]` on `mod display` — `format_estimate_confidence` needs the module | Module-level gate removed; individual `#[expect(dead_code)]` added on `format_estimate_normal` and `format_estimate_verbose` (see D7) |
