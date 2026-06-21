@@ -331,6 +331,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: Option<crate::boot::BootCommand>,
 
+        /// Emit the snapshot to stdout after regenerating (mutually exclusive with --check).
+        #[arg(long, conflicts_with = "check")]
+        emit: bool,
+
         /// Report disk staleness + unpopulated sections without writing (the
         /// disk sentry). Ignored when the `install` subcommand is given.
         #[arg(long)]
@@ -656,8 +660,9 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Boot {
             command,
             check,
+            emit,
             path,
-        } => crate::boot::dispatch(command, check, path, color),
+        } => crate::boot::dispatch(command, check, emit, path, color),
         Command::Catalog { command } => crate::catalog::dispatch(command, color),
         Command::Worktree { command } => crate::worktree::dispatch(command),
         Command::Dispatch { command } => crate::dispatch::dispatch(command, color),

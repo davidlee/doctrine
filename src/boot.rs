@@ -257,10 +257,16 @@ fn build_sections(root: &Path, exec: &Path) -> Vec<Section> {
         .collect()
 }
 
+/// Build every section and render the full snapshot string. Pure — same inputs
+/// yield byte-identical output every time (the deterministic guarantee VT-2).
+fn build_and_render(root: &Path, exec: &Path) -> String {
+    render_boot(&build_sections(root, exec))
+}
+
 /// Regenerate `.doctrine/state/boot.md` under `root`, resolving section bodies
 /// against `exec`. Returns whether the file changed. Pure assembly, single write.
 fn regenerate(root: &Path, exec: &Path) -> anyhow::Result<bool> {
-    let content = render_boot(&build_sections(root, exec));
+    let content = build_and_render(root, exec);
     write_if_changed(&root.join(BOOT_REL), &content)
 }
 
@@ -397,6 +403,19 @@ pub(crate) fn run_check(path: Option<PathBuf>) -> anyhow::Result<()> {
             report.marker_sections.join(", ")
         )?;
     }
+    Ok(())
+}
+
+/// `doctrine boot --emit` — regenerate the governance snapshot AND emit its
+/// exact bytes to stdout. The same bytes written to disk are written to stdout:
+/// one render, one output path each. No trailing extra newline — `render_boot`
+/// already supplies the terminal newline (the deterministic guarantee).
+pub(crate) fn run_emit(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let exec = resolve_exec()?;
+    let content = build_and_render(&root, &exec);
+    write_if_changed(&root.join(BOOT_REL), &content)?;
+    write!(io::stdout(), "{content}")?;
     Ok(())
 }
 
@@ -1813,10 +1832,12 @@ pub(crate) enum BootCommand {
 pub(crate) fn dispatch(
     command: Option<BootCommand>,
     check: bool,
+    emit: bool,
     path: Option<PathBuf>,
     _color: bool,
 ) -> anyhow::Result<()> {
     match command {
+        None if emit => run_emit(path),
         None if check => run_check(path),
         None => run(path),
         Some(BootCommand::Install {
@@ -4516,5 +4537,32 @@ weight = 0
 
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
         assert_eq!(out.mcp_extension, ExtOutcome::NotApplicable);
+    }
+
+    // --- VT-2: build_and_render determinism ---
+
+    #[test]
+    fn build_and_render_is_deterministic() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = root.join("doctrine");
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::write(root.join("doctrine"), b"fake-exe").unwrap();
+        let result1 = build_and_render(root, &exec);
+        let result2 = build_and_render(root, &exec);
+        assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn regenerate_writes_same_bytes_as_build_and_render() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = root.join("doctrine");
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::write(root.join("doctrine"), b"fake-exe").unwrap();
+        regenerate(root, &exec).unwrap();
+        let on_disk = std::fs::read_to_string(root.join(".doctrine/state/boot.md")).unwrap();
+        let built = build_and_render(root, &exec);
+        assert_eq!(on_disk, built);
     }
 }

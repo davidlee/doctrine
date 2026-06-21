@@ -876,6 +876,7 @@ mod write_class_tests {
         assert_eq!(
             cls(Command::Boot {
                 command: None,
+                emit: false,
                 check: false,
                 path: None
             }),
@@ -884,6 +885,7 @@ mod write_class_tests {
         assert_eq!(
             cls(Command::Boot {
                 command: None,
+                emit: false,
                 check: true,
                 path: None
             }),
@@ -897,6 +899,7 @@ mod write_class_tests {
                     dry_run: false,
                     yes: false,
                 }),
+                emit: false,
                 check: false,
                 path: None,
             }),
