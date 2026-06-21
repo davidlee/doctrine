@@ -1,0 +1,86 @@
+# Implementation plan for SL-134 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-134"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "FacetField + set_facet_mixed — shared leaf"
+objective = "Add FacetField enum (Str, Arr), set_facet_mixed core, and apply_set_mixed IO wrapper to facet_write.rs. Pure, additive, under the behaviour-preservation gate: every existing VT test stays green unchanged."
+
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and reconciled with RV-125" },
+  { id = "EN-2", text = "existing facet_write VT-1 through VT-8 suite passes unchanged" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "FacetField enum defined with Str and Arr variants" },
+  { id = "EX-2", text = "set_facet_mixed pure core: table-alloc, overwrite, no-op guard per type, shape-error on non-table" },
+  { id = "EX-3", text = "apply_set_mixed IO wrapper over edit_in_place" },
+  { id = "EX-4", text = "VT-13 through VT-17 passing (alloc absent, overwrite, no-op Str, no-op Arr, forward-compat)" },
+]
+
+verification = [
+  { id = "VT-1", expects = "FacetField::Str writes string value; no-op on identical" },
+  { id = "VT-2", expects = "FacetField::Arr writes array; no-op on identical element-wise" },
+  { id = "VT-3", expects = "set_facet_mixed allocates absent [facet] table" },
+  { id = "VT-4", expects = "set_facet_mixed preserves unknown sibling keys" },
+  { id = "VT-5", expects = "All existing facet_write VT-1 through VT-8 tests pass unchanged" },
+]
+
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Command layer + CLI registration"
+objective = "Add RiskSetArgs, RiskClearArgs, read_kind, run_risk_set, run_risk_clear in commands/facet.rs; RiskAction + Risk variant in Command + dispatch arm in cli.rs; Write(\"risk\") in guard.rs; ALL visibility bump in backlog.rs. Integration tests for the full set/clear flow."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — apply_set_mixed available" },
+  { id = "EN-2", text = "RiskLevel already derives clap::ValueEnum (backlog.rs:503)" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "RiskSetArgs + RiskClearArgs clap structs with correct annotations" },
+  { id = "EX-2", text = "read_kind helper gating on kind = \"risk\"" },
+  { id = "EX-3", text = "run_risk_set: at-least-one axis guard, kind gate, FacetField construction, apply_set_mixed call, echo" },
+  { id = "EX-4", text = "run_risk_clear: kind gate, apply_clear call, echo" },
+  { id = "EX-5", text = "RiskAction enum, Risk variant in Command, dispatch arm, Write(\"risk\") guard" },
+  { id = "EX-6", text = "ItemKind::ALL visibility: const → pub(crate) const" },
+  { id = "EX-7", text = "VT-1 through VT-11 + VT-18 passing" },
+  { id = "EX-8", text = "cargo clippy zero warnings; just gate passes --workspace" },
+]
+
+verification = [
+  { id = "VT-1", expects = "risk set --likelihood low --impact medium writes both to [facet]" },
+  { id = "VT-2", expects = "risk set --likelihood only — partial write, impact unchanged" },
+  { id = "VT-3", expects = "risk set with neither axis → error" },
+  { id = "VT-4", expects = "risk set on non-risk item → kind-gate error" },
+  { id = "VT-5", expects = "risk set on non-backlog entity → error" },
+  { id = "VT-6", expects = "risk clear removes [facet] table" },
+  { id = "VT-7", expects = "risk clear on absent facet → no-op echo" },
+  { id = "VT-8", expects = "risk set idempotent — same values → no-op echo" },
+  { id = "VT-9", expects = "risk set --origin writes origin string" },
+  { id = "VT-10", expects = "risk set --controls A --controls B writes controls = [\"A\", \"B\"]" },
+  { id = "VT-11", expects = "risk set preserves non-managed facet keys" },
+  { id = "VT-12", expects = "risk set on risk item with absent [facet] table — allocates table" },
+  { id = "VA-1", expects = "doctrine risk --help shows set/clear subcommands with correct descriptions" },
+  { id = "VA-2", expects = "doctrine risk set --help shows --controls long_help declaring replace semantics" },
+]
+
+specs             = []
+requirements      = []
