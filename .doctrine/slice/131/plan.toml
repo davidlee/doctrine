@@ -70,59 +70,75 @@ requirements = []
 
 [[phase]]
 id        = "PHASE-03"
-name      = "MCP dispatch unification and memory tool definitions"
-objective = "Change call_tool return type to String, wrap review arms, fix double-encoding. Add 4 memory tool definitions, parse helpers, and handler match arms. Wire handlers to PHASE-02 helpers."
+name      = "MCP dispatch refactor and tool definitions"
+objective = "Change call_tool return type to String, wrap 10 review arms, fix handle_tools_call double-encoding. Add 14 tool definitions (10 review + 4 memory). Add opt_bool_field and parse helpers. No memory handler wiring yet."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 complete — all structured helpers present and tested" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "call_tool returns anyhow::Result<String>; 10 review arms wrapped with .map(|o| serde_json::to_string(&o)?)" },
-  { id = "EX-2", text = "handle_tools_call Ok arm uses McpToolResult::text(out) directly (no double-encoding)" },
+  { id = "EX-2", text = "handle_tools_call Ok arm uses McpToolResult::text(out) directly — no re-serialization (double-encoding guard)" },
   { id = "EX-3", text = "ExtractFields gains opt_bool_field(name) -> Option<bool>" },
   { id = "EX-4", text = "parse_memory_type, parse_status, parse_lifespan helpers added — wrap errors with invalid arguments: prefix" },
-  { id = "EX-5", text = "4 memory tool definitions added to tools() vec: memory_find, memory_retrieve, memory_show, memory_list" },
-  { id = "EX-6", text = "memory_find handler: find_for_mcp + pagination envelope; no-selector caps at 20" },
-  { id = "EX-7", text = "memory_retrieve handler: mutual exclusivity validated; ref branch → retrieve_reference; scope branch → run_retrieve" },
-  { id = "EX-8", text = "memory_show handler: run_show JSON → collect_all + freeze → resolve Memory → check_retrievable + backlink_rows_for → enriched JSON; view, include_body, and backlinks_limit honoured" },
-  { id = "EX-9", text = "memory_list handler: limit resolved (default 50, 0→all) → list_for_mcp → pagination envelope" },
-  { id = "EX-10", text = "memory_retrieve validates min_trust via parse_min_trust before branching" },
+  { id = "EX-5", text = "14 tool definitions in tools() vec: 10 existing review + 4 new memory (memory_find, memory_retrieve, memory_show, memory_list)" },
+  { id = "EX-6", text = "tool_list_has_10_tools updated to 14; tool_list_names includes all 4 new names" },
 ]
 verification = [
-  { id = "VT-1", expects = "review_new/list/show/raise/dispose/verify/contest/withdraw/status/prime produce byte-identical JSON after call_tool→String" },
-  { id = "VT-2", expects = "MCP response content[0].text parses as JSON object, not quoted string (double-encoding guard)" },
-  { id = "VT-3", expects = "tool_list_has_10_tools updated to 14; tool_list_names includes 4 new names" },
-  { id = "VT-4", expects = "memory_find with no args returns capped 20 rows with total/offset/limit/next_offset" },
-  { id = "VT-5", expects = "memory_find rows include key and held_back_on_retrieve fields" },
-  { id = "VT-6", expects = "memory_retrieve with min_trust: banana returns -32602" },
-  { id = "VT-7", expects = "memory_retrieve with reference + query probe returns -32602 (mutual exclusivity)" },
-  { id = "VT-8", expects = "memory_show with view: summary excludes body; with invalid uid returns error" },
-  { id = "VT-9", expects = "memory_show with backlinks_limit: 5 returns ≤5 backlinks + backlinks_total" },
-  { id = "VT-10", expects = "memory_list defaults to 50 rows; limit: 0 returns all" },
-  { id = "VT-11", expects = "all PHASE-01 + PHASE-02 tests still green" },
-  { id = "VT-12", expects = "cargo clippy zero warnings" },
+  { id = "VT-1", expects = "all 10 review MCP tools produce byte-identical JSON after call_tool→String refactor" },
+  { id = "VT-2", expects = "review MCP response content[0].text parses as JSON object, NOT a quoted string (double-encoding trapdoor guard)" },
+  { id = "VT-3", expects = "tool_list_has_10_tools → tool_list_has_14_tools; tool_list_names includes memory_find/retrieve/show/list" },
+  { id = "VT-4", expects = "cargo clippy zero warnings on mcp_server module" },
 ]
 specs        = []
 requirements = []
 
 [[phase]]
 id        = "PHASE-04"
-name      = "Integration tests and skill updates"
-objective = "Add MCP integration tests against a live server, update skill files, final gates."
+name      = "Memory MCP handler wiring"
+objective = "Add 4 memory tool handler arms in call_tool, wired to PHASE-02 helpers. Mutual exclusivity and min_trust validation in memory_retrieve. memory_show enrichment (consumable + backlinks)."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-03 complete — all MCP handlers wired and unit-tested" },
+  { id = "EN-1", text = "PHASE-03 complete — dispatch refactor green, 14 tool definitions present, double-encoding guard proven" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "memory_find handler: find_for_mcp + pagination envelope; no-selector caps at 20" },
+  { id = "EX-2", text = "memory_retrieve handler: mutual exclusivity validated; ref branch → retrieve_reference; scope branch → run_retrieve; min_trust validated via parse_min_trust" },
+  { id = "EX-3", text = "memory_show handler: run_show JSON → collect_all + freeze → resolve Memory → check_retrievable + backlink_rows_for → enriched JSON; view, include_body, backlinks_limit honoured" },
+  { id = "EX-4", text = "memory_list handler: limit resolved (default 50, 0→all) → list_for_mcp → pagination envelope" },
+]
+verification = [
+  { id = "VT-1", expects = "memory_find with no args returns capped 20 rows with total/offset/limit/next_offset" },
+  { id = "VT-2", expects = "memory_find rows include key and held_back_on_retrieve fields" },
+  { id = "VT-3", expects = "memory_retrieve with min_trust: banana returns -32602" },
+  { id = "VT-4", expects = "memory_retrieve with reference + query probe returns -32602 (mutual exclusivity)" },
+  { id = "VT-5", expects = "memory_show with view: summary excludes body; with invalid uid returns error" },
+  { id = "VT-6", expects = "memory_show with backlinks_limit: 5 returns ≤5 backlinks + backlinks_total" },
+  { id = "VT-7", expects = "memory_show with include_body: false excludes body (metadata + links only)" },
+  { id = "VT-8", expects = "memory_list defaults to 50 rows; limit: 0 returns all" },
+  { id = "VT-9", expects = "all PHASE-03 tests still green (review compat)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Integration tests and skill updates"
+objective = "Add MCP integration tests reusing existing tests/e2e_mcp_server.rs infrastructure. Update skill files. Final gates."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete — all memory handlers wired and unit-tested" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "retrieve-memory/SKILL.md: MCP tool preference preamble added" },
   { id = "EX-2", text = "reviewing-memory/SKILL.md: MCP shortcut note added" },
   { id = "EX-3", text = "audit/SKILL.md: MCP tool preference preamble added" },
-  { id = "EX-4", text = "Integration tests: memory_find + memory_list round-trip against repo's own corpus" },
-  { id = "EX-5", text = "Integration tests: memory_retrieve with trust holdback (low-trust high-severity suppressed)" },
-  { id = "EX-6", text = "Integration tests: memory_show with consumable/notes/backlinks enrichment" },
-  { id = "EX-7", text = "just check green" },
-  { id = "EX-8", text = "cargo clippy zero warnings" },
+  { id = "EX-4", text = "E2e tests in tests/e2e_mcp_server.rs: memory_find + memory_list round-trip against seeded memory corpus" },
+  { id = "EX-5", text = "E2e test: memory_retrieve with min_trust: high suppresses low-trust high-severity memory" },
+  { id = "EX-6", text = "E2e test: memory_show returns consumable/notes/backlinks for known uid" },
+  { id = "EX-7", text = "E2e test: memory_retrieve with reference to held-back memory returns error" },
+  { id = "EX-8", text = "just check green" },
+  { id = "EX-9", text = "cargo clippy zero warnings" },
 ]
 verification = [
-  { id = "VT-1", expects = "MCP memory_find + memory_list request-response cycle succeeds against doctrine repo corpus" },
+  { id = "VT-1", expects = "MCP memory_find + memory_list request-response cycle succeeds against seeded corpus" },
   { id = "VT-2", expects = "MCP memory_retrieve with min_trust: high suppresses low-trust high-severity memory" },
   { id = "VT-3", expects = "MCP memory_show returns consumable: false and notes for quarantined memory" },
   { id = "VT-4", expects = "MCP memory_retrieve with reference to held-back memory returns error" },
