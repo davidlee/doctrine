@@ -1,0 +1,73 @@
+id    = 124
+slug  = "sl-014-design-review-codex-sessionstart-emit-boot-wiring"
+title = "SL-014 design review: Codex SessionStart-emit boot wiring"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-014"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected Codex install to replace the dead AGENTS.md import path; observed design only changes the refresh arm and leaves import_targets pre-wire intact"
+detail = "SL-014 scope says replace the codex import_targets/refresh path with the SessionStart hook writer; design D1 says the AGENTS.md import is untouched / no AGENTS.md change. But src/boot.rs:468-471 still maps Harness::Codex to AGENTS.md, and wire() calls ensure_boot_import before install_refresh at src/boot.rs:1627. Design D4.5/D6 only modifies install_refresh, so a fresh codex install still writes the dead @.doctrine/state/boot.md line that codex never expands. Decide explicitly: remove the Codex import target (preserve existing lines without adding new ones), or admit and verify the dead import remains intentional."
+disposition = "tolerated"
+response = """
+The reviewer is correct: `import_targets` still maps Codex → AGENTS.md, and `ensure_boot_import` writes the guard block whether or not codex is detected. 
+
+Decision: keep it. The guard block is ~160 bytes of committed content that codex ignores. Removing it for codex-only repos would require a separate un-import operation that crosses into the Claude import path — out of scope. Design D1 now explicitly acknowledges this: "the guard block stays; codex ignores it.""""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected malformed Codex hook fallback to name .codex/hooks.json and emit boot --emit; observed design leaves the shared fallback hard-coded to Claude boot"
+detail = "Design D4.4/D7 require malformed .codex/hooks.json to fail soft with a manual fallback. The current reporting path is not generic: src/boot.rs:1646-1652 prints {SETTINGS_REL} and fallback_snippet(exec), while fallback_snippet at src/boot.rs:1026-1027 always renders HookSpec::boot(exec). D4.1 only adds install_hook_to_file/install_codex_hook and says fallback_for is unchanged; it does not change RefreshOutcome/RefreshReport or wire() to carry the hook path/spec. As designed, the Codex malformed-config path would tell the user to edit .claude/settings.local.json and paste a non-emitting <exec> boot hook, leaving codex unwired. Make the fallback path/spec explicit and verify the actual install output, not only no-clobber."
+disposition = "fixed"
+response = """Correct. Design D4.4 now specifies `RefreshOutcome::PrintedFallback` becomes a struct variant carrying `hook_file: &'static str` and `snippet: String`. `install_hook_to_file` accepts the rel path + spec, annotates the fallback, and `wire()` uses those fields. No harness-branching in the printer. D7 gains a VT test: "Codex malformed-hook fallback prints .codex/hooks.json + boot --emit snippet.""""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected boot --emit to write and emit one byte-identical snapshot; observed design double-renders and uses println on an already-newline-terminated renderer"
+detail = 'Design D3 says run_emit calls regenerate() then println!("{}", render_boot(...)); D7 asserts stdout == render_boot(build_sections(...)). Current render_boot already appends a trailing newline (src/boot.rs:117-132), so println adds an extra blank line and also violates the repo print_stdout lint style. Worse, regenerate() computes and writes one render (src/boot.rs:262-264) and the later render_boot(build_sections(...)) can observe changed disk/governance state, so stdout is not guaranteed to be the bytes just written to .doctrine/state/boot.md. Factor a single content-producing helper, write_if_changed that content, and write the exact content to stdout without an added newline; test exact stdout bytes and on-disk bytes together.'
+disposition = "fixed"
+response = 'Correct on both counts. Design D3 now factors a private `build_and_render(root, exec) -> String` helper. `regenerate` = build_and_render + write_if_changed. `run_emit` = build_and_render + write_if_changed + `write!(stdout, "{content}")`. One render, exact same bytes to both sinks, no extra newline. D7 VT test updated: "assert stdout byte-for-byte against on-disk boot.md."'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected first install to converge the known spike hook; observed design preserves it as foreign and accepts duplicate concurrent SessionStart injection"
+detail = "The current repo has a spike hook in .codex/hooks.json:9: sh -c doctrine boot >/dev/null; cat ...boot.md. Codex docs captured in scratch/codex/...md:37-39 say matching hooks all run and multiple matching command hooks for the same event are launched concurrently. Design D8 explicitly says is_doctrine_emit_command will not own the spike, plan_hook will preserve it, and the user must remove it manually. That means the first dogfood install creates two startup|resume|clear|compact SessionStart hooks, racing two boot regenerates and injecting two boot snapshots into developer context. This is not a hypothetical edge; it is the checked-in local state. Either migrate/remove/warn on the exact spike shape, or make install refuse with a clear remediation. Do not silently ship duplicate governance injection."
+disposition = "fixed"
+response = 'Agreed — "user removes manually" is a footgun for the checked-in state. Design D5.2 now specifies a concurrency warning: after writing the canonical hook, re-parse `.codex/hooks.json` and check whether the SessionStart array has >1 entry with the same matcher. If so, print a warning telling the user both hooks fire concurrently and to remove the old one. The spike entry itself is not auto-removed (foreign-hook-survival is the right default), but the user is alerted. D7 gains a VT test for this warning.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected the Codex trust activation step to be wired and verified; observed design leaves it as prose detached from install outcomes"
+detail = "Trust surfacing is a slice objective, but D5 only sketches text after writing the hook. The existing wire() output is outcome-driven (src/boot.rs:1637-1654), and the design does not say when the Codex trust instructions print: Wired only, Refreshed, None, dry-run, or every Codex-targeted install. If the hook is already current but not yet trusted, a no-op reinstall would print nothing while Codex still skips it. D8 also says [features] hooks = true is required/documented, but D5 omits any output or verification for hooks disabled in config.toml/requirements.toml. Add a concrete Codex output policy and tests for wire()/run_install output so installed-but-inactive cannot masquerade as done."
+disposition = "fixed"
+response = 'Design D5 now specifies exact output policy: trust instructions print on Wired and Refreshed (hook was written or normalised), not on None (already canonical — trust already dealt with), and print on dry_run tagged [dry-run]. Step 1 of the instructions now explicitly mentions `[features] hooks = true` in `.codex/config.toml` — documented, not automated (TOML merge out of scope). D7 gains a VT test: "Trust instructions print on Wired/Refreshed, not on None."'
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Expected new boot --emit ownership predicate to have a full command matrix; observed design only proves informal suffix non-overlap"
+detail = 'D4.3 introduces is_doctrine_emit_command by strip_suffix(" boot --emit") plus is_doctrine_program, joining the existing boot/sync/stamp ownership family. D7 only asks for a disjointness test that emit does not match boot/sync/stamp, and says poison tolerance inherits existing is_doctrine_program tests. That misses the predicate integration risks: positive match for bare/spaced exec, stale exec refresh, trailing whitespace, and (deleted); negative match for plain doctrine boot, doctrine boot --emit extra, shell spike wrappers, and the reverse direction that boot/sync/stamp do not own emit. A one-token predicate slip here strands stale owned hooks as foreign and creates duplicates. Add the explicit matrix.'
+disposition = "fixed"
+response = 'Accepted. Design D4.3 now carries a full command matrix: positive rows (bare exec, spaced exec, poisoned exec), negative rows (plain boot, boot --emit --verbose, shell wrapper, sync, stamp, other-tool). D7 VT test updated: "Emit ownership predicate — full command matrix: test every row."'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
