@@ -3,7 +3,7 @@ slug = "codex-boot-hook"
 title = "codex SessionStart-emit boot wiring"
 status = "proposed"
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-06-21"
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
