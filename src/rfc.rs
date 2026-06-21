@@ -243,6 +243,7 @@ mod tests {
                 slug: "use-rust".to_string(),
                 title: "Use Rust?".to_string(),
                 status: "open".to_string(),
+                tags: vec![],
             }
         );
         // VT-1: status seeds open, the date is injected, no token survives.

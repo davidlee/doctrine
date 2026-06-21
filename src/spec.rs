@@ -2051,6 +2051,7 @@ mod tests {
                 slug: "onboarding".to_string(),
                 title: "Onboarding".to_string(),
                 status: "draft".to_string(),
+                tags: vec![],
             }
         );
     }

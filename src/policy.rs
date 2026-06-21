@@ -267,6 +267,7 @@ mod tests {
                 slug: "two-space-indent".to_string(),
                 title: "Two-space indent".to_string(),
                 status: "draft".to_string(),
+                tags: vec![],
             }
         );
         // status seeds draft, the date is injected, no token survives.
