@@ -1575,7 +1575,8 @@ pub(crate) fn run_after(
         for edge in &ds.after {
             let is_dangling = match crate::integrity::parse_canonical_ref(&edge.to) {
                 Ok((kref, tid)) => {
-                    let target_path = crate::entity::id_path(&root, kref.kind, tid, crate::entity::Ext::Toml);
+                    let target_path =
+                        crate::entity::id_path(&root, kref.kind, tid, crate::entity::Ext::Toml);
                     if target_path.exists() {
                         let body = std::fs::read_to_string(&target_path).unwrap_or_default();
                         let val: toml::Value = match toml::from_str(&body) {
@@ -1594,7 +1595,12 @@ pub(crate) fn run_after(
             if is_dangling {
                 let reason = match crate::integrity::parse_canonical_ref(&edge.to) {
                     Ok((kref2, tid2)) => {
-                        let target_path = crate::entity::id_path(&root, kref2.kind, tid2, crate::entity::Ext::Toml);
+                        let target_path = crate::entity::id_path(
+                            &root,
+                            kref2.kind,
+                            tid2,
+                            crate::entity::Ext::Toml,
+                        );
                         if target_path.exists() {
                             let body = std::fs::read_to_string(&target_path).unwrap_or_default();
                             let val: toml::Value = match toml::from_str(&body) {

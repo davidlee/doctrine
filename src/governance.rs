@@ -210,8 +210,13 @@ fn parse_ref(g: &GovKind, reference: &str) -> anyhow::Result<u32> {
 fn read_doc(g: &GovKind, root: &Path, id: u32) -> anyhow::Result<(Doc, String, String)> {
     let name = format!("{id:03}");
     let toml_path = entity::id_path(root, &g.kind, id, entity::Ext::Toml);
-    let text = fs::read_to_string(&toml_path)
-        .with_context(|| format!("{} {name} not found at {}", g.kind.stem, toml_path.display()))?;
+    let text = fs::read_to_string(&toml_path).with_context(|| {
+        format!(
+            "{} {name} not found at {}",
+            g.kind.stem,
+            toml_path.display()
+        )
+    })?;
     let doc: Doc = toml::from_str(&text)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
     let md_path = entity::id_path(root, &g.kind, id, entity::Ext::Md);
@@ -352,8 +357,8 @@ fn show_json(
         "kind".to_string(),
         serde_json::Value::String(g.kind.stem.to_string()),
     );
-    let mut doc_value =
-        serde_json::to_value(doc).with_context(|| format!("failed to serialize {}", g.kind.stem))?;
+    let mut doc_value = serde_json::to_value(doc)
+        .with_context(|| format!("failed to serialize {}", g.kind.stem))?;
     // Splice the migrated `related` axis back into the `relationships` object so the
     // JSON shape is byte-identical to the pre-migration typed-field serialization.
     if let Some(rel) = doc_value

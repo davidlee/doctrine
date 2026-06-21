@@ -243,58 +243,7 @@ pub(crate) struct FindRetrieveArgs {
     pub(crate) expand: Option<usize>,
 }
 
-// ---------------------------------------------------------------------------
-// Estimate / Value CLI argument structs (SL-118 PHASE-03)
-// ---------------------------------------------------------------------------
-
-/// `doctrine estimate set <ID> ...`
-#[derive(clap::Args)]
-struct EstimateSetArgs {
-    /// Canonical entity ref (e.g. SL-118, ADR-001)
-    id: String,
-    /// Lower bound (>= 0, finite); omit with -x
-    lower: Option<f64>,
-    /// Upper bound (>= lower, finite); omit with -x
-    #[arg(allow_hyphen_values = true)]
-    upper: Option<f64>,
-    /// Point estimate — sets lower == upper == N
-    #[arg(long = "exact", short = 'x', conflicts_with_all = ["lower", "upper"])]
-    exact: Option<f64>,
-    /// Explicit project root (default: auto-detect)
-    #[arg(short = 'p', long)]
-    path: Option<PathBuf>,
-}
-
-#[derive(clap::Args)]
-struct EstimateClearArgs {
-    /// Canonical entity ref (e.g. SL-118, ADR-001)
-    id: String,
-    /// Explicit project root (default: auto-detect)
-    #[arg(short = 'p', long)]
-    path: Option<PathBuf>,
-}
-
-/// `doctrine value set <ID> <magnitude>`
-#[derive(clap::Args)]
-struct ValueSetArgs {
-    /// Canonical entity ref (e.g. SL-118)
-    id: String,
-    /// Magnitude (any finite f64 — may be negative)
-    #[arg(allow_hyphen_values = true)]
-    magnitude: f64,
-    /// Explicit project root (default: auto-detect)
-    #[arg(short = 'p', long)]
-    path: Option<PathBuf>,
-}
-
-#[derive(clap::Args)]
-struct ValueClearArgs {
-    /// Canonical entity ref (e.g. SL-118)
-    id: String,
-    /// Explicit project root (default: auto-detect)
-    #[arg(short = 'p', long)]
-    path: Option<PathBuf>,
-}
+use crate::commands::facet::{EstimateClearArgs, EstimateSetArgs, ValueClearArgs, ValueSetArgs};
 
 #[derive(clap::Subcommand)]
 enum EstimateAction {
@@ -777,6 +726,7 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+
 enum CatalogCommand {
     /// Thin JSON dump of the hydrated entity corpus `Catalog` — entities,
     /// edges, and diagnostics. Output is always JSON (no format choice).
@@ -2984,271 +2934,6 @@ enum SkillsCommand {
     },
 }
 
-/// Mutation classification for the worker-mode guard (ADR-006 D2a). `Write`
-/// carries the verb label named in the refusal. EXHAUSTIVE by design (§7-D6):
-/// no wildcard arm, so a future `Command` variant is a compile error — never a
-/// silently-permitted write (the X4 self-defence).
-enum WriteClass {
-    Read,
-    Write(&'static str),
-    /// Orchestrator-only privileged verbs (SL-056 PHASE-06): `fork` is the FIRST
-    /// member; later phases add `import`/`land`/`gc`. Carries the verb label like
-    /// `Write`. REFUSED under worker-mode — these are the orchestrator's funnel
-    /// operations, never a worker's.
-    Orchestrator(&'static str),
-    /// `worktree marker --clear` (SL-056 §3, §5): a bespoke class that the
-    /// worker-mode guard does NOT refuse (locking the marker's only remover behind
-    /// the marker is a self-brick we reject). Its own bespoke refusals live in
-    /// `run_marker_clear`.
-    MarkerClear,
-    /// `worktree marker --stamp-subagent` (SL-056 PHASE-10): the claude harness
-    /// spawn path's provision+mark step. REFUSED under worker-mode via the SAME
-    /// branch as `Orchestrator`/`Write` — NO verb-identity carve-out. The legit
-    /// first stamp passes automatically: the target worktree bears no marker yet,
-    /// so `worker_mode == false` (marker-absent ⇒ allow). Carries the verb label.
-    Hookmint(&'static str),
-}
-
-#[expect(
-    clippy::match_same_arms,
-    reason = "consecutive Read arms across different nested-match shapes; merging would degrade readability"
-)]
-fn write_class(cmd: &Command) -> WriteClass {
-    use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
-    match cmd {
-        Command::Install { .. } => Write("install"),
-        Command::Skills { command } => match command {
-            SkillsCommand::List { .. } => Read,
-        },
-        Command::Map { .. } => Write("map"),
-        Command::ConceptMap { command } => match command {
-            ConceptMapCommand::New { .. } => Write("concept-map new"),
-            ConceptMapCommand::Add { .. } => Write("concept-map add"),
-            ConceptMapCommand::Remove { .. } => Write("concept-map remove"),
-            ConceptMapCommand::RenameNode { .. } => Write("concept-map rename-node"),
-            ConceptMapCommand::List { .. }
-            | ConceptMapCommand::Show { .. }
-            | ConceptMapCommand::Check { .. }
-            | ConceptMapCommand::Export { .. } => Read,
-        },
-        Command::Slice { command } => match command {
-            SliceCommand::New { .. } => Write("slice new"),
-            SliceCommand::Design { .. } => Write("slice design"),
-            SliceCommand::Plan { .. } => Write("slice plan"),
-            SliceCommand::Phases { .. } => Write("slice phases"),
-            SliceCommand::Notes { .. } => Write("slice notes"),
-            SliceCommand::Phase { .. } => Write("slice phase"),
-            SliceCommand::Status { .. } => Write("slice status"),
-            SliceCommand::List { .. } | SliceCommand::Show { .. } => Read,
-        },
-        Command::Memory { command } => match command {
-            MemoryCommand::Record { .. } => Write("memory record"),
-            MemoryCommand::Verify { .. } => Write("memory verify"),
-            MemoryCommand::Sync { command, .. } => match command {
-                None => Write("memory sync"),
-                Some(SyncCommand::Install { .. }) => Write("memory sync install"),
-            },
-            MemoryCommand::Tag { .. } => Write("memory tag"),
-            MemoryCommand::Status { .. } => Write("memory status"),
-            MemoryCommand::Edit { .. } => Write("memory edit"),
-            MemoryCommand::Validate { .. }
-            | MemoryCommand::Show { .. }
-            | MemoryCommand::List { .. }
-            | MemoryCommand::Find { .. }
-            | MemoryCommand::Retrieve { .. }
-            | MemoryCommand::ResolveLinks { .. }
-            | MemoryCommand::Backlinks { .. } => Read,
-        },
-        Command::Review { command } => match command {
-            ReviewCommand::New { .. } => Write("review new"),
-            ReviewCommand::Raise { .. } => Write("review raise"),
-            ReviewCommand::Dispose { .. } => Write("review dispose"),
-            ReviewCommand::Verify { .. } => Write("review verify"),
-            ReviewCommand::Contest { .. } => Write("review contest"),
-            ReviewCommand::Withdraw { .. } => Write("review withdraw"),
-            ReviewCommand::Unlock { .. } => Write("review unlock"),
-            ReviewCommand::List { .. }
-            | ReviewCommand::Show { .. }
-            | ReviewCommand::Status { .. }
-            | ReviewCommand::Prime { .. } => Read,
-        },
-        Command::Rec { command } => match command {
-            RecCommand::New { .. } => Write("rec new"),
-            RecCommand::List { .. } | RecCommand::Show { .. } => Read,
-        },
-        Command::Revision { command } => match command {
-            RevisionCommand::New { .. } => Write("revision new"),
-            RevisionCommand::Status { .. } => Write("revision status"),
-            RevisionCommand::Show { .. } => Read,
-            RevisionCommand::Change { command } => match command {
-                RevisionChangeCommand::Add { .. } => Write("revision change add"),
-            },
-            RevisionCommand::Approve { .. } => Write("revision approve"),
-            RevisionCommand::Apply { .. } => Write("revision apply"),
-        },
-        // Writes authored requirement status + an authored REC — an authored write.
-        Command::Reconcile { .. } => Write("reconcile"),
-        Command::Adr { command } => match command {
-            AdrCommand::New { .. } => Write("adr new"),
-            AdrCommand::Status { .. } => Write("adr status"),
-            AdrCommand::List { .. } | AdrCommand::Show { .. } => Read,
-        },
-        Command::Policy { command } => match command {
-            PolicyCommand::New { .. } => Write("policy new"),
-            PolicyCommand::Status { .. } => Write("policy status"),
-            PolicyCommand::List { .. } | PolicyCommand::Show { .. } => Read,
-        },
-        Command::Standard { command } => match command {
-            StandardCommand::New { .. } => Write("standard new"),
-            StandardCommand::Status { .. } => Write("standard status"),
-            StandardCommand::List { .. } | StandardCommand::Show { .. } => Read,
-        },
-        Command::Rfc { command } => match command {
-            RfcCommand::New { .. } => Write("rfc new"),
-            RfcCommand::Status { .. } => Write("rfc status"),
-            RfcCommand::List { .. } | RfcCommand::Show { .. } => Read,
-        },
-        Command::Spec { command } => match command {
-            SpecCommand::New { .. } => Write("spec new"),
-            SpecCommand::Req { command } => match command {
-                SpecReqCommand::Add { .. } => Write("spec req add"),
-                SpecReqCommand::Status { .. } => Write("spec req status"),
-                // Read-only authored roster (design §5.3).
-                SpecReqCommand::List { .. } => Read,
-            },
-            SpecCommand::List { .. } | SpecCommand::Show { .. } | SpecCommand::Validate { .. } => {
-                Read
-            }
-        },
-        // Export is read-only (RO proof): load + serialize, no mutation path.
-        Command::Export { command } => match command {
-            ExportCommand::Lazyspec { .. } => Read,
-        },
-        Command::Backlog { command } => match command {
-            BacklogCommand::New { .. } => Write("backlog new"),
-            BacklogCommand::Edit { .. } => Write("backlog edit"),
-            BacklogCommand::Needs { .. } => Write("backlog needs"),
-            BacklogCommand::After { .. } => Write("backlog after"),
-            BacklogCommand::Tag { .. } => Write("backlog tag"),
-            BacklogCommand::List { .. } | BacklogCommand::Show { .. } => Read,
-        },
-        Command::Knowledge { command } => match command {
-            KnowledgeCommand::New { .. } => Write("knowledge new"),
-            KnowledgeCommand::Status { .. } => Write("knowledge status"),
-            KnowledgeCommand::List { .. } | KnowledgeCommand::Show { .. } => Read,
-        },
-        Command::Serve { .. } => Read,
-        Command::Boot { command, .. } => match command {
-            None => Write("boot"),
-            Some(BootCommand::Install { .. }) => Write("boot install"),
-        },
-        Command::Worktree { command } => match command {
-            // Provision/check-allowlist write *fork* files, not the doctrine state
-            // the guard protects, and never run in worker context (§5.2) — Read.
-            // branch-point-check is a HEAD read + ref compare — no authored write,
-            // callable under worker-mode by construction (§5.2, C-V).
-            // status reads the resolved mode (SL-056 §3) — open to workers.
-            // verify-worker is a HEAD read + marker probe + is-ancestor compare on
-            // the worker dir — no authored write, diagnostic only; harmless under
-            // worker-mode (design §8.4/§8.6 lists no impersonation test for it).
-            WorktreeCommand::Provision { .. }
-            | WorktreeCommand::CheckAllowlist { .. }
-            | WorktreeCommand::BranchPointCheck { .. }
-            | WorktreeCommand::VerifyWorker { .. }
-            | WorktreeCommand::Status { .. } => Read,
-            // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
-            // first Orchestrator-classed verb; refused under worker-mode.
-            WorktreeCommand::Fork { .. } => Orchestrator("fork"),
-            // coordinate creates/resumes the orchestrator's OWN coordination
-            // worktree (SL-064 §2) — markerless, but still an orchestrator funnel
-            // operation; refused under worker-mode via the SAME guard as fork (EX-4).
-            WorktreeCommand::Coordinate { .. } => Orchestrator("coordinate"),
-            // import lands a worker delta into the coordination index (SL-056
-            // PHASE-07) — Orchestrator-classed; refused under worker-mode.
-            WorktreeCommand::Import { .. } => Orchestrator("import"),
-            // land lands a solo fork onto the coordination branch via --no-ff merge
-            // (SL-056 PHASE-08) — Orchestrator-classed; refused under worker-mode.
-            WorktreeCommand::Land { .. } => Orchestrator("land"),
-            // gc reaps a spent worktree fork once provably landed (SL-056 PHASE-09)
-            // — Orchestrator-classed; refused under worker-mode.
-            WorktreeCommand::Gc { .. } => Orchestrator("gc"),
-            // marker --stamp-subagent is the claude spawn path's provision+mark
-            // step (SL-056 PHASE-10) — Hookmint, refused under worker-mode (the
-            // legit first stamp lands on a marker-absent worktree ⇒ allowed). All
-            // other marker forms (--clear, bare) are the bespoke self-brick cure —
-            // NOT refused by the worker-mode guard; their fences live in the handler.
-            WorktreeCommand::Marker {
-                stamp_subagent: true,
-                ..
-            } => Hookmint("marker --stamp-subagent"),
-            WorktreeCommand::Marker { .. } => MarkerClear,
-        },
-        // dispatch sync projects coordination refs (SL-064 PHASE-04 / ADR-012
-        // §4) — Orchestrator-classed across the whole verb class; refused under
-        // worker-mode via the SAME guard as coordinate/fork (EX-1).
-        Command::Dispatch { command } => match command {
-            DispatchCommand::Sync { .. } => Orchestrator("dispatch-sync"),
-            DispatchCommand::RecordBoundary { .. } => Orchestrator("dispatch-record-boundary"),
-            DispatchCommand::RefreshBase { .. } => Orchestrator("dispatch-refresh-base"),
-            DispatchCommand::Setup { .. } => Orchestrator("dispatch-setup"),
-            // candidate create publishes coordination refs + ledger rows (SL-068
-            // §5.3) — Orchestrator-classed like sync/record-boundary; refused
-            // under worker-mode.
-            DispatchCommand::Candidate { command } => match command {
-                CandidateCommand::Create { .. } => Orchestrator("dispatch-candidate-create"),
-                // candidate status is a read-only self-describing surface (SL-068
-                // PHASE-04) — Read-classed so it works under worker-mode; it
-                // mutates no ref and no ledger row.
-                CandidateCommand::Status { .. } => Read,
-                // candidate admit pins an immutable OID into candidates.toml
-                // (SL-068 PHASE-05) — Orchestrator-classed like create; refused
-                // under worker-mode.
-                CandidateCommand::Admit { .. } => Orchestrator("dispatch-candidate-admit"),
-            },
-            // plan-next / status — read plan + phase sheets; never mutates a
-            // ref or ledger row — Read-classed so it works under worker-mode.
-            DispatchCommand::PlanNext { .. }
-            | DispatchCommand::Status { .. }
-            | DispatchCommand::DeliverTo { .. } => Read,
-        },
-        // The coverage group splits per inner verb (SL-057 D2a): `show` is the
-        // read-only drift view; `record`/`forget` mutate the observed store, and
-        // `verify` re-derives + saves per slice — all authored writes.
-        Command::Coverage { command } => match command {
-            CoverageCommand::Show { .. } => Read,
-            CoverageCommand::Record { .. } => Write("coverage record"),
-            CoverageCommand::Verify { .. } => Write("coverage verify"),
-            CoverageCommand::Forget { .. } => Write("coverage forget"),
-        },
-        // Read-only: the corpus integrity scan (INV-3), and the cross-kind relation
-        // view (SL-046 — reads only, never mints/derives status).
-        // Read-only priority surfaces (SL-047 — derive per query, never write /
-        // mint / derive status; ADR-004 stores no reverse field).
-        Command::Catalog { .. }
-        | Command::Validate { .. }
-        | Command::Inspect { .. }
-        | Command::Survey { .. }
-        | Command::Next { .. }
-        | Command::Blockers { .. }
-        | Command::Explain { .. }
-        | Command::Status { .. } => Read,
-        // Mutates the canonical-id triple — an authored write (D2/D6).
-        Command::Reseat { .. } => Write("reseat"),
-        // Author / remove a tier-1 `[[relation]]` edge — authored writes (SL-048 §5.4).
-        Command::Link { .. } => Write("link"),
-        Command::Unlink { .. } => Write("unlink"),
-        // Author a dep/seq edge into `[relationships]` — authored writes (SL-060 §5.4).
-        Command::Needs { .. } => Write("needs"),
-        Command::After { .. } => Write("after"),
-        // Record a supersession — writes NEW.supersedes, OLD.superseded_by, OLD.status
-        // in one transaction (SL-062 §5.4).
-        Command::Supersede { .. } => Write("supersede"),
-        // Estimate / Value facet writes (SL-118 PHASE-03).
-        Command::Estimate { .. } => Write("estimate"),
-        Command::Value { .. } => Write("value"),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // `doctrine catalog scan --json` / `doctrine catalog graph --json` (SL-071 PHASE-06)
 // ---------------------------------------------------------------------------
@@ -3353,43 +3038,6 @@ fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> a
     Ok(())
 }
 
-/// Worker-mode guard (ADR-006 D2a / SL-056 §3): refuse a Write-classed verb when
-/// the cwd tree resolves to worker mode (marker in a linked worktree OR the
-/// `DOCTRINE_WORKER` env optimisation). Read / `MarkerClear` pass through. The
-/// marker leg is evaluated LAZILY — only a Write verb resolves the root, so a Read
-/// verb in a non-doctrine cwd never gains a new failure path (design §3).
-fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
-    // Write and Orchestrator are both refused under worker-mode with the SAME
-    // branches; Read and the bespoke MarkerClear pass through (SL-056 PHASE-06).
-    let verb = match write_class(cmd) {
-        WriteClass::Write(verb) | WriteClass::Orchestrator(verb) | WriteClass::Hookmint(verb) => {
-            verb
-        }
-        WriteClass::Read | WriteClass::MarkerClear => return Ok(()),
-    };
-    // No doctrine/project root above the cwd: the marker leg cannot apply. Fall
-    // back to the env leg alone (a leaked env on a rootless cwd), never a new error.
-    let Ok(root) = root::find(None, &root::default_markers()) else {
-        if worktree::env_worker_set() {
-            anyhow::bail!("{}: refusing authored write `{verb}`", worktree::DUAL_CAUSE);
-        }
-        return Ok(());
-    };
-    let mode = worktree::resolve_mode(&root);
-    if !mode.refused {
-        return Ok(());
-    }
-    // The env leg on a NON-linked tree carries the NAMED dual-cause message (never
-    // a bare "worker refused"); the marker / linked-fork legs name the verb plainly.
-    if mode.is_env_on_nonlinked() {
-        anyhow::bail!("{}: refusing authored write `{verb}`", worktree::DUAL_CAUSE);
-    }
-    anyhow::bail!(
-        "worker fork (signal: {}): refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator.",
-        mode.cause_token()
-    );
-}
-
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let color = crate::tty::resolve_color(cli.color);
@@ -3397,7 +3045,7 @@ fn main() -> anyhow::Result<()> {
     // ADR-006 D2a / SL-056 §3 worker-mode guard: a dispatched worker mints/anchors
     // nothing. Bail before dispatch on any Write-classed verb; Read / MarkerClear
     // paths stay open (INV-3 / the self-brick carve-out).
-    worker_guard(&cli.command)?;
+    crate::commands::guard::worker_guard(&cli.command)?;
 
     match cli.command {
         Command::Install {
@@ -4446,12 +4094,12 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Status { format, json, path } => status::run(path, format, json),
         Command::Estimate { action } => match action {
-            EstimateAction::Set(args) => run_estimate_set(&args),
-            EstimateAction::Clear(args) => run_estimate_clear(&args),
+            EstimateAction::Set(args) => commands::facet::run_estimate_set(&args),
+            EstimateAction::Clear(args) => commands::facet::run_estimate_clear(&args),
         },
         Command::Value { action } => match action {
-            ValueAction::Set(args) => run_value_set(&args),
-            ValueAction::Clear(args) => run_value_clear(&args),
+            ValueAction::Set(args) => commands::facet::run_value_set(&args),
+            ValueAction::Clear(args) => commands::facet::run_value_clear(&args),
         },
         Command::Supersede { new, old, path } => run_supersede(path, &new, &old),
         Command::Map { command } => match command {
@@ -4475,120 +4123,6 @@ fn resolve_link_path(
     let rule = relation::validate_link(kref.kind, label)?;
     let toml_path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     Ok((toml_path, rule))
-}
-
-/// Resolve a canonical ref like `SL-118` / `ADR-003` to the entity TOML path.
-/// Returns the `PathBuf` and the resolved canonical id string.
-fn resolve_entity_path_and_canonical(
-    root: &std::path::Path,
-    raw: &str,
-) -> anyhow::Result<(PathBuf, String)> {
-    let (kref, id) = integrity::parse_canonical_ref(raw)?;
-    let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
-    if !path.exists() {
-        anyhow::bail!("entity not found: {raw}");
-    }
-    let canonical = listing::canonical_id(kref.kind.prefix, id);
-    Ok((path, canonical))
-}
-
-// ---------------------------------------------------------------------------
-// Estimate / Value handlers (SL-118 PHASE-03)
-// ---------------------------------------------------------------------------
-
-fn run_estimate_set(args: &EstimateSetArgs) -> anyhow::Result<()> {
-    use std::io::Write;
-    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
-
-    // Determine bounds from -x or positionals.
-    let (lower, upper) = match args.exact {
-        Some(n) => (n, n),
-        None => match (args.lower, args.upper) {
-            (Some(l), Some(u)) => (l, u),
-            (None | Some(_), None | Some(_)) => {
-                anyhow::bail!("estimate set: must supply both lower and upper, or -x/--exact");
-            }
-        },
-    };
-
-    // Build facet & validate (the COMPLETE rule from PHASE-01).
-    let facet = estimate::EstimateFacet { lower, upper };
-    estimate::validate(&facet)?;
-
-    // Write via the leaf.
-    let fields: &[(&str, f64)] = &[("lower", lower), ("upper", upper)];
-    let changed = facet_write::apply_set(&path, "estimate", fields)?;
-
-    if changed {
-        writeln!(
-            std::io::stdout(),
-            "estimate set: {canonical} lower={lower} upper={upper}"
-        )?;
-    } else {
-        writeln!(
-            std::io::stdout(),
-            "estimate unchanged: {canonical} lower={lower} upper={upper}"
-        )?;
-    }
-    Ok(())
-}
-
-fn run_estimate_clear(args: &EstimateClearArgs) -> anyhow::Result<()> {
-    use std::io::Write;
-    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
-    let cleared = facet_write::apply_clear(&path, "estimate")?;
-    if cleared {
-        writeln!(std::io::stdout(), "estimate cleared: {canonical}")?;
-    } else {
-        writeln!(std::io::stdout(), "no estimate to clear: {canonical}")?;
-    }
-    Ok(())
-}
-
-fn run_value_set(args: &ValueSetArgs) -> anyhow::Result<()> {
-    use std::io::Write;
-    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
-
-    // Build facet & validate.
-    let facet = value::ValueFacet {
-        value: args.magnitude,
-    };
-    value::validate(&facet)?;
-
-    // Write via the leaf.
-    let fields: &[(&str, f64)] = &[("value", args.magnitude)];
-    let changed = facet_write::apply_set(&path, "value", fields)?;
-
-    if changed {
-        writeln!(
-            std::io::stdout(),
-            "value set: {canonical} value={}",
-            args.magnitude
-        )?;
-    } else {
-        writeln!(
-            std::io::stdout(),
-            "value unchanged: {canonical} value={}",
-            args.magnitude
-        )?;
-    }
-    Ok(())
-}
-
-fn run_value_clear(args: &ValueClearArgs) -> anyhow::Result<()> {
-    use std::io::Write;
-    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
-    let cleared = facet_write::apply_clear(&path, "value")?;
-    if cleared {
-        writeln!(std::io::stdout(), "value cleared: {canonical}")?;
-    } else {
-        writeln!(std::io::stdout(), "no value to clear: {canonical}")?;
-    }
-    Ok(())
 }
 
 /// `doctrine link <SOURCE-ID> <LABEL> <TARGET>` (SL-048 §5.4) — author a tier-1
@@ -5235,7 +4769,7 @@ fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    #[allow(unused_imports)]
     // SL-060 / SL-066 §PHASE-04: the work-like membership predicate is the ONE
     // widen-later guard — exactly { slice } ∪ { the 5 backlog kinds } ∪ { revision },
     // every other admitted kind refused. REV joins as both dep/seq source and target
@@ -6046,337 +5580,13 @@ mod tests {
 }
 
 // ---------------------------------------------------------------------------
-// SL-118 PHASE-03: Estimate / Value handler tests
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod estimate_value_tests {
-    use super::*;
-
-    /// Seed a minimal entity TOML for testing, returning (toml_path, canonical_id).
-    fn seed_entity(root: &std::path::Path, prefix: &str, id: u32) -> (std::path::PathBuf, String) {
-        let padded = format!("{id:03}");
-        let kref = integrity::kind_by_prefix(prefix).expect("valid prefix");
-        let toml_path = entity::id_path(&root, kref.kind, id, entity::Ext::Toml);
-        let dir = toml_path.parent().unwrap().to_path_buf();
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            &toml_path,
-            format!(
-                "id = {id}\nslug = \"t{padded}\"\ntitle = \"Test {prefix}-{padded}\"\nstatus = \"accepted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n"
-            ),
-        )
-        .unwrap();
-        let canonical = listing::canonical_id(prefix, id);
-        (toml_path, canonical)
-    }
-
-    /// Create a tempdir that `root::find` can resolve as a project root.
-    fn mk_project_root() -> (tempfile::TempDir, std::path::PathBuf) {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join(".project"), "").unwrap();
-        std::fs::create_dir_all(tmp.path().join(".doctrine")).unwrap();
-        std::fs::write(tmp.path().join("doctrine.toml"), "").unwrap();
-        let root = tmp.path().to_path_buf();
-        (tmp, root)
-    }
-
-    // ---- VT-8: invalid matrix rejected ----
-
-    #[test]
-    fn vt8_neither_mode_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: None,
-            upper: None,
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(
-            err.contains("must supply both lower and upper"),
-            "got: {err}"
-        );
-    }
-
-    #[test]
-    fn vt8_one_lone_positional_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(1.0),
-            upper: None,
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(
-            err.contains("must supply both lower and upper"),
-            "got: {err}"
-        );
-    }
-
-    #[test]
-    fn vt8_negative_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(-1.0),
-            upper: Some(5.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("lower must be >= 0"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_upper_lt_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(5.0),
-            upper: Some(2.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("upper must be >= lower"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_inf_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(f64::INFINITY),
-            upper: Some(5.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("finite"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_nan_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(f64::NAN),
-            upper: Some(5.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("finite"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_entity_not_found_rejected() {
-        let (_tmp, root) = mk_project_root();
-        // No entity seeded; resolve fails.
-        let err = resolve_entity_path_and_canonical(&root, "SL-999")
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("entity not found"), "got: {err}");
-    }
-
-    // ---- VT-9: -x N sets lower == upper == N ----
-
-    #[test]
-    fn vt9_exact_sets_point_estimate() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: None,
-            upper: None,
-            exact: Some(3.0),
-            path: Some(root.clone()),
-        };
-        run_estimate_set(&args).unwrap();
-        let (path, _) = resolve_entity_path_and_canonical(&root, "SL-118").unwrap();
-        let body = std::fs::read_to_string(&path).unwrap();
-        assert!(body.contains("lower = 3.0"), "missing lower:\n{body}");
-        assert!(body.contains("upper = 3.0"), "missing upper:\n{body}");
-    }
-
-    // ---- VT-10: value set / value clear round-trip ----
-
-    #[test]
-    fn vt10_value_set_then_clear() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        // Set value.
-        run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: 42.0,
-            path: Some(root.clone()),
-        })
-        .unwrap();
-        let (path, _) = resolve_entity_path_and_canonical(&root, "SL-118").unwrap();
-        let body = std::fs::read_to_string(&path).unwrap();
-        assert!(body.contains("value = 42.0"), "missing value:\n{body}");
-        // Clear value.
-        run_value_clear(&ValueClearArgs {
-            id: "SL-118".into(),
-            path: Some(root),
-        })
-        .unwrap();
-        let body2 = std::fs::read_to_string(&path).unwrap();
-        assert!(
-            !body2.contains("[value]"),
-            "[value] should be gone:\n{body2}"
-        );
-    }
-
-    #[test]
-    fn vt10_value_set_negative() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: -5.0,
-            path: Some(root.clone()),
-        })
-        .unwrap();
-        let (path, _) = resolve_entity_path_and_canonical(&root, "SL-118").unwrap();
-        let body = std::fs::read_to_string(&path).unwrap();
-        assert!(body.contains("value = -5.0"), "missing value:\n{body}");
-    }
-
-    #[test]
-    fn vt10_value_set_inf_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let err = run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: f64::INFINITY,
-            path: Some(root),
-        })
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("finite"), "got: {err}");
-    }
-
-    #[test]
-    fn vt10_value_set_nan_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let err = run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: f64::NAN,
-            path: Some(root),
-        })
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("finite"), "got: {err}");
-    }
-
-    // ---- VT-11: catalog scan round-trip ----
-    // The catalog scan reads facets from the toml; we seed the toml directly
-    // and assert the catalog carries the data. Handler tests (VT-8/9/10)
-    // already prove the write path.
-
-    #[test]
-    fn vt11_catalog_scan_estimate_readback() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
-        // Seed an entity with [estimate] present.
-        let padded = "118";
-        let dir = root.join(".doctrine/slice").join(padded);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join(format!("slice-{padded}.toml")),
-            "id = 118\nslug = \"t118\"\ntitle = \"Test\"\nstatus = \"accepted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[estimate]\nlower = 2.0\nupper = 8.0\n",
-        )
-        .unwrap();
-        std::fs::write(dir.join(format!("slice-{padded}.md")), "# Test body\n").unwrap();
-        // Scan catalog and find the entity.
-        let catalog = crate::catalog::hydrate::scan_catalog(root).unwrap();
-        let entity = catalog
-            .entities
-            .iter()
-            .find(|e| e.kind_label == "SL" && matches!(&e.key, crate::catalog::hydrate::CatalogKey::Numbered(k) if k.id == 118))
-            .expect("SL-118 should be in the catalog");
-        let est = entity
-            .estimate
-            .as_ref()
-            .expect("estimate should be present");
-        assert_eq!(est.lower, 2.0);
-        assert_eq!(est.upper, 8.0);
-    }
-
-    #[test]
-    fn vt11_catalog_scan_estimate_clear_readback() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
-        // Seed an entity WITHOUT [estimate] — simulating clear.
-        let padded = "118";
-        let dir = root.join(".doctrine/slice").join(padded);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join(format!("slice-{padded}.toml")),
-            "id = 118\nslug = \"t118\"\ntitle = \"Test\"\nstatus = \"accepted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n",
-        )
-        .unwrap();
-        std::fs::write(dir.join(format!("slice-{padded}.md")), "# Test body\n").unwrap();
-        // Scan catalog — estimate should be absent.
-        let catalog = crate::catalog::hydrate::scan_catalog(root).unwrap();
-        let entity = catalog
-            .entities
-            .iter()
-            .find(|e| e.kind_label == "SL" && matches!(&e.key, crate::catalog::hydrate::CatalogKey::Numbered(k) if k.id == 118))
-            .expect("SL-118 should be in the catalog");
-        assert!(
-            entity.estimate.is_none(),
-            "estimate should be None after clear, got: {:?}",
-            entity.estimate
-        );
-    }
-
-    // ---- VT-12: slice typed-reader round-trip ----
-    // Seed a toml with [estimate] / [value] present and read back via
-    // parse_optional — the pure engine path.
-
-    #[test]
-    fn vt12_slice_typed_reader_roundtrip() {
-        let toml_body = "id = 118\nslug = \"t118\"\ntitle = \"Test\"\nstatus = \"accepted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[estimate]\nlower = 3.0\nupper = 7.0\n";
-        let val: toml::Table = toml_body.parse().unwrap();
-        let parsed =
-            crate::estimate::parse_optional(val.get("estimate").and_then(|v| v.as_table()))
-                .unwrap()
-                .expect("estimate should be present");
-        assert_eq!(parsed.lower, 3.0);
-        assert_eq!(parsed.upper, 7.0);
-    }
-
-    #[test]
-    fn vt12_value_typed_reader_roundtrip() {
-        let toml_body = "id = 118\nslug = \"t118\"\ntitle = \"Test\"\nstatus = \"accepted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[value]\nvalue = 99.0\n";
-        let val: toml::Table = toml_body.parse().unwrap();
-        let parsed = crate::value::parse_optional(val.get("value").and_then(|v| v.as_table()))
-            .unwrap()
-            .expect("value should be present");
-        assert_eq!(parsed.value, 99.0);
-    }
-}
+// The estimate / value handler tests moved to commands/facet.rs
+// This placeholder keeps the line count stable until fmt.
 
 #[cfg(test)]
 mod write_class_tests {
     use super::*;
+    use crate::commands::guard::{WriteClass, write_class};
 
     // Read => None, Write(label) => Some(label). The compiler's totality (no
     // wildcard in `write_class`) proves every variant is *handled*; this table
@@ -7249,5 +6459,272 @@ mod write_class_tests {
             }),
         };
         assert_eq!(cls(c), Some("value"));
+    }
+
+    // ── PHASE-01: Behaviour-preservation verification net (SL-115) ──────────────
+
+    #[test]
+    fn help_snapshot_top_level() {
+        let help = <Cli as clap::CommandFactory>::command()
+            .render_help()
+            .to_string();
+        assert!(help.contains("doctrine CLI"), "top-level about text");
+        assert!(help.contains("Usage: doctrine"), "usage line");
+        assert!(help.contains("Commands:"), "commands section");
+        // Representative subcommands that would be visibly absent if
+        // the top-level command tree is accidentally restructured.
+        assert!(help.contains("  install"), "install command present");
+        assert!(help.contains("  slice"), "slice command present");
+        assert!(help.contains("  memory"), "memory command present");
+        assert!(help.contains("  adr"), "adr command present");
+        assert!(help.contains("  spec"), "spec command present");
+        assert!(help.contains("  dispatch"), "dispatch command present");
+        assert!(help.contains("  help"), "help command always present");
+        assert!(help.contains("Options:"), "global options");
+        assert!(help.contains("--color"), "color flag in help");
+    }
+
+    #[test]
+    fn help_snapshot_slice_subcommand() {
+        let help = <Cli as clap::CommandFactory>::command()
+            .find_subcommand_mut("slice")
+            .unwrap()
+            .render_help()
+            .to_string();
+        assert!(help.contains("Create and list slices"));
+        assert!(help.contains("new"));
+        assert!(help.contains("design"));
+        assert!(help.contains("plan"));
+        assert!(help.contains("list"));
+        assert!(help.contains("show"));
+    }
+
+    #[test]
+    fn help_snapshot_memory_subcommand() {
+        let help = <Cli as clap::CommandFactory>::command()
+            .find_subcommand_mut("memory")
+            .unwrap()
+            .render_help()
+            .to_string();
+        assert!(help.contains("Record, show, and list memories"));
+        assert!(help.contains("record"));
+        assert!(help.contains("find"));
+        assert!(help.contains("retrieve"));
+        assert!(help.contains("list"));
+    }
+
+    #[test]
+    fn help_snapshot_adr_subcommand() {
+        let help = <Cli as clap::CommandFactory>::command()
+            .find_subcommand_mut("adr")
+            .unwrap()
+            .render_help()
+            .to_string();
+        assert!(help.contains("Create and list architecture decision records"));
+        assert!(help.contains("new"));
+        assert!(help.contains("list"));
+        assert!(help.contains("show"));
+        assert!(help.contains("status"));
+    }
+
+    #[test]
+    fn help_snapshot_spec_subcommand() {
+        let help = <Cli as clap::CommandFactory>::command()
+            .find_subcommand_mut("spec")
+            .unwrap()
+            .render_help()
+            .to_string();
+        assert!(help.contains("Create and list product / technical specifications"));
+        assert!(help.contains("new"));
+        assert!(help.contains("list"));
+        assert!(help.contains("show"));
+        assert!(help.contains("validate"));
+        assert!(help.contains("req"));
+    }
+
+    // ── Parse-regression tests ──────────────────────────────────────────────────
+
+    // (a) CommonListArgs value_delimiter
+    #[test]
+    fn parse_list_status_value_delimiter_equivalence() {
+        let a =
+            Cli::try_parse_from(["doctrine", "slice", "list", "--status", "draft,active"]).unwrap();
+        let b = Cli::try_parse_from([
+            "doctrine", "slice", "list", "--status", "draft", "--status", "active",
+        ])
+        .unwrap();
+        let Command::Slice {
+            command: SliceCommand::List { list: la, .. },
+        } = a.command
+        else {
+            panic!("expected SliceCommand::List");
+        };
+        let Command::Slice {
+            command: SliceCommand::List { list: lb, .. },
+        } = b.command
+        else {
+            panic!("expected SliceCommand::List");
+        };
+        assert_eq!(la.status, lb.status);
+        assert_eq!(la.status, ["draft", "active"]);
+    }
+
+    // (b) FindRetrieveArgs conflicts_with="offset"
+    #[test]
+    fn parse_find_retrieve_offset_conflicts_with_page() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "find", "--offset", "5", "--page", "2"]);
+        assert!(r.is_err(), "offset + page should conflict");
+    }
+
+    // (c) FindRetrieveArgs value_parser on MemoryType, Status, Lifespan
+    #[test]
+    fn parse_find_memory_type_valid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "find", "--type", "concept"]);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn parse_find_memory_type_invalid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "find", "--type", "banana"]);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn parse_find_status_valid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "find", "--status", "active"]);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn parse_find_status_invalid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "find", "--status", "foobar"]);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn parse_find_lifespan_valid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "find", "--lifespan", "semantic"]);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn parse_find_lifespan_invalid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "find", "--lifespan", "quantum"]);
+        assert!(r.is_err());
+    }
+
+    // (d) Retrieve value_parser=retrieve::parse_min_trust
+    #[test]
+    fn parse_retrieve_min_trust_valid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "retrieve", "--min-trust", "high"]);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn parse_retrieve_min_trust_invalid() {
+        let r = Cli::try_parse_from(["doctrine", "memory", "retrieve", "--min-trust", "banana"]);
+        assert!(r.is_err());
+    }
+
+    // (e) DispatchCommand::Sync stage selection
+    #[test]
+    fn parse_dispatch_sync_prepare_review_parses() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "99",
+            "--prepare-review",
+        ]);
+        assert!(r.is_ok(), "sync with --prepare-review");
+    }
+
+    #[test]
+    fn parse_dispatch_sync_integrate_parses_without_trunk() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "99",
+            "--integrate",
+        ]);
+        assert!(r.is_ok(), "sync with --integrate alone (trunk is optional)");
+    }
+
+    #[test]
+    fn parse_dispatch_sync_missing_stage_errors() {
+        let r = Cli::try_parse_from(["doctrine", "dispatch", "sync", "--slice", "99"]);
+        assert!(r.is_err(), "sync without a stage selector should error");
+    }
+
+    // ── Non-SPINE_KINDS CommonListArgs consumers ────────────────────────────────
+
+    #[test]
+    fn parse_concept_map_list_common_list_args() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "concept-map",
+            "list",
+            "--filter",
+            "test",
+            "--tag",
+            "a,b",
+            "--all",
+            "--json",
+        ]);
+        assert!(r.is_ok(), "concept-map list with CommonListArgs");
+        let parsed = r.unwrap();
+        let Command::ConceptMap {
+            command: ConceptMapCommand::List { .. },
+        } = parsed.command
+        else {
+            panic!("expected ConceptMapCommand::List");
+        };
+    }
+
+    #[test]
+    fn parse_review_list_common_list_args() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "review",
+            "list",
+            "--status",
+            "open",
+            "--format",
+            "json",
+            "--columns",
+            "id,title",
+        ]);
+        assert!(r.is_ok(), "review list with CommonListArgs");
+        let parsed = r.unwrap();
+        let Command::Review {
+            command: ReviewCommand::List { .. },
+        } = parsed.command
+        else {
+            panic!("expected ReviewCommand::List");
+        };
+    }
+
+    #[test]
+    fn parse_rec_list_common_list_args() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "rec",
+            "list",
+            "--all",
+            "--regexp",
+            "test.*",
+            "--case-insensitive",
+        ]);
+        assert!(r.is_ok(), "rec list with CommonListArgs");
+        let parsed = r.unwrap();
+        let Command::Rec {
+            command: RecCommand::List { .. },
+        } = parsed.command
+        else {
+            panic!("expected RecCommand::List");
+        };
     }
 }

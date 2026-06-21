@@ -70,7 +70,12 @@ fn entity_md_path(
     }
     let kind_ref = integrity::kind_by_prefix(key.prefix)
         .ok_or_else(|| MapServerError::BadEntityId(key.canonical()))?;
-    Ok(entity::id_path(root, kind_ref.kind, key.id, entity::Ext::Md))
+    Ok(entity::id_path(
+        root,
+        kind_ref.kind,
+        key.id,
+        entity::Ext::Md,
+    ))
 }
 
 #[cfg(test)]

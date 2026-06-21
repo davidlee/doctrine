@@ -1,3 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+pub(crate) mod dep_seq;
+pub(crate) mod facet;
+pub(crate) mod guard;
+pub(crate) mod inspect;
 pub(crate) mod map;
+pub(crate) mod relation;
 pub(crate) mod serve;
+pub(crate) mod supersede;
+pub(crate) mod validate;
