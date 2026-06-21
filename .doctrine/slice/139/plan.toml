@@ -1,0 +1,143 @@
+# Implementation plan for SL-139 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-139"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# --- PHASE-01: Shared paths helper module ---
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Shared paths helper module"
+objective = "Create src/paths.rs as an engine-tier module with EntityPathSet, PathSelection, directory scanning, file classification, exclusion filtering, and root-relative path conversion — pure types + impure scanner in one module. No clap, no command-tier imports."
+
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §5.3 tier assignment is locked (engine tier)" },
+  { id = "EN-2", text = "design.md §5.5 exclusion filter rules are locked" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "src/paths.rs exists as an engine-tier module importing no clap types and no command-tier modules" },
+  { id = "EX-2", text = "EntityPathSet, PathSelection types are defined clap-free" },
+  { id = "EX-3", text = "Directory scanning fn returns only regular files (not symlinks, dirs, runtime state)" },
+  { id = "EX-4", text = "Exclusion filter excludes dot-prefixed, editor temporaries (#/~/.swp), and known artifacts (.orig, .bak)" },
+  { id = "EX-5", text = "Root-relative path conversion works correctly (strips root prefix)" },
+  { id = "EX-6", text = "Selector logic: no selector = all files; any selector = only selected classes; --single truncates" },
+  { id = "EX-7", text = "Canonical output order: TOML, MD, then other files sorted lexicographically" },
+]
+
+verification = [
+  { id = "VT-1", expects = "unit tests: EntityPathSet selection with all combos of toml/md/entity/single" },
+  { id = "VT-2", expects = "unit tests: exclusion filter excludes .DS_Store, #file#, file~, .swp, .orig, .bak" },
+  { id = "VT-3", expects = "unit tests: directory-scanner returns only regular files, skips symlinks and subdirs" },
+  { id = "VT-4", expects = "unit tests: root-relative conversion strips root prefix correctly" },
+  { id = "VT-5", expects = "unit tests: canonical ordering is TOML → MD → lexicographic-others" },
+  { id = "VA-1", expects = "just check passes (including architecture_layering test — new module indexed)" },
+]
+
+specs        = []
+requirements = []
+
+# --- PHASE-02: Concept-map --json shorthand ---
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Concept-map show --json shorthand"
+objective = "Add the --json boolean flag to concept-map show as a shorthand for --format json, achieving show-parity with every other entity command. Existing show tests and goldens stay green."
+
+entrance_criteria = [
+  { id = "EN-1", text = "design.md D8 is locked: show-parity = CLI-grammar parity only" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "ConceptMapCommand::Show has a json: bool field with #[arg(long)]" },
+  { id = "EX-2", text = "Dispatch converts json flag: if json { Format::Json } else { format }" },
+  { id = "EX-3", text = "concept-map show --json produces identical output to concept-map show --format json" },
+  { id = "EX-4", text = "All existing concept-map show tests and goldens stay green unchanged" },
+]
+
+verification = [
+  { id = "VT-1", expects = "golden test: concept-map show <ref> --json matches concept-map show <ref> --format json byte-for-byte" },
+  { id = "VT-2", expects = "existing concept-map test suite (show, list, check, add, remove, export) stays green" },
+  { id = "VA-1", expects = "just check passes" },
+]
+
+specs        = []
+requirements = []
+
+# --- PHASE-03: Paths verb for numeric stem kinds ---
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Paths verb for numeric stem kinds"
+objective = "Wire the paths verb for all nine numeric-stem entity commands: adr, policy, standard, rfc, slice, review, rec, revision, and concept-map. Each gains a Paths subcommand; a shared dispatch helper resolves refs, calls paths.rs, and prints root-relative lines."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: src/paths.rs exists and passes its tests" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "Every numeric-stem command accepts `paths <REF>...` with --toml/-t, --md/-m, --entity/-e, --single/-s" },
+  { id = "EX-2", text = "Governance kinds (adr, policy, standard, rfc) share a single paths dispatch path via governance.rs" },
+  { id = "EX-3", text = "slice, review, rec, revision, concept-map each have their own thin Paths dispatch (ref parse + paths::run_for_kind)" },
+  { id = "EX-4", text = "Paths output is root-relative, one per line, deterministic order" },
+  { id = "EX-5", text = "Multi-ref splats preserve input order; --single applies per ref" },
+  { id = "EX-6", text = "Invalid ref yields non-zero exit and empty stdout (no partial output)" },
+  { id = "EX-7", text = "Existing per-kind show/list/status suites stay green unchanged" },
+]
+
+verification = [
+  { id = "VT-1", expects = "golden tests: slice paths SL-012, adr paths ADR-001, review paths RV-001, concept-map paths CM-001 produce correct root-relative output" },
+  { id = "VT-2", expects = "golden tests: --single, --toml, --md, --entity selectors produce correct subsets" },
+  { id = "VT-3", expects = "golden test: multi-ref splat (slice paths 012 014 021) preserves input order" },
+  { id = "VT-4", expects = "behavioural test: invalid ref (slice paths 99999) exits non-zero with empty stdout" },
+  { id = "VA-1", expects = "just gate passes with all new tests" },
+]
+
+specs        = []
+requirements = []
+
+# --- PHASE-04: Paths verb for umbrella and named kinds ---
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Paths verb for umbrella and named entity kinds"
+objective = "Wire the paths verb for backlog, spec, knowledge, and memory — each resolving refs through their prefix-to-sub-kind or uid/key dispatch. The shared paths helper is reused; only reference resolution differs."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: numeric-kind paths pattern is proven and tests pass" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "backlog paths ISS-007 resolves to .doctrine/backlog/issue/007/ with issue-007.{toml,md}" },
+  { id = "EX-2", text = "spec paths SPEC-004 resolves to .doctrine/spec/tech/004/ with tech-004.{toml,md}" },
+  { id = "EX-3", text = "spec paths PRD-001 resolves to .doctrine/spec/product/001/ with product-001.{toml,md}" },
+  { id = "EX-4", text = "knowledge paths ASM-001 resolves to .doctrine/knowledge/assumption/001/ with assumption-001.{toml,md}" },
+  { id = "EX-5", text = "memory paths <uid> resolves to the memory's concrete directory with memory.{toml,md}" },
+  { id = "EX-6", text = "All four kinds accept --toml/-t, --md/-m, --entity/-e, --single/-s selectors" },
+  { id = "EX-7", text = "Existing show/list/status suites for all four kinds stay green" },
+]
+
+verification = [
+  { id = "VT-1", expects = "golden test: backlog paths ISS-007 (full, --single, --md) produce correct paths" },
+  { id = "VT-2", expects = "golden test: spec paths SPEC-004 and spec paths PRD-001 produce correct paths" },
+  { id = "VT-3", expects = "golden test: knowledge paths ASM-001 and knowledge paths DEC-001 produce correct paths" },
+  { id = "VT-4", expects = "golden test: memory paths <uid> produces memory.toml + memory.md paths" },
+  { id = "VT-5", expects = "behavioural test: invalid refs (backlog paths ISS-99999, memory paths nonexistent) exit non-zero" },
+  { id = "VA-1", expects = "just gate passes with all new tests" },
+]
+
+specs        = []
+requirements = []
