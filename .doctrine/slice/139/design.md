@@ -20,7 +20,7 @@ SL-139 therefore has two targets:
 2. add a dedicated `paths` verb to every in-scope authored entity command so a
    caller can reliably obtain the authored files backing one or more entities.
 
-The richer summary/metadata surface remains separate follow-up work (IMP-145).
+The richer summary/metadata surface was explored during design and found to be a design dead-end (IMP-145, closed wont-do). This design does not impose a follow-up for it.
 This slice should not overload `show` with operational file-location output that
 would later be moved to an `info` surface.
 
@@ -62,7 +62,7 @@ used as a full-inspection surface:
   derived status.
 
 Adding file paths to `show --json` would mix operational file-location metadata
-into a body/reconstruction surface and create known future rework toward IMP-145.
+into a body/reconstruction surface — a path previously explored and found to be a dead-end (IMP-145, closed wont-do).
 
 ## 3. Forces & Constraints
 
@@ -288,7 +288,7 @@ remains full inspection JSON. File paths do not enter `show`.
 
 Rejected alternative: add `show --filepaths` and top-level JSON `filepaths`.
 That would mix file-location metadata into a body/reconstruction surface and
-create planned rework toward IMP-145.
+create planned rework toward a future info surface (IMP-145, closed wont-do — the dead-end confirmed).
 
 ### D2 — `paths` is the file-location surface
 
@@ -331,9 +331,9 @@ The design's show-parity objective is: every in-scope entity command MUST accept
 `--json` as a boolean shorthand alongside `--format json`. The concrete deviation
 is concept-map's missing `--json` flag — fixing it achieves the objective. JSON
 output-shape normalization across kinds (e.g., a common top-level envelope or
-kind-key) is explicitly out of scope for SL-139; it belongs to IMP-145's
-info/summary surface work. The scope body already carries this deferral in its
-Summary and Follow-Ups; this decision crystallises the boundary.
+kind-key) is explicitly out of scope for SL-139. The info/summary surface was
+explored and closed as a design dead-end (IMP-145, resolved wont-do); this
+decision crystallises that boundary and closes that avenue.
 
 ## 8. Risks & Mitigations
 
