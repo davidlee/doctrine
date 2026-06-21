@@ -11,8 +11,7 @@
 use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
-#[cfg_attr(debug_assertions, folder = "web/map/dist/")]
-#[cfg_attr(not(debug_assertions), folder = "web/map/dist/")]
+#[folder = "web/map/dist/"]
 pub(crate) struct Assets;
 
 /// Map file extension → MIME content-type.
