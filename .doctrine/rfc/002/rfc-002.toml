@@ -58,3 +58,19 @@ target = "SL-118"
 label = "related"
 target = "ISS-040"
 
+[[relation]]
+label = "related"
+target = "SL-135"
+
+[[relation]]
+label = "related"
+target = "SL-136"
+
+[[relation]]
+label = "related"
+target = "SL-137"
+
+[[relation]]
+label = "related"
+target = "SL-138"
+

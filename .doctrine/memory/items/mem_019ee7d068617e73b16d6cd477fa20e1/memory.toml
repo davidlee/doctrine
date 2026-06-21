@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee7d068617e73b16d6cd477fa20e1"
+memory_key = "mem.pattern.facets.shared-projection"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Shared facet projection: EntityFacets { estimate, value, risk, tags } — consume from ScannedEntity scan, feed both SL-132 (display) and SL-133 (scoring) to avoid parallel parsing"
+summary = "SL-132 and SL-133 both need estimate/value/risk/tag data from authored facets. Before either slice grows its own parser, establish a shared EntityFacets projection consumed by format_show, build_priority_graph, and explain."
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:architecture", "area:priority", "area:facets"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "56902b1520033e54ad9a6201302ac4f2b4678979"
+ref_name = "refs/heads/main"
+checkout_state_id = "a6f3bf9c0049bedcdd72575583234579d2d2eb52376f9d725976ca2519ccc552"
+base_commit = "80bf86db37d5bed39d65a4f73a0a970d56cc1870"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
