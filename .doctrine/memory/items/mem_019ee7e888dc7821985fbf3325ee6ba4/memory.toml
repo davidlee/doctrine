@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee7e888dc7821985fbf3325ee6ba4"
+memory_key = "mem.trigger.entity-facets-struct"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "EntityFacets struct trigger: create src/facet.rs when SL-133 design needs it"
+summary = ""
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:architecture", "area:facets"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "56e4e9ec69d3f3bb6eaaf13ec2da41a8fdfc5564"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c5dbd9e328a1fa69b8cae538a6e7d4f3f5720b5c344878f03d2d55c63c43c8ec"
+base_commit = "0fb32d6a02d2b392c30b9b3a7598ccac0d882693"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
