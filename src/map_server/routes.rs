@@ -112,7 +112,8 @@ async fn index() -> impl IntoResponse {
 }
 
 async fn asset(Path(path): Path<String>) -> Result<impl IntoResponse, MapServerError> {
-    assets::serve_embedded(&path)
+    let full_path = format!("assets/{path}");
+    assets::serve_embedded(&full_path)
 }
 
 async fn vendor_asset(Path(path): Path<String>) -> Result<impl IntoResponse, MapServerError> {
