@@ -109,8 +109,13 @@ a coefficient-weighted share of the value it unlocks — the **value of optional
 - **`needs`-leverage — recursive.** Completing N unblocks its whole downstream cone, so
   N accrues the *decayed* intrinsic value of everything that transitively needs it. Safe
   to recurse because the `needs` overlay is the acyclic ordering backbone (§3, D8).
-  `dep_coeff ∈ (0,1]` is a per-hop **retention** factor (so deep chains converge, never
-  amplify); contribution of a dependent at depth k is `dep_coeff^k · base`.
+  `dep_coeff ∈ (0,1]` is a per-hop **retention** factor: along a *single* path a dependent
+  at depth k contributes `dep_coeff^k · base`, so depth alone decays. It does **not** bound
+  total magnitude — a reconvergent fan reaches a node by many paths, so leverage is a finite
+  **path-sum** that can exceed any single `base` and grow with breadth (accepted, §5.5).
+  Finiteness is structural (a single DP sweep over a finite DAG), not a property of
+  `dep_coeff`; the only unbounded risk is `f64` overflow to `∞`, fenced by `COEFF_MAX`
+  (input) + `is_finite` (output, I2(b)) — not by `dep_coeff ≤ 1` (F-1/RV-132).
 - **`ref`/lineage-optionality — one-hop.** Associative "this unlocks the option of that"
   — a flat single-hop share. NOT recursed: these overlays are `Reject` (cyclic-capable),
   and recursion over them has no termination guarantee. `ref_coeff ≥ 0` is a flat weight
@@ -166,9 +171,12 @@ pub(crate) struct PriorityConfig {
     tag_coefficients: BTreeMap<String, f64>,    // lookup default 1.0 (unused this slice)
     consequence: ConsequenceCoeffs,             // { dep_coeff, ref_coeff } — see below
 }
-// dep_coeff: RECURSIVE retention, clamped to (0, 1] at load (>1 would amplify with
-//   depth and diverge on long needs chains; ≤0 disables leverage). Default illustrative
-//   (ADR-015 owns the number), e.g. 0.5.
+// dep_coeff: RECURSIVE retention, clamped to (0, 1] at load. ≤1 makes each hop *along a
+//   path* a decay (dep_coeff^k at depth k); >1 would let a single path amplify with depth.
+//   The (0,1] DOMAIN is scoring policy (ADR-015 owns role+domain — F-4/RV-132); it does NOT
+//   bound total leverage under fan-out (a path-sum, F-1/RV-132) — overflow is fenced by
+//   COEFF_MAX, not the domain. ≤0 disables leverage. Default VALUE illustrative (impl owns
+//   the number), e.g. 0.5.
 // ref_coeff: FLAT one-hop weight, clamped finite-non-negative ≤ COEFF_MAX (no
 //   compounding ⇒ magnitude unconstrained beyond the overflow guard). Default e.g. 1.0.
 // (No seq coeff — seq is a structural constraint, not a weight class, D10.)
@@ -266,10 +274,18 @@ consequence to a **post**-pass):
      prerequisites), so each `leverage(D)` is already resolved when N is reached — a
      single O(V+E) sweep, no fixpoint. Termination rests on the `needs` backbone being
      acyclic (§3): the `dep_overlay` is `Reject`, so a genuine `needs` cycle is *diagnosed*
-     (`dep_cycles()` / REQ-076), not silent. **Safety net:** any diagnosed cycle SCC is
-     *condensed* — members take leverage from dependents **outside** the SCC only (intra-SCC
-     edges contribute 0), so the DP terminates even on malformed data and the cycle is
-     surfaced as the authoring error it is (I5).
+     (`dep_cycles()` / REQ-076), not silent. **Safety net — explicit dep-component graph
+     (F-2/RV-132).** Partition nodes into components: each diagnosed `dep_overlay` cycle from
+     `provenance().cycles()` (filtered to `dep_overlay`; `.nodes()` is the SCC member set) is
+     one component, every other node a singleton. (`degraded_sccs` is cordage-private, but
+     `provenance().cycles()` is the public Reject-cycle surface — no new accessor needed.)
+     Condense: an `out_edges(dep_overlay)` edge whose endpoints share a component is
+     **intra-component → contributes 0**; only edges to dependents in *other* components
+     carry leverage. DP the components in reverse topological order; a component's leverage =
+     `dep_coeff · Σ_{D ∈ external dependents} (base(D) + leverage(D))` — each external
+     dependent counted once for the component — and **every member receives that same
+     component value**. So a malformed cycle halts the DP, yields finite equal leverage for
+     its members, and is surfaced as the authoring error it is (I5).
    - **`ref`-optionality — one-hop.** A referencer→target edge is `src→dst`, so N's
      referencers are `in_edges(ov, N)` over the **`CONSEQUENCE_LABELS` subset** of ref
      overlays ONLY (`reviews`/`owning_slice` bookkeeping excluded — pre-SL-133 semantics).
@@ -293,9 +309,18 @@ consequence to a **post**-pass):
   **incomparable** any two items with no seq path between them — separate components, AND
   sibling arms of a branch (a Y whose two arms share an upstream but have no edge to each
   other: ordered within each arm, silent between them). Wherever the order is silent, the
-  differentiator is **`score` desc** (`total_cmp`), then `id`. Concretely: sort the
-  actionable set by `(score desc, id asc)`, then apply the seq edges as strict precedence
-  nudges (only comparable pairs move). This makes `next` leverage-aware — a ready item that
+  differentiator is **`score` desc** (`total_cmp`), then `id`. **Algorithm (F-3/RV-132).**
+  An induced-frontier topological sort over the actionable set: the precedence relation is
+  the **surviving** seq edges only — the `seq_overlay` edges minus `provenance().evictions()`
+  for that overlay (raw `seq_overlay` edges include ones cordage *evicted* to linearize an
+  `Evict` cycle; replaying them raw would re-impose an evicted contradiction or miss a
+  transitive constraint). Among nodes whose surviving seq-predecessors are all emitted, pick
+  by `(score desc, id asc)`. Equivalently — and preferred, reusing cordage's proven
+  precedence/eviction machinery rather than re-deriving it — mint a **temporary** cordage
+  ordering over those surviving constraints with mint order `(score desc, id asc)` and read
+  its `order_key`; this is exactly today's `next` (which already consumes cordage
+  `order_key`) with the mint tiebreaker swapped from `base` to `score`. This makes `next`
+  leverage-aware — a ready item that
   unblocks a large valuable cone leads, even with a modest own `base` — while the only
   thing structure overrides is genuine same-chain sequencing.
 - `explain`: emits the full `Score` breakdown.
@@ -338,9 +363,12 @@ maintainability coefficient defaulting to 0.0).
   over the `dep_overlay`, the acyclic ordering backbone. Reverse-`ordered()` traversal
   guarantees dependents resolve first (single sweep, no fixpoint). A *diagnosed* `needs`
   cycle (malformed data; `Reject` surfaces it) is condensed — intra-SCC edges contribute
-  0 — so the DP halts and the cycle is reported, never chased. `dep_coeff ∈ (0,1]`
-  guarantees convergence by depth (a dependent at depth k contributes `dep_coeff^k·base`);
-  `> 1` is clamped at load precisely so deep chains cannot diverge (§5.2). The one-hop
+  0 — so the DP halts and the cycle is reported, never chased. Finiteness is **structural**
+  — a single DP sweep over a finite DAG is always finite — *not* a convergence property of
+  `dep_coeff`: under fan-out leverage is a path-sum that `dep_coeff ≤ 1` decays per-path but
+  does not bound (F-1/RV-132). `>1` is clamped at load to keep each hop a *retention*
+  (per-path decay), the recursive-vs-flat policy domain (ADR-015); overflow to `∞` is fenced
+  by `COEFF_MAX` + `is_finite` (I2(b)), not by the domain. The one-hop
   `ref`-optionality term needs no termination argument (it never recurses). (VT-4, VT-8.)
 - **Reconvergence is multiplicative — accepted as leverage.** In a `needs` diamond
   (N gated-by {B, C}, both gated-by D), D's base reaches N through *both* paths, so D is
@@ -463,7 +491,8 @@ maintainability coefficient defaulting to 0.0).
   Escalation path if the dumb constraint ever mis-sequences: re-introduce seq as a
   *diminished, rank-modulated optionality weight* (lower than `needs`) — deferred, evidence-
   gated (OQ-4). Coefficients are asymmetric by structure: `dep_coeff ∈ (0,1]` (recursive
-  retention, must not amplify), `ref_coeff` flat-non-negative (one-hop, no compounding).
+  retention — per-path decay, though fan-out still sums, F-1), `ref_coeff` flat-non-negative
+  (one-hop, no compounding).
 
 **ADR-015 boundary** — opens with the **thesis**: an *enabler* accrues a
 coefficient-weighted share of the value it unlocks (the value of optionality); `score`
@@ -472,9 +501,13 @@ web actionability view orders one axis by it). Ratifies durable policy: dimensio
 semantics; the two-pass model; **consequence = recursive `needs`-leverage (D8) +
 one-hop `ref`-optionality (D9)**; seq-as-structural-constraint (D10); the
 mint-vs-display ordering rule (I3); the `[priority]` config shape + forward-compat rule;
-the sort contract (survey/next/explain). Implementation-owned (not in the ADR, tunable
-freely): the coefficient *numbers* (incl. the `dep_coeff ∈ (0,1]` default), kind-weight
-defaults, tag-coeff examples, and the `total_cmp`/clamp/condensation mechanics.
+the sort contract (survey/next/explain); **and the coefficient role/domain split —
+`dep_coeff` a recursive retention factor in `(0,1]`, `ref_coeff` a flat non-negative one-hop
+weight, seq no weight class — because the domains (not just the values) encode the
+recursive-vs-one-hop policy that makes D8/D9 valid (F-4/RV-132).** Implementation-owned (not
+in the ADR, tunable freely): the coefficient *default numbers* (e.g. `dep_coeff = 0.5` — the
+value, never the `(0,1]` domain), kind-weight defaults, tag-coeff examples, `COEFF_MAX`, and
+the `total_cmp` / silent-clamp / condensation mechanics.
 
 ## 8. Risks & Mitigations
 
@@ -539,12 +572,17 @@ Verification (criteria firm up in `/plan`):
   computed dims/total/leverage/optionality, not just the inputs (I2(b), F-2).
 - **VT-7** — ordering split (I3): **mint** uses `base` only (consequence excluded from the
   structural tier-3 fallback); **`survey`** display sorts by `score`; **`next`** sorts the
-  actionable frontier by `(score desc, id)` with `after`-seq applied as strict precedence —
-  proven by a Y-fixture: two seq-incomparable ready arms order by score, while a same-chain
-  seq pair keeps structural order regardless of score.
-- **VT-8** — **leverage terminates on malformed data (I5)**: a hand-authored `needs`
-  cycle is diagnosed (`dep_cycles()`), the SCC is condensed (intra-SCC edges contribute 0),
-  the DP halts, and leverage is finite for every node.
+  actionable frontier by `(score desc, id)` with surviving `after`-seq applied as strict
+  precedence — proven by: a Y-fixture (two seq-incomparable ready arms order by score), a
+  same-chain seq pair (keeps structural order regardless of score), AND an evicted/cyclic
+  seq case (an `Evict`-broken seq edge does NOT re-impose precedence — proving the sort reads
+  *surviving* edges, not raw `seq_overlay`; F-3).
+- **VT-8** — **leverage terminates on malformed data, condensation specified (I5, F-2)**:
+  (a) a self-loop (`A needs A`) — the singleton-vs-cycle boundary — yields finite
+  `leverage(A)`; (b) a multi-member SCC `A↔B` with an external dependent `C` (`C needs B`):
+  the `{A,B}` component is read from `provenance().cycles()`, intra-component edges
+  contribute 0, `base(C)+leverage(C)` flows to the component **once**, and `A` and `B` report
+  the same finite component leverage. The DP halts and every node's leverage is finite.
 - **VA-1** — `explain --json` exposes `{ base, value_dim, risk_dim, leverage,
   optionality, total }`; human render reads correctly.
 - Goldens (`survey`/`next`/`explain` human + `--json`) updated to the score contract.
