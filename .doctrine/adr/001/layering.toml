@@ -25,6 +25,7 @@ dep_seq = "leaf"            # out=0: dependency-sequence data types — pure
 dispatch_config = "leaf"    # out=0: dispatch config defaults — pure
 dtoml = "leaf"              # → estimate, value, conduct, dispatch_config, verify; verify→coverage is engine but dtoml is a TOML wrapper (pure seam); baselined below
 estimate = "leaf"           # out=0: estimate facet types — pure
+facet = "leaf"              # out=0: EntityFacets aggregation — pure data, imports only estimate + value
 facet_write = "leaf"        # → fsutil (SL-113): shared facet read→mutate→write core — std+leaf only
 fsutil = "leaf"             # out=0: filesystem utility — impure seam, no domain
 git = "leaf"                # out=0: git ops — impure seam, no domain

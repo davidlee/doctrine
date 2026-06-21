@@ -15,6 +15,13 @@ pub(crate) fn format_bound(f: f64) -> String {
     }
 }
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "preserved for future verbose display mode (e.g. slice show --detail)"
+    )
+)]
 pub(crate) fn format_estimate_normal(facet: Option<&EstimateFacet>, unit: &str) -> String {
     debug_assert!(!unit.is_empty());
 
@@ -29,6 +36,13 @@ pub(crate) fn format_estimate_normal(facet: Option<&EstimateFacet>, unit: &str) 
     }
 }
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "preserved for future verbose display mode (e.g. slice show --detail)"
+    )
+)]
 pub(crate) fn format_estimate_verbose(facet: Option<&EstimateFacet>, unit: &str) -> Vec<String> {
     debug_assert!(!unit.is_empty());
 
@@ -52,6 +66,30 @@ pub(crate) fn format_estimate_verbose(facet: Option<&EstimateFacet>, unit: &str)
     );
 
     vec![spread, width]
+}
+
+/// Render a confidence-framed estimate line for `slice show`.
+///
+/// Formula: `lower_bound = facet.lower + lower_pct * (facet.upper - facet.lower)`,
+/// `upper_bound = facet.lower + upper_pct * (facet.upper - facet.lower)`.
+/// Output: `"{:.1}–{:.1} {unit} ({:.0}% confidence)"`
+pub(crate) fn format_estimate_confidence(
+    facet: &EstimateFacet,
+    lower_pct: f64,
+    upper_pct: f64,
+    unit: &str,
+) -> String {
+    debug_assert!(!unit.is_empty());
+    debug_assert!(lower_pct.is_finite() && upper_pct.is_finite());
+    debug_assert!((0.0..=1.0).contains(&lower_pct) && (0.0..=1.0).contains(&upper_pct));
+    debug_assert!(lower_pct < upper_pct);
+
+    let width = facet.upper - facet.lower;
+    let lo = facet.lower + lower_pct * width;
+    let hi = facet.lower + upper_pct * width;
+    let pct = (upper_pct - lower_pct) * 100.0;
+
+    format!("estimate: {lo:.1}–{hi:.1} {unit} ({pct:.0}% confidence)")
 }
 
 #[cfg(test)]
