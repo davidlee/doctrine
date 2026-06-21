@@ -47,7 +47,10 @@ fn toml_edit_value_as_f64(value: &toml_edit::Value) -> Option<f64> {
 /// A single field of a mixed-type facet: either a string value or a string array.
 #[derive(Debug, Clone)]
 pub(crate) enum FacetField {
-    Str { key: &'static str, value: String },
+    Str {
+        key: &'static str,
+        value: String,
+    },
     Arr {
         key: &'static str,
         values: Vec<String>,
