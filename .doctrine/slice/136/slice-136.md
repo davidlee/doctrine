@@ -102,7 +102,8 @@ ADR fixtures (`:1300`,`:1662-1668`) root-ward. Restore RFC-002's live tags via o
 | `src/spec.rs` | `spec::key()` populates tags; `tags` on `ReqJsonRow` + `show_json` member obj; spec show row + show-json |
 | `src/requirement.rs` | REQ show row (`req_key`/`tags` field already wired) |
 | `src/relation_graph.rs` | Repoint ADR fixtures (`:1300`,`:1662-1668`) typed→root tags |
-| `src/adr.rs`, `src/policy.rs` | Fix `Meta` struct-literal sites (A2) |
+| `src/adr.rs`, `src/policy.rs` | Fix `Meta` struct-literal sites (A2); drop `tags` from typed-axis render-unit tests (`policy.rs:295`, `adr.rs:322`) |
+| `src/standard.rs` | Drop `tags` from typed-axis render-unit test (`:302`) |
 | `src/listing.rs` | Centralise `--tag` filter-fold (calls `tag::fold_filter_tag`) |
 | `install/templates/{slice,requirement}.toml` | Seed root `tags = []` |
 | `install/templates/{adr,policy,standard,rfc}.toml` | Move `tags` to root |
