@@ -49,7 +49,7 @@ exit_criteria = [
   { id = "EX-3", text = "find_for_mcp(…) added — reuses load_query→query, returns FindForMcp { rows, total } with key/held_back_on_retrieve fields" },
   { id = "EX-4", text = "filtered_list(root, type_f, filter) added — shared helper for list_rows and list_for_mcp, reusing listing::retain" },
   { id = "EX-5", text = "list_for_mcp(root, …, limit: usize) added — validate_statuses → listing::build → filtered_list → paginate → ListForMcp" },
-  { id = "EX-6", text = "backlink_rows_for(root, all: &[Memory], uid) added — factored from run_backlinks, accepts pre-collected memories" },
+  { id = "EX-6", text = "backlink_rows_for(root, all: &[Memory], uid) added — factored from run_backlinks, accepts pre-collected memories. run_backlinks delegates to it internally." },
   { id = "EX-7", text = "list_rows internally delegates to filtered_list (no behaviour change)" },
   { id = "EX-8", text = "Visibility bumps: holdback_floor, held_back, staleness, git_facts (retrieve.rs); resolve_memory_from_all (memory.rs) → pub(crate)" },
   { id = "EX-9", text = "BacklinkRow struct and fields → pub(crate)" },
