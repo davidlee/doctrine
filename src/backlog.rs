@@ -1216,11 +1216,6 @@ fn list_rows(
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
-    // Fold the `-t/--tag` filter inputs through the lenient `tag::fold_filter_tag` so
-    // a mixed-case input round-trips the lowercased store (`-t Security` → `security`),
-    // WITHOUT the write-path charset reject (a filter matching nothing succeeds
-    // silently — SL-067 PHASE-01, EX-5/§5). `tags_admit`'s exact-match is unchanged.
-    args.tags = args.tags.iter().map(|t| tag::fold_filter_tag(t)).collect();
     let (filter, format) = listing::build(args)?;
     let corpus = read_all(root)?;
     let ordering = match by {
@@ -1901,8 +1896,7 @@ pub(crate) fn run_after(
 }
 
 // ---------------------------------------------------------------------------
-// SL-067 PHASE-01: the `backlog tag` verb — tag normalisation + the
-// edit-preserving set-replace write, plus the two divergent folds
+// SL-067 PHASE-01: the `backlog tag` verb
 // ---------------------------------------------------------------------------
 
 /// `doctrine backlog tag <ID> [TAGS]… [--remove/-d <TAGS>…]` — the tag-edit verb
@@ -1950,7 +1944,7 @@ pub(crate) fn run_tag(
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", item_path.display()))?;
-    let changed = tag::apply_tags_set(&mut doc, &add_set, &remove_set, &crate::clock::today());
+    let changed = tag::apply_tags_set(&mut doc, &add_set, &remove_set, &crate::clock::today())?;
     if changed {
         crate::fsutil::write_atomic(&item_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", item_path.display()))?;
@@ -2339,6 +2333,7 @@ mod tests {
                 slug: "fast-boot".to_string(),
                 title: "Fast boot".to_string(),
                 status: "open".to_string(),
+                tags: vec![],
             }
         );
 
@@ -4404,8 +4399,8 @@ tags = []
     }
 
     /// VT-5: edit-preserving — a comment / inert table / unknown key survive; `updated`
-    /// stamped; unrelated keys untouched. And a missing-`tags` file self-heals (SL-136
-    /// PHASE-01: insert-if-missing, CHR-019-proven safe).
+    /// stamped; unrelated keys untouched. And an F-1 missing-`tags` file is refused
+    /// byte-unchanged.
     #[test]
     fn run_tag_is_edit_preserving_and_refuses_missing_tags() {
         let dir = tempfile::tempdir().unwrap();
@@ -4436,8 +4431,7 @@ tags = []
             "updated stamped"
         );
 
-        // SL-136 PHASE-01: a file with NO `tags` key self-heals (insert-if-missing,
-        // CHR-019-proven safe) — seeds `tags = []` then adds the tag.
+        // Self-heal: a file with NO `tags` key gets tags = ["x"] seeded (SL-136).
         fs::create_dir_all(item_path(root, ItemKind::Issue, 2).parent().unwrap()).unwrap();
         let path2 = item_path(root, ItemKind::Issue, 2);
         let no_tags = "id = 2\nslug = \"b\"\ntitle = \"B\"\nkind = \"issue\"\n\
@@ -4448,7 +4442,7 @@ tags = []
         let after2 = fs::read_to_string(&path2).unwrap();
         assert!(
             after2.contains("tags = [\"x\"]"),
-            "self-heal: seeds tags array with new tag: {after2}"
+            "self-heal seeds tags and writes: {after2}"
         );
     }
 

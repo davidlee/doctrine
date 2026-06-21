@@ -1297,8 +1297,8 @@ mod tests {
         );
     }
 
-    /// Seed an ADR governance entity (SL-048 migrated shape — only `related` moves to
-    /// `[[relation]]`; supersedes/superseded_by/tags stay typed, OD-3).
+    /// Seed an ADR governance entity (SL-048 migrated shape: `related` → `[[relation]]`;
+    /// `supersedes`/`superseded_by` stay typed; `tags` → root-level (SL-136)).
     fn seed_adr(root: &Path, id: u32, axes: &[(&str, &[&str])]) {
         write(
             root,
@@ -1662,8 +1662,8 @@ mod tests {
             &root,
             ".doctrine/adr/001/adr-001.toml",
             "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
-             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nsuperseded_by = []\ntags = []\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
+             [relationships]\nsuperseded_by = []\n\
              [[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-002\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-003\"\n",
         );

@@ -186,11 +186,19 @@ pub(crate) fn build(args: ListArgs) -> anyhow::Result<(Filter, Format)> {
             Some(compiled)
         }
     };
+    // Fold `-t/--tag` filter inputs through the lenient `tag::fold_filter_tag` so a
+    // mixed-case input round-trips the lowercased store (`-t Security` → `security`),
+    // WITHOUT the write-path charset reject. Centralised once here for all list kinds.
+    let tags = args
+        .tags
+        .into_iter()
+        .map(|t| crate::tag::fold_filter_tag(&t))
+        .collect();
     let filter = Filter {
         substr: args.substr.map(|s| s.to_lowercase()),
         regex,
         status: args.status,
-        tags: args.tags,
+        tags,
         all: args.all,
     };
     let resolved = if args.json { Format::Json } else { args.format };

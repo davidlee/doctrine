@@ -13,7 +13,6 @@ updated = "2026-06-14"
 # SL-048). Author them with `doctrine link ADR-013 supersedes|related <target>`.
 # `doctrine inspect ADR-013` renders them. `superseded_by` (ADR-004) and `tags` stay typed.
 superseded_by = []   # set on the old ADR by F1; reverse link is derived
-tags          = []   # free-form classification
 
 
 # `related` cross-references are uniform `[[relation]]` rows now (SL-048 "the cut"),

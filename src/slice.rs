@@ -932,7 +932,7 @@ fn key(m: &Meta) -> listing::FilterFields {
         slug: m.slug.clone(),
         title: m.title.clone(),
         status: m.status.clone(),
-        tags: Vec::new(),
+        tags: m.tags.clone(),
     }
 }
 
@@ -1178,6 +1178,8 @@ struct SliceDoc {
     created: String,
     updated: String,
     #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
     gate: Gate,
     #[serde(default)]
     estimate: Option<crate::estimate::EstimateFacet>,
@@ -1332,6 +1334,10 @@ fn format_show(
     parts.push(format!("{} · {}\n", doc.slug, doc.status));
     // Advisory conduct posture for the current state (F15/F19) — Table only.
     parts.push(format!("conduct: {}\n", posture.label()));
+    // Tags — rendered only when non-empty (additive).
+    if !doc.tags.is_empty() {
+        parts.push(format!("tags: {}\n", doc.tags.join(", ")));
+    }
     parts.push(format!(
         "created {} · updated {}\n",
         doc.created, doc.updated
@@ -1477,6 +1483,7 @@ mod tests {
             slug: slug.to_string(),
             title: title.to_string(),
             status: status.to_string(),
+            tags: Vec::new(),
         }
     }
 
@@ -2379,6 +2386,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2422,6 +2430,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2471,6 +2480,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2513,6 +2523,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2547,6 +2558,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2585,6 +2597,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2619,6 +2632,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2661,6 +2675,7 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2762,6 +2777,7 @@ mod tests {
             status: "proposed".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-01".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2828,6 +2844,7 @@ mod tests {
             status: "proposed".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-01".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,
@@ -2848,6 +2865,7 @@ mod tests {
             status: "proposed".into(),
             created: "2026-06-18".into(),
             updated: "2026-06-18".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: Some(crate::estimate::EstimateFacet {
                 lower: 2.0,
@@ -2873,6 +2891,7 @@ mod tests {
             status: "proposed".into(),
             created: "2026-06-18".into(),
             updated: "2026-06-18".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: Some(crate::value::ValueFacet { value: 5.0 }),
@@ -2896,6 +2915,7 @@ mod tests {
             status: "proposed".into(),
             created: "2026-06-18".into(),
             updated: "2026-06-18".into(),
+            tags: vec![],
             gate: Gate::default(),
             estimate: None,
             value: None,

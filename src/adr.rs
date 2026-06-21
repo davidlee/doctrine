@@ -288,6 +288,7 @@ mod tests {
                 slug: "use-rust".to_string(),
                 title: "Use Rust".to_string(),
                 status: "proposed".to_string(),
+                tags: vec![],
             }
         );
         // VT-1: status seeds proposed, the date is injected, no token survives.
@@ -319,7 +320,7 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        assert!(doc["relationships"]["tags"].as_array().unwrap().is_empty());
+        assert!(doc["tags"].as_array().unwrap().is_empty());
         // … yet Meta deserialises fine, ignoring the unknown table.
         assert!(toml::from_str::<Meta>(&body).is_ok());
     }
