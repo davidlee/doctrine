@@ -1039,9 +1039,9 @@ mod tests {
             status: "accepted".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
+            tags: vec!["lang".into()],
             relationships: Relationships {
                 superseded_by: vec![],
-                tags: vec!["lang".into()],
             },
         };
         // SL-048: `related` is now passed in (read from `[[relation]]`), not a field.
@@ -1152,6 +1152,7 @@ mod tests {
                 slug: "use-rust".into(),
                 title: "Use Rust".into(),
                 status: "proposed".into(),
+                tags: vec![],
             })
         );
 

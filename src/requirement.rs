@@ -460,6 +460,7 @@ mod tests {
                 slug: "fast-boot".to_string(),
                 title: "Fast boot".to_string(),
                 status: "pending".to_string(),
+                tags: vec![],
             }
         );
         // … and the full requirement parses, with kind seeded `functional` (D-1).
