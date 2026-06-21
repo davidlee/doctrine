@@ -94,3 +94,21 @@ pre-date this slice.
 
 None. All design-to-implementation mappings are aligned. No per-slice
 artifacts need correction.
+
+## Reconciliation Outcome
+
+### REVs completed
+
+- **REV-007** (`reconcile-sl-139`): done — SPEC-013 amended to include `paths`
+  in the uniform-verb set (covers RV-136 F-4). Rationale in revision-007.md.
+
+  Change: `modify SPEC-013` — added `paths` to the shared verb set enumeration
+  in the Uniform command grammar section.
+
+### Direct edits applied
+
+None.
+
+### Withdrawn / tolerated
+
+None.
