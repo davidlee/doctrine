@@ -1,0 +1,42 @@
+memory_uid = "mem_019eeaec3c7f7023b9d0a86bc4a2ae2f"
+memory_key = "mem.pattern.dispatch.fork-env-contract-stdout-status-line"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "worktree fork emits a human status line on stdout before the env contract"
+summary = "doctrine worktree fork prints a 'provisioned …' status line on stdout before the KEY=VALUE env contract; capturing $fork_env unfiltered breaks env $fork_env cmd (rc 127)."
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = []
+globs = [".claude/skills/dispatch-subprocess/**"]
+commands = ["doctrine worktree fork"]
+tags = ["dispatch", "worktree", "subprocess", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "35b2d73123433367fb7a9e90030e93817f3aeb33"
+ref_name = "refs/heads/edge"
+checkout_state_id = "6eb452db26004fa1c7ae53338c8342b5e58af67506d6a534e4b2d8aa94b89e07"
+base_commit = "1f10ee302e817f3a539975ec7889fa35b1464ef9"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
