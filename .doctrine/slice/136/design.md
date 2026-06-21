@@ -138,10 +138,22 @@ enum TagCommand {
 - Template seeding (`tags = []` at root): add to **slice, requirement (REQ)**;
   backlog/knowledge/spec already seeded; gov/RFC seeded via the §5.4 migration.
   Excluded kinds (CM/RV/REC/REV) get no seed — not taggable until IMP-144.
-- **REQ read surfaces** must be wired so REQ tags are not write-only: its
-  `key()` (or `Meta` path) populates `FilterFields.tags`, and its `show` renders
-  the tag axis. (REQ is included precisely because this wiring is in scope; the
-  excluded kinds are excluded because theirs is not — IMP-144.)
+- **Full read-surface parity for every newly-included kind** (Codex 2nd-pass
+  BLOCKER): a kind is in `TAGGABLE` only if **all three** read surfaces render
+  tags — `list --tag` filter, `show` table, and `--json`. Partial wiring (filter
+  but not show/json) is the same write-only smell D2 killed, only quieter. In
+  scope per kind:
+  - **slice** — `Meta.tags` + `slice::key().tags`; `show` table tag row; show-json field.
+  - **spec (PRD/SPEC)** — `spec::key().tags` (was omitted from the worklist);
+    spec `show` tag row; show-json field.
+  - **REQ** — `req_key().tags` (already wired, `spec.rs:1665`); add `tags` to
+    `ReqJsonRow` (`spec.rs:~1556`) and to the `show_json` member req object
+    (`spec.rs:~1167`); REQ `show` tag row.
+  - **gov/RFC** — `governance::key().tags`; the §5.4 migration repoints `show`
+    render root-ward; add `tags` to the governance show-json builder.
+  - **backlog / knowledge** — already render tags on all three; unchanged.
+  (The excluded kinds are excluded because none of their three surfaces is wired
+  — IMP-144.)
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -166,8 +178,15 @@ add∩remove overlap, resolve path, call leaf, `write_atomic` if changed, print
 `Tagged <ID>: a, b` / `(none)`.
 
 List `--tag` fix:
-- `slice::key()` + `governance::key()` set `tags: m.tags.clone()` (governance
-  covers ADR/POL/STD and RFC, which routes through `governance::run_list`).
+- `slice::key()` + `governance::key()` + **`spec::key()`** set `tags:
+  m.tags.clone()` (governance covers ADR/POL/STD and RFC via `governance::run_list`;
+  `spec::key()` covers PRD/SPEC and was missing from the first-pass worklist —
+  `src/spec.rs:~1349` still hardcodes `Vec::new()`). REQ's `req_key()` already
+  wires `tags` (`spec.rs:1665`).
+- **Show + JSON render** for each newly-included kind (full-parity, §5.3): slice
+  and spec gain a `show` tag row + show-json `tags` field; REQ gains `tags` on
+  `ReqJsonRow` + the `show_json` member object; governance's show-json builder
+  gains `tags` (its table render is repointed root-ward by the §5.4 migration).
 - **Centralise the filter-fold into `listing::build`** (fold each `--tag` input
   trim+lowercase via `tag::fold_filter_tag`); remove backlog's redundant
   pre-fold. Idempotent → every list kind gets case-insensitive `--tag` uniformly.
@@ -177,9 +196,11 @@ contradicts two tech specs that pin governance tags as typed; the amendment ride
 a **Revision authored at reconciliation** (ADR-013), the in-slice code/test/corpus
 changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
 
-- **Canon (the REV, at closure):** SPEC-005 §Decisions D2 ("`tags` remain in the
-  typed `[relationships]` table") and SPEC-018 §relations ("`tags` … stays typed")
-  both amended to root-level by one Revision.
+- **Canon (the REV, at closure):** **three** specs pin governance tags as typed
+  and are amended root-level by one Revision — SPEC-005 §Decisions D2 ("`tags`
+  remain in the typed `[relationships]` table"), SPEC-018 §relations ("`tags` …
+  stays typed"), and **SPEC-016** (responsibility text describes the governance
+  `[relationships]` seam as carrying `tags` — `spec-016.toml:17`; Codex 2nd-pass).
 - **Struct surgery (`governance.rs`):** drop typed `tags` from `Relationships`;
   add root `tags` to `Doc`; **repoint the `show` render** `doc.relationships.tags`
   → `doc.tags` (~L313-320); fix the two `Meta` literals (A2).
@@ -196,7 +217,13 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
   (fixture), `src/adr.rs:322` (typed-tags assert). **Invert**
   `tests/e2e_relation_migration_storage.rs` — its
   `governance_corpus_..._tags_stay_typed` + `assert_governance_shape` guards now
-  assert tags are root, not typed.
+  assert tags are root, not typed; **extend `governance_files()` (`:86`) to
+  include `rfc`** — it scans only `adr/policy/standard`, so RFC migration is
+  currently unverified (Codex 2nd-pass).
+- **`relation_graph.rs` fixtures (Codex 2nd-pass):** `seed_adr`'s comment
+  (`:1300`, "supersedes/superseded_by/tags stay typed") and the inline ADR
+  fixtures (`:1662-1668`, `[relationships]…tags = []`) bake typed governance
+  tags; repoint to root `tags` so the relation-graph suite stays green.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -259,17 +286,18 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
   `run_list`. Rejected: three call sites + every future kind; one fold site is
   DRY and uniform. Idempotent, so backlog's removed pre-fold is behaviour-neutral.
 - **D6 — SL-136 is governance-changing; the spec amendment rides a Revision at
-  reconciliation.** D1 contradicts SPEC-005 D2 and SPEC-018 §relations, which pin
-  governance tags as typed in `[relationships]` (Codex BLOCKER, verified in
-  source). A slice design cannot overrule a tech spec. Per ADR-013 a governance
-  dependency routes through a **Revision (REV)**; per the project's governance
-  note small changes may proceed with the amendment recorded at reconciliation.
-  Chosen: **revision-at-reconciliation** — the code/test/corpus changes land
-  in-slice, the REV amending both specs is authored at `/reconcile` before
-  `/close`. Alt: revision-first (author the REV, then build) — heavier sequencing
-  for no correctness gain given the bounded, reversible blast radius. The REV
-  obligation is recorded here and in the scope so closure cannot silently skip
-  it.
+  reconciliation.** D1 contradicts SPEC-005 D2, SPEC-018 §relations, and SPEC-016
+  (Codex 2nd-pass), which pin governance tags as typed in `[relationships]` (Codex
+  BLOCKER, verified in source). A slice design cannot overrule a tech spec. Per
+  ADR-013 a governance dependency routes through a **Revision (REV)**; the
+  reconciliation **timing** is canon under ADR-003 (tech specs are reconciled from
+  observed implementation at `/reconcile`, after audit, before `/close`) — not the
+  project governance note. Chosen: **revision-at-reconciliation** — the
+  code/test/corpus changes land in-slice, one REV amending all **three** specs is
+  authored at `/reconcile` before `/close`. Alt: revision-first (author the REV,
+  then build) — heavier sequencing for no correctness gain given the bounded,
+  reversible blast radius. The REV obligation is recorded here and in the scope so
+  closure cannot silently skip it.
 
 ## 8. Risks & Mitigations
 
@@ -287,9 +315,16 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
 - R5 — Closure forgets the REV (D6), leaving the corpus non-canonical against
   SPEC-005/018. Mitigation: obligation recorded in design D6 + scope Phase 4 +
   carried to `/reconcile`; `/close` verifies spec-coherence.
-- R6 — REQ read-surface wiring is larger than assumed (REQ may not ride the `Meta`
-  list path). Mitigation: confirm REQ's list/show path in Phase 3 (phase-plan);
-  if non-trivial, REQ joins IMP-144 and drops from this slice's `TAGGABLE`.
+- R6 — REQ read-surface wiring is larger than assumed. **Resolved (verified):** REQ
+  rides a bespoke spec-mediated path, not `Meta`, but its `req_key()` already wires
+  `tags` (`spec.rs:1665`) and the `Requirement` struct already carries a
+  `#[serde(default)] tags` field (`requirement.rs:168`). Remaining work — `tags` on
+  `ReqJsonRow` + `show_json` member object + REQ show row — is mechanical and stays
+  in scope; REQ stays in `TAGGABLE`.
+- R7 — full read-surface parity (D2/§5.3) touches more render sites than the
+  first-pass worklist (slice/spec show+json, gov show-json). Mitigation: the §5.3
+  per-kind list + §9 parity tests are the work-list; one show+json test per kind
+  asserts no surface is write-only.
 
 ## 9. Quality Engineering & Validation
 
@@ -306,11 +341,16 @@ Per §6 of the scope and §5.5 invariants:
   struct-literal sites** (`adr.rs`, `policy.rs`, `governance.rs` ~L1150,
   `meta.rs` test helper, `backlog.rs` ~L2411) with `tags: vec![]` — literals
   need the field even with serde-default.
-- list: slice + governance + REQ `list --tag` match case-insensitively.
-- REQ read surface: a REQ tag renders in `show` and filters in `list` (not
-  write-only).
-- migration: no residual `[relationships].tags`; RFC-002 restored (asserted);
-  governance `show` renders tags from root; the migration-guard test inverted.
+- list: slice + spec (PRD/SPEC) + governance + REQ `list --tag` match
+  case-insensitively (spec::key was the gap).
+- **Full read-surface parity (per kind):** for slice, spec, REQ, gov/RFC a written
+  tag is visible on **all three** surfaces — `list --tag` filter, `show` table row,
+  and `--json` field. Specifically: `ReqJsonRow` + `show_json` member object carry
+  `tags`; slice/spec/gov show-json carry `tags`. No surface left write-only.
+- migration: no residual `[relationships].tags` (incl. RFC — `governance_files()`
+  extended to scan `rfc`); RFC-002 restored (asserted); governance `show` renders
+  tags from root; the migration-guard test inverted; `relation_graph.rs` ADR
+  fixtures (`:1300`,`:1662-1668`) repointed root-ward and that suite green.
 - Behaviour-preservation: backlog tag + gov/slice list suites green; the bail
   test rewritten.
 
@@ -321,12 +361,14 @@ Phasing:
    Behaviour-preserving.
 2. **Generic verb** — `commands/tag.rs` (`set`/`clear`) + `Command::Tag` wiring;
    taggability gate (excluded kinds → IMP-144 error).
-3. **Templates + Meta + list fix** — seed slice/REQ templates; `Meta.tags`;
-   `slice::key()`/`governance::key()`/REQ read surface; centralise fold in
+3. **Templates + Meta + full read surface** — seed slice/REQ templates; `Meta.tags`;
+   `slice::key()`/`governance::key()`/`spec::key()` + REQ list wiring; **show + json
+   tag render for slice/spec/REQ/gov** (full parity, §5.3); centralise fold in
    `listing::build`.
 4. **Governance/RFC migration** — root-ward move in files + 4 templates + struct
-   surgery + golden/migration-guard updates; RFC-002 restore. **REV obligation
-   (D6) flagged for `/reconcile`.**
+   surgery + golden/migration-guard updates (incl. `governance_files()` += `rfc`,
+   `relation_graph.rs` fixtures); RFC-002 restore. **REV obligation (D6) — amends
+   SPEC-005/016/018 — flagged for `/reconcile`.**
 
 ## 10. Review Notes
 
@@ -371,3 +413,34 @@ External adversarial pass — Codex (GPT-5.5), all claims verified in source:
 
 Net: Codex reversed D2 outright and forced D1 to declare itself governance-changing
 (D6) with a measured blast radius. D3/D4/D5 stand (D4 with proof + scoping).
+
+Second external pass — Codex (GPT-5.5), all claims verified in source:
+
+- **BLOCKER — partial read surface = quiet write-only.** The curated set claims
+  "read surfaces render tags," but the first-pass worklist only wired the
+  list-filter (and not for spec), leaving slice/spec/REQ tags unrendered in
+  `show`/`--json`. **Accepted — full-parity rule adopted (D2/§5.3):** a kind is
+  taggable only with all three surfaces (list-filter + show + json) wired; §5.3
+  enumerates the per-kind render work, §9 adds parity tests.
+- **MAJOR — `spec::key()` omitted from list-fix.** `src/spec.rs:~1349` hardcodes
+  `tags: Vec::new()`, so `spec list --tag` stayed dead. **Accepted** — `spec::key()`
+  added to the §5.4 list-fix worklist.
+- **MAJOR — REQ JSON write-only.** `req_key` wires list tags but `ReqJsonRow`
+  (`spec.rs:~1556`) and `show_json`'s member object (`spec.rs:~1167`) carry none.
+  **Accepted** — both folded into §5.3/§9.
+- **MAJOR — migration inventory incomplete (3 misses).** (a) `SPEC-016` also pins
+  typed gov tags (`spec-016.toml:17`) → D6 REV now amends **three** specs; (b)
+  `governance_files()` (`e2e_relation_migration_storage.rs:86`) scans only
+  adr/policy/standard, omitting RFC → extended to `rfc`; (c) `relation_graph.rs`
+  fixtures (`:1300`,`:1662-1668`) bake typed gov tags → repoint root-ward. All
+  folded into §5.4.
+- **Sequencing authority correction.** D6's revision-at-reconciliation **timing**
+  is canon under **ADR-003** (specs reconciled from implementation at `/reconcile`),
+  not the project governance note; ADR-013 still governs the REV routing. D6 fixed.
+- **Confirmed closed:** D4 scoping holds (tag-write `backlog.rs:1936` and
+  status-write `dep_seq.rs:282` are disjoint seams); exclusions correct (CM/RV/REC/
+  REV render no tags on any surface).
+
+Net second pass: no decision overturned, but the worklist was materially
+incomplete — full read-surface parity (D2/§5.3), `spec::key()` + REQ-JSON wiring,
+and three migration-inventory additions. Design now coherent for `/plan`.
