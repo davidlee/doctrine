@@ -1934,14 +1934,26 @@ pub(crate) fn collect_all(root: &Path) -> Result<Vec<Memory>> {
     Ok(out)
 }
 
+/// Shared filtered-list helper (design §3). Returns all memories matching the
+/// standard filter + type axis, in default sort order. Used by [`list_rows`]
+/// (CLI) and [`list_for_mcp`] (MCP) — zero duplication. Delegates to
+/// [`listing::retain`] for the full filter contract.
+pub(crate) fn filtered_list(
+    root: &Path,
+    type_f: Option<MemoryType>,
+    filter: &crate::listing::Filter,
+) -> Result<Vec<Memory>> {
+    let mut rows = listing::retain(collect_all(root)?, filter, is_hidden, key);
+    rows.retain(|m| type_f.is_none_or(|t| m.kind == t));
+    sort_default(&mut rows);
+    Ok(rows)
+}
+
 /// The `memory list` output as a string — the compute half of `run_list`, on the
 /// shared spine (SL-025). `validate_statuses` guards `--status` against the SIX
 /// [`MEMORY_STATUSES`] (A-2); `listing::build` resolves the filter + format;
-/// `retain` applies the shared substr/regex/status/tag axes + the terminal
-/// [`is_hidden`] set. `--type` is the one kind-specific axis (kept beside the shared
-/// flags, applied here after the shared retain — the backlog `--kind` precedent).
-/// Ordering is per-kind (`created`-desc + uid via [`sort_default`]), never in
-/// `retain` (§5.3). `boot` calls this directly with an explicit `status:["active"]`
+/// delegates to [`filtered_list`] for the core pipeline (no behaviour change).
+/// `boot` calls this directly with an explicit `status:["active"]`
 /// to render its memory section ACTIVE-ONLY (drafts excluded from agent context, C-4).
 pub(crate) fn list_rows(
     root: &Path,
@@ -1952,9 +1964,7 @@ pub(crate) fn list_rows(
     let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
-    let mut rows = listing::retain(collect_all(root)?, &filter, is_hidden, key);
-    rows.retain(|m| type_f.is_none_or(|t| m.kind == t));
-    sort_default(&mut rows);
+    let rows = filtered_list(root, type_f, &filter)?;
     match format {
         Format::Table => {
             let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, columns.as_deref())?;
@@ -1992,7 +2002,58 @@ pub(crate) fn run_list(
     Ok(())
 }
 
-fn resolve_memory_from_all<'a>(all: &'a [Memory], mref: &MemoryRef) -> Result<&'a Memory> {
+/// Structured result from `list_for_mcp` — rows + total, consumed by the
+/// `memory_list` MCP handler which builds the pagination envelope.
+#[derive(Debug)]
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
+pub(crate) struct ListForMcp {
+    pub(crate) rows: Vec<serde_json::Value>,
+    pub(crate) total: usize,
+}
+
+/// Structured list for MCP consumption (design §3). Thin pagination wrapper
+/// over [`filtered_list`]: validate statuses, build filter, filter, paginate,
+/// return `ListForMcp`. Zero duplication — the full filter contract
+/// (`listing::retain`: substr over key+title, status validation, default
+/// hide-set, tag OR-match) is shared with `list_rows`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
+pub(crate) fn list_for_mcp(
+    root: &Path,
+    type_f: Option<MemoryType>,
+    substr: Option<&str>,
+    status: &[String],
+    tags: &[String],
+    offset: usize,
+    limit: usize,
+) -> Result<ListForMcp> {
+    listing::validate_statuses(status, MEMORY_STATUSES)?;
+    let args = ListArgs {
+        substr: substr.map(str::to_owned),
+        status: status.to_vec(),
+        tags: tags.to_vec(),
+        ..Default::default()
+    };
+    let (filter, _format) = listing::build(args)?;
+    let rows = filtered_list(root, type_f, &filter)?;
+    let total = rows.len();
+    let json_rows = json_rows(
+        &rows
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .collect::<Vec<_>>(),
+    );
+    let mut page = Vec::with_capacity(json_rows.len());
+    for r in json_rows {
+        page.push(serde_json::to_value(r)?);
+    }
+    Ok(ListForMcp { rows: page, total })
+}
+
+pub(crate) fn resolve_memory_from_all<'a>(
+    all: &'a [Memory],
+    mref: &MemoryRef,
+) -> Result<&'a Memory> {
     match mref {
         MemoryRef::Uid(uid) => all
             .iter()
@@ -2064,11 +2125,11 @@ pub(crate) fn run_resolve_links(path: Option<PathBuf>, reference: Option<&str>) 
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct BacklinkRow {
-    uid: String,
-    memory_type: String,
-    title: String,
-    method: String,
+pub(crate) struct BacklinkRow {
+    pub(crate) uid: String,
+    pub(crate) memory_type: String,
+    pub(crate) title: String,
+    pub(crate) method: String,
 }
 
 fn normalize_backlink_target(
@@ -2083,43 +2144,18 @@ fn normalize_backlink_target(
     }
 }
 
-pub(crate) fn run_backlinks(path: Option<PathBuf>, reference: &str) -> Result<()> {
-    const BACKLINK_COLUMNS: [Column<BacklinkRow>; 4] = [
-        Column {
-            name: "uid",
-            header: "uid",
-            cell: |row| row.uid.clone(),
-            paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
-                owo_colors::AnsiColors::Cyan,
-            )),
-        },
-        Column {
-            name: "type",
-            header: "type",
-            cell: |row| row.memory_type.clone(),
-            paint: listing::ColumnPaint::ByValue(|row| listing::memory_type_hue(&row.memory_type)),
-        },
-        Column {
-            name: "title",
-            header: "title",
-            cell: |row| scrub_line(&row.title),
-            paint: listing::ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
-        },
-        Column {
-            name: "method",
-            header: "method",
-            cell: |row| scrub_line(&row.method),
-            paint: listing::ColumnPaint::None,
-        },
-    ];
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let all = collect_all(&root)?;
-    let (known_uids, key_to_uid) = known_link_maps(&all);
+/// Build the backlink row set for one memory uid (design §4). Accepts
+/// pre-collected memories so callers can share one `collect_all` between
+/// `check_retrievable` + `backlink_rows_for` (no double scan). Returns rows
+/// sorted by uid → method → title with method-provenance ("wikilink" or the
+/// actual relation label).
+pub(crate) fn backlink_rows_for(root: &Path, all: &[Memory], reference: &str) -> Vec<BacklinkRow> {
+    let (known_uids, key_to_uid) = known_link_maps(all);
     let mut wikilink_storage: BTreeMap<String, Vec<crate::links::Wikilink>> = BTreeMap::new();
     let mut relation_storage: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-    for memory in &all {
-        let body = read_body(&root, &memory.uid);
+    for memory in all {
+        let body = read_body(root, &memory.uid);
         let resolved: Vec<crate::links::Wikilink> = extract_wikilinks(&body)
             .into_iter()
             .map(|link| {
@@ -2153,7 +2189,7 @@ pub(crate) fn run_backlinks(path: Option<PathBuf>, reference: &str) -> Result<()
     let backlinks = backlinks_index(wikilinks_by_uid, relations_by_uid);
     let mut query_targets = BTreeSet::from([reference.to_owned()]);
     if let Ok(mref) = MemoryRef::parse(reference)
-        && let Ok(memory) = resolve_memory_from_all(&all, &mref)
+        && let Ok(memory) = resolve_memory_from_all(all, &mref)
     {
         query_targets.insert(memory.uid.clone());
         if let Some(key) = &memory.key {
@@ -2173,7 +2209,7 @@ pub(crate) fn run_backlinks(path: Option<PathBuf>, reference: &str) -> Result<()
         let Some(memory) = all.iter().find(|m| m.uid == uid) else {
             continue;
         };
-        let body = read_body(&root, &memory.uid);
+        let body = read_body(root, &memory.uid);
         let mut methods = BTreeSet::new();
         for link in extract_wikilinks(&body) {
             let normalized = resolve_wikilink(&known_uids, &key_to_uid, &link.target, link.is_uid)
@@ -2203,6 +2239,41 @@ pub(crate) fn run_backlinks(path: Option<PathBuf>, reference: &str) -> Result<()
             .then_with(|| a.method.cmp(&b.method))
             .then_with(|| a.title.cmp(&b.title))
     });
+    rows
+}
+
+pub(crate) fn run_backlinks(path: Option<PathBuf>, reference: &str) -> Result<()> {
+    const BACKLINK_COLUMNS: [Column<BacklinkRow>; 4] = [
+        Column {
+            name: "uid",
+            header: "uid",
+            cell: |row| row.uid.clone(),
+            paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+                owo_colors::AnsiColors::Cyan,
+            )),
+        },
+        Column {
+            name: "type",
+            header: "type",
+            cell: |row| row.memory_type.clone(),
+            paint: listing::ColumnPaint::ByValue(|row| listing::memory_type_hue(&row.memory_type)),
+        },
+        Column {
+            name: "title",
+            header: "title",
+            cell: |row| scrub_line(&row.title),
+            paint: listing::ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
+        },
+        Column {
+            name: "method",
+            header: "method",
+            cell: |row| scrub_line(&row.method),
+            paint: listing::ColumnPaint::None,
+        },
+    ];
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let all = collect_all(&root)?;
+    let rows = backlink_rows_for(&root, &all, reference);
     let selected =
         listing::select_columns(&BACKLINK_COLUMNS, &["uid", "type", "title", "method"], None)?;
     write!(
@@ -6715,6 +6786,132 @@ weight = 0
         };
         let changed = apply_edit(&mut doc, &fields, "2026-06-05").unwrap();
         assert!(!changed);
+    }
+
+    // ── filtered_list / list_for_mcp ─────────────────────────────────────
+
+    /// Helper: create a temp project with two seeded memories.
+    fn temp_project_with_two_memories() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q", "-b", "main"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.email", "t@example.com"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.name", "Test"])
+            .output()
+            .unwrap();
+        std::fs::create_dir_all(root.path().join(".doctrine")).unwrap();
+        std::fs::write(root.path().join(".doctrine/.keep"), "").unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["add", ".doctrine/.keep"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["commit", "-q", "-m", "base"])
+            .output()
+            .unwrap();
+        let sources: Vec<crate::memory::Provenance> = vec![];
+        let empty: Vec<String> = vec![];
+        for (title, key) in [("First", "mem.test.first"), ("Second", "mem.test.second")] {
+            let args = crate::memory::RecordArgs {
+                title,
+                memory_type: crate::memory::MemoryType::Fact,
+                key: Some(key),
+                status: crate::memory::Status::Active,
+                summary: None,
+                tags: &empty,
+                repo: None,
+                lifespan: None,
+                review_by: None,
+                sources: &sources,
+                paths: &empty,
+                globs: &empty,
+                commands: &empty,
+                global: false,
+                trust_level: None,
+                severity: None,
+            };
+            crate::memory::run_record(Some(root.path().to_path_buf()), &args).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn filtered_list_returns_all_active_memories() {
+        let root = temp_project_with_two_memories();
+        let filter = crate::listing::Filter {
+            substr: None,
+            regex: None,
+            status: vec![],
+            tags: vec![],
+            all: false,
+        };
+        let rows = filtered_list(root.path(), None, &filter).unwrap();
+        // Two active memories — both surfaced (hide-set filters archived/superseded/retracted)
+        assert_eq!(rows.len(), 2, "both memories should be visible");
+    }
+
+    #[test]
+    fn filtered_list_respects_substr_filter() {
+        let root = temp_project_with_two_memories();
+        let filter = crate::listing::Filter {
+            substr: Some("first".to_owned()),
+            regex: None,
+            status: vec![],
+            tags: vec![],
+            all: false,
+        };
+        let rows = filtered_list(root.path(), None, &filter).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].key.as_deref(), Some("mem.test.first"));
+    }
+
+    #[test]
+    fn list_for_mcp_returns_paginated_result() {
+        let root = temp_project_with_two_memories();
+        let result = list_for_mcp(
+            root.path(),
+            None,
+            None,
+            &[],
+            &[],
+            0,  // offset
+            50, // limit
+        )
+        .unwrap();
+        assert_eq!(result.total, 2);
+        assert_eq!(result.rows.len(), 2);
+    }
+
+    #[test]
+    fn list_for_mcp_respects_limit() {
+        let root = temp_project_with_two_memories();
+        let result = list_for_mcp(root.path(), None, None, &[], &[], 0, 1).unwrap();
+        assert_eq!(result.total, 2);
+        assert_eq!(result.rows.len(), 1);
+    }
+
+    #[test]
+    fn list_for_mcp_respects_offset() {
+        let root = temp_project_with_two_memories();
+        let result = list_for_mcp(root.path(), None, None, &[], &[], 1, 50).unwrap();
+        assert_eq!(result.total, 2);
+        assert_eq!(result.rows.len(), 1);
     }
 }
 
