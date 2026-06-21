@@ -30,7 +30,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::backlog_order::{BacklogOrder, ItemId, OrderInput, Override, OverrideReason};
-use crate::tag::normalize_tag;
+use crate::tag::{self, normalize_tag};
 // SL-060 PHASE-02: the dep/sequence schema + the strict edit-preserving append now
 // live in the shared `dep_seq` leaf. Backlog uses the leaf TYPE (`AfterEdge`) and the
 // leaf `RelEdit`/`append` write seam; its own `read_item`/`dep_seq_for` (the one-parse
@@ -1216,11 +1216,6 @@ fn list_rows(
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
-    // Fold the `-t/--tag` filter inputs through the lenient `fold_filter_tag` so a
-    // mixed-case input round-trips the lowercased store (`-t Security` → `security`),
-    // WITHOUT the write-path charset reject (a filter matching nothing succeeds
-    // silently — SL-067 PHASE-01, EX-5/§5). `tags_admit`'s exact-match is unchanged.
-    args.tags = args.tags.iter().map(|t| fold_filter_tag(t)).collect();
     let (filter, format) = listing::build(args)?;
     let corpus = read_all(root)?;
     let ordering = match by {
@@ -1901,83 +1896,8 @@ pub(crate) fn run_after(
 }
 
 // ---------------------------------------------------------------------------
-// SL-067 PHASE-01: the `backlog tag` verb — tag normalisation + the
-// edit-preserving set-replace write, plus the two divergent folds
+// SL-067 PHASE-01: the `backlog tag` verb
 // ---------------------------------------------------------------------------
-
-/// Normalise a `-t/--tag` FILTER input — the lenient, SEPARATE fold (§4.2): trim +
-/// lowercase, with NO charset reject. A filter matching nothing must succeed
-/// silently (never `bail!`), so this MUST NOT route through
-/// [`crate::tag::normalize_tag`]; the
-/// two folds diverge by design. `tags_admit` keeps its exact-match semantics — only
-/// the input is folded so `-t Security` round-trips the stored `security`.
-fn fold_filter_tag(raw: &str) -> String {
-    raw.trim().to_lowercase()
-}
-
-/// Pure write core: apply a tag add/remove SET edit to a held `&mut DocumentMut`,
-/// edit-preserving. No disk, no clock — the shell injects `today`.
-///
-/// - **F-1 strict refuse**: the `tags` key absent from the top-level table → the
-///   entity is malformed/hand-edited (a well-formed file seeds `tags = []`); a
-///   tail-insert would land the array inside a trailing subtable (silent corruption).
-///   `bail!`, NEVER create — the file is left untouched.
-/// - **The set algebra**: `new = (current ∪ normalize(adds)) ∖ normalize(removes)`,
-///   stored SORTED. The current set is read off the existing array verbatim (a
-///   hand-authored store may be unsorted — that is fine, the no-op guard compares as
-///   SETS).
-/// - **No-op guard (set-compare)**: if `set(new) == set(current)`, return `Ok(false)`
-///   with NO mutation (content + mtime hold). Set-compare (not ordered-vec) is
-///   REQUIRED so an idempotent re-add against an UNSORTED hand-authored store does
-///   not spuriously write + stamp `updated`.
-/// - Else replace `tags` with the fresh SORTED array and stamp `updated = today`,
-///   returning `Ok(true)`. Everything OUTSIDE the array (comments, inert tables,
-///   unknown keys) is preserved by `toml_edit`.
-fn apply_tags(
-    doc: &mut toml_edit::DocumentMut,
-    adds: &std::collections::BTreeSet<String>,
-    removes: &std::collections::BTreeSet<String>,
-    today: &str,
-) -> anyhow::Result<bool> {
-    let array = doc
-        .as_table()
-        .get("tags")
-        .and_then(toml_edit::Item::as_array)
-        .with_context(|| {
-            "malformed backlog item: missing seeded `tags` array (a well-formed item \
-             seeds `tags = []`); restore it before tagging — the file is left untouched"
-                .to_string()
-        })?;
-    let current: std::collections::BTreeSet<String> = array
-        .iter()
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .collect();
-
-    let mut new: std::collections::BTreeSet<String> = current.clone();
-    new.extend(adds.iter().cloned());
-    for r in removes {
-        new.remove(r);
-    }
-
-    // Set-compare no-op guard: an idempotent re-add / absent-remove (or an UNSORTED
-    // hand store whose set is already correct) writes nothing — mtime + content hold.
-    if new == current {
-        return Ok(false);
-    }
-
-    // Full sorted-array replace, preserving the doc outside the array. `BTreeSet`
-    // iterates sorted, so the stored array is sorted.
-    let mut fresh = toml_edit::Array::new();
-    for tag in &new {
-        fresh.push(tag.as_str());
-    }
-    let table = doc.as_table_mut();
-    table.insert("tags", toml_edit::value(fresh));
-    // Stamp `updated` — F-1 already proved `tags` present; `updated` is a sibling
-    // seeded key, so a plain insert edits it in place (no tail-subtable risk).
-    table.insert("updated", toml_edit::value(today));
-    Ok(true)
-}
 
 /// `doctrine backlog tag <ID> [TAGS]… [--remove/-d <TAGS>…]` — the tag-edit verb
 /// (SL-067 PHASE-01, §4.1/§4.3). Thin impure shell: find the root, `parse_ref` +
@@ -2024,7 +1944,7 @@ pub(crate) fn run_tag(
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", item_path.display()))?;
-    let changed = apply_tags(&mut doc, &add_set, &remove_set, &crate::clock::today())?;
+    let changed = tag::apply_tags_set(&mut doc, &add_set, &remove_set, &crate::clock::today())?;
     if changed {
         crate::fsutil::write_atomic(&item_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", item_path.display()))?;
@@ -2413,6 +2333,7 @@ mod tests {
                 slug: "fast-boot".to_string(),
                 title: "Fast boot".to_string(),
                 status: "open".to_string(),
+                tags: vec![],
             }
         );
 
@@ -4510,19 +4431,18 @@ tags = []
             "updated stamped"
         );
 
-        // F-1: a file with NO `tags` key is refused byte-unchanged.
+        // Self-heal: a file with NO `tags` key gets tags = ["x"] seeded (SL-136).
         fs::create_dir_all(item_path(root, ItemKind::Issue, 2).parent().unwrap()).unwrap();
         let path2 = item_path(root, ItemKind::Issue, 2);
         let no_tags = "id = 2\nslug = \"b\"\ntitle = \"B\"\nkind = \"issue\"\n\
              status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
              updated = \"2026-06-08\"\n";
         fs::write(&path2, no_tags).unwrap();
-        let err = run_tag(Some(root.to_path_buf()), "ISS-002", &s(&["x"]), &[]);
-        assert!(err.is_err(), "a missing seeded `tags` array is refused");
-        assert_eq!(
-            no_tags,
-            fs::read_to_string(&path2).unwrap(),
-            "refused byte-unchanged"
+        run_tag(Some(root.to_path_buf()), "ISS-002", &s(&["x"]), &[]).unwrap();
+        let after2 = fs::read_to_string(&path2).unwrap();
+        assert!(
+            after2.contains("tags = [\"x\"]"),
+            "self-heal seeds tags and writes: {after2}"
         );
     }
 
@@ -4530,9 +4450,9 @@ tags = []
     /// errors and round-trips the store; a no-match input succeeds silently.
     #[test]
     fn filter_fold_is_lenient_and_distinct_from_write_normalise() {
-        assert_eq!(fold_filter_tag("  Security "), "security");
+        assert_eq!(tag::fold_filter_tag("  Security "), "security");
         // The lenient fold accepts what the write chokepoint rejects (no bail).
-        assert_eq!(fold_filter_tag("a b"), "a b");
+        assert_eq!(tag::fold_filter_tag("a b"), "a b");
 
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();

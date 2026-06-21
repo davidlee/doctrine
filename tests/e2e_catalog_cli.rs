@@ -50,8 +50,8 @@ fn seed_fixture(root: &Path) {
         root,
         ".doctrine/adr/002/adr-002.toml",
         "id = 2\nslug = \"a2\"\ntitle = \"A2\"\nstatus = \"accepted\"\n\
-         created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-         [relationships]\nsuperseded_by = []\ntags = []\n\
+         created = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
+         [relationships]\nsuperseded_by = []\n\
          [[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-001\"\n",
     );
     write(root, ".doctrine/adr/002/adr-002.md", "body\n");

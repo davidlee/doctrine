@@ -9,4 +9,5 @@ pub(crate) mod map;
 pub(crate) mod relation;
 pub(crate) mod serve;
 pub(crate) mod supersede;
+pub(crate) mod tag;
 pub(crate) mod validate;

@@ -36,6 +36,8 @@ pub(crate) struct Meta {
     pub(crate) slug: String,
     pub(crate) title: String,
     pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) tags: Vec<String>,
 }
 
 /// Parse the `Meta` of a single entity by id, reading `<stem>-<id>.toml` under
@@ -98,6 +100,7 @@ mod tests {
             slug: slug.to_string(),
             title: title.to_string(),
             status: status.to_string(),
+            tags: Vec::new(),
         }
     }
 

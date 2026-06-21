@@ -7,12 +7,12 @@ title = "Consumption surfaces program: estimate, value, and scoring outward pipe
 status = "open"
 created = "2026-06-21"
 updated = "2026-06-21"
+tags = ["consumption-surfaces", "estimate", "program", "scoring", "value"]
 
 [relationships]
 # RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
 # Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
 superseded_by = []   # reverse link is derived (REV→RFC originates_from)
-tags          = ["program", "consumption-surfaces", "estimate", "value", "scoring"]
 
 [[relation]]
 label = "related"
