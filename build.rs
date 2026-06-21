@@ -10,7 +10,10 @@
 
 use std::path::Path;
 
-#[expect(clippy::disallowed_methods, reason = "build script — ephemeral stub for cargo package")]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "build script — ephemeral stub for cargo package"
+)]
 fn main() {
     let dist = Path::new("web/map/dist");
     let index = dist.join("index.html");
