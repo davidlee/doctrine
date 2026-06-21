@@ -27,4 +27,10 @@ The Inquisition (RV-134) raised 7 findings against the design. All resolved.
 
 ### Design now ready for phase planning.
 
+### 2026-06-22 — Plan authored (4 phases)
+
+- `plan.toml` + `plan.md` committed (897cf483 on edge)
+- 4 phases: PHASE-01 (paths.rs helper), PHASE-02 (concept-map --json), PHASE-03 (numeric stem kinds), PHASE-04 (umbrella + named kinds)
+- Slice moved to `ready`
+
 See RV-134 for full findings and dispositions.
