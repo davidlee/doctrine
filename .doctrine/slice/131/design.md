@@ -184,22 +184,25 @@ pub(crate) fn retrieve_reference(
     let mref = crate::memory::MemoryRef::parse(reference)?;
     let memory = crate::memory::resolve_memory_from_all(&all, &mref)?;
 
-    // 3. Single gate — check_consumable applies lifecycle, draft, holdback
-    let (ok, reason) = check_consumable(memory, include_draft, min_trust);
+    // 3. Freeze snapshot (same as load_query — one clock + git capture)
+    let snap = freeze(root);
+
+    // 4. Full retrieve-admission gate: partition, lifecycle, draft,
+    //    thread expiry, trust holdback — same contract as scope-based path
+    let (ok, reason) = check_retrievable(
+        memory, &snap.part, include_draft, min_trust, &snap.today);
     if !ok {
-        anyhow::bail!("memory {reference}: {}", reason.unwrap_or("not consumable"));
+        anyhow::bail!("memory {reference}: {}", reason.unwrap_or_default());
     }
 
-    // 4. Staleness (same computation as the scope-based path)
-    let snap = freeze(root);
-    let facts = snap.facts_for(&memory.anchor);
-    let today = &snap.today;
-    let st = staleness(memory, facts, today);
+    // 5. Staleness (same computation as the scope-based path)
+    let facts = git_facts(root, memory, &snap);
+    let st = staleness(memory, facts, &snap.today);
 
-    // 5. Read body
+    // 6. Read body
     let body = crate::memory::read_body(root, &memory.uid);
 
-    // 6. Security-framed render (same render_show as run_retrieve's per-block loop)
+    // 7. Security-framed render (same render_show as run_retrieve's per-block loop)
     let nonce = uuid::Uuid::new_v4().simple().to_string();
     let rendered = crate::memory::render_show(
         memory,
@@ -213,51 +216,78 @@ pub(crate) fn retrieve_reference(
 }
 ```
 
-**Visibility bumps needed:**
+**Visibility bumps needed (cumulative with §2b):**
 - `memory::resolve_memory_from_all` → `pub(crate)` (currently private)
 - `staleness` → `pub(crate)` (currently private)
-- `holdback_floor` → `pub(crate)` (currently private) — needed by `check_consumable`
-- `held_back` → `pub(crate)` (currently private) — needed by `check_consumable`
+- `git_facts` → `pub(crate)` (currently private; called by `retrieve_reference`)
 
 Already `pub(crate)`: `collect_all`, `MemoryRef`, `MemoryRef::parse`, `read_body`,
-`render_show`, `freeze`, `Status`.
+`render_show`, `freeze`, `base_filter`, `thread_expiry`, `check_retrievable`.
 
-## 2b. Consumability / holdback helper
+## 2b. Retrievability helper (`check_retrievable`)
 
-Three surfaces need the same eligibility check — `memory_show` (for the
-`consumable` flag), `retrieve_reference` (pre-render gate), and the
-`memory_find` MCP envelope (per-row `held_back_on_retrieve`). Factor once:
+Three surfaces need the same retrieve-admission check — `retrieve_reference`
+(pre-render gate), `memory_show` (`consumable`/`notes` flags), and the normal
+`run_retrieve` pipeline (partition + thread + holdback in `query()` then
+`held_back`). Factor once so the direct-reference path cannot bypass gates
+that the scope-based path enforces:
 
 ```rust
 // In src/retrieve.rs
-/// Returns (consumable, reason_if_not). Applies lifecycle suppression,
-/// draft handling, and trust holdback in that order.
-pub(crate) fn check_consumable(
+/// Returns (admitted, reason_if_blocked). Applies the full retrieve contract
+/// in order: workspace/repo partition, lifecycle + draft, thread expiry,
+/// trust holdback. This is the sole admission gate — no parallel logic.
+pub(crate) fn check_retrievable(
     m: &crate::memory::Memory,
+    part: &QueryPartition,
     include_draft: bool,
     min_trust: Option<&str>,
-) -> (bool, Option<&'static str>) {
-    use crate::memory::Status;
-    if m.status == Status::Quarantined { return (false, Some("quarantined")); }
-    if m.status == Status::Retracted   { return (false, Some("retracted")); }
-    if m.status == Status::Archived    { return (false, Some("archived")); }
-    if m.status == Status::Superseded  { return (false, Some("superseded")); }
-    if m.status == Status::Draft && !include_draft {
-        return (false, Some("draft"));
+    today: &str,
+) -> (bool, Option<String>) {
+    // 1. Workspace/repo partition + lifecycle + draft — same gate as query()
+    if !base_filter(m, part, include_draft) {
+        let reason = match m.status {
+            Status::Quarantined => "quarantined",
+            Status::Retracted   => "retracted",
+            Status::Archived    => "archived",
+            Status::Superseded  => "superseded",
+            Status::Draft       => "draft",
+            Status::Active      => {
+                if m.scope.workspace != part.workspace { "wrong workspace" }
+                else { "wrong repo" }
+            }
+        };
+        return (false, Some(reason.to_owned()));
     }
+    // 2. Thread expiry — same gate as query() (ScopeMatch arg is vestigial)
+    if !thread_expiry(m, ScopeMatch::of(Dimension::Paths), today) {
+        return (false, Some("thread expired (unverified or stale)".to_owned()));
+    }
+    // 3. Trust holdback — same gate as run_retrieve's pre-render filter
     let floor = holdback_floor(min_trust);
     if held_back(m, floor) {
-        return (false, Some("held back (low trust ∧ high severity)"));
+        return (false, Some("held back (low trust ∧ high severity)".to_owned()));
     }
     (true, None)
 }
 ```
 
-`retrieve_reference` delegates its gates to `check_consumable` and only reads
-the body + renders after a pass. The `memory_show` MCP handler calls it to set
-`consumable` + `notes`. The `memory_find` MCP handler calls it per-row to set
-`held_back_on_retrieve` (with `include_draft` from the request, `min_trust: None`
-— the flag answers "would default retrieve suppress this?").
+Used by:
+- **`retrieve_reference`** — calls `check_retrievable` as the single pre-render
+gate, then computes staleness + reads body + renders.
+- **`memory_show` MCP handler** — calls `check_retrievable` to set `consumable`,
+`held_back_on_retrieve`, and `notes`.
+- **`find_for_mcp` rows** — `find_for_mcp` results have already passed
+`base_filter` + `thread_expiry` via `query()`, so only the holdback check is
+needed for the `held_back_on_retrieve` flag: `held_back(m, holdback_floor(None))`.
+No duplicate gate logic.
+
+**Visibility bumps needed:**
+- `holdback_floor` → `pub(crate)` (currently private)
+- `held_back` → `pub(crate)` (currently private)
+
+`base_filter`, `thread_expiry`, `ScopeMatch`, `Dimension`, `QueryPartition` are
+already `pub(crate)`.
 
 ## 3. Tool definitions
 
@@ -307,7 +337,9 @@ pub(crate) fn find_for_mcp(
         .skip(offset).take(cap).collect();
     let rows: Vec<serde_json::Value> = visible.iter().map(|c| {
         let m = c.memory;
-        let (_ok, reason) = check_consumable(m, include_draft, None);
+        // find_for_mcp results already passed base_filter + thread_expiry
+        // via query(); only the holdback check is needed for the flag.
+        let held = held_back(m, holdback_floor(None));
         json!({
             "uid": m.uid,
             "key": m.key,
@@ -318,7 +350,7 @@ pub(crate) fn find_for_mcp(
             "severity": crate::memory::scrub_line(&m.severity),
             "spec": c.scope_match.map_or("-", |s| s.dim.label()),
             "title": crate::memory::scrub_line(&m.title),
-            "held_back_on_retrieve": reason.is_some(),
+            "held_back_on_retrieve": held,
         })
     }).collect();
     Ok(FindForMcp { rows, total })
@@ -355,7 +387,7 @@ is shared.
 ```rust
 // In src/memory.rs
 pub(crate) struct ListForMcp {
-    pub(crate) rows: Vec<MemoryRow>,
+    pub(crate) rows: Vec<serde_json::Value>,
     pub(crate) total: usize,
 }
 
@@ -368,24 +400,34 @@ pub(crate) fn list_for_mcp(
     offset: usize,
     limit: Option<usize>,
 ) -> Result<ListForMcp> {
-    let filter = crate::listing::Filter {
+    // Build filter through the same validation pipeline as list_rows
+    let args = crate::listing::ListArgs {
         substr: substr.map(str::to_owned),
         status: status.to_vec(),
         tags: tags.to_vec(),
         ..Default::default()
     };
+    let (filter, _format) = crate::listing::build(args)?;
     let rows = filtered_list(root, type_f, &filter)?;
     let total = rows.len();
-    let cap = limit.unwrap_or(DEFAULT_MEMORY_LIST_LIMIT);
-    let page: Vec<MemoryRow> = json_rows(
+    // limit: 0 = all (unbounded), per schema contract
+    let cap = match limit {
+        Some(0) | None => usize::MAX,
+        Some(n) => n,
+    };
+    let page: Vec<serde_json::Value> = json_rows(
         &rows.into_iter().skip(offset).take(cap).collect::<Vec<_>>()
-    );
+    ).into_iter()
+      .map(|r| serde_json::to_value(r).unwrap())
+      .collect();
     Ok(ListForMcp { rows: page, total })
 }
 ```
 
-`DEFAULT_MEMORY_LIST_LIMIT = 50`. The `MemoryRow` struct already carries
-`uid, type, status, trust, key, title` — matches the MCP schema.
+`DEFAULT_MEMORY_LIST_LIMIT = 50`. `filtered_list` delegates to `listing::retain`
+for the full filter contract. `list_for_mcp` builds the filter through
+`listing::build` (status validation, substr lowercasing, regex compilation) —
+the same path as `list_rows`.
 
 ### ExtractFields extension
 
@@ -507,7 +549,7 @@ Mutual exclusivity enforced: `reference` with any query/scope probe → `-32602`
         if has_probes {
             anyhow::bail!("invalid arguments: reference is mutually exclusive with query/path_scope/glob/command/tag/type/status/lifespan");
         }
-        // Single-memory path: resolve → check_consumable → staleness → render
+        // Single-memory path: resolve → check_retrievable → staleness → render
         let mut buf = Vec::new();
         retrieve::retrieve_reference(
             &mut buf,
@@ -641,7 +683,7 @@ memory_show(reference!,
     "memory": {
       uid, key, type, …,          // same as show_json
       "held_back_on_retrieve": true,  // flagged if retrieve would suppress this
-      "consumable": false,            // false when check_consumable fails
+      "consumable": false,            // false when check_retrievable fails
       relations: […],
       wikilinks: […],
       backlinks: [ … ],
@@ -658,12 +700,9 @@ summary, then safely consume the exact body via
 `memory_retrieve(reference)` (which goes through the trust holdback and
 security-framed render).
 
-`consumable` is false when `check_consumable(memory, false, None)` returns
-`(false, reason)` — i.e. lifecycle status is quarantined / retracted / archived /
-superseded / draft, or trust holdback would suppress (low-trust ∧ high-severity).
-Draft memories are always non-consumable in `memory_show` (the tool has no
-`include_draft` toggle — it's inspection, not consumption). The `notes` field
-carries the reason string.
+`consumable` is false when `check_retrievable(memory, &snap.part, false, None, &snap.today)`
+returns `(false, reason)` — i.e. partition mismatch, lifecycle blocked, thread expired,
+or trust holdback suppressed. The `notes` field carries the reason string.
 
 **Safe exact-body path:** For agents that have selected a candidate uid via
 `memory_find` and want the body, the recommended path is
@@ -732,8 +771,8 @@ Calls `memory::list_for_mcp` (structured), then builds the pagination envelope:
 ### Backlink computation cost
 
 Building the backlink index scans the full memory corpus (one `collect_all` per
-`memory_show` call, shared between `check_consumable` resolution and
-`backlink_rows_for` — no double scan). Acceptable for typical corpus sizes (<1000
+`memory_show` call, shared between `check_retrievable` + `backlink_rows_for` —
+no double scan). Acceptable for typical corpus sizes (<1000
 memories, <100ms). If the corpus grows past 10k items, this should be cached or
 moved to build-on-record. For now, every `memory_show` call pays this cost, same
 as `doctrine memory backlinks <REF>`.
@@ -764,7 +803,7 @@ wikilink-vs-relation distinction. Do not duplicate it in `tools.rs`.
 
 Instead, factor a pure helper from `run_backlinks`'s internals. It accepts
 pre-collected memories so callers that also need the `Memory` for
-`check_consumable` avoid a double `collect_all` scan:
+`check_retrievable` + `backlink_rows_for` avoid a double `collect_all` scan:
 
 ```rust
 // In memory.rs — factored from run_backlinks
@@ -799,11 +838,12 @@ The handler does one `collect_all` scan, then enriches in two passes:
 2. Deserialize, extract `uid`
 3. `let all = memory::collect_all(root)?;` — one scan
 4. Resolve the `Memory`: `memory::resolve_memory_from_all(&all, &mref)?`
-5. Call `retrieve::check_consumable(memory, false, None)` → set `consumable`,
+5. Freeze snapshot: `let snap = retrieve::freeze(root);`
+6. Call `retrieve::check_retrievable(memory, &snap.part, false, None, &snap.today)` → set `consumable`,
    `held_back_on_retrieve`, `notes`
-6. Call `memory::backlink_rows_for(root, &all, &uid)` — get typed backlinks
-7. Apply `backlinks_limit` cap, inject `backlinks` array + `backlinks_total`
-8. Re-serialize enriched JSON
+7. Call `memory::backlink_rows_for(root, &all, &uid)` — get typed backlinks
+8. Apply `backlinks_limit` cap, inject `backlinks` array + `backlinks_total`
+9. Re-serialize enriched JSON
 
 Zero changes to `show_json` or `run_show`. The `backlink_rows_for` signature
 change (`all: &[Memory]` instead of `root: &Path`) is the sole API shift —
@@ -860,10 +900,10 @@ an MCP equivalent.
 
 | Path | Change |
 |---|---|
-| `src/retrieve.rs` | Add `writer: &mut impl Write` param to `run_find`, `run_retrieve`, `expand_graph`. Replace `write!(io::stdout(), …)` → `write!(writer, …)`. Add `retrieve_reference(writer, root, reference, include_draft, min_trust)` — delegates to `check_consumable` for the full gate. Add `find_for_mcp(…) -> FindForMcp` — structured find reusing `load_query`→`query`, with `key`/`held_back_on_retrieve` fields. Add `check_consumable(m, include_draft, min_trust) -> (bool, Option<&str>)` — lifecycle + draft + holdback in one gate. Bump `holdback_floor`, `held_back`, `staleness` to `pub(crate)`. |
+| `src/retrieve.rs` | Add `writer: &mut impl Write` param to `run_find`, `run_retrieve`, `expand_graph`. Replace `write!(io::stdout(), …)` → `write!(writer, …)`. Add `retrieve_reference(writer, root, reference, include_draft, min_trust)` — delegates to `check_retrievable` for the full gate. Add `find_for_mcp(…) -> FindForMcp` — structured find reusing `load_query`→`query`, with `key`/`held_back_on_retrieve` fields. Add `check_retrievable(m, part, include_draft, min_trust, today) -> (bool, Option<String>)` — partition + lifecycle + thread expiry + holdback in one gate. Bump `holdback_floor`, `held_back`, `staleness`, `git_facts` to `pub(crate)`. |
 | `src/memory.rs` | Add `writer: &mut impl Write` param to `run_show`, `run_list`. Replace `write!(io::stdout(), …)` → `write!(writer, …)`. Add `filtered_list(root, type_f, filter) -> Vec<Memory>` — shared filtered-list helper used by both `list_rows` (CLI) and `list_for_mcp` (MCP), reusing `listing::retain`. Add `list_for_mcp(…) -> ListForMcp` — paginated wrapper over `filtered_list`. Refactor `backlink_rows_for(root, all: &[Memory], uid) -> Vec<BacklinkRow>` — accepts pre-collected memories so callers avoid double `collect_all`. `BacklinkRow` + fields `pub(crate)`. Bump `resolve_memory_from_all` to `pub(crate)`. `list_rows` delegates to `filtered_list` (internal refactor, no behaviour change). |
 | `src/main.rs` | 4 CLI call sites pass `&mut io::stdout()` as first arg. |
-| `src/mcp_server/tools.rs` | Add 4 tool definitions with agent-facing descriptions. Add 4 `call_tool` match arms. `memory_find`: `find_for_mcp` + pagination envelope. `memory_retrieve`: validate mutual exclusivity (`reference` vs probes → `-32602`) + validate `min_trust` via `parse_min_trust` before branch; ref branch → `retrieve_reference`, scope branch → `run_retrieve`. `memory_show`: `run_show` JSON → deserialize → `collect_all` once → resolve Memory → `check_consumable` + `backlink_rows_for` → enrich + re-serialize. `memory_list`: `list_for_mcp` + pagination envelope. Change `call_tool` return type to `String`. Wrap 10 review arms with `.map(|o| serde_json::to_string(&o)?)`. Change `handle_tools_call` Ok arm to `McpToolResult::text(out)` directly. Add `opt_bool_field` to `ExtractFields`. Add `parse_lifespan`, `parse_memory_type`, `parse_status` helpers. |
+| `src/mcp_server/tools.rs` | Add 4 tool definitions with agent-facing descriptions. Add 4 `call_tool` match arms. `memory_find`: `find_for_mcp` + pagination envelope. `memory_retrieve`: validate mutual exclusivity (`reference` vs probes → `-32602`) + validate `min_trust` via `parse_min_trust` before branch; ref branch → `retrieve_reference`, scope branch → `run_retrieve`. `memory_show`: `run_show` JSON → deserialize → `collect_all` + `freeze` once → resolve Memory → `check_retrievable` + `backlink_rows_for` → enrich + re-serialize. `memory_list`: `list_for_mcp` + pagination envelope. Change `call_tool` return type to `String`. Wrap 10 review arms with `.map(|o| serde_json::to_string(&o)?)`. Change `handle_tools_call` Ok arm to `McpToolResult::text(out)` directly. Add `opt_bool_field` to `ExtractFields`. Add `parse_lifespan`, `parse_memory_type`, `parse_status` helpers. |
 | `src/retrieve.rs` | Move `limit=0` reject into `run_retrieve`; cap at `RETRIEVE_LIMIT_MAX` in `run_retrieve` only (not `run_find`). |
 | `src/mcp_server/protocol.rs` | Unchanged. |
 | `src/mcp_server/mod.rs` | Unchanged. |
@@ -904,7 +944,7 @@ an MCP equivalent.
 - `memory_retrieve` with `min_trust: "banana"` returns error (`-32602`)
 - `memory_retrieve` with `reference` + query probe returns error (`-32602`, mutual exclusivity)
 - `memory_retrieve` with `reference` alone returns security-framed block
-- `memory_retrieve` with `reference` to quarantined memory returns error (check_consumable gate)
+- `memory_retrieve` with `reference` to quarantined memory returns error (check_retrievable gate)
 - `memory_retrieve` with `reference` to draft memory without `include_draft` returns error
 - `memory_show` with valid uid returns JSON with `held_back_on_retrieve`, `consumable`, `notes` fields
 - `memory_show` with `view: summary` excludes body
