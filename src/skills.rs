@@ -1088,7 +1088,7 @@ fn hook_outcome_label(outcome: &crate::boot::RefreshOutcome) -> &'static str {
         Wired(_) => "wired",
         Refreshed(_) => "refreshed",
         None => "already current",
-        PrintedFallback => "could not merge (settings left untouched)",
+        PrintedFallback { .. } => "could not merge (settings left untouched)",
     }
 }
 
