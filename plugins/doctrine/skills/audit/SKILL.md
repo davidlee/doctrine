@@ -90,6 +90,8 @@ not mutate a finding to `fixed`/`remediated`.
    Loose notes are insufficient for closure-grade work — findings belong in the
    ledger.
 2. **Gather evidence** (the audit's divergent work):
+   - prepare subject: do NOT change the main repository branch; use a worktree
+     instead, if necessary.
    - run the tests/checks the design and plan require, **plus `just check`**;
    - inspect observed behaviour against `design.md` and the phase `VT-` criteria;
    - note where behaviour and design diverge — each divergence is a finding.
