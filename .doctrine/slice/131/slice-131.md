@@ -51,33 +51,31 @@ Add MCP tools that expose **read-only** memory operations to agent harnesses:
 
 ## Affected surface
 
-- `src/mcp_server/tools.rs` — add memory tool definitions, handler dispatch arms,
-  and the `call_tool` match arms that call into `retrieve::run_*` and a Show/List
-  wrapper.
+- `src/mcp_server/tools.rs` — add memory tool definitions and handler dispatch
+  arms; change `call_tool` return type from `Result<ReviewOutput>` to
+  `Result<String>`; wrap 10 review arms with `.map(|o| serde_json::to_string(&o)?)`.
 - `src/mcp_server/mod.rs` — no change (transport/server loop is generic).
-- `src/mcp_server/protocol.rs` — may need a `MemoryOutput` variant or the existing
-  `McpToolResult` is reused with JSON-text via `serde_json`.
-- `src/retrieve.rs` — no change (the MCP layer adapts the existing run functions,
-  capturing `io::stdout()` output programmatically rather than printing it).
-- `src/memory.rs` — may need a thin adapter to return output as a `String`/`Value`
-  instead of writing to stdout (or capture stdout).
+- `src/mcp_server/protocol.rs` — no change (McpToolResult reused as-is).
+- `src/retrieve.rs` — add `writer: &mut impl Write` param to `run_find`,
+  `run_retrieve`, `expand_graph`; replace `write!(io::stdout(), …)` →
+  `write!(writer, …)`.
+- `src/memory.rs` — add `writer: &mut impl Write` param to `run_show`, `run_list`;
+  replace `write!(io::stdout(), …)` → `write!(writer, …)`.
+- `src/main.rs` — 4 CLI call sites pass `&mut io::stdout()` as first arg.
 
 ## Risks and assumptions
 
-- **Assumption:** The existing `run_find`/`run_retrieve` print to stdout. The MCP
-  handler captures that output via a `stdout` redirect or by adding a
-  `String`-returning variant. Prefer adding a `run_find_string() /
-  run_retrieve_string()` or a capture helper to avoid stdout pollution in the MCP
-  loop (which shares `io::stdout()` with the JSON-RPC response).
-- **Risk:** stdout capture from `run_*` functions is fragile — they use
-  `write!(io::stdout())` internally. The MCP server's own `io::stdout()` is
-  concurrently locked by `BufWriter` in the serve loop. The cleanest path is to
-  refactor the `run_*` functions to accept an `impl Write` or return `String`, but
-  that touches `src/retrieve.rs` which is out of scope unless necessary.
-  **Mitigation:** add programmatic variants (`run_find_value` / `run_retrieve_value`
-  returning `serde_json::Value`) that compose the same pipeline logic without
-  writing to stdout, then delegate the CLI variant to them. This avoids touching
-  the existing `run_*` shape.
+- **Decision (design):** refactor `run_find`, `run_retrieve`, `run_show`, `run_list`
+  to accept `writer: &mut impl Write` — the MCP handler passes `&mut Vec<u8>`,
+  CLI passes `&mut io::stdout()`. MCP tools use structured helpers
+  (`find_for_mcp`, `list_for_mcp`, `retrieve_reference`) that share the existing
+  `load_query` → `query` pipeline rather than post-processing rendered strings.
+- **Risk:** the `ExtractFields` helper in `tools.rs` lacks `opt_bool_field`. Must add
+  it for the `include_draft` flag.
+- **Risk:** `call_tool` return type changes to `String`. The `handle_tools_call`
+  handler must NOT re-serialize the string (`serde_json::to_string` on an already-
+  serialized JSON string produces double-encoding) — use `McpToolResult::text(out)`
+  directly.
 - **Risk:** MCP output format differs from CLI table/JSON format — the MCP layer
   will always return JSON (as `McpToolResult::text`). This is fine; the CLI format
   flag is not exposed in the MCP tool schema.
