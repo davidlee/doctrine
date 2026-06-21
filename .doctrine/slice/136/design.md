@@ -149,8 +149,15 @@ enum TagCommand {
   - **REQ** — `req_key().tags` (already wired, `spec.rs:1665`); add `tags` to
     `ReqJsonRow` (`spec.rs:~1556`) and to the `show_json` member req object
     (`spec.rs:~1167`); REQ `show` tag row.
-  - **gov/RFC** — `governance::key().tags`; the §5.4 migration repoints `show`
-    render root-ward; add `tags` to the governance show-json builder.
+  - **gov/RFC** — `governance::key().tags`; the §5.4 migration repoints the `show`
+    table render root-ward. **`--json` needs no builder change (RV-129 F-2,
+    root-expose):** `governance.rs:360` show_json is serde-driven
+    (`serde_json::to_value(doc)`), so once `tags` is stored at root it renders at
+    root automatically — uniform with every other kind's JSON. The existing
+    `supersedes`/`related` splice (reconstructing the SL-095 `[[relation]]` shape)
+    is **not** extended to tags: tags is a pure path relocation (string array →
+    same string array), nothing to reconstruct. The only `--json` work is updating
+    the goldens (§5.4) to expect tags at root.
   - **backlog / knowledge** — already render tags on all three; unchanged.
   (The excluded kinds are excluded because none of their three surfaces is wired
   — IMP-144.)
@@ -185,8 +192,12 @@ List `--tag` fix:
   wires `tags` (`spec.rs:1665`).
 - **Show + JSON render** for each newly-included kind (full-parity, §5.3): slice
   and spec gain a `show` tag row + show-json `tags` field; REQ gains `tags` on
-  `ReqJsonRow` + the `show_json` member object; governance's show-json builder
-  gains `tags` (its table render is repointed root-ward by the §5.4 migration).
+  `ReqJsonRow` + the `show_json` member object (RV-129 F-5: **additive** — both REQ
+  JSON sites drop tags today, so the parity test asserts tag **presence**, not
+  "unchanged"); governance's `--json` tags fall out of the serde-driven
+  `to_value(doc)` for free once storage moves root-ward (RV-129 F-2, no builder
+  change), while its `show` **table** render is repointed root-ward by the §5.4
+  migration.
 - **Centralise the filter-fold into `listing::build`** (fold each `--tag` input
   trim+lowercase via `tag::fold_filter_tag`); remove backlog's redundant
   pre-fold. Idempotent → every list kind gets case-insensitive `--tag` uniformly.
@@ -230,17 +241,31 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **Root insert-if-missing is safe in toml_edit 0.22** (D4). Probe (standalone
-  crate, toml_edit 0.22): `as_table_mut().insert("tags", …)` lands the key
-  **above** all trailing subtables AND `[[relation]]` array-of-tables in every
-  shape tested (no blank line / inline comments / multi-subtable / doc-comment
-  header / `[[relation]]` block), and the rendered doc **re-parses with
-  `root.tags` set** (semantic check, not just textual). The corruption premise in
-  `backlog::apply_tags`' F-1 comment is stale **for root inserts via this API**.
-  Scope of the change is the **tag write path only** — the status-refusal goldens
+- **Root insert-if-missing is safe in toml_edit 0.22** (D4). **Proven** by the
+  committed spike **CHR-019** (`tests/spike_chr019_root_tag_insert.rs`, toml_edit
+  `0.22.27`, 7 tests over the **live** corpus — RV-129 F-1, premise settled FALSE):
+  `as_table_mut().insert("tags", …)` lands the key **above** every trailing
+  `[relationships]` / `[[relation]]` / named subtable, and the rendered doc
+  **re-parses with `root.tags` set** (semantic, not textual). The original
+  evidence was a throwaway `/tmp/tomlprobe` on synthetic shapes; the spike instead
+  exercises the real worst-case shapes that probe never touched — SL-118
+  (`[[relation]]` → named `[estimate]` → trailing comment), RFC-002 (16×
+  `[[relation]]` + the only live tag set, relocated and preserved), SL-048
+  (comment after the last relation), ADR-014/POL-001 (same-file root `status` +
+  `[relationships].tags` overlap), spec-016 (root tags already present + `[[source]]`
+  AoT). **Why it is safe:** toml_edit's encoder emits header-less root leaf
+  key/values **above** all child table headers regardless of insertion order
+  (structural to TOML — a key after a `[header]` would belong to that table), so a
+  root insert via this API cannot tail-land inside a trailing subtable. The
+  corruption premise in `backlog::apply_tags`' F-1 comment (and the identical one
+  in `dep_seq::apply_status`) is therefore **stale for root inserts**. Scope of the
+  change is the **tag write path only** — the status-refusal goldens
   (`set_adr_status`/requirement, which lock byte-unchanged refusal on a *missing
-  status* key) are **not** touched; that paranoia stays. Insert-if-missing is
-  thus a tag-path decision, not a repo-wide reversal.
+  status* key) are **not** touched; that paranoia is now known over-conservative
+  but is harmless to keep. Insert-if-missing is thus a tag-path decision, not a
+  repo-wide reversal. (RV-129 F-1's "disjoint seams" objection is conceded:
+  ADR/POL carry both root `status` and `[relationships].tags` in one file — but the
+  spike proves that overlap is benign.)
 - No-op guard MUST compare as **sets** (not ordered vecs) so an idempotent re-add
   against an unsorted hand-authored store does not spuriously write + stamp.
 - `updated` stamp is **conditional on key presence** — status-less kinds without
@@ -279,8 +304,9 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
   all.** Alt: `set` = full-replace. Rejected: divergence from backlog would block
   clean delegation and break the behaviour-preservation gate. Backlog becomes a
   pure delegate.
-- **D4 — Insert-if-missing on the tag write path, not F-1 bail.** Empirically
-  safe at root incl. `[[relation]]` shapes (§5.5). Scoped to tagging only — the
+- **D4 — Insert-if-missing on the tag write path, not F-1 bail.** **Proven** safe
+  at root incl. `[[relation]]` shapes by the committed spike CHR-019 (§5.5; RV-129
+  F-1 settled FALSE). Scoped to tagging only — the
   status-refusal goldens stay. Backlog's only behaviour change: a
   malformed/hand-trimmed file self-heals instead of bailing; the one backlog test
   asserting that bail is rewritten to assert self-heal. The stale corruption
@@ -301,6 +327,20 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
   then build) — heavier sequencing for no correctness gain given the bounded,
   reversible blast radius. The REV obligation is recorded here and in the scope so
   closure cannot silently skip it.
+- **D7 — VA-1 stays a soft (agent-checked) gate, not a hard PHASE-04→reconcile
+  coupling.** RV-129 F-6 flags that PHASE-04 lands a corpus deliberately
+  contradicting SPEC-005/016/018, ratified by the REV only later at `/reconcile`,
+  with VA-1 (the weakest verification mode) as the only intervening check — so a
+  slice that stalls after PHASE-04 sits canon-violating. **Decision: keep soft.**
+  The temporary contradiction is the *expected* intermediate state of a
+  governance-changing slice (D6); the canonical change loop (ADR-003) routes
+  audit → reconcile → close, and `/close` already verifies spec-coherence, so the
+  window only matters under mid-flight abandonment — which the process closes
+  anyway. A hard gate is ceremony against an abandonment case the lifecycle
+  already handles. Alt (hard VH/VT gate coupling PHASE-04 exit to the REV):
+  rejected as disproportionate; reconsider only if stalled-slice canon drift is
+  observed in practice. The R5 mitigation (obligation recorded in D6 + scope +
+  carried to `/reconcile`) remains the primary guard.
 
 ## 8. Risks & Mitigations
 
@@ -314,7 +354,11 @@ changes land now. Blast radius (measured, Codex BLOCKER-1/MAJOR-2):
   Mitigation: `#[serde(default)]` keeps every existing file parsing; fix the named
   literal sites (A2); run the full list/show suites across kinds.
 - R4 — Migration misses a gov file or drops RFC-002's tags. Mitigation: scripted
-  grep for residual `[relationships].tags`; explicit RFC-002 restore + assertion.
+  grep for residual `[relationships].tags` **scoped to `install/templates` + the
+  committed corpus** (not the gitignored derived `.doctrine/templates/`, RV-129
+  F-3), **paired** with the golden/compile checks (grep is blind to serde/loop-var
+  consumers); explicit RFC-002 restore + assertion; `governance_files()` extended
+  to scan `rfc`.
 - R5 — Closure forgets the REV (D6), leaving the corpus non-canonical against
   SPEC-005/018. Mitigation: obligation recorded in design D6 + scope Phase 4 +
   carried to `/reconcile`; `/close` verifies spec-coherence.
@@ -336,7 +380,8 @@ Per §6 of the scope and §5.5 invariants:
 - `tag.rs` units: insert-if-missing seeds; no-op guard on **unsorted** store;
   set algebra sorted union/diff; `updated` stamped-if-present / skipped-if-absent;
   clear-on-untagged = no-op; `fold_filter_tag` lenient; **regression: root insert
-  lands above a trailing `[relationships]`** (locks the probe).
+  lands above a trailing `[relationships]`** (the CHR-019 spike,
+  `tests/spike_chr019_root_tag_insert.rs`, is the committed seed — kept as VT-2).
 - `commands/tag.rs`: set/clear round-trip on real scaffolds across taggable kinds
   (slice/adr/knowledge/spec/REQ); overlap reject; **excluded kind (e.g. `CM-1`)
   refused with the IMP-144 pointer**; memory-ref friendly error.
@@ -350,10 +395,25 @@ Per §6 of the scope and §5.5 invariants:
   tag is visible on **all three** surfaces — `list --tag` filter, `show` table row,
   and `--json` field. Specifically: `ReqJsonRow` + `show_json` member object carry
   `tags`; slice/spec/gov show-json carry `tags`. No surface left write-only.
-- migration: no residual `[relationships].tags` (incl. RFC — `governance_files()`
-  extended to scan `rfc`); RFC-002 restored (asserted); governance `show` renders
-  tags from root; the migration-guard test inverted; `relation_graph.rs` ADR
-  fixtures (`:1300`,`:1662-1668`) repointed root-ward and that suite green.
+- migration (storage residue only — **not** the read-parity proof, RV-129 F-2/F-3):
+  the residual-`[relationships].tags` grep is **scoped to `install/templates` + the
+  committed corpus** (`.doctrine/{adr,policy,standard,rfc}/**`), **never the
+  gitignored, derived `.doctrine/templates/`** — that tree is regenerated from the
+  `install/` RustEmbed (`src/install.rs:17`), so greppng it both over-fires (flags
+  derived copies) and proves nothing. Grep alone **cannot** gate this migration
+  (F-3): it is blind to serde-driven (`to_value(doc)`) and loop-var consumers, so
+  the gate pairs the grep with the **golden/compile-level checks** — the rewritten
+  adr/standard JSON goldens (now expecting root tags), `governance_files()`
+  extended to scan `rfc`, and the CHR-019 re-parse spike. RFC-002 restored
+  (asserted); governance `show` renders tags from root; the migration-guard test
+  inverted; `relation_graph.rs` ADR fixtures (`:1300`,`:1662-1668`) repointed
+  root-ward and that suite green.
+- read-parity (RV-129 F-2 — proven by **semantic per-kind enumeration**, §5.3, not
+  by grep): for slice/spec/REQ/gov each of the three surfaces — `list --tag`,
+  `show`, `--json` — is wired and **asserted by a dedicated test**; the dangerous
+  consumers are the grep-invisible ones (governance `to_value(doc)` JSON; the
+  REQ-JSON drop sites), which the §5.3 enumeration names explicitly rather than
+  trusting a textual scan to surface.
 - Behaviour-preservation: backlog tag + gov/slice list suites green; the bail
   test rewritten.
 
@@ -461,4 +521,52 @@ Third (focused) pass — Codex (GPT-5.5), confirmed in source:
   post-move). No change.
 
 Net third pass: two mechanical test-site additions, no new decisions, parity
-confirmed complete. Design coherent and converged — ready for `/plan`.
+confirmed complete.
+
+Fourth pass — RV-129 (adversarial, post-lock reopen), all 6 findings disposed in
+source; the contradiction in F-1 was settled by a committed spike, not assertion:
+
+- **F-1 (blocker) — D4 root-insert premise unproven; status/tags contradiction.**
+  **Settled — premise FALSE.** Spike **CHR-019** (`tests/spike_chr019_root_tag_insert.rs`,
+  toml_edit `0.22.27`, 7 tests over the live corpus) proves root insert lands above
+  every trailing subtable/`[[relation]]` and re-parses at root, across the real
+  worst-case shapes the `/tmp` probe never tested (SL-118, RFC-002, SL-048,
+  ADR-014/POL-001, spec-016). toml_edit emits header-less root leaf key/values
+  above all child headers regardless of insert order, so the both-seam refusal
+  (`apply_tags` + `apply_status`) is stale for root inserts. D4 stands, now proven;
+  the status-path bail is over-conservative but harmless (tag-path-only scope). The
+  "disjoint seams" objection is conceded but proven benign (ADR/POL same-file
+  overlap round-trips). → §5.5, D4.
+- **F-2 (major) — grep-as-parity-proof falsified; serde + loop-var consumers.**
+  **Accepted.** Read-parity is proven by the **semantic per-kind enumeration**
+  (§5.3), not grep; grep gates storage residue only. The serde-driven
+  `governance.rs:360` `to_value(doc)` JSON renders tags at root for free post-move
+  (**decision: root-expose** — uniform with all kinds, goldens updated; the
+  supersedes/related splice is NOT extended to tags). → §5.3/§5.4/§9.
+- **F-3 (major) — VT-1 grep gate under- and over-fires.** **Accepted.** The
+  migration grep is scoped to `install/templates` + committed corpus (never the
+  gitignored derived `.doctrine/templates/`) **and paired with golden/compile
+  checks** — grep alone cannot gate (blind to serde/loop-var reads). → §5.4/§8 R4/§9.
+- **F-4 (major) — positive shape-pin tests assert OLD shape; RFC unguarded.**
+  **Accepted — already integrated by the 2nd/3rd passes, confirmed complete:**
+  adr/standard JSON goldens (root nesting), `policy.rs:295`/`standard.rs:302` axis
+  loops, `assert_governance_shape` inversion, `governance_files()` += `rfc`,
+  RFC-002 live-tag restore + assertion (§5.4). `governance.rs:1063` show-row
+  (`"tags: lang"`) is a presentation positive-coverage test that stays green once
+  `show` reads root — reviewed, no change.
+- **F-5 (major) — REQ-JSON is an additive parity gap.** **Accepted; decision:
+  in scope.** Both REQ JSON sites (`spec.rs:~1167` member object, `spec.rs:~1556`
+  `ReqJsonRow`) drop tags today — nothing to preserve, a gap to fill. The slice
+  *adds* tags to both, and VT-2(P3) asserts tag **presence** (not "unchanged").
+  → §5.3/§5.4/§9.
+- **F-6 (minor) — VA-1 soft gate over a canon-violation window.** **Accepted;
+  decision: keep soft** (D7). The contradiction is the expected intermediate state
+  of a governance-changing slice; ADR-003's audit→reconcile→close loop and
+  `/close`'s spec-coherence check already close the window outside mid-flight
+  abandonment. A hard gate is disproportionate. → D7.
+
+Net fourth pass: no decision overturned; F-1 promoted from "claimed safe" to
+"proven safe" by a committed spike (CHR-019, kept as VT-2 seed), two genuinely new
+holes closed (F-3 grep scoping, F-6 gate posture), and the parity-proof method
+sharpened from grep to semantic enumeration (F-2). Design coherent and converged —
+ready for `/plan`.

@@ -23,38 +23,48 @@ response = "Spike CHR-019 (tests/spike_chr019_root_tag_insert.rs, toml_edit 0.22
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Full read-surface parity claim falsified; grep-invisible serde + Value-index reads"
 detail = 'Design declared read-surface parity complete (commit fe36aa9e). False. Grep-invisible consumers that move-to-root breaks with zero textual relationships.tags hit: (1) governance.rs:360-371 show_json is serde-driven (to_value(doc)) and is the PRIMARY ADR/POL/STD/RFC JSON render; moving tags to root silently changes JSON shape, no grep signal. (2) policy.rs:295-297 + standard.rs:302-304: for axis in ["superseded_by","tags"] -- tags via loop var, literal never appears. (3) adr.rs:322 Value-index doc["relationships"]["tags"]. Discovery curve has not flattened: three prior passes plus this one each found more. Disposition: enumerate consumers semantically, not by grep.'
+disposition = "accepted — root-expose; parity proven by semantic enumeration, not grep"
+response = "Verified: governance.rs:360 show_json IS serde-driven (serde_json::to_value(doc)) — the grep-invisible primary JSON render. Decision (root-expose): once tags store at root, to_value(doc) renders them at root automatically — uniform with every other kind; no builder change. The existing supersedes/related splice is NOT extended to tags (that splice reconstructs the [[relation]] shape lost in SL-095; tags is a pure path relocation with nothing to reconstruct). adr/standard JSON goldens update to expect root tags. Read-parity is now proven by the §5.3 per-kind semantic enumeration (list/show/json each wired + asserted), with grep demoted to storage-residue gating only. design.md §5.3/§5.4/§9 updated."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "major"
 title = "VT-1 grep gate both under- and over-fires"
 detail = "VT-1 gates migration completeness by grepping [relationships].tags residue. Two-way broken. Under: misses every semantic/serde consumer in the parity finding -- they compile clean to empty. Over: flags .doctrine/templates/*.toml, which are gitignored DERIVED copies regenerated from install/templates (the authoritative embedded tree, src/install.rs:17-19 RustEmbed). Fix: scope VT-1 to install/templates + corpus, and add a semantic/compile-level or golden-diff check alongside grep. Grep alone cannot gate this migration."
+disposition = "accepted — grep scoped to install/templates+corpus, paired with golden/compile checks"
+response = "Verified: .doctrine/templates IS gitignored (git check-ignore) and regenerated from install/ RustEmbed (src/install.rs:17). VT-1 grep is rescoped to install/templates + the committed corpus (.doctrine/{adr,policy,standard,rfc}/**), never the derived .doctrine/templates. Grep alone cannot gate (blind to serde/loop-var consumers) so it is paired with the golden/compile checks (rewritten adr/standard JSON goldens, governance_files()+=rfc, CHR-019 re-parse spike). design.md §5.4/§8 R4/§9 updated."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Positive shape-pin tests assert OLD shape; RFC excluded from guards but holds live tags"
 detail = "Tests that positively REQUIRE tags-under-[relationships] and will fail, must migrate lockstep with the corpus: assert_governance_shape (tests/e2e_relation_migration_storage.rs:436, over adr/policy/standard), e2e_adr_cli_golden.rs:144, e2e_standard_cli_golden.rs:145, governance.rs:1063 unit. These are not missed consumers; they pin the pre-migration shape. Separately, RFC asymmetry: RFC delegates code to governance.rs (covered) but is EXCLUDED from governance_files()/template shape guards, and rfc-002.toml:15 holds the ONLY non-empty live tag set [program, consumption-surfaces, estimate, value, scoring] -- migrate-and-restore has no guard watching it."
+disposition = "accepted — shape-pin set already integrated (2nd/3rd pass), confirmed complete"
+response = "Verified all sites. The lockstep shape-pin migration was already folded in by the 2nd/3rd Codex passes and is confirmed complete: adr/standard JSON goldens (root nesting), policy.rs:295 + standard.rs:302 axis loops, assert_governance_shape inversion (e2e_relation_migration_storage.rs:436), governance_files() extended to scan rfc (was [adr,policy,standard]), RFC-002 live-tag restore + assertion. governance.rs:1063 show-row (out.contains('tags: lang')) is a presentation positive-coverage test that stays green once show reads root — reviewed, no change needed. design.md §5.4 / 4th-pass review block."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "major"
 title = "REQ-JSON is an additive parity gap, not preservation; R6 misframed"
 detail = "Design treats R6 (REQ tags) as resolved/trivial-but-3-places. Evidence inverts it. REQ has 4 tag sites: spec.rs:638 text render (handles tags), spec.rs:1659 req_key filter (handles tags), spec.rs:1167 show_json member obj (DROPS tags), spec.rs:1554 ReqJsonRow (DROPS tags). BOTH JSON paths drop tags PRE-SLICE -- nothing to preserve, a gap to fill. Read-parity phase must ADD tags to two JSON sites that never had them; VT-2(P3) must assert tag PRESENCE in REQ JSON, not unchanged. Structural cause of the two prior slips: Requirement is Deserialize-only (requirement.rs:158), so every JSON surface hand-splices fields. Scope decision needed: is REQ-JSON tag parity in scope, or only the storage seed?"
+disposition = "accepted — in scope (REQ uniformity); additive, VT asserts presence"
+response = "Verified: both REQ JSON sites drop tags today — spec.rs:1167 (member obj) and spec.rs:1554 (ReqJsonRow) hand-build from a fixed field list (id/slug/title/kind/status), never tags; text render spec.rs:638 DOES handle them. So REQ-JSON tag parity is ADDITIVE, not preservation. Decision (in scope): the slice ADDS tags to both JSON sites and VT-2(P3) asserts tag PRESENCE (not 'unchanged'), completing full read-surface parity for REQ. design.md §5.3/§5.4/§9 updated."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "VA-1 soft gate over a real canon-violation window"
 detail = "PHASE-04 lands the corpus contradicting SPEC-005/016/018 by design, trusting /reconcile to ratify later. If the slice stalls after PHASE-04 the repo sits canon-violating. VA-1 is agent-checked (VA = weakest verification mode): a tripwire, not a hard gate, relying on /close to actually verify spec-coherence. Consider a hard gate or a tighter PHASE-04 -> reconcile coupling."
+disposition = "accepted — keep soft (D7)"
+response = "Decision (keep soft): VA-1 stays agent-checked, not a hard PHASE-04→reconcile gate. The corpus contradicting SPEC-005/016/018 after PHASE-04 is the EXPECTED intermediate state of a governance-changing slice (D6); ADR-003's audit→reconcile→close loop plus /close's spec-coherence verification already close the window except under mid-flight abandonment, which the lifecycle handles anyway. A hard gate is ceremony disproportionate to the risk. Recorded as D7; reconsider only if stalled-slice canon drift is observed. design.md §7 D7."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
