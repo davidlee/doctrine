@@ -315,11 +315,14 @@ consequence to a **post**-pass):
   for that overlay (raw `seq_overlay` edges include ones cordage *evicted* to linearize an
   `Evict` cycle; replaying them raw would re-impose an evicted contradiction or miss a
   transitive constraint). Among nodes whose surviving seq-predecessors are all emitted, pick
-  by `(score desc, id asc)`. Equivalently — and preferred, reusing cordage's proven
-  precedence/eviction machinery rather than re-deriving it — mint a **temporary** cordage
-  ordering over those surviving constraints with mint order `(score desc, id asc)` and read
-  its `order_key`; this is exactly today's `next` (which already consumes cordage
-  `order_key`) with the mint tiebreaker swapped from `base` to `score`. This makes `next`
+  the max by `(score desc, id asc)` — a Kahn-style frontier sort with `score` as the
+  ready-set priority. **Cordage's `order_key` is NOT usable for this (RV-132 F-3 raiser).**
+  `OrderKey` is `(Level, NodeId)` (cordage lib.rs:353) and ranks by longest-path **level
+  before** the mint/`NodeId` tiebreak, so a high-`score` item promoted to level ≥1 by a
+  surviving seq predecessor sorts below *every* low-`score` level-0 item — which breaks the
+  "score wherever seq is silent" contract between two seq-incomparable items. So `next` runs
+  its **own** frontier sort; cordage supplies the constraint *source* (surviving seq edges =
+  overlay − evictions), not the ordering. This makes `next`
   leverage-aware — a ready item that
   unblocks a large valuable cone leads, even with a modest own `base` — while the only
   thing structure overrides is genuine same-chain sequencing.

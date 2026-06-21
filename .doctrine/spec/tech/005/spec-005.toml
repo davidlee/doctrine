@@ -14,7 +14,7 @@ tags = ["adr", "decision-record", "governance-kind", "status-lifecycle", "relati
 responsibilities = [
   "Define the ADR-specific `Kind` descriptor and its scaffold — the `adr-<id>.{toml,md}` fileset and `<id>-<slug>` symlink — bound onto the shared entity-engine materialiser.",
   "Fix the ADR status vocabulary (proposed, accepted, rejected, superseded, deprecated) and the default `adr list` hide-set (rejected, superseded, deprecated).",
-  "Specify the ADR identity TOML fields and the `[relationships]` seam (`tags` only; supersedes, superseded_by, and related migrated to `[[relation]]` per SL-048/SL-095).",
+  "Specify the ADR identity TOML fields and the root-level `tags` axis (moved from the typed `[relationships]` seam in SL-136; the `[relationships]` table now holds only `superseded_by`; `supersedes` and `related` migrated to `[[relation]]` per SL-048/SL-095).",
   "Specify the ADR prose render contract: a Context / Decision / Consequences / Verification / References body with no YAML frontmatter, metadata living in the sister TOML.",
 ]
 
