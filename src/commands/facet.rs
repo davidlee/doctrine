@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 
+use anyhow::Context;
 use clap::Args;
 
 /// `doctrine estimate set <ID> ...`
@@ -55,6 +56,47 @@ pub(crate) struct ValueClearArgs {
     pub(crate) path: Option<PathBuf>,
 }
 
+/// `doctrine risk set <ID> ...`
+#[derive(Args)]
+pub(crate) struct RiskSetArgs {
+    /// Canonical entity ref (e.g. RSK-001)
+    pub(crate) id: String,
+
+    /// Likelihood axis level
+    #[arg(long, value_enum)]
+    pub(crate) likelihood: Option<crate::backlog::RiskLevel>,
+
+    /// Impact axis level
+    #[arg(long, value_enum)]
+    pub(crate) impact: Option<crate::backlog::RiskLevel>,
+
+    /// Risk origin (free-text label)
+    #[arg(long)]
+    pub(crate) origin: Option<String>,
+
+    /// Controls — each occurrence replaces the entire list (not additive)
+    #[arg(
+        long,
+        long_help = "Controls — each occurrence replaces the entire list (not additive)"
+    )]
+    pub(crate) controls: Vec<String>,
+
+    /// Explicit project root (default: auto-detect)
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
+}
+
+/// `doctrine risk clear <ID>`
+#[derive(Args)]
+pub(crate) struct RiskClearArgs {
+    /// Canonical entity ref (e.g. RSK-001)
+    pub(crate) id: String,
+
+    /// Explicit project root (default: auto-detect)
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
+}
+
 /// Resolve a canonical ref like `SL-118` / `ADR-003` to the entity TOML path.
 /// Returns the `PathBuf` and the resolved canonical id string.
 pub(crate) fn resolve_entity_path_and_canonical(
@@ -68,6 +110,19 @@ pub(crate) fn resolve_entity_path_and_canonical(
     }
     let canonical = crate::listing::canonical_id(kref.kind.prefix, id);
     Ok((path, canonical))
+}
+
+/// Read the `kind` field from a backlog entity TOML.
+fn read_kind(path: &std::path::Path) -> anyhow::Result<String> {
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("entity not found at {}", path.display()))?;
+    let doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+    match doc.get("kind").and_then(toml_edit::Item::as_str) {
+        Some(s) => Ok(s.to_owned()),
+        None => anyhow::bail!("no 'kind' field — not a backlog item"),
+    }
 }
 
 pub(crate) fn run_estimate_set(args: &EstimateSetArgs) -> anyhow::Result<()> {
@@ -161,6 +216,111 @@ pub(crate) fn run_value_clear(args: &ValueClearArgs) -> anyhow::Result<()> {
         writeln!(std::io::stdout(), "value cleared: {canonical}")?;
     } else {
         writeln!(std::io::stdout(), "no value to clear: {canonical}")?;
+    }
+    Ok(())
+}
+
+pub(crate) fn run_risk_set(args: &RiskSetArgs) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
+    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+
+    // Kind gate: must be a risk item.
+    let kind = read_kind(&path)?;
+    if kind != "risk" {
+        anyhow::bail!("{canonical}: risk set requires a risk item, got {kind}");
+    }
+
+    // At-least-one axis guard.
+    if args.likelihood.is_none() && args.impact.is_none() {
+        anyhow::bail!("risk set: must supply at least one of --likelihood or --impact");
+    }
+
+    // Build FacetField list.
+    let mut fields: Vec<crate::facet_write::FacetField> = Vec::new();
+    if let Some(ref level) = args.likelihood {
+        fields.push(crate::facet_write::FacetField::Str {
+            key: "likelihood",
+            value: level.as_str().to_owned(),
+        });
+    }
+    if let Some(ref level) = args.impact {
+        fields.push(crate::facet_write::FacetField::Str {
+            key: "impact",
+            value: level.as_str().to_owned(),
+        });
+    }
+    if let Some(ref origin) = args.origin {
+        fields.push(crate::facet_write::FacetField::Str {
+            key: "origin",
+            value: origin.clone(),
+        });
+    }
+    if !args.controls.is_empty() {
+        fields.push(crate::facet_write::FacetField::Arr {
+            key: "controls",
+            values: args.controls.clone(),
+        });
+    }
+
+    let changed = crate::facet_write::apply_set_mixed(&path, "facet", &fields)?;
+
+    // Build echo parts (Vec<String> + join — house style).
+    if changed {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(ref level) = args.likelihood {
+            parts.push(format!("likelihood={}", level.as_str()));
+        }
+        if let Some(ref level) = args.impact {
+            parts.push(format!("impact={}", level.as_str()));
+        }
+        if let Some(ref origin) = args.origin {
+            parts.push(format!("origin={origin:?}"));
+        }
+        if !args.controls.is_empty() {
+            let list: Vec<String> = args.controls.iter().map(|c| format!("{c:?}")).collect();
+            parts.push(format!("controls=[{}]", list.join(", ")));
+        }
+        let detail = parts.join(" ");
+        writeln!(std::io::stdout(), "risk set: {canonical} {detail}")?;
+    } else {
+        // Unchanged — same detail pattern.
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(ref level) = args.likelihood {
+            parts.push(format!("likelihood={}", level.as_str()));
+        }
+        if let Some(ref level) = args.impact {
+            parts.push(format!("impact={}", level.as_str()));
+        }
+        if let Some(ref origin) = args.origin {
+            parts.push(format!("origin={origin:?}"));
+        }
+        if !args.controls.is_empty() {
+            let list: Vec<String> = args.controls.iter().map(|c| format!("{c:?}")).collect();
+            parts.push(format!("controls=[{}]", list.join(", ")));
+        }
+        let detail = parts.join(" ");
+        writeln!(std::io::stdout(), "risk unchanged: {canonical} {detail}")?;
+    }
+    Ok(())
+}
+
+pub(crate) fn run_risk_clear(args: &RiskClearArgs) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
+    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+
+    // Kind gate.
+    let kind = read_kind(&path)?;
+    if kind != "risk" {
+        anyhow::bail!("{canonical}: risk clear requires a risk item, got {kind}");
+    }
+
+    let cleared = crate::facet_write::apply_clear(&path, "facet")?;
+    if cleared {
+        writeln!(std::io::stdout(), "risk cleared: {canonical}")?;
+    } else {
+        writeln!(std::io::stdout(), "no risk facet to clear: {canonical}")?;
     }
     Ok(())
 }
@@ -492,5 +652,305 @@ mod tests {
             .unwrap()
             .expect("value should be present");
         assert_eq!(parsed.value, 99.0);
+    }
+
+    // ---- VT-1: risk set --likelihood low --impact medium writes both to [facet] ----
+
+    #[test]
+    fn risk_set_writes_both_axes() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 1);
+        // Overwrite with kind = "risk" so read_kind passes.
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"risk\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: Some(crate::backlog::RiskLevel::Low),
+            impact: Some(crate::backlog::RiskLevel::Medium),
+            origin: None,
+            controls: vec![],
+            path: Some(root.clone()),
+        };
+        run_risk_set(&args).unwrap();
+
+        let after = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(after.contains("likelihood = \"low\""), "missing likelihood:\n{after}");
+        assert!(after.contains("impact = \"medium\""), "missing impact:\n{after}");
+    }
+
+    // ---- VT-2: risk set --likelihood only — partial write ----
+
+    #[test]
+    fn risk_set_likelihood_only() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 2);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"risk\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: Some(crate::backlog::RiskLevel::High),
+            impact: None,
+            origin: None,
+            controls: vec![],
+            path: Some(root.clone()),
+        };
+        run_risk_set(&args).unwrap();
+
+        let after = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(after.contains("likelihood = \"high\""), "missing likelihood:\n{after}");
+        assert!(!after.contains("impact"), "impact should be absent:\n{after}");
+    }
+
+    // ---- VT-3: risk set with neither axis → error ----
+
+    #[test]
+    fn risk_set_no_axis_rejected() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 3);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"risk\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: None,
+            impact: None,
+            origin: None,
+            controls: vec![],
+            path: Some(root),
+        };
+        let err = run_risk_set(&args).unwrap_err().to_string();
+        assert!(
+            err.contains("must supply at least one of --likelihood or --impact"),
+            "got: {err}"
+        );
+    }
+
+    // ---- VT-4: risk set on non-risk item → kind-gate error ----
+
+    #[test]
+    fn risk_set_on_non_risk_kind_rejected() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, _) = seed_entity(&root, "ISS", 1);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"issue\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskSetArgs {
+            id: "ISS-001".into(),
+            likelihood: Some(crate::backlog::RiskLevel::Low),
+            impact: None,
+            origin: None,
+            controls: vec![],
+            path: Some(root),
+        };
+        let err = run_risk_set(&args).unwrap_err().to_string();
+        assert!(
+            err.contains("risk set requires a risk item"),
+            "got: {err}"
+        );
+    }
+
+    // ---- VT-5: risk set on non-backlog entity → error ----
+
+    #[test]
+    fn risk_set_on_non_backlog_rejected() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 1);
+
+        let args = RiskSetArgs {
+            id: "SL-001".into(),
+            likelihood: Some(crate::backlog::RiskLevel::Low),
+            impact: None,
+            origin: None,
+            controls: vec![],
+            path: Some(root),
+        };
+        let err = run_risk_set(&args).unwrap_err().to_string();
+        assert!(
+            err.contains("no 'kind' field — not a backlog item"),
+            "got: {err}"
+        );
+    }
+
+    // ---- VT-6: risk clear removes [facet] table ----
+
+    #[test]
+    fn risk_clear_removes_facet() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 6);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind_and_facet = format!("{body}kind = \"risk\"\n[facet]\nlikelihood = \"low\"\n");
+        std::fs::write(&toml_path, with_kind_and_facet).unwrap();
+
+        let args = RiskClearArgs {
+            id: canonical,
+            path: Some(root.clone()),
+        };
+        run_risk_clear(&args).unwrap();
+
+        let after = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(!after.contains("[facet]"), "[facet] should be gone:\n{after}");
+    }
+
+    // ---- VT-7: risk clear on absent facet → no-op echo ----
+
+    #[test]
+    fn risk_clear_absent_noop() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 7);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"risk\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskClearArgs {
+            id: canonical,
+            path: Some(root),
+        };
+        // No error — just no-op.
+        run_risk_clear(&args).unwrap();
+    }
+
+    // ---- VT-8: risk set idempotent — same values → no-op echo ----
+
+    #[test]
+    fn risk_set_idempotent_noop() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 8);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind_and_facet =
+            format!("{body}kind = \"risk\"\n[facet]\nlikelihood = \"low\"\nimpact = \"medium\"\n");
+        std::fs::write(&toml_path, with_kind_and_facet).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: Some(crate::backlog::RiskLevel::Low),
+            impact: Some(crate::backlog::RiskLevel::Medium),
+            origin: None,
+            controls: vec![],
+            path: Some(root),
+        };
+        // Should succeed (no error), and the file should be unchanged.
+        run_risk_set(&args).unwrap();
+    }
+
+    // ---- VT-9: risk set --origin writes origin string ----
+
+    #[test]
+    fn risk_set_origin() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 9);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"risk\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: Some(crate::backlog::RiskLevel::Low),
+            impact: None,
+            origin: Some("supply-chain".into()),
+            controls: vec![],
+            path: Some(root.clone()),
+        };
+        run_risk_set(&args).unwrap();
+
+        let after = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(after.contains("origin = \"supply-chain\""), "missing origin:\n{after}");
+    }
+
+    // ---- VT-10: risk set --controls A --controls B writes ["A", "B"] ----
+
+    #[test]
+    fn risk_set_controls() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 10);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"risk\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: Some(crate::backlog::RiskLevel::Low),
+            impact: None,
+            origin: None,
+            controls: vec!["A".into(), "B".into()],
+            path: Some(root.clone()),
+        };
+        run_risk_set(&args).unwrap();
+
+        let after = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(
+            after.contains("controls = [\"A\", \"B\"]"),
+            "missing controls array:\n{after}"
+        );
+    }
+
+    // ---- VT-11: risk set preserves non-managed facet keys ----
+
+    #[test]
+    fn risk_set_preserves_unknown_sibling() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 11);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind_and_facet = format!(
+            "{body}kind = \"risk\"\n[facet]\nlikelihood = \"low\"\nnotes = \"keep me\"\n"
+        );
+        std::fs::write(&toml_path, with_kind_and_facet).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: Some(crate::backlog::RiskLevel::High),
+            impact: None,
+            origin: None,
+            controls: vec![],
+            path: Some(root.clone()),
+        };
+        run_risk_set(&args).unwrap();
+
+        let after = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(
+            after.contains("likelihood = \"high\""),
+            "likelihood not updated:\n{after}"
+        );
+        assert!(
+            after.contains("notes = \"keep me\""),
+            "non-managed sibling lost:\n{after}"
+        );
+    }
+
+    // ---- VT-12 (VT-18 in design): risk set on risk item with absent [facet] table — allocates ----
+
+    #[test]
+    fn risk_set_allocates_absent_facet() {
+        let (_tmp, root) = mk_project_root();
+        let (toml_path, canonical) = seed_entity(&root, "RSK", 12);
+        let body = std::fs::read_to_string(&toml_path).unwrap();
+        let with_kind = format!("{body}kind = \"risk\"\n");
+        std::fs::write(&toml_path, with_kind).unwrap();
+
+        let args = RiskSetArgs {
+            id: canonical,
+            likelihood: Some(crate::backlog::RiskLevel::Critical),
+            impact: Some(crate::backlog::RiskLevel::Critical),
+            origin: None,
+            controls: vec![],
+            path: Some(root.clone()),
+        };
+        run_risk_set(&args).unwrap();
+
+        let after = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(after.contains("[facet]"), "[facet] should be allocated:\n{after}");
+        assert!(
+            after.contains("likelihood = \"critical\""),
+            "missing likelihood:\n{after}"
+        );
+        assert!(
+            after.contains("impact = \"critical\""),
+            "missing impact:\n{after}"
+        );
     }
 }
