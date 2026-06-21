@@ -1,0 +1,79 @@
+id    = 121
+slug  = "sl-132-design-inquisition"
+title = "SL-132 design inquisition"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "designer"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-132"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected one EntityFacets ownership decision; observed design both creates and forbids it"
+detail = "Evidence: `.doctrine/slice/132/design.md` Code impact lists `src/facet.rs` as new and D5 says `EntityFacets` is defined now in SL-132. The same document's Non-goals says `No EntityFacets struct (deferred to SL-133 trigger)`. These statements cannot both govern implementation. Because `format_show` signature, call-site construction, and SL-133 dependency all turn on this choice, the design is not plan-ready until the contradiction is removed."
+disposition = "fixed"
+response = "Stale non-goal removed. D5 now states EntityFacets is created in this slice — wraps already-parsed SliceDoc fields, no new parse. D6 describes extension by later slices. Non-goals no longer mention EntityFacets deferral. Design is plan-ready on this axis."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected a shared facet projection; observed a new projection with no reconciliation to the existing catalog projection"
+detail = "Evidence: `.doctrine/slice/132/design.md` D5 proposes a new root `src/facet.rs` containing `EntityFacets { estimate, value }` as the shared projection for SL-132/SL-133. Current source already has cross-kind facet projection: `src/catalog/scan.rs::ScannedEntity` carries `estimate` and `value`, and `src/catalog/hydrate.rs::CatalogEntity` copies them; `Catalog` also carries resolved `Units`. The design does not say whether `EntityFacets` replaces, wraps, aliases, or deliberately stays separate from this existing projection. That omission risks violating the no-parallel-implementation rule and makes the downstream SL-133 path unclear."
+disposition = "fixed"
+response = "D5 now explicitly reconciles with existing projection: EntityFacets wraps already-parsed data from SliceDoc (show path) or ScannedEntity (catalog path). It does NOT introduce a new TOML parse — it's a pure aggregation struct giving the two existing parse paths a shared consumption contract. The dual-path heritage (SliceDoc serde + scan::read_facets) predates SL-132 and is documented in Current Behavior."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Expected a settled unit-resolution boundary; observed contradictory reuse of catalog Units and direct config resolution"
+detail = "Evidence: `.doctrine/slice/132/design.md` Code impact says `format_show` accepts `units: &Units` and terrain says to reuse `src/catalog/hydrate.rs:185-199 resolve_units`; D1 says `run_show` adds calls to `crate::estimate::resolve_unit` and `crate::value::resolve_unit` on the existing `DoctrineToml`. In current source, `catalog::hydrate::resolve_units` is private and `Units` is defined inside the catalog hydration module. Making either part of `slice.rs`'s show path creates avoidable single-entity-show-to-catalog coupling; duplicating the read logic also needs an explicit error policy for absent vs malformed `doctrine.toml`."
+disposition = "fixed"
+response = "D1 corrected: run_show calls crate::dtoml::load_doctrine_toml(&root)? directly instead of load_conduct. The full DoctrineToml struct provides cfg.estimation and cfg.value for unit resolution alongside cfg.conduct for posture. Single TOML read, no catalog coupling — dtoml is leaf tier, already imported."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected verification of shell construction and config failure paths; observed formatter-only coverage"
+detail = "Evidence: `.doctrine/slice/132/design.md` VT-1 through VT-5 and VT-9/VT-10 focus on `format_show` output. They do not require a test proving `run_show` constructs `EntityFacets` from `SliceDoc.estimate`/`SliceDoc.value`, resolves configured units/confidence, and passes them correctly. The design also does not specify behavior when `doctrine.toml` is malformed: `estimate::resolve_confidence` returns `anyhow::Result`, while `resolve_unit` is infallible. A display command gaining new failure modes without a named policy is not acceptable."
+disposition = "fixed"
+response = "Added VT-11 (shell integration: run_show against fixture slice TOML + doctrine.toml → confidence row in output) and VT-12 (malformed doctrine.toml → Err propagated, not silently defaulted). Tests cover the full run_show → EntityFacets → format_show path, not just the formatter in isolation."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Expected dead-code ungating to leave no orphaned display API; observed new confidence helper beside unused normal/verbose helpers"
+detail = "Evidence: `.doctrine/slice/132/design.md` says to remove the `dead_code` gate on `estimate::display` and add `format_estimate_confidence`. Current `src/estimate/display.rs` already exposes `format_estimate_normal` and `format_estimate_verbose`; the target SL-132 output uses confidence framing, not the existing normal helper, and does not mention verbose output. Without an explicit disposition, removing the module-level expect may either produce dead-code warnings for existing helpers or leave misleading display functions with divergent semantics."
+disposition = "fixed"
+response = 'D7 corrected: module-level #[expect(dead_code)] on mod display is removed (format_estimate_confidence needs the module compiled). Individual #[expect(dead_code)] added on format_estimate_normal and format_estimate_verbose with reason "preserved for future verbose display mode." Code-impact table now matches: "Module-level gate removed; individual gates added."'
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Expected additive-output verification to be implementable; observed byte-identical golden criterion without a golden baseline"
+detail = "Evidence: `.doctrine/slice/132/design.md` D3 and VT-5 require absent facets to produce byte-identical pre-change output via a golden test. The current `src/slice.rs` tests are not shown to have a full-output golden baseline for `format_show`; adding one during the change risks enshrining a newly generated string rather than proving pre-change identity. The invariant is sound, but the design should specify an implementable check: exact expected string for a representative absent-facet fixture, or explicit before/after fixture capture."
+disposition = "fixed"
+response = "VT-5 now specified as: capture current format_show output for a fixture slice with no estimate/value facets, assert output unchanged after change. Byte-identical golden test — the implementation must pass a fixture through format_show before and after the change and compare."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "major"
+title = "Expected ADR-001 placement for new src/facet.rs; observed no tier assignment or layering.toml plan"
+detail = "Evidence: ADR-001 makes `.doctrine/adr/001/layering.toml` the authoritative tier assignment and the fitness gate checks new module edges. `.doctrine/slice/132/design.md` creates `src/facet.rs` but does not classify it as leaf/engine/command, list expected imports, or mention updating `layering.toml`. Because `EntityFacets` imports `EstimateFacet` and `ValueFacet` and is intended for both show and priority consumers, its tier is an architectural decision, not an implementation detail."
+disposition = "fixed"
+response = 'D9 corrected: src/facet.rs classified as leaf tier (imports only estimate + value, both leaf). layering.toml entry specified: facet = "leaf" with rationale. Code-impact table includes the layering.toml row. ADR-001 gate (just gate) enforces this — the previous claim of "no change needed" was wrong.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
