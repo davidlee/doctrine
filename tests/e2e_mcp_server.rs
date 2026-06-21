@@ -643,3 +643,279 @@ fn vt9_state_mismatch() {
 
     kill(child);
 }
+
+// ── Memory MCP E2E tests (SL-131 PHASE-05) ─────────────────────────────
+
+const MEM_C: &str = "mem_0000000000000000000000000000000c";
+const MEM_D: &str = "mem_0000000000000000000000000000000d";
+const MEM_E: &str = "mem_0000000000000000000000000000000e";
+
+/// Seed a single memory record (adapted from e2e_list_columns_golden.rs).
+fn seed_memory(
+    root: &Path,
+    uid: &str,
+    key: Option<&str>,
+    kind: &str,
+    status: &str,
+    trust: &str,
+    title: &str,
+    body: &str,
+) {
+    let dir = root.join(format!(".doctrine/memory/items/{uid}"));
+    fs::create_dir_all(&dir).unwrap();
+    let key_line = key.map_or(String::new(), |k| format!("memory_key = \"{k}\"\n"));
+    let severity = if trust == "low" { "high" } else { "medium" };
+    fs::write(
+        dir.join("memory.toml"),
+        format!(
+            "memory_uid = \"{uid}\"\n\
+             {key_line}\
+             schema_version = 1\n\
+             memory_type = \"{kind}\"\n\
+             status = \"{status}\"\n\
+             title = \"{title}\"\n\
+             summary = \"\"\n\
+             created = \"2026-01-02\"\n\
+             updated = \"2026-01-02\"\n\
+             \n\
+             [scope]\n\
+             workspace = \"default\"\n\
+             \n\
+             [review]\n\
+             verification_state = \"verified\"\n\
+             reviewed = \"2026-01-02\"\n\
+             \n\
+             [git]\n\
+             anchor_kind = \"none\"\n\
+             \n\
+             [ranking]\n\
+             severity = \"{severity}\"\n\
+             \n\
+             [trust]\n\
+             trust_level = \"{trust}\"\n"
+        ),
+    )
+    .unwrap();
+    fs::write(dir.join("memory.md"), body).unwrap();
+    if let Some(k) = key {
+        std::os::unix::fs::symlink(uid, root.join(format!(".doctrine/memory/items/{k}"))).ok();
+    }
+}
+
+/// Seed a memory corpus with varied trust/type for MCP E2E testing.
+fn seed_memory_corpus(root: &Path) {
+    // High-trust pattern (visible to all trust levels)
+    seed_memory(
+        root,
+        MEM_C,
+        Some("mem.pattern.e2e-safe"),
+        "pattern",
+        "active",
+        "high",
+        "E2E Safe Pattern",
+        "# E2E Safe Pattern\n\nAlways visible.",
+    );
+    // Medium-trust fact
+    seed_memory(
+        root,
+        MEM_D,
+        None,
+        "fact",
+        "active",
+        "medium",
+        "E2E Fact",
+        "# E2E Fact\n\nA fact with [[mem.pattern.e2e-safe]] link.",
+    );
+    // Low-trust, high-severity — should be held back
+    seed_memory(
+        root,
+        MEM_E,
+        None,
+        "fact",
+        "active",
+        "low",
+        "E2E Low-Trust High-Severity",
+        "# Low-Trust\n\nThis should be suppressed by trust holdback.",
+    );
+    let shipped = root.join(".doctrine/memory/shipped");
+    fs::create_dir_all(&shipped).unwrap();
+}
+
+// EX-4: memory_find + memory_list round-trip against seeded corpus
+
+#[test]
+fn memory_find_and_list_roundtrip() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_memory_corpus(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    // memory_find: scoped query for "safe"
+    let params = tools_call_params(
+        "memory_find",
+        serde_json::json!({ "query": "safe" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_find: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    let out: Value = serde_json::from_str(text).expect("parse memory_find JSON");
+    assert_eq!(out["kind"], "memory_find");
+    assert!(out["total"].as_u64().unwrap() >= 1, "should find at least 1 memory");
+    let rows = out["rows"].as_array().unwrap();
+    for row in rows {
+        assert!(row.get("uid").is_some());
+        assert!(row.get("key").is_some());
+        assert!(row.get("type").is_some());
+        assert!(row.get("held_back_on_retrieve").is_some());
+    }
+
+    // memory_list with type filter
+    let params = tools_call_params(
+        "memory_list",
+        serde_json::json!({ "type": "fact" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_list: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    let out: Value = serde_json::from_str(text).expect("parse memory_list JSON");
+    assert_eq!(out["kind"], "memory");
+    assert_eq!(out["total"], 2, "should have 2 facts");
+    let rows = out["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+
+    kill(child);
+}
+
+// EX-5: memory_retrieve with min_trust: "high" suppresses low-trust memory
+
+#[test]
+fn memory_retrieve_min_trust_suppression() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_memory_corpus(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    // memory_retrieve with min_trust: "high" should suppress MEM_E (low trust, high severity)
+    let params = tools_call_params(
+        "memory_retrieve",
+        serde_json::json!({
+            "query": "Low-Trust",
+            "min_trust": "high"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_retrieve high: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    assert!(
+        !text.contains("Low-Trust"),
+        "low-trust high-severity memory should be suppressed by min_trust:high"
+    );
+
+    // Low-trust high-severity is ALSO suppressed by default (medium floor is non-bypassable)
+    let params = tools_call_params(
+        "memory_retrieve",
+        serde_json::json!({ "query": "Low-Trust" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_retrieve default: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    assert!(
+        !text.contains("Low-Trust"),
+        "low-trust high-severity memory should be suppressed by default min_trust"
+    );
+
+    kill(child);
+}
+
+// EX-6: memory_show returns consumable/notes/backlinks for known uid
+
+#[test]
+fn memory_show_consumable_notes_backlinks() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_memory_corpus(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let params = tools_call_params(
+        "memory_show",
+        serde_json::json!({
+            "reference": MEM_C,
+            "view": "summary"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_show: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    let out: Value = serde_json::from_str(text).expect("parse memory_show JSON");
+
+    let memory = &out["memory"];
+    assert!(memory.get("consumable").is_some(), "missing consumable");
+    assert!(memory.get("held_back_on_retrieve").is_some(), "missing held_back");
+    assert!(memory.get("backlinks").is_some(), "missing backlinks");
+    assert!(memory.get("backlinks_total").is_some(), "missing backlinks_total");
+    assert!(memory["consumable"].as_bool().unwrap(), "high-trust active should be consumable");
+    assert!(memory["backlinks_total"].as_u64().unwrap() >= 1, "MEM_C should have backlinks from MEM_D");
+
+    assert!(out.get("body").is_none(), "summary view should exclude body");
+
+    kill(child);
+}
+
+// EX-7: memory_retrieve with reference to held-back memory returns error
+
+#[test]
+fn memory_retrieve_reference_to_held_back_memory_returns_error() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_memory_corpus(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let params = tools_call_params(
+        "memory_retrieve",
+        serde_json::json!({
+            "reference": MEM_E
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+
+    let err = resp.get("error").expect("should have error for held-back memory");
+    assert_eq!(err["code"], -32603, "held-back should be internal error");
+    assert!(
+        err["data"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("held back"),
+        "expected held-back message, got {resp:?}"
+    );
+
+    kill(child);
+}
