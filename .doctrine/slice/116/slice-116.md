@@ -21,11 +21,12 @@ pure/shell triplet structure makes the seams obvious and the split low-risk.
 
 ## Scope & Objectives
 
-- Convert `worktree.rs` into a `worktree/` folder with `mod.rs` plus topic files
-  along the natural seams: `worktree/allowlist.rs`, `worktree/lifecycle.rs`
-  (the fork/provision/import/land/gc/coordinate machines),
-  `worktree/marker.rs`, `worktree/subagent.rs` (final partition decided in
-  `/design`).
+- Convert `worktree.rs` into a `worktree/` folder with `mod.rs` plus topic files.
+  Final partition (decided in `/design`, D1): **per-machine** —
+  `mod.rs` (command + dispatch + re-exports), `shared.rs`, `allowlist.rs`,
+  `marker.rs`, and one file per lifecycle machine (`provision`/`import`/`land`/
+  `coordinate`/`gc`/`fork`), `subagent.rs` (stamping + worker verify, D7), plus a
+  `#[cfg(test)] test_helpers.rs`.
 - Preserve the public surface (`worktree::*` paths callers use, e.g.
   `worktree::run_phases`'s neighbours) via `mod.rs` re-exports so no caller
   changes.
