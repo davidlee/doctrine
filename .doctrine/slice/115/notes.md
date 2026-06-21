@@ -128,3 +128,64 @@ present.
   `src/commands/command.rs`). This would eliminate the false positive at its source
   rather than filtering it. Consider as a future slice or a close-out
   recommendation.
+
+---
+
+## 2026-06-21 — PHASE-03 complete
+
+### Done
+
+- 23 kind enums + dispatch bodies relocated from `main.rs` to own-module or
+  `commands/` shell, behind the uniform `pub(crate) fn dispatch(cmd, color)`
+- 5 domain batches, each standalone gate-green
+- `main.rs` reduced from ~5247 → ~2086 lines
+- Only `Command` (top-level) and `ExportCommand` (top-level verb) enums remain
+
+### D1a enforcement
+
+- **MemoryCommand::Sync** → corpus — dispatch stays in residual match (NOT
+  memory.rs). `corpus` already imports `memory`; routing Sync to `memory.rs`
+  would close `corpus↔memory` 2-cycle → tangle 120→≥121. The residual arm
+  calls `corpus::run_sync` directly in main.rs; destined for `commands/cli.rs`
+  in PHASE-04.
+- **SpecReqCommand** → spec.rs (own-module, NOT requirement.rs).
+  `requirement.rs` has no CLI and doesn't import `spec`; `spec` already imports
+  `requirement`. Routing to `requirement` would mint `requirement→spec` cycle.
+  Folded into `spec.rs` — zero new edge.
+
+### Batch ladder
+
+```
+A (7): Boot, Skills, Policy, Standard, Rfc, Rec, Knowledge
+B (5): Revision+Change, Adr, Backlog, Slice, Worktree
+C (4): Spec, SpecReq→spec (D1a), Coverage→commands/coverage, Map→commands/map
+D (4): Dispatch+Candidate, Catalog+orphans, ConceptMap, Review
+E (1): Memory+Sync (D1a carve-out — Sync stays residual)
+```
+
+### Verification
+
+- 2142 tests pass, `cargo clippy --bin doctrine` zero-warn
+- `tests::architecture_layering_gate`: **command = 120 unchanged**
+- `tests/e2e_*` goldens untouched
+- Grep: only `Command` + `ExportCommand` enums remain in main.rs
+
+### Notes
+
+- `CommonListArgs` stays at crate root (main.rs) — inert to the gate (design §4 F-B).
+  The pre-filter handles its edge visibility from relocated kind enums.
+- `ExportCommand` is a top-level verb, not nested; stays residual for PHASE-04
+  (`commands/cli.rs`).
+- Nested enums (`CandidateCommand`⊂Dispatch, `SyncCommand`⊂Memory,
+  `RevisionChangeCommand`⊂Revision) rode their parents correctly.
+- `FindRetrieveArgs` struct moved to `memory.rs` with `MemoryCommand`.
+- No `use crate::commands::*` glob in `main.rs` — all qualified paths.
+- `run_catalog_scan`/`run_catalog_graph` orphans relocated into `catalog.rs` with
+  the Catalog fold (own-module, zero new edge).
+
+### Durable items
+
+- **Gate pre-filter pattern:** crate-root type references (`crate::TypeName`) cross
+  the module boundary when enums relocate from main.rs. The edge extractor can't
+  distinguish module names from type names. The source-file existence filter is
+  the minimal correct fix — recorded as memory `mem_019ee7d35d0d`.

@@ -1,0 +1,41 @@
+memory_uid = "mem_019ee7d35d0d7872a6218ffcfb0b9f47"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Gate pre-filter: crate-root type edges are not module edges"
+summary = "When relocating enums from main.rs to kind modules, crate-root type refs (Command, CommonListArgs) become edges the gate can't classify. Pre-filter by source-file existence check."
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = []
+globs = ["tests/architecture_layering.rs"]
+commands = []
+tags = ["layering"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4f7da932b594164b7eb8fde8170c59fff9762a30"
+ref_name = "refs/heads/edge"
+checkout_state_id = "420b085d313cc78c7d980d11643df46ac4b3da5b15c4db14d7468bfb5f4c875b"
+base_commit = "05d3cf14a7ca0af63e12e94f05a743948963f89f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
