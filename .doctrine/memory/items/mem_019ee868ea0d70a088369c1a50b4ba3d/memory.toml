@@ -1,0 +1,42 @@
+memory_uid = "mem_019ee868ea0d70a088369c1a50b4ba3d"
+memory_key = "mem.pattern.show.load-doctrine-toml-entry-point"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Use load_doctrine_toml for show paths"
+summary = ""
+created = "2026-06-21"
+updated = "2026-06-21"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["sl-132", "pattern", "show-path"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "45f5529e071c0ee234153c16ae1e71da6f69bd27"
+ref_name = "refs/heads/edge"
+checkout_state_id = "269a403c339c0fd9a2a8f841e527cc4f806a95fc925d74026aedf331d441e709"
+base_commit = "f3290b29fadd2a5888c85ce2b9c6e14f3487f14a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

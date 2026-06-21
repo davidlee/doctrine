@@ -42,3 +42,22 @@ All VT-1 through VT-12 green:
 - `format_estimate_normal` and `format_estimate_verbose` preserved per D7 with function-level expects
 - Confidence bounds resolved in `run_show` (shell), passed as pure values to `format_show` — follows ADR-001 pure/impure split
 - `EntityFacets` struct is ready for SL-133 extension (risk) and SL-136 (tags) per D6
+
+## Audit harvest (RV-126, 2026-06-21)
+
+Audit verdict: **conformant** — ready for reconcile and close.
+
+### Findings dispositioned
+
+- **F-1 (minor, aligned):** `format_value_normal` uses `{:.1}` — integer values render with one decimal (e.g. `5.0`). Design target-behavior shows integer `5`. Settled format is correct and tested (VT-3).
+- **F-2 (nit, aligned):** `format_estimate_confidence` debug_asserts protected by `resolve_confidence` shell validation. Belt-and-suspenders; future callers must honour the contract.
+
+### Standing risks
+
+- `format_estimate_confidence` is `pub(crate)` with debug_assert contracts — a future caller bypassing `resolve_confidence` would hit release-mode panics. Current single caller is safe.
+- `format_show` has 9 params with `#[expect(clippy::too_many_arguments)]` — intentional, but future additions (risk, tags) may tip the balance towards a `DisplayCtx` struct.
+
+### Durable findings to remember
+
+1. **`load_doctrine_toml` is the correct entry point** for any show/survey path that needs more than just `ConductConfig`. It already exists and is leaf-tier — no need for a new helper.
+2. **EntityFacets pattern**: a shared, pure aggregation struct wrapping already-parsed fields from disparate input paths (`SliceDoc` serde vs `ScannedEntity` scan). No new parse path needed.
