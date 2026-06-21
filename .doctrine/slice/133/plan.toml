@@ -1,0 +1,160 @@
+# Implementation plan for SL-133 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-133"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+#
+# VT/VA labels preserve the design §9 verification ids for traceability; they are
+# phase-local (the same label never recurs within a phase).
+
+# ── PHASE-01 ─ Ratify durable policy first ─────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "ADR-015 — ratify scoring policy"
+objective = """
+Author ADR-015 extracting design §7's durable policy before any code implements \
+it (resolves the scope-vs-§9 sequencing conflict in favour of ratify-before- \
+implement; F-4 made coefficient role/domain ADR-owned policy, not a tunable). \
+Governance only — no source change.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked — RV-132 verified closed (F-1..F-4 disposed)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = ".doctrine/adr/015/** authored; status accepted; surfaces via `doctrine adr show ADR-015`." },
+  { id = "EX-2", text = "ADR-015 ratifies the durable items only: dimension semantics; two-pass model; consequence = recursive needs-leverage (D8) + one-hop ref-optionality (D9); seq-as-structural-constraint (D10); mint-vs-display ordering rule (I3); coefficient role/domain split (dep_coeff retention in (0,1], ref_coeff flat non-negative, seq none — F-4); [priority] config shape + forward-compat rule; the survey/next/explain sort contract." },
+  { id = "EX-3", text = "Tunable numbers explicitly OUT of ADR-015 (default values, COEFF_MAX, clamp/condensation/total_cmp mechanics) — left implementation-owned." },
+]
+verification = [
+  { id = "VA-1", expects = "Agent/human check: ADR-015 body covers every EX-2 item and excludes every EX-3 item; no coefficient *value* is ratified, every coefficient *domain* is." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-02 ─ Risk leaf extraction (ADR-001 forcing function) ─────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Risk leaf extraction"
+objective = """
+Move the risk model from backlog (command) to a new leaf src/risk.rs so facet \
+(leaf) and priority::graph (engine) can read it without an upward import (D2). \
+Behaviour-preserving: backlog re-uses the leaf, its public behaviour unchanged. \
+EntityFacets gains risk. Amend the binding tier-map in the same phase.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "ADR-015 ratified (PHASE-01) — the policy the risk dimension serves is fixed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RiskLevel/RiskFacet/RawRiskFacet/parse_optional/exposure live in src/risk.rs (leaf, extracted verbatim); backlog re-uses them; no parallel validator." },
+  { id = "EX-2", text = "EntityFacets (src/facet.rs) gains `risk: Option<RiskFacet>`; all constructors updated." },
+  { id = "EX-3", text = ".doctrine/adr/001/layering.toml: add `risk = \"leaf\"`; relax the `facet` entry comment to permit the risk import. `just gate` green (the binding tier-map is consumed by the gate — RV-121 precedent)." },
+]
+verification = [
+  { id = "VT-1", expects = "risk::exposure parity — the existing backlog risk/exposure suites pass unchanged post-move (behaviour-preservation gate is the proof)." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-03 ─ Scan risk read + PriorityConfig ─────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Scan risk read + config load"
+objective = """
+Feed the two pure scoring inputs from disk: read_facets reads the [facet] table \
+into ScannedEntity.risk (same per-facet isolation as estimate/value), and a new \
+priority::config leaf parses the [priority] section with the deliberate advisory- \
+config clamp policy. No scoring consumer yet — both are unit-tested standalone, so \
+the phase ends green with no dead code threaded into build_from.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Risk leaf available (PHASE-02) — read_facets and config share the leaf risk types." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "read_facets reads [facet] via risk::parse_optional; ScannedEntity gains a risk field; per-facet isolation preserved (a malformed [facet] drops only risk to None + an Error diagnostic, estimate/value intact)." },
+  { id = "EX-2", text = "src/priority/config.rs: PriorityConfig serde struct (#[serde(default)], unknown keys ignored) + impure `load(root)`; advisory clamp at load (NaN/±∞ → field default, negative → 0.0, over-COEFF_MAX → COEFF_MAX; silent). NOT threaded into build_from this phase." },
+  { id = "EX-3", text = ".doctrine/adr/001/layering.toml: classify `priority::config = \"leaf\"`. `just gate` green." },
+]
+verification = [
+  { id = "VT-1b", expects = "scan per-facet isolation — a malformed risk [facet] drops only risk (None + Error), estimate/value survive; existing catalog/scan malformed-facet cases stay green unchanged (F-7)." },
+  { id = "VT-3",  expects = "config — missing [priority] → all defaults; partial section → per-field defaults; unknown key ignored; non-finite/negative/over-COEFF_MAX coefficient clamped (I2a); a malformed *value* clamps and does NOT hard-error (the deliberate advisory-config policy, distinct from dispatch_config; F-6)." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-04 ─ Scoring passes (ADDITIVE — engine proven in isolation) ──────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Scoring passes (additive)"
+objective = """
+Land the pure scoring engine WITHOUT disturbing the live ordering surfaces: the \
+base pre-pass, NodeAttr.base_score, the recursive needs-leverage DP, and the \
+one-hop ref-optionality post-pass, storing leverage/optionality/score on the \
+graph. Strangler step — the old consequence:u32 pre-pass, mint order, and all \
+surfaces stay UNTOUCHED and green; the new machinery is exercised by direct \
+graph/score inspection in tests. The atomic cutover is PHASE-05. This keeps the \
+correctness-critical engine reviewable before any surface churn.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Scan risk + PriorityConfig available (PHASE-03)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`base_score(&EntityFacets, &entity::Kind, &PriorityConfig) -> BaseScore` (split value_dim/risk_dim); pure; NaN/∞-free by construction — every computed dimension and total() is_finite-sanitized (I2b, not inputs alone)." },
+  { id = "EX-2", text = "build_from loads PriorityConfig from its existing `root` arg (D4) — covering every caller incl. actionability_block_from (surface.rs:484) with no signature change; base pre-pass computes a BTreeMap<EntityKey,BaseScore> carried onto NodeAttr.base_score." },
+  { id = "EX-3", text = "Consequence post-pass on the built graph: needs-leverage = recursive DP over out_edges(dep_overlay) in reverse graph.ordered() order, with the explicit dep-component graph (SCCs from provenance().cycles() filtered to dep_overlay; singletons otherwise; intra-component edges contribute 0; every member gets the same component leverage); ref-optionality = one-hop ref_coeff·Σ in_edges over the CONSEQUENCE_LABELS subset only. leverage/optionality/score maps stored on PriorityGraph; each is_finite-sanitized before storage." },
+  { id = "EX-4", text = "ADDITIVE: old consequence:u32 field + pre-pass, mint order, surfaces, and existing goldens are untouched and green. No surface reads the new maps yet." },
+]
+verification = [
+  { id = "VT-2",  expects = "base_score pure & correct — value-only / risk-only / both / neither; absent estimate → midpoint 1.0; kind_weight & tag_coeff (Σ=1.0 stub) defaults applied." },
+  { id = "VT-4",  expects = "directions & classes (D8/D9): (a) needs-leverage flows out_edges(dep_overlay) (prereq accrues dependents); (b) ref-optionality flows in_edges over CONSEQUENCE_LABELS one-hop; (c) a reviews/owning_slice edge contributes 0; (d) a dangling target contributes 0; ADR-004 (no stored reverse) upheld." },
+  { id = "VT-4b", expects = "leverage is recursive (D8): a 3-deep needs chain A←B←C gives A leverage = dep_coeff·base(B) + dep_coeff²·base(C) (depth-k decay along a path); a reconvergent diamond double-counts the shared leaf through both paths (accepted finite path-sum, F-1); contrast — ref is one-hop, no transitive accumulation." },
+  { id = "VT-6",  expects = "determinism + finite outputs (I2b, F-2): equal scores tiebreak canonical-id asc; feeding near-f64::MAX coefficients proves no ∞/NaN reaches any stored map — base_score AND the post-pass is_finite-sanitize computed dims/total/leverage/optionality, not just inputs." },
+  { id = "VT-8",  expects = "leverage terminates + condensation specified (I5, F-2): (a) a self-loop (A needs A) yields finite leverage(A); (b) a multi-member SCC A↔B with external dependent C (C needs B) — the {A,B} component read from provenance().cycles(), intra-component edges contribute 0, base(C)+leverage(C) flows once to the component, A and B report the same finite component leverage; the DP halts." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-05 ─ Surface cutover + activate config ──────────────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "Surface cutover + [priority] seed"
+objective = """
+The atomic cutover: retype surfaces consequence:u32 → score:f64, flip mint order \
+to base, delete the old consequence pre-pass/field (no parallel path left), give \
+`next` its own score-aware frontier sort, add score columns, bump policy_version, \
+update goldens, and seed an illustrative [priority] in doctrine.toml so the live \
+behaviour change is deliberate and last.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Scoring engine landed and tested in isolation (PHASE-04)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Surfaces retyped consequence:u32 → score:f64 across SurveyRow/ActionabilityNode/ActionabilityBlock/NextRow; ReasonKind::Consequence{inbound} → ReasonKind::Score{base,value_dim,risk_dim,leverage,optionality,total}." },
+  { id = "EX-2", text = "Mint order cutover to (base.total() desc via f64::total_cmp, id asc); the old consequence:u32 field + pre-pass are removed — no parallel implementation remains." },
+  { id = "EX-3", text = "survey sorts actionability → score desc (total_cmp) → id asc; `next` runs its OWN Kahn-style induced-frontier sort over the SURVIVING seq edges (seq_overlay minus provenance().evictions()) with (score desc, id asc) as the ready-set priority — explicitly NOT cordage order_key (it ranks Level before NodeId, demoting score-promoted successors; RV-132 F-3). survey + next gain a score column; policy_version \"priority.v2\" → \"priority.v3\"." },
+  { id = "EX-4", text = "doctrine.toml gains an illustrative [priority] section; all survey/next/explain goldens (human + --json) updated to the score contract." },
+]
+verification = [
+  { id = "VT-5",  expects = "reordering scenario (the point of the slice): a blocker gating one high-value slice outranks a blocker gating five ideas (old inbound-count ranked them opposite); AND a deep blocker gating a cheap chore that gates a valuable cone outranks a shallow blocker fronting one modest item (recursive-leverage proof)." },
+  { id = "VT-7",  expects = "ordering split (I3): mint uses base only (consequence excluded from the structural tier-3 fallback); survey display sorts by score; `next` sorts the actionable frontier by (score desc, id) with surviving after-seq as strict precedence — proven by a Y-fixture (two seq-incomparable ready arms order by score), a same-chain seq pair (keeps structural order regardless of score), AND an evicted/cyclic-seq case (an Evict-broken seq edge does NOT re-impose precedence — proving the sort reads surviving edges, not raw seq_overlay; F-3)." },
+  { id = "VA-1",  expects = "explain --json exposes { base, value_dim, risk_dim, leverage, optionality, total }; human render reads correctly." },
+]
+specs        = []
+requirements = []
