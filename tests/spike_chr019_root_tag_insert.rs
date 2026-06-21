@@ -232,7 +232,11 @@ fn h2_rfc002_live_tags_at_root_16_relations_preserved() {
         parsed["relationships"].get("superseded_by").is_some(),
         "sibling superseded_by axis present"
     );
-    assert_eq!(relation_count(&parsed), 16, "all 16 [[relation]] rows survive");
+    assert_eq!(
+        relation_count(&parsed),
+        16,
+        "all 16 [[relation]] rows survive"
+    );
 
     // Exercise a root-insert edit that replaces the tags array. Root tags + 16 relations survive.
     let existing_tags = root_tags(&parsed);
@@ -246,7 +250,11 @@ fn h2_rfc002_live_tags_at_root_16_relations_preserved() {
     let rendered = doc.to_string();
     assert_root_tags_above_subtables(&rendered);
     let parsed2 = reparse(&doc);
-    assert_eq!(root_tags(&parsed2), all_tags, "root tags survive insert edit");
+    assert_eq!(
+        root_tags(&parsed2),
+        all_tags,
+        "root tags survive insert edit"
+    );
     assert_eq!(relation_count(&parsed2), 16, "relations survive edit");
     assert!(
         parsed2["relationships"].get("superseded_by").is_some(),
