@@ -20,6 +20,7 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
+use clap::Subcommand;
 
 use crate::git::{self, MergeTree, RefCas, ZERO_OID};
 use crate::ledger::{
@@ -28,6 +29,347 @@ use crate::ledger::{
 };
 use crate::listing::render_table;
 use crate::root;
+
+#[derive(Subcommand)]
+pub(crate) enum DispatchCommand {
+    /// Materialise reviewable refs from `dispatch/<slice>` (SL-064 / ADR-012
+    /// §4). The stage selector is required and single-choice; PHASE-04 ships
+    /// `--prepare-review` (stage-1: create `review/<slice>` + `phase/<slice>-NN`
+    /// under a CAS journal, never writing trunk). Orchestrator-classed — refused
+    /// under worker-mode.
+    Sync {
+        /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
+        /// coordination branch to project.
+        #[arg(long)]
+        slice: u32,
+
+        /// Stage-1: create the reviewable `review/<slice>` and `phase/<slice>-NN`
+        /// refs from the dispatch tip; never writes trunk.
+        #[arg(long, group = "stage", required = true)]
+        prepare_review: bool,
+
+        /// Stage-2: replay the prepared journal idempotently and project the
+        /// audited code units (opt-in `--trunk`/`--edge`); runs from parent/root
+        /// after the coordination worktree is removed. Never auto-resolves.
+        #[arg(long, group = "stage", required = true)]
+        integrate: bool,
+
+        /// Read-only (SL-121 §3(b)): print the committed journal's trunk-row
+        /// `planned_new_oid` — the row whose target is `--trunk` — to stdout and
+        /// exit; the close step-3a verify read surface. Tree-reads `dispatch/<slice>`,
+        /// writes nothing.
+        #[arg(long, group = "stage", required = true)]
+        show_journal_trunk_oid: bool,
+
+        /// Project the cumulative code units onto this trunk ref, fast-forward-only +
+        /// expected-tip CAS (e.g. `refs/heads/main`) under `--integrate`; names the
+        /// row to read under `--show-journal-trunk-oid`. Absent under `--integrate` ⇒
+        /// trunk is left untouched.
+        #[arg(long, conflicts_with = "prepare_review")]
+        trunk: Option<String>,
+
+        /// Stage-2 only: advance this standing aggregate ref to the `review/<slice>`
+        /// bundle (e.g. `refs/heads/edge`). Absent ⇒ no aggregate written.
+        #[arg(long, requires = "integrate")]
+        edge: Option<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Funnel-time recording: append a per-phase code boundary to
+    /// `.doctrine/dispatch/<slice>/boundaries.toml` (design §4.3). The
+    /// orchestrator runs this between the funnel's code commit and its knowledge
+    /// commit; stage-1 `sync --prepare-review` tree-reads the committed file to
+    /// cut the claude-arm `phase/<slice>-NN` deliverables. Orchestrator-classed —
+    /// refused under worker-mode.
+    RecordBoundary {
+        /// The slice id (bare number, e.g. `64`) whose ledger to append.
+        #[arg(long)]
+        slice: u32,
+
+        /// The `PHASE-NN` id this code boundary belongs to.
+        #[arg(long)]
+        phase: String,
+
+        /// Commit-ish for HEAD before the phase's code landed (resolved to a
+        /// full oid; the empty-phase test compares it to `--code-end`).
+        #[arg(long)]
+        code_start: String,
+
+        /// Commit-ish for the phase's cumulative code tip, *before* the knowledge
+        /// record commit (resolved to a full oid — the tree the cut snapshots).
+        #[arg(long)]
+        code_end: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Advance dispatch/<slice>'s base by merging current trunk into it in the
+    /// live coordination worktree (design SL-127 §3.2). Merge-only; re-run
+    /// `sync --prepare-review` after. Orchestrator-classed — refused under worker-mode.
+    RefreshBase {
+        #[arg(long)]
+        slice: u32,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Create OR resume the coordination worktree and emit the dispatch env
+    /// contract on stdout (design §2). Orchestrator-classed — refused under
+    /// worker-mode.
+    Setup {
+        /// The slice id (bare number, e.g. `85`).
+        #[arg(long)]
+        slice: u32,
+
+        /// The coordination worktree directory (must not already exist).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Candidate lifecycle (SL-068 / design §5.3). `create` publishes a
+    /// reviewable/landable candidate at `candidate/<slice>/<label>` by computing
+    /// the no-ff 3-way merge of a verified source ref onto a base, under zero-oid
+    /// CAS. Orchestrator-classed — refused under worker-mode.
+    Candidate {
+        #[command(subcommand)]
+        command: CandidateCommand,
+    },
+
+    /// Read the plan and runtime phase sheets; print ordered phase rollup
+    /// and identify the next actionable phase(s). Read-only — callable from
+    /// anywhere.
+    PlanNext {
+        /// The slice id (bare number).
+        #[arg(long)]
+        slice: u32,
+
+        /// Emit JSON instead of human-readable table.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only full dispatch rollup: coordination state, phase table,
+    /// trunk drift, sync state, candidate summary, next-step guidance.
+    Status {
+        /// The slice id (bare number, e.g. `85`).
+        #[arg(long)]
+        slice: u32,
+
+        /// Emit JSON instead of human-readable table.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Print the resolved `[dispatch] deliver_to` trunk delivery ref to stdout
+    /// (SL-128 / IMP-124). Read-only — callable from anywhere.
+    DeliverTo {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum CandidateCommand {
+    /// Create a candidate (the happy path: provenance gate → no-ff 3-way merge →
+    /// zero-oid CAS branch → recorded row). A content conflict aborts cleanly,
+    /// writing no row/ref/worktree.
+    Create {
+        /// The slice id (bare number, e.g. `68`).
+        #[arg(long)]
+        slice: u32,
+
+        /// The human label (e.g. `review-001`); the ref is
+        /// `candidate/<slice>/<label>` and the id `cand-<slice>-<label>`.
+        #[arg(long, visible_alias = "target")]
+        label: String,
+
+        /// Flavour: `audit` | `experiment`.
+        #[arg(long, default_value = "audit")]
+        kind: String,
+
+        /// Role: `review_surface` | `close_target` | `scratch`.
+        #[arg(long)]
+        role: String,
+
+        /// Payload: `impl_bundle` | `code`.
+        #[arg(long)]
+        payload: String,
+
+        /// The base ref the merge is computed against (e.g. `refs/heads/main`).
+        #[arg(long)]
+        base: String,
+
+        /// The source ref merged in. Defaults to `review/<slice>` for a
+        /// `review_surface`; required otherwise (e.g. a `phase/<slice>-NN`).
+        #[arg(long)]
+        source: Option<String>,
+
+        /// An optional prior candidate id this fresh row supersedes (EX-2).
+        #[arg(long)]
+        supersedes: Option<String>,
+
+        /// Also materialise a linked worktree at the candidate branch (opt-in
+        /// here; mandatory-for-review is PHASE-03).
+        #[arg(long)]
+        worktree: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Status (SL-068 PHASE-04): a read-only self-describing surface — lists the
+    /// evidence refs and the candidate interaction branches in separate groups,
+    /// reports each candidate's base/source/tip/status/admission, surfaces ref
+    /// drift, and prints the safe next command(s). Read-classed — never mutates a
+    /// ref or the ledger, so it works under worker-mode.
+    Status {
+        /// The slice id (bare number, e.g. `68`).
+        #[arg(long)]
+        slice: u32,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Admit (SL-068 PHASE-05): pin a recorded candidate's committed tip as the
+    /// immutable OID a downstream verb (close/review) targets, after validating
+    /// provenance (the recorded merge is the Doctrine candidate merge and an
+    /// ancestor of the admitted tip) and re-reading the ref. Writes ONLY
+    /// `candidates.toml` — never an evidence/candidate ref. Orchestrator-classed.
+    Admit {
+        /// The slice id (bare number, e.g. `68`).
+        #[arg(long)]
+        slice: u32,
+
+        /// Role: `review_surface` | `close_target` (scratch is not admissible).
+        #[arg(long)]
+        role: String,
+
+        /// The candidate ref to admit (e.g. `refs/heads/candidate/064/close-001`).
+        #[arg(long)]
+        candidate: String,
+
+        /// The governing review (e.g. `RV-007`).
+        #[arg(long)]
+        review: Option<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()> {
+    match cmd {
+        DispatchCommand::Sync {
+            slice,
+            integrate,
+            show_journal_trunk_oid,
+            trunk,
+            edge,
+            path,
+            ..
+        } => {
+            // The `stage` group is `required = true` single-choice: exactly one
+            // of `--prepare-review` / `--integrate` / `--show-journal-trunk-oid`
+            // is set, so the booleans select the stage in order (no unreachable
+            // arm).
+            if show_journal_trunk_oid {
+                // SL-128 D3: absent `--trunk` defaults from `[dispatch] deliver_to`;
+                // explicit `--trunk` still wins. `--integrate` is unchanged.
+                run_show_journal_trunk_oid(path, slice, trunk.as_deref())
+            } else if integrate {
+                run_integrate(path, slice, trunk.as_deref(), edge.as_deref())
+            } else {
+                run_prepare_review(path, slice)
+            }
+        }
+        DispatchCommand::RecordBoundary {
+            slice,
+            phase,
+            code_start,
+            code_end,
+            path,
+        } => run_record_boundary(path, slice, &phase, &code_start, &code_end),
+        DispatchCommand::RefreshBase { slice, path } => run_refresh_base(path, slice),
+        DispatchCommand::Setup { slice, dir, path } => {
+            // Read the harness signal here in the shell (ISS-031 placement
+            // guard); a `CLAUDE`-prefixed env var marks the Claude arm, whose
+            // outside-root coordination dir silently produces a wrong base.
+            let claude_harness =
+                std::env::vars_os().any(|(k, _v)| k.to_string_lossy().starts_with("CLAUDE"));
+            run_setup(path, slice, &dir, claude_harness)
+        }
+        DispatchCommand::Candidate { command } => match command {
+            CandidateCommand::Create {
+                slice,
+                label,
+                kind,
+                role,
+                payload,
+                base,
+                source,
+                supersedes,
+                worktree,
+                path,
+            } => {
+                let req = CreateRequest {
+                    slice,
+                    label,
+                    kind: parse_kind(&kind)?,
+                    role: parse_role(&role)?,
+                    payload: parse_payload(&payload)?,
+                    base,
+                    source,
+                    supersedes,
+                    worktree,
+                    created_at: crate::clock::today(),
+                };
+                run_candidate_create(path, &req)
+            }
+            CandidateCommand::Status { slice, path } => run_candidate_status(path, slice),
+            CandidateCommand::Admit {
+                slice,
+                role,
+                candidate,
+                review,
+                path,
+            } => {
+                let req = AdmitRequest {
+                    slice,
+                    role: parse_role(&role)?,
+                    candidate,
+                    review,
+                    admitted_at: crate::clock::today(),
+                };
+                run_candidate_admit(path, &req)
+            }
+        },
+        DispatchCommand::PlanNext { slice, json, path } => run_plan_next(path, slice, json),
+        DispatchCommand::Status { slice, json, path } => run_status(path, slice, json),
+        DispatchCommand::DeliverTo { path } => run_deliver_to(path),
+    }
+}
 
 /// PURE — coordination-worktree placement guard (no env/disk; CLAUDE.md split).
 ///

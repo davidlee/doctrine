@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
+use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::{self, Artifact, Fileset, LocalFs};
@@ -23,6 +24,618 @@ use crate::links::{backlinks_index, extract_wikilinks, resolve_wikilink};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::relation::{AppendOutcome, RemoveOutcome};
 use crate::tomlfmt::{toml_array_inner, toml_string};
+
+fn parse_expand_depth(s: &str) -> Result<usize, String> {
+    let depth = s
+        .parse::<usize>()
+        .map_err(|_err| "expand depth must be a number")?;
+    if depth == 0 {
+        return Err("expand depth must be >= 1".to_string());
+    }
+    Ok(depth)
+}
+
+/// Shared scope/filter/format fields for `MemoryCommand::Find` and
+/// `MemoryCommand::Retrieve`. Both variants flatten this struct via
+/// `#[command(flatten)]` — each shared field is defined once (DRY).
+#[derive(Args, Debug)]
+pub(crate) struct FindRetrieveArgs {
+    /// Path scope probe, repeatable (`-p`/`--path` is the project root).
+    #[arg(long = "path-scope")]
+    pub(crate) path_scope: Vec<String>,
+
+    /// Glob scope probe, repeatable.
+    #[arg(long = "glob")]
+    pub(crate) glob: Vec<String>,
+
+    /// Command scope probe, repeatable.
+    #[arg(long = "command")]
+    pub(crate) command: Vec<String>,
+
+    /// Tag scope probe, repeatable.
+    #[arg(long = "tag")]
+    pub(crate) tag: Vec<String>,
+
+    /// Free-text lexical query (not a scope constraint).
+    #[arg(long = "query")]
+    pub(crate) flag_query: Option<String>,
+
+    /// Hard filter by type: concept|fact|pattern|signpost|system|thread.
+    #[arg(long = "type", value_parser = MemoryType::parse)]
+    pub(crate) memory_type: Option<MemoryType>,
+
+    /// Hard filter by lifecycle status.
+    #[arg(long, value_parser = Status::parse)]
+    pub(crate) status: Option<Status>,
+
+    /// Hard filter by lifespan.
+    #[arg(long, value_parser = Lifespan::from_str)]
+    pub(crate) lifespan: Option<Lifespan>,
+
+    /// Output format.
+    #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+    pub(crate) format: Format,
+
+    /// Shorthand for `--format json`.
+    #[arg(long)]
+    pub(crate) json: bool,
+
+    /// Include `draft` memories (excluded by default).
+    #[arg(long = "include-draft")]
+    pub(crate) include_draft: bool,
+
+    /// Skip first N results (default 0).
+    #[arg(long, default_value_t = 0)]
+    pub(crate) offset: usize,
+
+    /// Page number (1-based; sugar over --offset). Mutually exclusive with --offset.
+    #[arg(long, conflicts_with = "offset")]
+    pub(crate) page: Option<usize>,
+
+    /// Max results to show.
+    #[arg(long)]
+    pub(crate) limit: Option<usize>,
+
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
+
+    /// Expand graph by traversing relations N levels deep (retrieve only).
+    #[arg(long, value_parser = parse_expand_depth)]
+    pub(crate) expand: Option<usize>,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MemoryCommand {
+    /// Mint a uid and scaffold a new memory under `.doctrine/memory/items`.
+    /// `memory new` is the uniform canonical alias (SL-025 §5.4 / D8); both names
+    /// dispatch the identical handler — skills may migrate `record → new` at leisure.
+    #[command(visible_alias = "new")]
+    Record {
+        /// Memory title.
+        title: String,
+
+        /// Memory type (required): concept|fact|pattern|signpost|system|thread.
+        #[arg(long = "type", value_parser = MemoryType::parse)]
+        memory_type: MemoryType,
+
+        /// Key alias `mem.<type>.<domain>.<subject>` (shorthand normalized).
+        #[arg(long)]
+        key: Option<String>,
+
+        /// Lifespan classification.
+        #[arg(long, value_parser = Lifespan::from_str)]
+        lifespan: Option<Lifespan>,
+
+        /// Lifecycle status (default: active).
+        #[arg(long, default_value = "active", value_parser = Status::parse)]
+        status: Status,
+
+        /// One-line summary.
+        #[arg(long)]
+        summary: Option<String>,
+
+        /// Review-by date carried in `[review].review_by`.
+        #[arg(long)]
+        review_by: Option<String>,
+
+        /// Provenance source, repeatable, in `KIND:REF` form.
+        #[arg(long = "provenance-source", value_parser = Provenance::parse_flag)]
+        provenance_source: Vec<Provenance>,
+
+        /// Trust level carried in `[trust].trust_level`.
+        #[arg(long = "trust")]
+        trust: Option<String>,
+
+        /// Severity carried in `[ranking].severity`.
+        #[arg(long = "severity")]
+        severity: Option<String>,
+
+        /// Tag, repeatable — written to `scope.tags`.
+        #[arg(long = "tag")]
+        tag: Vec<String>,
+
+        /// Path scope, repeatable — written to `scope.paths`.
+        #[arg(long = "path-scope")]
+        path_scope: Vec<String>,
+
+        /// Glob scope, repeatable — written to `scope.globs`.
+        #[arg(long = "glob")]
+        glob: Vec<String>,
+
+        /// Command scope, repeatable — written to `scope.commands`.
+        #[arg(long = "command")]
+        command: Vec<String>,
+
+        /// Repo identity override (`--repo`), e.g. `github.com/org/repo` — kind
+        /// `explicit`, confidence `high`; userinfo is stripped.
+        #[arg(long = "repo")]
+        repo: Option<String>,
+
+        /// Mint a GLOBAL orientation master: suppress the git born frame
+        /// (`repo=""`, anchor `none`) and write into the repo-root `memory/` tree
+        /// instead of `items/` (SL-018 — the corpus authoring path).
+        #[arg(long = "global")]
+        global: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Resolve a memory by uid or key and print its header + body-as-data.
+    Show {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Output format. `--json` is shorthand; see `--format`.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Attest a memory against the current working tree: stamp its verification
+    /// axis (refuses a dirty tree — no false attestation).
+    Verify {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Allow verification on dirty tree (stamps `checkout_state_id`).
+        #[arg(long)]
+        allow_dirty: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Run advisory validation checks on memories (dangling relations, stale verification, draft expiry).
+    Validate {
+        /// Optional memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List recorded memories, newest first; AND-filter on the shared spine.
+    List {
+        /// Filter by type: concept|fact|pattern|signpost|system|thread. The one
+        /// kind-specific axis (beside the shared flags — backlog `--kind` precedent).
+        #[arg(long = "type", value_parser = MemoryType::parse)]
+        memory_type: Option<MemoryType>,
+
+        /// Shared list flags: -f/-r/-i/-s/-t/-a/--format/--json (SL-025).
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Find memories by scope/query, ranked; rows carry trust + severity so the
+    /// holdback-exempt find surface keeps risk visible.
+    Find {
+        /// Positional query (zero or one; maps to --query). Mutually exclusive with --query.
+        query: Option<String>,
+
+        #[command(flatten)]
+        args: FindRetrieveArgs,
+    },
+
+    /// Retrieve memories as bounded, security-framed `data, not instruction`
+    /// blocks for agent context. Applies the trust holdback (non-bypassable):
+    /// low-trust high-severity memories are suppressed; use `find`/`show` to
+    /// inspect them.
+    Retrieve {
+        #[command(flatten)]
+        args: FindRetrieveArgs,
+
+        /// Raise the trust floor: only show memories at this trust or higher under
+        /// high severity (high|medium|low; only raises the default `medium`).
+        #[arg(long = "min-trust", value_parser = crate::retrieve::parse_min_trust)]
+        min_trust: Option<String>,
+    },
+
+    /// Resolve memory wikilinks for one memory or the whole corpus.
+    ResolveLinks {
+        /// Optional memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show reverse links into one target from wikilinks and authored relations.
+    Backlinks {
+        /// Target reference: a `mem_<hex>` uid, a `mem.<…>` key, or another target token.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Add and/or remove tags on a memory — tags are lowercased and validated
+    /// `[a-z0-9_:-]` (colon namespacing, e.g. `area:memory`); the stored set is
+    /// sorted. At least one add or remove required.
+    Tag {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Tags to add (positional, repeatable).
+        tags: Vec<String>,
+
+        /// Tags to remove, repeatable (`-d security -d area:memory`).
+        #[arg(long = "remove", short = 'd')]
+        remove: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Transition one memory's status. `<state>` must be one of the 6 lifecycle
+    /// states (active/draft/superseded/retracted/archived/quarantined).
+    /// `--by <OTHER>` is required for superseded (records the successor relation)
+    /// and forbidden otherwise.
+    Status {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// The target status: active|draft|superseded|retracted|archived|quarantined.
+        state: String,
+
+        /// Successor reference (required for superseded, forbidden otherwise).
+        #[arg(long)]
+        by: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Edit a memory's fields in a single read→mutate→write transaction.
+    /// At least one flag required. `--status` delegates to the status-transition
+    /// core (superseded refused — use `memory status superseded --by`).
+    /// `--key` late-binds only on an unkeyed memory (immutable once recorded).
+    /// Scope arrays replace. `updated` stamped once on any change.
+    Edit {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Replace the title (non-empty after trim).
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Replace the summary (free text).
+        #[arg(long)]
+        summary: Option<String>,
+
+        /// Transition status (active|draft|retracted|archived|quarantined).
+        /// Superseded is refused — use `memory status superseded --by <OTHER>`.
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Replace the lifespan (semantic|episodic|procedural|working|identity).
+        /// An empty value leaves the existing lifespan unchanged.
+        #[arg(long)]
+        lifespan: Option<String>,
+
+        /// Set or replace the review-by date (`YYYY-MM-DD`); empty string clears.
+        #[arg(long)]
+        review_by: Option<String>,
+
+        /// Set the trust level (low|medium|high).
+        #[arg(long)]
+        trust: Option<String>,
+
+        /// Set the severity (critical|high|medium|low|none).
+        #[arg(long)]
+        severity: Option<String>,
+
+        /// Late-bind the memory key (shorthand normalized via `mem.` prefix).
+        /// Refused if the memory already has a key set.
+        #[arg(long)]
+        key: Option<String>,
+
+        /// Replace the scope.paths array (repeatable).
+        #[arg(long = "path-scope")]
+        path_scope: Vec<String>,
+
+        /// Replace the scope.globs array (repeatable).
+        #[arg(long = "glob")]
+        glob: Vec<String>,
+
+        /// Replace the scope.commands array (repeatable).
+        #[arg(long = "command")]
+        command: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Materialize the embedded global-memory corpus into the gitignored
+    /// `.doctrine/memory/shipped/`, or `memory sync install` to wire the
+    /// session hook. Outside a doctrine repo this is a clean no-op.
+    Sync {
+        /// Wire the `SessionStart` refresh hook (omit to run the sync).
+        #[command(subcommand)]
+        command: Option<SyncCommand>,
+
+        /// Compute and print the plan without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SyncCommand {
+    /// Wire a separate `SessionStart` hook running `doctrine memory sync` (mirrors
+    /// `boot install`; the hook degrades to a clean no-op in non-doctrine repos).
+    Install {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+
+        /// Compute and report the plan without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+}
+
+pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
+    match cmd {
+        MemoryCommand::Record {
+            title,
+            memory_type,
+            key,
+            lifespan,
+            status,
+            summary,
+            review_by,
+            provenance_source,
+            trust,
+            severity,
+            tag,
+            path_scope,
+            glob,
+            command,
+            repo,
+            global,
+            path,
+        } => run_record(
+            path,
+            &RecordArgs {
+                title: &title,
+                memory_type,
+                key: key.as_deref(),
+                lifespan,
+                status,
+                summary: summary.as_deref(),
+                review_by: review_by.as_deref(),
+                sources: &provenance_source,
+                trust_level: trust.as_deref(),
+                severity: severity.as_deref(),
+                tags: &tag,
+                paths: &path_scope,
+                globs: &glob,
+                commands: &command,
+                repo: repo.as_deref(),
+                global,
+            },
+        ),
+        MemoryCommand::Show {
+            reference,
+            format,
+            json,
+            path,
+        } => run_show(&mut io::stdout(), path, &reference, if json { Format::Json } else { format }),
+        MemoryCommand::Verify {
+            reference,
+            allow_dirty,
+            path,
+        } => run_verify(path, &reference, allow_dirty),
+        MemoryCommand::Validate { reference, path } => {
+            match run_validate(path, reference.as_deref()) {
+                Ok(()) => Ok(()),
+                Err(e) if e.to_string().contains("validation warnings found") => {
+                    // Exit with code 1 for validation warnings - this is the expected CLI behavior
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "CLI tool needs to exit with code 1 for validation warnings"
+                    )]
+                    {
+                        std::process::exit(1);
+                    }
+                }
+                Err(e) => Err(e),
+            }
+        }
+        MemoryCommand::List {
+            memory_type,
+            list,
+            path,
+        } => run_list(&mut io::stdout(), path, memory_type, list.into_list_args(color)),
+        MemoryCommand::Find { query, args } => {
+            // Merge positional query + --query; mutually exclusive.
+            let free_query = match (query, args.flag_query) {
+                (Some(_), Some(_)) => {
+                    anyhow::bail!("cannot specify both a positional query and --query")
+                }
+                (q, None) | (None, q) => q,
+            };
+            // Validate --limit.
+            if args.limit == Some(0) {
+                anyhow::bail!("--limit must be >= 1");
+            }
+            // Resolve offset: page sugar or explicit.
+            let page_size = args
+                .limit
+                .unwrap_or(crate::retrieve::RETRIEVE_LIMIT_DEFAULT);
+            let offset = match args.page {
+                Some(0) => anyhow::bail!("--page must be >= 1"),
+                Some(p) => (p - 1) * page_size,
+                None => args.offset,
+            };
+            let resolved_format = if args.json { Format::Json } else { args.format };
+            crate::retrieve::run_find(
+                &mut io::stdout(),
+                args.path,
+                args.path_scope,
+                args.glob,
+                args.command,
+                args.tag,
+                args.lifespan,
+                free_query,
+                args.memory_type,
+                args.status,
+                args.include_draft,
+                resolved_format,
+                offset,
+                args.limit,
+            )
+        }
+        MemoryCommand::Retrieve { args, min_trust } => {
+            // Validate --limit.
+            if args.limit == Some(0) {
+                anyhow::bail!("--limit must be >= 1");
+            }
+            let retrieve_limit = args
+                .limit
+                .unwrap_or(crate::retrieve::RETRIEVE_LIMIT_DEFAULT)
+                .min(crate::retrieve::RETRIEVE_LIMIT_MAX);
+            // Resolve offset: page sugar or explicit.
+            let page_size = args
+                .limit
+                .unwrap_or(crate::retrieve::RETRIEVE_LIMIT_DEFAULT);
+            let offset = match args.page {
+                Some(0) => anyhow::bail!("--page must be >= 1"),
+                Some(p) => (p - 1) * page_size,
+                None => args.offset,
+            };
+            let resolved_format = if args.json { Format::Json } else { args.format };
+            crate::retrieve::run_retrieve(
+                &mut io::stdout(),
+                args.path,
+                args.path_scope,
+                args.glob,
+                args.command,
+                args.tag,
+                args.lifespan,
+                args.flag_query,
+                args.memory_type,
+                args.status,
+                args.include_draft,
+                retrieve_limit,
+                min_trust.as_deref(),
+                offset,
+                resolved_format,
+                args.expand,
+            )
+        }
+        MemoryCommand::ResolveLinks { reference, path } => {
+            run_resolve_links(path, reference.as_deref())
+        }
+        MemoryCommand::Backlinks { reference, path } => run_backlinks(path, &reference),
+        MemoryCommand::Tag {
+            reference,
+            tags,
+            remove,
+            path,
+        } => run_tag(path, &reference, &tags, &remove),
+        MemoryCommand::Status {
+            reference,
+            state,
+            by,
+            path,
+        } => run_status(path, &reference, &state, by.as_deref(), color),
+        MemoryCommand::Edit {
+            reference,
+            title,
+            summary,
+            status,
+            lifespan,
+            review_by,
+            trust,
+            severity,
+            key,
+            path_scope,
+            glob,
+            command,
+            path,
+        } => {
+            let fields = EditFields {
+                title,
+                summary,
+                status,
+                lifespan,
+                review_by,
+                trust,
+                severity,
+                key,
+                path_scope: if path_scope.is_empty() {
+                    None
+                } else {
+                    Some(path_scope)
+                },
+                glob: if glob.is_empty() { None } else { Some(glob) },
+                command: if command.is_empty() {
+                    None
+                } else {
+                    Some(command)
+                },
+            };
+            run_edit(path, &reference, &fields)
+        }
+        MemoryCommand::Sync { .. } => {
+            anyhow::bail!("MemoryCommand::Sync is handled by the residual main.rs dispatch")
+        }
+    }
+}
 
 /// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
 /// flag — design § 5.3 / interop constraint 6). Read back by `list`/`show`.

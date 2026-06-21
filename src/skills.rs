@@ -1092,6 +1092,30 @@ fn hook_outcome_label(outcome: &crate::boot::RefreshOutcome) -> &'static str {
     }
 }
 
+// ── CLI dispatch ───────────────────────────────────────────────────────────
+
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub(crate) enum SkillsCommand {
+    /// List available skills and their install status.
+    List {
+        /// Agent to report status for (default: claude).
+        #[arg(short = 'a', long)]
+        agent: Option<String>,
+
+        /// Only show skills already installed.
+        #[arg(long)]
+        installed: bool,
+    },
+}
+
+pub(crate) fn dispatch(cmd: SkillsCommand, _color: bool) -> anyhow::Result<()> {
+    match cmd {
+        SkillsCommand::List { agent, installed } => run_list(agent.as_deref(), installed),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

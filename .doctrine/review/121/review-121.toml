@@ -32,7 +32,7 @@ response = "D5 now explicitly reconciles with existing projection: EntityFacets 
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected a settled unit-resolution boundary; observed contradictory reuse of catalog Units and direct config resolution"
 detail = "Evidence: `.doctrine/slice/132/design.md` Code impact says `format_show` accepts `units: &Units` and terrain says to reuse `src/catalog/hydrate.rs:185-199 resolve_units`; D1 says `run_show` adds calls to `crate::estimate::resolve_unit` and `crate::value::resolve_unit` on the existing `DoctrineToml`. In current source, `catalog::hydrate::resolve_units` is private and `Units` is defined inside the catalog hydration module. Making either part of `slice.rs`'s show path creates avoidable single-entity-show-to-catalog coupling; duplicating the read logic also needs an explicit error policy for absent vs malformed `doctrine.toml`."
@@ -50,7 +50,7 @@ response = "Added VT-11 (shell integration: run_show against fixture slice TOML 
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected dead-code ungating to leave no orphaned display API; observed new confidence helper beside unused normal/verbose helpers"
 detail = "Evidence: `.doctrine/slice/132/design.md` says to remove the `dead_code` gate on `estimate::display` and add `format_estimate_confidence`. Current `src/estimate/display.rs` already exposes `format_estimate_normal` and `format_estimate_verbose`; the target SL-132 output uses confidence framing, not the existing normal helper, and does not mention verbose output. Without an explicit disposition, removing the module-level expect may either produce dead-code warnings for existing helpers or leave misleading display functions with divergent semantics."

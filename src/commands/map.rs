@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 use std::path::PathBuf;
 
-use clap::Args;
+use clap::{Args, Subcommand};
 
 #[derive(Args)]
 pub(crate) struct MapServeArgs {
@@ -98,5 +98,17 @@ mod tests {
             depth: 1,
         };
         assert!(args_no_path.path.is_none());
+    }
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MapCommand {
+    /// Start the local map explorer web server (loopback only)
+    Serve(MapServeArgs),
+}
+
+pub(crate) fn dispatch(cmd: MapCommand) -> anyhow::Result<()> {
+    match cmd {
+        MapCommand::Serve(args) => run_serve(None, args),
     }
 }
