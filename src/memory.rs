@@ -473,7 +473,12 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
             format,
             json,
             path,
-        } => run_show(&mut io::stdout(), path, &reference, if json { Format::Json } else { format }),
+        } => run_show(
+            &mut io::stdout(),
+            path,
+            &reference,
+            if json { Format::Json } else { format },
+        ),
         MemoryCommand::Verify {
             reference,
             allow_dirty,
@@ -499,7 +504,12 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
             memory_type,
             list,
             path,
-        } => run_list(&mut io::stdout(), path, memory_type, list.into_list_args(color)),
+        } => run_list(
+            &mut io::stdout(),
+            path,
+            memory_type,
+            list.into_list_args(color),
+        ),
         MemoryCommand::Find { query, args } => {
             // Merge positional query + --query; mutually exclusive.
             let free_query = match (query, args.flag_query) {
@@ -2618,7 +2628,6 @@ pub(crate) fn run_list(
 /// Structured result from `list_for_mcp` — rows + total, consumed by the
 /// `memory_list` MCP handler which builds the pagination envelope.
 #[derive(Debug)]
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
 pub(crate) struct ListForMcp {
     pub(crate) rows: Vec<serde_json::Value>,
     pub(crate) total: usize,
@@ -2629,7 +2638,6 @@ pub(crate) struct ListForMcp {
 /// return `ListForMcp`. Zero duplication — the full filter contract
 /// (`listing::retain`: substr over key+title, status validation, default
 /// hide-set, tag OR-match) is shared with `list_rows`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
 pub(crate) fn list_for_mcp(
     root: &Path,
     type_f: Option<MemoryType>,

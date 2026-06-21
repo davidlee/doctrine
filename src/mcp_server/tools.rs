@@ -9,6 +9,8 @@
 use super::protocol::{
     Id, JsonRpcRequest, JsonRpcResponse, McpTool, McpToolResult, ToolsListResult,
 };
+use crate::memory;
+use crate::retrieve;
 use crate::review::{self, NewArgs, PrimeArgs, ReviewOutput};
 use anyhow::Context;
 use serde_json::{Value, json};
@@ -464,6 +466,240 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             let out = review::run_prime(Some(root.to_path_buf()), &args)?;
             Ok(serde_json::to_string(&out)?)
         }
+        "memory_find" => {
+            let fields = ExtractFields::from_value(arguments, &[]);
+            let limit = fields.opt_usize_field("limit");
+            let has_selectors = fields.opt_str_field("query").is_some()
+                || !fields.vec_str_field("path_scope").is_empty()
+                || !fields.vec_str_field("glob").is_empty()
+                || !fields.vec_str_field("command").is_empty()
+                || !fields.vec_str_field("tag").is_empty()
+                || fields.opt_str_field("type").is_some()
+                || fields.opt_str_field("status").is_some()
+                || fields.opt_str_field("lifespan").is_some();
+            // No selectors + no explicit limit → default cap of 20 (design §3)
+            let effective_limit = if !has_selectors && limit.is_none() {
+                Some(20usize)
+            } else {
+                limit
+            };
+            let result = retrieve::find_for_mcp(
+                Some(root.to_path_buf()),
+                fields.vec_str_field("path_scope"),
+                fields.vec_str_field("glob"),
+                fields.vec_str_field("command"),
+                fields.vec_str_field("tag"),
+                parse_lifespan(fields.opt_str_field("lifespan"))?,
+                fields.opt_str_field("query"),
+                parse_memory_type(fields.opt_str_field("type"))?,
+                parse_status(fields.opt_str_field("status"))?,
+                fields.opt_bool_field("include_draft").unwrap_or(false),
+                fields.opt_usize_field("offset").unwrap_or(0),
+                effective_limit,
+            )?;
+            let offset = fields.opt_usize_field("offset").unwrap_or(0);
+            let cap = effective_limit.unwrap_or(result.total);
+            let next_offset = if offset + cap < result.total {
+                Some(offset + cap)
+            } else {
+                None
+            };
+            Ok(serde_json::to_string_pretty(&json!({
+                "kind": "memory_find",
+                "rows": result.rows,
+                "total": result.total,
+                "offset": offset,
+                "limit": cap,
+                "next_offset": next_offset,
+            }))?)
+        }
+        "memory_retrieve" => {
+            let fields = ExtractFields::from_value(arguments, &[]);
+            let reference = fields.opt_str_field("reference");
+            let include_draft = fields.opt_bool_field("include_draft").unwrap_or(false);
+
+            // Validate min_trust before use — parse_min_trust errors on bad input
+            let min_trust_str = fields.opt_str_field("min_trust");
+            let min_trust = min_trust_str
+                .as_deref()
+                .map(|s| {
+                    retrieve::parse_min_trust(s)
+                        .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+                })
+                .transpose()?;
+
+            if let Some(ref_str) = reference {
+                // Validate mutual exclusivity: reference alone, no probes
+                let has_probes = fields.opt_str_field("query").is_some()
+                    || !fields.vec_str_field("path_scope").is_empty()
+                    || !fields.vec_str_field("glob").is_empty()
+                    || !fields.vec_str_field("command").is_empty()
+                    || !fields.vec_str_field("tag").is_empty()
+                    || fields.opt_str_field("type").is_some()
+                    || fields.opt_str_field("status").is_some()
+                    || fields.opt_str_field("lifespan").is_some();
+                if has_probes {
+                    anyhow::bail!(
+                        "invalid arguments: reference is mutually exclusive with query/path_scope/glob/command/tag/type/status/lifespan"
+                    );
+                }
+                // Single-memory path: resolve → check_retrievable → staleness → render
+                let mut buf = Vec::new();
+                retrieve::retrieve_reference(
+                    &mut buf,
+                    root,
+                    &ref_str,
+                    include_draft,
+                    min_trust.as_deref(),
+                )?;
+                Ok(String::from_utf8(buf)?)
+            } else {
+                // Scope-based path: search → rank → holdback → framed blocks
+                let mut buf = Vec::new();
+                retrieve::run_retrieve(
+                    &mut buf,
+                    Some(root.to_path_buf()),
+                    fields.vec_str_field("path_scope"),
+                    fields.vec_str_field("glob"),
+                    fields.vec_str_field("command"),
+                    fields.vec_str_field("tag"),
+                    parse_lifespan(fields.opt_str_field("lifespan"))?,
+                    fields.opt_str_field("query"),
+                    parse_memory_type(fields.opt_str_field("type"))?,
+                    parse_status(fields.opt_str_field("status"))?,
+                    include_draft,
+                    fields
+                        .opt_usize_field("limit")
+                        .unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT),
+                    min_trust.as_deref(),
+                    fields.opt_usize_field("offset").unwrap_or(0),
+                    crate::listing::Format::Table,
+                    None, // expand (deferred per scope)
+                )?;
+                Ok(String::from_utf8(buf)?)
+            }
+        }
+        "memory_show" => {
+            let fields = ExtractFields::from_value(arguments, &["reference"]);
+            let reference = fields.str_field("reference");
+            if reference.is_empty() {
+                anyhow::bail!("invalid arguments: reference is required");
+            }
+            let view = fields
+                .opt_str_field("view")
+                .unwrap_or_else(|| "summary".to_owned());
+            let include_body = fields.opt_bool_field("include_body").unwrap_or(true);
+            let backlinks_limit = fields.opt_usize_field("backlinks_limit");
+
+            // Get base show JSON via run_show
+            let mut buf = Vec::new();
+            memory::run_show(
+                &mut buf,
+                Some(root.to_path_buf()),
+                &reference,
+                crate::listing::Format::Json,
+            )?;
+            let json_str = String::from_utf8(buf)?;
+            let mut value: serde_json::Value = serde_json::from_str(&json_str)?;
+
+            // Extract uid from the run_show JSON output
+            let uid = value
+                .get("memory")
+                .and_then(|m| m.get("uid"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("invalid memory show response: missing uid"))?
+                .to_owned();
+
+            // One collect_all + freeze for both check_retrievable and backlinks (design §4)
+            let all = memory::collect_all(root)?;
+            let mref = memory::MemoryRef::parse(&uid)?;
+            let memory = memory::resolve_memory_from_all(&all, &mref)
+                .map_err(|e| anyhow::anyhow!("memory not found: {reference}: {e}"))?;
+            let snap = retrieve::freeze(root);
+
+            // check_retrievable → consumable + held_back_on_retrieve + notes
+            let (consumable, notes) =
+                retrieve::check_retrievable(memory, &snap.part, false, None, &snap.today);
+            let held_back_on_retrieve =
+                !consumable || retrieve::held_back(memory, retrieve::holdback_floor(None));
+
+            // Backlinks enrichment (design §4)
+            let backlinks = memory::backlink_rows_for(root, &all, &uid);
+            let backlinks_total = backlinks.len();
+            let backlinks_clipped: Vec<serde_json::Value> = backlinks
+                .iter()
+                .take(backlinks_limit.unwrap_or(20))
+                .map(|b| {
+                    json!({
+                        "uid": b.uid,
+                        "title": b.title,
+                        "type": b.memory_type,
+                        "method": b.method,
+                    })
+                })
+                .collect();
+
+            // Inject enriched fields into the memory object
+            if let Some(obj) = value.get_mut("memory").and_then(|v| v.as_object_mut()) {
+                obj.insert("consumable".to_owned(), json!(consumable));
+                obj.insert(
+                    "held_back_on_retrieve".to_owned(),
+                    json!(held_back_on_retrieve),
+                );
+                obj.insert("backlinks".to_owned(), json!(backlinks_clipped));
+                obj.insert("backlinks_total".to_owned(), json!(backlinks_total));
+            }
+
+            // When not consumable, surface the reason as notes
+            if let Some(notes_text) = notes.filter(|_| !consumable)
+                && let Some(obj) = value.as_object_mut()
+            {
+                obj.insert("notes".to_owned(), json!(notes_text));
+            }
+
+            // Handle view / include_body
+            let view_full = view == "full";
+            if !(view_full && include_body)
+                && let Some(obj) = value.as_object_mut()
+            {
+                obj.remove("body");
+            }
+
+            Ok(serde_json::to_string_pretty(&value)?)
+        }
+        "memory_list" => {
+            let fields = ExtractFields::from_value(arguments, &[]);
+            // Resolve limit before passing: default 50, 0 = all (unbounded)
+            let limit_raw = fields.opt_usize_field("limit");
+            let limit = match limit_raw {
+                Some(0) => usize::MAX,
+                None => 50,
+                Some(n) => n,
+            };
+            let result = memory::list_for_mcp(
+                root,
+                parse_memory_type(fields.opt_str_field("type"))?,
+                fields.opt_str_field("substr").as_deref(),
+                &fields.vec_str_field("status"),
+                &fields.vec_str_field("tag"),
+                fields.opt_usize_field("offset").unwrap_or(0),
+                limit,
+            )?;
+            let offset = fields.opt_usize_field("offset").unwrap_or(0);
+            let next_offset = if offset + limit < result.total {
+                Some(offset + limit)
+            } else {
+                None
+            };
+            Ok(serde_json::to_string_pretty(&json!({
+                "kind": "memory",
+                "rows": result.rows,
+                "total": result.total,
+                "offset": offset,
+                "limit": if limit == usize::MAX { result.total } else { limit },
+                "next_offset": next_offset,
+            }))?)
+        }
         _ => anyhow::bail!("Tool not found: {name}"),
     }
 }
@@ -519,7 +755,6 @@ impl ExtractFields {
 
     /// Extract an optional boolean (missing or non-boolean ⇒ `None`).
     /// Used for the `include_draft` flag.
-    #[expect(dead_code, reason = "will be used in MCP tools wiring")]
     fn opt_bool_field(&self, name: &str) -> Option<bool> {
         self.inner.get(name).and_then(serde_json::Value::as_bool)
     }
@@ -530,7 +765,6 @@ impl ExtractFields {
 /// Parse a `MemoryType` from an optional string, wrapping errors with the
 /// load-bearing "invalid arguments: " prefix so the MCP error mapper (§2,
 /// branch 2) routes them to `-32602` (Invalid params) rather than `-32603`.
-#[expect(dead_code, reason = "will be used in MCP tools wiring")]
 fn parse_memory_type(s: Option<String>) -> anyhow::Result<Option<crate::memory::MemoryType>> {
     s.map(|v| {
         crate::memory::MemoryType::parse(&v).map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
@@ -540,7 +774,6 @@ fn parse_memory_type(s: Option<String>) -> anyhow::Result<Option<crate::memory::
 
 /// Parse a memory `Status` from an optional string, wrapping errors with the
 /// load-bearing "invalid arguments: " prefix.
-#[expect(dead_code, reason = "will be used in MCP tools wiring")]
 fn parse_status(s: Option<String>) -> anyhow::Result<Option<crate::memory::Status>> {
     s.map(|v| {
         crate::memory::Status::parse(&v).map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
@@ -550,7 +783,6 @@ fn parse_status(s: Option<String>) -> anyhow::Result<Option<crate::memory::Statu
 
 /// Parse a `Lifespan` from an optional string via `FromStr`, wrapping errors
 /// with the load-bearing "invalid arguments: " prefix.
-#[expect(dead_code, reason = "will be used in MCP tools wiring")]
 fn parse_lifespan(s: Option<String>) -> anyhow::Result<Option<crate::memory::Lifespan>> {
     s.map(|v| {
         crate::memory::Lifespan::from_str(&v).map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
@@ -1144,5 +1376,380 @@ mod tests {
         let resp = dispatch(&req, &root);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32602);
+    }
+
+    // ── Memory MCP handler tests (PHASE-04) ──────────────────────────────
+
+    const MEM_A: &str = "mem_0000000000000000000000000000000a";
+    const MEM_B: &str = "mem_0000000000000000000000000000000b";
+
+    /// Seed a single memory record into the temp root.
+    fn seed_memory(
+        root: &Path,
+        uid: &str,
+        key: Option<&str>,
+        kind: &str,
+        status: &str,
+        trust: &str,
+        title: &str,
+        body: &str,
+    ) {
+        let dir = root.join(format!(".doctrine/memory/items/{uid}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let key_line = key.map_or(String::new(), |k| format!("memory_key = \"{k}\"\n"));
+        std::fs::write(
+            dir.join("memory.toml"),
+            format!(
+                "memory_uid = \"{uid}\"\n\
+                 {key_line}\
+                 schema_version = 1\n\
+                 memory_type = \"{kind}\"\n\
+                 status = \"{status}\"\n\
+                 title = \"{title}\"\n\
+                 summary = \"\"\n\
+                 created = \"2026-01-02\"\n\
+                 updated = \"2026-01-02\"\n\
+                 \n\
+                 [scope]\n\
+                 workspace = \"default\"\n\
+                 \n\
+                 [git]\n\
+                 anchor_kind = \"none\"\n\
+                 \n\
+                 [trust]\n\
+                 trust_level = \"{trust}\"\n",
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join("memory.md"), body).unwrap();
+        if let Some(k) = key {
+            std::os::unix::fs::symlink(uid, root.join(format!(".doctrine/memory/items/{k}"))).ok();
+        }
+    }
+
+    /// Seed a minimal memory corpus: two active memories.
+    fn seed_memory_corpus(root: &Path) {
+        seed_memory(
+            root,
+            MEM_A,
+            Some("mem.pattern.cli.skinny"),
+            "pattern",
+            "active",
+            "high",
+            "Skinny CLI",
+            "# Skinny CLI\n\nBody A content.",
+        );
+        seed_memory(
+            root,
+            MEM_B,
+            None,
+            "fact",
+            "active",
+            "medium",
+            "A bare fact",
+            "# A bare fact\n\nBody B content with [[mem.pattern.cli.skinny]] link.",
+        );
+        // Add a shipped dir so root::find finds the repo root
+        let shipped = root.join(".doctrine/memory/shipped");
+        std::fs::create_dir_all(&shipped).unwrap();
+    }
+
+    /// Helper: dispatch a memory tool call and return the result JSON.
+    fn memory_dispatch(root: &Path, name: &str, args: Value) -> Value {
+        let req = tools_call_req(name, args);
+        let resp = dispatch(&req, root);
+        resp.result.expect("expected success")
+    }
+
+    // VT-3: memory_retrieve with min_trust: "banana" returns -32602
+
+    #[test]
+    fn memory_retrieve_bad_min_trust_returns_32602() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req(
+            "memory_retrieve",
+            json!({
+                "min_trust": "banana"
+            }),
+        );
+        let resp = dispatch(&req, &root);
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, -32602);
+        assert!(err.message.contains("Invalid params"));
+    }
+
+    // VT-4: memory_retrieve with reference + query probe returns -32602
+
+    #[test]
+    fn memory_retrieve_reference_with_probe_mutual_exclusivity() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req(
+            "memory_retrieve",
+            json!({
+                "reference": "mem_xxx",
+                "query": "test"
+            }),
+        );
+        let resp = dispatch(&req, &root);
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, -32602);
+        let data = err.data.unwrap();
+        assert!(
+            data["parse_error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("mutually exclusive")
+        );
+    }
+
+    // VT-5: memory_show with invalid uid returns error
+
+    #[test]
+    fn memory_show_invalid_uid_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        // Must have .git for root::find
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        let req = tools_call_req(
+            "memory_show",
+            json!({
+                "reference": "nonexistent"
+            }),
+        );
+        let resp = dispatch(&req, &root);
+        assert!(resp.error.is_some(), "expected error for invalid uid");
+    }
+
+    // VT-5: memory_show with view: summary excludes body
+    // VT-6: memory_show with backlinks_limit: 5 returns ≤5 backlinks
+    // VT-7: memory_show with include_body: false excludes body
+
+    #[test]
+    fn memory_show_view_summary_excludes_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(
+            root,
+            "memory_show",
+            json!({
+                "reference": MEM_A,
+                "view": "summary"
+            }),
+        );
+        // Parse the text content
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        // body should be absent (summary view)
+        assert!(
+            parsed.get("body").is_none(),
+            "summary view should exclude body"
+        );
+        // memory metadata should be present
+        assert_eq!(parsed["memory"]["uid"], MEM_A);
+        assert_eq!(parsed["memory"]["consumable"], true);
+    }
+
+    #[test]
+    fn memory_show_include_body_false_excludes_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(
+            root,
+            "memory_show",
+            json!({
+                "reference": MEM_A,
+                "view": "full",
+                "include_body": false
+            }),
+        );
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert!(
+            parsed.get("body").is_none(),
+            "include_body: false should exclude body"
+        );
+    }
+
+    #[test]
+    fn memory_show_view_full_includes_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(
+            root,
+            "memory_show",
+            json!({
+                "reference": MEM_A,
+                "view": "full"
+            }),
+        );
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert!(
+            parsed.get("body").is_some(),
+            "full view should include body"
+        );
+    }
+
+    #[test]
+    fn memory_show_includes_backlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        // MEM_B has [[mem.pattern.cli.skinny]] wiki link to MEM_A's key
+        let result = memory_dispatch(
+            root,
+            "memory_show",
+            json!({
+                "reference": MEM_A
+            }),
+        );
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert!(
+            parsed["memory"]["backlinks_total"].as_u64().unwrap_or(0) > 0,
+            "MEM_A should have backlinks from MEM_B"
+        );
+        let backlinks = parsed["memory"]["backlinks"].as_array().unwrap();
+        assert!(!backlinks.is_empty(), "backlinks array should not be empty");
+    }
+
+    #[test]
+    fn memory_show_backlinks_limit_caps() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(
+            root,
+            "memory_show",
+            json!({
+                "reference": MEM_A,
+                "backlinks_limit": 1
+            }),
+        );
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        let backlinks = parsed["memory"]["backlinks"].as_array().unwrap();
+        assert!(backlinks.len() <= 1, "backlinks should be capped at 1");
+    }
+
+    // VT-1: memory_find with no args returns capped 20 rows with pagination metadata
+    // VT-2: memory_find rows include key and held_back_on_retrieve fields
+
+    #[test]
+    fn memory_find_no_args_returns_paginated_results() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(root, "memory_find", json!({}));
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(parsed["kind"], "memory_find");
+        // With 2 seeds and no selectors → capped at 20
+        let rows = parsed["rows"].as_array().unwrap();
+        assert!(!rows.is_empty(), "should return rows");
+        assert!(rows.len() <= 20, "no-selector default cap should be 20");
+        // Pagination metadata
+        assert!(parsed["total"].as_u64().is_some());
+        assert!(parsed["offset"].as_u64().is_some());
+        assert!(parsed["limit"].as_u64().is_some());
+        // Each row has key and held_back_on_retrieve fields
+        for row in rows {
+            assert!(row.get("key").is_some(), "row missing key field");
+            assert!(
+                row.get("held_back_on_retrieve").is_some(),
+                "row missing held_back_on_retrieve"
+            );
+        }
+    }
+
+    #[test]
+    fn memory_find_with_selectors_returns_scoped_results() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(
+            root,
+            "memory_find",
+            json!({
+                "query": "Skinny"
+            }),
+        );
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(parsed["kind"], "memory_find");
+        let rows = parsed["rows"].as_array().unwrap();
+        assert!(rows.len() >= 1, "should find at least 1 memory");
+        // The Skinny CLI memory should be in results
+        let has_skinny = rows.iter().any(|r| r["uid"] == MEM_A);
+        assert!(has_skinny, "should include Skinny CLI memory");
+    }
+
+    // VT-8: memory_list defaults to 50 rows; limit: 0 returns all
+
+    #[test]
+    fn memory_list_default_limit_50() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(root, "memory_list", json!({}));
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(parsed["kind"], "memory");
+        assert_eq!(parsed["limit"], 50, "default limit should be 50");
+        let rows = parsed["rows"].as_array().unwrap();
+        assert_eq!(parsed["total"], 2, "should have 2 total memories");
+        assert_eq!(rows.len(), 2, "should show all 2 (under 50 cap)");
+    }
+
+    #[test]
+    fn memory_list_limit_zero_returns_all() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(
+            root,
+            "memory_list",
+            json!({
+                "limit": 0
+            }),
+        );
+        let text = result["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(parsed["kind"], "memory");
+        // limit in response should equal total when limit=0 was requested
+        assert_eq!(parsed["limit"], parsed["total"]);
+        let rows = parsed["rows"].as_array().unwrap();
+        assert_eq!(rows.len() as u64, parsed["total"].as_u64().unwrap());
+    }
+
+    // Confirm the MCP response text parses as JSON object (not quoted string)
+    // — the double-encoding guard.
+
+    #[test]
+    fn memory_find_text_parses_as_json_object() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(root, "memory_find", json!({}));
+        let text = result["content"][0]["text"].as_str().unwrap();
+        // Should parse as a JSON object, not a quoted string
+        let parsed: Value = serde_json::from_str(text).unwrap();
+        assert!(
+            parsed.is_object(),
+            "memory_find result must be a JSON object"
+        );
     }
 }

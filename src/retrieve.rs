@@ -877,7 +877,6 @@ pub(crate) fn held_back(m: &Memory, floor: u8) -> bool {
 /// contract in order: workspace/repo partition + lifecycle + draft, thread
 /// expiry, trust holdback. This is the sole admission gate — no parallel logic.
 /// Returns `(admitted, reason_if_blocked)`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
 pub(crate) fn check_retrievable(
     m: &crate::memory::Memory,
     part: &QueryPartition,
@@ -925,7 +924,6 @@ pub(crate) fn check_retrievable(
 /// (design §2a), compute staleness, read the body, and render a security-framed
 /// block. This is the single-memory retrieve path for MCP `memory_retrieve`
 /// with a `reference` argument.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
 pub(crate) fn retrieve_reference(
     writer: &mut impl Write,
     root: &Path,
@@ -966,7 +964,6 @@ pub(crate) fn retrieve_reference(
 /// Structured result from `find_for_mcp` — rows + total, consumed by the
 /// `memory_find` MCP handler which builds the pagination envelope.
 #[derive(Debug)]
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
 pub(crate) struct FindForMcp {
     pub(crate) rows: Vec<serde_json::Value>,
     pub(crate) total: usize,
@@ -976,7 +973,6 @@ pub(crate) struct FindForMcp {
 /// `query` — no parallel implementation. Returns ranked rows enriched with
 /// `key` and `held_back_on_retrieve` fields.
 #[expect(clippy::too_many_arguments, reason = "MCP surface fans flags 1:1")]
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in PHASE-04"))]
 pub(crate) fn find_for_mcp(
     path: Option<PathBuf>,
     paths: Vec<String>,
