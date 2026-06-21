@@ -170,22 +170,20 @@ fn stamp_provisions_and_marks_the_payload_worktree() {
         !marker_path(src.path()).exists(),
         "marker NOT stamped into the process cwd (read from payload, not cwd)"
     );
-    // No worktree-path env-contract printed to stdout: unlike `run_fork`, the stamp
-    // verb stamps an EXISTING worktree, so it emits no `KEY=value` contract and no
-    // fork-path-for-import line of its own (its own status goes to stderr). The lone
-    // stdout line is `run_provision`'s OWN human report (the sole copier we reuse) —
-    // never the stamp verb's; the stamp verb itself prints nothing to stdout.
-    let out_text = stdout(&out);
-    let out_lines: Vec<&str> = out_text.lines().collect();
+    // Stamp emits NOTHING on stdout: unlike `run_fork`, the stamp verb stamps an
+    // EXISTING worktree, so it emits no `KEY=value` contract. `run_provision`'s
+    // own "provisioned …" report is human status and lands on stderr (ISS-044) —
+    // it is the sole copier shared by every consumer (fork/coordinate/stamp), so
+    // routing it to stderr keeps each consumer's stdout a pure machine surface.
     assert!(
-        !out_lines.iter().any(|l| l.contains('=')),
-        "stamp emits NO key=value worktree-path env-contract on stdout; got: {}",
+        stdout(&out).trim().is_empty(),
+        "stamp emits nothing on stdout; got: {}",
         stdout(&out)
     );
     assert!(
-        out_lines.iter().all(|l| l.starts_with("provisioned ")),
-        "the only stdout is run_provision's own report; got: {}",
-        stdout(&out)
+        stderr(&out).contains("provisioned "),
+        "run_provision's report lands on stderr (ISS-044); got: {}",
+        stderr(&out)
     );
     // The stamp verb's own confirmation lands on stderr, not stdout.
     assert!(

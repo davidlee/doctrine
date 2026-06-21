@@ -164,6 +164,19 @@ fn fork_happy_path_solo_and_worker() {
         "human status on stderr; got: {}",
         stderr(&out)
     );
+    // stdout is a PURE machine surface: every non-empty line is KEY=value, no
+    // human status leaks in (ISS-044 — `run_provision`'s "provisioned …" report
+    // belongs on stderr, else `env $(fork …)` word-splits the line and exits 127).
+    assert!(
+        stdout(&out)
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .all(|l| l.split_once('=').is_some_and(|(k, _)| {
+                !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            })),
+        "stdout must be pure KEY=value env contract; got: {}",
+        stdout(&out)
+    );
     // The worktree + branch exist AT B.
     assert!(
         worktree_registered(src.path(), &solo_dir),
