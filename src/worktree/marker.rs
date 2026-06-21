@@ -219,17 +219,22 @@ pub(crate) fn run_marker_clear(path: Option<PathBuf>, operator: bool) -> anyhow:
     let cwd = std::env::current_dir().context("current dir")?;
     let cwd =
         fs::canonicalize(&cwd).with_context(|| format!("canonicalize cwd {}", cwd.display()))?;
-    if cwd != root {
+    let linked = is_linked_worktree(&root).unwrap_or(false);
+    if linked && !operator {
+        bail!(
+            "refusing `marker --clear` in a linked worktree without `--operator` — this is the accident-fence; pass `--operator` to confirm you are the trusted orchestrator"
+        );
+    }
+
+    // For linked worktrees operated from outside (primary tree), skip the
+    // cwd check — cwd will never match. When inside the linked worktree
+    // itself, enforce cwd == root (refuse clear from a subdirectory).
+    let enforce_cwd = !linked || cwd.starts_with(&root);
+    if enforce_cwd && cwd != root {
         bail!(
             "refusing `marker --clear`: cwd {} is not the marker's tree root {} — run it from the tree root",
             cwd.display(),
             root.display()
-        );
-    }
-
-    if is_linked_worktree(&root).unwrap_or(false) && !operator {
-        bail!(
-            "refusing `marker --clear` in a linked worktree without `--operator` — this is the accident-fence; pass `--operator` to confirm you are the trusted orchestrator"
         );
     }
 
