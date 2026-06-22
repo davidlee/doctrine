@@ -1,0 +1,94 @@
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-142"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ── PHASE-01: Data path ───────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Data path — `tags` through the read seam"
+objective = "Add `tags: Vec<String>` to EntityFacets, ScannedEntity, read_facets return, and the build_from constructor, so tags from entity TOML flow into the scoring pipeline."
+
+entrance_criteria = [
+  { id = "EN-1", text = "The slice scope (slice-142.md) and design.md are reconciled and agreed." },
+  { id = "EN-2", text = "src/facet.rs has no `tags` field; src/catalog/scan.rs ScannedEntity has no `tags` field; read_facets returns a 3-tuple. (Precondition — confirms start state.)" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "EntityFacets.tags: Vec<String> exists and defaults to empty vec." },
+  { id = "EX-2", text = "ScannedEntity.tags: Vec<String> exists." },
+  { id = "EX-3", text = "read_facets returns a 4-tuple including tags parsed from the TOML `tags` array." },
+  { id = "EX-4", text = "build_from passes entity.tags into the EntityFacets constructor." },
+  { id = "EX-5", text = "Tags are read as raw strings (no normalize_tag); absent `tags` key → empty vec." },
+]
+
+verification = [
+  { id = "VT-1", expects = "compiles with zero warnings (cargo clippy on relevant modules)." },
+  { id = "VT-2", expects = "read_facets test: tags key present with string array produces expected Vec<String>." },
+  { id = "VT-3", expects = "read_facets test: absent tags key produces empty Vec<String>." },
+  { id = "VT-4", expects = "read_facets test: non-array tags value (e.g. string) produces empty Vec<String> (graceful)." },
+  { id = "VT-5", expects = "read_facets test: a non-normalized tag (e.g. `Area:Foo`) passes through byte-identical — proves no normalize_tag in the read path (RV-143 F-4 regression guard)." },
+]
+
+specs        = []
+requirements = []
+
+# ── PHASE-02: Formula ─────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Formula — tag_term in base_score"
+objective = "Wire the tag multiplier into value_dim: tag_term = max(0.0, 1.0 + Σ(coeff − 1.0)). Remove dead_code expect on tag_coeff(). Add unit tests."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is done: tags flow into EntityFacets and reach base_score." },
+  { id = "EN-2", text = "ADR-015 §1 enshrines the delta-form tag multiplier." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "base_score multiplies value_dim by tag_term = max(0.0, 1.0 + Σ(coeff − 1.0))." },
+  { id = "EX-2", text = "#[expect(dead_code)] removed from PriorityConfig::tag_coeff()." },
+  { id = "EX-3", text = "base_score_empty_tags_identity test passes (empty tags → value_dim unchanged)." },
+  { id = "EX-4", text = "base_score_with_tag_coefficient test passes (single tag coeff 2.0 → value_dim doubles)." },
+  { id = "EX-5", text = "base_score_multiple_tags test passes (two tags, coeffs 1.5 + 2.0 → ×2.5)." },
+  { id = "EX-6", text = "base_score_demoting_tag test passes (single tag coeff 0.5 → value_dim halves)." },
+  { id = "EX-7", text = "base_score_multi_demote_floors_at_zero test passes (two tags coeff 0 → value_dim zero, not negative)." },
+]
+
+verification = [
+  { id = "VT-1", expects = "All base_score tests (existing + new) pass under cargo test." },
+  { id = "VT-2", expects = "cargo clippy zero warnings — dead_code expect removed and no new lints." },
+  { id = "VT-3", expects = "just gate passes (root + cordage workspace)." },
+]
+
+specs        = []
+requirements = []
+
+# ── PHASE-03: Goldens ────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Golden tests — update survey/next/explain expected output"
+objective = "Run golden tests, update any expected output that shifted due to the tag multiplier (unlikely for the current corpus but verified)."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 is done: the formula is wired and unit-tested." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "All golden tests pass (survey, next, explain)." },
+  { id = "EX-2", text = "If goldens changed, each diff is reviewed and intentional (no accidental float drift)." },
+]
+
+verification = [
+  { id = "VT-1", expects = "cargo test (golden integration tests) passes after updating expected output." },
+  { id = "VT-2", expects = "just gate passes with zero warnings." },
+]
+
+specs        = []
+requirements = []
