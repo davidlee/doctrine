@@ -5,7 +5,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/audit/SKILL.md",
-      "computedHash": "0009b29e4daa2218dbb3882fe8b1c27e474ed20e73b6bfa4146edde1c9157aa1"
+      "computedHash": "2c4b3a8b3637a5aba04ff4ebba78d8a9808c238c44966862256eb347df96dc62"
     },
     "backlog": {
       "source": "davidlee/doctrine",
@@ -143,7 +143,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/reviewing-memory/SKILL.md",
-      "computedHash": "fccc777e09ec5c065f6472b372d481674469be32621dcd540b66ee4982a14443"
+      "computedHash": "6ee579fc8d5a010c16e9a7aaa096502897f239f76a1cc92b00cc54c2391c0185"
     },
     "route": {
       "source": "davidlee/doctrine",
