@@ -2184,6 +2184,8 @@ fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String, 
 /// Try to resolve a memory by key from shipped/ — shipped/ stores memories as
 /// `<uid>/` directories without key symlinks, so a key lookup requires scanning
 /// every shipped memory for a `memory_key` match (SL-018 / ISS-047).
+/// Skips unreadable or corrupt entries rather than aborting the scan — one
+/// bad memory.toml should not hide the rest of the shipped corpus.
 pub(crate) fn resolve_shipped_by_key(shipped_root: &Path, key: &str) -> Option<(Memory, String, PathBuf)> {
     let dirs = std::fs::read_dir(shipped_root).ok()?;
     for entry in dirs.flatten() {
@@ -2193,13 +2195,21 @@ pub(crate) fn resolve_shipped_by_key(shipped_root: &Path, key: &str) -> Option<(
         }
         let toml_path = path.join("memory.toml");
         let text = std::fs::read_to_string(toml_path).ok()?;
-        let memory = Memory::parse(&text).ok()?;
+        let Ok(memory) = Memory::parse(&text) else { continue };
         if memory.key.as_deref() == Some(key) {
             let body = std::fs::read_to_string(path.join("memory.md")).unwrap_or_default();
             return Some((memory, body, path));
         }
     }
     None
+}
+
+/// Is the error (or its chain) rooted in a file-not-found? Used to distinguish
+/// a genuine miss from a parse error when deciding whether to fall through from
+/// items/ to shipped/ (ISS-047).
+fn err_is_not_found(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<std::io::Error>()
+        .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2603,26 +2613,22 @@ pub(crate) fn run_show(
     let items_root = root.join(MEMORY_ITEMS_DIR);
     let shipped_root = root.join(MEMORY_SHIPPED_DIR);
     let mref = MemoryRef::parse(reference)?;
-    let (memory, body, _dir) = resolve_show(&items_root, &mref).or_else(|_| {
-        // Fall through to shipped/ when items/ misses — mirrors read_body's pattern.
-        // Shipped/ stores memories as <uid>/ dirs without key symlinks, so key
-        // resolution requires a scan (ISS-047).
+    let (memory, body, _dir) = resolve_show(&items_root, &mref).or_else(|items_err| {
+        // Only fall through to shipped/ for a genuine miss (NotFound). A parse
+        // error or other fault in items/ must propagate — swallowing it would
+        // turn debugging into archaeology (ISS-047).
+        if !err_is_not_found(&items_err) {
+            return Err(items_err);
+        }
         match &mref {
-            MemoryRef::Uid(uid) => {
-                let dir = crate::fsutil::safe_join(&shipped_root, Path::new(uid))
-                    .with_context(|| format!("memory not found: {uid}"))?;
-                let text = fs::read_to_string(dir.join("memory.toml"))
-                    .with_context(|| format!("memory not found: {uid}"))?;
-                let memory = Memory::parse(&text)?;
-                let body = fs::read_to_string(dir.join("memory.md")).unwrap_or_default();
-                Ok((memory, body, dir))
-            }
-            MemoryRef::Key(key) => {
-                resolve_shipped_by_key(&shipped_root, key)
-                    .ok_or_else(|| anyhow::anyhow!("memory not found: {key}"))
-            }
-            // UidPrefix can't resolve shipped-only memories (no scan in shipped
-            // for uid prefixes — a future enhancement if needed).
+            // Uid: shipped/ has the same uid-dir layout as items/, so reuse
+            // resolve_show directly — no duplicated read/parse logic.
+            MemoryRef::Uid(_) => resolve_show(&shipped_root, &mref),
+            // Key: shipped/ has no key symlinks, need a scan.
+            MemoryRef::Key(key) => resolve_shipped_by_key(&shipped_root, key)
+                .ok_or_else(|| anyhow::anyhow!("memory not found: {key}")),
+            // UidPrefix can't resolve shipped-only memories (no prefix scan
+            // in shipped/ — a future enhancement if needed).
             MemoryRef::UidPrefix(p) => bail!("memory not found: {p}"),
         }
     })?;
