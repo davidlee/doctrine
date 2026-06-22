@@ -19,3 +19,10 @@ triggers = []                   # watched source globs: { globs, note? }
 [[relation]]
 label = "specs"
 target = "PRD-011"
+
+[value]
+value = 1.0
+
+[estimate]
+lower = 2.0
+upper = 4.0
