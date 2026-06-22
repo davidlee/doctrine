@@ -75,7 +75,8 @@ findings can be queried, gated, and handed off:
 - The **code/diff is the evidence, not the subject.** When the locus is a backlog
   item (or any non-code entity), the item is the RV's *locus* and the concrete code
   evidence — file, line, the offending construct — lives in each finding's
-  `--detail` (`review-ledger.md` §1; design §5.5).
+  `--detail` (`review-ledger.md` §1; design §5.5). Never include any secrets,
+  credentials or API keys directly in the ledger.
 
 ## Process
 
