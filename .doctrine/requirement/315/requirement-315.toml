@@ -4,7 +4,7 @@ version = 1
 id = 315
 slug = "cas-journal-recovery-contract-with-worktree-aware-advance"
 title = "CAS journal recovery contract with worktree-aware advance"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

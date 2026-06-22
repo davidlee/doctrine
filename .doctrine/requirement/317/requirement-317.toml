@@ -4,7 +4,7 @@ version = 1
 id = 317
 slug = "repair-to-integrate-propagation-contract"
 title = "Repair-to-integrate propagation contract"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

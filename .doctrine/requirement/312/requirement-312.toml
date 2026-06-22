@@ -4,7 +4,7 @@ version = 1
 id = 312
 slug = "evidence-refs-are-immutable-zero-oid-cas-report-not-clobber"
 title = "Evidence refs are immutable: zero-oid CAS, report-not-clobber"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);
