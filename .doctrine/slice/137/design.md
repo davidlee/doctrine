@@ -147,7 +147,9 @@ identity boundary — mem.pattern.catalog.catalogkey-identity-boundary).
 edges) → `--label` matches `name()` → `--source-kind` matches `source_kind()` →
 `--target` matches `target_display()` (canonical-normalised, D6) → `--unresolved`
 ⇒ `target_state != Resolved`. Map survivors to `RelationRow`. Sort `(label, source
-canonical)`. Deterministic — no clock/rng.
+canonical, target)` — the `target` key is the tie-breaker so duplicate
+`(label, source)` rows (one source may hold several edges of one label to distinct
+targets) order stably (F4c). Deterministic — no clock/rng.
 
 **`project_census`** — filter `cat.edges` by the `include_memory` gate only; group
 by label `name()`; per group accumulate `count` and per-`TargetState` tallies. Emit
@@ -160,17 +162,38 @@ one `CensusRow` per label. Sort `(count desc, label asc)`. Invariant:
 "relation-census", rows)` for JSON. Empty rows → empty string (header suppressed).
 
 **Command shell** — `scan_catalog` → print only `Severity::Error` diagnostics to
-stderr (corpus didn't fully parse ⇒ the view is incomplete; Warning/Info are
-suppressed — `--unresolved`/the census breakdown surface those on demand) →
-resolve `RenderOpts` (`color` via `tty::stdout_color_enabled`, term width) →
-project → render → stdout. (Error-only is a deliberate divergence from `inspect`,
-which prints every diagnostic: a corpus query spans ~1000 edges, so per-edge
-Warning/Info on stderr would drown the signal — F5.)
+stderr → resolve `RenderOpts` (`color` via `tty::stdout_color_enabled`, term width)
+→ project → render → stdout.
+
+Diagnostics policy (F5, corrected). Two distinct diagnostic classes ride
+`scan_catalog`, and they are NOT symmetric:
+- **classification diagnostics** — `UnresolvedRef`→Warning, `UnvalidatedText`→Info
+  (`catalog/scan.rs`). The edge IS still emitted, so it is recoverable per-row via
+  `--unresolved` (the dangling case) and counted in the census `unresolved`/
+  `free_text` columns. Suppressing these from stderr loses no completeness.
+- **edge-dropping diagnostics** — empty memory relation label/target emit Warning
+  then `continue` (`catalog/hydrate.rs`), so the edge never enters `Catalog.edges`.
+  These are NOT recoverable via `--unresolved`/census. To avoid a silently truncated
+  view, the shell counts edge-dropping Warnings during scan and, when any fired,
+  prints a single summary line to stderr (`N edge(s) dropped — run \`doctrine
+  validate\` for detail`) — a bounded signal, not the ~1000-edge per-row flood
+  (VT-11).
+
+This is parity with `inspect`, not a divergence: `inspect` consumes
+`relation_graph::scan_entities`, whose scan path emits `Severity::Error` only
+(`commands/inspect.rs`), so `inspect` is already effectively Error-only on its own
+path. The earlier framing ("diverges from `inspect`, which prints every diagnostic")
+was factually wrong — `inspect` has no Warning/Info stream to print (F1).
 
 `--target` is normalised before matching: when the input parses as a canonical
 ref (`integrity::parse_canonical_ref`) it is compared in canonical form (so
 `ADR-1` matches the stored `ADR-001`); otherwise the raw string is matched
-verbatim (D6).
+verbatim (D6). **Memory targets match by UID only.** A Resolved memory target
+displays as its memory UID (`CatalogKey::canonical()`), because hydration resolves
+authored memory-key *aliases* through `mem_key_map` into `CatalogKey::Memory(uid)`
+(`catalog/hydrate.rs`). `--target` does NOT re-expand an alias, so an alias input
+falls to the verbatim branch and will not match a UID-displayed edge — pass the UID
+(F3, VT-12).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -190,6 +213,16 @@ verbatim (D6).
 - Catalog symlink double-count is already handled at the scan walk
   (mem.pattern.entity.corpus-walk-skip-slug-symlink) — this consumer inherits the
   deduped edge set.
+- **Scope: validated LIVE edges only (F2).** `scan_catalog` builds edges from the
+  tier-1 reader, which drops off-table *illegal* `[[relation]]` rows before any edge
+  exists (`relation::tier1_edges` discards the `_illegal` partition;
+  `relation_graph` must re-read raw TOML for `validate` precisely because
+  "scan_entities drops the illegal rows"). So a hand-edited illegal relation row is
+  invisible to `relation list`/`census` and emits no diagnostic. This is by design:
+  illegal rows are the sole province of `doctrine validate` (the `IllegalRow`
+  consumer). This verb queries the legal, live edge set — it is not a structural
+  linter, and the F1 dropped-edge summary covers only the empty-field Warning class,
+  not illegal rows.
 
 ## 6. Open Questions & Unknowns
 
@@ -253,11 +286,16 @@ Pure projection ⇒ tested over a seeded `Catalog` (`catalog::test_helpers` /
 - **VT-1** `target_state`/`target_display` over all three `EdgeTarget` variants.
 - **VT-2** `source_kind`: Numbered→prefix, Memory→`"MEM"`.
 - **VT-3** `project_list` filters: `--label`, `--target`, `--source-kind` (incl.
-  `MEM`), AND-composition.
+  `MEM`), AND-composition — plus a case exercising all FOUR axes simultaneously
+  (`--label` + `--target` + `--source-kind` + `--unresolved`, `include_memory` on),
+  proving the AND narrows to the single intended row (F4b).
 - **VT-4** `include_memory` gate: default excludes `Raw` (memory) edges; with the
-  flag they appear.
+  flag they appear. Corner: `--source-kind MEM` WITHOUT `--include-memory` → empty,
+  since the gate drops the memory population first (F4a).
 - **VT-5** `--unresolved` keeps only state ≠ Resolved.
-- **VT-6** list sort `(label, source)`; empty result → empty string.
+- **VT-6** list sort `(label, source, target)`; the `target` tie-breaker orders two
+  edges sharing `(label, source)` to distinct targets deterministically (F4c); empty
+  result → empty string.
 - **VT-7** `project_census` breakdown: `count == resolved+unresolved+free_text`;
   `drift` all-free_text; sort `(count desc, label asc)`.
 - **VT-8** census `include_memory` honored (raw labels only with the flag).
@@ -266,9 +304,12 @@ Pure projection ⇒ tested over a seeded `Catalog` (`catalog::test_helpers` /
 - **VT-10** e2e black-box CLI golden: `relation list`/`census` wire end-to-end on a
   fixture corpus (clap registration + command shell smoke).
 - **VT-11** diagnostics: a malformed-entity fixture emits an `Error` line on
-  stderr; a dangling-ref edge adds NO stderr line (Warning/Info suppressed).
-- **VT-12** `--target` canonical normalisation: `--target ADR-1` matches a stored
-  `ADR-001` resolved edge (D6).
+  stderr; a dangling-ref edge (classification Warning) adds NO per-row stderr line;
+  an empty-field memory relation row (edge-dropping Warning) DOES emit the single
+  `N edge(s) dropped` summary line (F1).
+- **VT-12** `--target` normalisation: `--target ADR-1` matches a stored `ADR-001`
+  resolved edge (D6); and a resolved memory target matches by its UID, not by an
+  authored key alias (F3).
 
 Behaviour preservation: no edits to `catalog`/`relation`/`listing` internals ⇒
 existing suites green unchanged.
@@ -293,8 +334,35 @@ existing suites green unchanged.
 - **F3 (FIXED → D6):** `--target` canonical normalisation kills exact-match
   brittleness.
 - **F4 (FIXED → VT-11):** diagnostics behaviour now has a verification case.
-- **F5 (RECORDED):** Error-only stderr is a deliberate divergence from `inspect`
-  (rationale in §5.4).
+- **F5 (SUPERSEDED → see external pass X1):** the "Error-only is a divergence from
+  `inspect`" framing was wrong; corrected to parity in §5.4.
 - Layering re-checked: command → `relation_query` (engine) → `catalog`/`listing`/
   `relation`. No up-calls, no cycle (ADR-001 clean). ADR-004 honoured (`--target`
   reads the outbound store; no reciprocity compute). ADR-010 vocabulary read-only.
+
+### External adversarial pass — codex/GPT-5.5 via RV-139 (2026-06-22)
+
+Inquisition (RV-139, `--raiser inquisitor`). Codex cleared three lines under
+cross-examination, with code evidence: the load-bearing D2 invariant holds
+(`Validated` labels are constructed only in the numbered-source loop,
+`hydrate.rs:224`; `Raw` only in the memory loop, `hydrate.rs:285` — no mixed
+constructor path); the "free-text that parses as a canonical ref" collision cannot
+arise (`classify_target` routes any parsable ref to Resolved/UnresolvedRef, never
+`UnvalidatedText`); ADR-001 layering + ADR-004 outbound-only stand. Four charges
+sustained and reconciled into the design:
+
+- **X1 (F-1, major → fixed §5.4):** Error-only rationale rested on a false premise.
+  `inspect` consumes `relation_graph::scan_entities` (Error-only scan path), so it is
+  already effectively Error-only — not a noisy "prints every diagnostic" foil. And
+  "Warning/Info are surfaced by `--unresolved`/census" is false for *edge-dropping*
+  Warnings (empty memory rows `continue` before the edge exists). Fixed: rationale
+  rewritten to parity; shell now prints a bounded dropped-edge summary line.
+- **X2 (F-2, major → fixed §5.5):** illegal hand-edited `[[relation]]` rows are
+  dropped by the tier-1 reader with no diagnostic — invisible to the query. Scoped
+  explicitly as a validated-live-edge verb; illegal rows remain `doctrine validate`'s
+  province.
+- **X3 (F-3, minor → fixed §5.4/D6):** `--target` was underspecified for resolved
+  memory targets. Pinned: memory targets match by UID, not authored alias.
+- **X4 (F-4, minor → fixed §9):** §9 overclaimed coverage. Added VTs for the
+  `--source-kind MEM` empty case, the full four-axis AND, and a `(label, source,
+  target)` tie-breaker for stable sort.
