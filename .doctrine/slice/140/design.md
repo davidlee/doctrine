@@ -240,4 +240,30 @@ workspace-wide · `cargo clippy` zero warnings (plain, bins/lib only — not
 
 ## 10. Review Notes
 
-(adversarial pass to follow)
+Internal adversarial pass (design author), findings:
+
+- **R1 — gate is real, verified empirically.** `reachable`: `reachability.rs`
+  (Along/Against/None, a↔b cycle l.82–83, foreign overlay/node) **plus** two
+  independent cross-checks — `condensation_fold.rs` re-derives the fold from
+  `g.reachable` across a Max×CountDistinct net matrix, and `golden_net.rs:268`
+  runs a naive BFS *sharing no traversal code*. `spine_path`:
+  `reachability.rs` l.99–128 (chain root→m→n, single root, `None`, kept-parent
+  tiebreak). `cone`: `explain.rs` (SCC endpoint, roots, multi-parent, isolated).
+- **R2 — unification strengthens spine cycle coverage.** `spine_path`'s
+  cycle-stop now rides `walk_bfs`, whose cycle-safety is directly asserted by
+  `reachable`'s a↔b test. Residual: no *direct* assertion of `spine_path` on a
+  cyclic `AtMostOne` Reject overlay — covered only transitively via the shared
+  loop. **Non-blocking; optional follow-up characterization test**, not part of
+  this slice's gate.
+- **R3 — `skip(1)` / reverse equivalence re-confirmed.** `start` is `order[0]`
+  and never re-emitted (visited seeded), safe even under a self-loop ⇒ `skip(1)`
+  drops exactly `start`. Spine: `single_parent` yields ≤1 ⇒ strictly linear
+  discovery ⇒ `reverse` is the ancestor-first chain; cycle re-entry excluded by
+  visited exactly as the old `break`.
+- **R4 — minor allocation note (accepted).** `spine_path` gains a `VecDeque`
+  frontier it lacked; `reachable` transiently holds the `order` Vec alongside
+  the collected set. Both O(path)/O(reachable) and negligible for a leaf
+  refactor — not a regression worth a special case.
+- **R5 — doctrinal.** Leaf-internal (ADR-001); pure layer (no clock/rng/git/disk);
+  public API unchanged ⇒ external callers unaffected by construction. No cordage
+  traversal ADR/standard/policy constrains this surface.
