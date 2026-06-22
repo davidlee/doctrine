@@ -180,3 +180,128 @@ shapes.
 - Ledger protocol: `install/review-ledger.md` (shipped to `.doctrine/review-ledger.md`)
 - Consuming skills: `plugins/doctrine/skills/audit/SKILL.md`, `plugins/doctrine/skills/inquisition/SKILL.md`
 - IMP-148 (prior art for memory tools): `.doctrine/backlog/improvement/148/backlog-148.md`
+
+---
+
+## Handover: plan of attack (for the implementing agent)
+
+### The task
+
+Improve the 10 MCP review tool descriptions in `src/mcp_server/tools.rs` L26–195
+to match the quality bar IMP-148 set for the memory tools — response field docs,
+workflow guidance, and protocol invariants the consuming skills need agents to know.
+
+This is a **pure description change** — no function signatures, no response
+shapes, no handler logic changes. Every edit hits the `description` or
+`input_schema` fields of `McpTool` structs in the `tools()` function. The
+existing golden tests (`tools_list_response_structure`, etc.) should pass
+unchanged after the work (the one current failure — 15 tools vs expected 14 —
+is a pre-existing IMP-148 artefact, not ours to fix).
+
+### Execution plan (ordered by impact)
+
+**Phase A: add `Returns:` blocks (Gap 1).** Edit each tool's `description` field
+to append a `\n\nReturns: { ... }` block. Model on the memory tool pattern at
+L206 (`memory_find`), L221 (`memory_retrieve`), L249 (`memory_show`), L260
+(`memory_list`). The response shapes come from `src/review.rs` L767
+(`ReviewOutput` enum) — read the `#[serde(...)]` annotations for exact field
+names. Five output shape classes:
+
+1. **`review_new`** → `{ id: int, canonical: "RV-NNN", dir: "/path/to/review" }`
+2. **`review_raise` / `review_dispose` / `review_verify` / `review_contest` /
+   `review_withdraw`** → `{ finding_id: "F-N", review_id: int }`
+3. **`review_list`** → `{ rows: [{ id, status, awaiting, facet, target, title
+   }], total?: int }` (`total` is `skip_serializing_if None` — absent when
+   list is complete, present (with pre-truncation count) when capped)
+4. **`review_show`** → `{ id, canonical, title, status, awaiting, facet,
+   target, finding_count, findings: [{ id, status, severity, title, detail,
+   disposition?, response? }], body }` — note which fields blank under
+   `view=summary` (see Gap 5)
+5. **`review_status`** → `{ canonical, status, awaiting, findings_count,
+   rounds, cache_primed, stale_paths }`
+6. **`review_prime`** → two shapes: normal `{ canonical, tracked_paths,
+   areas_count, tracked_count, invariants_count, risks_count }` vs `--seed`
+   `{ canonical, tracked_paths, areas_count, tracked_count: 0,
+   invariants_count: 0, risks_count: 0 }` (see Gap 6 — actually the
+   `ReviewOutput::Primed` struct has an `is_seed` field marked `#[serde(skip)]`
+   so it's NOT on the wire; the count-zero signal is the discriminat). Verify
+   this against the actual serialised output before documenting.
+
+**Phase B: add workflow / protocol guidance (Gap 2).** Inline short protocol
+notes into the tool descriptions that need them. Source material:
+`install/review-ledger.md` (the shipped reference). Key points per tool:
+
+- `review_new`: mention the turn protocol starts here; link that findings are
+  added with `review_raise`
+- `review_raise`: note the role ownership — severity/title/detail are
+  raiser-owned and fixed at raise (append-only ledger)
+- `review_dispose`: note the full disposition vocab (Gap 4 fix); mention this
+  is the responder's verb
+- `review_verify` / `review_contest`: note `--note` is ephemeral baton chatter,
+  NOT durable rationale; durable justification goes in the finding `response`
+- all role-bearing verbs: mention `--as` is cooperative role assertion, not a
+  security boundary (ADR-007)
+- consider adding a brief "parent-tree caveat" note on `review_new` or the
+  top-level command: review verbs refuse worktree/fork-resolved roots
+
+**Phase C: add examples (Gap 3).** One example per shape class, appended to
+  the `Returns:` block. Keep them compact — just enough to show field names
+  and semantics. The `review_show` example in Gap 3 above is the template.
+
+**Phases D–F: small fixes.**
+- **Gap 4**: update `review_dispose` disposition description from
+  `"fixed | design-wrong | tolerated"` to `"aligned | fix-now | design-wrong |
+  follow-up | tolerated"`. Keep `type: "string"` (free-text in practice).
+- **Gap 5**: clarify `review_show` `view=summary` blanks `body`, `detail` →
+  `""`, `response` → `null`, preserves the finding skeleton.
+- **Gap 6**: document the two `review_prime` modes.
+
+### Reference docs to read before starting
+
+1. `install/review-ledger.md` — the shipped protocol reference. Every
+   invariant to inline comes from here.
+2. `plugins/doctrine/skills/audit/SKILL.md` — the audit skill; see its
+   "Disposition convention" for audit-specific vocab, and the parent-tree
+   caveat.
+3. `plugins/doctrine/skills/inquisition/SKILL.md` — same, for the inquisitor
+   lens.
+4. `src/review.rs` L767–940 — the `ReviewOutput` enum with `#[serde]` attrs;
+   this is the canonical source of response shapes.
+5. IMP-148's tool descriptions in `src/mcp_server/tools.rs` L206–277 — the
+   pattern to follow (`Returns:`, chaining, parameter clarifications).
+
+### IMP-148 pattern (exact shape to replicate)
+
+Each memory tool description now follows this structure:
+```
+One-line summary. Safety/constraint notes. Workflow chaining.
+
+Returns: { kind: 'memory_find', rows: [{ field, field, ... }], ... }
+```
+
+Parameters got clarifications too (e.g. `lifespan` filter direction). Apply
+the same structure to review tools.
+
+### What NOT to do
+
+- Do NOT change response shapes, handler logic, or function signatures.
+- Do NOT touch the CLI help text — this is MCP-only.
+- Do NOT expose `review_unlock` or `review_paths` as new MCP tools — out of
+  scope (the analysis surfaced these as a feature gap, deliberately deferred).
+- The pre-existing test failure (`tools_list_response_structure` expects 14,
+  IMP-148 made it 15) is NOT ours to fix.
+- Do NOT change the `view=summary` behaviour — just document it.
+- The `ReviewOutput::Primed.is_seed` field is `#[serde(skip)]` — do NOT change
+  that to add mode discrimination to the wire; use the existing count-zero
+  signal (or just document both shapes).
+
+### Verifying the work
+
+- `cargo test mcp_server::tools::tests` — the existing MCP tool tests should
+  pass (except the pre-existing 14→15 count failure).
+- `cargo clippy` — zero new warnings.
+- `just check` — gate passes (ignore the pre-existing test failure).
+- Manually: `doctrine review <verb> --help` should be unchanged (MCP
+  descriptions are only in the MCP surface).
+- If the MCP server is connected to your harness, verify the tool descriptions
+  appear correctly in the tool list.
