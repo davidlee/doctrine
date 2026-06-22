@@ -7,7 +7,7 @@ They are obtrusive distractions.
 **Avoid** unless there are no reasonable alternatives:
 
 - load-bearing (instead, try: important, relevant, significant)
-- tired physical metaphors (plumbing, wiring, scaffolding, lever, seam, substrate, cut, sharp, ...)
+- tired physical metaphors (plumbing, wiring, scaffolding, lever, seam, substrate, cut, sharp, spine, ...)
 
 ## Scope
 
