@@ -2,111 +2,97 @@
 
 The four MCP memory tools (`memory_find`, `memory_retrieve`, `memory_show`,
 `memory_list`) defined in `src/mcp_server/tools.rs` L195–272 have solid safety
-guidance and workflow chaining but are missing response-field documentation,
-examples, and the `memory validate` verb.
+guidance and workflow chaining. But response fields are opaque to agents, two
+parameter ambiguities exist, and `memory validate` isn't exposed.
 
-## What works
+**Context budget constraint.** MCP tool descriptions ride every turn —
+`tools/list` re-sends them on every response. So inline help must be terse;
+reference material belongs in on-demand retrievals. This reassessment
+(2026-06-22) weights each gap against its per-turn token cost.
 
-- **Workflow guidance.** `memory_find`: "Use first to probe context … use
-  `memory_show` for inspection then `memory_retrieve` for safe recall."
-  `memory_show`: "Use only after selecting an exact uid via `memory_find`."
-  `memory_list`: "Prefer scoped `memory_find` for targeted discovery." — clear
-  chain.
-- **Safety rules.** Holdback-exempt on `find`, low-trust × high-severity
-  suppression on `retrieve`, held-back warning on `show` — all covered.
-- **Token consciousness.** `view: summary` / `include_body: false` on
-  `memory_show` documented.
+## What works (keep)
 
-## Gap 1: response fields undocumented
+- **Workflow chaining.** `find` → `show` → `retrieve` is documented.
+- **Safety rules.** Holdback-exempt on `find`, suppression on `retrieve`,
+  held-back warning on `show` — all covered.
+- **Token consciousness.** `view: summary` / `include_body: false` documented.
 
-Every tool returns JSON but no tool description explains the response shape.
-An agent sees fields with opaque semantics:
+## Gap 1: response fields undocumented → enrich the shipped concept memory instead
 
-| Field | Values | Tool | Issue |
-|---|---|---|---|
-| `staleness` | `"fresh"`, `"stale"`, `"reference"`, `"unknown"` | `memory_find` rows, `memory_list` | Agent can't interpret these without guessing. `"stale"` = verified_sha behind HEAD? `"reference"` = signpost? `"unknown"` = never verified? |
-| `consumable` | `true`/`false` | `memory_show` | Not mentioned in any tool description. |
-| `held_back_on_retrieve` | `true`/`false` | `memory_find` rows, `memory_show` | `memory_find` says rows "may include memories suppressed by `memory_retrieve`" and points at `held_back_on_retrieve` but doesn't name the field. |
-| `verification_state` | `"verified"`/`"unverified"` | `memory_show` | Not documented at all. |
-| `weight` | integer | `memory_show` | Scoring weight — never explained. |
-| `review_by` | date string or empty | `memory_show` | Not mentioned. |
-| `next_offset` | integer or null | `memory_find` | Pagination cursor — implicit, but a word would help. |
-| `spec` | string or `"-"` | `memory_find` rows, `memory_list` | Links to governing spec — undocumented. |
+**Do NOT inline a field reference into every tool description** (~1200-2000
+tokens/turn). Instead:
 
-**Fix**: add a short "Response fields" section to each tool description, or a
-single reference block linked from each tool (the memory model concept is
-already `mem.concept.doctrine.memory-model`).
+1. **Enrich `mem.concept.doctrine.memory-model`** (the shipped concept, authored
+   in `memory/mem.concept.doctrine.memory-model/memory.md`). Add an "MCP
+   response fields" section documenting every field an agent sees:
+   `staleness` (fresh/stale/reference/unknown semantics), `consumable`,
+   `held_back_on_retrieve`, `verification_state`, `weight`, `spec`,
+   `next_offset`. One canonical source, retrieved on demand.
 
-## Gap 2: `lifespan` parameter semantics ambiguous
+2. **Add a single reference line to each tool description**, e.g.:
+   > Response shape: see `mem.concept.doctrine.memory-model` for field semantics.
 
-`memory_find` and `memory_retrieve` expose `lifespan` as:
-> Filter by lifespan threshold
+   ~15 tokens per tool. No duplication, no drift.
 
-The lifespans are a durability hierarchy:
-`semantic > episodic > procedural > working > identity` (most to least
-durable). But "threshold" doesn't say which direction — does it return
-memories *at or above* the given level, or *at or below*? An agent has to
-guess.
+**Shipped-memory authorship flow note:** edits to the shipped concept go in
+`memory/` (the RustEmbed folder, `src/corpus.rs` → `#[folder = "memory/"]`),
+then `cargo build` + `doctrine memory sync` to materialize into
+`.doctrine/memory/shipped/`. Editing `shipped/` directly is ephemeral —
+overwritten on next `sync` (or `doctrine claude install`, which calls it).
+Analogous to skills: `plugins/` → `touch src/skills.rs` → `cargo build` →
+`doctrine claude install`.
 
-**Fix**: clarify e.g. "Filter to memories at or above this durability
-threshold (semantic ⊃ episodic ⊃ procedural ⊃ working ⊃ identity)."
+## Gap 2: `lifespan` parameter ambiguous → fix inline (~20 tokens)
 
-## Gap 3: `memory_show` default interaction confusing
+Current: `"Filter by lifespan threshold"`
 
-`view` defaults to `"summary"` (body skipped). `include_body` defaults to
-`true`. When `view=summary`, `include_body` is silently ignored — setting
-both produces the summary view, and the agent may not understand why.
+Fix: `"Filter to memories at or above this durability (semantic ⊃ episodic ⊃ procedural ⊃ working ⊃ identity)"`
 
-**Fix**: either (a) note the interaction in the `include_body` description,
-or (b) change `include_body` default to `null` / omit it, or (c) always
-respect `include_body` even under `view=summary` (the cleanest contract).
+The ambiguity cost (wrong memories surfaced, second round-trip) dwarfs 20
+tokens.
 
-## Gap 4: `memory validate` not exposed as MCP tool
+## Gap 3: `memory_show` `include_body` vs `view` interaction → fix inline (~5 tokens)
 
-The CLI verb `doctrine memory validate` (staleness, dangling relations, draft
-expiry) is an essential maintenance operation — used in the dreaming skill's
-step 1. The MCP surface has no equivalent, so an MCP-bound agent can't check
-memory health programmatically.
+Current: `"Include body text in result (default: true)"`
 
-**Fix**: add a `memory_validate` MCP tool wrapping `memory::run_validate`.
-Optional `reference` parameter for scoped checks. Exit 0 / 1 semantics
-mapped to response; findings returned as a structured array.
+Add: `"(ignored when view=summary)"`.
 
-## Gap 5: no `memory record`/`memory edit` MCP exposure
+## Gap 4: `memory validate` not exposed as MCP tool → add
 
-Agents can read memories through MCP but can't create or edit them. The
-`/record-memory` skill exists as a workaround (drives the CLI), but direct
-MCP verbs would be cleaner and avoid shell round-trips. Lower priority than
-Gap 4 since the skill works.
+No per-turn cost (tool descriptions only ride `tools/list` responses). Wrap
+`memory::run_validate` (`src/memory.rs` L3043). Optional `reference` param for
+scoped checks. Findings returned as structured array — exit-0/1 semantics
+mapped to success/error with findings payload.
 
-## Gap 6: no examples
+## Gap 5: no `memory record`/`memory edit` MCP exposure → defer
 
-None of the four tool descriptions include example invocations or response
-shapes. Even a single `memory_show` response example (with the key fields
-labelled) would eliminate most guesswork.
+The `/record-memory` skill exists and works. Direct MCP verbs would be cleaner
+(long-term) but aren't urgent. Lower priority than Gap 4.
 
-**Fix**: one example JSON response block per tool, e.g.:
+## Gap 6: examples → skip (too expensive)
 
-```json
-// memory_show mem_019ed0b6 reference=mem.fact.clap.colorchoice-case-sensitive:
-{
-  "memory": {
-    "uid": "mem_019ed0b6...",
-    "key": "mem.fact.clap.colorchoice-case-sensitive",
-    "title": "clap ColorChoice parser case sensitivity",
-    "status": "active",
-    "type": "fact",
-    "consumable": true,
-    "held_back_on_retrieve": false,
-    "verification_state": "verified",
-    ...
-  }
-}
-```
+A compact JSON example block is ~200 tokens per tool, sent every turn. Skip
+for now. If thrashing is observed (agents misusing tool output shapes),
+revisit with one compact example on `memory_show` only (the most-used tool).
+
+## Gap 7: shipped memory-model concept is thin → needs MCP response-field section
+
+`memory/mem.concept.doctrine.memory-model/memory.md` currently explains the
+two-face model (local vs shipped) and retrieval habits. It doesn't document
+the MCP response surface at all. The "Response fields" section from Gap 1
+should land here.
+
+Fields to document: `uid`, `key`, `title`, `status`, `type`, `staleness`,
+`severity`, `trust`, `spec`, `consumable`, `held_back_on_retrieve`,
+`verification_state`, `weight`, `review_by`, `next_offset`, `backlinks`,
+`backlinks_total`, `relations`, `wikilinks`.
 
 ## References
 
 - Tool definitions: `src/mcp_server/tools.rs` L195–272
 - Handler dispatch: `src/mcp_server/tools.rs` L469–694
 - CLI validate verb: `src/memory.rs` L3043 (`run_validate`)
-- Memory model concept: `mem.concept.doctrine.memory-model`
+- CLI sync verb: `doctrine memory sync` (materializes `memory/` → `shipped/`)
+- Shipped memory source: `memory/` (RustEmbed via `src/corpus.rs` L44)
+- Memory model shipped concept: `memory/mem.concept.doctrine.memory-model/`
+- Installed copy: `.doctrine/memory/shipped/` (gitignored, `memory sync` output)
