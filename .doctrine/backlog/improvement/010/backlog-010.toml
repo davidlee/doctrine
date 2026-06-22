@@ -5,10 +5,10 @@ id = 10
 slug = "sl-032-review-cleanups"
 title = "SL-032 review cleanups: write_class test rewrite + reseat atomicity"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-22"
 tags = ["area:review"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

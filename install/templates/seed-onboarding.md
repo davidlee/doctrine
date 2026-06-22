@@ -1,18 +1,22 @@
 # Project Orientation
 
 > **This is a seed memory created during `doctrine install`.**
-> Edit this body to describe your project, then run `doctrine memory verify <key>`
+> Edit it to suit your project's needs, then run `doctrine memory verify <key>`
 > to attest it.
 
-## What this project does
+## Project Purpose 
 
 <!-- Describe the project's purpose and scope -->
 
-## Key architecture
+## Guiding Principles
 
-<!-- Key decisions and architectural sketch -->
+<!-- Useful operating heuristics; design goals -->
 
-## Where to find things
+## Architecture
+
+<!-- Key decisions and important architectural knowledge -->
+
+## Structure 
 
 <!-- Map of the codebase or document tree -->
 
@@ -20,6 +24,10 @@
 
 <!-- Coding standards, workflow patterns, naming -->
 
-## For new contributors
+## Tooling & Development Workflow
 
-<!-- How to get oriented, what to read first, who to ask -->
+<!-- What you need to know about tests, linter / formatter, committing, branch strategy, dev servers, jail / sandbox concerns, etc -->
+
+## Further Reading
+
+<!-- Links to get you oriented / into more detail if it becomes useful -->

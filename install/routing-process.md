@@ -5,6 +5,7 @@
 governing skill *before* inspecting files, running commands, or writing code.
 When unsure, route to the stricter skill. No code without an approved plan.
 
+
 | When | Skill |
 |---|---|
 | Correctness depends on project governance / unfamiliar subsystem / "right way?" | `/canon` + `/retrieve-memory` |
