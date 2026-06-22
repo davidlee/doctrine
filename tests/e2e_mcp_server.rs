@@ -184,7 +184,7 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 14, "expected 14 tools, got {tools:?}");
+    assert_eq!(tools.len(), 15, "expected 15 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -202,6 +202,7 @@ fn vt2_tools_list() {
         "memory_retrieve",
         "memory_show",
         "memory_list",
+        "memory_validate",
     ] {
         assert!(
             names.contains(expected),
