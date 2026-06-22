@@ -31,8 +31,8 @@ fn validate_focus(s: &str) -> Result<String, String> {
 
 pub(crate) fn run_serve(path: Option<PathBuf>, args: MapServeArgs) -> anyhow::Result<()> {
     let root = crate::root::find(args.path.or(path), &crate::root::default_markers())?;
-    let catalog =
-        crate::catalog::hydrate::scan_catalog(&root, ScanMode::default()).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(crate::map_server::serve(crate::map_server::state::Config {

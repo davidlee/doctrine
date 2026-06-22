@@ -40,7 +40,8 @@ pub(crate) fn run_inspect(
     // the scan order is the same both saw (KINDS table / id ascending), preserving
     // REQ-077 determinism and the byte-identical relation/priority surfaces (VT-4).
     let mut diagnostics = Vec::new();
-    let scanned = crate::relation_graph::scan_entities(&root, &mut diagnostics, ScanMode::default())?;
+    let scanned =
+        crate::relation_graph::scan_entities(&root, &mut diagnostics, ScanMode::default())?;
     // Surface scan degradation diagnostics to stderr before normal output (D3).
     for diag in &diagnostics {
         writeln!(io::stderr(), "{}: {}", diag.file.display(), diag.message)?;

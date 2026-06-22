@@ -123,8 +123,8 @@ mod tests {
 
     /// Build a CatalogGraph from a small fixture via scan_catalog.
     fn build_graph(root: &Path) -> CatalogGraph {
-        let catalog =
-            crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan_catalog should succeed");
+        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default())
+            .expect("scan_catalog should succeed");
         CatalogGraph::from_catalog(&catalog)
     }
 
@@ -420,8 +420,8 @@ mod tests {
             "[estimate]\nlower = 5\nupper = 2\n\n[value]\nvalue = 7\n",
         );
 
-        let catalog =
-            crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan_catalog should succeed");
+        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default())
+            .expect("scan_catalog should succeed");
         let graph = CatalogGraph::from_catalog(&catalog);
 
         let node = node_for(&graph, "ADR-001");
@@ -454,8 +454,8 @@ mod tests {
             "[estimate]\nlower = 3\nupper = 11\n\n[value]\nvalue = 4\n",
         );
 
-        let catalog =
-            crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan_catalog should succeed");
+        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default())
+            .expect("scan_catalog should succeed");
         let entity = catalog
             .entities
             .iter()

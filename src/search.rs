@@ -11,18 +11,19 @@ use std::str::FromStr;
 use anyhow::Result;
 use clap::Args;
 
-use crate::catalog::hydrate::{scan_catalog, CatalogEntity, CatalogKey};
+use crate::catalog::hydrate::{CatalogEntity, CatalogKey, scan_catalog};
 use crate::catalog::scan::ScanMode;
 use crate::integrity;
-use crate::lexical::{tokenize, tokenize_with_spans, Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker};
+use crate::lexical::{
+    Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker, tokenize, tokenize_with_spans,
+};
 use crate::listing::Format;
 
 // ── KindSelector ──────────────────────────────────────────────────────────
 
 const DEFAULT_SEARCH_KINDS: &[&str] = &[
-    "SL", "ADR", "PRD", "SPEC", "RFC",
-    "ISS", "IMP", "CHR", "RSK", "IDE",
-    "ASM", "DEC", "QUE", "CON",
+    "SL", "ADR", "PRD", "SPEC", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE",
+    "CON",
 ];
 
 const GROUP_ALIASES: &[(&str, &[&str])] = &[
@@ -30,7 +31,13 @@ const GROUP_ALIASES: &[(&str, &[&str])] = &[
     ("governance", &["ADR", "POL", "STD"]),
     ("specs", &["PRD", "SPEC"]),
     ("knowledge", &["ASM", "DEC", "QUE", "CON"]),
-    ("all", &["SL","ADR","PRD","SPEC","RFC","ISS","IMP","CHR","RSK","IDE","REQ","RV","REC","REV","CM","POL","STD","ASM","DEC","QUE","CON"]),
+    (
+        "all",
+        &[
+            "SL", "ADR", "PRD", "SPEC", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "REQ", "RV",
+            "REC", "REV", "CM", "POL", "STD", "ASM", "DEC", "QUE", "CON",
+        ],
+    ),
 ];
 
 #[derive(Debug, Clone)]
@@ -48,7 +55,10 @@ impl KindSelector {
         let mut prefixes: BTreeSet<String> = if let Some(k) = kind_opt {
             Self::expand(k)?
         } else {
-            DEFAULT_SEARCH_KINDS.iter().map(|s| (*s).to_string()).collect()
+            DEFAULT_SEARCH_KINDS
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect()
         };
 
         for w in with_list {
@@ -100,8 +110,7 @@ impl KindSelector {
             } else {
                 let mut valid: Vec<&str> = known.iter().copied().collect();
                 valid.sort_unstable();
-                let mut group_names: Vec<&str> =
-                    GROUP_ALIASES.iter().map(|(n, _)| *n).collect();
+                let mut group_names: Vec<&str> = GROUP_ALIASES.iter().map(|(n, _)| *n).collect();
                 group_names.sort_unstable();
                 return Err(anyhow::anyhow!(
                     "unknown kind prefix or group: '{token}'. Valid prefixes: {}. Valid groups: {}",
@@ -146,9 +155,7 @@ pub(crate) fn snippet(doc_text: &str, query: &str, context_chars: usize) -> Stri
 
     let spans = tokenize_with_spans(doc_text);
     // Find first span whose token matches any query token
-    let first_match = spans
-        .iter()
-        .find(|ts| query_tokens.contains(&ts.token));
+    let first_match = spans.iter().find(|ts| query_tokens.contains(&ts.token));
 
     let Some(matched) = first_match else {
         return String::new();
@@ -287,10 +294,7 @@ pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
     let scored = ranker.score(Some(&args.query), &corpus, &ids);
 
     // Filter zero scores, sort descending, apply offset/limit
-    let mut results: Vec<_> = scored
-        .into_iter()
-        .filter(|(_, score)| *score > 0)
-        .collect();
+    let mut results: Vec<_> = scored.into_iter().filter(|(_, score)| *score > 0).collect();
     results.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
     let total = results.len();
@@ -330,7 +334,11 @@ pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
                     writeln!(
                         std::io::stdout(),
                         "{:12} {:8} {:24} {:>8}   {}",
-                        id, kind_label, status, score, entity.title
+                        id,
+                        kind_label,
+                        status,
+                        score,
+                        entity.title
                     )?;
                     if args.context {
                         let body = entity.body.as_deref().unwrap_or(&entity.title);
@@ -362,7 +370,11 @@ pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
                 "total": total,
                 "results": json_results,
             });
-            writeln!(std::io::stdout(), "{}", serde_json::to_string_pretty(&output)?)?;
+            writeln!(
+                std::io::stdout(),
+                "{}",
+                serde_json::to_string_pretty(&output)?
+            )?;
         }
     }
 
@@ -389,17 +401,11 @@ mod tests {
     fn kind_selector_default_has_correct_prefixes() {
         let ks = KindSelector::resolve(None, &[], &[]).unwrap();
         for prefix in DEFAULT_SEARCH_KINDS {
-            assert!(
-                ks.matches(prefix),
-                "default should include {prefix}"
-            );
+            assert!(ks.matches(prefix), "default should include {prefix}");
         }
         // IDE is in defaults — confirm it.
         assert!(ks.matches("IDE"), "default should include IDE");
-        assert!(
-            !ks.matches("REQ"),
-            "default should not include REQ"
-        );
+        assert!(!ks.matches("REQ"), "default should not include REQ");
     }
 
     #[test]
@@ -414,12 +420,7 @@ mod tests {
     #[test]
     fn kind_selector_add_remove() {
         // Start with default, add PRD, remove ADR
-        let ks = KindSelector::resolve(
-            None,
-            &["prd".to_string()],
-            &["adr".to_string()],
-        )
-        .unwrap();
+        let ks = KindSelector::resolve(None, &["prd".to_string()], &["adr".to_string()]).unwrap();
         assert!(ks.matches("PRD"));
         assert!(!ks.matches("ADR"));
         assert!(ks.matches("SL"));
@@ -454,10 +455,7 @@ mod tests {
             .map(|kr| kr.kind.prefix.to_string())
             .collect();
         for p in &known {
-            assert!(
-                ks.matches(p),
-                "all should include {p}"
-            );
+            assert!(ks.matches(p), "all should include {p}");
         }
     }
 
@@ -512,10 +510,22 @@ mod tests {
     fn snippet_matches_and_extracts_context() {
         let text = "The quick brown fox jumps over the lazy dog";
         let result = snippet(text, "fox", 10);
-        assert!(result.contains("fox"), "result should contain fox: {result:?}");
-        assert!(result.starts_with('\u{2026}'), "should start with ellipsis: {result:?}");
-        assert!(result.ends_with('\u{2026}'), "should end with ellipsis: {result:?}");
-        assert!(result.contains("brown"), "context should include brown: {result:?}");
+        assert!(
+            result.contains("fox"),
+            "result should contain fox: {result:?}"
+        );
+        assert!(
+            result.starts_with('\u{2026}'),
+            "should start with ellipsis: {result:?}"
+        );
+        assert!(
+            result.ends_with('\u{2026}'),
+            "should end with ellipsis: {result:?}"
+        );
+        assert!(
+            result.contains("brown"),
+            "context should include brown: {result:?}"
+        );
     }
 
     #[test]
@@ -534,14 +544,20 @@ mod tests {
     fn snippet_at_start_no_leading_ellipsis() {
         let text = "fox jumps over the lazy dog";
         let result = snippet(text, "fox", 20);
-        assert!(!result.starts_with('\u{2026}'), "no leading ellipsis at start: {result:?}");
+        assert!(
+            !result.starts_with('\u{2026}'),
+            "no leading ellipsis at start: {result:?}"
+        );
     }
 
     #[test]
     fn snippet_at_end_no_trailing_ellipsis() {
         let text = "the quick brown fox";
         let result = snippet(text, "fox", 20);
-        assert!(!result.ends_with('\u{2026}'), "no trailing ellipsis at end: {result:?}");
+        assert!(
+            !result.ends_with('\u{2026}'),
+            "no trailing ellipsis at end: {result:?}"
+        );
     }
 
     // ── search integration tests ──────────────────────────────────────────
@@ -602,10 +618,7 @@ mod tests {
         let ranker = Bm25Ranker;
         let scored = ranker.score(Some("scope"), &corpus, &ids);
 
-        let mut results: Vec<_> = scored
-            .into_iter()
-            .filter(|(_, s)| *s > 0)
-            .collect();
+        let mut results: Vec<_> = scored.into_iter().filter(|(_, s)| *s > 0).collect();
         results.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
         let entity_map: BTreeMap<String, &CatalogEntity> = catalog
@@ -624,17 +637,22 @@ mod tests {
             .iter()
             .map(|(id, score)| {
                 let entity = entity_map.get(id);
-                build_json_hit(id, *score, entity, &SearchArgs {
-                    query: "scope".to_string(),
-                    kinds: None,
-                    with: vec![],
-                    no: vec![],
-                    format: Format::Json,
-                    context: false,
-                    limit: 20,
-                    offset: 0,
-                    path: None,
-                })
+                build_json_hit(
+                    id,
+                    *score,
+                    entity,
+                    &SearchArgs {
+                        query: "scope".to_string(),
+                        kinds: None,
+                        with: vec![],
+                        no: vec![],
+                        format: Format::Json,
+                        context: false,
+                        limit: 20,
+                        offset: 0,
+                        path: None,
+                    },
+                )
             })
             .collect();
 
