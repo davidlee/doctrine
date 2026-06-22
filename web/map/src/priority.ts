@@ -196,26 +196,26 @@ export function renderGraph(opts: PriorityRenderOpts): void {
 
   const needsMarker = document.createElementNS(SVG_NS, 'marker');
   needsMarker.setAttribute('id', 'needs-arrow');
-  needsMarker.setAttribute('markerWidth', '10');
+  needsMarker.setAttribute('markerWidth', '7');
   needsMarker.setAttribute('markerHeight', '7');
-  needsMarker.setAttribute('refX', '9');
+  needsMarker.setAttribute('refX', '10');
   needsMarker.setAttribute('refY', '3.5');
   needsMarker.setAttribute('orient', 'auto');
   const needsPath = document.createElementNS(SVG_NS, 'path');
-  needsPath.setAttribute('d', 'M0,0 L10,3.5 L0,7 z');
+  needsPath.setAttribute('d', 'M0,0 L7,3.5 L0,7 z');
   needsPath.setAttribute('fill', 'var(--priority-needs-edge, #C0392B)');
   needsMarker.appendChild(needsPath);
   defs.appendChild(needsMarker);
 
   const afterMarker = document.createElementNS(SVG_NS, 'marker');
   afterMarker.setAttribute('id', 'after-arrow');
-  afterMarker.setAttribute('markerWidth', '10');
+  afterMarker.setAttribute('markerWidth', '7');
   afterMarker.setAttribute('markerHeight', '7');
-  afterMarker.setAttribute('refX', '9');
+  afterMarker.setAttribute('refX', '10');
   afterMarker.setAttribute('refY', '3.5');
   afterMarker.setAttribute('orient', 'auto');
   const afterPath = document.createElementNS(SVG_NS, 'path');
-  afterPath.setAttribute('d', 'M0,0 L10,3.5 L0,7 z');
+  afterPath.setAttribute('d', 'M0,0 L7,3.5 L0,7 z');
   afterPath.setAttribute('fill', 'var(--priority-after-edge, #E67E22)');
   afterMarker.appendChild(afterPath);
   defs.appendChild(afterMarker);
@@ -240,10 +240,17 @@ export function renderGraph(opts: PriorityRenderOpts): void {
     const line = document.createElementNS(SVG_NS, 'line');
     // Edge direction: dependent (target) → prerequisite (source).
     // "A needs B" = A (dependent/target) depends on B (prerequisite/source).
+    // Offset the endpoint by node radius + margin so the arrowhead clears the rect.
+    const dx = s.x - t.x;
+    const dy = s.y - t.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const pad = 8; // rx=6 + 2px margin
+    const ux = dx / len;
+    const uy = dy / len;
     line.setAttribute('x1', String(t.x));
     line.setAttribute('y1', String(t.y));
-    line.setAttribute('x2', String(s.x));
-    line.setAttribute('y2', String(s.y));
+    line.setAttribute('x2', String(s.x - pad * ux));
+    line.setAttribute('y2', String(s.y - pad * uy));
     const isNeeds = edge.kind === 'needs';
     line.setAttribute('class', isNeeds ? 'priority-edge priority-needs-edge' : 'priority-edge priority-after-edge');
     line.setAttribute('marker-end', isNeeds ? 'url(#needs-arrow)' : 'url(#after-arrow)');
