@@ -57,7 +57,8 @@ mod tests {
     use crate::map_server::shell::{FakeDotMode, FakeDotRenderer};
 
     pub(crate) async fn test_app(root: &std::path::Path) -> axum::Router {
-        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan");
+        let catalog =
+            crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan");
         let priority_graph = crate::priority::graph::build(root).expect("priority graph");
         let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
         let stores = super::state::DataStores {

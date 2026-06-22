@@ -197,8 +197,8 @@ async fn survey(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
 }
 
 async fn refresh(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, MapServerError> {
-    let catalog =
-        crate::catalog::hydrate::scan_catalog(&state.root, ScanMode::default()).map_err(MapServerError::Other)?;
+    let catalog = crate::catalog::hydrate::scan_catalog(&state.root, ScanMode::default())
+        .map_err(MapServerError::Other)?;
     let priority_graph =
         crate::priority::graph::build(&state.root).map_err(MapServerError::Other)?;
     let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
@@ -911,7 +911,8 @@ mod tests {
         let root_path = root.path().to_path_buf();
         crate::catalog::test_helpers::seed_slice(&root_path, 1, &[]);
 
-        let catalog = crate::catalog::hydrate::scan_catalog(&root_path, ScanMode::default()).expect("scan");
+        let catalog =
+            crate::catalog::hydrate::scan_catalog(&root_path, ScanMode::default()).expect("scan");
         let priority_graph = crate::priority::graph::build(&root_path).expect("priority graph");
         let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
         let stores = crate::map_server::state::DataStores {
@@ -1421,7 +1422,8 @@ mod tests {
 
         // Build the graph from a normal catalog (SL-001, ADR-001, etc.)
         // and manually insert a memory node.
-        let catalog = crate::catalog::hydrate::scan_catalog(root_path, ScanMode::default()).expect("scan");
+        let catalog =
+            crate::catalog::hydrate::scan_catalog(root_path, ScanMode::default()).expect("scan");
         let mut graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
         graph.nodes.insert(
             NodeKey::Memory(uid.to_string()),

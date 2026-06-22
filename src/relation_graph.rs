@@ -29,8 +29,8 @@ use crate::relation::{RELATION_RULES, RelationEdge, RelationLabel, TargetSpec};
 
 // Re-exports from catalog::scan — the single source of truth (SL-071 D7).
 // Aliases, not wrappers — one body, one source.
-pub(crate) use crate::catalog::scan::{EntityKey, ScannedEntity, outbound_for, scan_entities};
 use crate::catalog::scan::ScanMode;
+pub(crate) use crate::catalog::scan::{EntityKey, ScannedEntity, outbound_for, scan_entities};
 
 /// One entity's `needs`/`after` dep/seq edges plus its `promoted` flag, dispatched to
 /// the owning kind's reader by canonical prefix — the kind-agnostic READ gate that lets
@@ -517,7 +517,11 @@ pub(crate) struct InspectView {
     )
 )]
 pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
-    inspect_from(&scan_entities(root, &mut vec![], ScanMode::default())?, root, id)
+    inspect_from(
+        &scan_entities(root, &mut vec![], ScanMode::default())?,
+        root,
+        id,
+    )
 }
 
 /// `inspect` over a PRE-SCANNED entity slice (the SL-050 F2 shared-scan seam). `inspect`

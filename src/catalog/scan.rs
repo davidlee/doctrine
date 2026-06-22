@@ -167,7 +167,9 @@ pub(crate) struct ScanMode {
 
 impl ScanMode {
     pub(crate) const fn include_bodies() -> Self {
-        Self { include_bodies: true }
+        Self {
+            include_bodies: true,
+        }
     }
 }
 

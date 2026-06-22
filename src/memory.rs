@@ -3129,7 +3129,8 @@ fn validate_relation_target(root: &Path, target: &str) -> Result<()> {
 
     // Try catalog scan for other entities (SL-999, ADR-001, etc.)
     let mut diagnostics = Vec::new();
-    let entities = crate::catalog::scan::scan_entities(root, &mut diagnostics, ScanMode::default())?;
+    let entities =
+        crate::catalog::scan::scan_entities(root, &mut diagnostics, ScanMode::default())?;
     if entities.iter().any(|item| item.key.canonical() == target) {
         return Ok(());
     }
