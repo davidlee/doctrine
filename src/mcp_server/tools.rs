@@ -24,7 +24,7 @@ fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
             name: "review_new".to_owned(),
-            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge.\n\nReturns: { id: int, canonical: \"RV-NNN\", dir: string }".to_owned(),
+            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge. Start of the adversarial review protocol — next: `review_prime` (seed → curate → prime) to warm the context cache, then `review_raise` to add findings. Review verbs refuse worktree/fork-resolved roots — drive from the main tree.\n\nReturns: { id: int, canonical: \"RV-NNN\", dir: string }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -98,7 +98,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_raise".to_owned(),
-            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail.\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
+            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail. `severity`/`title`/`detail` are raiser-owned and fixed at raise — the ledger is append-only. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -113,7 +113,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_dispose".to_owned(),
-            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response.\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
+            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response. Sanctioned dispositions: `aligned | fix-now | design-wrong | follow-up | tolerated` (free-text in practice, but these five are the protocol). `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -128,7 +128,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_verify".to_owned(),
-            description: "Verify an answered finding (the raiser's verb) — accept it (terminal).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
+            description: "Verify an answered finding (the raiser's verb) — accept it (terminal). `--note` is ephemeral baton chatter for the log, NOT durable rationale — durable justification belongs in the finding's `response` or a new finding. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -142,7 +142,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_contest".to_owned(),
-            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder.\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
+            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder. `--note` is ephemeral baton chatter for the log, NOT durable rationale — durable justification belongs in a new finding or the finding's `response`. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -156,7 +156,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_withdraw".to_owned(),
-            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
+            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal). `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
