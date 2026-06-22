@@ -7,6 +7,9 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::Args;
 
+#[cfg(test)]
+use crate::catalog::scan::ScanMode;
+
 /// `doctrine estimate set <ID> ...`
 #[derive(Args)]
 pub(crate) struct EstimateSetArgs {
@@ -584,7 +587,7 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join(format!("slice-{padded}.md")), "# Test body\n").unwrap();
         // Scan catalog and find the entity.
-        let catalog = crate::catalog::hydrate::scan_catalog(root).unwrap();
+        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).unwrap();
         let entity = catalog
             .entities
             .iter()
@@ -615,7 +618,7 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join(format!("slice-{padded}.md")), "# Test body\n").unwrap();
         // Scan catalog — estimate should be absent.
-        let catalog = crate::catalog::hydrate::scan_catalog(root).unwrap();
+        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).unwrap();
         let entity = catalog
             .entities
             .iter()

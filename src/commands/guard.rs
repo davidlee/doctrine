@@ -278,6 +278,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         // Read-only priority surfaces (SL-047 — derive per query, never write /
         // mint / derive status; ADR-004 stores no reverse field).
         Command::Catalog { .. }
+        | Command::Search { .. }
         | Command::Validate { .. }
         | Command::Inspect { .. }
         | Command::Survey { .. }

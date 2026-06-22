@@ -31,6 +31,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::catalog::scan::ScanMode;
+
 use cordage::{
     Arity, CyclePolicy, Direction, EdgeAttrs, Graph, GraphBuilder, OrderLayer, OrderSpec,
     OverlayConfig, OverlayId,
@@ -172,7 +174,7 @@ const CONSEQUENCE_LABELS: &[RelationLabel] = &[
 /// Propagates a scan/read error, or an internal cordage rejection of well-formed
 /// adapter input (an adapter bug, not a recoverable condition).
 pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
-    build_from(&relation_graph::scan_entities(root, &mut vec![])?, root)
+    build_from(&relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?, root)
 }
 
 /// Build the priority graph from a PRE-SCANNED entity slice (the SL-050 F2 shared-scan
@@ -753,7 +755,7 @@ mod tests {
         let pg = build(root).unwrap();
         // Node set equals the scanned entity set (one NodeAttr per scanned entity).
         let scanned: std::collections::BTreeSet<EntityKey> =
-            relation_graph::scan_entities(root, &mut vec![])
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default())
                 .unwrap()
                 .iter()
                 .map(|e| e.key)

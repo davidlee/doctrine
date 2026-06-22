@@ -12,6 +12,8 @@ use std::path::PathBuf;
 
 use clap::Subcommand;
 
+use crate::catalog::scan::ScanMode;
+
 #[derive(Subcommand)]
 
 pub(crate) enum CatalogCommand {
@@ -50,7 +52,7 @@ pub(crate) fn run_catalog_scan(root_arg: Option<PathBuf>) -> anyhow::Result<()> 
     if !root.join(".doctrine").is_dir() {
         anyhow::bail!("no .doctrine directory found at '{}'", root.display());
     }
-    let catalog = crate::catalog::hydrate::scan_catalog(&root)?;
+    let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())?;
     let json = serde_json::to_string_pretty(&catalog)
         .map_err(|e| anyhow::anyhow!("failed to serialize catalog: {e}"))?;
     write!(std::io::stdout(), "{json}")?;
@@ -65,7 +67,7 @@ pub(crate) fn run_catalog_graph(root_arg: Option<PathBuf>) -> anyhow::Result<()>
     if !root.join(".doctrine").is_dir() {
         anyhow::bail!("no .doctrine directory found at '{}'", root.display());
     }
-    let catalog = crate::catalog::hydrate::scan_catalog(&root)?;
+    let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())?;
     let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
     let json = serde_json::to_string_pretty(&graph)
         .map_err(|e| anyhow::anyhow!("failed to serialize graph: {e}"))?;

@@ -14,6 +14,7 @@ use crate::commands::facet::{
     EstimateClearArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs, ValueClearArgs, ValueSetArgs,
 };
 use crate::listing::Format;
+use crate::search::SearchArgs;
 
 // ── shared action enums (Estimate / Value) ──────────────────────────────────
 
@@ -134,6 +135,9 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: crate::rec::RecCommand,
     },
+
+    /// Full-text search over the entity corpus.
+    Search(SearchArgs),
 
     /// Create, show, and transition revisions (the REV change-axis kind, ADR-013).
     Revision {
@@ -580,6 +584,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Memory { command } => crate::memory::dispatch(command, color),
         Command::Review { command } => crate::review::dispatch(command, color),
         Command::Rec { command } => crate::rec::dispatch(command, color),
+        Command::Search(args) => crate::search::run(args),
         Command::Revision { command } => crate::revision::dispatch(command, color),
         Command::Reconcile {
             req,
