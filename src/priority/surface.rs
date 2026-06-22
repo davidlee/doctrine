@@ -442,9 +442,7 @@ fn frontier_order(
         };
         let Some(pick) = candidates.into_iter().max_by(|a, b| {
             // Max by score asc then id DESC ⇒ picks highest score, lowest id first.
-            score(*a)
-                .total_cmp(&score(*b))
-                .then_with(|| b.cmp(a))
+            score(*a).total_cmp(&score(*b)).then_with(|| b.cmp(a))
         }) else {
             break;
         };
@@ -829,7 +827,11 @@ mod tests {
     }
 
     fn survey_ids(root: &Path) -> Vec<String> {
-        survey(root, false).unwrap().into_iter().map(|r| r.id).collect()
+        survey(root, false)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.id)
+            .collect()
     }
 
     /// VT-5 (the point of the slice): a blocker gating ONE high-value slice outranks a
@@ -866,8 +868,14 @@ mod tests {
         }
 
         let g = build(root).unwrap();
-        let rsk1 = EntityKey { prefix: "RSK", id: 1 };
-        let rsk2 = EntityKey { prefix: "RSK", id: 2 };
+        let rsk1 = EntityKey {
+            prefix: "RSK",
+            id: 1,
+        };
+        let rsk2 = EntityKey {
+            prefix: "RSK",
+            id: 2,
+        };
         // RSK-001's leverage = 0.5 · (base(ISS-010) + 0) = 0.5 · 20 = 10.
         assert!(
             (channels::score(&g, rsk1) - 10.0).abs() < 1e-9,
@@ -884,7 +892,10 @@ mod tests {
         let ids = survey_ids(root);
         let p1 = ids.iter().position(|x| x == "RSK-001").unwrap();
         let p2 = ids.iter().position(|x| x == "RSK-002").unwrap();
-        assert!(p1 < p2, "RSK-001 outranks RSK-002 by score (not inbound count): {ids:?}");
+        assert!(
+            p1 < p2,
+            "RSK-001 outranks RSK-002 by score (not inbound count): {ids:?}"
+        );
     }
 
     /// VT-5 (recursive-leverage proof): a DEEP blocker gating a cheap chore that gates a
@@ -910,12 +921,21 @@ mod tests {
         let deep = channels::score(&g, k(1));
         // leverage(ISS-010) = 0.5·(base(ISS-011)+0) = 0.5·2 = 1.
         let shallow = channels::score(&g, k(10));
-        assert!((deep - 10.0).abs() < 1e-9, "deep blocker recursive leverage = 10: got {deep}");
-        assert!((shallow - 1.0).abs() < 1e-9, "shallow blocker leverage = 1: got {shallow}");
+        assert!(
+            (deep - 10.0).abs() < 1e-9,
+            "deep blocker recursive leverage = 10: got {deep}"
+        );
+        assert!(
+            (shallow - 1.0).abs() < 1e-9,
+            "shallow blocker leverage = 1: got {shallow}"
+        );
         let ids = survey_ids(root);
         let pd = ids.iter().position(|x| x == "ISS-001").unwrap();
         let ps = ids.iter().position(|x| x == "ISS-010").unwrap();
-        assert!(pd < ps, "deep blocker of a valuable cone outranks the shallow one: {ids:?}");
+        assert!(
+            pd < ps,
+            "deep blocker of a valuable cone outranks the shallow one: {ids:?}"
+        );
     }
 
     /// VT-7 (a): a Y-fixture — two seq-INCOMPARABLE ready arms order by score. ISS-002
@@ -981,7 +1001,10 @@ mod tests {
             .keys()
             .map(|&k| channels::evicted_seq_edges(&g, k).len())
             .sum();
-        assert!(evicted_total > 0, "the seq 2-cycle must produce an eviction");
+        assert!(
+            evicted_total > 0,
+            "the seq 2-cycle must produce an eviction"
+        );
 
         let ids = next_ids(root);
         let p1 = ids.iter().position(|x| x == "ISS-001").unwrap();
@@ -1002,12 +1025,23 @@ mod tests {
                     .collect(),
             );
             preds
-                .get(&EntityKey { prefix: "ISS", id: 2 })
-                .map(|s| s.contains(&EntityKey { prefix: "ISS", id: 1 }))
+                .get(&EntityKey {
+                    prefix: "ISS",
+                    id: 2,
+                })
+                .map(|s| {
+                    s.contains(&EntityKey {
+                        prefix: "ISS",
+                        id: 1,
+                    })
+                })
                 .unwrap_or(false)
         };
         if surviving_pred_of_2 {
-            assert!(p1 < p2, "surviving edge orders ISS-001 before ISS-002: {ids:?}");
+            assert!(
+                p1 < p2,
+                "surviving edge orders ISS-001 before ISS-002: {ids:?}"
+            );
         } else {
             assert!(
                 p2 < p1,
