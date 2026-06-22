@@ -1,0 +1,42 @@
+[[area]]
+name = "SL-141 design and prior penance"
+purpose = "Round-2 design inquisition over the amended search design and RV-140 findings"
+paths = [".doctrine/slice/141/slice-141.md", ".doctrine/slice/141/design.md", ".doctrine/review/140/review-140.md", ".doctrine/review/140/review-140.toml"]
+
+[[area]]
+name = "lexical and snippet contract"
+purpose = "BM25, tokenization, LexDoc projection, and prohibition on parallel tokenizer logic"
+paths = ["src/lexical.rs", "src/retrieve.rs"]
+
+[[area]]
+name = "catalog scan and entity body ingestion"
+purpose = "ScanMode/body-field semantics, entity path authority, hydrate/serialization behaviour"
+paths = ["src/catalog/scan.rs", "src/catalog/hydrate.rs", "src/entity.rs", "src/integrity.rs"]
+
+[[area]]
+name = "CLI/listing/pagination conventions"
+purpose = "Command wiring, output formatting, --json precedence, help-test conventions, pagination precedent"
+paths = ["src/commands/cli.rs", "src/main.rs", "src/listing.rs"]
+
+[[area]]
+name = "ADR-001 layering ratchet"
+purpose = "Tier assignments and command-SCC tangle ceiling"
+paths = [".doctrine/adr/001/adr-001.md", ".doctrine/adr/001/layering.toml", "tests/architecture_layering.rs"]
+
+[[invariant]]
+text = "ADR-001 layering remains true: command modules may depend on engine/leaf and same-tier command modules, but new command-SCC edges must answer the 120-edge ratchet."
+
+[[invariant]]
+text = "Reuse the canonical lexical tokenizer; do not ship a parallel tokenization implementation coupled only by prose."
+
+[[invariant]]
+text = "CLI defaults and pagination claims must cite the right precedent: memory find and memory retrieve are distinct surfaces with different limit semantics."
+
+[[invariant]]
+text = "Existing catalog consumers must preserve behaviour unless they explicitly opt into body ingestion."
+
+[[risk]]
+text = "Amending RV-140 findings can introduce fresh design debt around snippets, pagination, and rendering."
+
+[[risk]]
+text = "Template boilerplate and process entities can pollute search relevance if v1 has no filtering or boilerplate mitigation."
