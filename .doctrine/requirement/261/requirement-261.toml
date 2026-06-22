@@ -4,7 +4,7 @@ version = 1
 id = 261
 slug = "record-an-optional-bounded-estimate-facet-on-an-entity"
 title = "Record an optional bounded estimate facet on an entity"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An author can attach an optional [estimate] table carrying lower and upper bounded effort claims to an entity's TOML; bounds may be integers or floats and normalize internally to floats."

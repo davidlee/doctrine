@@ -4,7 +4,7 @@ version = 1
 id = 305
 slug = "relations-are-stored-outbound-only-inbound-is-always-derived-from-in-edges-and-never-persisted-the"
 title = "Relations are stored outbound-only — inbound is always derived from `in_edges` and never persisted, the sole typed reverse being the `superseded_by` carve-out (ADR-004)."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

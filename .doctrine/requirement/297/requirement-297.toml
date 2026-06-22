@@ -4,7 +4,7 @@ version = 1
 id = 297
 slug = "an-isolated-worker-returns-a-single-non-merge-source-delta-and-never-writes-doctrine-authored-state"
 title = "An isolated worker returns a single non-merge source delta and never writes doctrine-authored state, runtime state, or memory; a multi-commit, merge, authored-tree-touching, or misbased delta is refused at the funnel."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

@@ -1,0 +1,8 @@
+[[entry]]
+slice = "SL-060"
+requirement = "REQ-258"
+contributing_change = "SL-060"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"

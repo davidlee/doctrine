@@ -1,0 +1,44 @@
+[[entry]]
+slice = "SL-058"
+requirement = "REQ-305"
+contributing_change = "SL-058"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-058"
+requirement = "REQ-306"
+contributing_change = "SL-058"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-058"
+requirement = "REQ-307"
+contributing_change = "SL-058"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-058"
+requirement = "REQ-308"
+contributing_change = "SL-058"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-058"
+requirement = "REQ-309"
+contributing_change = "SL-058"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"

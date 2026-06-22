@@ -4,7 +4,7 @@ version = 1
 id = 284
 slug = "surface-values-in-detailed-display"
 title = "Surface values in detailed display"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Detailed entity display shows the value when present and a fixed phrase when absent; the value facet has no derived spread (a single magnitude) and is never classified as high or low."

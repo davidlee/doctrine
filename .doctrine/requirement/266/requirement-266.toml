@@ -4,7 +4,7 @@ version = 1
 id = 266
 slug = "estimates-are-optional-everywhere-and-never-gate-work"
 title = "Estimates and values are optional everywhere and never gate work"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Estimates and values are optional on every entity kind and never gate work; absence is surfaced at most as a generic nudge, never as a schema violation or a workflow block."
