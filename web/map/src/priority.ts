@@ -191,20 +191,35 @@ export function renderGraph(opts: PriorityRenderOpts): void {
   svg.setAttribute('width', '100%');
   svg.setAttribute('height', '100%');
 
-  // Arrow marker definition
+  // Arrow marker definitions
   const defs = document.createElementNS(SVG_NS, 'defs');
-  const marker = document.createElementNS(SVG_NS, 'marker');
-  marker.setAttribute('id', 'needs-arrow');
-  marker.setAttribute('markerWidth', '10');
-  marker.setAttribute('markerHeight', '7');
-  marker.setAttribute('refX', '9');
-  marker.setAttribute('refY', '3.5');
-  marker.setAttribute('orient', 'auto');
-  const markerPath = document.createElementNS(SVG_NS, 'path');
-  markerPath.setAttribute('d', 'M0,0 L10,3.5 L0,7 z');
-  markerPath.setAttribute('fill', 'var(--priority-needs-edge, #C0392B)');
-  marker.appendChild(markerPath);
-  defs.appendChild(marker);
+
+  const needsMarker = document.createElementNS(SVG_NS, 'marker');
+  needsMarker.setAttribute('id', 'needs-arrow');
+  needsMarker.setAttribute('markerWidth', '10');
+  needsMarker.setAttribute('markerHeight', '7');
+  needsMarker.setAttribute('refX', '9');
+  needsMarker.setAttribute('refY', '3.5');
+  needsMarker.setAttribute('orient', 'auto');
+  const needsPath = document.createElementNS(SVG_NS, 'path');
+  needsPath.setAttribute('d', 'M0,0 L10,3.5 L0,7 z');
+  needsPath.setAttribute('fill', 'var(--priority-needs-edge, #C0392B)');
+  needsMarker.appendChild(needsPath);
+  defs.appendChild(needsMarker);
+
+  const afterMarker = document.createElementNS(SVG_NS, 'marker');
+  afterMarker.setAttribute('id', 'after-arrow');
+  afterMarker.setAttribute('markerWidth', '10');
+  afterMarker.setAttribute('markerHeight', '7');
+  afterMarker.setAttribute('refX', '9');
+  afterMarker.setAttribute('refY', '3.5');
+  afterMarker.setAttribute('orient', 'auto');
+  const afterPath = document.createElementNS(SVG_NS, 'path');
+  afterPath.setAttribute('d', 'M0,0 L10,3.5 L0,7 z');
+  afterPath.setAttribute('fill', 'var(--priority-after-edge, #E67E22)');
+  afterMarker.appendChild(afterPath);
+  defs.appendChild(afterMarker);
+
   svg.appendChild(defs);
 
   // Build node lookup
@@ -223,12 +238,15 @@ export function renderGraph(opts: PriorityRenderOpts): void {
     if (s.x === undefined || s.y === undefined || t.x === undefined || t.y === undefined) continue;
 
     const line = document.createElementNS(SVG_NS, 'line');
-    line.setAttribute('x1', String(s.x));
-    line.setAttribute('y1', String(s.y));
-    line.setAttribute('x2', String(t.x));
-    line.setAttribute('y2', String(t.y));
-    line.setAttribute('class', edge.kind === 'needs' ? 'priority-edge priority-needs-edge' : 'priority-edge priority-after-edge');
-    if (edge.kind === 'needs') line.setAttribute('marker-end', 'url(#needs-arrow)');
+    // Edge direction: dependent (target) → prerequisite (source).
+    // "A needs B" = A (dependent/target) depends on B (prerequisite/source).
+    line.setAttribute('x1', String(t.x));
+    line.setAttribute('y1', String(t.y));
+    line.setAttribute('x2', String(s.x));
+    line.setAttribute('y2', String(s.y));
+    const isNeeds = edge.kind === 'needs';
+    line.setAttribute('class', isNeeds ? 'priority-edge priority-needs-edge' : 'priority-edge priority-after-edge');
+    line.setAttribute('marker-end', isNeeds ? 'url(#needs-arrow)' : 'url(#after-arrow)');
     zoomLayer.appendChild(line);
   }
 
