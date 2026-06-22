@@ -21,6 +21,7 @@ function node(id: string, x: number, y: number): LayoutNode {
     kind: 'slice',
     status: 'open',
     actionability: 'actionable',
+    score: 0,
     rank: 0,
     blockers: [],
     x,
@@ -59,6 +60,7 @@ describe('layoutBBox', () => {
       kind: 'slice',
       status: 'open',
       actionability: 'actionable',
+      score: 0,
       rank: 0,
       blockers: [],
     };
