@@ -1,0 +1,29 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 21
+slug = "audit-and-improve-shipped-memory-corpus-currency-completeness-onboarding-cross-linking"
+title = "Audit and improve shipped memory corpus (currency, completeness, onboarding, cross-linking)"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-22"
+updated = "2026-06-22"
+tags = ["memory", "shipped-memory", "audit", "onboarding", "documentation"]
+
+# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
+# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "drift"
+target = "mem.pattern.distribution.shipped-memory-authoring: the authoring flow for shipped memories"
+
+[[relation]]
+label = "drift"
+target = "IMP-148: MCP tool help gaps — the response-field section feeds into this audit"
