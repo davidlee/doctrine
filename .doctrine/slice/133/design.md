@@ -109,7 +109,8 @@ a coefficient-weighted share of the value it unlocks — the **value of optional
 - **`needs`-leverage — recursive.** Completing N unblocks its whole downstream cone, so
   N accrues the *decayed* intrinsic value of everything that transitively needs it. Safe
   to recurse because the `needs` overlay is the acyclic ordering backbone (§3, D8).
-  `dep_coeff ∈ (0,1]` is a per-hop **retention** factor: along a *single* path a dependent
+  `dep_coeff ∈ [0,1]` (where `0`, and any value clamped from `≤0`, explicitly DISABLES
+  leverage) is a per-hop **retention** factor: above `0`, along a *single* path a dependent
   at depth k contributes `dep_coeff^k · base`, so depth alone decays. It does **not** bound
   total magnitude — a reconvergent fan reaches a node by many paths, so leverage is a finite
   **path-sum** that can exceed any single `base` and grow with breadth (accepted, §5.5).
@@ -125,7 +126,7 @@ a coefficient-weighted share of the value it unlocks — the **value of optional
   continuous under-signal — the strict-`<` / ULP form, no manufactured ties). Deferred as
   a weight class; escalate only on evidence the dumb constraint mis-sequences (D10, OQ-4).
 
-`value_dim = (value × kind_weight × Σ tag_coeff) / estimate_midpoint`
+`value_dim = (coefficients.value × value × kind_weight × Σ tag_coeff) / estimate_midpoint`
 `risk_dim  = exposure × risk_coeff` (presence-gated by the `[facet]`; non-risk → 0)
 
 Absent facets collapse to the identity: value absent → `value_dim = 0`; estimate
@@ -171,9 +172,10 @@ pub(crate) struct PriorityConfig {
     tag_coefficients: BTreeMap<String, f64>,    // lookup default 1.0 (unused this slice)
     consequence: ConsequenceCoeffs,             // { dep_coeff, ref_coeff } — see below
 }
-// dep_coeff: RECURSIVE retention, clamped to (0, 1] at load. ≤1 makes each hop *along a
-//   path* a decay (dep_coeff^k at depth k); >1 would let a single path amplify with depth.
-//   The (0,1] DOMAIN is scoring policy (ADR-015 owns role+domain — F-4/RV-132); it does NOT
+// dep_coeff: RECURSIVE retention, clamped to [0, 1] at load (0 = explicit disable). ≤1 makes
+//   each hop *along a path* a decay (dep_coeff^k at depth k); >1 would let a single path
+//   amplify with depth.
+//   The [0,1] DOMAIN is scoring policy (ADR-015 owns role+domain — F-4/RV-132); it does NOT
 //   bound total leverage under fan-out (a path-sum, F-1/RV-132) — overflow is fenced by
 //   COEFF_MAX, not the domain. ≤0 disables leverage. Default VALUE illustrative (impl owns
 //   the number), e.g. 0.5.
@@ -493,7 +495,7 @@ maintainability coefficient defaulting to 0.0).
   structural precedence (which cordage already realizes) is both simpler and tie-free.
   Escalation path if the dumb constraint ever mis-sequences: re-introduce seq as a
   *diminished, rank-modulated optionality weight* (lower than `needs`) — deferred, evidence-
-  gated (OQ-4). Coefficients are asymmetric by structure: `dep_coeff ∈ (0,1]` (recursive
+  gated (OQ-4). Coefficients are asymmetric by structure: `dep_coeff ∈ [0,1]` (recursive
   retention — per-path decay, though fan-out still sums, F-1), `ref_coeff` flat-non-negative
   (one-hop, no compounding).
 
@@ -505,11 +507,11 @@ semantics; the two-pass model; **consequence = recursive `needs`-leverage (D8) +
 one-hop `ref`-optionality (D9)**; seq-as-structural-constraint (D10); the
 mint-vs-display ordering rule (I3); the `[priority]` config shape + forward-compat rule;
 the sort contract (survey/next/explain); **and the coefficient role/domain split —
-`dep_coeff` a recursive retention factor in `(0,1]`, `ref_coeff` a flat non-negative one-hop
+`dep_coeff` a recursive retention factor in `[0,1]`, `ref_coeff` a flat non-negative one-hop
 weight, seq no weight class — because the domains (not just the values) encode the
 recursive-vs-one-hop policy that makes D8/D9 valid (F-4/RV-132).** Implementation-owned (not
 in the ADR, tunable freely): the coefficient *default numbers* (e.g. `dep_coeff = 0.5` — the
-value, never the `(0,1]` domain), kind-weight defaults, tag-coeff examples, `COEFF_MAX`, and
+value, never the `[0,1]` domain), kind-weight defaults, tag-coeff examples, `COEFF_MAX`, and
 the `total_cmp` / silent-clamp / condensation mechanics.
 
 ## 8. Risks & Mitigations
@@ -643,7 +645,7 @@ mechanics below are NOT yet externally reviewed:
   into a transitive, depth-decayed leverage term over the acyclic `needs` backbone, and a
   flat one-hop optionality term over the cyclic-capable lineage overlays. Resolves the
   cycle question as "which edges may accumulate *recursively*" (only the acyclic backbone),
-  not a calculation wrinkle. Coefficients become asymmetric: `dep_coeff ∈ (0,1]` retention,
+  not a calculation wrinkle. Coefficients become asymmetric: `dep_coeff ∈ [0,1]` retention,
   `ref_coeff` flat.
 - **Seq stays a structural constraint (D10).** The score-clamp temptation is tie-prone
   only when non-strict; strict (`<`/ULP) precedence — which cordage's `OrderSpec` already

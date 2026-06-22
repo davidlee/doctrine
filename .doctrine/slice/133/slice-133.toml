@@ -1,9 +1,9 @@
 id = 133
 slug = "multi-dimensional-priority-scoring"
 title = "Multi-dimensional priority scoring for survey/next"
-status = "ready"
+status = "reconcile"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-22"
 
 [relationships]
 needs = ["SL-132"]                      # slice→work hard prerequisite

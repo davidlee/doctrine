@@ -1,0 +1,50 @@
+memory_uid = "mem_019eecae25a877839459a58737bf17f2"
+memory_key = "mem.fact.cordage.in-edges-excludes-evicted"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "cordage in_edges already excludes evicted edges"
+summary = "cordage in_edges/out_edges(overlay) already exclude Evict-evicted edges; provenance().evictions() still lists them. Subtracting evictions from in_edges is a no-op safeguard today."
+created = "2026-06-22"
+updated = "2026-06-22"
+
+[scope]
+paths = ["crates/cordage/src/lib.rs", "src/priority/surface.rs"]
+globs = []
+commands = []
+tags = ["cordage", "priority"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2034212570ca79bcc104a4f192dd06c5601b2242"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f55c66c281e8a9472d1cb880a951bc6e08ff9c81daf8a2a0ff995eb20aad4a97"
+base_commit = "280fa22c23531bc25c25a5b4d170b5f1bb2e03eb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-133"
+
+[[source]]
+kind = "review"
+ref = "RV-132"
+

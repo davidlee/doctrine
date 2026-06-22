@@ -1,0 +1,61 @@
+id    = 138
+slug  = "reconciliation-audit-sl-133-priority-scoring-phase-0105-rv-137"
+title = "Reconciliation audit — SL-133 priority scoring (PHASE-01..05 + RV-137)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-133"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "ADR-015 ratifies dep_coeff (0,1] but code+design treat ≤0 as the disable sentinel [0,1]"
+detail = 'Governance lag (RV-137 F-3, re-confirmed on the candidate). config.rs clamp_dep + tests treat dep_coeff ≤0 as DISABLE (→0.0); design §5.2/§7 say "≤0 disables leverage". ADR-015 §lines 80-81/125-127 still ratify the domain as (0,1]. Code+design are the coherent reading; the ADR wording is stale. Governance change — route to /reconcile as an ADR-015 amendment (REV): ratify [0,1] with 0 (and any clamped ≤0) the explicit disable sentinel. No code change.'
+disposition = "verified"
+response = "Confirmed governance lag. Routed to /reconcile: amend ADR-015 (REV) to ratify dep_coeff domain [0,1] with 0 (and clamped ≤0) the explicit disable sentinel; align design §5.2/§7 wording. No code change. Recorded in the Reconciliation Brief (governance/spec REV)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "F-4 value_dim-formula doc edits live on the dispatch branch; must reconcile onto canonical canon"
+detail = "RV-137 F-4 added `coefficients.value ×` to the value_dim formula in .doctrine/slice/133/design.md §5.1 and .doctrine/adr/015/adr-015.md, committed on dispatch/133 @3ddeb307 (not on edge). Code already applies coefficients.value (correct). The authored design.md edit is per-slice (lands via the candidate→main integrate at close); the ADR-015 formula edit is governance and should be reconciled coherently with F-1's ADR-015 amendment so a single REV carries both ADR-015 changes. Route to /reconcile."
+disposition = "verified"
+response = "Routed to /reconcile. design.md §5.1 edit is per-slice (integrates via candidate→main at close). The ADR-015 value_dim-formula edit folds into the same ADR-015 REV as F-1 (one amendment carries both the dep_coeff domain and the coefficients.value formula fix). Recorded in the Reconciliation Brief."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "web/map TS cutover (consequence→score) is unverifiable in the offline jail"
+detail = "The JSON field rename ActionabilityNode.consequence→score broke two web consumers; the orchestrator cut them over: web/map/src/render.ts (actionability table cell+header), priority.ts (graph score badge), types.ts (added score:number), priority.css (badge class). No node_modules exist anywhere in the jail, so eslint/tsc/vite cannot run — the edits are hand-verified and type-aligned only, not compiler-checked. The dist embed is built out-of-band; CI compiles TS. Verification gap is environmental, not a code defect."
+disposition = "tolerated"
+response = "Accepted environmental constraint. No node_modules in the offline jail → eslint/tsc/vite cannot run on web/map. The TS cutover is a mechanical field rename, hand-verified and type-aligned (added score:number to the type, read node.score.toFixed(1)); CI compiles TS and rebuilds the dist embed out-of-band. No durable defect; left as a known verification gap."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "design §5.4 prescribes a seq-eviction subtraction that is empirically a no-op"
+detail = """design §5.4 specifies "surviving seq edges = seq_overlay minus provenance().evictions()". Empirically cordage's in_edges(seq_overlay) already excludes Evict-evicted edges (provenance().evictions() still lists them). The next-sort keeps the explicit subtraction as a design-aligned safeguard (no-op today, correct if cordage's enumeration ever changes). VT-7(c) passes either way. Recorded as mem.fact.cordage.in-edges-excludes-evicted. No change required; optional design annotation."""
+disposition = "aligned"
+response = "Safeguard retained intentionally; behaviour correct. The subtraction is a no-op given current cordage in_edges semantics but defends the design-§5.4 contract if enumeration changes. Captured as mem.fact.cordage.in-edges-excludes-evicted. No reconcile action required; design wording already matches the (defensive) implementation."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Conformance PASS — score cutover + next frontier sort match design §5.4; full suite green"
+detail = "Positive closure finding. On the admitted candidate dd099115: mint orders by base.total() only (I3, no score feedback); survey sorts act→score desc→id; next uses an induced-frontier Kahn sort over the actionable set with surviving-seq precedence and (score desc,id) ready-set — not cordage order_key (RV-132 F-3). Old consequence:u32 field+pre-pass+counts_toward_consequence removed (EX-2). No expect(dead_code) suppression survives (EX-5). policy_version priority.v3. cargo clippy 0 warn; cargo test 2766 passed/0 failed; VT-5/VT-7/VA-1 green."
+disposition = "aligned"
+response = "Conformance confirmed on the admitted candidate. Implementation matches design §5.4 / I3 / RV-132 F-3 / EX-2 / EX-5; full suite green (2766/0), clippy clean, VT-5/VT-7/VA-1 satisfied. No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
