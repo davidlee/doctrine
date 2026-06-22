@@ -191,34 +191,62 @@ export function renderGraph(opts: PriorityRenderOpts): void {
   svg.setAttribute('width', '100%');
   svg.setAttribute('height', '100%');
 
-  // Arrow marker definitions
+  // Arrow marker definitions — two families per color:
+  //   -diag (10×7 oblong): diagonal edges, where the wider shape reads naturally
+  //   base  (7×7 square):  near-horizontal/vertical edges, rotation-invariant
   const defs = document.createElementNS(SVG_NS, 'defs');
 
-  const needsMarker = document.createElementNS(SVG_NS, 'marker');
-  needsMarker.setAttribute('id', 'needs-arrow');
-  needsMarker.setAttribute('markerWidth', '7');
-  needsMarker.setAttribute('markerHeight', '7');
-  needsMarker.setAttribute('refX', '10');
-  needsMarker.setAttribute('refY', '3.5');
-  needsMarker.setAttribute('orient', 'auto');
-  const needsPath = document.createElementNS(SVG_NS, 'path');
-  needsPath.setAttribute('d', 'M0,0 L7,3.5 L0,7 z');
-  needsPath.setAttribute('fill', 'var(--priority-needs-edge, #C0392B)');
-  needsMarker.appendChild(needsPath);
-  defs.appendChild(needsMarker);
+  const mkNeedsDiag = document.createElementNS(SVG_NS, 'marker');
+  mkNeedsDiag.setAttribute('id', 'needs-arrow-diag');
+  mkNeedsDiag.setAttribute('markerWidth', '12');
+  mkNeedsDiag.setAttribute('markerHeight', '7');
+  mkNeedsDiag.setAttribute('refX', '14');
+  mkNeedsDiag.setAttribute('refY', '3.5');
+  mkNeedsDiag.setAttribute('orient', 'auto');
+  const pNeedsDiag = document.createElementNS(SVG_NS, 'path');
+  pNeedsDiag.setAttribute('d', 'M0,0 L12,3.5 L0,7 z');
+  pNeedsDiag.setAttribute('fill', 'var(--priority-needs-edge, #C0392B)');
+  mkNeedsDiag.appendChild(pNeedsDiag);
+  defs.appendChild(mkNeedsDiag);
 
-  const afterMarker = document.createElementNS(SVG_NS, 'marker');
-  afterMarker.setAttribute('id', 'after-arrow');
-  afterMarker.setAttribute('markerWidth', '7');
-  afterMarker.setAttribute('markerHeight', '7');
-  afterMarker.setAttribute('refX', '10');
-  afterMarker.setAttribute('refY', '3.5');
-  afterMarker.setAttribute('orient', 'auto');
-  const afterPath = document.createElementNS(SVG_NS, 'path');
-  afterPath.setAttribute('d', 'M0,0 L7,3.5 L0,7 z');
-  afterPath.setAttribute('fill', 'var(--priority-after-edge, #E67E22)');
-  afterMarker.appendChild(afterPath);
-  defs.appendChild(afterMarker);
+  const mkNeeds = document.createElementNS(SVG_NS, 'marker');
+  mkNeeds.setAttribute('id', 'needs-arrow');
+  mkNeeds.setAttribute('markerWidth', '7');
+  mkNeeds.setAttribute('markerHeight', '7');
+  mkNeeds.setAttribute('refX', '10');
+  mkNeeds.setAttribute('refY', '3.5');
+  mkNeeds.setAttribute('orient', 'auto');
+  const pNeeds = document.createElementNS(SVG_NS, 'path');
+  pNeeds.setAttribute('d', 'M0,0 L7,3.5 L0,7 z');
+  pNeeds.setAttribute('fill', 'var(--priority-needs-edge, #C0392B)');
+  mkNeeds.appendChild(pNeeds);
+  defs.appendChild(mkNeeds);
+
+  const mkAfterDiag = document.createElementNS(SVG_NS, 'marker');
+  mkAfterDiag.setAttribute('id', 'after-arrow-diag');
+  mkAfterDiag.setAttribute('markerWidth', '12');
+  mkAfterDiag.setAttribute('markerHeight', '7');
+  mkAfterDiag.setAttribute('refX', '14');
+  mkAfterDiag.setAttribute('refY', '3.5');
+  mkAfterDiag.setAttribute('orient', 'auto');
+  const pAfterDiag = document.createElementNS(SVG_NS, 'path');
+  pAfterDiag.setAttribute('d', 'M0,0 L12,3.5 L0,7 z');
+  pAfterDiag.setAttribute('fill', 'var(--priority-after-edge, #E67E22)');
+  mkAfterDiag.appendChild(pAfterDiag);
+  defs.appendChild(mkAfterDiag);
+
+  const mkAfter = document.createElementNS(SVG_NS, 'marker');
+  mkAfter.setAttribute('id', 'after-arrow');
+  mkAfter.setAttribute('markerWidth', '7');
+  mkAfter.setAttribute('markerHeight', '7');
+  mkAfter.setAttribute('refX', '10');
+  mkAfter.setAttribute('refY', '3.5');
+  mkAfter.setAttribute('orient', 'auto');
+  const pAfter = document.createElementNS(SVG_NS, 'path');
+  pAfter.setAttribute('d', 'M0,0 L7,3.5 L0,7 z');
+  pAfter.setAttribute('fill', 'var(--priority-after-edge, #E67E22)');
+  mkAfter.appendChild(pAfter);
+  defs.appendChild(mkAfter);
 
   svg.appendChild(defs);
 
@@ -251,9 +279,12 @@ export function renderGraph(opts: PriorityRenderOpts): void {
     line.setAttribute('y1', String(t.y));
     line.setAttribute('x2', String(s.x - pad * ux));
     line.setAttribute('y2', String(s.y - pad * uy));
+    const slope = Math.abs(dy / (dx === 0 ? 1e-9 : dx));
+    const isStraight = slope < 0.5 || slope > 2.0;
+    const suffix = isStraight ? '' : '-diag';
     const isNeeds = edge.kind === 'needs';
     line.setAttribute('class', isNeeds ? 'priority-edge priority-needs-edge' : 'priority-edge priority-after-edge');
-    line.setAttribute('marker-end', isNeeds ? 'url(#needs-arrow)' : 'url(#after-arrow)');
+    line.setAttribute('marker-end', `url(#${isNeeds ? 'needs' : 'after'}-arrow${suffix})`);
     zoomLayer.appendChild(line);
   }
 
