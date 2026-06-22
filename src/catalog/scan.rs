@@ -153,6 +153,22 @@ pub(crate) struct ScannedEntity {
     /// and pushes an `Error` diagnostic. Consumed by the priority graph base
     /// pre-pass (PHASE-04).
     pub(crate) risk: Option<RiskFacet>,
+    /// The entity's body prose, read from its `.md` file.
+    /// `None` when `ScanMode::default()` or when the `.md` file is missing.
+    pub(crate) body: Option<String>,
+}
+
+/// Controls optional body reading during entity scan.
+/// Default is bodyless (backwards-compatible).
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ScanMode {
+    pub include_bodies: bool,
+}
+
+impl ScanMode {
+    pub(crate) const fn include_bodies() -> Self {
+        Self { include_bodies: true }
+    }
 }
 
 /// The all-kind raw scan (design §5.2 — the reusable seam factored out of
@@ -172,6 +188,7 @@ pub(crate) struct ScannedEntity {
 pub(crate) fn scan_entities(
     root: &Path,
     diagnostics: &mut Vec<CatalogDiagnostic>,
+    mode: ScanMode,
 ) -> anyhow::Result<Vec<ScannedEntity>> {
     let mut out = Vec::new();
     for kref in integrity::KINDS {
@@ -206,6 +223,11 @@ pub(crate) fn scan_entities(
                 }
             };
             let (estimate, value, risk) = read_facets(root, kref, id, diagnostics);
+            let body = if mode.include_bodies {
+                read_body(root, kref.kind, id, diagnostics)
+            } else {
+                None
+            };
             out.push(ScannedEntity {
                 key: EntityKey { prefix, id },
                 kind: kref.kind,
@@ -215,6 +237,7 @@ pub(crate) fn scan_entities(
                 estimate,
                 value,
                 risk,
+                body,
             });
         }
     }
@@ -273,6 +296,35 @@ fn read_facets(
         diagnostics,
     );
     (estimate, value, risk)
+}
+
+/// Read the entity's body `.md` file. Missing file → `None`
+/// (no diagnostic — many kinds legitimately lack bodies).
+/// IO/UTF-8 errors → diagnostic + `None` (scan continues).
+fn read_body(
+    root: &Path,
+    kind: &'static entity::Kind,
+    id: u32,
+    diagnostics: &mut Vec<CatalogDiagnostic>,
+) -> Option<String> {
+    let path = entity::id_path(root, kind, id, entity::Ext::Md);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() { None } else { Some(text) }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            diagnostics.push(CatalogDiagnostic {
+                file: path,
+                entity_key: None,
+                field: None,
+                message: format!("failed to read body: {e}"),
+                severity: Severity::Error,
+            });
+            None
+        }
+    }
 }
 
 /// Parse ONE optional facet keyed `field` off the entity's parsed toml, isolating
@@ -466,7 +518,7 @@ mod tests {
         seed_slice(root, 1, &[]);
         seed_adr(root, 2, &[]);
 
-        let scanned = scan_entities(root, &mut vec![]).unwrap();
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let keys = canonical_keys(&scanned);
 
         // KINDS-table order: SL before ADR. Within SL: id ascending.
@@ -485,7 +537,7 @@ mod tests {
         let root = dir.path();
         seed_fixture(root);
 
-        let scanned = scan_entities(root, &mut vec![]).unwrap();
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         // Order is proven by T2; here we assert shape on the first entity.
         let sl001 = &scanned[0];
         // Shape: (key.canonical(), kind.prefix, status, title, outbound tuples).
@@ -541,7 +593,7 @@ mod tests {
 
         let pg = crate::priority::graph::build(root).unwrap();
         // Node count equals scanned entity count.
-        let scanned = scan_entities(root, &mut vec![]).unwrap();
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         assert_eq!(pg.attrs.len(), scanned.len());
         // Every scanned key resolves in the projection.
         let scanned_keys: std::collections::BTreeSet<EntityKey> =
@@ -798,7 +850,7 @@ mod tests {
         write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         // Only SL-001 returned.
         assert_eq!(scanned.len(), 1);
@@ -836,7 +888,7 @@ mod tests {
         write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         // Only SL-001 returned.
         assert_eq!(scanned.len(), 1);
@@ -874,7 +926,7 @@ mod tests {
         }
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         assert!(scanned.is_empty(), "no entities should be returned");
         assert_eq!(diags.len(), 3, "one diagnostic per malformed entity");
@@ -898,7 +950,7 @@ mod tests {
         seed_slice(root, 3, &[]);
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         assert_eq!(scanned.len(), 2);
         let keys: Vec<String> = scanned.iter().map(|e| e.key.canonical()).collect();
@@ -971,7 +1023,7 @@ mod tests {
         seed_slice(root, 2, &[]);
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         let sl001 = &scanned[0];
         assert_eq!(sl001.key.canonical(), "SL-001");
@@ -1008,7 +1060,7 @@ mod tests {
         );
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         // The node survives, with the sibling facet intact.
         assert_eq!(scanned.len(), 1);
@@ -1047,7 +1099,7 @@ mod tests {
         seed_adr_with_facets(root, 1, "estimate = 7\n");
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         assert_eq!(scanned.len(), 1);
         assert!(scanned[0].estimate.is_none());
@@ -1077,7 +1129,7 @@ mod tests {
         write(root, ".doctrine/adr/001/adr-001.md", "body\n");
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         let adr = scanned
             .iter()
@@ -1110,7 +1162,7 @@ mod tests {
         );
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags).unwrap();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         // The node survives, with sibling facets intact.
         assert_eq!(scanned.len(), 1);
@@ -1144,6 +1196,33 @@ mod tests {
             d.message.contains("invalid likelihood"),
             "leaf message verbatim: {}",
             d.message
+        );
+    }
+
+    // == SL-141 PHASE-02: body reading tests ==
+
+    #[test]
+    fn scan_mode_default_produces_no_body() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[]);
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let e = scanned.iter().find(|s| s.key.id == 1).unwrap();
+        assert!(e.body.is_none(), "default mode should not read bodies");
+    }
+
+    #[test]
+    fn scan_mode_include_bodies_reads_body() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[]);
+        let scanned = scan_entities(root, &mut vec![], ScanMode::include_bodies()).unwrap();
+        let e = scanned.iter().find(|s| s.key.id == 1).unwrap();
+        assert!(e.body.is_some(), "include_bodies mode should read body");
+        // The body should contain the seeded markdown.
+        assert!(
+            e.body.as_deref().unwrap().contains("scope"),
+            "body should contain seeded markdown"
         );
     }
 }

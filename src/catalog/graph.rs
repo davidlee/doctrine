@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use super::hydrate::{Catalog, CatalogEdge, CatalogKey, EdgeTarget, Units};
 #[cfg(test)]
-use super::scan::EntityKey;
+use super::scan::{EntityKey, ScanMode};
 
 // ---------------------------------------------------------------------------
 // CatalogGraph — a pure projection of Catalog into BTreeMap + Vec
@@ -124,7 +124,7 @@ mod tests {
     /// Build a CatalogGraph from a small fixture via scan_catalog.
     fn build_graph(root: &Path) -> CatalogGraph {
         let catalog =
-            crate::catalog::hydrate::scan_catalog(root).expect("scan_catalog should succeed");
+            crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan_catalog should succeed");
         CatalogGraph::from_catalog(&catalog)
     }
 
@@ -421,7 +421,7 @@ mod tests {
         );
 
         let catalog =
-            crate::catalog::hydrate::scan_catalog(root).expect("scan_catalog should succeed");
+            crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan_catalog should succeed");
         let graph = CatalogGraph::from_catalog(&catalog);
 
         let node = node_for(&graph, "ADR-001");
@@ -455,7 +455,7 @@ mod tests {
         );
 
         let catalog =
-            crate::catalog::hydrate::scan_catalog(root).expect("scan_catalog should succeed");
+            crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).expect("scan_catalog should succeed");
         let entity = catalog
             .entities
             .iter()
