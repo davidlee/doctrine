@@ -1,0 +1,16 @@
+id    = 144
+slug  = "audit-wire-tag-coefficients-into-priority-scoring"
+title = "SL-142 audit — wire tag coefficients into priority scoring"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-142"
+
+# Zero-finding review — no [[finding]] tables.
+# The audit concluded no findings; reconciliation outcome is recorded in review-144.md.
