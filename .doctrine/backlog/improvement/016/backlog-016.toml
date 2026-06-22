@@ -23,3 +23,10 @@ target = "PRD-013"
 [[relation]]
 label = "specs"
 target = "PRD-012"
+
+[value]
+value = 1.1
+
+[estimate]
+lower = 1.0
+upper = 3.0
