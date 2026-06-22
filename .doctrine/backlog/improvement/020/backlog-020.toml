@@ -16,6 +16,13 @@ needs    = []                   # item→item hard prerequisite
 after    = [{ to = "ISS-003", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
+[value]
+value = 2.0
+
 [[relation]]
 label = "slices"
 target = "SL-036"
+
+[[relation]]
+label = "slices"
+target = "SL-140"
