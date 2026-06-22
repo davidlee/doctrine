@@ -6,7 +6,7 @@ slug = "consumption-surfaces-program-estimate-value-scoring"
 title = "Consumption surfaces program: estimate, value, and scoring outward pipeline"
 status = "open"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-23"
 tags = ["consumption-surfaces", "estimate", "program", "scoring", "value"]
 
 [relationships]
@@ -77,4 +77,12 @@ target = "SL-138"
 [[relation]]
 label = "related"
 target = "IMP-142"
+
+[[relation]]
+label = "related"
+target = "IMP-021"
+
+[[relation]]
+label = "related"
+target = "IMP-147"
 

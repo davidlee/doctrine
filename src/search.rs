@@ -17,7 +17,7 @@ use crate::integrity;
 use crate::lexical::{
     Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker, tokenize, tokenize_with_spans,
 };
-use crate::listing::Format;
+use crate::listing::{Column, ColumnPaint, Format, RenderOpts, render_columns};
 
 // ── KindSelector ──────────────────────────────────────────────────────────
 
@@ -145,6 +145,10 @@ pub(crate) fn entity_lex_doc(entity: &CatalogEntity) -> LexDoc {
 
 // ── snippet ───────────────────────────────────────────────────────────────
 
+/// Chars of context kept on each side of the first query-token match in a
+/// `--context` snippet. Single source for both the table band and the JSON hit.
+const SNIPPET_CONTEXT_CHARS: usize = 100;
+
 /// Extract a context window around the first query-token match.
 /// Returns empty string if no query token found in `doc_text`.
 pub(crate) fn snippet(doc_text: &str, query: &str, context_chars: usize) -> String {
@@ -190,7 +194,7 @@ pub(crate) struct SearchArgs {
     pub(crate) query: String,
 
     /// Replace default search kinds (comma-separated prefixes/aliases)
-    #[arg(short = 'k', long = "kinds")]
+    #[arg(short = 'k', long = "kinds", visible_alias = "kind")]
     pub(crate) kinds: Option<String>,
 
     /// Add kinds to the effective set (can be repeated)
@@ -252,7 +256,7 @@ fn build_json_hit(
         }
         if opts.context {
             let body = e.body.as_deref().unwrap_or(&e.title);
-            let snip = snippet(body, &opts.query, 40);
+            let snip = snippet(body, &opts.query, SNIPPET_CONTEXT_CHARS);
             if !snip.is_empty() {
                 map.insert("snippet".to_string(), serde_json::json!(snip));
             }
@@ -261,9 +265,93 @@ fn build_json_hit(
     serde_json::Value::Object(map)
 }
 
+// ── SearchRow ──────────────────────────────────────────────────────────────
+
+/// One rendered row in the search results table.
+pub(crate) struct SearchRow {
+    id: String,
+    kind: String,
+    status: String,
+    title: String,
+}
+
+const SEARCH_COLUMNS: [Column<SearchRow>; 4] = [
+    Column {
+        name: "id",
+        header: "ID",
+        cell: |r| r.id.clone(),
+        paint: ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+    },
+    Column {
+        name: "kind",
+        header: "Kind",
+        cell: |r| r.kind.clone(),
+        paint: ColumnPaint::None,
+    },
+    Column {
+        name: "status",
+        header: "Status",
+        cell: |r| r.status.clone(),
+        paint: ColumnPaint::ByValue(|r: &SearchRow| crate::listing::status_hue(&r.status)),
+    },
+    Column {
+        name: "title",
+        header: "Title",
+        cell: |r| r.title.clone(),
+        paint: ColumnPaint::Alternate([crate::listing::TITLE_EVEN, crate::listing::TITLE_ODD]),
+    },
+];
+
+/// `--context` snippet block: muted sage text on a dark green band, painted across
+/// the full terminal width so the prose reads as a distinct block under each table
+/// row. Emitted only when `render.color` is on, so piped output stays byte-clean.
+const SNIPPET_FG: owo_colors::DynColors = owo_colors::DynColors::Rgb(100, 125, 105);
+const SNIPPET_BG: owo_colors::DynColors = owo_colors::DynColors::Rgb(10, 30, 14);
+
+/// True when a rendered table line *begins* a logical row — its first column (the
+/// ID cell, everything before the first `│` separator) carries non-whitespace.
+/// comfy-table blanks every non-wrapping column on a wrapped cell's continuation
+/// lines, so a multi-line title's continuations have an all-whitespace first
+/// column. Used to attach each `--context` snippet after the LAST physical line of
+/// its entity rather than after every wrapped line.
+fn is_table_row_start(line: &str) -> bool {
+    let head = line.split('\u{2502}').next().unwrap_or(line);
+    head.chars().any(|c| !c.is_whitespace())
+}
+
+/// Write one `--context` snippet as a full-width band beneath its table row. An
+/// empty snippet writes nothing. Whitespace is collapsed to a single line so a body
+/// newline can't fracture the band, then the line is padded to the terminal width
+/// (when known) so the dark-green band spans the row. Colour is gated on
+/// `render.color`, keeping piped output byte-clean.
+fn write_context_snippet(snip: &str, render: RenderOpts) -> std::io::Result<()> {
+    if snip.is_empty() {
+        return Ok(());
+    }
+    let flat = snip.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut out = std::io::stdout();
+    if render.color {
+        use owo_colors::OwoColorize;
+        let content = format!("  {flat}");
+        // chars()-count is a fine width proxy for this ASCII-leaning prose.
+        let padded = match render.term_width {
+            Some(w) if usize::from(w) > content.chars().count() => {
+                let pad = usize::from(w) - content.chars().count();
+                let mut s = content;
+                s.extend(std::iter::repeat_n(' ', pad));
+                s
+            }
+            _ => content,
+        };
+        writeln!(out, "{}", padded.color(SNIPPET_FG).on_color(SNIPPET_BG))
+    } else {
+        writeln!(out, "  {flat}")
+    }
+}
+
 // ── run() ─────────────────────────────────────────────────────────────────
 
-pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
+pub(crate) fn run(mut args: SearchArgs, render: RenderOpts) -> Result<()> {
     let path = args.path.take();
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let selector = KindSelector::resolve(args.kinds.as_deref(), &args.with, &args.no)?;
@@ -317,40 +405,71 @@ pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
 
     match args.format {
         Format::Table => {
-            let header = format!(
-                "{:12} {:8} {:24} {:>8}   {}",
-                "ID", "Kind", "Status", "Score", "Title"
-            );
-            writeln!(std::io::stdout(), "{header}")?;
-            let separator = "-".repeat(80);
-            writeln!(std::io::stdout(), "{separator}")?;
-            for (id, score) in &page {
-                if let Some(entity) = entity_map.get(id) {
-                    let status = entity.status.as_deref().unwrap_or("-");
-                    let kind_label = match &entity.key {
-                        CatalogKey::Numbered(k) => k.prefix.to_lowercase(),
-                        CatalogKey::Memory(_) => "mem".to_string(),
-                    };
-                    writeln!(
-                        std::io::stdout(),
-                        "{:12} {:8} {:24} {:>8}   {}",
-                        id,
-                        kind_label,
-                        status,
-                        score,
-                        entity.title
-                    )?;
-                    if args.context {
-                        let body = entity.body.as_deref().unwrap_or(&entity.title);
-                        let snip = snippet(body, &args.query, 40);
-                        if !snip.is_empty() {
-                            writeln!(std::io::stdout(), "  {snip}")?;
-                        }
-                    }
-                }
+            // Build rows + aligned snippets in one pass so they stay index-parallel
+            // with the rendered metadata lines (a `filter_map` that drops a row would
+            // desync the snippet interleave below).
+            let mut rows: Vec<SearchRow> = Vec::with_capacity(page.len());
+            let mut snippets: Vec<String> = Vec::with_capacity(page.len());
+            for (id, _score) in &page {
+                let Some(entity) = entity_map.get(id) else {
+                    continue;
+                };
+                let status = entity.status.as_deref().unwrap_or("-");
+                let kind_label = match &entity.key {
+                    CatalogKey::Numbered(k) => k.prefix.to_uppercase(),
+                    CatalogKey::Memory(_) => "MEM".to_string(),
+                };
+                rows.push(SearchRow {
+                    id: id.clone(),
+                    kind: kind_label,
+                    status: status.to_string(),
+                    title: entity.title.clone(),
+                });
+                let snip = if args.context {
+                    let body = entity.body.as_deref().unwrap_or(&entity.title);
+                    snippet(body, &args.query, SNIPPET_CONTEXT_CHARS)
+                } else {
+                    String::new()
+                };
+                snippets.push(snip);
             }
+
+            let cols: Vec<&Column<SearchRow>> = SEARCH_COLUMNS.iter().collect();
+
+            let table = render_columns(&rows, &cols, render);
+
+            if args.context {
+                // Render the metadata at the real terminal width so long titles still
+                // WRAP, then attach each snippet after the LAST physical line of its
+                // entity. A wrapped title emits continuation lines with a blank first
+                // column; `is_table_row_start` detects a fresh row, which flushes the
+                // previous entity's snippet first (and the final entity's after the
+                // loop). `lines()` yields no trailing empty: first line is the header.
+                let mut lines = table.lines();
+                if let Some(header) = lines.next() {
+                    writeln!(std::io::stdout(), "{header}")?;
+                }
+                let mut pending: Option<usize> = None;
+                let mut next = 0usize;
+                for line in lines {
+                    if is_table_row_start(line) {
+                        if let Some(snip) = pending.and_then(|i| snippets.get(i)) {
+                            write_context_snippet(snip, render)?;
+                        }
+                        pending = Some(next);
+                        next += 1;
+                    }
+                    writeln!(std::io::stdout(), "{line}")?;
+                }
+                if let Some(snip) = pending.and_then(|i| snippets.get(i)) {
+                    write_context_snippet(snip, render)?;
+                }
+            } else {
+                writeln!(std::io::stdout(), "{table}")?;
+            }
+
             if total > 0 {
-                writeln!(std::io::stdout(), "\n{total} result(s)")?;
+                writeln!(std::io::stdout(), "{total} result(s)")?;
             } else {
                 writeln!(std::io::stdout(), "No results.")?;
             }

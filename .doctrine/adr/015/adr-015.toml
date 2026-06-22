@@ -6,7 +6,7 @@ slug = "multi-dimensional-priority-scoring"
 title = "Multi-dimensional priority scoring"
 status = "accepted"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-23"
 
 [relationships]
 # The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
