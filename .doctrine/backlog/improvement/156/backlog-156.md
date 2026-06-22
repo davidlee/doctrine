@@ -1,5 +1,7 @@
 # IMP-156: Add --spawn-from <BACKLOG-ID> flag to doctrine slice new
 
+This fulfills REQ-065: "Spawn a backlog item from a record without converting it into work."
+
 REQ-065 requires a record to be able to spawn a backlog item, recording a
 `spawns` relation on the record (inbound `spawned_by` derived).
 
@@ -16,5 +18,3 @@ This would:
 The `spawns` relation already exists in RELATION_RULES
 (`src/relation.rs`): record kinds (ASM/DEC/QUE/CON) → backlog kinds (ISS/IMP/CHR/RSK/IDE).
 Inbound `spawned_by` is derived.
-
-See REQ-065 (pending).
