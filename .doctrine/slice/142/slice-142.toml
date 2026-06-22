@@ -1,7 +1,7 @@
 id = 142
 slug = "tag-coefficient-scoring"
 title = "Wire tag coefficients into priority scoring"
-status = "ready"
+status = "done"
 created = "2026-06-22"
 updated = "2026-06-22"
 tags = []
