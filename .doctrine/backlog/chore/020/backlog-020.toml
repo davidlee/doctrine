@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 17
-slug = "worker-gate-gap-just-check-fails-in-forks-lint-js-needs-gitignored-node-modules-npx-vs-bun"
-title = "Worker gate gap: just check fails in forks (lint-js needs gitignored node_modules; npx vs bun)"
+id = 20
+slug = "gitignored-webmapdist-missing-from-worktree-forks-rustembed-compile-failures-in-coordination-tree"
+title = "Gitignored web/map/dist missing from worktree forks → RustEmbed compile failures in coordination tree"
 kind = "chore"
-status = "resolved"
-resolution = "fixed"
-created = "2026-06-20"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-22"
 updated = "2026-06-22"
-tags = ["next"]
+tags = ["area:dispatch", "area:worktree"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
