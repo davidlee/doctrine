@@ -508,7 +508,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => run_verify(path, &reference, allow_dirty),
         MemoryCommand::Validate { reference, path } => {
-            match run_validate(path, reference.as_deref()) {
+            match run_validate(path, reference.as_deref(), &mut io::stdout()) {
                 Ok(()) => Ok(()),
                 Err(e) if e.to_string().contains("validation warnings found") => {
                     // Exit with code 1 for validation warnings - this is the expected CLI behavior
@@ -3041,7 +3041,7 @@ pub(crate) fn run_verify(path: Option<PathBuf>, reference: &str, allow_dirty: bo
 /// `doctrine memory validate [REF]` — run advisory validation checks on memories.
 /// Three checks: dangling relations, stale verification, draft expiry.
 /// Exit 0 if clean, 1 if any warnings. Never writes to disk.
-pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>) -> Result<()> {
+pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>, writer: &mut dyn std::io::Write) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let items_root = root.join(MEMORY_ITEMS_DIR);
     let today = crate::clock::today();
@@ -3061,7 +3061,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>) -> Re
         for relation in &memory.relations {
             if validate_relation_target(&root, &relation.target).is_err() {
                 writeln!(
-                    io::stdout(),
+                    writer,
                     "{}: dangling: [[relation]] target \"{}\" not found",
                     memory.uid,
                     relation.target
@@ -3082,7 +3082,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>) -> Re
             && commits_behind > 0
         {
             writeln!(
-                io::stdout(),
+                writer,
                 "{}: stale: verified_sha {} commits behind HEAD on scoped paths",
                 memory.uid,
                 commits_behind
@@ -3097,7 +3097,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>) -> Re
             && days < 0
         {
             writeln!(
-                io::stdout(),
+                writer,
                 "{}: expired: draft past review_by {} ({} days ago)",
                 memory.uid,
                 memory.review_by,
