@@ -62,8 +62,9 @@ search` command that reuses the existing BM25 ranker.
 
 | File | Change |
 |------|--------|
-| `src/catalog/scan.rs` | Add `ScanMode` parameter + `body: Option<String>` to `ScannedEntity`; read `.md` when requested |
-| `src/catalog/hydrate.rs` | Carry `body` through to `CatalogEntity` |
+| `src/catalog/scan.rs` | Add `ScanMode` parameter + `body: Option<String>` to `ScannedEntity`; read `.md` when requested; body-read error policy (missing→None, error→diagnostic+None) |
+| `src/catalog/hydrate.rs` | Carry `body` through to `CatalogEntity`; serde-skip body from JSON |
+| `src/lexical.rs` | Add `tokenize_with_spans(&str) → Vec<TokenSpan>` (shared span authority); `tokenize` becomes a projection over it |
 | `src/search.rs` | New module: `KindSelector`, `entity_lex_doc`, `snippet`, CLI args, BM25 orchestration |
 | `src/main.rs` | Wire `Search` variant into `Commands` enum |
 | `src/commands/cli.rs` | Dispatch `Search` to `search::run` |

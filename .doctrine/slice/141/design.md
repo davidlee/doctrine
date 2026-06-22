@@ -11,9 +11,13 @@ search.rs
   ├── KindSelector::resolve(…)     → KindSelector  (pure)
   ├── entity_lex_doc(ent)          → LexDoc        (pure adapter)
   ├── build_corpus(kinds, root)    → Vec<LexDoc>   (impure: reads .md)
-  ├── snippet(body, query)         → Option<String> (pure)
+  ├── snippet(body, query)         → Option<String> (pure, uses lexical::tokenize_with_spans)
   ├── output_table / output_json   (listing facade)
   └── run(query, opts, root)       → Result<()>    (shell)
+
+lexical.rs
+  └── tokenize_with_spans          → Vec<TokenSpan>  (NEW — shared span authority)
+      tokenize                     → Vec<String>      (now a projection over tokenize_with_spans)
 ```
 
 Dependencies: `lexical` (leaf — `Bm25Ranker`, `LexDoc`, `LexicalCorpus`,
@@ -55,7 +59,12 @@ pub(crate) fn scan_entities(
 ```
 
 `ScannedEntity` gains `pub body: Option<String>`. Read from
-`entity::id_path(root, kref.kind, id, Ext::Md)` — missing file → `None`.
+`entity::id_path(root, kref.kind, id, Ext::Md)`. Body-read policy:
+- **Missing file** → `body = None` (no diagnostic — many kinds legitimately
+  lack `.md` bodies).
+- **Non-missing read error** (permission, I/O) or **invalid UTF-8** →
+  `CatalogDiagnostic::Warning` at the body path + `body = None`. Scan continues;
+  one corrupt body never poisons the full search.
 When `include_bodies` is false, field is `None`.
 
 ~10 existing call sites pass `ScanMode { include_bodies: false }` — zero
@@ -165,14 +174,12 @@ Options:
   -h, --help
 ```
 
-Pagination follows `memory find` conventions: `--limit` without page/offset
-caps at N; `--limit 0` → unlimited; `--page N` → offset = (N-1) × limit.
-Default limit: 20 (matches `RETRIEVE_LIMIT_MAX`). `--page` requires `>= 1`
-(validated by clap `value_parser`).
+Pagination: `--limit` defaults to 20 (`SEARCH_LIMIT_DEFAULT`), caps at 100
+(`SEARCH_LIMIT_MAX`). `--limit 0` is REJECTED (must be >= 1). `--page N` →
+offset = (N-1) × limit. `--page` requires `>= 1` (clap `value_parser`).
 
 Edge cases: `--page 0` rejected by clap; `--page` beyond available results
-returns empty output; `--page 1 --limit 0` → offset=0, unlimited (effectively
-ignores page).
+returns empty output; `--page` without `--limit` uses the default (20).
 
 ## Output formats
 
@@ -198,29 +205,36 @@ ADR-005   adr      accepted  872140   Adversarial review protocol
                                        ...the adversarial review protocol requires every finding...
 ```
 
-Snippet extraction: tokenize query and body via `lexical::tokenize`. Find the
-first body token (lowercased) that matches a query token (lowercased). Map the
-matched token back to its span in the *original cased* body text. Return ~40
-chars left of span + span + ~40 chars right, with "..." ellipsis at
-boundaries. Fall back to first 120 chars of original body if no token overlap
-detected.
+Snippet extraction uses shared lexical machinery. `lexical.rs` exposes a new
+`tokenize_with_spans(&str) -> Vec<TokenSpan>` — the ONE authority for
+split-on-non-alphanumeric tokenization with byte-offset spans. `tokenize`
+becomes the token-only projection:
 
-Span reconstruction algorithm (two-pass):
+```rust
+pub(crate) struct TokenSpan {
+    pub token: String,   // lowercased
+    pub start: usize,    // byte offset in original
+    pub end: usize,      // exclusive
+}
 
-1. **Match pass:** `lexical::tokenize(body)` → `Vec<String>` of lowercased
-   tokens. `lexical::tokenize(query)` → query tokens. Find the index of the
-   first body token present in the query-token set.
-2. **Position pass:** Re-scan the original-cased `body` string, tracking byte
-   offset as the original text is consumed character by character. Apply the
-   same split-on-non-alphanumeric logic as `lexical::tokenize` (but without
-   lowercasing), recording `(start_byte, end_byte)` per token. The matched
-   token's index from step 1 selects its span.
-3. **Extract window:** `body[span_start.saturating_sub(40)..(span_end + 40)]`,
-   with "..." prefix if truncated-left and "..." suffix if truncated-right.
+pub(crate) fn tokenize_with_spans(s: &str) -> Vec<TokenSpan> { ... }
+pub(crate) fn tokenize(s: &str) -> Vec<String> {
+    tokenize_with_spans(s).into_iter().map(|ts| ts.token).collect()
+}
+```
 
-Test cases: exact single-match → correct span; multi-match → first match only;
-empty query → None; empty body → None; no token overlap → first 120 chars
-fallback.
+The snippet function:
+1. `let body_spans = tokenize_with_spans(body);`
+2. Let `query_tokens: BTreeSet<String>` = `tokenize(query)`.
+3. Find first `body_spans` entry where `ts.token` ∈ `query_tokens`.
+4. Extract window: `body[ts.start.saturating_sub(40)..(ts.end + 40)]`,
+   with "..." ellipsis at boundaries.
+
+No match → first 120 chars of original body. Empty query/body → None.
+
+Proof tests: `tokenize(s) == tokenize_with_spans(s).map(|ts| ts.token)` for
+varied inputs (behaviour preservation); Unicode multi-byte boundaries don't
+split inside a codepoint; existing `lexical` tests pass unchanged.
 
 ### JSON
 
@@ -251,11 +265,13 @@ fallback.
   unknown prefix error, group alias expansion (expand then validate)
 - `entity_lex_doc` — id canonical, title present, body concatenated, None body
   handled
-- `snippet` — token match returns original-cased window via two-pass algorithm,
-  no match returns body prefix fallback, empty query/body returns None
+- `snippet` — uses `tokenize_with_spans` for one-authority span extraction;
+  match → correct byte-offset window; no match → body prefix; empty inputs → None;
+  Unicode multi-byte boundary correctness
 - zero-score suppression: row with score 0 is dropped from results
 - `build_corpus` — with a seeded project dir: reads bodies correctly, handles
-  missing body files, filters by kind selector
+  missing body files (None), permission/UTF-8 errors (diagnostic + None),
+  filters by kind selector
 
 ### Existing tests (behaviour preservation)
 
@@ -273,8 +289,9 @@ fallback.
 - `doctrine search "nonexistent_token"` returns zero results (all scores 0 → suppressed)
 - `doctrine search "auth" --kind adr --format table` includes ADR column headers
 - `doctrine search "auth" --page 0` fails (clap rejects < 1)
-- `doctrine search "auth" --page 100` returns empty output (beyond available)
-- `doctrine search "auth" --page 1 --limit 0` offset=0, unlimited (no error)
+- `doctrine search --help` renders without error (follows existing CLI help-test pattern)
+- `doctrine search "x" --json --format table` outputs JSON (`--json` wins, matching `listing::ListArgs::build` precedence)
+- `doctrine search "auth" --page 1 --limit 0` fails (--limit 0 rejected)
 - `doctrine search "auth" --with req --no adr` additive/subtractive logic
 - `doctrine search "auth" --context --format json` returns valid JSON with snippet fields
 - `doctrine search "auth" --short --format json` returns valid JSON without snippet fields

@@ -1,0 +1,78 @@
+id    = 141
+slug  = "inquisition-round-2-on-sl-141-entity-full-text-search-design"
+title = "Inquisition round 2 on SL-141 entity full-text search design"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-141"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Snippet design must share tokenizer machinery; amended two-pass algorithm duplicates lexical splitting logic"
+detail = """
+EXPECTED: SL-141's snippet-span design reuses a single lexical tokenization authority, either by extending `src/lexical.rs` with a span-bearing tokenizer helper or by factoring the split primitive so `tokenize` and snippet extraction consume the same code. Project doctrine forbids parallel implementation; a future tokenizer change must not require remembering a prose-coupled duplicate.
+
+OBSERVED: `.doctrine/slice/141/design.md` specifies a position pass that re-scans the body character-by-character and applies "the same split-on-non-alphanumeric logic as `lexical::tokenize` (but without lowercasing)." The canonical implementation in `src/lexical.rs` is `tokenize(s)` with `s.split(|c: char| !c.is_alphanumeric()).filter(...).map(str::to_lowercase)`. The design therefore creates a second tokenizer coupled only by prose. If `lexical::tokenize` later changes for stemming, Unicode normalization, stopwording, or separator handling, snippets silently drift from BM25 tokenization.
+
+PENANCE: Change the design to require shared machinery: e.g. `lexical::tokenize_with_spans(&str) -> Vec<TokenSpan { token, start, end }>` (or an internal shared iterator) and define `tokenize` as the token-only projection. Add tests proving `tokenize(s)` and `tokenize_with_spans(s).map(token)` stay equivalent, plus snippet tests over Unicode byte boundaries."""
+disposition = "fix-now"
+response = "Accepted. The two-pass algorithm duplicates the split-on-non-alphanumeric rule. Fix: add `tokenize_with_spans(&str) -> Vec<TokenSpan { token: String, start: usize, end: usize }>` to `src/lexical.rs` as the one authority. `tokenize` becomes the token-only projection over it. The snippet design will reference `lexical::tokenize_with_spans` directly, and the position-pass prose is removed. Add tests proving equivalence and Unicode byte-boundary correctness."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Pagination section cites memory-find conventions but contradicts memory-find and retrieve limits"
+detail = """
+EXPECTED: SL-141 either follows an existing pagination precedent exactly, or declares a search-specific convention with its own rationale and tests. Citations to memory constants must distinguish defaults from ceilings.
+
+OBSERVED: `.doctrine/slice/141/design.md` says pagination follows `memory find` conventions, says `--limit 0` means unlimited, and says the default limit is 20 because it "matches `RETRIEVE_LIMIT_MAX`." The accused confesses three contradictions under examination:
+
+- `src/retrieve.rs` `run_find` rejects `Some(0)` with `--limit must be >= 1`; memory-find does not accept `--limit 0` as unlimited.
+- `run_find` defaults to `limit.unwrap_or(usize::MAX)` for visible rows; memory-find's default is effectively unbounded, not 20.
+- `RETRIEVE_LIMIT_MAX = 20` is the cap for the bounded `memory retrieve` surface, while `RETRIEVE_LIMIT_DEFAULT = 5` is its default. A maximum is not a default.
+
+The design launders a ceiling into a default and claims memory-find precedent while diverging from it. The implementation would either fail its own integration test (`--page 1 --limit 0` no error) or fork CLI semantics without admitting the fork.
+
+PENANCE: Rewrite the pagination section to choose one rule set: (a) follow memory-find (`--limit 0` rejected, absent limit unbounded, page notice semantics aligned), (b) follow memory-retrieve (`default 5`, cap 20, `--limit 0` rejected), or (c) define search-specific `SEARCH_LIMIT_DEFAULT`/`SEARCH_LIMIT_MAX` with explicit rationale. Update verification accordingly."""
+disposition = "fix-now"
+response = "Accepted. The design falsely cites RETRIEVE_LIMIT_MAX (a retrieve ceiling of 20) as the search default. Fix: define search-specific constants — SEARCH_LIMIT_DEFAULT = 20, SEARCH_LIMIT_MAX = 100. --limit 0 is REJECTED (matching memory-find, not invented). Remove all citations to RETRIEVE_LIMIT_* constants. Update the --page 1 --limit 0 test: it should FAIL (--limit 0 rejected), not succeed as currently documented."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Body-ingestion error semantics cover missing files but not unreadable or invalid UTF-8 bodies"
+detail = """
+EXPECTED: The design specifies how `scan_entities(..., ScanMode { include_bodies: true })` handles every `.md` body read outcome: missing file, unreadable file, and invalid UTF-8. The choice should preserve catalog diagnostics discipline and avoid one corrupt body poisoning unrelated search results unless intentionally fatal.
+
+OBSERVED: `.doctrine/slice/141/design.md` says only "missing file → None." The planned implementation necessarily uses `entity::id_path(..., Ext::Md)` and likely `fs::read_to_string`, whose non-missing failures include permission errors and invalid UTF-8. Current `scan_entities` catches TOML metadata/read failures into `CatalogDiagnostic` and continues for entity metadata/outbound extraction. The design does not say whether body-read errors should: (1) be diagnostics and `body=None`, (2) skip the entity, or (3) abort the whole search. This ambiguity affects both behaviour preservation and the `build_corpus` missing-body test boundary.
+
+PENANCE: Add an explicit body-read policy. Minimal acceptable design: missing `.md` => `None`; non-missing read/UTF-8 error => diagnostic at the body path and `None` (or a stated fatal error), with a test for the selected policy."""
+disposition = "fix-now"
+response = "Accepted. The design must specify the full body-read error policy. Policy: missing .md → body = None (no diagnostic — many kinds legitimately lack bodies). Non-missing read error (permission, I/O) or invalid UTF-8 → CatalogDiagnostic::Warning at the body path + body = None, search continues. Scan is permissive; one corrupt body never poisons the whole search. Add a test for each error class."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Search command verification omits help/flag precedence tests established by existing CLI surfaces"
+detail = """
+EXPECTED: A new top-level CLI command carries tests for help rendering and flag precedence that mirror existing conventions, especially where `--json` sugar and `--format` interact.
+
+OBSERVED: `.doctrine/slice/141/design.md` lists integration tests for JSON/table output and `--context --short` conflict, but no help snapshot/parser test for the new `doctrine search` command. It also says `--json` is shorthand for `--format json` without specifying the established precedence from `src/listing.rs`: `--json` forces `Format::Json` and wins over `--format table`. Since search is a bespoke command surface, it will not automatically inherit `listing::ListArgs::build` unless designed to do so.
+
+PENANCE: Add verification that `doctrine search --help` is covered by the existing help-test pattern and that `--json --format table` resolves deterministically (preferably `--json` wins, matching `listing.rs`)."""
+disposition = "fix-now"
+response = 'Accepted. Add verification: (1) `doctrine search --help` is covered by existing CLI help-test pattern (existing in tests/cli_help_snapshots.rs or equivalent). (2) `doctrine search "x" --json --format table` outputs JSON (--json wins, matching listing.rs ListArgs::build precedence). State the precedence rule explicitly in the design.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
