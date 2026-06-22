@@ -1298,6 +1298,7 @@ pub(crate) fn run_show(
                 estimate: doc.estimate.clone(),
                 value: doc.value.clone(),
                 risk: None,
+                tags: doc.tags.clone(),
             };
             format_show(
                 &doc,
@@ -2549,6 +2550,7 @@ mod tests {
             }),
             value: None,
             risk: None,
+            tags: vec![],
         };
         let out = format_show(
             &doc,
@@ -2624,6 +2626,7 @@ mod tests {
             estimate: None,
             value: Some(crate::value::ValueFacet { value: 5.0 }),
             risk: None,
+            tags: vec![],
         };
         let out = format_show(
             &doc,
@@ -2702,6 +2705,7 @@ mod tests {
             }),
             value: None,
             risk: None,
+            tags: vec![],
         };
         // 25%–75% band → 50% confidence
         let out = format_show(
@@ -2746,6 +2750,7 @@ mod tests {
             }),
             value: None,
             risk: None,
+            tags: vec![],
         };
         let out = format_show(
             &doc,
@@ -3088,6 +3093,7 @@ mod tests {
             estimate: doc.estimate.clone(),
             value: doc.value.clone(),
             risk: None,
+            tags: doc.tags.clone(),
         };
         let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
         let dep_seq = crate::dep_seq::DepSeq::default();
