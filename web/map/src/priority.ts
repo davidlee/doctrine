@@ -198,7 +198,7 @@ export function renderGraph(opts: PriorityRenderOpts): void {
   needsMarker.setAttribute('id', 'needs-arrow');
   needsMarker.setAttribute('markerWidth', '10');
   needsMarker.setAttribute('markerHeight', '7');
-  needsMarker.setAttribute('refX', '2');
+  needsMarker.setAttribute('refX', '9');
   needsMarker.setAttribute('refY', '3.5');
   needsMarker.setAttribute('orient', 'auto');
   const needsPath = document.createElementNS(SVG_NS, 'path');
@@ -211,7 +211,7 @@ export function renderGraph(opts: PriorityRenderOpts): void {
   afterMarker.setAttribute('id', 'after-arrow');
   afterMarker.setAttribute('markerWidth', '10');
   afterMarker.setAttribute('markerHeight', '7');
-  afterMarker.setAttribute('refX', '2');
+  afterMarker.setAttribute('refX', '9');
   afterMarker.setAttribute('refY', '3.5');
   afterMarker.setAttribute('orient', 'auto');
   const afterPath = document.createElementNS(SVG_NS, 'path');
