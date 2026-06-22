@@ -64,11 +64,11 @@ pub(crate) struct RiskSetArgs {
 
     /// Likelihood axis level
     #[arg(long, value_enum)]
-    pub(crate) likelihood: Option<crate::backlog::RiskLevel>,
+    pub(crate) likelihood: Option<crate::risk::RiskLevel>,
 
     /// Impact axis level
     #[arg(long, value_enum)]
-    pub(crate) impact: Option<crate::backlog::RiskLevel>,
+    pub(crate) impact: Option<crate::risk::RiskLevel>,
 
     /// Risk origin (free-text label)
     #[arg(long)]
@@ -667,8 +667,8 @@ mod tests {
 
         let args = RiskSetArgs {
             id: canonical,
-            likelihood: Some(crate::backlog::RiskLevel::Low),
-            impact: Some(crate::backlog::RiskLevel::Medium),
+            likelihood: Some(crate::risk::RiskLevel::Low),
+            impact: Some(crate::risk::RiskLevel::Medium),
             origin: None,
             controls: vec![],
             path: Some(root.clone()),
@@ -698,7 +698,7 @@ mod tests {
 
         let args = RiskSetArgs {
             id: canonical,
-            likelihood: Some(crate::backlog::RiskLevel::High),
+            likelihood: Some(crate::risk::RiskLevel::High),
             impact: None,
             origin: None,
             controls: vec![],
@@ -754,7 +754,7 @@ mod tests {
 
         let args = RiskSetArgs {
             id: "ISS-001".into(),
-            likelihood: Some(crate::backlog::RiskLevel::Low),
+            likelihood: Some(crate::risk::RiskLevel::Low),
             impact: None,
             origin: None,
             controls: vec![],
@@ -773,7 +773,7 @@ mod tests {
 
         let args = RiskSetArgs {
             id: "SL-001".into(),
-            likelihood: Some(crate::backlog::RiskLevel::Low),
+            likelihood: Some(crate::risk::RiskLevel::Low),
             impact: None,
             origin: None,
             controls: vec![],
@@ -840,8 +840,8 @@ mod tests {
 
         let args = RiskSetArgs {
             id: canonical,
-            likelihood: Some(crate::backlog::RiskLevel::Low),
-            impact: Some(crate::backlog::RiskLevel::Medium),
+            likelihood: Some(crate::risk::RiskLevel::Low),
+            impact: Some(crate::risk::RiskLevel::Medium),
             origin: None,
             controls: vec![],
             path: Some(root),
@@ -862,7 +862,7 @@ mod tests {
 
         let args = RiskSetArgs {
             id: canonical,
-            likelihood: Some(crate::backlog::RiskLevel::Low),
+            likelihood: Some(crate::risk::RiskLevel::Low),
             impact: None,
             origin: Some("supply-chain".into()),
             controls: vec![],
@@ -889,7 +889,7 @@ mod tests {
 
         let args = RiskSetArgs {
             id: canonical,
-            likelihood: Some(crate::backlog::RiskLevel::Low),
+            likelihood: Some(crate::risk::RiskLevel::Low),
             impact: None,
             origin: None,
             controls: vec!["A".into(), "B".into()],
@@ -917,7 +917,7 @@ mod tests {
 
         let args = RiskSetArgs {
             id: canonical,
-            likelihood: Some(crate::backlog::RiskLevel::High),
+            likelihood: Some(crate::risk::RiskLevel::High),
             impact: None,
             origin: None,
             controls: vec![],
@@ -948,8 +948,8 @@ mod tests {
 
         let args = RiskSetArgs {
             id: canonical,
-            likelihood: Some(crate::backlog::RiskLevel::Critical),
-            impact: Some(crate::backlog::RiskLevel::Critical),
+            likelihood: Some(crate::risk::RiskLevel::Critical),
+            impact: Some(crate::risk::RiskLevel::Critical),
             origin: None,
             controls: vec![],
             path: Some(root.clone()),

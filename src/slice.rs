@@ -1297,6 +1297,7 @@ pub(crate) fn run_show(
             let facets = crate::facet::EntityFacets {
                 estimate: doc.estimate.clone(),
                 value: doc.value.clone(),
+                risk: None,
             };
             format_show(
                 &doc,
@@ -2547,6 +2548,7 @@ mod tests {
                 upper: 5.0,
             }),
             value: None,
+            risk: None,
         };
         let out = format_show(
             &doc,
@@ -2621,6 +2623,7 @@ mod tests {
         let facets = crate::facet::EntityFacets {
             estimate: None,
             value: Some(crate::value::ValueFacet { value: 5.0 }),
+            risk: None,
         };
         let out = format_show(
             &doc,
@@ -2698,6 +2701,7 @@ mod tests {
                 upper: 5.0,
             }),
             value: None,
+            risk: None,
         };
         // 25%–75% band → 50% confidence
         let out = format_show(
@@ -2741,6 +2745,7 @@ mod tests {
                 upper: 5.0,
             }),
             value: None,
+            risk: None,
         };
         let out = format_show(
             &doc,
@@ -3082,6 +3087,7 @@ mod tests {
         let facets = crate::facet::EntityFacets {
             estimate: doc.estimate.clone(),
             value: doc.value.clone(),
+            risk: None,
         };
         let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
         let dep_seq = crate::dep_seq::DepSeq::default();

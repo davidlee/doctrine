@@ -2,7 +2,7 @@
 // TypeScript rewrite of render.js. Depends on: model (neighbourhood, compareEdgesBySource),
 // dot (graphToDot), api (renderDot, fetchMarkdown), svg (injectHitRects, wireHandlers, dimLegend).
 
-import type { Graph, CatalogNode, Edge, Neighbourhood, ActionabilityView, ActionabilityNode, RawEdge } from './types';
+import type { Graph, CatalogNode, Edge, Neighbourhood, ActionabilityView, RawEdge } from './types';
 import { neighbourhood, compareEdgesBySource } from './model';
 import { graphToDot } from './dot';
 import { renderDot, fetchMarkdown } from './api';
@@ -338,7 +338,7 @@ export function relationshipTable(opts: RelationshipTableOpts): void {
       'status',
       'actionability',
       'blockers',
-      'consequence',
+      'score',
       'title',
     ]);
     tbody.innerHTML = '';
@@ -384,14 +384,9 @@ export function relationshipTable(opts: RelationshipTableOpts): void {
         : '';
       tr.appendChild(blockersCell);
 
-      const nodeExtra = node as ActionabilityNode & { consequence?: unknown };
-      const consequenceCell = document.createElement('td');
-      consequenceCell.textContent =
-        nodeExtra.consequence != null
-          ? // eslint-disable-next-line @typescript-eslint/no-base-to-string
-            String(nodeExtra.consequence)
-          : '';
-      tr.appendChild(consequenceCell);
+      const scoreCell = document.createElement('td');
+      scoreCell.textContent = node.score.toFixed(1);
+      tr.appendChild(scoreCell);
 
       const titleCell = document.createElement('td');
       // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
