@@ -40,3 +40,9 @@ All three findings verified. No design or governance changes were needed
 
 - _Per-slice (direct edit)_: none
 - _Governance/spec (REV)_: none
+
+## Reconciliation Outcome
+
+No-op reconcile — every finding was a code-level fix-now, applied to `review/137`
+and verified as terminal. No spec/governance changes needed. Reconcile pass
+complete — handoff to /close.
