@@ -1275,6 +1275,26 @@ pub(crate) fn resync_worktree_hard(wt: &Path, oid: &str) -> Result<(), CaptureEr
     Ok(())
 }
 
+/// Retry `git write-tree` with exponential backoff on transient index.lock
+/// contention. Multiple concurrent doctrine processes (e.g. parallel `memory
+/// verify` invocations) can race for the lock; this is harmless and resolves
+/// as soon as the holder exits. 4 attempts, ~750 ms total.
+fn write_tree_with_retry(repo_root: &Path) -> Result<String, CaptureError> {
+    let mut delay_ms: u64 = 50;
+    for _attempt in 0..4 {
+        match git_text(repo_root, &["write-tree"]) {
+            Ok(tree) => return Ok(tree),
+            Err(CaptureError::Git(ref msg)) if msg.contains("index.lock") => {
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                delay_ms *= 2;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    // Last attempt without catching — let the error surface.
+    git_text(repo_root, &["write-tree"])
+}
+
 /// Capture the born frame for the working tree at `repo_root` (design §5.2).
 ///
 /// Three Ok states: clean → [`AnchorKind::Commit`] (`commit`/`tree`/`base_commit`/
@@ -1327,27 +1347,56 @@ pub(crate) fn capture(repo_root: &Path) -> Result<Frame, CaptureError> {
     reject_submodules(repo_root)?;
 
     // Content-based dirty detection (design §5.2).
-    let index_tree = git_text(repo_root, &["write-tree"])?;
+    //
+    // Use diff-index (lock-free) for the fast-path check — write-tree acquires
+    // .git/index.lock, so we defer it to the rare dirty case where we need the
+    // index tree for checkout_state_id. On a clean tree (>99% of invocations)
+    // the lock is never touched, eliminating the dominant lock-contention source
+    // when multiple doctrine processes run concurrently.
     let diff_bytes = git_bytes(
         repo_root,
         &["diff", "HEAD", "--binary", "--no-textconv", "--no-ext-diff"],
     )?;
     let untracked_fp = untracked_fingerprint(repo_root)?;
-    let dirty = index_tree != tree || !diff_bytes.is_empty() || untracked_fp.is_some();
+    let worktree_dirty = !diff_bytes.is_empty() || untracked_fp.is_some();
 
-    if dirty {
-        let worktree_fp = sha256(&diff_bytes);
-        let untracked = untracked_fp.unwrap_or_else(|| sha256(b""));
-        Ok(Frame {
-            anchor_kind: AnchorKind::CheckoutState,
-            repo,
-            commit: String::new(), // empty iff dirty
-            tree,
-            ref_name,
-            checkout_state_id: checkout_state_id(&index_tree, &worktree_fp, &untracked),
-            base_commit: commit, // HEAD always when born
-        })
+    // diff-index --quiet --cached HEAD: exit 0 = clean index (no staged changes).
+    // This is a read-only operation — no lock acquired.
+    let index_clean = git_opt(repo_root, &["diff-index", "--quiet", "--cached", "HEAD"])?.is_some();
+
+    if !index_clean || worktree_dirty {
+        // Tree is dirty — call write-tree (acquires lock) for the fingerprint.
+        // Retry on transient index.lock contention (up to 4 attempts, ~750ms total).
+        let index_tree = write_tree_with_retry(repo_root)?;
+        let dirty = index_tree != tree || worktree_dirty;
+        if dirty {
+            let worktree_fp = sha256(&diff_bytes);
+            let untracked = untracked_fp.unwrap_or_else(|| sha256(b""));
+            Ok(Frame {
+                anchor_kind: AnchorKind::CheckoutState,
+                repo,
+                commit: String::new(), // empty iff dirty
+                tree,
+                ref_name,
+                checkout_state_id: checkout_state_id(&index_tree, &worktree_fp, &untracked),
+                base_commit: commit, // HEAD always when born
+            })
+        } else {
+            // write-tree showed clean but diff-index said dirty —
+            // rare edge (e.g. file mode-only change invisible to diff-index).
+            // Trust write-tree: the tree is clean.
+            Ok(Frame {
+                anchor_kind: AnchorKind::Commit,
+                repo,
+                commit: commit.clone(),
+                tree,
+                ref_name,
+                checkout_state_id: String::new(),
+                base_commit: commit,
+            })
+        }
     } else {
+        // Index and worktree both clean — no lock acquired.
         Ok(Frame {
             anchor_kind: AnchorKind::Commit,
             repo,
