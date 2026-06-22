@@ -1,7 +1,7 @@
 id = 140
 slug = "cordage-traversal-unification"
 title = "Unify cordage traversal: reachable/spine_path/extend_chains"
-status = "design"
+status = "started"
 created = "2026-06-22"
 updated = "2026-06-22"
 tags = ["area:cordage", "area:relations"]

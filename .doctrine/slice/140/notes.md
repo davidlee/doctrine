@@ -35,3 +35,16 @@ the governing spec). Behaviour-preserving — no test assertions changed.
 - R2: no *direct* test of `spine_path` on a cyclic `AtMostOne` Reject overlay —
   covered transitively via shared `walk_bfs` (whose cycle-safety is asserted by
   `reachable`'s a↔b test). Optional characterization test; out of this slice's gate.
+
+## Close-out (trimmed audit/reconcile, option 2)
+
+No design drift to reconcile: implementation matches design.md §5 exactly (one
+`walk_bfs`, two thin callers, cone explicit + documented). Evidence = green gate
+(above), proven equivalence (R3), behaviour-preservation via two independent
+reachable oracles.
+
+RV ledger (minimal): one finding, R2 → **CHR-022** (linked `slices SL-140`),
+dispositioned *deferred* (out of slice scope, behaviour covered transitively).
+No other open findings. Public API unchanged ⇒ no downstream reconciliation.
+
+Transitions: started → audit → reconcile → done.
