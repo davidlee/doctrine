@@ -11,9 +11,15 @@ frontier pattern but differ in their termination and mapping logic:
 - the predecessor-cone walk (`cone_on_overlay`) — BFS upward, building a
   `node ↦ {preds}` adjacency map
 
-Each duplicates the visited-set / frontier / neighbour-lookup loop. The
-walk logic should be unified behind a single traversal primitive
-parameterised by direction, termination predicate, and fold function.
+Each re-asserts the visited-set / frontier loop. `reachable` and `spine_path`
+share one genuine shape — breadth-first *discovery order* — and ride a single
+primitive. `cone_on_overlay` does not: it records per-node predecessor sets as
+map values and must terminate at degraded-SCC entries (record, don't expand),
+neither expressible through a discovery-order primitive without a heavier
+visitor+predicate abstraction that would obscure the SCC-endpoint logic. It
+stays explicit, sharing the (already-factored) neighbour helpers, documented as
+the deliberate exception (design D2). The neighbour-lookup helpers
+(`neighbours`/`predecessors`/`single_parent`) are already factored out today.
 
 `extend_chains` is referenced in IMP-020's title but is not present in the
 current source — it was likely a historical name or a planned abstraction
@@ -22,12 +28,15 @@ divergence.
 
 ## Scope & Objectives
 
-- Extract a single `walk` primitive in `query.rs` that subsumes the BFS
-  visited-set/frontier loop shared by all three traversals.
-- Re-implement `reachable`, `spine_path`, and `cone_on_overlay` as
-  thin callers of the unified walk.
-- Public API (`Graph::reachable`, `Graph::spine_path`) is unchanged —
-  this is an internal refactor.
+- Extract a `walk_bfs(start, neighbours) -> Vec<NodeId>` discovery-order
+  primitive in `query.rs` — the single locus of the visited/frontier/
+  cycle-safety invariant (F12/F47).
+- Re-implement `reachable` (strict set, `skip(1)`) and `spine_path`
+  (reversed chain) as thin callers of `walk_bfs`.
+- Leave `cone_on_overlay` explicit; add a doc comment recording why it is the
+  deliberate exception (design D2).
+- Public API (`Graph::reachable`, `Graph::spine_path`, `predecessor_cone`) is
+  unchanged — this is an internal refactor.
 - Existing cordage tests pass unchanged (behaviour-preservation gate).
 
 ## Non-Goals
@@ -42,7 +51,7 @@ divergence.
 
 | File | Change |
 |------|--------|
-| `crates/cordage/src/query.rs` | Add `walk(…)` primitive; refactor `reachable`, `spine_path`, `cone_on_overlay` onto it |
+| `crates/cordage/src/query.rs` | Add `walk_bfs(…)` discovery-order primitive; rewrite `reachable` + `spine_path` as thin callers; doc-comment `cone_on_overlay` as the deliberate non-rider |
 | `crates/cordage/tests/reachability.rs` | Existing suite must stay green unchanged |
 
 ## Risks
