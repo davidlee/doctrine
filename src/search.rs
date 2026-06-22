@@ -162,7 +162,7 @@ pub(crate) fn snippet(doc_text: &str, query: &str, context_chars: usize) -> Stri
     if window_start > 0 {
         result.push('\u{2026}'); // ellipsis
         // Get the slice safely (already bounded)
-        if let Some(s) = doc_text.get(window_start + 1..window_end) {
+        if let Some(s) = doc_text.get(window_start..window_end) {
             result.push_str(s);
         }
     } else if let Some(s) = doc_text.get(..window_end) {
