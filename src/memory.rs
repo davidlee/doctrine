@@ -1742,6 +1742,7 @@ pub(crate) fn seed_by_key(
     body: &str,
     summary: &str,
 ) -> Result<bool> {
+    validate_key(key)?;
     let key_symlink = root.join(MEMORY_ITEMS_DIR).join(key);
     if key_symlink.exists() {
         return Ok(false);

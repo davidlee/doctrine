@@ -28,7 +28,7 @@ create = [
 # The body is drawn from a template under install/templates/; the user edits it
 # in place. Idempotent — re-install skips existing key symlinks.
 seed_items = [
-  { key = "signpost.project.orientation", type = "signpost", title = "Project Orientation", body_template = "templates/seed-onboarding.md" }
+  { key = "mem.signpost.project.orientation", type = "signpost", title = "Project Orientation", body_template = "templates/seed-onboarding.md" }
 ]
 
 [gitignore]
