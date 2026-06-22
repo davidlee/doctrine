@@ -1,8 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `doctrine link` / `doctrine unlink` — relation edge verbs (SL-048 §5.4).
+//! `doctrine relation list` / `doctrine relation census` — read-only relation
+//! projection views (SL-137).
 //! SL-129: uses `entity::id_path`, `integrity`, `relation`, `memory`
 
 use std::path::PathBuf;
+use std::str::FromStr;
+
+use clap::Subcommand;
+
+use crate::catalog::diagnostic::Severity;
+use crate::catalog::scan::ScanMode;
+use crate::listing::Format;
+use crate::relation_query::ListFilter;
 
 /// Resolve a `link`/`unlink` source+label to (the source entity's toml path, the
 /// validated label). Shared by both verbs (design §5.4): parse the source ref →
@@ -84,6 +94,180 @@ pub(crate) fn run_link(
             )?;
         }
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// RelationCommand — the SL-137 read-only projection sub-enum
+// ---------------------------------------------------------------------------
+
+/// The sub-variants of `doctrine relation`.
+#[derive(Subcommand)]
+pub(crate) enum RelationCommand {
+    /// List relation edges with optional filtering.
+    List {
+        /// Include memory-source edges (excluded by default).
+        #[arg(long)]
+        include_memory: bool,
+
+        /// Filter by exact edge label (e.g. `requirements`).
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Filter by target entity (canonical ref, normalised).
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Filter by source kind prefix (e.g. `SL`, `MEM`).
+        #[arg(long = "source-kind")]
+        source_kind: Option<String>,
+
+        /// Show only edges whose target is unresolved or free-text.
+        #[arg(long)]
+        unresolved: bool,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str)]
+        format: Option<Format>,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Group edges by label with resolution tallies.
+    Census {
+        /// Include memory-source edges in the census.
+        #[arg(long)]
+        include_memory: bool,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str)]
+        format: Option<Format>,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+/// Shell for `doctrine relation list` — scan the catalog, apply the diagnostics
+/// policy, project & render, print to stdout.
+#[expect(clippy::too_many_arguments, reason = "clap dispatch flatten — 8 fields from subcommand")]
+pub(crate) fn run_relation_list(
+    path: Option<PathBuf>,
+    include_memory: bool,
+    label: Option<String>,
+    target: Option<String>,
+    source_kind: Option<String>,
+    unresolved: bool,
+    format: Option<Format>,
+    json: bool,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())?;
+
+    // Diagnostics policy (design §5.4 F1):
+    emit_diagnostics(&root, &catalog.diagnostics)?;
+
+    let resolved_format = if json { Format::Json } else { format.unwrap_or(Format::Table) };
+    let opts = crate::listing::RenderOpts {
+        color: crate::tty::stdout_color_enabled(),
+        term_width: crate::tty::stdout_terminal_width(),
+    };
+
+    let filter = ListFilter {
+        include_memory,
+        label,
+        target,
+        source_kind,
+        unresolved,
+    };
+
+    let rows = crate::relation_query::project_list(&catalog, &filter);
+    let out = crate::relation_query::render_list(&rows, resolved_format, opts)?;
+    write!(std::io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// Shell for `doctrine relation census` — scan the catalog, apply the diagnostics
+/// policy, project & render, print to stdout.
+pub(crate) fn run_relation_census(
+    path: Option<PathBuf>,
+    include_memory: bool,
+    format: Option<Format>,
+    json: bool,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())?;
+
+    // Diagnostics policy (design §5.4 F1):
+    emit_diagnostics(&root, &catalog.diagnostics)?;
+
+    let resolved_format = if json { Format::Json } else { format.unwrap_or(Format::Table) };
+    let opts = crate::listing::RenderOpts {
+        color: crate::tty::stdout_color_enabled(),
+        term_width: crate::tty::stdout_terminal_width(),
+    };
+
+    let rows = crate::relation_query::project_census(&catalog, include_memory);
+    let out = crate::relation_query::render_census(&rows, resolved_format, opts)?;
+    write!(std::io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// Apply the SL-137 diagnostics policy (design §5.4 F1):
+/// - Print every `Severity::Error` diagnostic to stderr.
+/// - Suppress per-row `Warning`/`Info` diagnostics (recoverable via `--unresolved`/census).
+/// - Count edge-dropping Warnings (empty memory label/target); when any fired,
+///   print ONE summary line '\"{N} edge(s) dropped — run `doctrine validate` for detail\"'
+fn emit_diagnostics(
+    root: &std::path::Path,
+    diagnostics: &[crate::catalog::diagnostic::CatalogDiagnostic],
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let mut dropped_edges: usize = 0;
+
+    for diag in diagnostics {
+        match diag.severity {
+            Severity::Error => {
+                // Strip the root prefix for a clean relative path.
+                let rel = diag
+                    .file
+                    .strip_prefix(root)
+                    .unwrap_or(&diag.file);
+                writeln!(std::io::stderr(), "{}: {}", rel.display(), diag.message)?;
+            }
+            Severity::Warning => {
+                // Count edge-dropping Warnings (empty memory label/target).
+                if diag.message.contains("empty relation") {
+                    dropped_edges = dropped_edges.wrapping_add(1);
+                }
+                // All other Warnings (dangling refs) are suppressed silently.
+            }
+            Severity::Info => {
+                // Unvalidated free-text targets — silently suppressed.
+            }
+        }
+    }
+
+    if dropped_edges > 0 {
+        writeln!(
+            std::io::stderr(),
+            "{dropped_edges} edge(s) dropped — run `doctrine validate` for detail"
+        )?;
+    }
+
     Ok(())
 }
 
