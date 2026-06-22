@@ -1,0 +1,50 @@
+memory_uid = "mem_019eecf4d2ad73909b05baaadebfdc82"
+memory_key = "mem.pattern.distribution.shipped-memory-authoring"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Shipped memory authoring flow: edit memory/, rebuild, sync — never edit shipped/ directly"
+summary = "Shipped memories are authored in memory/, RustEmbed-compiled, synced to .doctrine/memory/shipped/ — editing shipped/ directly is ephemeral"
+created = "2026-06-22"
+updated = "2026-06-22"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["shipped-memory", "distribution", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9c97babdff622e045950bebd5ff81ed0e17efa0d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2ba58049a5c88c5a956998bb36f566815af1f58a24e10fbd5997e154d93548d3"
+base_commit = "7db4602d8664bfb8f83d9883df55e078f589617f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019e98a783ea7471ac4bfcefdc04ae5e"
+
+[[relation]]
+label = "related"
+target = "mem_019e9a12560d7972b29124e09f4de704"
+
