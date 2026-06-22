@@ -1,7 +1,7 @@
 id = 141
 slug = "search"
 title = "Full-text search for the entity corpus"
-status = "design"
+status = "ready"
 created = "2026-06-22"
 updated = "2026-06-22"
 tags = []
