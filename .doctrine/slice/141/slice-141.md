@@ -55,43 +55,47 @@ search` command that reuses the existing BM25 ranker.
 - No change to `LexicalRanker` trait or `Bm25Ranker` — the engine is already
   generic.
 - No relevance feedback or result tuning knobs (yet).
+- No status filtering (display-only column). Follow-up.
+- No MCP surface for agents. Follow-up.
 
 ## Summary
 
 | File | Change |
 |------|--------|
-| `src/catalog/scan.rs` | Add `body: Option<String>` to `ScannedEntity`; read `.md` during scan |
+| `src/catalog/scan.rs` | Add `ScanMode` parameter + `body: Option<String>` to `ScannedEntity`; read `.md` when requested |
 | `src/catalog/hydrate.rs` | Carry `body` through to `CatalogEntity` |
-| `src/search.rs` | New module: `entity_lex_doc`, `search`, CLI args, BM25 orchestration |
+| `src/search.rs` | New module: `KindSelector`, `entity_lex_doc`, `snippet`, CLI args, BM25 orchestration |
 | `src/main.rs` | Wire `Search` variant into `Commands` enum |
 | `src/commands/cli.rs` | Dispatch `Search` to `search::run` |
 
 ## Risks
 
 - **RSK-001 (disk I/O amplification):** reading every `.md` during catalog scan
-  doubles the disk touches (one extra `read_to_string` per entity). Mitigation:
-  the scan is already a heavy operation (`scan_entities` reads every `.toml`),
-  and the `.md` files are small. If this becomes a problem, body reading can
-  be deferred to a separate `build_search_corpus` path that is only invoked by
-  the search command.
-- **RSK-002 (memory pressure):** holding all entity bodies in `ScannedEntity`
-  (and thus `CatalogEntity`) could be large for a project with many big ADRs
-  and specs. Mitigation: `body` is `Option<String>` — callers that don't need
-  it (e.g. `inspect`, `priority`) ignore it. If the catalog JSON dump gets
-  unwieldy, body can be excluded from the serialized projection.
+  doubles the disk touches. Mitigation: `ScanMode { include_bodies: bool }`
+  gates it per-caller; only search pays the cost.
+- **RSK-002 (memory pressure):** holding all entity bodies in one `Vec<LexDoc>`
+  during search. Mitigation: entity corpora are small (hundreds, not millions).
+- **RSK-003 (template noise):** many entities start from template boilerplate
+  ("## Scope & Objectives"). These tokens match every query containing "scope"
+  or "context". Follow-up: strip or score-penalise high-frequency tokens.
 
 ## Verification / Closure intent
 
 - `doctrine search "auth token"` returns ranked results from entity bodies
-- `doctrine search "auth" --kinds adr` limits to ADRs only
+- `doctrine search "auth" --kind adr` limits to ADRs, excluding default kinds
+- `doctrine search "auth" --with req --no sl` additive/subtractive logic
 - `doctrine search "auth" --format json` emits structured output
+- `doctrine search "auth" --context` shows body snippets
+- `doctrine search "auth" --context --short` fails (mutually exclusive)
+- `doctrine search "nonexistent"` returns zero results (score-0 suppressed)
 - `just gate` green — no layering violations (new module is command-tier)
-- Existing catalog tests pass unchanged (body field is additive)
+- Existing catalog tests pass unchanged (body field additive, ScanMode defaults false)
 - Lexical unit tests pass unchanged (no change to the ranker)
-- Empty corpus / no-match / missing-body edges handled gracefully
 
 ## Follow-Ups
 
 - Persisted index for large corpora if on-demand fit becomes slow
 - Stemming/configurable tokenizer
 - MCP surface for entity search (like memory has)
+- Hoist group aliases from `search.rs` to `integrity.rs` (shared alongside KINDS)
+- Template boilerplate detection and score-penalisation
