@@ -26,7 +26,7 @@ lint:
   cargo clippy
 
 lint-js:
-  npx eslint web/map/
+  @if [ -d web/map/node_modules ]; then cd web/map && bun run lint; else echo "lint-js: node_modules not found, skipping (restore with: cd web/map && bun install)"; fi
 
 # Build the map frontend (typecheck + lint + test + vite build).
 web-build:
