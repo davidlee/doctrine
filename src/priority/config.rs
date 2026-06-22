@@ -92,7 +92,6 @@ impl PriorityConfig {
     }
 
     /// Look up the coefficient for a given tag string; returns 1.0 when absent.
-    #[cfg_attr(not(test), expect(dead_code, reason = "consumed SL-136 (tags)"))]
     pub(crate) fn tag_coeff(&self, tag: &str) -> f64 {
         self.tag_coefficients.get(tag).copied().unwrap_or(1.0)
     }

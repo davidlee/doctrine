@@ -16,10 +16,10 @@ use crate::value::ValueFacet;
 /// entity. Constructed by the shell (`run_show`, `scan_catalog`) from already-parsed
 /// data; consumed by `format_show` and (in SL-133) `format_survey_row`.
 ///
-/// Extended in later slices: tags (SL-136).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct EntityFacets {
     pub estimate: Option<EstimateFacet>,
     pub value: Option<ValueFacet>,
     pub risk: Option<RiskFacet>,
+    pub tags: Vec<String>,
 }

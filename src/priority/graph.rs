@@ -71,7 +71,12 @@ impl BaseScore {
 /// `BaseScore` so `explain` can surface `value_dim` / `risk_dim`. No IO.
 fn base_score(f: &EntityFacets, kind: &entity::Kind, cfg: &config::PriorityConfig) -> BaseScore {
     const EPSILON: f64 = 1e-12;
-    // value_dim = coefficients.value × value × kind_weight(kind) × Σtag / estimate_midpoint
+    // value_dim = coefficients.value × value × kind_weight(kind) × tag_term / estimate_midpoint
+    // tag_term = (1.0 + Σ(coeff - 1.0)).max(0.0): identity base for absent tags,
+    // each configured tag pushes the multiplier by its excess over default.
+    // Default coeff (1.0) → delta 0 → no effect. Floor at zero prevents a
+    // negative multiplier from many demoting tags.
+    let tag_term = (1.0 + f.tags.iter().map(|t| cfg.tag_coeff(t) - 1.0).sum::<f64>()).max(0.0);
     let value_dim = {
         let raw = if let Some(ref v) = f.value {
             let est_mid = match f.estimate {
@@ -82,7 +87,7 @@ fn base_score(f: &EntityFacets, kind: &entity::Kind, cfg: &config::PriorityConfi
                 None => 1.0,
             };
             let kw = cfg.kind_weight(kind.prefix);
-            cfg.coefficients.value * v.value * kw / est_mid
+            cfg.coefficients.value * v.value * kw * tag_term / est_mid
         } else {
             0.0
         };
@@ -233,6 +238,7 @@ pub(crate) fn build_from(
                     estimate: entity.estimate.clone(),
                     value: entity.value.clone(),
                     risk: entity.risk.clone(),
+                    tags: entity.tags.clone(),
                 },
                 entity.kind,
                 &cfg,
@@ -1564,6 +1570,150 @@ mod tests {
         assert!(
             (lev_a - 5.0).abs() < 1e-9,
             "D counted once per component: 0.5*10=5, not 0.5*20=10"
+        );
+    }
+
+    // ── tag_term helpers ────────────────────────────────────────────────
+
+    /// Seed a backlog issue with tags, estimate, and value facets.
+    fn seed_issue_with_tags(root: &Path, id: u32, tags: &str, value: &str, estimate: &str) {
+        write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+                 resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 tags = [{tags}]\n\
+                 [estimate]\n{estimate}\n\
+                 [value]\n{value}\n",
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
+            "b\n",
+        );
+    }
+
+    // ── VT-14: tag_term in base_score ───────────────────────────────────
+
+    #[test]
+    fn base_score_empty_tags_identity() {
+        // No tags → tag_term = 1.0 → value_dim unchanged (identity).
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 10.0", "value = 10.0", "");
+        let pg = build(root).unwrap();
+        let bs = pg.attrs[&key("ISS", 1)].base_score;
+        // value_dim = 1.0 * 10.0 * 1.0 * 1.0 / 5.0 = 2.0
+        assert!((bs.value_dim - 2.0).abs() < 1e-9, "empty tags → identity");
+    }
+
+    #[test]
+    fn base_score_with_tag_coefficient() {
+        // tags = ["area:foo"], tag_coeff("area:foo") = 2.0
+        // tag_term = 1.0 + (2.0 - 1.0) = 2.0 → doubles value_dim
+        let dir = tmp();
+        let root = dir.path();
+        write(
+            root,
+            "doctrine.toml",
+            "[priority]\ntag_coefficients = { \"area:foo\" = 2.0 }\n",
+        );
+        seed_issue_with_tags(
+            root,
+            1,
+            "\"area:foo\"",
+            "value = 10.0",
+            "lower = 0.0\nupper = 10.0",
+        );
+        let pg = build(root).unwrap();
+        let bs = pg.attrs[&key("ISS", 1)].base_score;
+        // value_dim = 1.0 * 10.0 * 1.0 * 2.0 / 5.0 = 4.0
+        assert!(
+            (bs.value_dim - 4.0).abs() < 1e-9,
+            "tag coeff 2.0 doubles value_dim"
+        );
+    }
+
+    #[test]
+    fn base_score_multiple_tags() {
+        // tags = ["a", "b"], tag_coeff("a") = 1.5, tag_coeff("b") = 2.0
+        // tag_term = 1.0 + (1.5 - 1.0) + (2.0 - 1.0) = 2.5
+        let dir = tmp();
+        let root = dir.path();
+        write(
+            root,
+            "doctrine.toml",
+            "[priority]\ntag_coefficients = { a = 1.5, b = 2.0 }\n",
+        );
+        seed_issue_with_tags(
+            root,
+            1,
+            "\"a\", \"b\"",
+            "value = 6.0",
+            "lower = 2.0\nupper = 4.0",
+        );
+        let pg = build(root).unwrap();
+        let bs = pg.attrs[&key("ISS", 1)].base_score;
+        // value_dim = 1.0 * 6.0 * 1.0 * 2.5 / 3.0 = 5.0
+        assert!(
+            (bs.value_dim - 5.0).abs() < 1e-9,
+            "tag_term 2.5 → value_dim = 5.0"
+        );
+    }
+
+    #[test]
+    fn base_score_demoting_tag() {
+        // tags = ["wontfix"], tag_coeff("wontfix") = 0.5
+        // tag_term = 1.0 + (0.5 - 1.0) = 0.5 → halves value_dim
+        let dir = tmp();
+        let root = dir.path();
+        write(
+            root,
+            "doctrine.toml",
+            "[priority]\ntag_coefficients = { wontfix = 0.5 }\n",
+        );
+        seed_issue_with_tags(
+            root,
+            1,
+            "\"wontfix\"",
+            "value = 20.0",
+            "lower = 0.0\nupper = 10.0",
+        );
+        let pg = build(root).unwrap();
+        let bs = pg.attrs[&key("ISS", 1)].base_score;
+        // value_dim = 1.0 * 20.0 * 1.0 * 0.5 / 5.0 = 2.0
+        assert!(
+            (bs.value_dim - 2.0).abs() < 1e-9,
+            "demoting tag halves value_dim"
+        );
+    }
+
+    #[test]
+    fn base_score_multi_demote_floors_at_zero() {
+        // tags = ["x", "y"], both tag_coeff = 0.0
+        // tag_term = 1.0 + (0.0 - 1.0) + (0.0 - 1.0) = -1.0 → max(0.0) = 0.0
+        let dir = tmp();
+        let root = dir.path();
+        write(
+            root,
+            "doctrine.toml",
+            "[priority]\ntag_coefficients = { x = 0.0, y = 0.0 }\n",
+        );
+        seed_issue_with_tags(
+            root,
+            1,
+            "\"x\", \"y\"",
+            "value = 10.0",
+            "lower = 0.0\nupper = 10.0",
+        );
+        let pg = build(root).unwrap();
+        let bs = pg.attrs[&key("ISS", 1)].base_score;
+        // value_dim = 1.0 * 10.0 * 1.0 * 0.0 / 5.0 = 0.0
+        assert!(
+            (bs.value_dim - 0.0).abs() < 1e-9,
+            "multi-demote floors at zero, not negative"
         );
     }
 }
