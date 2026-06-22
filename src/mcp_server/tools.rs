@@ -1396,7 +1396,7 @@ mod tests {
         let resp = dispatch(&req, &root);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 14);
+        assert_eq!(tools.len(), 15);
     }
 
     #[test]
