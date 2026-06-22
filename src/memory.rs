@@ -1727,6 +1727,62 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result
     Ok(())
 }
 
+/// Seed a key-addressed memory with no git frame (`anchor = none`).
+///
+/// The body is written verbatim — it should come from a seed template, not
+/// from `render_memory_md`.
+///
+/// Idempotent: returns `Ok(true)` if created, `Ok(false)` if the key alias
+/// already exists under `items/`.
+pub(crate) fn seed_by_key(
+    root: &Path,
+    key: &str,
+    memory_type: MemoryType,
+    title: &str,
+    body: &str,
+    summary: &str,
+) -> Result<bool> {
+    let key_symlink = root.join(MEMORY_ITEMS_DIR).join(key);
+    if key_symlink.exists() {
+        return Ok(false);
+    }
+
+    let uid = format!("mem_{}", uuid::Uuid::now_v7().simple());
+    let date = crate::clock::today();
+    let frame = crate::git::unanchored_frame();
+
+    let draft = Draft {
+        uid: &uid,
+        key: Some(key),
+        lifespan: None,
+        memory_type,
+        status: Status::Active,
+        title,
+        summary,
+        date: &date,
+        review_by: None,
+        sources: &[],
+        trust_level: DEFAULT_TRUST_LEVEL,
+        severity: DEFAULT_SEVERITY,
+        tags: &[],
+        paths: &[],
+        globs: &[],
+        commands: &[],
+        frame: &frame,
+    };
+
+    let mut fileset = memory_scaffold(&draft)?;
+    // Replace the auto-generated body (index 1, the memory.md artifact)
+    // with the seed template body.
+    if let Some(Artifact::File { body: b, .. }) = fileset.get_mut(1) {
+        body.clone_into(b);
+    }
+
+    entity::materialise_named(&LocalFs, root, MEMORY_ITEMS_DIR, &uid, &fileset)
+        .context("Failed to seed memory")?;
+    Ok(true)
+}
+
 /// The record-time advisory for a freshly-minted memory. A `thread` is hidden
 /// from find/retrieve until verified (SL-008 D6 `thread_expiry`); every other
 /// type surfaces immediately, so returns `None`. `reference` is the verify
@@ -5464,6 +5520,102 @@ to = "mem_018e000000000000000000000000000b"
         assert_eq!(m.sources, sources);
         assert_eq!(m.trust_level, "low");
         assert_eq!(m.severity, "critical");
+    }
+
+    // -- seed_by_key --------------------------------------------------------
+
+    #[test]
+    fn seed_by_key_creates_unanchored_memory_under_items() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let created = seed_by_key(
+            root,
+            "mem.signpost.project.orientation",
+            MemoryType::Signpost,
+            "Project Orientation",
+            "# Body content\n\nedit me",
+            "",
+        )
+        .unwrap();
+        assert!(created);
+
+        let symlink = root.join(MEMORY_ITEMS_DIR).join("mem.signpost.project.orientation");
+        assert!(symlink.is_symlink());
+
+        let uid = symlink.read_link().unwrap();
+        let uid_dir = root.join(MEMORY_ITEMS_DIR).join(&uid);
+        assert!(uid_dir.join("memory.toml").is_file());
+        assert!(uid_dir.join("memory.md").is_file());
+
+        let body = std::fs::read_to_string(uid_dir.join("memory.md")).unwrap();
+        assert_eq!(body, "# Body content\n\nedit me");
+
+        let toml = std::fs::read_to_string(uid_dir.join("memory.toml")).unwrap();
+        assert!(toml.contains(r#"anchor_kind = "none""#));
+        assert!(toml.contains("memory_key = \"mem.signpost.project.orientation\""));
+    }
+
+    #[test]
+    fn seed_by_key_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let first = seed_by_key(
+            root,
+            "mem.signpost.project.orientation",
+            MemoryType::Signpost,
+            "Project Orientation",
+            "first body",
+            "",
+        )
+        .unwrap();
+        assert!(first);
+
+        let second = seed_by_key(
+            root,
+            "mem.signpost.project.orientation",
+            MemoryType::Signpost,
+            "Project Orientation",
+            "second body",
+            "",
+        )
+        .unwrap();
+        assert!(!second);
+
+        // Original body preserved
+        let symlink = root.join(MEMORY_ITEMS_DIR).join("mem.signpost.project.orientation");
+        let uid = symlink.read_link().unwrap();
+        let body =
+            std::fs::read_to_string(root.join(MEMORY_ITEMS_DIR).join(&uid).join("memory.md"))
+                .unwrap();
+        assert_eq!(body, "first body");
+    }
+
+    #[test]
+    fn seed_by_key_writes_correct_memory_type_and_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        seed_by_key(
+            root,
+            "mem.pattern.test.seed",
+            MemoryType::Fact,
+            "Seeded Fact",
+            "body",
+            "summary text",
+        )
+        .unwrap();
+
+        let symlink = root.join(MEMORY_ITEMS_DIR).join("mem.pattern.test.seed");
+        let uid = symlink.read_link().unwrap();
+        let toml =
+            std::fs::read_to_string(root.join(MEMORY_ITEMS_DIR).join(&uid).join("memory.toml"))
+                .unwrap();
+        assert!(toml.contains("memory_type = \"fact\""));
+        assert!(toml.contains("status = \"active\""));
+        assert!(toml.contains(r#"title = "Seeded Fact""#));
+        assert!(toml.contains("summary = \"summary text\""));
     }
 
     // -- PHASE-05: the `verify` mutation verb -------------------------------
