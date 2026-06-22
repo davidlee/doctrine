@@ -6,7 +6,7 @@ status = "active"
 title = "Non-hook settings.local.json key rides BESIDE the owner-locked HookSpec merge core, not through it"
 summary = ""
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-06-22"
 
 [scope]
 paths = ["src/boot.rs"]
@@ -25,12 +25,12 @@ tree = "8774cac0c2f72e2e3fa678424a7fc80f5423c4df"
 ref_name = "refs/heads/main"
 checkout_state_id = "7fccafab0e6ef24a5a3eb20cde5c8be81239303431ca77fe6cd46cf2fc81d975"
 base_commit = "dcb48733dd0c0e15b66996c64335099d5bd33837"
-verified_sha = "e3e7b524badea1b7e083129bf7ce2df3d804226c"
+verified_sha = "114af4c33ec0f988634cdb7004e7ee43c693401c76df42e42fe62c399acfbce8"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-14"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

@@ -6,7 +6,7 @@ status = "active"
 title = "SubagentStart hook is sync-blocking but un-failclosable; exit 2 does not abort the subagent"
 summary = "SubagentStart command hook blocks the worker (sync) until it exits, but cannot abort it — exit 2 does not fail-close, unlike WorktreeCreate"
 created = "2026-06-13"
-updated = "2026-06-13"
+updated = "2026-06-22"
 
 [scope]
 paths = [".doctrine/slice/056"]
@@ -25,12 +25,12 @@ tree = "1f1f9c73db3f4a54264399ce7c8f9a021d6b6a46"
 ref_name = "refs/heads/main"
 checkout_state_id = ""
 base_commit = "542e7a3f713e98d7a83d38482fd153bf72a4b427"
-verified_sha = "5f1ca2e15718032e3e2917092f6afda5b30afa95"
+verified_sha = "eb08c9bb61730d5a5c89f912c7714f6b2b43cae586449f0c08dae59b65d426da"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-13"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

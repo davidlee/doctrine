@@ -6,7 +6,7 @@ status = "active"
 title = "expect(dead_code) on a `mod foo;` decl propagates into the submodule"
 summary = "A dead-code expect on a module declaration covers the submodule's items without editing the submodule file — respects cross-slice file boundaries; self-clears when a live consumer lands."
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-22"
 
 [scope]
 paths = ["src/estimate.rs"]
@@ -25,12 +25,12 @@ tree = "e4e6117f6ebbd8ced699ff1b9fea4a445bbfda0a"
 ref_name = "refs/heads/main"
 checkout_state_id = "5d80c6dcb3529506e3deab9822ad6928a5089256e6f3d15a3f3cefa0aead086b"
 base_commit = "d165d63fac1f100f986d9d11163c5bee4ec4e0ba"
-verified_sha = "1e382acdf654214e939d7ec0ab41fdd3df8098b3"
+verified_sha = "7738fe1beefad595349d18ea256884e6c1d246c60d6539cb8e2902c05eb3e99c"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-19"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

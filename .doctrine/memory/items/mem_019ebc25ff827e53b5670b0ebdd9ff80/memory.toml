@@ -6,7 +6,7 @@ status = "active"
 title = "Default backlog list orders by ItemId prefix-string, diverging from --by id grouping"
 summary = "Default backlog list --by sequence orders edge-free rows by cordage tie-break (ItemId prefix-string), not (kind.ordinal,id)"
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-22"
 
 [scope]
 paths = ["src/backlog.rs", "src/backlog_order.rs"]
@@ -25,12 +25,12 @@ tree = "d28af9f248ecf6ff45aa8a91c8c7907a90b59359"
 ref_name = "refs/heads/main"
 checkout_state_id = ""
 base_commit = "344b89b46e7a8f5cf140e7c28a60aa8a8d648610"
-verified_sha = "f5ec9343da6513dcc876a0029357b0acfd458294"
+verified_sha = "d1aca8f26bbe69e29bafd296935692b31cd072ed4edf9861ad6ef3a0c9e3e581"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-12"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

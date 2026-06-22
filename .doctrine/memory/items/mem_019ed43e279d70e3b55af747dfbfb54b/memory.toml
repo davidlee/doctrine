@@ -6,7 +6,7 @@ status = "active"
 title = "Use jail-built binary for doctrine claude install and boot after plugin edits"
 summary = "After editing plugin SKILL.md, use the jail-built binary for claude install and boot — the PATH binary carries stale embedded assets"
 created = "2026-06-17"
-updated = "2026-06-17"
+updated = "2026-06-22"
 
 [scope]
 paths = ["plugins/doctrine/skills/", "install/routing-process.md"]
@@ -25,12 +25,12 @@ tree = "cc02cd0e9dae5ca07b7456492b2045cbb57a1dc6"
 ref_name = "refs/heads/main"
 checkout_state_id = "22c6e4fec15a8dcae55d6bd8f7ae480d77dc085cadf4d75d6e6d66441e601644"
 base_commit = "985f8d0d140b0e5b5dc9fedceadbdaf16ee64357"
-verified_sha = "b9ed4c4146fa3b095ca3372761a59a90f8dc0217"
+verified_sha = "7a391cc892dfcaac06e9bd25187fd87f880037c410de81826740710644d6c3cf"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-17"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

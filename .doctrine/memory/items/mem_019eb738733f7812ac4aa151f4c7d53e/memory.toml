@@ -6,7 +6,7 @@ status = "active"
 title = "cordage denylist whole-word matches forbidden product vocab"
 summary = "cordage forbidden-vocab denylist (tests/denylist.rs) whole-word matches product nouns — no project/task/schedule/capacity in any cordage identifier or doc-comment"
 created = "2026-06-11"
-updated = "2026-06-11"
+updated = "2026-06-22"
 
 [scope]
 paths = ["crates/cordage/tests/denylist.rs"]
@@ -25,12 +25,12 @@ tree = "4f91dffb3f3258baa96f979b7c17d9aebc705f8f"
 ref_name = "refs/heads/main"
 checkout_state_id = ""
 base_commit = "6dfc589fb606bcc579d71de85d971bd047fc1498"
-verified_sha = "ac4b88c1eb5dadd7afdf5b80c337b37284b66802"
+verified_sha = "206c804c50aeeff05a4fb8fdeca7e9e246814701eee235539a88d6e9d00249a6"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-11"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

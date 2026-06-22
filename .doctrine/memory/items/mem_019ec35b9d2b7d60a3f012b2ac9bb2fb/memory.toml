@@ -2,11 +2,11 @@ memory_uid = "mem_019ec35b9d2b7d60a3f012b2ac9bb2fb"
 memory_key = "mem.pattern.distribution.skill-frontmatter-yaml-no-colon-no-quote"
 schema_version = 1
 memory_type = "pattern"
-status = "superseded"
+status = "archived"
 title = "SKILL.md frontmatter description must avoid colon-space and double-quotes (YAML scalar)"
 summary = "SKILL.md frontmatter is YAML — a description with colon-space or embedded double-quotes breaks the embed parse"
 created = "2026-06-13"
-updated = "2026-06-21"
+updated = "2026-06-22"
 
 [scope]
 paths = ["src/skills.rs"]
@@ -25,12 +25,12 @@ tree = "ab54fa8a3fe6411d35c63e01032a1361813dba9b"
 ref_name = "refs/heads/main"
 checkout_state_id = ""
 base_commit = "6b431b10d30bd23aaf9039d975803535d25da324"
-verified_sha = "e86787d867c03e1e1c861feb2ad5e8bced3c24ca"
+verified_sha = "dd735de9315e2b8d9376442f263e0b6e7f86e4a8a97e7670d8b09cd4b224d500"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-13"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

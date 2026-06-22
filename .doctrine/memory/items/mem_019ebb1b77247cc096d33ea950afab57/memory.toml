@@ -6,7 +6,7 @@ status = "active"
 title = "Governance superseded_by is ADR-004 §5 sanctioned canon, not an outbound-only violation"
 summary = "Governance superseded_by is ADR-004 §5 sanctioned canon (sole permitted reverse field), not an outbound-only violation"
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-22"
 
 [scope]
 paths = ["src/governance.rs"]
@@ -25,12 +25,12 @@ tree = "faf0d97ac5f13ab39276e2d275b71fbb6da7a7f2"
 ref_name = "refs/heads/main"
 checkout_state_id = ""
 base_commit = "5e0d5a5d3460f19519595e806731f8bf5107dbd5"
-verified_sha = "468db31ecd02bfd5c939a1acafaedad401fd41fb"
+verified_sha = "d1aca8f26bbe69e29bafd296935692b31cd072ed4edf9861ad6ef3a0c9e3e581"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-12"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]
