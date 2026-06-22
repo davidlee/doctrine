@@ -14,24 +14,30 @@ ref   = "SL-137"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "VT-3 test gap: four-axis AND composition test omits `--unresolved` and `include_memory`"
 detail = """Design VT-3 (F4b) specifies: "a four-axis case (+ --unresolved, include_memory on) narrows to the single row." The test `project_list_and_composes_four_axes_to_one_row` only tests label + source-kind + target (3 axes). It omits both `unresolved: true` and `include_memory: true`. While the AND-composition logic itself is sound, the named four-axis case is untested. Add a test with all four active axes + include_memory to match VT-3's specification."""
+disposition = "fix-now"
+response = "Agreed — the test name promises four axes but only exercises three. The AND-composition logic is correct in `project_list` (all five filter gates are AND'd by sequenced `filter()` closures), so this is a test-coverage gap, not a behaviour bug. Fix: rewrite `project_list_and_composes_four_axes_to_one_row` to include `unresolved: true`, `include_memory: true`, and a catalog with an additional unresolved edge to prove the four-axis narrowing."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "VT-4/F4a test gap: `--source-kind MEM` without `--include-memory` not tested on catalog with memory edges"
 detail = 'Design VT-4 F4a specifies that `--source-kind MEM` WITHOUT `--include-memory` → empty, "since the gate drops the memory population first." The unit test `include_memory_false_drops_raw_edges` uses a catalog with no memory edges, so the empty result is from `source-kind` matching nothing, not from the gate interaction. A proper test needs a catalog with both numbered and memory edges, then assert that `source-kind: MEM` + `include_memory: false` returns empty while `source-kind: MEM` + `include_memory: true` returns the memory edges.'
+disposition = "fix-now"
+response = "Agreed. The execution order in `project_list` proves the gate fires first (line: `!filter.include_memory && matches!(edge.label, CatalogEdgeLabel::Raw(_))`), so the behaviour is correct — but the spec VT-4 F4a case is not directly tested. Fix: add a helper to seed a `Catalog` with a `Raw`-label memory edge, then assert `include_memory=false` + `source_kind=MEM` → empty vs `include_memory=true` + `source_kind=MEM` → the memory edge."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "nit"
 title = "Stale `expect(dead_code)` lint on relation_query.rs — rationale no longer accurate"
 detail = 'The `#![cfg_attr(not(test), expect(dead_code))]` attribute on `relation_query.rs` rationale says "module built ahead of its consumer; every symbol is exercised by the test suite." Since PHASE-02 is now integrated, all public functions are consumed by `commands/relation.rs` in normal builds, so dead_code should not fire. The `expect(dead_code)` lint expects a warning that never comes — technically a no-op but slightly misleading. Remove the attribute now that the consumer exists. (Note: does not produce a visible clippy warning on this Rust version, so this is a code cleanliness nit, not a functional issue.)'
+disposition = "fix-now"
+response = "Clean code smell. Remove the `#![cfg_attr(not(test), expect(dead_code, ...))]` attribute. The module's public surface is now consumed by `commands/relation.rs`; no dead code suppression needed beyond what the compiler infers. Clippy stays clean after removal — verified on the review/137 branch."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
