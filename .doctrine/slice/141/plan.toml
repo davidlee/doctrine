@@ -1,0 +1,240 @@
+# Implementation plan for SL-141 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 2
+slice   = "SL-141"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ── PHASE-01 ─────────────────────────────────────────────────────────────────
+#
+# Extract `tokenize_with_spans(&str) → Vec<TokenSpan>` from `tokenize` in
+# `src/lexical.rs`. `tokenize` becomes a thin projection over
+# `tokenize_with_spans`. Pure refactor — no functional change, all BM25
+# behaviour preserved. Spans are needed by the search module for snippet
+# extraction (highlighting matched tokens in context).
+#
+# TokenSpan: { token: String, start: usize, end: usize }
+#   - token: lowercased token text (same as tokenize returns)
+#   - start: byte offset of the token in the original string
+#   - end:   byte offset past the end of the token in the original string
+#
+# Implementation: char_indices loop produces spans directly; the resulting
+# tokens MUST be byte-identical to the existing split+filter+map tokenize
+# for every possible input. A property test verifies this equivalence.
+[[phase]]
+id        = "PHASE-01"
+name      = "Lexical span tokenizer"
+objective = "Extract `tokenize_with_spans` from `tokenize` in src/lexical.rs, making tokenize a thin projection; add TokenSpan struct with byte-offset spans; property-test delegation equivalence; existing tests pass unchanged."
+
+entrance_criteria = [
+  { id = "EN-1", text = "src/lexical.rs contains the shared `pub(crate) fn tokenize` as the single tokenizer authority." },
+  { id = "EN-2", text = "No TokenSpan type or tokenize_with_spans function exists yet." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`TokenSpan` struct with fields `token: String`, `start: usize`, `end: usize` defined in src/lexical.rs." },
+  { id = "EX-2", text = "`tokenize_with_spans(s: &str) → Vec<TokenSpan>` exists, producing byte-offset spans via a char_indices loop." },
+  { id = "EX-3", text = "`tokenize` is a thin projection over `tokenize_with_spans`: `tokenize(s) == tokenize_with_spans(s).into_iter().map(|ts| ts.token).collect()`." },
+  { id = "EX-4", text = "All existing lexical unit tests pass unchanged (behaviour-preservation gate)." },
+  { id = "EX-5", text = "Property test proves `tokenize_with_spans` produces identical tokens to `tokenize` for random strings, empty input, whitespace-only, symbols-only, Unicode, and boundary cases." },
+  { id = "EX-6", text = "`just gate` green — no clippy warnings, no layering violations." },
+]
+
+verification = [
+  { id = "VT-1", expects = "Unit test: tokenize_with_spans('auth') returns [TokenSpan { token: \"auth\", start: 0, end: 4 }]." },
+  { id = "VT-2", expects = "Unit test: tokenize_with_spans('mem.auth.token') returns three spans with correct byte offsets (0,3), (4,8), (9,14)." },
+  { id = "VT-3", expects = "Property test (100 random strings + edge cases): tokenize_with_spans(s).map(|ts| ts.token) == tokenize(s). Uses quickcheck or a manual random generator over alphanumeric, punctuation, Unicode, and mixed inputs." },
+  { id = "VT-4", expects = "Unit test: tokenize_with_spans('') returns empty Vec." },
+  { id = "VT-5", expects = "Unit test: tokenize_with_spans('  !@#$  ') returns empty Vec (no alphanumeric content)." },
+  { id = "VT-6", expects = "Existing `tokenize_casefolds_and_splits_on_non_alphanumeric` test passes unchanged." },
+  { id = "VT-7", expects = "Existing BM25 ranker tests pass unchanged (ranked results identical before and after refactor — scores are deterministic)." },
+]
+
+# ── PHASE-02 ─────────────────────────────────────────────────────────────────
+#
+# Add body ingestion to the entity catalog scan. Introduce `ScanMode` struct
+# parameter that gates body reading. Read the `.md` file at
+# `entity::id_path(root, kind, id, Ext::Md)` when bodies are requested. Carry
+# `body: Option<String>` through `ScannedEntity` → `CatalogEntity`. Missing
+# `.md` → `None` without error; read error → diagnostic + `None`.
+#
+# Signature changes:
+#   scan_entities(root, diagnostics) → scan_entities(root, diagnostics, ScanMode)
+#   scan_catalog(root) → scan_catalog(root, ScanMode)
+# All existing callers pass ScanMode::default() (bodyless) — mechanical update.
+[[phase]]
+id        = "PHASE-02"
+name      = "Body ingestion into catalog"
+objective = "Add body ingestion to the catalog scan: `ScanMode { include_bodies: bool }` parameter gates `.md` reading on both scan_entities and scan_catalog, carrying body through ScannedEntity → CatalogEntity with serde-skip when None."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is complete (tokenize_with_spans exists as shared authority)." },
+  { id = "EN-2", text = "`scan_entities` has the current 2-param signature (root, diagnostics)." },
+  { id = "EN-3", text = "`scan_catalog` has the current 1-param signature (root)." },
+  { id = "EN-4", text = "`ScannedEntity` has no `body` field." },
+  { id = "EN-5", text = "`CatalogEntity` has no `body` field." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`ScanMode` struct exists at `catalog::scan` level with field `include_bodies: bool` and `Default` impl returning `ScanMode { include_bodies: false }` (backwards-compatible)." },
+  { id = "EX-2", text = "`scan_entities(root, diagnostics, ScanMode)` — third param added. When `include_bodies` is true, reads `.md` via `entity::id_path(root, &kind, id, entity::Ext::Md)` and `std::fs::read_to_string`. Missing file → `body: None`. IO error → `CatalogDiagnostic` (Error severity) + `body: None`." },
+  { id = "EX-3", text = "`ScannedEntity` has `body: Option<String>` field, populated only when ScanMode requests bodies." },
+  { id = "EX-4", text = "`CatalogEntity` carries `body: Option<String>` with `#[serde(skip_serializing_if = \"Option::is_none\")]` (matching existing pattern for estimate/value facets)." },
+  { id = "EX-5", text = "`scan_catalog(root, ScanMode)` — second param added, forwarded to scan_entities. Existing callers updated to `ScanMode::default()`." },
+  { id = "EX-6", text = "ALL callers of `scan_entities` and `scan_catalog` updated to pass `ScanMode::default()` where bodyless — Rust type checker guarantees no missed site." },
+  { id = "EX-7", text = "Existing catalog tests pass unchanged (body field additive, ScanMode defaults to false/bodyless — existing test output identical)." },
+  { id = "EX-8", text = "`doctrine catalog scan --json` output omits `body` field when bodies not requested (existing JSON contract preserved)." },
+  { id = "EX-9", text = "`just gate` green." },
+]
+
+verification = [
+  { id = "VT-1", expects = "Unit test: scan with ScanMode::default() produces identical output to current behaviour — no body field present on entities (the struct field exists but is None)." },
+  { id = "VT-2", expects = "Unit test: scan with include_bodies: true populates body for entities with existing .md files (uses seed_slice/seed_adr which write .md bodies)." },
+  { id = "VT-3", expects = "Unit test: entity with no .md file yields body: None (no error, no crash — e.g. a kind with .toml only)." },
+  { id = "VT-4", expects = "Unit test: unreadable .md file (permission denied) yields CatalogDiagnostic Error + body: None — scan continues, does not abort." },
+  { id = "VT-5", expects = "Unit test: scan_catalog with include_bodies: true produces CatalogEntity with body populated." },
+  { id = "VT-6", expects = "Unit test: CatalogEntity JSON serialization omits `body` key when body is None (serde skip)." },
+  { id = "VT-7", expects = "Verification: `just gate` green confirms all callers compile with the new ScanMode parameter (Rust type-checks every call site)." },
+]
+
+# ── PHASE-03 ─────────────────────────────────────────────────────────────────
+#
+# Create `src/search.rs` — the new command-tier search module. Implements:
+#   - KindSelector: additive/subtractive kind filtering over known prefixes
+#   - entity_lex_doc: pure adapter CatalogEntity → LexDoc
+#   - snippet: span-aware context extraction using tokenize_with_spans
+#   - BM25 orchestration: build corpus from matching entities, fit, score, rank
+#   - CLI args: --kinds, --with, --no, --format, --context
+#
+# Wire `Search` variant into `Commands` enum and dispatch to `search::run`.
+#
+# JSON output shape: { id, title, kind, prefix, score, snippet? }
+#   - id: canonical ref (e.g. "SL-141")
+#   - title: entity title
+#   - kind: full kind label (e.g. "Slice", "ADR")
+#   - prefix: kind prefix (e.g. "SL", "ADR") — for script consumers
+#   - score: BM25 quantized score (u32, 0 suppressed)
+#   - snippet: present when --context is set, absent otherwise
+#
+# Snippet algorithm:
+#   1. tokenize_with_spans(doc_text) to find query-token positions
+#   2. Find first span whose token matches any query token
+#   3. Extract context_chars bytes (default 80) before and after span start
+#   4. If start > context_chars: prepend "…" and trim to context_chars
+#   5. If end + context_chars < doc_text.len(): append "…" and trim
+#   6. Return the resulting substring
+#
+# Table format (--format table, default):
+#   ID            Kind   Title  Score
+#   SL-141        Slice  Foo    0.85
+#   ADR-022       ADR    Bar    0.42
+# With --context, each result gets an indented snippet line below.
+#
+# Default kind set (--kinds unspecified):
+#   SL  (Slice)
+#   ADR (ADR)
+#   PRD (Product Spec)
+#   SPEC (Tech Spec)
+#   RFC (RFC)
+#   ISS (Issue), IMP (Improvement), CHR (Chore), RSK (Risk), IDE (Idea)
+#
+# Excluded from defaults (can be added via --with):
+#   REQ (Requirement) — predominantly .toml metadata, sparse body prose
+#   ASM, DEC, QUE, CON (Knowledge records) — newer kinds, process-maturity
+#     TBD; including them on --with rather than defaults avoids surprising
+#     noise while the corpus grows. (Design says "TBD at design" — this
+#     resolution excludes them from defaults, makes them includable.)
+#   RV (Review), REV (Revision), REC (Reconciliation), CM (Concept Map) —
+#     process/graph byproducts, not primary authored content.
+[[phase]]
+id        = "PHASE-03"
+name      = "Search command"
+objective = "Create `src/search.rs` module with KindSelector, entity_lex_doc, snippet, BM25 orchestration, and CLI arguments. Wire `doctrine search` into the CLI dispatch with `--kinds`/`--with`/`--no`, `--format table|json`, and `--context` flags."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 is complete (catalog carries bodies, tokenize_with_spans is available)." },
+  { id = "EN-2", text = "No `src/search.rs` module exists yet." },
+  { id = "EN-3", text = "`Commands` enum has no `Search` variant in cli.rs." },
+  { id = "EN-4", text = "`main.rs` has no search dispatch path." },
+]
+
+exit_criteria = [
+  # Module structure
+  { id = "EX-1", text = "`src/search.rs` module exists with: KindSelector, entity_lex_doc, snippet, CLI args struct, and `run(args) → Result<()>` entry point." },
+
+  # KindSelector
+  { id = "EX-2", text = "`KindSelector` parses `--kinds` (replace-default), `--with` (add to default), `--no` (remove from default). Accepts case-insensitive prefix matching: \"sl\", \"SL\", \"adr\", \"ADR\" all work. Unknown prefixes produce a clear error." },
+  { id = "EX-3", text = "Default kind set matches the plan's specification — slices, ADRs, specs, RFCs, and all five backlog kinds." },
+
+  # entity_lex_doc
+  { id = "EX-4", text = "`entity_lex_doc(entity: &CatalogEntity) -> LexDoc` packs: id = canonical ref (key.canonical()), text = `{title}\\n{body}` when body is Some, or just `{title}` when body is None." },
+
+  # Snippet
+  { id = "EX-5", text = "`snippet(doc_text: &str, query: &str, context: usize) -> String` finds first query-token match via tokenize_with_spans and extracts context_chars around it with ellipsis truncation. Returns empty string if no query token matches." },
+
+  # BM25 orchestration
+  { id = "EX-6", text = "`run` builds BodyLexDoc corpus from entities matching the kind selector, constructs LexicalCorpus, fits Bm25Ranker, scores, drops score-0 results, sorts descending by score, and formats output." },
+
+  # CLI wiring
+  { id = "EX-7", text = "`Commands` enum in cli.rs has `Search` variant with: positional `<QUERY>`, `-k/--kinds <PREFIXES>` (comma-separated, replaces default), `--with <PREFIXES>` (adds to default), `--no <PREFIXES>` (removes from default), `-f/--format <table|json>`, `-c/--context`." },
+  { id = "EX-8", text = "`cli.rs` dispatches `Search` to `search::run`." },
+  { id = "EX-9", text = "`main.rs` has `mod search;` and `Search` variant in the Commands enum." },
+
+  # Functional end-to-end
+  { id = "EX-10", text = "`doctrine search \"auth token\"` returns ranked results from entity bodies." },
+  { id = "EX-11", text = "`doctrine search \"nonexistent\"` returns zero results (score-0 suppressed)." },
+  { id = "EX-12", text = "`doctrine search \"auth\" --kinds adr` returns only ADR results (replaces default set)." },
+  { id = "EX-13", text = "`doctrine search \"auth\" --with req --no sl` additive/subtractive on default set." },
+  { id = "EX-14", text = "`doctrine search \"auth\" --format json` emits valid JSON array with fields: id, title, kind, prefix, score (optional: snippet when --context is active)." },
+  { id = "EX-15", text = "`doctrine search \"auth\" --context` shows body snippets with matched terms." },
+  { id = "EX-16", text = "Unknown prefix in --kinds/--with/--no produces a clear error message listing valid prefixes." },
+  { id = "EX-17", text = "`--with` with no --kinds modifies defaults; `--kinds` with --with/--no: --kinds wins, --with/--no are additive on the explicit set." },
+
+  # Gate
+  { id = "EX-18", text = "`just gate` green — new module is command-tier, no layering violations, no clippy warnings." },
+  { id = "EX-19", text = "Existing catalog and lexical tests pass unchanged (EX-1 no regression)." },
+]
+
+verification = [
+  # KindSelector unit tests
+  { id = "VT-1", expects = "Unit test: KindSelector::default() resolves to the canonical default prefix set." },
+  { id = "VT-2", expects = "Unit test: KindSelector::from_kinds([\"adr\",\"sl\"]) case-insensitively resolves to prefixes [\"ADR\", \"SL\"]." },
+  { id = "VT-3", expects = "Unit test: KindSelector::with([\"req\"]).without([\"sl\"]) builds additive/subtractive set from defaults." },
+  { id = "VT-4", expects = "Unit test: unknown prefix \"xyz\" in from_kinds returns Err with diagnostic listing valid prefixes." },
+
+  # entity_lex_doc unit tests
+  { id = "VT-5", expects = "Unit test: entity_lex_doc with body produces LexDoc with id=canonical and text={title}\\n{body}." },
+  { id = "VT-6", expects = "Unit test: entity_lex_doc without body produces LexDoc with text={title} only (no trailing newline)." },
+
+  # Snippet unit tests
+  { id = "VT-7", expects = "Unit test: snippet finds 'auth' in 'authentication token is valid' and returns context around it with ellipsis when context_chars < doc length." },
+  { id = "VT-8", expects = "Unit test: snippet with no matching query tokens returns empty string." },
+
+  # BM25 integration tests (uses test fixture — seed_* helpers in catalog)
+  { id = "VT-9", expects = "Unit test: search over seeded entities (seed_slice with .md body containing 'auth') returns non-empty results for 'auth'." },
+  { id = "VT-10", expects = "Unit test: search with kind filter restricts to matching kind only." },
+  { id = "VT-11", expects = "Unit test: search with empty corpus or all score-0 results returns empty Vec (no 0-score leakage, no crash)." },
+
+  # Serialization
+  { id = "VT-12", expects = "Unit test: JSON serialization of results includes id/title/kind/prefix/score; snippet field absent when --context not set; present when set." },
+
+  # Agent verification (requires a real doctrine repo)
+  { id = "VA-1", expects = "Agent check: `doctrine search \"scope\"` returns ranked results from entity bodies containing 'scope'." },
+  { id = "VA-2", expects = "Agent check: `doctrine search \"scope\" --kinds adr` returns only ADR results." },
+  { id = "VA-3", expects = "Agent check: `doctrine search \"scope\" --format json` emits valid JSON array." },
+  { id = "VA-4", expects = "Agent check: `doctrine search \"scope\" --context` shows snippet context with matched terms visible." },
+  { id = "VA-5", expects = "Agent check: `doctrine search \"scope\" --with req` includes requirements in results." },
+  { id = "VA-6", expects = "Agent check: `doctrine search \"scope\" --no adr` excludes ADRs from results." },
+  { id = "VA-7", expects = "Agent check: `doctrine search \"asdfnonexistent\"` returns zero results." },
+]
