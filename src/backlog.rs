@@ -2012,8 +2012,17 @@ fn render_overrides(
         ));
     }
 
-    // adapter-level drops.
+    // adapter-level drops. Suppress Dangling overrides whose from-endpoint is
+    // terminal (IDE-019): a stale dep on resolved/closed work is noise; only
+    // truly-absent endpoints matter in the default view.
     for ov in overrides {
+        if ov.reason() == OverrideReason::Dangling
+            && corpus
+                .get(&ov.from())
+                .is_some_and(|item| item.status.is_terminal())
+        {
+            continue;
+        }
         let line = match ov.reason() {
             OverrideReason::SoftCycleEvicted => format!(
                 "  {} → {} dropped (soft cycle)\n",
@@ -4638,12 +4647,13 @@ tags = []
             "the live node survives: {out}"
         );
         assert!(out.contains("overrides:"));
-        // the terminal dep is named with status+resolution (never silently satisfied).
+        // IDE-019: the terminal dep is suppressed by default (stale; no action
+        // needed on resolved work). Only the truly-absent ref surfaces.
         assert!(
-            out.contains("CHR-001") && out.contains("closed/wont-do"),
-            "terminal dep named status/resolution: {out}"
+            !out.contains("CHR-001"),
+            "terminal dep suppressed by default: {out}"
         );
-        // the absent ref is named absent.
+        // the absent ref is still named absent.
         assert!(
             out.contains("ISS-099") && out.contains("absent"),
             "absent ref named: {out}"
