@@ -4,7 +4,7 @@ version = 1
 id = 318
 slug = "run-ledger-object-db-sourcing"
 title = "Run-ledger object-db sourcing"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

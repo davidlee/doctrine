@@ -4,7 +4,7 @@ version = 1
 id = 314
 slug = "two-stage-audit-gated-projection"
 title = "Two-stage projection — trunk isolated to stage-2"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

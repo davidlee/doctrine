@@ -4,7 +4,7 @@ version = 1
 id = 316
 slug = "candidate-admission-by-immutable-oid"
 title = "Candidate admission by immutable OID"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

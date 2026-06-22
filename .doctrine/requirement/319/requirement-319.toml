@@ -4,7 +4,7 @@ version = 1
 id = 319
 slug = "trunk-resolution-via-freshest-descendant-with-ancestry-close-backstop"
 title = "Trunk resolution via freshest_descendant with ancestry close backstop"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);
