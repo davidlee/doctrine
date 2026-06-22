@@ -1,11 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-137 PHASE-01 — module built ahead of its consumer; every symbol is exercised by the test suite"
-    )
-)]
+//! `relation_query` — the pure projection+filter+render engine over `&Catalog`
 //! `relation_query` — the pure projection+filter+render engine over `&Catalog`
 //! (SL-137 PHASE-01). Engine-tier (ADR-001): imports catalog (engine) + listing/
 //! relation (leaf), never command-tier. No clock, rng, git, or disk.
@@ -504,40 +498,79 @@ mod tests {
         assert_eq!(source_kind(&mem), "MEM");
     }
 
-    // ---- VT-3: project_list filters AND-compose; four-axis narrows to single row
+    // ---- VT-3: project_list filters AND-compose; four-axis (+ unresolved, include_memory on) narrows
 
     #[test]
     fn project_list_and_composes_four_axes_to_one_row() {
-        // SL-001 → REQ-005 (requirements), REQ-005 seeded so it resolves.
-        let sl001 = numbered_with_edge("SL", 1, "requirements", "REQ-005");
-        let req005 = numbered_with_edge("REQ", 5, "members", "PRD-001");
+        // SL-001 → REQ-005 (requirements, resolved) + REQ-999 (requirements, unresolved)
+        // REQ-005 seeded → resolves; REQ-999 absent → unresolved.
+        // All four axes + include_memory: true narrow to exactly the REQ-999 row.
+        use crate::relation::{RelationEdge, RelationLabel};
+        let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
+        let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
+        let sl001 = ScannedEntity {
+            key: EntityKey { prefix: "SL", id: 1 },
+            kind,
+            status: Some("proposed".to_string()),
+            title: "SL-001".to_string(),
+            outbound: vec![
+                RelationEdge::new(RelationLabel::Requirements, "REQ-005".to_string()),
+                RelationEdge::new(RelationLabel::Requirements, "REQ-999".to_string()),
+            ],
+            estimate: None, value: None, risk: None, tags: vec![], body: None,
+        };
+        let req005 = ScannedEntity {
+            key: EntityKey { prefix: "REQ", id: 5 },
+            kind: req_kind,
+            status: Some("active".to_string()),
+            title: "REQ-005".to_string(),
+            outbound: vec![],
+            estimate: None, value: None, risk: None, tags: vec![], body: None,
+        };
         let catalog = two_entities(sl001, req005);
 
+        // All four axes + include_memory on → one row (REQ-999, the resolved REQ-005 is filtered by unresolved)
         let rows = project_list(
             &catalog,
             &ListFilter {
+                include_memory: true,
                 label: Some("requirements".into()),
                 source_kind: Some("SL".into()),
-                target: Some("REQ-005".into()),
-                ..Default::default()
+                target: Some("REQ-999".into()),
+                unresolved: true,
             },
         );
-        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.len(), 1, "four axes + include_memory narrows to one row");
         assert_eq!(rows[0].source, "SL-001");
         assert_eq!(rows[0].label, "requirements");
-        assert_eq!(rows[0].target, "REQ-005");
-        assert_eq!(rows[0].state, TargetState::Resolved);
+        assert_eq!(rows[0].target, "REQ-999");
+        assert_eq!(rows[0].state, TargetState::Unresolved);
+
+        // Baseline: without unresolved filter, both edges appear.
+        let all = project_list(&catalog, &ListFilter { include_memory: true, ..Default::default() });
+        assert_eq!(all.len(), 2, "both edges visible without --unresolved");
     }
 
     // ---- VT-4: include_memory gate; --source-kind MEM without flag → empty
 
     #[test]
     fn include_memory_false_drops_raw_edges() {
-        // A numbered-source edge is Validated; --source-kind MEM finds nothing
-        // because no memory edges exist when include_memory is false.
-        let sl001 = numbered_with_edge("SL", 1, "requirements", "REQ-001");
-        let catalog = catalog_from(&[sl001]);
+        // Build a Catalog with one numbered edge AND one Raw-label (memory) edge.
+        // The numbered edge is Validated; the Raw edge simulates a memory source.
+        use crate::catalog::hydrate::{CatalogEdge, CatalogEdgeLabel};
+        use std::path::PathBuf;
 
+        let sl001 = numbered_with_edge("SL", 1, "requirements", "REQ-001");
+        let mut catalog = catalog_from(&[sl001]);
+        // Inject a Raw-label edge (simulating a memory-source edge).
+        catalog.edges.push(CatalogEdge {
+            source: CatalogKey::Memory("mem_user123".to_string()),
+            label: CatalogEdgeLabel::Raw("references".to_string()),
+            target: EdgeTarget::UnvalidatedText { raw: "some note".to_string() },
+            origin: crate::catalog::hydrate::EdgeOrigin { file: PathBuf::new(), field: None },
+        });
+
+        // F4a: --source-kind MEM WITHOUT --include-memory → empty (gate drops memory first)
         let rows = project_list(
             &catalog,
             &ListFilter {
@@ -545,7 +578,29 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert!(rows.is_empty());
+        assert!(rows.is_empty(), "MEM source-kind without include_memory should be empty");
+
+        // With include_memory=true, the memory edge is visible.
+        let rows = project_list(
+            &catalog,
+            &ListFilter {
+                include_memory: true,
+                source_kind: Some("MEM".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(rows.len(), 1, "MEM source-kind WITH include_memory should include the memory edge");
+        assert_eq!(rows[0].source, "mem_user123");
+        assert_eq!(rows[0].label, "references");
+        assert_eq!(rows[0].state, TargetState::FreeText);
+
+        // Without --source-kind, include_memory=true shows all edges (numbered + memory)
+        let all = project_list(&catalog, &ListFilter { include_memory: true, ..Default::default() });
+        assert_eq!(all.len(), 2, "include_memory=true with no source-kind should show all edges");
+
+        // Default (no flags) excludes the Raw edge.
+        let default = project_list(&catalog, &ListFilter::default());
+        assert_eq!(default.len(), 1, "default should show only numbered edges");
     }
 
     // ---- VT-5: --unresolved keeps only state ≠ Resolved
