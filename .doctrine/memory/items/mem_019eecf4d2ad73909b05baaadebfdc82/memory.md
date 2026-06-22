@@ -7,8 +7,17 @@ RustEmbed-compiled into the binary and materialized into
 
 ## Authoring flow (project-side, not client-facing)
 
+The CLI/MCP memory tools (`record`, `edit`, `tag`, `status`) operate on
+`.doctrine/memory/items/` — the **local corpus**. They cannot write to
+shipped memories: `edit` on a shipped uid correctly refuses with "shipped/
+is read-only".
+
+Shipped memories are a **separate namespace** with a separate write path:
+
 1. **Edit** `memory/<key>/memory.md` (and `memory.toml` if needed).
    The RustEmbed source is `src/corpus.rs` L44 (`#[folder = "memory/"]`).
+   This is the ONLY way to author shipped memories — there is no CLI or MCP
+   verb that writes to this directory.
 
 2. **Force re-embed**: RustEmbed has NO `rerun-if-changed` for the `memory/`
    folder. A plain `cargo build` is a no-op unless the embedding crate
