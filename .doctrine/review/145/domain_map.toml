@@ -1,0 +1,40 @@
+# Domain map for RV-145 (SL-137 audit)
+
+[[area]]
+name = "Engine — relation query"
+purpose = "Pure projection+filter+render over &Catalog — PHASE-01 deliverable"
+paths = ["src/relation_query.rs"]
+
+[[area]]
+name = "CLI — relation subcommands + diagnostics"
+purpose = "relation {list,census} CLI surface, diagnostics policy — PHASE-02 deliverable"
+paths = [
+  "src/commands/cli.rs",
+  "src/commands/relation.rs",
+  "src/commands/guard.rs",
+  "tests/relation_cli.rs",
+]
+
+[[area]]
+name = "Design contract"
+purpose = "Authored scope, design, plan — the audit's normative baseline"
+paths = [
+  ".doctrine/slice/137/slice-137.toml",
+  ".doctrine/slice/137/design.md",
+  ".doctrine/slice/137/plan.toml",
+  ".doctrine/slice/137/plan.md",
+  ".doctrine/slice/137/slice-137.md",
+]
+
+[[invariant]]
+text = "INV-1: Architecture — command→relation_query (engine)→catalog/listing/relation; no up-calls, no cycles (ADR-001)"
+[[invariant]]
+text = "INV-2: D2 hydration invariant holds — Validated⟺numbered source, Raw⟺memory source"
+[[invariant]]
+text = "INV-3: Behaviour preservation — existing catalog/relation/listing suites unchanged"
+[[invariant]]
+text = "INV-4: Pure/imperative split — projection/filter is pure over &Catalog; diagnostics/io in shell (design §5.4)"
+[[invariant]]
+text = "INV-5: D1 — relation {list,census} under top-level Relation; link/unlink stay top-level, unchanged"
+[[invariant]]
+text = "INV-6: Diagnostics policy — Error-only per-row stderr; edge-dropping Warning summary; classification Warning/Info suppressed (design §5.4 F1)"
