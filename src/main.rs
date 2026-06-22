@@ -248,20 +248,18 @@ mod tests {
 
 mod write_class_tests {
     use super::*;
-    use crate::commands::cli::{Command, EstimateAction, ValueAction};
-    use crate::commands::facet::{EstimateSetArgs, ValueSetArgs};
+    use crate::commands::cli::Command;
     use crate::commands::guard::{WriteClass, write_class};
     use crate::concept_map::ConceptMapCommand;
-    use crate::dispatch::DispatchCommand;
-    use crate::memory::{FindRetrieveArgs, MemoryCommand, SyncCommand};
+    use crate::memory::MemoryCommand;
     use crate::review::ReviewCommand;
-    use std::path::PathBuf;
 
     // Read => None, Write(label) => Some(label). The compiler's totality (no
     // wildcard in `write_class`) proves every variant is *handled*; this table
-    // pins the Read/Write split + verb labels (VT-1).
-    fn cls(cmd: Command) -> Option<&'static str> {
-        match write_class(&cmd) {
+    // pins the Read/Write split + verb labels (VT-1) via argv-driven assertions
+    // (IMP-010 F-3) — no struct-literal command construction.
+    fn cls(args: &[&str]) -> Option<&'static str> {
+        match write_class(&Cli::try_parse_from(args).unwrap().command) {
             WriteClass::Read => None,
             // All refused classes carry a verb label; the guard refuses each.
             WriteClass::Write(v) | WriteClass::Orchestrator(v) | WriteClass::Hookmint(v) => Some(v),
@@ -271,281 +269,74 @@ mod write_class_tests {
         }
     }
 
-    // The 8-field shared list flags — every `list` verb is a Read; a helper
-    // tames the construction noise across the kinds.
-    fn clist() -> CommonListArgs {
-        CommonListArgs {
-            filter: None,
-            regexp: None,
-            case_insensitive: false,
-            status: Vec::new(),
-            tag: Vec::new(),
-            all: false,
-            format: Format::Table,
-            json: false,
-            columns: None,
-        }
-    }
-
     #[test]
     fn install_is_write() {
-        assert_eq!(
-            cls(Command::Install {
-                path: None,
-                agent: Vec::new(),
-                skill: Vec::new(),
-                domain: Vec::new(),
-                only_memory: false,
-                global: false,
-                dry_run: false,
-                yes: false
-            }),
-            Some("install")
-        );
+        assert_eq!(cls(&["doctrine", "install"]), Some("install"));
     }
 
     #[test]
     fn skills_list_is_read() {
-        assert_eq!(
-            cls(Command::Skills {
-                command: crate::skills::SkillsCommand::List {
-                    agent: None,
-                    installed: false
-                }
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "skills", "list"]), None);
     }
 
     #[test]
     fn slice_split() {
-        use crate::slice::SliceCommand;
-        let w = |c| cls(Command::Slice { command: c });
+        assert_eq!(cls(&["doctrine", "slice", "new"]), Some("slice new"));
         assert_eq!(
-            w(SliceCommand::New {
-                title: None,
-                slug: None,
-                path: None
-            }),
-            Some("slice new")
-        );
-        assert_eq!(
-            w(SliceCommand::Design { id: 0, path: None }),
+            cls(&["doctrine", "slice", "design", "0"]),
             Some("slice design")
         );
+        assert_eq!(cls(&["doctrine", "slice", "plan", "0"]), Some("slice plan"));
         assert_eq!(
-            w(SliceCommand::Plan { id: 0, path: None }),
-            Some("slice plan")
-        );
-        assert_eq!(
-            w(SliceCommand::Phases {
-                id: 0,
-                prune: false,
-                path: None
-            }),
+            cls(&["doctrine", "slice", "phases", "0"]),
             Some("slice phases")
         );
         assert_eq!(
-            w(SliceCommand::Notes { id: 0, path: None }),
+            cls(&["doctrine", "slice", "notes", "0"]),
             Some("slice notes")
         );
         assert_eq!(
-            w(SliceCommand::Phase {
-                id: 0,
-                phase_id: String::new(),
-                status: state::PhaseStatus::Planned,
-                note: None,
-                path: None,
-            }),
+            cls(&[
+                "doctrine", "slice", "phase", "0", "PHASE-01", "--status", "planned"
+            ]),
             Some("slice phase")
         );
         assert_eq!(
-            w(SliceCommand::Status {
-                id: 0,
-                state: slice::SliceStatus::Proposed,
-                note: None,
-                path: None,
-            }),
+            cls(&["doctrine", "slice", "status", "0", "proposed"]),
             Some("slice status")
         );
-        assert_eq!(
-            w(SliceCommand::List {
-                list: clist(),
-                path: None
-            }),
-            None
-        );
-        assert_eq!(
-            w(SliceCommand::Show {
-                reference: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "slice", "list"]), None);
+        assert_eq!(cls(&["doctrine", "slice", "show", ""]), None);
     }
 
     #[test]
     fn memory_split() {
-        let w = |c| cls(Command::Memory { command: c });
         assert_eq!(
-            w(MemoryCommand::Record {
-                title: String::new(),
-                memory_type: memory::MemoryType::Concept,
-                key: None,
-                lifespan: None,
-                status: memory::Status::Active,
-                summary: None,
-                review_by: None,
-                provenance_source: Vec::new(),
-                trust: None,
-                severity: None,
-                tag: Vec::new(),
-                path_scope: Vec::new(),
-                glob: Vec::new(),
-                command: Vec::new(),
-                repo: None,
-                global: false,
-                path: None,
-            }),
+            cls(&["doctrine", "memory", "record", "T", "--type", "concept"]),
             Some("memory record")
         );
         assert_eq!(
-            w(MemoryCommand::Verify {
-                reference: String::new(),
-                allow_dirty: false,
-                path: None
-            }),
+            cls(&["doctrine", "memory", "verify", ""]),
             Some("memory verify")
         );
-        assert_eq!(
-            w(MemoryCommand::Show {
-                reference: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
-        assert_eq!(
-            w(MemoryCommand::List {
-                memory_type: None,
-                list: clist(),
-                path: None,
-            }),
-            None
-        );
-        assert_eq!(
-            w(MemoryCommand::Find {
-                query: None,
-                args: FindRetrieveArgs {
-                    path_scope: Vec::new(),
-                    glob: Vec::new(),
-                    command: Vec::new(),
-                    tag: Vec::new(),
-                    flag_query: None,
-                    memory_type: None,
-                    status: None,
-                    lifespan: None,
-                    include_draft: false,
-                    format: Format::Table,
-                    json: false,
-                    offset: 0,
-                    page: None,
-                    limit: None,
-                    path: None,
-                    expand: None,
-                },
-            }),
-            None
-        );
-        assert_eq!(
-            w(MemoryCommand::Retrieve {
-                args: FindRetrieveArgs {
-                    path_scope: Vec::new(),
-                    glob: Vec::new(),
-                    command: Vec::new(),
-                    tag: Vec::new(),
-                    flag_query: None,
-                    memory_type: None,
-                    status: None,
-                    lifespan: None,
-                    include_draft: false,
-                    format: Format::Table,
-                    json: false,
-                    offset: 0,
-                    page: None,
-                    limit: None,
-                    path: None,
-                    expand: None,
-                },
-                min_trust: None,
-            }),
-            None
-        );
-        assert_eq!(
-            w(MemoryCommand::ResolveLinks {
-                reference: None,
-                path: None,
-            }),
-            None
-        );
-        assert_eq!(
-            w(MemoryCommand::Backlinks {
-                reference: String::new(),
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "memory", "show", ""]), None);
+        assert_eq!(cls(&["doctrine", "memory", "list"]), None);
+        assert_eq!(cls(&["doctrine", "memory", "find"]), None);
+        assert_eq!(cls(&["doctrine", "memory", "retrieve"]), None);
+        assert_eq!(cls(&["doctrine", "memory", "resolve-links"]), None);
+        assert_eq!(cls(&["doctrine", "memory", "backlinks", ""]), None);
         // Nested Option — bare `memory sync` AND `memory sync install` are both Write.
+        assert_eq!(cls(&["doctrine", "memory", "sync"]), Some("memory sync"));
         assert_eq!(
-            w(MemoryCommand::Sync {
-                command: None,
-                dry_run: false,
-                yes: false,
-                path: None,
-            }),
-            Some("memory sync")
-        );
-        assert_eq!(
-            w(MemoryCommand::Sync {
-                command: Some(SyncCommand::Install {
-                    path: None,
-                    dry_run: false,
-                    yes: false,
-                }),
-                dry_run: false,
-                yes: false,
-                path: None,
-            }),
+            cls(&["doctrine", "memory", "sync", "install"]),
             Some("memory sync install")
         );
         assert_eq!(
-            w(MemoryCommand::Status {
-                reference: String::new(),
-                state: String::new(),
-                by: None,
-                path: None,
-            }),
+            cls(&["doctrine", "memory", "status", "", ""]),
             Some("memory status")
         );
         assert_eq!(
-            w(MemoryCommand::Edit {
-                reference: String::new(),
-                title: None,
-                summary: None,
-                status: None,
-                lifespan: None,
-                review_by: None,
-                trust: None,
-                severity: None,
-                key: None,
-                path_scope: vec![],
-                glob: vec![],
-                command: vec![],
-                path: None,
-            }),
+            cls(&["doctrine", "memory", "edit", ""]),
             Some("memory edit")
         );
     }
@@ -641,259 +432,82 @@ mod write_class_tests {
 
     #[test]
     fn adr_split() {
-        use crate::adr::AdrCommand;
-        let w = |c| cls(Command::Adr { command: c });
+        assert_eq!(cls(&["doctrine", "adr", "new"]), Some("adr new"));
         assert_eq!(
-            w(AdrCommand::New {
-                title: None,
-                slug: None,
-                path: None
-            }),
-            Some("adr new")
-        );
-        assert_eq!(
-            w(AdrCommand::Status {
-                id: 0,
-                status: adr::AdrStatus::Proposed,
-                path: None,
-            }),
+            cls(&["doctrine", "adr", "status", "0", "--status", "proposed"]),
             Some("adr status")
         );
-        assert_eq!(
-            w(AdrCommand::List {
-                list: clist(),
-                path: None
-            }),
-            None
-        );
-        assert_eq!(
-            w(AdrCommand::Show {
-                reference: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "adr", "list"]), None);
+        assert_eq!(cls(&["doctrine", "adr", "show", ""]), None);
     }
 
     #[test]
     fn policy_split() {
-        let w = |c| cls(Command::Policy { command: c });
+        assert_eq!(cls(&["doctrine", "policy", "new"]), Some("policy new"));
         assert_eq!(
-            w(crate::policy::PolicyCommand::New {
-                title: None,
-                slug: None,
-                path: None
-            }),
-            Some("policy new")
-        );
-        assert_eq!(
-            w(crate::policy::PolicyCommand::Status {
-                id: 0,
-                status: policy::PolicyStatus::Draft,
-                path: None,
-            }),
+            cls(&["doctrine", "policy", "status", "0", "--status", "draft"]),
             Some("policy status")
         );
-        assert_eq!(
-            w(crate::policy::PolicyCommand::List {
-                list: clist(),
-                path: None
-            }),
-            None
-        );
-        assert_eq!(
-            w(crate::policy::PolicyCommand::Show {
-                reference: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "policy", "list"]), None);
+        assert_eq!(cls(&["doctrine", "policy", "show", ""]), None);
     }
 
     #[test]
     fn standard_split() {
-        let w = |c| cls(Command::Standard { command: c });
+        assert_eq!(cls(&["doctrine", "standard", "new"]), Some("standard new"));
         assert_eq!(
-            w(crate::standard::StandardCommand::New {
-                title: None,
-                slug: None,
-                path: None
-            }),
-            Some("standard new")
-        );
-        assert_eq!(
-            w(crate::standard::StandardCommand::Status {
-                id: 0,
-                status: standard::StandardStatus::Draft,
-                path: None,
-            }),
+            cls(&["doctrine", "standard", "status", "0", "--status", "draft"]),
             Some("standard status")
         );
-        assert_eq!(
-            w(crate::standard::StandardCommand::List {
-                list: clist(),
-                path: None
-            }),
-            None
-        );
-        assert_eq!(
-            w(crate::standard::StandardCommand::Show {
-                reference: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "standard", "list"]), None);
+        assert_eq!(cls(&["doctrine", "standard", "show", ""]), None);
     }
 
     #[test]
     fn spec_split() {
-        use crate::spec::{SpecCommand, SpecReqCommand};
-        let w = |c| cls(Command::Spec { command: c });
         assert_eq!(
-            w(SpecCommand::New {
-                subtype: spec::SpecSubtype::Product,
-                title: None,
-                slug: None,
-                path: None,
-            }),
+            cls(&["doctrine", "spec", "new", "product"]),
             Some("spec new")
         );
-        // Three levels deep: Spec -> Req -> Add.
         assert_eq!(
-            w(SpecCommand::Req {
-                command: SpecReqCommand::Add {
-                    spec_ref: String::new(),
-                    title: None,
-                    kind: requirement::ReqKind::Functional,
-                    label: None,
-                    slug: None,
-                    path: None,
-                }
-            }),
+            cls(&["doctrine", "spec", "req", "add", "", "--kind", "functional"]),
             Some("spec req add")
         );
-        // sibling: Spec -> Req -> Status is also a Write.
         assert_eq!(
-            w(SpecCommand::Req {
-                command: SpecReqCommand::Status {
-                    req_ref: String::new(),
-                    to: requirement::ReqStatus::Active,
-                    note: None,
-                    path: None,
-                }
-            }),
+            cls(&["doctrine", "spec", "req", "status", "", "--to", "active"]),
             Some("spec req status")
         );
-        assert_eq!(
-            w(SpecCommand::List {
-                list: clist(),
-                path: None
-            }),
-            None
-        );
-        assert_eq!(
-            w(SpecCommand::Show {
-                spec_ref: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
-        assert_eq!(
-            w(SpecCommand::Validate {
-                spec_ref: None,
-                path: None
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "spec", "list"]), None);
+        assert_eq!(cls(&["doctrine", "spec", "show", ""]), None);
+        assert_eq!(cls(&["doctrine", "spec", "validate"]), None);
     }
 
     #[test]
     fn backlog_split() {
-        use crate::backlog::BacklogCommand;
-        let w = |c| cls(Command::Backlog { command: c });
         assert_eq!(
-            w(BacklogCommand::New {
-                kind: backlog::ItemKind::Issue,
-                title: None,
-                slug: None,
-                path: None,
-            }),
+            cls(&["doctrine", "backlog", "new", "issue"]),
             Some("backlog new")
         );
         assert_eq!(
-            w(BacklogCommand::Edit {
-                id: String::new(),
-                status: backlog::Status::Open,
-                resolution: None,
-                path: None,
-            }),
+            cls(&["doctrine", "backlog", "edit", "", "--status", "open"]),
             Some("backlog edit")
         );
-        assert_eq!(
-            w(BacklogCommand::List {
-                kind: None,
-                by: backlog::OrderBy::Sequence,
-                list: clist(),
-                substr: None,
-                path: None,
-            }),
-            None
-        );
-        assert_eq!(
-            w(BacklogCommand::Show {
-                id: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "backlog", "list"]), None);
+        assert_eq!(cls(&["doctrine", "backlog", "show", ""]), None);
     }
 
     #[test]
     fn knowledge_split() {
-        let w = |c| cls(Command::Knowledge { command: c });
         assert_eq!(
-            w(crate::knowledge::KnowledgeCommand::New {
-                kind: knowledge::RecordKind::Assumption,
-                title: None,
-                slug: None,
-                path: None,
-            }),
+            cls(&["doctrine", "knowledge", "new", "assumption"]),
             Some("knowledge new")
         );
         assert_eq!(
-            w(crate::knowledge::KnowledgeCommand::Status {
-                id: String::new(),
-                state: String::new(),
-                path: None,
-            }),
+            cls(&["doctrine", "knowledge", "status", "", ""]),
             Some("knowledge status")
         );
-        assert_eq!(
-            w(crate::knowledge::KnowledgeCommand::List {
-                list: clist(),
-                path: None,
-            }),
-            None
-        );
-        assert_eq!(
-            w(crate::knowledge::KnowledgeCommand::Show {
-                id: String::new(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "knowledge", "list"]), None);
+        assert_eq!(cls(&["doctrine", "knowledge", "show", ""]), None);
     }
 
     #[test]
@@ -901,70 +515,20 @@ mod write_class_tests {
         // Bare regenerate (None) AND `boot install` are both Write. `--check` is
         // a read-only sentry but the superset (§5.2) sweeps the whole verb to
         // Write — workers never run it, and over-refusing a read is the safe side.
-        assert_eq!(
-            cls(Command::Boot {
-                command: None,
-                emit: false,
-                check: false,
-                path: None
-            }),
-            Some("boot")
-        );
-        assert_eq!(
-            cls(Command::Boot {
-                command: None,
-                emit: false,
-                check: true,
-                path: None
-            }),
-            Some("boot")
-        );
-        assert_eq!(
-            cls(Command::Boot {
-                command: Some(crate::boot::BootCommand::Install {
-                    path: None,
-                    agent: Vec::new(),
-                    dry_run: false,
-                    yes: false,
-                }),
-                emit: false,
-                check: false,
-                path: None,
-            }),
-            Some("boot install")
-        );
+        assert_eq!(cls(&["doctrine", "boot"]), Some("boot"));
+        assert_eq!(cls(&["doctrine", "boot", "--check"]), Some("boot"));
+        assert_eq!(cls(&["doctrine", "boot", "install"]), Some("boot install"));
     }
 
     #[test]
     fn worktree_is_read() {
         // Deliberate (§5.2): these write *fork* files, not the doctrine state the
         // guard protects, and never run in worker context.
-        assert_eq!(
-            cls(Command::Worktree {
-                command: crate::worktree::WorktreeCommand::Provision {
-                    fork: PathBuf::from("x"),
-                    path: None,
-                }
-            }),
-            None
-        );
-        assert_eq!(
-            cls(Command::Worktree {
-                command: crate::worktree::WorktreeCommand::CheckAllowlist { path: None }
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "worktree", "provision", "x"]), None);
+        assert_eq!(cls(&["doctrine", "worktree", "check-allowlist"]), None);
         // SL-056 §3: `worktree status` reads the resolved mode — Read (open to
         // workers), so it survives the guard.
-        assert_eq!(
-            cls(Command::Worktree {
-                command: crate::worktree::WorktreeCommand::Status {
-                    assert: false,
-                    path: None,
-                }
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "worktree", "status"]), None);
     }
 
     // SL-056 §3/§5: `worktree marker --clear` is the bespoke MarkerClear class —
@@ -972,20 +536,15 @@ mod write_class_tests {
     // self-brick). The guard must not refuse it; its own fences live in the handler.
     #[test]
     fn worktree_marker_is_bespoke_class() {
-        let c = Command::Worktree {
-            command: crate::worktree::WorktreeCommand::Marker {
-                clear: true,
-                operator: false,
-                stamp_subagent: false,
-                path: None,
-            },
-        };
+        let c = Cli::try_parse_from(["doctrine", "worktree", "marker", "--clear"])
+            .unwrap()
+            .command;
         assert!(
             matches!(write_class(&c), WriteClass::MarkerClear),
             "marker --clear must be the bespoke MarkerClear class"
         );
         // And therefore not seen as a guarded Write by `cls`.
-        assert_eq!(cls(c), None);
+        assert_eq!(cls(&["doctrine", "worktree", "marker", "--clear"]), None);
     }
 
     // SL-056 PHASE-10: `worktree marker --stamp-subagent` is the Hookmint class —
@@ -993,14 +552,9 @@ mod write_class_tests {
     // verb-identity carve-out), carries the "marker --stamp-subagent" verb label.
     #[test]
     fn worktree_marker_stamp_subagent_is_hookmint() {
-        let c = Command::Worktree {
-            command: crate::worktree::WorktreeCommand::Marker {
-                clear: false,
-                operator: false,
-                stamp_subagent: true,
-                path: None,
-            },
-        };
+        let c = Cli::try_parse_from(["doctrine", "worktree", "marker", "--stamp-subagent"])
+            .unwrap()
+            .command;
         assert!(
             matches!(
                 write_class(&c),
@@ -1008,133 +562,125 @@ mod write_class_tests {
             ),
             "marker --stamp-subagent must be the Hookmint class"
         );
-        // A guarded Write to `cls` — the worker-mode guard refuses it.
-        assert_eq!(cls(c), Some("marker --stamp-subagent"));
+        assert_eq!(
+            cls(&["doctrine", "worktree", "marker", "--stamp-subagent"]),
+            Some("marker --stamp-subagent")
+        );
     }
 
     // SL-056 PHASE-06: `worktree fork` is the FIRST Orchestrator-classed verb —
     // refused under worker-mode, carries the "fork" verb label.
     #[test]
     fn worktree_fork_is_orchestrator() {
-        let c = Command::Worktree {
-            command: crate::worktree::WorktreeCommand::Fork {
-                base: "B".to_string(),
-                branch: "wkr".to_string(),
-                dir: PathBuf::from("x"),
-                worker: false,
-                path: None,
-            },
-        };
+        let c = Cli::try_parse_from([
+            "doctrine", "worktree", "fork", "--base", "B", "--branch", "wkr", "--dir", "x",
+        ])
+        .unwrap()
+        .command;
         assert!(
             matches!(write_class(&c), WriteClass::Orchestrator("fork")),
             "fork must be Orchestrator(\"fork\")"
         );
-        // The guard treats it like a Write: cls surfaces the verb label.
-        assert_eq!(cls(c), Some("fork"));
+        assert_eq!(
+            cls(&[
+                "doctrine", "worktree", "fork", "--base", "B", "--branch", "wkr", "--dir", "x"
+            ]),
+            Some("fork")
+        );
     }
 
     // SL-064 PHASE-04: `dispatch sync --prepare-review` is Orchestrator-classed —
     // refused under worker-mode, carries the "dispatch-sync" verb label (EX-1).
     #[test]
     fn dispatch_sync_is_orchestrator() {
-        let c = Command::Dispatch {
-            command: DispatchCommand::Sync {
-                slice: 64,
-                prepare_review: true,
-                integrate: false,
-                show_journal_trunk_oid: false,
-                trunk: None,
-                edge: None,
-                path: None,
-            },
-        };
+        let c = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "64",
+            "--prepare-review",
+        ])
+        .unwrap()
+        .command;
         assert!(
             matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
             "dispatch sync must be Orchestrator(\"dispatch-sync\")"
         );
-        assert_eq!(cls(c), Some("dispatch-sync"));
+        assert_eq!(
+            cls(&[
+                "doctrine",
+                "dispatch",
+                "sync",
+                "--slice",
+                "64",
+                "--prepare-review"
+            ]),
+            Some("dispatch-sync")
+        );
     }
 
     // SL-064 PHASE-05: `dispatch sync --integrate` is the same Orchestrator verb
     // class (EX-6) — the trunk-writing stage inherits the worker-mode refusal.
     #[test]
     fn dispatch_sync_integrate_is_orchestrator() {
-        let c = Command::Dispatch {
-            command: DispatchCommand::Sync {
-                slice: 64,
-                prepare_review: false,
-                integrate: true,
-                show_journal_trunk_oid: false,
-                trunk: None,
-                edge: None,
-                path: None,
-            },
-        };
+        let c = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "64",
+            "--integrate",
+        ])
+        .unwrap()
+        .command;
         assert!(
             matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
             "dispatch sync --integrate must be Orchestrator(\"dispatch-sync\")"
         );
-        assert_eq!(cls(c), Some("dispatch-sync"));
+        assert_eq!(
+            cls(&[
+                "doctrine",
+                "dispatch",
+                "sync",
+                "--slice",
+                "64",
+                "--integrate"
+            ]),
+            Some("dispatch-sync")
+        );
     }
 
     #[test]
     fn inspect_is_read() {
         // SL-046: the cross-kind relation view reads only — never mints/derives.
-        assert_eq!(
-            cls(Command::Inspect {
-                id: "SL-046".to_string(),
-                format: Format::Table,
-                json: false,
-                path: None,
-            }),
-            None
-        );
+        assert_eq!(cls(&["doctrine", "inspect", "SL-046"]), None);
     }
 
     #[test]
     fn validate_is_read_reseat_is_write() {
         // Corpus integrity: the scan reads (INV-3); reseat mutates the canonical
         // triple, so it is a worker-refused authored write (D2/D6).
-        assert_eq!(cls(Command::Validate { path: None }), None);
-        assert_eq!(
-            cls(Command::Reseat {
-                reference: "SL-001".to_string(),
-                to: None,
-                path: None,
-            }),
-            Some("reseat")
-        );
+        assert_eq!(cls(&["doctrine", "validate"]), None);
+        assert_eq!(cls(&["doctrine", "reseat", "SL-001"]), Some("reseat"));
     }
 
     // SL-118 PHASE-03: Estimate/Value write-class tests.
 
-    fn estimate_cmd() -> Command {
-        Command::Estimate {
-            action: EstimateAction::Set(EstimateSetArgs {
-                id: "SL-001".into(),
-                lower: Some(1.0),
-                upper: Some(3.0),
-                exact: None,
-                path: None,
-            }),
-        }
-    }
-
     #[test]
     fn estimate_is_write() {
-        assert_eq!(cls(estimate_cmd()), Some("estimate"));
+        assert_eq!(
+            cls(&["doctrine", "estimate", "set", "SL-001", "1", "3"]),
+            Some("estimate")
+        );
     }
 
     #[test]
     fn value_is_write() {
-        let c = Command::Value {
-            action: ValueAction::Set(ValueSetArgs {
-                id: "SL-001".into(),
-                magnitude: 42.0,
-                path: None,
-            }),
-        };
-        assert_eq!(cls(c), Some("value"));
+        assert_eq!(
+            cls(&["doctrine", "value", "set", "SL-001", "42"]),
+            Some("value")
+        );
     }
 
     // ── PHASE-01: Behaviour-preservation verification net (SL-115) ──────────────

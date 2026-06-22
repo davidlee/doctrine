@@ -386,13 +386,13 @@ pub(crate) fn parse_canonical_ref(reference: &str) -> anyhow::Result<(&'static K
 /// citations are reported as danglers and force a non-zero exit; prose is never
 /// rewritten (ADR-004 outbound-only, D4/R-3).
 ///
-/// CONTRACT (SL-032 review F-4, accepted): the dangler exit is **non-zero even on
+/// CONTRACT (SL-032 review F-4): the dangler exit is **non-zero even on
 /// a fully-completed reseat** — the mutation succeeded, the citations are the
-/// human's to fix; `reseat && commit` is therefore wrong, drive it by hand. The
-/// six post-guard fs ops are **not transactional**: a mid-sequence failure leaves
-/// a half-reseated entity that `validate` will flag. Reseat targets freshly
-/// minted, pre-execution collisions where that blast radius is acceptable;
-/// hardening it to atomic is a tracked follow-up, not done here.
+/// human's to fix; `reseat && commit` is therefore wrong, drive it by hand.
+/// The mutation is now staged in a sibling temp dir with a single atomic
+/// rename as the commit point (IMP-010): a mid-sequence failure before the
+/// rename leaves only an orphan `.MMM.tmp` the retry path cleans — never a
+/// half-reseated entity at the canonical id.
 pub(crate) fn run_reseat(
     path: Option<PathBuf>,
     reference: &str,
@@ -448,19 +448,28 @@ pub(crate) fn run_reseat(
         );
     }
 
-    // --- Mutation (all guards passed) ---
-    std::fs::rename(&src_dir, &dst_dir)
-        .with_context(|| format!("rename {} → {}", src_dir.display(), dst_dir.display()))?;
+    // Staging dir — sibling `.MMM.tmp` on the same mount, invisible until commit.
+    let tmp_dir = tree_root.join(format!(".{dst_name}.tmp"));
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(&tmp_dir)
+            .with_context(|| format!("clean stale staging dir {}", tmp_dir.display()))?;
+    }
+
+    // --- Mutation (IMP-010: staged in tmp, atomic rename = commit point) ---
+    // Step 1: copy src contents into staging dir (invisible).
+    fsutil::copy_dir_all(&src_dir, &tmp_dir)
+        .with_context(|| format!("copy {} → {}", src_dir.display(), tmp_dir.display()))?;
+
+    // Step 2–3: transform staging dir in place.
     for ext in ["toml", "md"] {
-        let from = dst_dir.join(format!("{}-{src_name}.{ext}", kind.kind.stem));
-        let onto = dst_dir.join(format!("{}-{dst_name}.{ext}", kind.kind.stem));
+        let from = tmp_dir.join(format!("{}-{src_name}.{ext}", kind.kind.stem));
+        let onto = tmp_dir.join(format!("{}-{dst_name}.{ext}", kind.kind.stem));
         if from.exists() {
             std::fs::rename(&from, &onto)
                 .with_context(|| format!("rename {} → {}", from.display(), onto.display()))?;
         }
     }
-    // toml `id` field — edit-preserving (toml_edit keeps comments/sections).
-    let toml_path = crate::entity::id_path(&root, kind.kind, dst_id, crate::entity::Ext::Toml);
+    let toml_path = tmp_dir.join(format!("{}-{dst_name}.toml", kind.kind.stem));
     let text = std::fs::read_to_string(&toml_path)
         .with_context(|| format!("read {}", toml_path.display()))?;
     let mut doc = text
@@ -468,9 +477,19 @@ pub(crate) fn run_reseat(
         .with_context(|| format!("parse {}", toml_path.display()))?;
     doc.as_table_mut()
         .insert("id", toml_edit::value(i64::from(dst_id)));
-    crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
+    fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
         .with_context(|| format!("write {}", toml_path.display()))?;
-    // Alias — drop the old `NNN-slug`, plant `MMM-slug → MMM`.
+
+    // Step 4: atomic commit — rename(tmp → dst_dir).
+    std::fs::rename(&tmp_dir, &dst_dir).with_context(|| {
+        format!(
+            "commit rename {} → {}",
+            tmp_dir.display(),
+            dst_dir.display()
+        )
+    })?;
+
+    // Step 5: swap aliases.
     let old_alias = tree_root.join(format!("{src_name}-{slug}"));
     if matches!(std::fs::symlink_metadata(&old_alias), Ok(m) if m.file_type().is_symlink()) {
         std::fs::remove_file(&old_alias)
@@ -480,6 +499,10 @@ pub(crate) fn run_reseat(
         &tree_root.join(format!("{dst_name}-{slug}")),
         Path::new(&dst_name),
     )?;
+
+    // Step 6: cleanup src_dir.
+    std::fs::remove_dir_all(&src_dir)
+        .with_context(|| format!("remove old src dir {}", src_dir.display()))?;
 
     let old_ref = listing::canonical_id(kind.kind.prefix, src_id);
     let new_ref = listing::canonical_id(kind.kind.prefix, dst_id);
