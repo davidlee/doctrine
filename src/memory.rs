@@ -3041,7 +3041,11 @@ pub(crate) fn run_verify(path: Option<PathBuf>, reference: &str, allow_dirty: bo
 /// `doctrine memory validate [REF]` — run advisory validation checks on memories.
 /// Three checks: dangling relations, stale verification, draft expiry.
 /// Exit 0 if clean, 1 if any warnings. Never writes to disk.
-pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>, writer: &mut dyn std::io::Write) -> Result<()> {
+pub(crate) fn run_validate(
+    path: Option<PathBuf>,
+    reference: Option<&str>,
+    writer: &mut dyn std::io::Write,
+) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let items_root = root.join(MEMORY_ITEMS_DIR);
     let today = crate::clock::today();
@@ -3063,8 +3067,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>, write
                 writeln!(
                     writer,
                     "{}: dangling: [[relation]] target \"{}\" not found",
-                    memory.uid,
-                    relation.target
+                    memory.uid, relation.target
                 )?;
                 warning_count += 1;
             }
@@ -3084,8 +3087,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>, write
             writeln!(
                 writer,
                 "{}: stale: verified_sha {} commits behind HEAD on scoped paths",
-                memory.uid,
-                commits_behind
+                memory.uid, commits_behind
             )?;
             warning_count += 1;
         }
@@ -3099,9 +3101,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>, reference: Option<&str>, write
             writeln!(
                 writer,
                 "{}: expired: draft past review_by {} ({} days ago)",
-                memory.uid,
-                memory.review_by,
-                -days
+                memory.uid, memory.review_by, -days
             )?;
             warning_count += 1;
         }
