@@ -584,10 +584,13 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Memory { command } => crate::memory::dispatch(command, color),
         Command::Review { command } => crate::review::dispatch(command, color),
         Command::Rec { command } => crate::rec::dispatch(command, color),
-        Command::Search(args) => crate::search::run(args, crate::listing::RenderOpts {
-            color,
-            term_width: crate::tty::stdout_terminal_width(),
-        }),
+        Command::Search(args) => crate::search::run(
+            args,
+            crate::listing::RenderOpts {
+                color,
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
         Command::Revision { command } => crate::revision::dispatch(command, color),
         Command::Reconcile {
             req,
