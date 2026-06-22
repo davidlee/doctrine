@@ -23,6 +23,14 @@ create = [
   ".doctrine/templates",
 ]
 
+[memory]
+# Seed one key-addressed memory item into .doctrine/memory/items/ during install.
+# The body is drawn from a template under install/templates/; the user edits it
+# in place. Idempotent — re-install skips existing key symlinks.
+seed_items = [
+  { key = "signpost.project.orientation", type = "signpost", title = "Project Orientation", body_template = "templates/seed-onboarding.md" }
+]
+
 [gitignore]
 # Runtime state is disposable and must never be committed; the convenience
 # `phases` symlink and ad-hoc `handover.md` are gitignored so they never enter

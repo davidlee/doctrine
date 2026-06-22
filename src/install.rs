@@ -13,6 +13,8 @@ use anyhow::Context;
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 
+use crate::memory::MemoryType;
+
 /// Embedded install assets — everything under `install/`.
 #[derive(RustEmbed)]
 #[folder = "install/"]
@@ -40,6 +42,9 @@ struct Manifest {
 
     #[serde(default)]
     root_markers: RootMarkersSection,
+
+    #[serde(default)]
+    memory: MemorySection,
 }
 
 fn default_target() -> String {
@@ -70,6 +75,23 @@ impl Default for RootMarkersSection {
             markers: crate::root::default_markers(),
         }
     }
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct MemorySection {
+    #[serde(default)]
+    seed_items: Vec<SeedItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SeedItem {
+    key: String,
+    #[serde(rename = "type")]
+    memory_type: String,
+    title: String,
+    body_template: String,
+    #[serde(default)]
+    summary: String,
 }
 
 /// A planned action from the dry-run.
@@ -134,6 +156,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     }
 
     execute_plan(&plan)?;
+    seed_authoring_memories(&project_root, &manifest)?;
     stdout_line("Done.")?;
 
     // ── Stage 2: forward steps ──
@@ -155,6 +178,37 @@ fn sync_hint() -> &'static str {
 // ---------------------------------------------------------------------------
 // Forward-step orchestration (PHASE-02)
 // ---------------------------------------------------------------------------
+
+/// Seed key-addressed memory items listed in `manifest.toml` (e.g. the project
+/// orientation template). Each item uses `memory::seed_by_key` to create a
+/// no-anchor memory whose body is drawn from an embedded template.
+/// Idempotent — skips existing key symlinks.
+fn seed_authoring_memories(root: &Path, manifest: &Manifest) -> anyhow::Result<()> {
+    if manifest.memory.seed_items.is_empty() {
+        return Ok(());
+    }
+    let mut stdout = io::stdout();
+    writeln!(stdout, "  seeding authoring memories…")?;
+    for item in &manifest.memory.seed_items {
+        let memory_type = MemoryType::parse(&item.memory_type)
+            .with_context(|| format!("invalid memory type {:?}", item.memory_type))?;
+        let body = asset_text(&item.body_template)
+            .with_context(|| format!("seed body template '{}' not found", item.body_template))?;
+        if crate::memory::seed_by_key(
+            root,
+            &item.key,
+            memory_type,
+            &item.title,
+            &body,
+            &item.summary,
+        )? {
+            writeln!(stdout, "  seed memory  {} → memory/items/{}/", item.key, item.key)?;
+        } else {
+            writeln!(stdout, "  skip seed    {} (exists)", item.key)?;
+        }
+    }
+    Ok(())
+}
 
 /// Print the forward-step summary (dry-run or live).
 fn print_forward_summary(root: &Path, args: &InstallArgs<'_>) -> anyhow::Result<()> {
@@ -1258,6 +1312,7 @@ mod tests {
                 dirs: DirsSection::default(),
                 gitignore: GitignoreSection::default(),
                 root_markers: RootMarkersSection::default(),
+                memory: MemorySection::default(),
             }
         }
     }
