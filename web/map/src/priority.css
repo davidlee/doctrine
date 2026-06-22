@@ -94,12 +94,12 @@
 
   .priority-needs-edge {
     stroke: var(--priority-needs-edge);
-    stroke-width: 1.5;
+    stroke-width: 2.5;
   }
 
   .priority-after-edge {
     stroke: var(--priority-after-edge);
-    stroke-width: 1.5;
-    stroke-dasharray: 5 3;
+    stroke-width: 2.3;
+    stroke-dasharray: 4 3;
   }
 }
