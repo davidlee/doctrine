@@ -1,0 +1,86 @@
+id    = 143
+slug  = "inquisition-sl-142-design-vs-adr-015-and-slice-scope"
+title = "Inquisition: SL-142 design vs ADR-015 and slice scope"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-142"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Scope preaches empty-tags=>0.0; ADR-015 commands identity (x1.0)"
+detail = "EXPECTED (ADR-015 §1): 'absent tags / tag storage not yet shipped => tag contribution is the IDENTITY' — multiplicative identity x1.0; an untagged entity's value_dim is unchanged. OBSERVED (slice-142.md): §Risks 'Empty tag list => Σ tag_coeffs is the empty sum (0.0), which collapses value_dim to zero. This is the identity/floor' and §Verification 'value_dim doubles with coeff=2.0, zero with empty tags'. The scope conflates 0.0 with identity — they are opposites for a multiplicative term. Since the overwhelming majority of entities carry no tags, the scope's literal ×0.0 would ZERO value_dim corpus-wide, silently demolishing priority ordering. The authored scope contradicts canon. EVIDENCE: ADR-015 §1; slice-142.md Risks & Assumptions + Verification/closure."
+disposition = "design-wrong"
+response = "PENANCE: amend slice-142.md to obey ADR-015 §1. §Risks must read: empty tag list => tag term is the IDENTITY (×1.0), value_dim UNCHANGED — not collapsed to zero. §Verification must read 'value_dim doubles with coeff=2.0, UNCHANGED with empty tags', deleting 'zero with empty tags'. Add a base_score test asserting empty tags leave value_dim at the no-tag baseline. The scope's ×0.0 is canon-violating and would zero the untagged majority's value_dim."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "design tag_sum.max(1.0) over-floors present demoting tags vs ADR-015 literal Σ"
+detail = "EXPECTED: ADR-015 §1 multiplies value_dim by the LITERAL Σ tag_coefficients; the identity floor is granted to ABSENT tags only. With tag_coeff defaulting to 1.0 (config.rs:97 unwrap_or(1.0)), the faithful guard is: let tag_term = if f.tags.is_empty() { 1.0 } else { f.tags.iter().map(|t| cfg.tag_coeff(t)).sum() }. OBSERVED (design.md §5): let tag_sum = f.tags.iter().map(..).sum(); let tag_term = tag_sum.max(1.0). The max(1.0) does not merely handle empty — it floors ANY present tag set whose Σ<1.0 up to 1.0. An operator who configures a demoting coefficient (e.g. tag:wontfix => 0.3) is SILENTLY OVERRIDDEN: the demotion never applies. ADR-015 places no ≥1.0 constraint on tag_coefficients (clamp at config.rs:142 is value-wise, not a ≥1 floor). The clamp invents a floor canon does not sanction. EVIDENCE: design.md Formula change §5; ADR-015 §1; config.rs:97,142."
+disposition = "design-wrong"
+response = "PENANCE: replace 'tag_sum.max(1.0)' in design.md §5 with the empty-only guard: let tag_term = if f.tags.is_empty() { 1.0 } else { f.tags.iter().map(|t| cfg.tag_coeff(t)).sum() }. This grants identity ONLY to absent tags (per ADR-015) and applies the literal Σ when tags are present, honouring operator-configured demoting coefficients (Σ<1.0). The max(1.0) floor is unsanctioned by canon and must die."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "design test ['a','b'] coeff 1.5+2.0 expects x3.0 but .sum()=3.5"
+detail = "EXPECTED: a verification table internally consistent with the design's own formula. design.md §5 specifies tag_sum = ...sum(), and ADR-015 §1 uses Σ (sum). For tags ['a','b'] with coeffs a=>1.5, b=>2.0, Σ = 3.5, so value_dim should scale by 3.5. OBSERVED (design.md Verification, base_score_multiple_tags row): 'value_dim scaled by 3.0'. 1.5+2.0=3.5, NOT 3.0. The expectation 3.0 matches a PRODUCT (1.5×2.0=3.0), not a sum — betraying sum-vs-product confusion in the test design. As written the test is unsatisfiable against the design's .sum() formula. Per ADR-015 canon (Σ=sum), the formula is right and the expected value must be 3.5; the table is the heresy. EVIDENCE: design.md Verification table; ADR-015 §1."
+disposition = "design-wrong"
+response = "PENANCE: fix the verification table in design.md. For tags ['a','b'] with coeffs 1.5 and 2.0 under the Σ (sum) model, the expected scale is 3.5, not 3.0. Correct the 'base_score_multiple_tags' expected value to ×3.5 (or restate coeffs whose sum is the intended factor). ADR-015 §1 uses Σ; the sum is canon, the 3.0 (product) expectation is the error."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "design calls tag::normalize_tag in read_facets; scope Out-of-scope forbids it"
+detail = """EXPECTED (slice-142.md Out of scope): 'tag::normalize_tag is NOT called in the scoring path — tags are already normalized at rest by SL-136. read_facets reads raw table values and passes them through unmodified.' Also slice-142.md Risks: 'read_facets reads table.get("tags") and emits them as raw Vec<String> without re-normalizing.' OBSERVED (design.md §2): the read_facets snippet maps '.filter_map(|v| v.as_str().map(crate::tag::normalize_tag))' and the prose 'Normalising at the read boundary eliminates any key-form mismatch risk'. The design DIRECTLY contradicts the authored Out-of-scope boundary: it injects normalize_tag into the exact path the scope forbids it from. Either the scope is reconciled (normalization admitted, with rationale) or the design drops the call — but the silent contradiction must not stand. EVIDENCE: design.md Data path §2; slice-142.md Out of scope + Risks & Assumptions."""
+disposition = "design-wrong"
+response = "PENANCE: reconcile the normalize contradiction. Per ADR-015 there is no requirement to normalize at read; slice-142.md Out-of-scope explicitly forbids it and SL-136 normalizes at rest. DROP the crate::tag::normalize_tag call from design.md §2 — read raw and pass through unmodified, as scope commands. If the design author insists normalization is required (defence-in-depth), the BURDEN is to reopen scope via /design and amend the Out-of-scope clause with rationale; the silent contradiction is forbidden either way."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Scope and design left unreconciled: x0.0 (scope) vs x1.0 (design)"
+detail = "EXPECTED: when a design corrects an authored scope, the scope is reconciled so the two authored tiers agree (no silent divergence; storage rule — authored artifacts are the reviewed source of truth). OBSERVED: design.md §5 correctly implements identity (tag_sum.max(1.0) => x1.0 for empty) per ADR-015, while slice-142.md still preaches the opposite (empty => value_dim zero) in both §Risks and §Verification. The design author evidently recognised the identity semantics (design.md cites 'ADR-015 §1: empty tags => identity (×1.0)') yet left the contradicting scope un-amended. Two committed authored artifacts now disagree on the central behaviour. This is the meta-heresy that F-1 and F-2 both descend from: the scope was never reconciled to canon. EVIDENCE: design.md Formula change/Edge case vs slice-142.md Risks + Verification."
+disposition = "design-wrong"
+response = "PENANCE: this is the root heresy. Re-enter /design for SL-142 and reconcile the authored tiers so slice-142.md and design.md agree with ADR-015 — empty tags => identity (×1.0) everywhere. F-1/F-2/F-4 are its limbs; resolving them in a single /design reconciliation pass closes this too. Until then SL-142 must NOT advance to /plan: its scope preaches a canon-violating formula."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "blocker"
+title = "Slice adopts tag_term=1.0+Σ(coeff-1); ADR-015 §1 canon says ×Σ tag_coefficients"
+detail = "EXPECTED: SL-142 is governed_by ADR-015. ADR-015 §1 states the literal formula 'value_dim = (coefficients.value × value × kind_weight × Σ tag_coefficients) / estimate_midpoint' with 'absent tags ⇒ identity'. OBSERVED (design.md §5 + slice-142.md:46-50, both revised): tag_term = 1.0 + Σ(coeff - 1.0). These are DIFFERENT functions: ADR yields Σc_i; slice yields 1 + Σ(c_i-1) = Σc_i - (N-1). They agree only for N=1 tag. For N≥2 they diverge (e.g. two default-1.0 tags: ADR ⇒ Σ=2.0 ×2.0 inflation; slice ⇒ 1.0 identity). The slice has SILENTLY SUPERSEDED accepted canon's stated arithmetic. The slice's delta-form is arguably SUPERIOR (default tags neutral, empty=identity, the literal Σ's default-tag inflation is a latent ADR bug) — but a slice design must not unilaterally redefine an accepted ADR's formula. Per ADR-013, a governance dependency routes through a Revision. EVIDENCE: ADR-015 §1; design.md §5; slice-142.md Risks; SL-142 governed_by ADR-015."
+disposition = "design-wrong"
+response = "PENANCE: reconcile canon before SL-142 advances. The slice's delta-form (1.0 + Σ(coeff-1)) is the better formula — empty=identity, default tags neutral, demotion works — whereas ADR-015's literal Σ inflates score per default tag. The right route is therefore to AMEND CANON, not conform the slice down: open a Revision (REV, per ADR-013) against ADR-015 §1, restating the tag term as value_dim's multiplier = 1.0 + Σ(tag_coeff - 1.0) (equivalently: each tag contributes its excess over the unit default; absent/all-default ⇒ identity). Alternative (inferior): conform slice to literal Σ with empty special-cased — rejected, reintroduces default-tag inflation. This finding GATES /plan: a slice must not ship a formula contradicting its governing ADR. Recommend REV; defer to User on whether to amend ADR-015 now or route through /reconcile."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "tag_term unguarded against negative: ≥2 demoting tags flip value_dim sign"
+detail = "EXPECTED: ADR-015 §1 — absent/degenerate inputs 'collapse to an identity/floor rather than an error'. A multiplier should floor, not go negative. OBSERVED: tag_term = 1.0 + Σ(coeff-1.0) with coefficients clamped to [0, COEFF_MAX] (config.rs clamp_general floors at 0.0, line 156). A single coeff=0 tag → tag_term 0.0 (fine). But TWO coeff-0 (or sufficiently demoting) tags → 1.0 + (-1.0)+(-1.0) = -1.0 → NEGATIVE value_dim. base_score (graph.rs:72) guards only is_finite, not sign — a negative value_dim sorts an item BELOW zero-value work, which is neither identity nor floor. The new base_score_demoting_tag test covers only the single-tag positive case (0.5⇒halves) and misses the multi-demote sign flip. PENANCE: floor the multiplier — tag_term.max(0.0) — and add a test with ≥2 demoting tags asserting value_dim ≥ 0. EVIDENCE: design.md §5; config.rs clamp_general:150-162; graph.rs base_score."
+disposition = "fix-now"
+response = "PENANCE: floor the multiplier at zero in design.md §5 — let tag_term = (1.0 + Σ(coeff-1.0)).max(0.0). Preserves demotion-to-zero (suppress) while preventing the sign flip that yields negative value_dim. Add a base_score test: ≥2 demoting tags (e.g. ['x','y'] each coeff 0.0) asserts value_dim == 0.0 (floored), not negative. Cheap, local to the formula clause."
+
+[[finding]]
+id = "F-8"
+status = "withdrawn"
+severity = "minor"
+title = "tag_term unguarded negative: 2× coeff-0 tags → 1.0+(−1)+(−1)=−1.0 → negative value_dim"
+detail = "tag_term = 1.0 + Σ(coeff - 1.0) can go negative when Σ(coeff-1.0) < -1.0. E.g. two tags with coeff 0: 1.0 + (-1) + (-1) = -1.0. A negative value_dim is meaningless and the existing non-finite guard (which catches NaN/Inf) won't catch it. The fix: floor tag_term at 0.0 — tag_term.max(0.0). Add a test with ≥2 demoting tags proving floor at zero."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
