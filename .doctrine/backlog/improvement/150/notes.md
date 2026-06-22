@@ -40,3 +40,23 @@
 - Phase D: `review_dispose` disposition vocab expanded from 3 to 5 values
 - Phase E: `review_show` view=summary — explicit field-level blanking behaviour
 - Phase F: `review_prime` seed mode — noted count-zero shape divergence in parameter description
+
+**Test fix-ups (pre-existing IMP-148 artefacts):**
+- `95b2fb07` — unit test assertion 14→15
+- `a7ebdaa2` — e2e vt2_tools_list assertion 14→15, added `memory_validate`
+
+## Walkthrough Corrections (2026-06-22)
+
+Walkthrough agent exercised all 10 tools end-to-end. Six corrections applied in commit `464fef79`:
+
+1. **Variant wrappers:** all Returns blocks now show serde variant tags (`{"Created": ...}`, etc.)
+2. **review_prime seed counts:** "counts zero" → `tracked_count` reflects git-changed path count
+3. **review_status rounds:** "baton handoffs" → "all finding-state transitions"
+4. **review_show format:** "default: table" → "default: json" (MCP context)
+5. **--note destination:** "ephemeral baton chatter for the log" → "written to the baton handoff log (persisted but not surfaced in review_show or review_status)"
+6. **review_prime seed param:** same counts fix applied to seed parameter description
+
+**Spawned backlog items:**
+- [IMP-151](../151/backlog-151.md) — `seed` field: JSON Schema says optional, Rust serde requires it
+- [IMP-152](../152/backlog-152.md) — Document domain_map TOML format (shipped memory/reference)
+- Path parameter on review tools: wontfix
