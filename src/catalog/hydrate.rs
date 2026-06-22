@@ -946,6 +946,7 @@ mod tests {
         id: u32,
         estimate: Option<crate::estimate::EstimateFacet>,
         value: Option<crate::value::ValueFacet>,
+        risk: Option<crate::risk::RiskFacet>,
     ) -> ScannedEntity {
         ScannedEntity {
             key: EntityKey { prefix, id },
@@ -955,6 +956,7 @@ mod tests {
             outbound: Vec::new(),
             estimate,
             value,
+            risk,
         }
     }
 
@@ -971,8 +973,8 @@ mod tests {
         };
         let val = crate::value::ValueFacet { value: 5.0 };
         let scanned = vec![
-            scanned_numbered("SL", 1, Some(est.clone()), Some(val.clone())),
-            scanned_numbered("SL", 2, None, None),
+            scanned_numbered("SL", 1, Some(est.clone()), Some(val.clone()), None),
+            scanned_numbered("SL", 2, None, None, None),
         ];
 
         let record = MemoryCatalogRecord {

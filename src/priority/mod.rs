@@ -16,6 +16,7 @@
 //! and the `inspect` actionability block — the live caller that retires the
 //! PHASE-01/02 self-clearing `dead_code` scopes.
 pub(crate) mod channels;
+pub(crate) mod config;
 pub(crate) mod graph;
 pub(crate) mod partition;
 pub(crate) mod render;

@@ -11,3 +11,19 @@ claude-force-subprocess-dispatch = true
 # close-integration gate checks against. `main` is the dispatch landing zone
 # (low-noise); `edge` is the daily authoring branch (high-churn).
 deliver-to = "refs/heads/main"
+
+# SL-133 — multi-dimensional priority scoring. Advisory: every coefficient is
+# clamped finite-non-negative at load (out-of-range / malformed values fall back to
+# the field default, never a hard error). Absent → all defaults (weighted by
+# value/risk with unit kind weights). Unknown keys are tolerated (forward-compat
+# with future dimensions). These are illustrative seed values, not policy.
+[priority.coefficients]
+# Per-dimension multipliers on the base score.
+value = 1.0
+risk = 1.0
+
+[priority.consequence]
+# dep_coeff: per-hop retention on the recursive needs-leverage DP (kept in (0, 1]).
+# ref_coeff: flat multiplier on the one-hop ref-optionality sum.
+dep_coeff = 0.5
+ref_coeff = 1.0

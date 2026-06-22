@@ -233,7 +233,7 @@ fn inspect_predecessor_human_byte_exact() {
          actionability:\n\
          \x20\x20eligible: true\n\
          \x20\x20actionable: true\n\
-         \x20\x20consequence: 0\n"
+         \x20\x20score: 0.0\n"
     );
 }
 
@@ -263,7 +263,7 @@ fn inspect_supersedor_human_byte_exact() {
          actionability:\n\
          \x20\x20eligible: true\n\
          \x20\x20actionable: true\n\
-         \x20\x20consequence: 0\n"
+         \x20\x20score: 0.0\n"
     );
 }
 
@@ -294,7 +294,7 @@ fn inspect_tech_spec_interaction_type_annotated_byte_exact() {
          actionability:\n\
          \x20\x20eligible: true\n\
          \x20\x20actionable: true\n\
-         \x20\x20consequence: 1\n"
+         \x20\x20score: 0.0\n"
     );
 }
 
@@ -319,7 +319,7 @@ fn inspect_no_relations_entity_renders_cleanly() {
          actionability:\n\
          \x20\x20eligible: true\n\
          \x20\x20actionable: true\n\
-         \x20\x20consequence: 0\n"
+         \x20\x20score: 0.0\n"
     );
 }
 
@@ -401,7 +401,7 @@ fn inspect_json_supersedor_byte_exact_every_surface() {
     // actionability block (serde_json sorts keys, so `actionability` leads).
     assert_eq!(
         body,
-        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"consequence\": 0,\n    \"eligible\": true\n  },\n  \"danglers\": [\n    {\n      \"label\": \"specs\",\n      \"target\": \"PRD-099\"\n    }\n  ],\n  \"id\": \"SL-003\",\n  \"inbound\": [],\n  \"kind\": \"inspect\",\n  \"outbound\": [\n    {\n      \"label\": \"specs\",\n      \"targets\": [\n        \"SPEC-001\",\n        \"PRD-099\"\n      ]\n    },\n    {\n      \"label\": \"requirements\",\n      \"targets\": [\n        \"REQ-005\"\n      ]\n    },\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-001\"\n      ]\n    }\n  ]\n}"
+        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"eligible\": true,\n    \"score\": 0.0\n  },\n  \"danglers\": [\n    {\n      \"label\": \"specs\",\n      \"target\": \"PRD-099\"\n    }\n  ],\n  \"id\": \"SL-003\",\n  \"inbound\": [],\n  \"kind\": \"inspect\",\n  \"outbound\": [\n    {\n      \"label\": \"specs\",\n      \"targets\": [\n        \"SPEC-001\",\n        \"PRD-099\"\n      ]\n    },\n    {\n      \"label\": \"requirements\",\n      \"targets\": [\n        \"REQ-005\"\n      ]\n    },\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-001\"\n      ]\n    }\n  ]\n}"
     );
 }
 
@@ -419,7 +419,7 @@ fn inspect_json_predecessor_inbound_supersedes_surface() {
     // (serde sorts keys, so it leads) is the only change (SL-047 PHASE-03).
     assert_eq!(
         stdout(&out),
-        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"consequence\": 0,\n    \"eligible\": true\n  },\n  \"danglers\": [],\n  \"id\": \"SL-001\",\n  \"inbound\": [\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-003\"\n      ]\n    }\n  ],\n  \"kind\": \"inspect\",\n  \"outbound\": []\n}"
+        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"eligible\": true,\n    \"score\": 0.0\n  },\n  \"danglers\": [],\n  \"id\": \"SL-001\",\n  \"inbound\": [\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-003\"\n      ]\n    }\n  ],\n  \"kind\": \"inspect\",\n  \"outbound\": []\n}"
     );
 }
 

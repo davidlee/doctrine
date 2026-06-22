@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Pure channel synthesis over a [`PriorityGraph`] (SL-047 design §5.2) — the
 //! derived per-node work-priority signals: eligibility, direct blockers, the
-//! actionable boolean (D12), the blocking-others set, the consequence tally read,
-//! the composed order key, and the dep-cycle degrade diagnostic.
+//! actionable boolean (D12), the blocking-others set, the score read (+ its base /
+//! leverage / optionality breakdown), the composed order key, and the dep-cycle
+//! degrade diagnostic.
 //!
 //! Pure: no clock, RNG, or disk — every signal is DERIVED per query from the graph
-//! (ADR-004: nothing stores a reverse field; `blocked_by`/`blocking`/`consequence`
-//! are computed each call). Determinism: `BTreeSet`/`Vec` over the graph's ordered
+//! (ADR-004: nothing stores a reverse field; `blocked_by`/`blocking` are computed each
+//! call; `score`/`leverage`/`optionality` read the post-pass maps). Determinism:
+//! `BTreeSet`/`Vec` over the graph's ordered
 //! adjacency — permutation-invariant (REQ-077).
 //!
 //! `actionable = eligible && !blocked` (D12). `blocked_by` is the DIRECT-blocker test
@@ -174,28 +176,43 @@ pub(crate) fn evicted_seq_edges(
     out
 }
 
-/// The node's **consequence** tally — the PHASE-01 pre-pass count of inbound
-/// work/lineage references (`g.consequence`, default 0 when absent). Read-only.
-pub(crate) fn consequence(g: &PriorityGraph, node: EntityKey) -> u32 {
-    g.consequence.get(&node).copied().unwrap_or(0)
+/// The node's **score** — the final priority signal (`base + leverage + optionality`),
+/// computed by the consequence post-pass and stored on the graph (`g.score`, default
+/// `0.0` when absent). The display-time sort key for `survey`/`next` (SL-133 §5.4).
+pub(crate) fn score(g: &PriorityGraph, node: EntityKey) -> f64 {
+    g.score.get(&node).copied().unwrap_or(0.0)
 }
 
-/// The composed **order key** — cordage's level-then-`NodeId` total order remapped
-/// `NodeId → EntityKey` through the projection (the `backlog_order::ordered()`
-/// shape, D9). The seq-rank / consequence-fallback tiers live in the graph's
-/// `OrderSpec` + mint order (PHASE-01); this surface just remaps.
-pub(crate) fn order_key(g: &PriorityGraph) -> Vec<EntityKey> {
-    g.graph
-        .ordered()
-        .iter()
-        .filter_map(|node| g.projection.key_of(*node))
-        .collect()
+/// The node's **base** score total — `value_dim + risk_dim` from its own facets (the
+/// mint tiebreaker and the `explain` breakdown; SL-133 §5.1). Default `0.0`.
+pub(crate) fn base(g: &PriorityGraph, node: EntityKey) -> f64 {
+    g.attrs.get(&node).map_or(0.0, |a| a.base_score.total())
+}
+
+/// The node's base **value dimension** (SL-133 §5.1) — for the `explain` breakdown.
+pub(crate) fn value_dim(g: &PriorityGraph, node: EntityKey) -> f64 {
+    g.attrs.get(&node).map_or(0.0, |a| a.base_score.value_dim)
+}
+
+/// The node's base **risk dimension** (SL-133 §5.1) — for the `explain` breakdown.
+pub(crate) fn risk_dim(g: &PriorityGraph, node: EntityKey) -> f64 {
+    g.attrs.get(&node).map_or(0.0, |a| a.base_score.risk_dim)
+}
+
+/// The node's recursive **needs-leverage** (`g.leverage`, default `0.0`; SL-133 §5.4).
+pub(crate) fn leverage(g: &PriorityGraph, node: EntityKey) -> f64 {
+    g.leverage.get(&node).copied().unwrap_or(0.0)
+}
+
+/// The node's one-hop **ref-optionality** (`g.optionality`, default `0.0`; SL-133 §5.4).
+pub(crate) fn optionality(g: &PriorityGraph, node: EntityKey) -> f64 {
+    g.optionality.get(&node).copied().unwrap_or(0.0)
 }
 
 /// The diagnosed **dep cycles** (REQ-076 / F2) — each a component of `EntityKey`s
 /// caught in a provenance cycle on the dep overlay. cordage's `Reject` policy
 /// preserves the cyclic edges and still yields a total `ordered()`; the affected
-/// component degrades to the consequence/`NodeId` fallback rather than emitting a
+/// component degrades to the base/`NodeId` fallback rather than emitting a
 /// false topological order. Mirrors `backlog_order::dep_cycles()`.
 pub(crate) fn dep_cycles(g: &PriorityGraph) -> Vec<BTreeSet<EntityKey>> {
     g.graph
@@ -229,6 +246,18 @@ mod tests {
 
     fn key(prefix: &'static str, id: u32) -> EntityKey {
         EntityKey { prefix, id }
+    }
+
+    /// Test-local remap of cordage's total `ordered()` to `EntityKey` (the former
+    /// `order_key` channel). `next` no longer consumes a level-then-`NodeId` order
+    /// (RV-132 F-3), so this remap is now only test scaffolding for the cycle-degrade
+    /// and permutation-invariance assertions.
+    fn order_key(g: &PriorityGraph) -> Vec<EntityKey> {
+        g.graph
+            .ordered()
+            .iter()
+            .filter_map(|node| g.projection.key_of(*node))
+            .collect()
     }
 
     /// Seed a slice with a given lifecycle status and relations (SL-048 migrated
@@ -456,16 +485,19 @@ mod tests {
     }
 
     #[test]
-    fn consequence_reads_the_pre_pass_tally() {
+    fn score_reads_the_post_pass_value() {
         let dir = tmp();
         let root = dir.path();
-        // Two slices' `requirements` edges onto REQ-005 (work/lineage) raise its tally.
+        // No facets ⇒ base/leverage/optionality all 0 ⇒ score reads 0.0 (the floor),
+        // and the readers default to 0.0 for an unseen key (the SL-133 score contract:
+        // `channels::score` reads `g.score`, never the old u32 tally).
         seed_slice(root, 1, "proposed", &[("requirements", &["REQ-005"])]);
-        seed_slice(root, 2, "proposed", &[("requirements", &["REQ-005"])]);
         seed_requirement(root, 5);
         let g = build(root).unwrap();
-        assert_eq!(consequence(&g, key("REQ", 5)), 2);
-        assert_eq!(consequence(&g, key("SL", 1)), 0);
+        assert_eq!(score(&g, key("REQ", 5)), 0.0, "no facets → score floor 0");
+        assert_eq!(base(&g, key("REQ", 5)), 0.0);
+        assert_eq!(leverage(&g, key("REQ", 5)), 0.0);
+        assert_eq!(optionality(&g, key("REQ", 5)), 0.0);
     }
 
     // -- VT-4: cycle degrade ---------------------------------------------------
@@ -568,11 +600,7 @@ mod tests {
             assert_eq!(actionable(&g0, n), actionable(&g1, n), "actionable {n:?}");
             assert_eq!(blocked_by(&g0, n), blocked_by(&g1, n), "blocked_by {n:?}");
             assert_eq!(blocking(&g0, n), blocking(&g1, n), "blocking {n:?}");
-            assert_eq!(
-                consequence(&g0, n),
-                consequence(&g1, n),
-                "consequence {n:?}"
-            );
+            assert_eq!(score(&g0, n), score(&g1, n), "score {n:?}");
         }
         assert_eq!(order_key(&g0), order_key(&g1), "order_key invariant");
         assert_eq!(dep_cycles(&g0), dep_cycles(&g1), "dep_cycles invariant");
