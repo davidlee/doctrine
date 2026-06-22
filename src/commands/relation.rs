@@ -161,7 +161,10 @@ pub(crate) enum RelationCommand {
 
 /// Shell for `doctrine relation list` — scan the catalog, apply the diagnostics
 /// policy, project & render, print to stdout.
-#[expect(clippy::too_many_arguments, reason = "clap dispatch flatten — 8 fields from subcommand")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "clap dispatch flatten — 8 fields from subcommand"
+)]
 pub(crate) fn run_relation_list(
     path: Option<PathBuf>,
     include_memory: bool,
@@ -179,7 +182,11 @@ pub(crate) fn run_relation_list(
     // Diagnostics policy (design §5.4 F1):
     emit_diagnostics(&root, &catalog.diagnostics)?;
 
-    let resolved_format = if json { Format::Json } else { format.unwrap_or(Format::Table) };
+    let resolved_format = if json {
+        Format::Json
+    } else {
+        format.unwrap_or(Format::Table)
+    };
     let opts = crate::listing::RenderOpts {
         color: crate::tty::stdout_color_enabled(),
         term_width: crate::tty::stdout_terminal_width(),
@@ -214,7 +221,11 @@ pub(crate) fn run_relation_census(
     // Diagnostics policy (design §5.4 F1):
     emit_diagnostics(&root, &catalog.diagnostics)?;
 
-    let resolved_format = if json { Format::Json } else { format.unwrap_or(Format::Table) };
+    let resolved_format = if json {
+        Format::Json
+    } else {
+        format.unwrap_or(Format::Table)
+    };
     let opts = crate::listing::RenderOpts {
         color: crate::tty::stdout_color_enabled(),
         term_width: crate::tty::stdout_terminal_width(),
@@ -242,10 +253,7 @@ fn emit_diagnostics(
         match diag.severity {
             Severity::Error => {
                 // Strip the root prefix for a clean relative path.
-                let rel = diag
-                    .file
-                    .strip_prefix(root)
-                    .unwrap_or(&diag.file);
+                let rel = diag.file.strip_prefix(root).unwrap_or(&diag.file);
                 writeln!(std::io::stderr(), "{}: {}", rel.display(), diag.message)?;
             }
             Severity::Warning => {

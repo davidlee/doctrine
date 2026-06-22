@@ -822,12 +822,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 format,
                 json,
                 path,
-            } => crate::commands::relation::run_relation_census(
-                path,
-                include_memory,
-                format,
-                json,
-            ),
+            } => crate::commands::relation::run_relation_census(path, include_memory, format, json),
         },
         Command::Link {
             source,

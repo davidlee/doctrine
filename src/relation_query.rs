@@ -509,7 +509,10 @@ mod tests {
         let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
         let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
         let sl001 = ScannedEntity {
-            key: EntityKey { prefix: "SL", id: 1 },
+            key: EntityKey {
+                prefix: "SL",
+                id: 1,
+            },
             kind,
             status: Some("proposed".to_string()),
             title: "SL-001".to_string(),
@@ -517,15 +520,26 @@ mod tests {
                 RelationEdge::new(RelationLabel::Requirements, "REQ-005".to_string()),
                 RelationEdge::new(RelationLabel::Requirements, "REQ-999".to_string()),
             ],
-            estimate: None, value: None, risk: None, tags: vec![], body: None,
+            estimate: None,
+            value: None,
+            risk: None,
+            tags: vec![],
+            body: None,
         };
         let req005 = ScannedEntity {
-            key: EntityKey { prefix: "REQ", id: 5 },
+            key: EntityKey {
+                prefix: "REQ",
+                id: 5,
+            },
             kind: req_kind,
             status: Some("active".to_string()),
             title: "REQ-005".to_string(),
             outbound: vec![],
-            estimate: None, value: None, risk: None, tags: vec![], body: None,
+            estimate: None,
+            value: None,
+            risk: None,
+            tags: vec![],
+            body: None,
         };
         let catalog = two_entities(sl001, req005);
 
@@ -540,14 +554,24 @@ mod tests {
                 unresolved: true,
             },
         );
-        assert_eq!(rows.len(), 1, "four axes + include_memory narrows to one row");
+        assert_eq!(
+            rows.len(),
+            1,
+            "four axes + include_memory narrows to one row"
+        );
         assert_eq!(rows[0].source, "SL-001");
         assert_eq!(rows[0].label, "requirements");
         assert_eq!(rows[0].target, "REQ-999");
         assert_eq!(rows[0].state, TargetState::Unresolved);
 
         // Baseline: without unresolved filter, both edges appear.
-        let all = project_list(&catalog, &ListFilter { include_memory: true, ..Default::default() });
+        let all = project_list(
+            &catalog,
+            &ListFilter {
+                include_memory: true,
+                ..Default::default()
+            },
+        );
         assert_eq!(all.len(), 2, "both edges visible without --unresolved");
     }
 
@@ -566,8 +590,13 @@ mod tests {
         catalog.edges.push(CatalogEdge {
             source: CatalogKey::Memory("mem_user123".to_string()),
             label: CatalogEdgeLabel::Raw("references".to_string()),
-            target: EdgeTarget::UnvalidatedText { raw: "some note".to_string() },
-            origin: crate::catalog::hydrate::EdgeOrigin { file: PathBuf::new(), field: None },
+            target: EdgeTarget::UnvalidatedText {
+                raw: "some note".to_string(),
+            },
+            origin: crate::catalog::hydrate::EdgeOrigin {
+                file: PathBuf::new(),
+                field: None,
+            },
         });
 
         // F4a: --source-kind MEM WITHOUT --include-memory → empty (gate drops memory first)
@@ -578,7 +607,10 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert!(rows.is_empty(), "MEM source-kind without include_memory should be empty");
+        assert!(
+            rows.is_empty(),
+            "MEM source-kind without include_memory should be empty"
+        );
 
         // With include_memory=true, the memory edge is visible.
         let rows = project_list(
@@ -589,14 +621,28 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(rows.len(), 1, "MEM source-kind WITH include_memory should include the memory edge");
+        assert_eq!(
+            rows.len(),
+            1,
+            "MEM source-kind WITH include_memory should include the memory edge"
+        );
         assert_eq!(rows[0].source, "mem_user123");
         assert_eq!(rows[0].label, "references");
         assert_eq!(rows[0].state, TargetState::FreeText);
 
         // Without --source-kind, include_memory=true shows all edges (numbered + memory)
-        let all = project_list(&catalog, &ListFilter { include_memory: true, ..Default::default() });
-        assert_eq!(all.len(), 2, "include_memory=true with no source-kind should show all edges");
+        let all = project_list(
+            &catalog,
+            &ListFilter {
+                include_memory: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            all.len(),
+            2,
+            "include_memory=true with no source-kind should show all edges"
+        );
 
         // Default (no flags) excludes the Raw edge.
         let default = project_list(&catalog, &ListFilter::default());
