@@ -2181,6 +2181,27 @@ fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String, 
     Ok((memory, body, dir))
 }
 
+/// Try to resolve a memory by key from shipped/ — shipped/ stores memories as
+/// `<uid>/` directories without key symlinks, so a key lookup requires scanning
+/// every shipped memory for a `memory_key` match (SL-018 / ISS-047).
+pub(crate) fn resolve_shipped_by_key(shipped_root: &Path, key: &str) -> Option<(Memory, String, PathBuf)> {
+    let dirs = std::fs::read_dir(shipped_root).ok()?;
+    for entry in dirs.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let toml_path = path.join("memory.toml");
+        let text = std::fs::read_to_string(toml_path).ok()?;
+        let memory = Memory::parse(&text).ok()?;
+        if memory.key.as_deref() == Some(key) {
+            let body = std::fs::read_to_string(path.join("memory.md")).unwrap_or_default();
+            return Some((memory, body, path));
+        }
+    }
+    None
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MemoryInspectView {
     id: String,
@@ -2580,8 +2601,31 @@ pub(crate) fn run_show(
 ) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let items_root = root.join(MEMORY_ITEMS_DIR);
+    let shipped_root = root.join(MEMORY_SHIPPED_DIR);
     let mref = MemoryRef::parse(reference)?;
-    let (memory, body, _dir) = resolve_show(&items_root, &mref)?;
+    let (memory, body, _dir) = resolve_show(&items_root, &mref).or_else(|_| {
+        // Fall through to shipped/ when items/ misses — mirrors read_body's pattern.
+        // Shipped/ stores memories as <uid>/ dirs without key symlinks, so key
+        // resolution requires a scan (ISS-047).
+        match &mref {
+            MemoryRef::Uid(uid) => {
+                let dir = crate::fsutil::safe_join(&shipped_root, Path::new(uid))
+                    .with_context(|| format!("memory not found: {uid}"))?;
+                let text = fs::read_to_string(dir.join("memory.toml"))
+                    .with_context(|| format!("memory not found: {uid}"))?;
+                let memory = Memory::parse(&text)?;
+                let body = fs::read_to_string(dir.join("memory.md")).unwrap_or_default();
+                Ok((memory, body, dir))
+            }
+            MemoryRef::Key(key) => {
+                resolve_shipped_by_key(&shipped_root, key)
+                    .ok_or_else(|| anyhow::anyhow!("memory not found: {key}"))
+            }
+            // UidPrefix can't resolve shipped-only memories (no scan in shipped
+            // for uid prefixes — a future enhancement if needed).
+            MemoryRef::UidPrefix(p) => bail!("memory not found: {p}"),
+        }
+    })?;
     let all = collect_all(&root)?;
     let (known_uids, key_to_uid) = known_link_maps(&all);
     let wikilinks = resolve_body_wikilinks(&body, &known_uids, &key_to_uid);
@@ -6287,6 +6331,48 @@ to = "mem_018e000000000000000000000000000b"
         let err =
             resolve_show(&items, &MemoryRef::Key("mem.fact.any.thing".to_owned())).unwrap_err();
         assert!(err.to_string().contains("memory not found"));
+    }
+
+    // VT-5: run_show falls through to shipped/ when items/ misses — mirrors
+    // the read_body fallthrough pattern (ISS-047). Key and uid refs both work.
+    #[test]
+    fn show_resolves_a_shipped_only_memory_by_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let shipped = root.join(MEMORY_SHIPPED_DIR);
+        let uid = "mem_aabb0000000000000000000000000001";
+        let shipped_toml = titled_toml(uid, "Shipped Mem").replace(
+            "mem.pattern.cli.skinny",
+            "mem.signpost.test.shipped",
+        );
+        write_memory_full(&shipped, uid, &shipped_toml, "shipped body");
+
+        // Key resolves via shipped/ fallthrough
+        let mut buf = Vec::new();
+        run_show(
+            &mut buf,
+            Some(root.to_path_buf()),
+            "mem.signpost.test.shipped",
+            Format::Json,
+        )
+        .unwrap();
+        let out: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+        assert_eq!(out["memory"]["uid"], uid);
+        assert_eq!(out["memory"]["key"], "mem.signpost.test.shipped");
+        assert_eq!(out["body"], "shipped body");
+
+        // Uid resolves via shipped/ fallthrough too
+        let mut buf2 = Vec::new();
+        run_show(
+            &mut buf2,
+            Some(root.to_path_buf()),
+            uid,
+            Format::Json,
+        )
+        .unwrap();
+        let out2: serde_json::Value = serde_json::from_slice(&buf2).unwrap();
+        assert_eq!(out2["memory"]["title"], "Shipped Mem");
+        assert_eq!(out2["body"], "shipped body");
     }
 
     #[test]
