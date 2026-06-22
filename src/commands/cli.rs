@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Result;
+use clap::CommandFactory;
 use clap::Subcommand;
 
 use crate::commands::facet::{
@@ -84,16 +85,18 @@ pub(crate) enum Command {
         yes: bool,
     },
 
-    /// Debug catalog inspection — thin JSON dump of the hydrated entity corpus
-    /// (`scan`) and its graph projection (`graph`). Developer-facing; not gating
-    /// for acceptance (SL-071 D12).
+    /// Debug catalog inspection.
+    ///
+    /// Thin JSON dump of the hydrated entity corpus (`scan`) and its graph
+    /// projection (`graph`). Developer-facing; not gating for acceptance (SL-071 D12).
     Catalog {
         #[command(subcommand)]
         command: crate::catalog::CatalogCommand,
     },
 
-    /// List available skills and their install status. Hidden deprecated alias
-    /// — the consolidated `install` surface is the primary path.
+    /// List available skills and their install status.
+    ///
+    /// Hidden deprecated alias — the consolidated `install` surface is the primary path.
     #[command(hide = true)]
     Skills {
         #[command(subcommand)]
@@ -145,9 +148,11 @@ pub(crate) enum Command {
         command: crate::revision::RevisionCommand,
     },
 
-    /// Reconcile ONE requirement against observed coverage — the sole author of
-    /// reconciled requirement status (SL-044). Applies exactly one move and emits
-    /// one atomic REC. `--to` is required for accept/revise, omitted for redesign.
+    /// Reconcile ONE requirement against observed coverage.
+    ///
+    /// The sole author of reconciled requirement status (SL-044). Applies exactly
+    /// one move and emits one atomic REC. `--to` is required for accept/revise,
+    /// omitted for redesign.
     Reconcile {
         /// The requirement to reconcile, canonical `REQ-NNN`.
         req: String,
@@ -174,16 +179,20 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Requirement coverage: the read-only drift view (`show`) plus the
-    /// observed-tier write path (`record`/`verify`/`forget`, SL-057).
+    /// Requirement coverage.
+    ///
+    /// The read-only drift view (`show`) plus the observed-tier write path
+    /// (`record`/`verify`/`forget`, SL-057).
     Coverage {
         #[command(subcommand)]
         command: crate::commands::coverage::CoverageCommand,
     },
 
-    /// Read-only cross-kind relation view of one entity (`<ID>` = SL-NNN, ADR-NNN,
-    /// …): its authored outbound relations, the derived inbound relations, and any
-    /// unresolved / free-text dangling targets — grouped, direct-only (one hop).
+    /// Read-only cross-kind relation view.
+    ///
+    /// Shows one entity's authored outbound relations, derived inbound relations,
+    /// and any unresolved / free-text dangling targets — grouped, direct-only
+    /// (one hop).
     Inspect {
         /// Canonical ref of the entity to inspect (e.g. `SL-046`, `ADR-004`).
         id: String,
@@ -201,10 +210,12 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Read-only cross-kind importance survey: every ELIGIBLE entity in importance
-    /// order (actionability, then consequence desc, then canonical-id), each blocked
-    /// row carrying a BLOCKED badge and its direct blocker. Terminal and
-    /// promoted-backlog items are excluded unless `--all`. Advisory — never writes.
+    /// Read-only cross-kind importance survey.
+    ///
+    /// Every ELIGIBLE entity in importance order (actionability, then consequence
+    /// desc, then canonical-id), each blocked row carrying a BLOCKED badge and its
+    /// direct blocker. Terminal and promoted-backlog items are excluded unless
+    /// `--all`. Advisory — never writes.
     Survey {
         /// Include terminal + promoted-backlog items (the complete view).
         #[arg(long)]
@@ -223,9 +234,11 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Read-only advisory worklist: the ACTIONABLE entities (eligible AND unblocked),
-    /// in composed dependency/sequence order. Blocked items are absent (the divergence
-    /// from `survey`). Mutates nothing.
+    /// Read-only advisory worklist.
+    ///
+    /// The ACTIONABLE entities (eligible AND unblocked), in composed
+    /// dependency/sequence order. Blocked items are absent (the divergence from
+    /// `survey`). Mutates nothing.
     Next {
         /// Output format (table | json).
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
@@ -240,9 +253,10 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Read-only blocker view of one entity (`<ID>` = SL-NNN, ISS-NNN, …): its direct
-    /// blocked-by prerequisites + the items it is blocking. `--transitive` walks both
-    /// chains. Display depth never reorders.
+    /// Read-only blocker view.
+    ///
+    /// Shows one entity's direct blocked-by prerequisites + the items it is
+    /// blocking. `--transitive` walks both chains. Display depth never reorders.
     Blockers {
         /// Canonical ref of the entity (e.g. `ISS-007`, `SL-046`).
         id: String,
@@ -264,9 +278,11 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Read-only structured explanation of one entity's priority (`<ID>`): its
-    /// eligibility reason, the transitive blocker chain, the order-key contributors,
-    /// any evicted soft-sequence edges, and its consequence — always to root.
+    /// Read-only structured priority explanation.
+    ///
+    /// Explains one entity's priority: its eligibility reason, the transitive
+    /// blocker chain, the order-key contributors, any evicted soft-sequence edges,
+    /// and its consequence — always to root.
     Explain {
         /// Canonical ref of the entity (e.g. `ISS-007`, `SL-046`).
         id: String,
@@ -346,6 +362,8 @@ pub(crate) enum Command {
         args: crate::commands::serve::ServeArgs,
     },
 
+    /// Regenerate the governance snapshot.
+    ///
     /// Regenerate the cache-friendly governance snapshot, or `boot install` to wire it.
     Boot {
         /// Wire the `@`-import + per-harness session refresh (omit to regenerate).
@@ -373,15 +391,18 @@ pub(crate) enum Command {
         command: crate::worktree::WorktreeCommand,
     },
 
-    /// Dispatch coordination-branch projection (SL-064 / ADR-012): the
-    /// integration-sync seam that materialises reviewable refs from
-    /// `dispatch/<slice>`. Orchestrator-classed — refused under worker-mode.
+    /// Dispatch coordination-branch projection.
+    ///
+    /// The integration-sync seam (SL-064 / ADR-012) that materialises reviewable
+    /// refs from `dispatch/<slice>`. Orchestrator-classed — refused under worker-mode.
     Dispatch {
         #[command(subcommand)]
         command: crate::dispatch::DispatchCommand,
     },
 
-    /// Scan every numbered entity kind for id-integrity violations (ADR-006 D3
+    /// Scan entity ids for integrity violations.
+    ///
+    /// Scans every numbered entity kind for id-integrity violations (ADR-006 D3
     /// detect-half): dir basename == toml id, no intra-kind duplicate id, and
     /// alias target equality. Exits non-zero on any violation.
     Validate {
@@ -390,9 +411,11 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Renumber an entity's canonical id (ADR-006 D3 repair). Takes a canonical
-    /// ref (`SL-031`), moves it to the next free trunk-aware id or `--to <NNN>`,
-    /// and reports inbound prose citations as danglers (never rewrites them).
+    /// Renumber an entity's canonical id.
+    ///
+    /// ADR-006 D3 repair. Takes a canonical ref (`SL-031`), moves it to the next
+    /// free trunk-aware id or `--to <NNN>`, and reports inbound prose citations as
+    /// danglers (never rewrites them).
     Reseat {
         /// Canonical ref to renumber, e.g. `SL-031` (never a bare id).
         reference: String,
@@ -406,10 +429,12 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Author a tier-1 `[[relation]]` edge: `link SL-048 governed_by ADR-010`
-    /// (SL-048 §5.4). The label must be `link`-writable for the source kind, and the
-    /// target must resolve to an entity of a legal kind (forward-edge validation,
-    /// §5.5). Idempotent — re-linking an existing edge is a no-op.
+    /// Author a tier-1 relation edge.
+    ///
+    /// `link SL-048 governed_by ADR-010` (SL-048 §5.4). The label must be
+    /// `link`-writable for the source kind, and the target must resolve to an entity
+    /// of a legal kind (forward-edge validation, §5.5). Idempotent — re-linking an
+    /// existing edge is a no-op.
     Link {
         /// The source entity's canonical ref (e.g. `SL-048`) or memory ref (`mem_<uid>`, `mem.<key>`).
         source: String,
@@ -423,8 +448,10 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Remove a tier-1 `[[relation]]` edge authored by `link` (SL-048 §5.4). Symmetric
-    /// on the same write seam; idempotent — unlinking an absent edge is a no-op.
+    /// Remove a tier-1 relation edge.
+    ///
+    /// Removes an edge authored by `link` (SL-048 §5.4). Symmetric on the same write
+    /// seam; idempotent — unlinking an absent edge is a no-op.
     Unlink {
         /// The source entity's canonical ref (e.g. `SL-048`) or memory ref (`mem_<uid>`, `mem.<key>`).
         source: String,
@@ -437,11 +464,13 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Append a hard prerequisite to a source entity's `needs` axis: `needs SL-060
-    /// SL-047` (SL-060 §5.4). Generic cross-kind: SRC and TGT resolve via the same
-    /// canonical-ref seam as `link`. SRC must be a dep/seq-authoring kind (slice or a
-    /// backlog kind); TGT must resolve AND be work-like (slice or backlog) — a
-    /// free-text or non-work-like target is refused at author time. Idempotent.
+    /// Append a hard prerequisite.
+    ///
+    /// `needs SL-060 SL-047` (SL-060 §5.4). Generic cross-kind: SRC and TGT resolve
+    /// via the same canonical-ref seam as `link`. SRC must be a dep/seq-authoring
+    /// kind (slice or a backlog kind); TGT must resolve AND be work-like (slice or
+    /// backlog) — a free-text or non-work-like target is refused at author time.
+    /// Idempotent.
     Needs {
         /// The source entity's canonical ref, e.g. `SL-060`.
         source: String,
@@ -452,9 +481,11 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Append a soft-sequence edge to a source entity's `after` axis: `after SL-060
-    /// SL-047 [--rank N]` (SL-060 §5.4). Generic cross-kind with the same author-time
-    /// target gate as `needs`. Records `{ to, rank }` (rank default 0). Idempotent.
+    /// Append a soft-sequence edge.
+    ///
+    /// `after SL-060 SL-047 [--rank N]` (SL-060 §5.4). Generic cross-kind with the
+    /// same author-time target gate as `needs`. Records `{ to, rank }` (rank
+    /// default 0). Idempotent.
     After {
         /// The source entity's canonical ref, e.g. `SL-060`.
         source: String,
@@ -478,8 +509,10 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Read-only project orientation dashboard: active work, blocked items, boot
-    /// staleness, recent commits. 10–20 lines human output; structured JSON.
+    /// Read-only project orientation dashboard.
+    ///
+    /// Active work, blocked items, boot staleness, recent commits. 10–20 lines
+    /// human output; structured JSON.
     Status {
         /// Output format (table | json).
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
@@ -494,12 +527,14 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Record that NEW supersedes OLD: `supersede ADR-012 ADR-004` (SL-062 §5.4).
-    /// ADR-first — one parse-once / hold-both / write-once transaction writes
-    /// `NEW.supersedes += OLD`, `OLD.superseded_by += NEW` (the single sanctioned
-    /// reverse carve-out, ADR-004 §5), and flips `OLD.status → superseded`. Refuses
-    /// a self-edge, cross-kind refs, a non-ADR kind, and an OLD already superseded by
-    /// a different ADR. Idempotent — a re-run with all three surfaces present is a no-op.
+    /// Record that NEW supersedes OLD.
+    ///
+    /// `supersede ADR-012 ADR-004` (SL-062 §5.4). ADR-first — one parse-once /
+    /// hold-both / write-once transaction writes `NEW.supersedes += OLD`,
+    /// `OLD.superseded_by += NEW` (the single sanctioned reverse carve-out, ADR-004
+    /// §5), and flips `OLD.status → superseded`. Refuses a self-edge, cross-kind
+    /// refs, a non-ADR kind, and an OLD already superseded by a different ADR.
+    /// Idempotent — a re-run with all three surfaces present is a no-op.
     Supersede {
         /// The superseding entity's canonical ref, e.g. `ADR-012`.
         new: String,
@@ -525,6 +560,53 @@ pub(crate) enum Command {
         #[command(subcommand)]
         action: RiskAction,
     },
+}
+
+// ── help rendering ───────────────────────────────────────────────────────────
+
+/// One row in the top-level help table.
+struct HelpEntry {
+    name: String,
+    about: String,
+}
+
+/// Render the top-level command list as a comfy-table, replacing clap's built-in
+/// help output. Called from `main()` when `--help` is requested at the top level.
+pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> String {
+    use crate::listing::{self, Column, ColumnPaint, RenderOpts};
+
+    let cmd = <crate::Cli as CommandFactory>::command();
+    let entries: Vec<HelpEntry> = cmd
+        .get_subcommands()
+        .filter(|sub| !sub.is_hide_set())
+        .map(|sub| {
+            let name = sub.get_name().to_string();
+            let about = sub.get_about().map_or(String::new(), ToString::to_string);
+            HelpEntry { name, about }
+        })
+        .collect();
+
+    if entries.is_empty() {
+        return String::new();
+    }
+
+    let cols: &[&Column<HelpEntry>] = &[
+        &Column {
+            name: "command",
+            header: "command",
+            cell: |e| e.name.clone(),
+            paint: ColumnPaint::None,
+        },
+        &Column {
+            name: "description",
+            header: "description",
+            cell: |e| e.about.clone(),
+            paint: ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
+        },
+    ];
+
+    let opts = RenderOpts { color, term_width };
+    listing::render_columns(&entries, cols, opts)
 }
 
 // ── ExportCommand ───────────────────────────────────────────────────────────
