@@ -17,7 +17,7 @@ use crate::integrity;
 use crate::lexical::{
     Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker, tokenize, tokenize_with_spans,
 };
-use crate::listing::Format;
+use crate::listing::{Column, ColumnPaint, Format, RenderOpts, render_columns};
 
 // ── KindSelector ──────────────────────────────────────────────────────────
 
@@ -261,9 +261,48 @@ fn build_json_hit(
     serde_json::Value::Object(map)
 }
 
+// ── SearchRow ──────────────────────────────────────────────────────────────
+
+/// One rendered row in the search results table.
+pub(crate) struct SearchRow {
+    id: String,
+    kind: String,
+    status: String,
+    title: String,
+}
+
+const SEARCH_COLUMNS: [Column<SearchRow>; 4] = [
+    Column {
+        name: "id",
+        header: "ID",
+        cell: |r| r.id.clone(),
+        paint: ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
+    },
+    Column {
+        name: "kind",
+        header: "Kind",
+        cell: |r| r.kind.clone(),
+        paint: ColumnPaint::None,
+    },
+    Column {
+        name: "status",
+        header: "Status",
+        cell: |r| r.status.clone(),
+        paint: ColumnPaint::ByValue(|r: &SearchRow| crate::listing::status_hue(&r.status)),
+    },
+    Column {
+        name: "title",
+        header: "Title",
+        cell: |r| r.title.clone(),
+        paint: ColumnPaint::Alternate([crate::listing::TITLE_EVEN, crate::listing::TITLE_ODD]),
+    },
+];
+
 // ── run() ─────────────────────────────────────────────────────────────────
 
-pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
+pub(crate) fn run(mut args: SearchArgs, render: RenderOpts) -> Result<()> {
     let path = args.path.take();
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let selector = KindSelector::resolve(args.kinds.as_deref(), &args.with, &args.no)?;
@@ -317,30 +356,33 @@ pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
 
     match args.format {
         Format::Table => {
-            let header = format!(
-                "{:12} {:8} {:24} {:>8}   {}",
-                "ID", "Kind", "Status", "Score", "Title"
-            );
-            writeln!(std::io::stdout(), "{header}")?;
-            let separator = "-".repeat(80);
-            writeln!(std::io::stdout(), "{separator}")?;
-            for (id, score) in &page {
-                if let Some(entity) = entity_map.get(id) {
+            // Build rows from the scored page (no Score column).
+            let rows: Vec<SearchRow> = page
+                .iter()
+                .filter_map(|(id, _score)| {
+                    let entity = entity_map.get(id)?;
                     let status = entity.status.as_deref().unwrap_or("-");
                     let kind_label = match &entity.key {
                         CatalogKey::Numbered(k) => k.prefix.to_lowercase(),
                         CatalogKey::Memory(_) => "mem".to_string(),
                     };
-                    writeln!(
-                        std::io::stdout(),
-                        "{:12} {:8} {:24} {:>8}   {}",
-                        id,
-                        kind_label,
-                        status,
-                        score,
-                        entity.title
-                    )?;
-                    if args.context {
+                    Some(SearchRow {
+                        id: id.clone(),
+                        kind: kind_label,
+                        status: status.to_string(),
+                        title: entity.title.clone(),
+                    })
+                })
+                .collect();
+
+            let cols: Vec<&Column<SearchRow>> = SEARCH_COLUMNS.iter().collect();
+            let table = render_columns(&rows, &cols, render);
+            writeln!(std::io::stdout(), "{table}")?;
+
+            // Snippet lines for --context (indented below each row).
+            if args.context {
+                for (id, _score) in &page {
+                    if let Some(entity) = entity_map.get(id) {
                         let body = entity.body.as_deref().unwrap_or(&entity.title);
                         let snip = snippet(body, &args.query, 40);
                         if !snip.is_empty() {
@@ -349,8 +391,9 @@ pub(crate) fn run(mut args: SearchArgs) -> Result<()> {
                     }
                 }
             }
+
             if total > 0 {
-                writeln!(std::io::stdout(), "\n{total} result(s)")?;
+                writeln!(std::io::stdout(), "{total} result(s)")?;
             } else {
                 writeln!(std::io::stdout(), "No results.")?;
             }
