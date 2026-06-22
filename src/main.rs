@@ -51,6 +51,7 @@ mod reconcile;
 mod registry;
 mod relation;
 mod relation_graph;
+mod relation_query;
 mod requirement;
 mod retrieve;
 mod review;

@@ -429,6 +429,15 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Read-only relation projection views (SL-137).
+    ///
+    /// `doctrine relation list` — filter-and-project relation edges.
+    /// `doctrine relation census` — group edges by label with resolution tallies.
+    Relation {
+        #[command(subcommand)]
+        command: crate::commands::relation::RelationCommand,
+    },
+
     /// Author a tier-1 relation edge.
     ///
     /// `link SL-048 governed_by ADR-010` (SL-048 §5.4). The label must be
@@ -788,6 +797,38 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             to,
             path,
         } => crate::integrity::run_reseat(path, &reference, to),
+        Command::Relation { command } => match command {
+            crate::commands::relation::RelationCommand::List {
+                include_memory,
+                label,
+                target,
+                source_kind,
+                unresolved,
+                format,
+                json,
+                path,
+            } => crate::commands::relation::run_relation_list(
+                path,
+                include_memory,
+                label,
+                target,
+                source_kind,
+                unresolved,
+                format,
+                json,
+            ),
+            crate::commands::relation::RelationCommand::Census {
+                include_memory,
+                format,
+                json,
+                path,
+            } => crate::commands::relation::run_relation_census(
+                path,
+                include_memory,
+                format,
+                json,
+            ),
+        },
         Command::Link {
             source,
             label,
