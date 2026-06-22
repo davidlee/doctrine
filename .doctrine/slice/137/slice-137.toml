@@ -1,7 +1,7 @@
 id = 137
 slug = "corpus-relation-query"
 title = "Corpus-level relation query verb — list edges by label, target, source-kind"
-status = "reconcile"
+status = "done"
 created = "2026-06-21"
 updated = "2026-06-22"
 

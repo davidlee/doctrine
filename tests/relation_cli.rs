@@ -86,11 +86,7 @@ fn seed_requirement(root: &Path, id: u32) {
         ),
     )
     .unwrap();
-    fs::write(
-        dir.join(format!("requirement-{id:03}.md")),
-        "body\n",
-    )
-    .unwrap();
+    fs::write(dir.join(format!("requirement-{id:03}.md")), "body\n").unwrap();
 }
 
 /// Seed a memory entity with given relations.
@@ -116,11 +112,7 @@ fn seed_memory(root: &Path, uid: &str, title: &str, relations: &[(&str, &str)]) 
 fn seed_malformed_slice(root: &Path, id: u32) {
     let dir = root.join(format!(".doctrine/slice/{id:03}"));
     fs::create_dir_all(&dir).unwrap();
-    fs::write(
-        dir.join(format!("slice-{id:03}.toml")),
-        "id = notanumber\n",
-    )
-    .unwrap();
+    fs::write(dir.join(format!("slice-{id:03}.toml")), "id = notanumber\n").unwrap();
     fs::write(dir.join(format!("slice-{id:03}.md")), "malformed\n").unwrap();
 }
 
@@ -133,11 +125,7 @@ fn relation_list_filters_and_renders_table() {
     seed_project(root);
     // SL-001 → REQ-005 (requirements, resolved), SL-001 → REQ-999 (requirements, unresolved)
     seed_requirement(root, 5);
-    seed_slice(
-        root,
-        1,
-        &[("requirements", &["REQ-005", "REQ-999"])],
-    );
+    seed_slice(root, 1, &[("requirements", &["REQ-005", "REQ-999"])]);
     // SL-002 → REQ-005 (requirements, resolved)
     seed_requirement(root, 5);
     _ = seed_requirement; // REQ-005 already seeded above
@@ -310,11 +298,7 @@ fn dangling_ref_warning_is_suppressed_per_row() {
     seed_project(root);
     seed_requirement(root, 5);
     // SL-001 → REQ-005 (resolved) and SL-001 → REQ-999 (dangling — not seeded)
-    seed_slice(
-        root,
-        1,
-        &[("requirements", &["REQ-005", "REQ-999"])],
-    );
+    seed_slice(root, 1, &[("requirements", &["REQ-005", "REQ-999"])]);
 
     let out = run(root, &["relation", "list"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));

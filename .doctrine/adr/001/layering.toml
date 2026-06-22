@@ -63,6 +63,7 @@ coverage_view = "engine"    # → coverage, coverage_scan, listing, requirement,
 supersede = "engine"        # → entity, knowledge; supersession policy gate; knowledge→cmd baselined
 backlog_order = "engine"    # → backlog, projection; ordering engine; backlog→ upward baselined
 paths = "engine"            # PHASE-01/SL-139: shared entity-file-path projection; engine-tier, no clap/command imports
+relation_query = "command"  # SL-137: pure relation projection+filter engine over &Catalog; imports catalog and integrity (both cmd) — uniformly command
 
 # ── command (22) ─────────────────────────────────────────────────────────
 # Import commands + engines + leaves. CLI layer, run_* functions, user-facing verbs.
@@ -193,3 +194,4 @@ follow_up = "SL-112"
 from = "dtoml"; to = "verify"
 reason = "dtoml imports verify for config validation; verify→coverage is an engine import but dtoml is the pure TOML seam"
 follow_up = "SL-112"
+

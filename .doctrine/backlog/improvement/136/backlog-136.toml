@@ -5,10 +5,10 @@ id = 136
 slug = "corpus-relation-query"
 title = "Corpus-level relation query verb"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-22"
 tags = ["area:cli", "area:relations"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
