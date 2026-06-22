@@ -12,11 +12,45 @@ use crate::{
     Direction, InIndex, NodeId, OutIndex, OverlayId, ValueKind,
 };
 
+/// Breadth-first discovery order from `start` over the `neighbours` relation:
+/// each reachable node yielded exactly once, `start` first. A FIFO frontier and a
+/// visited set make it deterministic (given `neighbours` in adjacency-key order)
+/// and cycle-safe over a degraded `Reject` view — the visited set bounds re-entry
+/// (F12/F47). The single locus of that invariant, shared by `reachable` and
+/// `spine_path`. `neighbours` may yield a `Vec` (many successors) or an `Option`
+/// (≤1 successor) — `IntoIterator` covers both with no wrapper allocation.
+///
+/// Deliberately NOT the basis of `cone_on_overlay`: the cone records each node's
+/// full pred-set as map values and must terminate at degraded-SCC entries
+/// (record, don't expand) — neither fits discovery order (SL-140 design D2).
+fn walk_bfs<I>(start: NodeId, neighbours: impl Fn(NodeId) -> I) -> Vec<NodeId>
+where
+    I: IntoIterator<Item = NodeId>,
+{
+    let mut order = vec![start];
+    let mut visited: BTreeSet<NodeId> = BTreeSet::new();
+    visited.insert(start);
+    let mut frontier: VecDeque<NodeId> = VecDeque::new();
+    frontier.push_back(start);
+    while let Some(node) = frontier.pop_front() {
+        for next in neighbours(node) {
+            // visited carries `start`, so a cycle back to it never re-adds it.
+            if visited.insert(next) {
+                order.push(next);
+                frontier.push_back(next);
+            }
+        }
+    }
+    order
+}
+
 /// The strict reachable set of `start` on `overlay` in `direction` (I6/F8):
 /// `start` itself is excluded even when cyclically reachable. `Along` walks
 /// out-edges, `Against` walks in-edges, `None` yields ∅ (F25). A foreign overlay
-/// or node yields ∅ (F14). Cycle-safe: a visited set bounds the BFS over a
-/// degraded `Reject` view (F12).
+/// or node yields ∅ (F14). Cycle-safe via `walk_bfs`'s visited set (F12).
+///
+/// Strictness is `skip(1)`: `start` is always `walk_bfs`'s first (index-0)
+/// element and is never re-emitted, so dropping it yields exactly `{n} \ {start}`.
 pub(crate) fn reachable(
     out: &OutIndex,
     incoming: &InIndex,
@@ -24,41 +58,24 @@ pub(crate) fn reachable(
     start: NodeId,
     direction: Direction,
 ) -> BTreeSet<NodeId> {
-    let mut reached: BTreeSet<NodeId> = BTreeSet::new();
-    let mut visited: BTreeSet<NodeId> = BTreeSet::new();
-    visited.insert(start);
-    let mut frontier: VecDeque<NodeId> = VecDeque::new();
-    frontier.push_back(start);
-    while let Some(node) = frontier.pop_front() {
-        for next in neighbours(out, incoming, overlay, node, direction) {
-            // visited carries `start`, so a cycle back to it never re-adds it —
-            // strictness holds without a separate guard.
-            if visited.insert(next) {
-                reached.insert(next);
-                frontier.push_back(next);
-            }
-        }
-    }
-    reached
+    walk_bfs(start, |node| {
+        neighbours(out, incoming, overlay, node, direction)
+    })
+    .into_iter()
+    .skip(1)
+    .collect()
 }
 
 /// The spine chain of `node`: follow the single kept parent (pass-1 arity left
 /// ≤1 incoming per node on an `AtMostOne` overlay) up the `incoming` view to a
 /// root or a cycle re-entry, returned **root → … → node** (ancestor-first). The
-/// caller has already gated on `AtMostOne`. Cycle-safe: a visited set stops a
-/// surviving `Reject` cycle at re-entry (the chain ends there).
+/// caller has already gated on `AtMostOne`. Cycle-safe: `walk_bfs`'s visited set
+/// stops a surviving `Reject` cycle at re-entry (the chain ends there).
+///
+/// `single_parent` yields ≤1 successor, so the discovery order degenerates to the
+/// linear chain `node → … → root`; `reverse` makes it ancestor-first.
 pub(crate) fn spine_path(incoming: &InIndex, overlay: OverlayId, node: NodeId) -> Vec<NodeId> {
-    let mut chain = vec![node];
-    let mut visited: BTreeSet<NodeId> = BTreeSet::new();
-    visited.insert(node);
-    let mut cur = node;
-    while let Some(parent) = single_parent(incoming, overlay, cur) {
-        if !visited.insert(parent) {
-            break; // re-entry into a surviving cycle — stop, chain ends here
-        }
-        chain.push(parent);
-        cur = parent;
-    }
+    let mut chain = walk_bfs(node, |cur| single_parent(incoming, overlay, cur));
     chain.reverse();
     chain
 }
@@ -98,6 +115,13 @@ pub(crate) fn predecessor_cone(
 /// single BFS up the in-edges with a global visited set records each reached node
 /// once, terminating at roots (empty pred-set) and degraded-SCC entries (recorded
 /// as empty-pred endpoints, never enqueued).
+///
+/// Deliberately NOT a `walk_bfs` caller (SL-140 design D2): the cone records each
+/// node's full pred-set as map *values* and must block expansion at degraded-SCC
+/// entries (record, don't expand) — neither is expressible through the
+/// discovery-order primitive without a heavier visitor+predicate abstraction that
+/// would obscure the SCC-endpoint logic. The reuse seam is the shared neighbour
+/// helpers (`predecessors`, `in_degraded_scc`), not the loop.
 fn cone_on_overlay(
     incoming: &InIndex,
     degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
