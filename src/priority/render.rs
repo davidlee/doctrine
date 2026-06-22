@@ -17,7 +17,7 @@ use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, Reason
 /// The priority policy version stamped into every `--json` envelope (D6 / REQ-094).
 /// A consumer keys behaviour off this; bump it whenever the policy (partition,
 /// channel synthesis, or order composition) changes its observable verdicts.
-pub(crate) const PRIORITY_POLICY_VERSION: &str = "priority.v2";
+pub(crate) const PRIORITY_POLICY_VERSION: &str = "priority.v3";
 
 // ---------------------------------------------------------------------------
 // Column definitions for priority human tables (SL-079 PHASE-02)
@@ -49,9 +49,9 @@ const SURVEY_COLS: [Column<SurveyRow>; 7] = [
         paint: ColumnPaint::ByValue(|r| status_hue(r.act.token())),
     },
     Column {
-        name: "cons",
-        header: "cons",
-        cell: |r| r.consequence.to_string(),
+        name: "score",
+        header: "score",
+        cell: |r| format!("{:.1}", r.score),
         paint: ColumnPaint::None,
     },
     Column {
@@ -72,9 +72,9 @@ const SURVEY_COLS: [Column<SurveyRow>; 7] = [
     dead_code,
     reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)"
 )]
-const SURVEY_DEFAULT: &[&str] = &["id", "kind", "status", "act", "cons", "blocker", "title"];
+const SURVEY_DEFAULT: &[&str] = &["id", "kind", "status", "act", "score", "blocker", "title"];
 
-const NEXT_COLS: [Column<NextRow>; 5] = [
+const NEXT_COLS: [Column<NextRow>; 6] = [
     Column {
         name: "id",
         header: "id",
@@ -94,6 +94,12 @@ const NEXT_COLS: [Column<NextRow>; 5] = [
         paint: ColumnPaint::ByValue(|r| status_hue(&r.status)),
     },
     Column {
+        name: "score",
+        header: "score",
+        cell: |r| format!("{:.1}", r.score),
+        paint: ColumnPaint::None,
+    },
+    Column {
         name: "unblocks",
         header: "unblocks",
         cell: |r| r.blocking.len().to_string(),
@@ -111,14 +117,14 @@ const NEXT_COLS: [Column<NextRow>; 5] = [
     dead_code,
     reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)"
 )]
-const NEXT_DEFAULT: &[&str] = &["id", "kind", "status", "unblocks", "title"];
+const NEXT_DEFAULT: &[&str] = &["id", "kind", "status", "score", "unblocks", "title"];
 
 // ---------------------------------------------------------------------------
 // Render functions
 // ---------------------------------------------------------------------------
 
 /// Render `survey` for human reading — one row per eligible node in importance order.
-/// Columns: id, kind, status, BLOCKED badge (or blank), consequence, direct blocker.
+/// Columns: id, kind, status, BLOCKED badge (or blank), score, direct blocker.
 /// Rides `listing::render_columns` (the shared list layout + colour seam). A blocked
 /// row shows its badge + first direct blocker (the rest live in `blockers`/`explain` —
 /// direct-only here, D11).
@@ -130,8 +136,9 @@ pub(crate) fn survey_human(rows: &[SurveyRow], opts: RenderOpts) -> String {
     listing::render_columns(rows, &sel, opts)
 }
 
-/// Render `next` for human reading — actionable-only, in `order_key` order. Columns:
-/// id, kind, status, blocking-count, title. Advisory.
+/// Render `next` for human reading — actionable-only, in the score-aware
+/// induced-frontier order (SL-133 §5.4). Columns: id, kind, status, score,
+/// blocking-count, title. Advisory.
 pub(crate) fn next_human(rows: &[NextRow], opts: RenderOpts) -> String {
     if rows.is_empty() {
         return "(nothing actionable)\n".to_string();
@@ -178,7 +185,17 @@ fn reason_line(reason: &ReasonKind) -> String {
         }
         ReasonKind::BlockedBy { items } => format!("  blocked by: {}\n", items.join(", ")),
         ReasonKind::Blocking { items } => format!("  blocking: {}\n", items.join(", ")),
-        ReasonKind::Consequence { inbound } => format!("  consequence: {inbound}\n"),
+        ReasonKind::Score {
+            base,
+            value_dim,
+            risk_dim,
+            leverage,
+            optionality,
+            total,
+        } => format!(
+            "  score: {total:.1} (base {base:.1} [value {value_dim:.1}, risk {risk_dim:.1}], \
+             leverage {leverage:.1}, optionality {optionality:.1})\n"
+        ),
         ReasonKind::EvictedEdge { from, to, reason } => {
             format!("  evicted seq edge: {from} → {to} ({reason:?})\n")
         }
@@ -189,7 +206,7 @@ fn reason_line(reason: &ReasonKind) -> String {
 }
 
 /// Render `explain` for human reading — every structured reason in a fixed section
-/// order: eligibility, blocker chain, evicted edges, consequence.
+/// order: eligibility, blocker chain, evicted edges, score.
 pub(crate) fn explain_human(ex: &Explanation) -> String {
     let mut parts: Vec<String> = vec![format!("{} — explain\n", ex.id)];
     parts.push(reason_line(&ex.eligibility));
@@ -199,7 +216,7 @@ pub(crate) fn explain_human(ex: &Explanation) -> String {
     for r in &ex.evictions {
         parts.push(reason_line(r));
     }
-    parts.push(reason_line(&ex.consequence));
+    parts.push(reason_line(&ex.score));
     parts.concat()
 }
 
@@ -210,7 +227,7 @@ pub(crate) fn actionability_block_human(block: &ActionabilityBlock) -> String {
     let mut parts: Vec<String> = vec!["\nactionability:\n".to_string()];
     parts.push(format!("  eligible: {}\n", block.eligible));
     parts.push(format!("  actionable: {}\n", block.actionable));
-    parts.push(format!("  consequence: {}\n", block.consequence));
+    parts.push(format!("  score: {:.1}\n", block.score));
     if !block.blockers.is_empty() {
         parts.push(format!("  blocked by: {}\n", block.blockers.join(", ")));
     }
@@ -239,9 +256,22 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
         ReasonKind::Blocking { items } => {
             serde_json::json!({ "kind": "blocking", "items": items })
         }
-        ReasonKind::Consequence { inbound } => {
-            serde_json::json!({ "kind": "consequence", "inbound": inbound })
-        }
+        ReasonKind::Score {
+            base,
+            value_dim,
+            risk_dim,
+            leverage,
+            optionality,
+            total,
+        } => serde_json::json!({
+            "kind": "score",
+            "base": base,
+            "value_dim": value_dim,
+            "risk_dim": risk_dim,
+            "leverage": leverage,
+            "optionality": optionality,
+            "total": total,
+        }),
         ReasonKind::EvictedEdge { from, to, reason } => serde_json::json!({
             "kind": "evicted_edge",
             "from": from,
@@ -262,7 +292,7 @@ fn finish(value: &serde_json::Value) -> anyhow::Result<String> {
 }
 
 /// `survey --json` — every row's full surface (id/title/kind/status/actionability/
-/// consequence/blockers/reasons) under a policy-versioned envelope.
+/// score/blockers/reasons) under a policy-versioned envelope.
 pub(crate) fn survey_json(rows: &[SurveyRow]) -> anyhow::Result<String> {
     let rows: Vec<serde_json::Value> = rows
         .iter()
@@ -273,7 +303,7 @@ pub(crate) fn survey_json(rows: &[SurveyRow]) -> anyhow::Result<String> {
                 "kind": r.kind,
                 "status": r.status,
                 "actionability": r.act.token(),
-                "consequence": r.consequence,
+                "score": r.score,
                 "blockers": r.blockers,
                 "reasons": r.reasons.iter().map(reason_json).collect::<Vec<_>>(),
             })
@@ -286,7 +316,7 @@ pub(crate) fn survey_json(rows: &[SurveyRow]) -> anyhow::Result<String> {
     }))
 }
 
-/// `next --json` — actionable rows in `order_key` order, full surface.
+/// `next --json` — actionable rows in the score-aware frontier order, full surface.
 pub(crate) fn next_json(rows: &[NextRow]) -> anyhow::Result<String> {
     let rows: Vec<serde_json::Value> = rows
         .iter()
@@ -297,6 +327,7 @@ pub(crate) fn next_json(rows: &[NextRow]) -> anyhow::Result<String> {
                 "kind": r.kind,
                 "status": r.status,
                 "actionability": r.act.token(),
+                "score": r.score,
                 "blocking": r.blocking,
                 "reasons": r.reasons.iter().map(reason_json).collect::<Vec<_>>(),
             })
@@ -330,7 +361,7 @@ pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
         "eligibility": reason_json(&ex.eligibility),
         "blocker_chain": ex.blocker_chain.iter().map(reason_json).collect::<Vec<_>>(),
         "evictions": ex.evictions.iter().map(reason_json).collect::<Vec<_>>(),
-        "consequence": reason_json(&ex.consequence),
+        "score": reason_json(&ex.score),
     }))
 }
 
@@ -342,6 +373,6 @@ pub(crate) fn actionability_block_value(block: &ActionabilityBlock) -> serde_jso
         "actionable": block.actionable,
         "blockers": block.blockers,
         "blocking": block.blocking,
-        "consequence": block.consequence,
+        "score": block.score,
     })
 }

@@ -131,7 +131,7 @@ fn seed_corpus(root: &Path) {
 // === VT-1 / VT-3 / VT-4 — survey human (byte-exact) ======================
 
 /// survey (default): every ELIGIBLE node in importance order — actionable first
-/// (consequence desc, then canonical id), the workable-but-BLOCKED ISS-001 LAST with
+/// (score desc, then canonical id), the workable-but-BLOCKED ISS-001 LAST with
 /// its badge + direct blocker (the divergence, D10). Terminal ISS-003 and promoted
 /// ISS-004 are EXCLUDED. The cross-kind RV-001 (Active) appears (VT-3).
 #[test]
@@ -143,11 +143,11 @@ fn survey_human_importance_order_blocked_last_terminal_promoted_excluded() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ kind │ status │         │ cons │ blocker │ title\n\
-         ISS-002 │ ISS  │ open   │         │ 0    │         │ Free work\n\
-         RSK-001 │ RSK  │ open   │         │ 0    │         │ The prereq\n\
-         RV-001  │ RV   │ active │         │ 0    │         │ The review\n\
-         ISS-001 │ ISS  │ open   │ BLOCKED │ 0    │ RSK-001 │ Blocked work\n"
+        "id      │ kind │ status │         │ score │ blocker │ title\n\
+         ISS-002 │ ISS  │ open   │         │ 0.0   │         │ Free work\n\
+         RSK-001 │ RSK  │ open   │         │ 0.0   │         │ The prereq\n\
+         RV-001  │ RV   │ active │         │ 0.0   │         │ The review\n\
+         ISS-001 │ ISS  │ open   │ BLOCKED │ 0.0   │ RSK-001 │ Blocked work\n"
     );
 }
 
@@ -185,10 +185,10 @@ fn next_human_actionable_only_blocked_absent() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ kind │ status │ unblocks │ title\n\
-         ISS-002 │ ISS  │ open   │ 0        │ Free work\n\
-         RSK-001 │ RSK  │ open   │ 1        │ The prereq\n\
-         RV-001  │ RV   │ active │ 0        │ The review\n"
+        "id      │ kind │ status │ score │ unblocks │ title\n\
+         ISS-002 │ ISS  │ open   │ 0.0   │ 0        │ Free work\n\
+         RSK-001 │ RSK  │ open   │ 0.0   │ 1        │ The prereq\n\
+         RV-001  │ RV   │ active │ 0.0   │ 0        │ The review\n"
     );
     // The blocked item is absent from the actionable worklist.
     assert!(
@@ -235,7 +235,7 @@ fn blockers_transitive_byte_exact() {
 }
 
 /// explain ISS-001: the full structured account — eligibility, the blocker chain,
-/// and the consequence, each from a structured reason.
+/// and the score breakdown, each from a structured reason.
 #[test]
 fn explain_human_byte_exact() {
     let dir = tmp();
@@ -248,7 +248,7 @@ fn explain_human_byte_exact() {
         "ISS-001 — explain\n\
          \x20\x20eligibility: open → Workable\n\
          \x20\x20blocked by: RSK-001\n\
-         \x20\x20consequence: 0\n"
+         \x20\x20score: 0.0 (base 0.0 [value 0.0, risk 0.0], leverage 0.0, optionality 0.0)\n"
     );
 }
 
@@ -267,7 +267,7 @@ fn survey_json_every_surface_and_policy_version() {
     let body = stdout(&out);
     let v: serde_json::Value = serde_json::from_str(&body).expect("valid JSON");
     assert_eq!(v["kind"], "survey");
-    assert_eq!(v["policy_version"], "priority.v2");
+    assert_eq!(v["policy_version"], "priority.v3");
     let rows = v["rows"].as_array().expect("rows array");
     // ISS-002 leads; every surface present on it.
     let lead = &rows[0];
@@ -276,7 +276,7 @@ fn survey_json_every_surface_and_policy_version() {
     assert_eq!(lead["kind"], "ISS");
     assert_eq!(lead["status"], "open");
     assert_eq!(lead["actionability"], "actionable");
-    assert_eq!(lead["consequence"], 0);
+    assert_eq!(lead["score"], 0.0);
     assert!(lead["blockers"].is_array(), "blockers surface present");
     assert!(lead["reasons"].is_array(), "reasons surface present");
     // The blocked row carries the structured blocked_by reason + its direct blocker.
@@ -304,7 +304,7 @@ fn explain_json_structured_reasons_and_policy_version() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
     assert_eq!(v["kind"], "explain");
-    assert_eq!(v["policy_version"], "priority.v2");
+    assert_eq!(v["policy_version"], "priority.v3");
     assert_eq!(v["id"], "ISS-001");
     assert_eq!(v["eligibility"]["kind"], "eligibility");
     assert_eq!(v["eligibility"]["class"], "Workable");
@@ -314,7 +314,14 @@ fn explain_json_structured_reasons_and_policy_version() {
         v.get("order_contrib").is_none(),
         "order_contrib field dropped from the explain --json envelope (SL-050 F5)"
     );
-    assert_eq!(v["consequence"]["inbound"], 0);
+    // SL-133 VA-1: the score breakdown exposes every dimension.
+    assert_eq!(v["score"]["kind"], "score");
+    assert_eq!(v["score"]["base"], 0.0);
+    assert_eq!(v["score"]["value_dim"], 0.0);
+    assert_eq!(v["score"]["risk_dim"], 0.0);
+    assert_eq!(v["score"]["leverage"], 0.0);
+    assert_eq!(v["score"]["optionality"], 0.0);
+    assert_eq!(v["score"]["total"], 0.0);
 }
 
 /// next --json: actionable rows only, with the policy stamp + structured reasons.
@@ -327,7 +334,7 @@ fn next_json_actionable_only_policy_version() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
     assert_eq!(v["kind"], "next");
-    assert_eq!(v["policy_version"], "priority.v2");
+    assert_eq!(v["policy_version"], "priority.v3");
     let ids: Vec<&str> = v["rows"]
         .as_array()
         .unwrap()
@@ -454,7 +461,7 @@ fn inspect_appends_actionability_block_human() {
          actionability:\n\
          \x20\x20eligible: true\n\
          \x20\x20actionable: false\n\
-         \x20\x20consequence: 0\n\
+         \x20\x20score: 0.0\n\
          \x20\x20blocked by: RSK-001\n"
     );
 }
@@ -479,5 +486,5 @@ fn inspect_json_additive_actionability_key() {
     assert_eq!(v["actionability"]["eligible"], true);
     assert_eq!(v["actionability"]["actionable"], false);
     assert_eq!(v["actionability"]["blockers"][0], "RSK-001");
-    assert_eq!(v["actionability"]["consequence"], 0);
+    assert_eq!(v["actionability"]["score"], 0.0);
 }

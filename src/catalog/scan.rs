@@ -19,6 +19,7 @@ use crate::estimate::{self, EstimateFacet};
 use crate::integrity;
 use crate::listing;
 use crate::relation::RelationEdge;
+use crate::risk::{self, RiskFacet};
 use crate::value::{self, ValueFacet};
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
@@ -146,6 +147,12 @@ pub(crate) struct ScannedEntity {
     /// same kind-agnostic, per-facet isolation as [`Self::estimate`]. Now
     /// consumed by the hydrate projection (PHASE-02).
     pub(crate) value: Option<ValueFacet>,
+    /// The entity's optional `[facet]` (risk) table (SL-133 PHASE-03) — read
+    /// with the same kind-agnostic, per-facet isolation as [`Self::estimate`]
+    /// and [`Self::value`]. A malformed `[facet]` drops only `risk` to `None`
+    /// and pushes an `Error` diagnostic. Consumed by the priority graph base
+    /// pre-pass (PHASE-04).
+    pub(crate) risk: Option<RiskFacet>,
 }
 
 /// The all-kind raw scan (design §5.2 — the reusable seam factored out of
@@ -198,7 +205,7 @@ pub(crate) fn scan_entities(
                     continue;
                 }
             };
-            let (estimate, value) = read_facets(root, kref, id, diagnostics);
+            let (estimate, value, risk) = read_facets(root, kref, id, diagnostics);
             out.push(ScannedEntity {
                 key: EntityKey { prefix, id },
                 kind: kref.kind,
@@ -207,17 +214,19 @@ pub(crate) fn scan_entities(
                 outbound,
                 estimate,
                 value,
+                risk,
             });
         }
     }
     Ok(out)
 }
 
-/// Read the optional `[estimate]` / `[value]` facets off one entity's toml,
-/// kind-agnostically, with PER-FACET malformed isolation (SL-103 PHASE-01,
-/// design §5.1 / D4). Each facet parses independently: a malformed PRESENT facet
-/// pushes an `Error` diagnostic and drops THAT facet to `None` — no bound
-/// coercion, no silent repair — leaving the node and the sibling facet intact.
+/// Read the optional `[estimate]` / `[value]` / `[facet]` (risk) facets off one
+/// entity's toml, kind-agnostically, with PER-FACET malformed isolation (SL-103
+/// PHASE-01 / SL-133 PHASE-03, design §5.1 / D4). Each facet parses
+/// independently: a malformed PRESENT facet pushes an `Error` diagnostic and
+/// drops THAT facet to `None` — no bound coercion, no silent repair — leaving
+/// the node and the sibling facets intact.
 ///
 /// The status read ([`status_and_title_for`]) has already validated this file
 /// parses; a vanished/garbled file HERE is a concurrent-edit window — the status
@@ -228,13 +237,13 @@ fn read_facets(
     kref: &integrity::KindRef,
     id: u32,
     diagnostics: &mut Vec<CatalogDiagnostic>,
-) -> (Option<EstimateFacet>, Option<ValueFacet>) {
+) -> (Option<EstimateFacet>, Option<ValueFacet>, Option<RiskFacet>) {
     let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     let Ok(text) = std::fs::read_to_string(&path) else {
-        return (None, None);
+        return (None, None, None);
     };
     let Ok(table) = text.parse::<toml::Table>() else {
-        return (None, None);
+        return (None, None, None);
     };
     let estimate = parse_facet(
         "estimate",
@@ -254,7 +263,16 @@ fn read_facets(
         id,
         diagnostics,
     );
-    (estimate, value)
+    let risk = parse_facet(
+        "facet",
+        table.get("facet"),
+        risk::parse_optional,
+        root,
+        kref,
+        id,
+        diagnostics,
+    );
+    (estimate, value, risk)
 }
 
 /// Parse ONE optional facet keyed `field` off the entity's parsed toml, isolating
@@ -1074,5 +1092,58 @@ mod tests {
             "estimate read off a non-slice kind"
         );
         assert!(diags.is_empty(), "no diagnostics: {diags:?}");
+    }
+
+    /// VT-1b (SL-133 PHASE-03): per-facet isolation — a malformed `[facet]`
+    /// (bad likelihood token) next to VALID `[estimate]` and `[value]` on the
+    /// SAME entity pushes one `Error`, drops `risk` to `None`, and leaves
+    /// estimate + value intact. Seeded on an ADR so the malformed facet reaches
+    /// `read_facets` (a slice would reject it in its own typed read).
+    #[test]
+    fn read_facets_isolates_malformed_risk_facet_from_valid_estimate_and_value() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_adr_with_facets(
+            root,
+            1,
+            "[estimate]\nlower = 2\nupper = 8\n\n[value]\nvalue = 5\n\n[facet]\nlikelihood = \"bogus\"\nimpact = \"high\"\n",
+        );
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        // The node survives, with sibling facets intact.
+        assert_eq!(scanned.len(), 1);
+        let adr = &scanned[0];
+        assert_eq!(adr.key.canonical(), "ADR-001");
+        assert!(adr.risk.is_none(), "malformed risk facet drops to None");
+        assert_eq!(
+            adr.estimate,
+            Some(EstimateFacet {
+                lower: 2.0,
+                upper: 8.0
+            }),
+            "sibling estimate facet stays intact"
+        );
+        assert_eq!(
+            adr.value,
+            Some(ValueFacet { value: 5.0 }),
+            "sibling value facet stays intact"
+        );
+
+        // Exactly one Error diagnostic, for the facet field, verbatim message.
+        assert_eq!(diags.len(), 1);
+        let d = &diags[0];
+        assert_eq!(d.severity, Severity::Error);
+        assert_eq!(d.field.as_deref(), Some("facet"));
+        assert_eq!(
+            d.entity_key.as_ref().map(|k| k.canonical()),
+            Some("ADR-001".to_string())
+        );
+        assert!(
+            d.message.contains("invalid likelihood"),
+            "leaf message verbatim: {}",
+            d.message
+        );
     }
 }

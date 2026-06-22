@@ -56,6 +56,7 @@ mod retrieve;
 mod review;
 mod revision;
 mod rfc;
+mod risk;
 mod root;
 mod skills;
 mod slice;

@@ -70,11 +70,11 @@
     filter: brightness(1.1);
   }
 
-  .priority-consequence-badge circle {
+  .priority-score-badge circle {
     fill: var(--bg);
   }
 
-  .priority-consequence-badge text {
+  .priority-score-badge text {
     fill: var(--fg);
     font-size: 10px;
   }

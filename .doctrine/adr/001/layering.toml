@@ -16,7 +16,7 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (24) ────────────────────────────────────────────────────────────
+# ── leaf (25) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 clock = "leaf"              # out=0: std-only time helpers
 conduct = "leaf"            # out=0: conduct.toml defaults — pure constants
@@ -25,7 +25,7 @@ dep_seq = "leaf"            # out=0: dependency-sequence data types — pure
 dispatch_config = "leaf"    # out=0: dispatch config defaults — pure
 dtoml = "leaf"              # → estimate, value, conduct, dispatch_config, verify; verify→coverage is engine but dtoml is a TOML wrapper (pure seam); baselined below
 estimate = "leaf"           # out=0: estimate facet types — pure
-facet = "leaf"              # out=0: EntityFacets aggregation — pure data, imports only estimate + value
+facet = "leaf"              # → estimate, value, risk: EntityFacets aggregation — pure data, imports only leaf facet types
 facet_write = "leaf"        # → fsutil (SL-113): shared facet read→mutate→write core — std+leaf only
 fsutil = "leaf"             # out=0: filesystem utility — impure seam, no domain
 git = "leaf"                # out=0: git ops — impure seam, no domain
@@ -38,6 +38,7 @@ listing = "leaf"            # out=0: listing/render primitives — pure presenta
 plan = "leaf"               # out=0: plan phase types — pure
 projection = "leaf"         # out=0: priority projection enum — pure
 registry = "leaf"           # out=0: spec registry index — pure
+risk = "leaf"               # out=0: risk facet types + exposure — pure (SL-133 PHASE-02 extraction from backlog)
 root = "leaf"               # out=0: project-root resolution — impure seam
 tag = "leaf"                # out=0: tag normalization — pure
 tomlfmt = "leaf"            # out=0: TOML formatting helpers — pure
@@ -107,6 +108,7 @@ worktree = "command"        # → fsutil, git, root, slice; worktree fork/coordi
 "catalog::graph" = "engine"       # pure graph projection
 "catalog::diagnostic" = "engine"  # pure diagnostic dump
 "priority::graph" = "engine"      # pure relation_graph consumer
+"priority::config" = "leaf"       # [priority] config load + clamp; imports std + serde + toml only (SL-133)
 "status::run_status" = "command"  # the run_* CLI entry — reaches backlog, boot, priority
 "worktree::shared" = "engine"     # cross-machine helpers; imports git (leaf)
 "worktree::allowlist" = "leaf"    # pure tier-classification core; imports glob (external) only — no domain, disk, git, clock, or rng (D4)
