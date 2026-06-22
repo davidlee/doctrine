@@ -849,15 +849,35 @@ mod tests {
         let n1 = pg.projection.resolve(key("ISS", 1)).unwrap();
         let n2 = pg.projection.resolve(key("ISS", 2)).unwrap();
         let n3 = pg.projection.resolve(key("ISS", 3)).unwrap();
-        assert!(n2 < n3, "ISS-002 (base 5.0) mints before ISS-003 (base 3.0)");
-        assert!(n3 < n1, "ISS-003 (base 3.0) mints before ISS-001 (base 1.0)");
+        assert!(
+            n2 < n3,
+            "ISS-002 (base 5.0) mints before ISS-003 (base 3.0)"
+        );
+        assert!(
+            n3 < n1,
+            "ISS-003 (base 3.0) mints before ISS-001 (base 1.0)"
+        );
 
         // Permutation invariance: re-seed the same corpus in a DIFFERENT authoring order
         // (BTree, no clock/RNG) — the score map and the mint order are identical.
         let dir2 = tmp();
         let root2 = dir2.path();
-        seed_issue_with_facets(root2, 3, "", "lower = 0.0\nupper = 10.0", "value = 15.0", "");
-        seed_issue_with_facets(root2, 2, "", "lower = 0.0\nupper = 10.0", "value = 25.0", "");
+        seed_issue_with_facets(
+            root2,
+            3,
+            "",
+            "lower = 0.0\nupper = 10.0",
+            "value = 15.0",
+            "",
+        );
+        seed_issue_with_facets(
+            root2,
+            2,
+            "",
+            "lower = 0.0\nupper = 10.0",
+            "value = 25.0",
+            "",
+        );
         seed_issue_with_facets(root2, 1, "", "lower = 0.0\nupper = 10.0", "value = 5.0", "");
         let pg2 = build(root2).unwrap();
         assert_eq!(pg.score, pg2.score, "score map is permutation-invariant");
