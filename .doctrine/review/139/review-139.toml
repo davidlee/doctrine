@@ -1,0 +1,52 @@
+id    = 139
+slug  = "inquisition-sl-137-corpus-relation-query-design"
+title = "Inquisition: SL-137 corpus relation query design"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-137"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Error-only stderr rationale (F5/§5.4) rests on a false premise about inspect AND a false completeness claim"
+detail = "EXPECTED: §5.4/F5 justifies Error-only stderr as 'a deliberate divergence from inspect, which prints every diagnostic' — implying inspect floods per-edge Warning/Info that a ~1000-edge corpus query would drown in. OBSERVED, two defects: (1) inspect does NOT diverge — it consumes relation_graph::scan_entities (src/commands/inspect.rs:42) whose scan path emits Error severity only (src/catalog/scan.rs:189 read-fail=Error); inspect prints every diagnostic it HAS, but it has only Errors. The 'would drown the signal' rationale compares against a phantom Warning/Info stream inspect never produces. (2) §5.4 asserts Warning/Info 'are surfaced by --unresolved / the census breakdown'. FALSE for edge-DROPPING warnings: empty memory relation label/target emit Severity::Warning then 'continue' (src/catalog/hydrate.rs:289,299) so the edge never enters Catalog.edges — invisible to both --unresolved and census. Suppressing Warning here hides genuine incompleteness, not noise. REMEDY: rewrite the F5 rationale to state true inspect parity; either surface an edge-dropped-count summary when any edge-dropping Warning fired, or explicitly scope the divergence to UnresolvedRef(Warning)/UnvalidatedText(Info) classification diagnostics (recoverable per-row) and disclaim the dropped-edge class."
+disposition = "design-wrong"
+response = "Design defect, corrected in the artifact (pre-implementation, no code yet). §5.4 diagnostics rationale rewritten: states true inspect parity (relation_graph::scan_entities is Error-only), splits classification Warnings (recoverable, suppressed) from edge-dropping Warnings (now surfaced via a bounded 'N edge(s) dropped' summary line). §10 F5 marked superseded; VT-11 extended."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Illegal hand-edited [[relation]] rows are silently dropped with NO diagnostic — unacknowledged completeness blind spot"
+detail = "EXPECTED: the design markets the verb as exposing the corpus edge set ('the data exists, fully typed, in the hydrated Catalog'; 'rich on the inside, thin on the outside') — implying the query reflects the authored relation corpus. OBSERVED: tier-1 reads drop off-table (illegal) [[relation]] rows before any edge exists — relation::tier1_edges discards the _illegal partition (src/relation.rs:629-631), and validate must RE-READ raw TOML precisely because 'scan_entities drops the illegal rows' (src/relation_graph.rs:373-374). scan_catalog inherits that dropped set, so a hand-edited illegal relation row is invisible to relation list/census AND emits NO diagnostic (not even Warning) — a stricter blind spot than F-1's dropped Warnings. The design never names this. REMEDY (prefer scope clarification over scope expansion): add an explicit §3/§5.5 boundary that the verb is a VALIDATED-LIVE-EDGE query, illegal rows being the sole province of 'doctrine validate' (cite the existing IllegalRow consumer). Do NOT silently let the completeness framing stand."
+disposition = "design-wrong"
+response = "Corrected via scope clarification, not expansion. §5.5 now states the verb is a validated-live-edge query; illegal off-table [[relation]] rows are dropped by tier1_edges and remain doctrine validate's sole province (IllegalRow consumer). Completeness framing no longer stands unqualified."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Target normalisation (D6) underspecified for resolved MEMORY targets — UID vs key-alias"
+detail = "EXPECTED: D6 says the --target filter matches canonical form for Resolved targets, raw verbatim otherwise — presented as fully covering the match contract. OBSERVED: for a Resolved target that is a memory key, CatalogKey::canonical() returns the memory UID (src/catalog/hydrate.rs:27), while classify_target resolves authored non-UID memory key aliases through mem_key_map into CatalogKey::Memory(uid) (src/catalog/hydrate.rs:376). So target_display() of such an edge is the UID; an operator passing the authored memory-key alias to the --target flag would NOT match. The contract is silent on whether the filter accepts memory UID, alias, or both. REMEDY: state in §5.4/D6 that the --target filter compares memory targets in UID canonical form (alias inputs are not normalised), or normalise memory refs before compare; add a VT pinning the chosen rule. Cheap to specify; do not leave latent."
+disposition = "design-wrong"
+response = "Corrected in §5.4/D6: memory targets match by UID only; authored key aliases are resolved to Memory(uid) at hydration and not re-expanded by --target. VT-12 extended to pin it."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "VT set (§9) overclaims — three asserted behaviours have no covering test, and tie-break is unspecified"
+detail = "EXPECTED: §9 claims pure projection is fully tested and §4 asserts deterministic order. OBSERVED gaps vs the design's own claims: (a) §5.5 asserts '--source-kind MEM alone yields nothing without --include-memory' — no VT pins the empty case (VT-4 covers the gate generally, not this corner). (b) §5.4 says all active axes AND-compose; VT-3 only exercises label/target/source-kind 'AND-composition' generically — no VT runs all FOUR axes (+ --unresolved, + include_memory) simultaneously. (c) sort is sort_by (label, source) but the design never states a tie-breaker for duplicate (label,source) pairs (same source CAN hold multiple edges of one label to distinct targets) — 'deterministic' is asserted, not pinned; an unstable sort would reorder ties. REMEDY: add VT for the MEM-without-include-memory empty case; add a full four-axis composition VT; specify the tie-breaker (extend the sort key to (label, source, target)) and pin it in VT-6."
+disposition = "design-wrong"
+response = "Corrected in §9: VT-4 pins --source-kind MEM without --include-memory => empty; VT-3 adds a full four-axis AND case; sort key extended to (label, source, target) with VT-6 pinning the tie-breaker. §5.4 list-sort updated to match."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
