@@ -4,7 +4,7 @@ version = 1
 id = 283
 slug = "configure-a-project-wide-value-unit-with-a-default"
 title = "Configure a project-wide value unit with a default"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The value unit is read from project config [value].unit and defaults to magic_beans when unconfigured; the unit is project-wide, never entity-local."

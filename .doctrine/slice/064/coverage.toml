@@ -33,3 +33,84 @@ mode = "VA"
 status = "verified"
 git_anchor = "d73f30f9cadb1712e8aa5d18168ce73b691d4509"
 attested_date = "2026-06-19"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-296"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-297"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-298"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-299"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-300"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-301"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-302"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-303"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-064"
+requirement = "REQ-304"
+contributing_change = "SL-064"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"

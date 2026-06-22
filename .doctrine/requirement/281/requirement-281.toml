@@ -4,7 +4,7 @@ version = 1
 id = 281
 slug = "record-an-optional-value-worthpayoff-magnitude-facet-on-an-entity"
 title = "Record an optional value worth/payoff magnitude facet on an entity"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "An author can attach an optional [value] table carrying a single worth/payoff magnitude to an entity's TOML; the magnitude may be an integer or float and normalizes internally to a finite float."

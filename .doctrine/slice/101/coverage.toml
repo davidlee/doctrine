@@ -87,3 +87,120 @@ mode = "VA"
 status = "verified"
 git_anchor = "d73f30f9cadb1712e8aa5d18168ce73b691d4509"
 attested_date = "2026-06-19"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-261"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-262"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-263"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-264"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-265"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-266"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-267"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-268"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-281"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-282"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-283"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-284"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
+
+[[entry]]
+slice = "SL-101"
+requirement = "REQ-285"
+contributing_change = "SL-101"
+mode = "VA"
+status = "verified"
+git_anchor = "b7c07ea84c1f1aa775f137bf98140ef54c27b0a8"
+attested_date = "2026-06-23"
