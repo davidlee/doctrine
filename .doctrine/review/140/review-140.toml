@@ -1,0 +1,99 @@
+id    = 140
+slug  = "inquisition-on-sl-141-entity-full-text-search-design"
+title = "Inquisition on SL-141 entity full-text search design"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-141"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Snippet span-reconstruction algorithm is underspecified"
+detail = """
+EXPECTED: The design specifies a concrete algorithm for mapping a lowercased token match back to the original-cased body span. Without this, the `--context` snippet feature cannot be implemented deterministically.
+
+OBSERVED: Section 'Output & snippet' says: 'tokenize query and body via lexical::tokenize. Find the first body token (lowercased) that matches a query token (lowercased). Map the matched token back to its span in the *original cased* body text.' But lexical::tokenize lowercases everything and splits on non-alphanumeric, losing positional information. A single lowercased token (e.g. 'auth') can match multiple spans in the original cased body ('Auth token', 'OAuth', 'authorization'). The algorithm gives no method for finding the byte offset of the matched lowercased token in the original cased text — which is required to extract the ~40-char window. The design hand-waves past the hard part: the token→span reconstruction from a destructive tokenize pass."""
+disposition = "fix-now"
+response = "Accepted. The token→span reconstruction algorithm is indeed underspecified. The fix is to add a concrete algorithm: use lexical::tokenize on the body to produce a Vec<String> of lowercased tokens, then build a parallel Vec<(usize, usize)> of byte-offset spans during tokenization (a second pass over the body that tracks byte positions while matching the tokenizer's split logic). The snippet function then uses the matched token's index to look up its span in the original cased text. The design will be amended to specify this two-pass algorithm precisely, with test cases for: exact match → correct span; multi-match → first match; no match → body prefix fallback."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Design misstates tier of catalog::scan, integrity, and listing in dependency list"
+detail = """
+EXPECTED: The design's Architecture section correctly labels dependencies by their authoritative tier in .doctrine/adr/001/layering.toml.
+
+OBSERVED: The design says:
+- `catalog::scan` (engine) — but layering.toml line 'catalog::scan = "command"': it reaches adr, backlog, knowledge, memory, policy, rec, review, revision, slice, spec, standard — 9 command modules.
+- `integrity::KINDS` (engine) — but layering.toml line 'integrity = "command"': it imports adr, backlog, concept_map, knowledge, policy, rec, requirement, review, revision, slice, spec, standard — 12 command modules.
+- `listing` (engine) — but layering.toml line 'listing = "leaf"': pure presentation primitives, no domain knowledge.
+
+The 'No upward edges' claim still holds because search.rs is itself command-tier, depending on same-tier or lower modules. But the mislabeling misleads future reviewers who may add engine-tier dependencies to catalog::scan assuming it is engine. This is a classification error in the design document, not a structural layering violation."""
+disposition = "fix-now"
+response = "Accepted. The dependency list in the design's Architecture section will be corrected to reflect the authoritative layering.toml tiers: catalog::scan (command), integrity (command), listing (leaf). The 'No upward edges' claim remains true regardless — this is a documentation fix, not a structural change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = '\`spec\` group alias semantically collides with SPEC kind prefix'
+detail = """
+EXPECTED: Group aliases and kind prefixes should be unambiguous. A user writing `--kind spec` has a clear, singular interpretation.
+
+OBSERVED: The `spec` group alias expands to [prd, spec], but `spec` (or `SPEC`) is also a literal kind prefix — the tech-spec subtype in integrity::KINDS (prefix='SPEC'). The design says 'Evaluation order: default set → --kind replaces → --with adds → --no removes' and 'expand aliases → validate'. Under this pipeline, `--kind spec` always resolves as the group alias, never the literal SPEC prefix. To select only tech specs, the user must write `--kind spec --no prd`. The ambiguity is acknowledged but not mitigated — there is no error or warning when a user's `--kind spec` resolves to both PRD and SPEC when they may have meant only SPEC. The sane fix: rename the group alias to something non-colliding (e.g. `specs`)."""
+disposition = "fix-now"
+response = "Accepted. The group alias 'spec' will be renamed to 'specs' (plural) to avoid collision with the SPEC (tech-spec) kind prefix. The alias table becomes: 'specs' → [prd, spec]. This is a one-line change in the design's alias table with zero downstream impact (it's specified, not implemented yet)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "No --page boundary-edge tests specified for pagination"
+detail = """
+EXPECTED: The verification alignment section covers page-boundary edge cases: page 0 (1-based, should error?), page exceeding total pages (empty result), and --page with --limit 0 (unlimited — what does page mean?).
+
+OBSERVED: The design lists only 'doctrine search "auth" --limit 5 --page 2 paginates correctly'. No edge cases: --page 0 (is it rejected? silently clamped?), --page with --limit 0 (0 means unlimited, but page implies bounded chunks — the interaction is undefined), --page exceeding total results (returns empty? wraps?), or --page provided without --limit (default limit?). The `--page N` → offset = (N-1) × limit formula silently clamps to 0 on --page 1 --limit 0 (offset=0, infinite take), which is surprising but not necessarily wrong. The missing boundary tests risk a follow-up finding in implementation review."""
+disposition = "fix-now"
+response = "Accepted. Page edge tests will be added to the verification plan: --page 0 (rejected by clap: value_parser requires > 0), --page 1 --limit 0 (offset=0, effectively unlimited, no error — clap validates --page >= 1), --page beyond available results (returns empty, no panic), --page without explicit --limit (uses memory find's RETRIEVE_LIMIT_DEFAULT of 5, or search-specific default — which the design must now specify). The design will also specify the search default --limit (proposal: 20, matching RETRIEVE_LIMIT_MAX)."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Design does not address the command-tier tangle ratchet from new intra-command edges"
+detail = """
+EXPECTED: The design acknowledges and accounts for the ADR-001 command-tier tangle ratchet (frozen at 120 cyclic edges in layering.toml [tangle_baseline].command). Adding a new command module with edges into the existing command SCC must not grow the cyclic edge count, or must explicitly request a baseline increase.
+
+OBSERVED: The design says `just gate` passes with zero layering violations. But search.rs as command-tier imports:
+- `catalog::scan` (command-tier, in the 32-module SCC)
+- `integrity` (command-tier, in the SCC)
+And `commands::cli` (command-tier, in the SCC) will import search.rs for dispatch wiring. These 3 new command→command edges ALL connect into the existing SCC. Every new edge between modules inside the SCC increments the cyclic edge count tracked by the `syn`-based fitness gate in tests/architecture_layering.rs — and the ratchet forbids any increase above 120. The design offers no analysis of whether these edges grow the tangle, and no plan for a baseline increase if they do. This risks `just gate` failing at implementation time, blocking the PR."""
+disposition = "fix-now"
+response = """
+Accepted. The design must address the tangle ratchet. Analysis: search.rs has 2 command→command imports (catalog::scan, integrity) plus 1 reverse import (commands::cli → search.rs for dispatch). These 3 edges connect into the existing 32-module command SCC. Per layering.toml, the tangle_baseline.command of 120 must not grow. 
+
+Strategy: reduce before grow. The accepted_violation table already captures 10 upward edges. If any command→command edge can be eliminated BEFORE adding search.rs — a pre-commit cleanup — the baseline headroom may absorb the addition. Alternatively, the design must document that the baseline increase to 123 is intentional and plan the gate update in the implementation PR. The design will be amended with an explicit 'Tangle impact' section acknowledging the 3 new command→command edges and a plan."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Missing test for CatalogEntity.body serde skip in catalog JSON dump"
+detail = """
+EXPECTED: The verification plan includes a test proving that CatalogEntity.body is excluded from the catalog JSON dump (as stated: 'Serialization excluded by default from catalog JSON dump').
+
+OBSERVED: The design lists no test for body serialization exclusion. The current CatalogEntity struct carries the standard #[derive(Clone, serde::Serialize)] macro. Adding a body field with #[serde(skip)] — or gating it behind a conditional skip — is additive but the skip behavior is UNDERPINNED BY NO TEST. A future derive attrs change or serde annotation drift could silently include body text (potentially large) in catalog JSON output that consumers do not expect. The follow-up note ('explicit --include-bodies could follow later') suggests this behavior WILL change, making the skip test load-bearing for the interim invariant."""
+disposition = "fix-now"
+response = "Accepted. A test will be added to the hydrate tests verifying that CatalogEntity.body is excluded from JSON serialization. The test: construct a CatalogEntity with a non-empty body, serialize to JSON, assert the 'body' key is absent from the output. This guards against serde attribute drift when --include-bodies is eventually implemented."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
