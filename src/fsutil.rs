@@ -113,6 +113,26 @@ fn symlink(target: &Path, link: &Path) -> anyhow::Result<()> {
         .with_context(|| format!("Failed to create symlink {}", link.display()))
 }
 
+/// Recursively copy a directory tree from `src` to `dst`. `dst` will be
+/// created if it does not exist. Symlinks are followed — the target file is
+/// copied, not the symlink itself.
+pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    fs::create_dir_all(dst).with_context(|| format!("copy_dir_all: create {}", dst.display()))?;
+    for entry in
+        fs::read_dir(src).with_context(|| format!("copy_dir_all: read {}", src.display()))?
+    {
+        let entry = entry?;
+        let child = entry.path();
+        let dest = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(&child, &dest)?;
+        } else {
+            fs::copy(&child, &dest)?;
+        }
+    }
+    Ok(())
+}
+
 /// The disposition of one [`copy_selected`] candidate.
 #[derive(Debug)]
 pub(crate) enum CopyOutcome {
@@ -401,5 +421,28 @@ mod tests {
         let out = copy_selected(&src_canon, &fork_canon, Path::new("link"), &withheld).unwrap();
         assert!(matches!(out, CopyOutcome::Skipped(_)));
         assert!(!fork_canon.join("link").exists());
+    }
+
+    #[test]
+    fn copy_dir_all_copies_a_directory_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        let dst = tmp.path().join("dst");
+
+        fs::create_dir_all(src.join("sub")).unwrap();
+        fs::write(src.join("a.txt"), "hello").unwrap();
+        fs::write(src.join("sub").join("b.txt"), "world").unwrap();
+
+        copy_dir_all(&src, &dst).unwrap();
+        assert!(dst.join("a.txt").is_file(), "top-level file copied");
+        assert!(
+            dst.join("sub").join("b.txt").is_file(),
+            "nested file copied"
+        );
+        assert_eq!(fs::read_to_string(dst.join("a.txt")).unwrap(), "hello");
+        assert_eq!(
+            fs::read_to_string(dst.join("sub").join("b.txt")).unwrap(),
+            "world"
+        );
     }
 }
