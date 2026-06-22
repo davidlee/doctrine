@@ -28,8 +28,8 @@ doctrine relation list --source-kind SL
 # Multiple filters combined
 doctrine relation list --label specs --source-kind IMP
 
-# Label provenance: validated vocab (default) | memory raw | both
-doctrine relation list --labels all
+# Include memory edges (Raw-label / MEM-source population); default: off
+doctrine relation list --include-memory
 
 # Validation lens: only edges whose target does not resolve
 doctrine relation list --unresolved
@@ -42,18 +42,20 @@ source. `state ∈ {resolved, unresolved, free_text}` (always present in JSON).
 
 ```bash
 doctrine relation census
-doctrine relation census --labels all
+doctrine relation census --include-memory
 ```
 
 Per-label distribution WITH a target-resolution health breakdown:
 `label │ count │ resolved │ unresolved │ free_text`, sorted count desc
-then label asc (`count == resolved + unresolved + free_text`). Default
-`--labels validated` (closed `RelationLabel` vocabulary); `raw` = memory
-free-labels; `all` = both.
+then label asc (`count == resolved + unresolved + free_text`). Default:
+numbered entities only (closed `RelationLabel` vocabulary); `--include-memory`
+adds the memory free-label population.
 
 ### Flags (both verbs)
 
-- `--labels validated|raw|all` — label provenance axis (default `validated`).
+- `--include-memory` — admit memory edges (default off). Hydration makes
+  `Validated ⟺ numbered`, `Raw ⟺ memory`, so "memory only" =
+  `--include-memory --source-kind MEM`.
 - `--unresolved` (list only) — restrict to non-resolving targets.
 - `--format table|json` / `--json`.
 
