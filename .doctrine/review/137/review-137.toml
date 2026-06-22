@@ -14,7 +14,7 @@ ref   = "SL-133"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "SCC leverage not DP'd in component topo order — seq-perturbed levels drop a dependent's leverage"
 detail = "src/priority/graph.rs:465-503 (design 272-288,365-370). Component leverage is computed when the FIRST member is hit in reverse graph.ordered() order, but the design requires DP over the CONDENSED component graph in reverse topological order. Seq-induced levels can place an SCC member after an external dependent of another member. Shape: A<->B needs-SCC; D needs A; E needs D; B after D (seq). Cordage withholds intra-SCC dep edges, keeps A->D->E and D->B(seq); order A,D,B,E -> reverse E,B,D,A. Component {A,B} computed at B BEFORE D's leverage is resolved, so leverage_by_node.get(D).unwrap_or(0.0) drops D's recursive leverage. Violates 'each leverage(D) already resolved' + 'DP components in reverse topological order'."
@@ -23,7 +23,7 @@ response = "Confirmed against impl. Reverse graph.ordered() is NOT reverse-topo 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Multi-member SCC external dependents not deduplicated — counted once per member, not once per component"
 detail = "src/priority/graph.rs:484-492 (design 285-288,584-588). Design: an external dependent is counted ONCE for the component. Impl iterates every member's out_edges(dep_overlay) and sums directly. Shape: A<->B SCC; D needs A AND D needs B -> component {A,B} adds base(D)+leverage(D) TWICE. Contradicts the condensation contract and VT-8 wording."
@@ -32,7 +32,7 @@ response = "Confirmed. Per-member out_edges summation double-counts a D that nee
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "dep_coeff domain: ADR-015 ratifies (0,1] but code+design treat <=0 as disable (0.0)"
 detail = "src/priority/config.rs:128,135,163-169 + tests 282-290; ADR-015 80-81,125-127; design 504-512. ADR ratifies dep_coeff in (0,1], but impl/tests clamp <=0 to 0.0 and design says '<=0 disables leverage'. Durable policy and executable behaviour disagree. Resolve: either ADR/design ratify [0,1] with 0 as explicit disable sentinel, OR code clamps <=0 back into (0,1]."
@@ -41,7 +41,7 @@ response = "Code+design semantics are coherent (<=0 disables leverage); ADR-015 
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "coefficients.value applied in code but omitted from design+ADR value_dim formula"
 detail = "src/priority/graph.rs:70-83; design 128; ADR-015 38-43,131-132. Impl applies coefficients.value in value_dim; design+ADR formulas omit it. Impl is the coherent reading (ADR separately discusses global value-vs-risk weights). Fix the formulas so future readers don't 'correct' the code into wrong behaviour."
