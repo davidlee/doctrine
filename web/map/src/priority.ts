@@ -196,26 +196,26 @@ export function renderGraph(opts: PriorityRenderOpts): void {
 
   const needsMarker = document.createElementNS(SVG_NS, 'marker');
   needsMarker.setAttribute('id', 'needs-arrow');
-  needsMarker.setAttribute('markerWidth', '8');
+  needsMarker.setAttribute('markerWidth', '10');
   needsMarker.setAttribute('markerHeight', '6');
-  needsMarker.setAttribute('refX', '4');
+  needsMarker.setAttribute('refX', '3');
   needsMarker.setAttribute('refY', '3');
   needsMarker.setAttribute('orient', 'auto');
   const needsPath = document.createElementNS(SVG_NS, 'path');
-  needsPath.setAttribute('d', 'M0,0 L8,3 L0,6 z');
+  needsPath.setAttribute('d', 'M0,0 L10,3 L0,6 z');
   needsPath.setAttribute('fill', 'var(--priority-needs-edge, #C0392B)');
   needsMarker.appendChild(needsPath);
   defs.appendChild(needsMarker);
 
   const afterMarker = document.createElementNS(SVG_NS, 'marker');
   afterMarker.setAttribute('id', 'after-arrow');
-  afterMarker.setAttribute('markerWidth', '8');
+  afterMarker.setAttribute('markerWidth', '10');
   afterMarker.setAttribute('markerHeight', '6');
-  afterMarker.setAttribute('refX', '4');
+  afterMarker.setAttribute('refX', '3');
   afterMarker.setAttribute('refY', '3');
   afterMarker.setAttribute('orient', 'auto');
   const afterPath = document.createElementNS(SVG_NS, 'path');
-  afterPath.setAttribute('d', 'M0,0 L8,3 L0,6 z');
+  afterPath.setAttribute('d', 'M0,0 L10,3 L0,6 z');
   afterPath.setAttribute('fill', 'var(--priority-after-edge, #E67E22)');
   afterMarker.appendChild(afterPath);
   defs.appendChild(afterMarker);
