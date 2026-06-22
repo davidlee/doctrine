@@ -963,6 +963,7 @@ mod tests {
             estimate,
             value,
             risk,
+            tags: vec![],
             body: None,
         }
     }

@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 18
-slug = "top-level-help-text-needs-wrapping-or-table"
-title = "top-level help text needs wrapping or table"
-kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-06-17"
+id = 153
+slug = "doctrine-search-table-output-uses-hand-rolled-format-instead-of-comfy-table-render-table"
+title = "doctrine search table output uses hand-rolled format!() instead of comfy-table render_table"
+kind = "improvement"
+status = "closed"
+resolution = "done"
+created = "2026-06-22"
 updated = "2026-06-22"
-tags = []
+tags = ["area:cli"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with

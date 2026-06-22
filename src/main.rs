@@ -73,6 +73,7 @@ mod value;
 mod verify;
 mod worktree;
 
+use std::io::Write;
 use std::str::FromStr;
 
 use clap::{Args, Parser};
@@ -165,11 +166,34 @@ impl CommonListArgs {
 }
 
 fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    let color = crate::tty::resolve_color(cli.color);
-    crate::commands::guard::worker_guard(&cli.command)?;
-    let Cli { command, .. } = cli;
-    crate::commands::cli::dispatch(command, color)
+    match Cli::try_parse() {
+        Ok(cli) => {
+            let color = crate::tty::resolve_color(cli.color);
+            crate::commands::guard::worker_guard(&cli.command)?;
+            let Cli { command, .. } = cli;
+            crate::commands::cli::dispatch(command, color)
+        }
+        Err(e) => {
+            if matches!(
+                e.kind(),
+                clap::error::ErrorKind::DisplayHelp
+                    | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                    | clap::error::ErrorKind::MissingSubcommand
+            ) {
+                // Intercept top-level help; subcommand help falls through to clap.
+                let args: Vec<String> = std::env::args().skip(1).collect();
+                let has_real_subcommand = args.iter().any(|a| !a.starts_with('-') && a != "help");
+                if !has_real_subcommand {
+                    let color = crate::tty::stdout_color_enabled();
+                    let term_width = crate::tty::stdout_terminal_width();
+                    let help = crate::commands::cli::render_top_level_help(color, term_width);
+                    writeln!(std::io::stdout(), "{help}")?;
+                    return Ok(());
+                }
+            }
+            e.exit()
+        }
+    }
 }
 #[cfg(test)]
 mod tests {

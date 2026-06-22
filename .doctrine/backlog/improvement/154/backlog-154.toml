@@ -1,13 +1,13 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 18
-slug = "top-level-help-text-needs-wrapping-or-table"
-title = "top-level help text needs wrapping or table"
-kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-06-17"
+id = 154
+slug = "search-all-index-non-entity-docs-path-column"
+title = "search --all: index non-entity docs + path column"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-22"
 updated = "2026-06-22"
 tags = []
 

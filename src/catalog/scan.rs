@@ -153,6 +153,9 @@ pub(crate) struct ScannedEntity {
     /// and pushes an `Error` diagnostic. Consumed by the priority graph base
     /// pre-pass (PHASE-04).
     pub(crate) risk: Option<RiskFacet>,
+    /// The entity's authored `tags`, read from the same parsed TOML as the
+    /// facets — already normalized at rest (SL-136).
+    pub(crate) tags: Vec<String>,
     /// The entity's body prose, read from its `.md` file.
     /// `None` when `ScanMode::default()` or when the `.md` file is missing.
     pub(crate) body: Option<String>,
@@ -224,7 +227,7 @@ pub(crate) fn scan_entities(
                     continue;
                 }
             };
-            let (estimate, value, risk) = read_facets(root, kref, id, diagnostics);
+            let (estimate, value, risk, tags) = read_facets(root, kref, id, diagnostics);
             let body = if mode.include_bodies {
                 read_body(root, kref.kind, id, diagnostics)
             } else {
@@ -239,6 +242,7 @@ pub(crate) fn scan_entities(
                 estimate,
                 value,
                 risk,
+                tags,
                 body,
             });
         }
@@ -246,12 +250,13 @@ pub(crate) fn scan_entities(
     Ok(out)
 }
 
-/// Read the optional `[estimate]` / `[value]` / `[facet]` (risk) facets off one
-/// entity's toml, kind-agnostically, with PER-FACET malformed isolation (SL-103
-/// PHASE-01 / SL-133 PHASE-03, design §5.1 / D4). Each facet parses
-/// independently: a malformed PRESENT facet pushes an `Error` diagnostic and
-/// drops THAT facet to `None` — no bound coercion, no silent repair — leaving
-/// the node and the sibling facets intact.
+/// Read the optional `[estimate]` / `[value]` / `[facet]` (risk) facets and
+/// the `tags` array off one entity's toml, kind-agnostically, with PER-FACET
+/// malformed isolation (SL-103 PHASE-01 / SL-133 PHASE-03, design §5.1 / D4).
+/// Each facet parses independently: a malformed PRESENT facet pushes an `Error`
+/// diagnostic and drops THAT facet to `None` — no bound coercion, no silent
+/// repair — leaving the node and the sibling facets intact. Tags are lenient:
+/// absent or non-array → empty vec; already normalized at rest (SL-136).
 ///
 /// The status read ([`status_and_title_for`]) has already validated this file
 /// parses; a vanished/garbled file HERE is a concurrent-edit window — the status
@@ -262,14 +267,28 @@ fn read_facets(
     kref: &integrity::KindRef,
     id: u32,
     diagnostics: &mut Vec<CatalogDiagnostic>,
-) -> (Option<EstimateFacet>, Option<ValueFacet>, Option<RiskFacet>) {
+) -> (
+    Option<EstimateFacet>,
+    Option<ValueFacet>,
+    Option<RiskFacet>,
+    Vec<String>,
+) {
     let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     let Ok(text) = std::fs::read_to_string(&path) else {
-        return (None, None, None);
+        return (None, None, None, Vec::new());
     };
     let Ok(table) = text.parse::<toml::Table>() else {
-        return (None, None, None);
+        return (None, None, None, Vec::new());
     };
+    let tags: Vec<String> = table
+        .get("tags")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
     let estimate = parse_facet(
         "estimate",
         table.get("estimate"),
@@ -297,7 +316,7 @@ fn read_facets(
         id,
         diagnostics,
     );
-    (estimate, value, risk)
+    (estimate, value, risk, tags)
 }
 
 /// Read the entity's body `.md` file. Missing file → `None`
@@ -1225,6 +1244,87 @@ mod tests {
         assert!(
             e.body.as_deref().unwrap().contains("scope"),
             "body should contain seeded markdown"
+        );
+    }
+
+    // == SL-142 PHASE-01: tags parsing tests ==
+
+    /// Seed a slice with explicit `tags` array in its TOML.
+    fn seed_slice_with_tags(root: &Path, id: u32, tags_toml: &str) {
+        write(
+            root,
+            &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{tags_toml}"
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/slice/{id:03}/slice-{id:03}.md"),
+            "scope\n",
+        );
+    }
+
+    /// VT-2: tags key present with string array → parsed.
+    #[test]
+    fn read_facets_tags_present_string_array() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice_with_tags(root, 1, "tags = [\"foo\", \"bar\"]\n");
+
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].tags, vec!["foo", "bar"]);
+    }
+
+    /// VT-3: absent tags key → empty vec.
+    #[test]
+    fn read_facets_tags_absent_is_empty() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[]);
+
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        assert_eq!(scanned.len(), 1);
+        assert!(scanned[0].tags.is_empty());
+    }
+
+    /// VT-4: non-array tags value → empty vec (graceful). Seeded on a REC
+    /// entity — REC's `status_and_title_for` reads title leniently via
+    /// [`title_for`], so the non-array `tags` key survives to `read_facets`
+    /// (a slice/ADR's `Meta` deserialization would reject it first).
+    #[test]
+    fn read_facets_tags_non_array_is_empty() {
+        let dir = tmp();
+        let root = dir.path();
+        // REC-001: a reconciliation record whose title_for only reads `title`.
+        write(
+            root,
+            ".doctrine/rec/001/rec-001.toml",
+            "id = 1\nslug = \"r\"\ntitle = \"R\"\ntags = \"not-an-array\"\n\
+             [rec]\nmove = \"accept\"\nowning_slice = \"SL-001\"\n",
+        );
+
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        assert_eq!(scanned.len(), 1);
+        assert!(scanned[0].tags.is_empty());
+    }
+
+    /// VT-5: non-normalized tag passes through byte-identical (proves no
+    /// normalize_tag in the read path).
+    #[test]
+    fn read_facets_tags_un_normalized_passes_through() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice_with_tags(root, 1, "tags = [\"  unpadded  \", \"\"]\n");
+
+        let scanned = scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(
+            scanned[0].tags,
+            vec!["  unpadded  ".to_string(), String::new()],
+            "tags pass through byte-identical — no normalize_tag in read path"
         );
     }
 }
