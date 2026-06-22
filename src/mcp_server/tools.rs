@@ -265,6 +265,18 @@ fn tools() -> Vec<McpTool> {
                 "required": []
             }),
         },
+        McpTool {
+            name: "memory_validate".to_owned(),
+            description: "Run advisory validation checks on memories — dangling relations, stale verification, draft expiry. Returns a findings list; non-empty means warnings exist.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "reference": { "type": "string", "description": "Optional memory reference by uid or key; omit to validate all memories" },
+                    "path": { "type": "string", "description": "Explicit project root (default: auto-detect)" }
+                },
+                "required": []
+            }),
+        },
     ]
 }
 
@@ -700,6 +712,26 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 "next_offset": next_offset,
             }))?)
         }
+        "memory_validate" => {
+            let fields = ExtractFields::from_value(arguments, &[]);
+            let reference = fields.opt_str_field("reference");
+            let path = fields.opt_str_field("path");
+            let path_buf = path.map(std::path::PathBuf::from);
+            let mut buf = Vec::new();
+            let result = memory::run_validate(path_buf, reference.as_deref(), &mut buf);
+            let output = String::from_utf8(buf)?;
+            match result {
+                Ok(()) => Ok(serde_json::to_string_pretty(&json!({
+                    "warnings": 0,
+                    "output": output
+                }))?),
+                Err(e) if e.to_string().contains("validation warnings found") => Ok(serde_json::to_string_pretty(&json!({
+                    "warnings": output.lines().count(),
+                    "output": output
+                }))?),
+                Err(e) => Err(e),
+            }
+        }
         _ => anyhow::bail!("Tool not found: {name}"),
     }
 }
@@ -1027,7 +1059,7 @@ mod tests {
     #[test]
     fn tool_list_has_14_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 14);
+        assert_eq!(list.tools.len(), 15);
     }
 
     #[test]
@@ -1048,6 +1080,7 @@ mod tests {
         assert!(names.contains(&"memory_retrieve"));
         assert!(names.contains(&"memory_show"));
         assert!(names.contains(&"memory_list"));
+        assert!(names.contains(&"memory_validate"));
     }
 
     // ISS-033: review_list must accept its advertised (all-optional) arg shapes —
