@@ -24,7 +24,7 @@ fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
             name: "review_new".to_owned(),
-            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge.".to_owned(),
+            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge.\n\nReturns: { id: int, canonical: \"RV-NNN\", dir: string }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -59,7 +59,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_list".to_owned(),
-            description: "List reviews by id with derived status, facet, target, and title.".to_owned(),
+            description: "List reviews by id with derived status, facet, target, and title.\n\nReturns: { rows: [{ id: \"RV-NNN\", status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, title: string }], total?: int } — `total` absent (not null) when uncapped; present (pre-truncation count) when rows were dropped by `limit`.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -85,7 +85,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_show".to_owned(),
-            description: "Show one review: derived status, the reviews edge, and the brief.".to_owned(),
+            description: "Show one review: derived status, the reviews edge, and the brief.\n\nReturns: { id: int, canonical: \"RV-NNN\", title: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, finding_count: int, findings: [{ id: \"F-N\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", title: string, detail: string, disposition?: string|null, response?: string|null }], body: string } — `view=summary` blanks `body` → `\"\"`, each finding's `detail` → `\"\"` and `response` → `null`.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -98,7 +98,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_raise".to_owned(),
-            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail.".to_owned(),
+            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail.\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -113,7 +113,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_dispose".to_owned(),
-            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response.".to_owned(),
+            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response.\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -128,7 +128,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_verify".to_owned(),
-            description: "Verify an answered finding (the raiser's verb) — accept it (terminal).".to_owned(),
+            description: "Verify an answered finding (the raiser's verb) — accept it (terminal).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -142,7 +142,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_contest".to_owned(),
-            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder.".to_owned(),
+            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder.\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -156,7 +156,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_withdraw".to_owned(),
-            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal).".to_owned(),
+            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal).\n\nReturns: { finding_id: \"F-N\", review_id: int }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -169,7 +169,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_status".to_owned(),
-            description: "Report a review's derived state and rebuild its baton (cache == recompute).".to_owned(),
+            description: "Report a review's derived state and rebuild its baton (cache == recompute).\n\nReturns: { canonical: \"RV-NNN\", status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", findings_count: int, rounds: int, cache_primed: bool, stale_paths: [string] } — `rounds` counts baton handoffs; `cache_primed` is the prime-cache freshness signal, never a gate; `stale_paths` lists paths whose git-sha diverged since prime.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -180,7 +180,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_prime".to_owned(),
-            description: "Populate the reviewer-context warm-cache from a curated domain_map, or (--seed) emit git-changed candidate paths.".to_owned(),
+            description: "Populate the reviewer-context warm-cache from a curated domain_map, or (--seed) emit git-changed candidate paths. Normal prime persists the domain_map and returns `{ canonical: \"RV-NNN\", tracked_paths: [string], areas_count: int, tracked_count: int, invariants_count: int, risks_count: int }`; `--seed` emits git-changed candidates (write-nothing) with the same shape but counts zero.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
