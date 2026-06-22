@@ -14,7 +14,7 @@ use crate::memory::{self, MEMORY_ITEMS_DIR, MemoryCatalogRecord};
 use crate::relation::RelationLabel;
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
-use super::scan::{EntityKey, ScannedEntity};
+use super::scan::{EntityKey, ScanMode, ScannedEntity};
 
 /// Corpus-wide identity — numbered AND named (memory) entities.
 /// Serializes flat: Numbered → "SL-001", Memory → "`mem_019ecf`..."
@@ -114,6 +114,10 @@ pub(crate) struct CatalogEntity {
     /// onto the catalog; projected onto the graph in PHASE-03.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) value: Option<crate::value::ValueFacet>,
+    /// The entity's body prose, read from its `.md` file.
+    /// `None` when bodies were not requested or the `.md` file is missing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) body: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +219,7 @@ impl Catalog {
                 memory_type: None,
                 estimate: se.estimate.clone(),
                 value: se.value.clone(),
+                body: se.body.clone(),
                 source: SourceSpan {
                     file: entity_dir.clone(),
                     field: None,
@@ -276,6 +281,7 @@ impl Catalog {
                 // Memory entities carry no estimate/value facets.
                 estimate: None,
                 value: None,
+                body: None,
                 source: SourceSpan {
                     file: record.path.clone(),
                     field: None,
@@ -401,9 +407,9 @@ fn classify_target(
 /// (the memory walk), then `Catalog::from_scanned` (pure projection). Also builds
 /// a memory key→UID map from items/ symlinks so that memory→memory edge targets
 /// resolve to their canonical UID nodes.
-pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
+pub(crate) fn scan_catalog(root: &Path, mode: ScanMode) -> anyhow::Result<Catalog> {
     let mut diagnostics = Vec::new();
-    let scanned = super::scan::scan_entities(root, &mut diagnostics)?;
+    let scanned = super::scan::scan_entities(root, &mut diagnostics, mode)?;
     let memory = super::scan::scan_memory_entities(root, &mut diagnostics)?;
     let mem_key_map = build_memory_key_map(root);
     let units = resolve_units(root)?;
@@ -493,7 +499,7 @@ mod tests {
         let root = dir.path();
         seed_hydrate_fixture(root);
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         // Entity count: SL-001, SL-003, ADR-001, ADR-002, REQ-005 = 5
         assert_eq!(
@@ -565,7 +571,7 @@ mod tests {
         // SL-001 → REQ-999 (dangling — parses as canonical ref but not seeded).
         seed_slice(root, 1, &[("requirements", &["REQ-999"])]);
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         assert_eq!(catalog.entities.len(), 1);
         assert_eq!(catalog.edges.len(), 1);
@@ -613,7 +619,7 @@ mod tests {
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         assert_eq!(catalog.entities.len(), 1);
         assert_eq!(catalog.edges.len(), 1);
@@ -650,7 +656,7 @@ mod tests {
         seed_adr(root, 2, &[]);
         seed_requirement(root, 5);
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         for entity in &catalog.entities {
             let CatalogKey::Numbered(key) = &entity.key else {
@@ -688,7 +694,7 @@ mod tests {
         let root = dir.path();
         seed_hydrate_fixture(root);
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         // All edges are resolved (no diagnostics) — fixture has no dangling refs.
         assert_eq!(catalog.diagnostics.len(), 0);
@@ -802,7 +808,7 @@ mod tests {
             ],
         );
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         assert_eq!(catalog.entities.len(), 2);
         assert_eq!(catalog.edges.len(), 3);
@@ -864,7 +870,7 @@ mod tests {
             &[("", "SL-001"), ("refs", ""), ("", "")],
         );
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         assert_eq!(catalog.entities.len(), 1);
         assert_eq!(
@@ -908,7 +914,7 @@ mod tests {
         );
         write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
 
-        let catalog = scan_catalog(root).unwrap();
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
         // Only SL-001 in entities.
         assert_eq!(catalog.entities.len(), 1);
@@ -957,6 +963,7 @@ mod tests {
             estimate,
             value,
             risk,
+            body: None,
         }
     }
 
@@ -1072,6 +1079,43 @@ mod tests {
         assert!(
             resolve_units(root3).is_err(),
             "a non-NotFound read error must propagate, not default"
+        );
+    }
+
+    // == SL-141 PHASE-02: body forwarding tests ==
+
+    #[test]
+    fn scan_catalog_with_bodies_forwards_body_to_catalog_entity() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[]);
+        let catalog = scan_catalog(root, ScanMode::include_bodies()).unwrap();
+        let e = catalog
+            .entities
+            .iter()
+            .find(|ce| matches!(&ce.key, CatalogKey::Numbered(k) if k.id == 1))
+            .unwrap();
+        assert!(
+            e.body.is_some(),
+            "body should be Some when include_bodies is true"
+        );
+    }
+
+    #[test]
+    fn catalog_entity_body_skipped_in_json_when_none() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[]);
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
+        let e = catalog
+            .entities
+            .iter()
+            .find(|ce| matches!(&ce.key, CatalogKey::Numbered(k) if k.id == 1))
+            .unwrap();
+        let json = serde_json::to_string(e).unwrap();
+        assert!(
+            !json.contains("\"body\""),
+            "JSON should omit body key when None"
         );
     }
 }

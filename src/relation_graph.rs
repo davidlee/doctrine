@@ -30,6 +30,7 @@ use crate::relation::{RELATION_RULES, RelationEdge, RelationLabel, TargetSpec};
 // Re-exports from catalog::scan — the single source of truth (SL-071 D7).
 // Aliases, not wrappers — one body, one source.
 pub(crate) use crate::catalog::scan::{EntityKey, ScannedEntity, outbound_for, scan_entities};
+use crate::catalog::scan::ScanMode;
 
 /// One entity's `needs`/`after` dep/seq edges plus its `promoted` flag, dispatched to
 /// the owning kind's reader by canonical prefix — the kind-agnostic READ gate that lets
@@ -312,7 +313,7 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
     // (SL-071 PHASE-05). Catalog classifies every edge target via
     // `parse_canonical_ref`; UnresolvedRef means the target parsed as a
     // canonical ref but the entity was absent from the scan.
-    let catalog = crate::catalog::hydrate::scan_catalog(root)?;
+    let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default())?;
     // Index entity keys → Kind for label-validation lookups.
     let entity_kinds: BTreeMap<EntityKey, &'static entity::Kind> = catalog
         .entities
@@ -516,7 +517,7 @@ pub(crate) struct InspectView {
     )
 )]
 pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
-    inspect_from(&scan_entities(root, &mut vec![])?, root, id)
+    inspect_from(&scan_entities(root, &mut vec![], ScanMode::default())?, root, id)
 }
 
 /// `inspect` over a PRE-SCANNED entity slice (the SL-050 F2 shared-scan seam). `inspect`
@@ -1104,7 +1105,7 @@ mod tests {
             "id = 1\nslug = \"r\"\ntitle = \"R\"\nstatus = \"active\"\n",
         );
         write(&root, ".doctrine/requirement/001/requirement-001.md", "b\n");
-        let scanned = scan_entities(&root, &mut vec![]).unwrap();
+        let scanned = scan_entities(&root, &mut vec![], ScanMode::default()).unwrap();
         let keys: Vec<_> = scanned.iter().map(|e| e.key.canonical()).collect();
         assert_eq!(keys, vec!["REQ-001"], "no record kind contributes a node");
     }

@@ -18,6 +18,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 
+use crate::catalog::scan::ScanMode;
+
 use crate::entity::{self, Artifact, Fileset, LocalFs};
 use crate::git::{AnchorKind, Confidence, RepoIdKind};
 use crate::links::{backlinks_index, extract_wikilinks, resolve_wikilink};
@@ -2162,7 +2164,7 @@ fn memory_inspect_from(root: &Path, uid: &str) -> Result<MemoryInspectView> {
         .ok_or_else(|| anyhow::anyhow!("memory not found: {uid}"))?;
     let (known_uids, key_to_uid) = known_link_maps(&all);
     let mut diagnostics = Vec::new();
-    let scanned = crate::catalog::scan::scan_entities(root, &mut diagnostics)?;
+    let scanned = crate::catalog::scan::scan_entities(root, &mut diagnostics, ScanMode::default())?;
     let known_entities: BTreeSet<String> = scanned
         .iter()
         .map(|entity| entity.key.canonical())
@@ -3127,7 +3129,7 @@ fn validate_relation_target(root: &Path, target: &str) -> Result<()> {
 
     // Try catalog scan for other entities (SL-999, ADR-001, etc.)
     let mut diagnostics = Vec::new();
-    let entities = crate::catalog::scan::scan_entities(root, &mut diagnostics)?;
+    let entities = crate::catalog::scan::scan_entities(root, &mut diagnostics, ScanMode::default())?;
     if entities.iter().any(|item| item.key.canonical() == target) {
         return Ok(());
     }

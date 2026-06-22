@@ -81,6 +81,7 @@ knowledge = "command"       # → engine/leaf; knowledge entity-kind handler
 lazyspec = "command"        # → engine/leaf + adr, backlog, requirement, slice, spec; spec projection
 main = "command"            # → commands, engine/leaf; binary entrypoint
 map_server = "command"      # → catalog, concept_map, fsutil, integrity, memory, priority; web map server
+search = "command"            # → catalog, integrity, lexical, listing; BM25 search over entity bodies
 mcp_server = "command"      # → listing, review, root; MCP stdio server
 memory = "command"          # → engine/leaf + catalog, lexical, links, retrieve; memory entity-kind handler
 policy = "command"          # → engine/leaf; policy entity-kind handler
@@ -137,7 +138,7 @@ worktree = "command"        # → fsutil, git, root, slice; worktree fork/coordi
 # baselined here, ratcheted by the gate (may not grow).
 leaf = 0
 engine = 0
-command = 120
+command = 123
 
 # ── Accepted violations ──────────────────────────────────────────────────
 # Every genuine upward edge (from lower tier to higher tier). Frozen —

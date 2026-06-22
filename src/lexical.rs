@@ -18,10 +18,57 @@ use std::collections::{BTreeMap, BTreeSet};
 /// the lexical axis — `mem.foo.bar` / `src/x.rs` split on their separators too.
 /// General-purpose: `retrieve` imports it; this leaf imports nothing of retrieval.
 pub(crate) fn tokenize(s: &str) -> Vec<String> {
-    s.split(|c: char| !c.is_alphanumeric())
-        .filter(|t| !t.is_empty())
-        .map(str::to_lowercase)
+    tokenize_with_spans(s)
+        .into_iter()
+        .map(|ts| ts.token)
         .collect()
+}
+
+/// A token with byte-offset spans into the original string.
+/// `start` is the byte offset of the first character, `end` is the
+/// byte offset past the last character (exclusive).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TokenSpan {
+    pub token: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// Case-fold + split on non-alphanumeric, dropping empties, with byte-offset spans.
+/// The shared span authority — `tokenize` is a thin projection over this.
+pub(crate) fn tokenize_with_spans(s: &str) -> Vec<TokenSpan> {
+    let mut tokens: Vec<TokenSpan> = Vec::new();
+    let mut current_start: Option<usize> = None;
+
+    for (i, c) in s.char_indices() {
+        if c.is_alphanumeric() {
+            if current_start.is_none() {
+                current_start = Some(i);
+            }
+        } else if let Some(start) = current_start.take()
+            && let Some(token_slice) = s.get(start..i)
+        {
+            let token: String = token_slice.to_lowercase();
+            tokens.push(TokenSpan {
+                token,
+                start,
+                end: i,
+            });
+        }
+    }
+    // Handle trailing token
+    if let Some(start) = current_start
+        && let Some(token_slice) = s.get(start..)
+    {
+        let token: String = token_slice.to_lowercase();
+        tokens.push(TokenSpan {
+            token,
+            start,
+            end: s.len(),
+        });
+    }
+
+    tokens
 }
 
 /// A memory-agnostic scoring document. `id` is the memory uid (caller-canonical,
@@ -247,6 +294,87 @@ mod tests {
         // key segments split on the dot
         assert_eq!(tokenize("mem.auth.token"), vec!["mem", "auth", "token"]);
         assert!(tokenize("   ").is_empty());
+    }
+
+    // -- tokenize_with_spans (SL-141 VT-1..VT-5) ----------------------------
+
+    #[test]
+    fn tokenize_with_spans_single_token() {
+        assert_eq!(
+            tokenize_with_spans("auth"),
+            vec![TokenSpan {
+                token: "auth".to_string(),
+                start: 0,
+                end: 4,
+            }]
+        );
+    }
+
+    #[test]
+    fn tokenize_with_spans_dotted_three_spans() {
+        let spans = tokenize_with_spans("mem.auth.token");
+        assert_eq!(spans.len(), 3);
+        let s0 = spans.get(0).expect("span 0");
+        assert_eq!(s0.token, "mem");
+        assert_eq!(s0.start, 0);
+        assert_eq!(s0.end, 3);
+        let s1 = spans.get(1).expect("span 1");
+        assert_eq!(s1.token, "auth");
+        assert_eq!(s1.start, 4);
+        assert_eq!(s1.end, 8);
+        let s2 = spans.get(2).expect("span 2");
+        assert_eq!(s2.token, "token");
+        assert_eq!(s2.start, 9);
+        assert_eq!(s2.end, 14);
+    }
+
+    #[test]
+    fn tokenize_with_spans_empty_input() {
+        assert!(tokenize_with_spans("").is_empty());
+    }
+
+    #[test]
+    fn tokenize_with_spans_separators_only() {
+        assert!(tokenize_with_spans("...///").is_empty());
+        assert!(tokenize_with_spans("   ").is_empty());
+    }
+
+    #[test]
+    fn tokenize_with_spans_projection_equivalent_to_tokenize() {
+        let inputs: &[&str] = &[
+            "",
+            "   ",
+            "...///",
+            "auth",
+            "Auth Bug",
+            "mem.auth.token",
+            "café résumé",
+            "  leading",
+            "trailing  ",
+            "a..b__c",
+            "mixedCase token",
+            "///separators///everywhere///",
+        ];
+        for input in inputs {
+            let via_spans: Vec<String> = tokenize_with_spans(input)
+                .into_iter()
+                .map(|ts| ts.token)
+                .collect();
+            let direct = tokenize(input);
+            assert_eq!(
+                via_spans, direct,
+                "span projection mismatch for input {input:?}"
+            );
+            // Verify spans bound the original token bytes correctly
+            for ts in tokenize_with_spans(input) {
+                let original_slice: String =
+                    input.get(ts.start..ts.end).unwrap_or("").to_lowercase();
+                assert_eq!(
+                    original_slice, ts.token,
+                    "span {ts:?} does not match original text in {input:?}"
+                );
+            }
+        }
     }
 
     // -- quantize (design §5.2 / §9, VT-3) ----------------------------------

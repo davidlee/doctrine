@@ -2,6 +2,7 @@
 //! `doctrine inspect` — cross-kind entity inspection with relation + actionability views.
 //! SL-129: uses `entity::id_path`, `relation_graph`, `priority`
 
+use crate::catalog::scan::ScanMode;
 use crate::listing::Format;
 
 /// `doctrine inspect <ID>` — cross-kind relation tree + actionability block.
@@ -39,7 +40,7 @@ pub(crate) fn run_inspect(
     // the scan order is the same both saw (KINDS table / id ascending), preserving
     // REQ-077 determinism and the byte-identical relation/priority surfaces (VT-4).
     let mut diagnostics = Vec::new();
-    let scanned = crate::relation_graph::scan_entities(&root, &mut diagnostics)?;
+    let scanned = crate::relation_graph::scan_entities(&root, &mut diagnostics, ScanMode::default())?;
     // Surface scan degradation diagnostics to stderr before normal output (D3).
     for diag in &diagnostics {
         writeln!(io::stderr(), "{}: {}", diag.file.display(), diag.message)?;
