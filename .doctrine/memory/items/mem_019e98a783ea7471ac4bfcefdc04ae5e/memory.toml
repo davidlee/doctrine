@@ -6,7 +6,7 @@ status = "active"
 title = "rust-embed re-embed footgun — lone template edit is invisible until the embedding crate recompiles"
 summary = "rust-embed has no rerun-if-changed: a lone install/ asset edit needs touch src/install.rs to re-embed"
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-06-22"
 
 [scope]
 paths = ["install/", "src/install.rs"]
@@ -25,12 +25,12 @@ tree = "8920cf290b43c8d49d7d993e6347b8130baf167f"
 ref_name = "refs/heads/SL-015"
 checkout_state_id = "ec9ba4145b821f8e6f77bf81d2586878bdd70fd79db7b9b3a84e3da967f1de69"
 base_commit = "7fc3aad6fa190b7086c8ccfd67224c3d613c56f6"
-verified_sha = "8f106e062fe5aae045cd28c5f17d8977b37510d0"
+verified_sha = "114af4c33ec0f988634cdb7004e7ee43c693401c76df42e42fe62c399acfbce8"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-05"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

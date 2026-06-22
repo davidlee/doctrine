@@ -6,7 +6,7 @@ status = "active"
 title = "Write seam must canonicalize every id axis the read view does"
 summary = "A write seam must canonicalize every id axis the read view canonicalizes, or keys silently diverge"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-06-22"
 
 [scope]
 paths = ["src/coverage_store.rs", "src/coverage_view.rs"]
@@ -25,12 +25,12 @@ tree = "4fd4c20a81e1313106f9af8b52a0e434329bb675"
 ref_name = "refs/heads/main"
 checkout_state_id = "a8c180e651b55f4d7406236326ca2874c24c0c7f85c6e2e6ef948d9261a46300"
 base_commit = "a0b4bb350ac342c9b5a8217bf2974edc2ddae5e2"
-verified_sha = "ef0eb0571ccaf759742333be27cd9b284e888ea4"
+verified_sha = "96a796a97477c79f7f0437c747f339ba90974e37ce2280e67f6857dd9ff3a9fe"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-14"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]
@@ -39,3 +39,7 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019ec48053ff74f0b039e44ceaa026dc"

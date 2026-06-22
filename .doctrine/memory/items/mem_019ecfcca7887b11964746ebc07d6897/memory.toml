@@ -6,7 +6,7 @@ status = "active"
 title = "Concept Map diagnostic serialisation shape for JS consumption"
 summary = "ConceptMapDiagnostic serialises as tagged-enum JSON: each JS diagnostic object has a single key (variant name) with nested field values"
 created = "2026-06-16"
-updated = "2026-06-16"
+updated = "2026-06-22"
 
 [scope]
 paths = ["web/map/app.js", "src/concept_map.rs"]
@@ -25,12 +25,12 @@ tree = "555f322eab0f75aceab4d339e78a1d70f82a7beb"
 ref_name = "refs/heads/main"
 checkout_state_id = "8ab417c291490684d2459bc3a08735bb01373db7c2544b68bf52a2d508956df7"
 base_commit = "e9a8f267f085d109a7727eede229260cea349d6a"
-verified_sha = "1d96b69bdb5247d3f324f9f14f48f23fc2e98570"
+verified_sha = "eb08c9bb61730d5a5c89f912c7714f6b2b43cae586449f0c08dae59b65d426da"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-16"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]

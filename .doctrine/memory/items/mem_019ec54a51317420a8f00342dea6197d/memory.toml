@@ -6,7 +6,7 @@ status = "active"
 title = "tempfile is a dev-dependency only — production git plumbing uses a git-dir ScratchIndex for a throwaway GIT_INDEX_FILE"
 summary = "tempfile is dev-only; production git plumbing needs a throwaway GIT_INDEX_FILE inside the git dir, not tempfile"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-06-22"
 
 [scope]
 paths = ["src/git.rs"]
@@ -25,12 +25,12 @@ tree = "d47895450c1a84be705f33271aae27bf617751fc"
 ref_name = "refs/heads/dispatch/064"
 checkout_state_id = ""
 base_commit = "08de4a51e54d21fcdea1adee7f86d7e766508617"
-verified_sha = "324e5f3b48c718c7616a342c2f13f60b01f7605f"
+verified_sha = "622397bc25f4026d25cf6555fe3dfb4a099c2b95f422645d9d7145b969bf433d"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-14"
+reviewed = "2026-06-22"
 review_by = ""
 
 [trust]
