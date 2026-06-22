@@ -30,6 +30,7 @@ export interface ActionabilityNode {
   kind: string;
   status: string;
   actionability: string;
+  score: number;
   rank: number;
   blockers: string[];
 }

@@ -7,7 +7,6 @@ import type { ActionabilityView, ActionabilityNode } from './types';
 export interface LayoutNode extends ActionabilityNode {
   x?: number;
   y?: number;
-  consequence?: number;
 }
 
 export interface LayoutEdge {
@@ -146,15 +145,11 @@ export function layoutGraph(view: ActionabilityView): { nodes: LayoutNode[]; edg
   for (const dagNode of dag.nodes()) {
     const datum: StratifyDatum = dagNode.data;
     const base = datum.data;
-    const con = (base as unknown as { consequence?: unknown }).consequence;
     const ln: LayoutNode = {
       ...base,
       x: dagNode.x,
       y: dagNode.y,
     };
-    if (typeof con === 'number') {
-      ln.consequence = con;
-    }
     layoutNodes.push(ln);
     nodeMap.set(ln.id, ln);
   }
@@ -266,18 +261,18 @@ export function renderGraph(opts: PriorityRenderOpts): void {
     text.textContent = node.id;
     group.appendChild(text);
 
-    // Consequence badge
-    if ((node.consequence ?? 0) > 0) {
+    // Score badge
+    if (node.score > 0) {
       const badge = document.createElementNS(SVG_NS, 'g');
       const circle = document.createElementNS(SVG_NS, 'circle');
       const badgeText = document.createElementNS(SVG_NS, 'text');
-      badge.setAttribute('class', 'priority-consequence-badge');
+      badge.setAttribute('class', 'priority-score-badge');
       badge.setAttribute('transform', `translate(${String((nw / 2) - 6)} -10)`);
       circle.setAttribute('r', '8');
       badge.appendChild(circle);
       badgeText.setAttribute('text-anchor', 'middle');
       badgeText.setAttribute('dominant-baseline', 'middle');
-      badgeText.textContent = String(node.consequence);
+      badgeText.textContent = node.score.toFixed(1);
       badge.appendChild(badgeText);
       group.appendChild(badge);
     }

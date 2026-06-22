@@ -43,6 +43,9 @@ use crate::entity::{
 use crate::listing::{self, Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
+use crate::risk;
+use crate::risk::{RiskFacet, RiskLevel, exposure, validate_facet};
+
 use std::str::FromStr;
 
 use clap::Subcommand;
@@ -536,29 +539,6 @@ impl Resolution {
     }
 }
 
-/// A risk facet axis level. Closed set, kebab serde; tech of the risk `[facet]`,
-/// optional (the `"" -> None` seam — seeded empty until assessed).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum RiskLevel {
-    Low,
-    Medium,
-    High,
-    Critical,
-}
-
-impl RiskLevel {
-    /// The kebab string for render (matches the serde rename). Pure.
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            RiskLevel::Low => "low",
-            RiskLevel::Medium => "medium",
-            RiskLevel::High => "high",
-            RiskLevel::Critical => "critical",
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Three-layer parse model (the entity-model tolerant-parse tier — §5.3)
 // ---------------------------------------------------------------------------
@@ -583,24 +563,9 @@ struct RawBacklogToml {
     #[serde(default)]
     tags: Vec<String>,
     #[serde(default)]
-    facet: Option<RawRiskFacet>,
+    facet: Option<risk::RawRiskFacet>,
     #[serde(default)]
     relationships: Relationships,
-}
-
-/// The tolerant risk-facet layer: the two assessable axes as raw `String` (the
-/// `"" -> None` seam), `origin` as raw `String` (empty → absent), `controls` a
-/// free list.
-#[derive(Debug, Deserialize)]
-struct RawRiskFacet {
-    #[serde(default)]
-    likelihood: String,
-    #[serde(default)]
-    impact: String,
-    #[serde(default)]
-    origin: String,
-    #[serde(default)]
-    controls: Vec<String>,
 }
 
 /// The validated entity (design §5.2). `id/slug/title/status` are top-level in the
@@ -625,16 +590,6 @@ pub(crate) struct BacklogItem {
     /// Populated by [`read_item`] from the raw TOML text; the `validate` test seam
     /// leaves it empty (those tests assert the typed dep/sequence axes, not tier-1).
     tier1: Vec<crate::relation::RelationEdge>,
-}
-
-/// The validated risk facet (risk only). Every axis typed — no untyped bag
-/// (PRD-009 invariant). The assessable axes are optional until assessed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RiskFacet {
-    likelihood: Option<RiskLevel>,
-    impact: Option<RiskLevel>,
-    origin: Option<String>,
-    controls: Vec<String>,
 }
 
 /// A `triggers` rider (PRD-009 §5.7): the source `globs` this item watches, with
@@ -692,11 +647,6 @@ fn optional_enum<T: serde::de::DeserializeOwned>(
     }
 }
 
-/// The `"" -> None` seam for an optional free-text field.
-fn optional_text(text: String) -> Option<String> {
-    if text.is_empty() { None } else { Some(text) }
-}
-
 /// Validate a tolerant `RawBacklogToml` into a typed `BacklogItem` — the second
 /// layer of the parse model. Maps the seeded-`""` optionals to `None`, parses any
 /// non-empty value to its enum (erroring on an unknown token), and validates the
@@ -722,40 +672,6 @@ fn validate(raw: RawBacklogToml) -> anyhow::Result<BacklogItem> {
         // Filled by `read_item` from the raw TOML text (read_block); empty otherwise.
         tier1: Vec::new(),
     })
-}
-
-/// Validate a tolerant risk facet: the two axes through the `"" -> None` enum seam,
-/// `origin` through the text seam, `controls` passed through.
-fn validate_facet(raw: RawRiskFacet) -> anyhow::Result<RiskFacet> {
-    Ok(RiskFacet {
-        likelihood: optional_enum(&raw.likelihood, "likelihood")?,
-        impact: optional_enum(&raw.impact, "impact")?,
-        origin: optional_text(raw.origin),
-        controls: raw.controls,
-    })
-}
-
-/// The risk exposure score — `likelihood × impact` (1..=16) when BOTH axes are
-/// assessed, else `0`. The within-level ordering fallback the `backlog_order`
-/// adapter consumes (design §5.1 tier 3, VT-4): `0` is the baseline shared by
-/// every non-risk item (a `None` facet) and every part-assessed risk alike —
-/// assessment is all-or-nothing for ordering. Weights are Low=1 … Critical=4 (A3);
-/// the product fits `u8`, no cast. The single derivation site — PHASE-03's
-/// `project` reads it here, not a second copy (the PHASE-01 self-clearing dead-code
-/// scope removed itself once `project` landed).
-pub(crate) fn exposure(facet: Option<&RiskFacet>) -> u8 {
-    const fn weight(level: RiskLevel) -> u8 {
-        match level {
-            RiskLevel::Low => 1,
-            RiskLevel::Medium => 2,
-            RiskLevel::High => 3,
-            RiskLevel::Critical => 4,
-        }
-    }
-    match facet.and_then(|f| f.likelihood.zip(f.impact)) {
-        Some((l, i)) => weight(l) * weight(i),
-        None => 0,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2524,10 +2440,9 @@ tags = []
     }
 
     #[test]
-    fn resolution_and_risk_level_render_mirror_serde() {
+    fn resolution_render_mirror_serde() {
         assert_eq!(Resolution::WontDo.as_str(), "wont-do");
         assert_eq!(Resolution::Promoted.as_str(), "promoted");
-        assert_eq!(RiskLevel::Critical.as_str(), "critical");
         // the mirror matches the parse direction.
         assert_eq!(
             parse_enum::<Resolution>("wont-do", "resolution").unwrap(),
@@ -3648,37 +3563,6 @@ tags = []
         // a non-terminal status with no resolution → D9 auto-clear to "".
         assert_eq!(validate_transition(Status::Open, None).unwrap(), "");
         assert_eq!(validate_transition(Status::Triaged, None).unwrap(), "");
-    }
-
-    // --- SL-039 VT-4: exposure = likelihood × impact, baseline otherwise ---
-
-    fn facet(likelihood: Option<RiskLevel>, impact: Option<RiskLevel>) -> RiskFacet {
-        RiskFacet {
-            likelihood,
-            impact,
-            origin: None,
-            controls: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn exposure_scores_a_fully_assessed_risk() {
-        use RiskLevel::{Critical, High, Low};
-        assert_eq!(exposure(Some(&facet(Some(High), Some(Critical)))), 12);
-        assert_eq!(exposure(Some(&facet(Some(Low), Some(Low)))), 1);
-        assert_eq!(exposure(Some(&facet(Some(Critical), Some(Critical)))), 16);
-    }
-
-    #[test]
-    fn exposure_is_baseline_when_unassessed_or_non_risk() {
-        use RiskLevel::High;
-        // one axis only → baseline.
-        assert_eq!(exposure(Some(&facet(Some(High), None))), 0);
-        assert_eq!(exposure(Some(&facet(None, Some(High)))), 0);
-        // no axis → baseline.
-        assert_eq!(exposure(Some(&facet(None, None))), 0);
-        // non-risk item (no facet) → baseline.
-        assert_eq!(exposure(None), 0);
     }
 
     // --- VT-3: edit-preserving (comments/unknowns survive); updated bumps ---

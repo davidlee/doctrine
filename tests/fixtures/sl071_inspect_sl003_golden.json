@@ -3,8 +3,8 @@
     "actionable": true,
     "blockers": [],
     "blocking": [],
-    "consequence": 0,
-    "eligible": true
+    "eligible": true,
+    "score": 0.0
   },
   "danglers": [],
   "id": "SL-003",

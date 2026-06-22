@@ -125,7 +125,7 @@ a coefficient-weighted share of the value it unlocks — the **value of optional
   continuous under-signal — the strict-`<` / ULP form, no manufactured ties). Deferred as
   a weight class; escalate only on evidence the dumb constraint mis-sequences (D10, OQ-4).
 
-`value_dim = (value × kind_weight × Σ tag_coeff) / estimate_midpoint`
+`value_dim = (coefficients.value × value × kind_weight × Σ tag_coeff) / estimate_midpoint`
 `risk_dim  = exposure × risk_coeff` (presence-gated by the `[facet]`; non-risk → 0)
 
 Absent facets collapse to the identity: value absent → `value_dim = 0`; estimate
