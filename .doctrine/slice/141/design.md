@@ -111,13 +111,13 @@ Three flags define the effective set:
 
 | flag | behaviour |
 |------|-----------|
-| `--kind sl,adr,backlog` | Replace default — no default kinds included |
+| `--kinds sl,adr,backlog` | Replace default — no default kinds included |
 | `--with rfc,review` | Add to effective set (repeatable) |
 | `--no ide,rsk` | Remove from effective set (repeatable) |
 
-Evaluation order: default set → `--kind` replaces → `--with` adds → `--no`
-removes. `--kind` and absent-`--kind` are mutually exclusive in effect:
-`--kind` means the default is discarded.
+Evaluation order: default set → `--kinds` replaces → `--with` adds → `--no`
+removes. `--kinds` and absent-`--kinds` are mutually exclusive in effect:
+`--kinds` means the default is discarded.
 
 Values: canonical kind prefixes (`sl`, `adr`, `prd`, `spec`, `rfc`, `iss`,
 `imp`, `chr`, `rsk`, `ide`, `rv`, `rec`, `req`, `rev`, `cm`, `asm`, `dec`,
@@ -159,27 +159,20 @@ Arguments:
   <QUERY>  Free-text lexical query (required)
 
 Options:
-  --kind <KINDS>     Replace default search kinds (comma-separated prefixes/aliases)
-  --with <KINDS>     Add kinds to the effective set (repeatable)
-  --no <KINDS>       Remove kinds from the effective set (repeatable)
-  --format <FMT>     Output format [default: table] [possible values: table, json]
-  --json             Shorthand for --format json
-  --context          Show body snippet for each result
-  --short            JSON: omit snippet/body fields from output
-  --limit <LIMIT>    Max results to show
-  --offset <OFFSET>  Skip first N results [default: 0]
-  --page <PAGE>      Page number (1-based; sugar over --offset). Mutually exclusive with --offset
-  -p, --path <PATH>  Explicit project root (default: auto-detect)
-  --color <COLOR>    Control colour output [default: auto]
+  --kinds <KINDS>   Replace default search kinds (comma-separated prefixes/aliases)
+  --with <KINDS>    Add kinds to the effective set (repeatable)
+  --no <KINDS>      Remove kinds from the effective set (repeatable)
+  --format <FMT>    Output format [default: table] [possible values: table, json]
+  --context         Show body snippet for each result
+  --limit <LIMIT>   Max results to show
+  --offset <OFFSET> Skip first N results [default: 0]
+  -p, --path <PATH> Explicit project root (default: auto-detect)
+  --color <COLOR>   Control colour output [default: auto]
   -h, --help
 ```
 
-Pagination: `--limit` defaults to 20 (`SEARCH_LIMIT_DEFAULT`), caps at 100
-(`SEARCH_LIMIT_MAX`). `--limit 0` is REJECTED (must be >= 1). `--page N` →
-offset = (N-1) × limit. `--page` requires `>= 1` (clap `value_parser`).
-
-Edge cases: `--page 0` rejected by clap; `--page` beyond available results
-returns empty output; `--page` without `--limit` uses the default (20).
+Pagination: `--limit` defaults to 20, capped at 100. `--offset` skips the
+first N results (default 0).
 
 ## Output formats
 
@@ -254,8 +247,7 @@ split inside a codepoint; existing `lexical` tests pass unchanged.
 }
 ```
 
-`--context` adds `"snippet"` field. `--short` is mutually exclusive with
-`--context` — clap `conflicts_with = "context"`.
+`--context` adds `"snippet"` field.
 
 ## Verification alignment
 
@@ -288,14 +280,9 @@ split inside a codepoint; existing `lexical` tests pass unchanged.
 - `doctrine search "auth" --format json` returns valid JSON with expected shape
 - `doctrine search "nonexistent_token"` returns zero results (all scores 0 → suppressed)
 - `doctrine search "auth" --kind adr --format table` includes ADR column headers
-- `doctrine search "auth" --page 0` fails (clap rejects < 1)
 - `doctrine search --help` renders without error (follows existing CLI help-test pattern)
-- `doctrine search "x" --json --format table` outputs JSON (`--json` wins, matching `listing::ListArgs::build` precedence)
-- `doctrine search "auth" --page 1 --limit 0` fails (--limit 0 rejected)
 - `doctrine search "auth" --with req --no adr` additive/subtractive logic
 - `doctrine search "auth" --context --format json` returns valid JSON with snippet fields
-- `doctrine search "auth" --short --format json` returns valid JSON without snippet fields
-- `doctrine search "auth" --context --short` fails with mutually-exclusive error
 - `doctrine search "auth" --format table` prints table without panicking
 - `just gate` green — zero clippy warnings, layering gate passes
 
@@ -334,7 +321,7 @@ split inside a codepoint; existing `lexical` tests pass unchanged.
 | D3 | No status filtering in v1 | Simpler surface; status is display-only; follow-up can add `--status` |
 | D4 | `--kind` replaces default, `--with`/`--no` modify | Follows existing doctrine flag philosophy (flags are authoritative) |
 | D5 | Snippet via token-window, no sentence boundaries | Simple, testable; sentence awareness is a follow-up |
-| D6 | `--short` conflicts with `--context` | Ambiguous UX: toggle-on + toggle-off in same invocation; clap rejects it |
+
 | D7 | Canonical-id tiebreak | Deterministic output; stable across invocations on same corpus |
 | D8 | Suppress zero-score rows | Entity search has no scope-filter pre-pass; 0-score-everything is noise |
 | D9 | `specs` alias (plural) avoids SPEC prefix collision | `--kind spec` would resolve to [prd, spec], user may have meant tech-spec only. `specs` is unambiguous. `--kind spec --no prd` for tech-specs only. |

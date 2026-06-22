@@ -1,0 +1,102 @@
+id    = 142
+slug  = "audit-sl-141-entity-full-text-search-bm25-over-md-bodies"
+title = "Audit: SL-141 entity full-text search (BM25 over .md bodies)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-141"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: property test proving tokenize_with_spans equivalence per plan VT-3. Observed: table-driven test with 12 fixed inputs, not a property test with random strings."
+detail = """
+Plan PHASE-01 VT-3 specifies: 'Property test (100 random strings + edge cases): tokenize_with_spans(s).map(|ts| ts.token) == tokenize(s). Uses quickcheck or a manual random generator over alphanumeric, punctuation, Unicode, and mixed inputs.'
+
+Implementation has `tokenize_with_spans_projection_equivalent_to_tokenize` which is a table-driven test with 12 fixed inputs (empty, whitespace, symbols, 'auth', 'Auth Bug', 'mem.auth.token', 'café résumé', leading/trailing whitespace, double separators, mixedCase, etc.). The fixed cases cover the important edge cases, but this is not a property test — there is no random/stochastic element, no proptest/quickcheck generator, and no proof that arbitrary inputs preserve equivalence.
+
+The spirit of VT-3 (prove equivalence) is partially met by the table-driven approach since the tokenizer is simple `char_indices` boolean logic without emergent properties. However, the plan explicitly called for property testing with 100+ random strings, and this is a verification gap relative to the authored criteria."""
+disposition = "tolerated"
+response = "The table-driven test covers empty, whitespace-only, symbols-only, ASCII, Unicode (café résumé), mixedCase, double-separators, leading/trailing separators — all the boundary cases a property test would randomize over. The tokenizer is a simple char_indices boolean loop (is_alphanumeric → span start) with no emergent behavior that random input would reveal differently than the curated set. The equivalence assertion (via_spans == direct) and span-boundary assertion (original_slice.lowercase() == ts.token) cover the correctness property concretely. A proptest addition would be window-dressing, not gap-filling. Tolerated as a form-vs-substance difference: the correctness property is tested; only the 'property test' form is missing."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: CLI --json, --page flags and --limit validation per design.md. Observed: --json shorthand, --page pagination, and --limit 0 rejection/capping not implemented."
+detail = """
+design.md specifies:
+1. `--json` shorthand for --format json (design Options table)
+2. `--page <PAGE>` 1-based page-number sugar over --offset, mutually exclusive with --offset
+3. `--limit` caps at 100 (SEARCH_LIMIT_MAX), --limit 0 is REJECTED (must be >= 1)
+
+Implementation only has --limit (default=20, no validation), --offset (default=0), and --format (table/json). No --json shorthand, no --page flag, no --limit validation.
+
+The plan's EX-7 doesn't list --json, --page, or --limit validation, so the implementation matches the plan. The design-spec → plan refinement implicitly dropped these features. This is a design-plan gap that needs reconciliation: either the design is trimmed (remove the unimplemented flags from the spec), or the implementation is extended to match the design."""
+disposition = "tolerated"
+response = "The plan's EX-7 deliberately narrowed the CLI surface from the design spec — it lists only --kinds, --with, --no, --format, --context as the accepted flags. The --short flag was explicitly discussed (A4: 'Removed — not in scope'), but --json, --page, and --limit validation were dropped implicitly rather than documented. The implementation matches the plan, and these are small UX conveniences (--json sugar, --page pagination convenience) rather than functional gaps. The design document should be trimmed to match the implemented CLI surface. This is a design-vs-plan reconciliation item, not a code defect. Tolerated for audit; the reconciliation brief will map this to a design update."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Expected: snippet context window default 80 chars per design.md. Observed: hardcoded 40 chars in both table and JSON callers."
+detail = """
+design.md §Snippet algorithm step 3: 'Extract context_chars bytes (default 80) before and after span start'. 
+
+Implementation's `build_json_hit` and table formatter both call `snippet(body, &opts.query, 40)` with hardcoded value 40, not 80. The `snippet` function itself accepts a parameterized `context_chars` argument correctly, but all callers use 40.
+
+This is a minor variance — neither 40 nor 80 is inherently wrong for v1, but it diverges from the design specification. Context window is a UX tuning parameter that could benefit from follow-up evaluation regardless of the starting value."""
+disposition = "tolerated"
+response = "Minor UX tuning parameter (40 vs 80 chars). Neither value is wrong for v1 — both produce reasonable snippet context. The hardcoded value should become a configurable CLI flag in a follow-up, but the 40/80 choice is below the correctness threshold. Design document should note the actual value used. Tolerated as accepted drift; no code change needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = 'Expected: JSON output `kind` field uses kind label per design example ("slice", "adr"). Observed: `kind` field uses lowercase prefix ("sl", "adr").'
+detail = """
+design.md JSON output example shows:
+`"kind": "slice"` (the kind label, e.g. "Slice"/"ADR"/"Issue")
+
+Implementation emits:
+`"kind": "sl"` (lowercase prefix, e.g. "sl"/"adr"/"iss")
+
+Also adds `"total"` field at the top level and `"prefix"` and `"status"` per-result fields not in the design's JSON schema. The extra fields are useful additions and don't break consumers, but `kind` using prefix ("sl") vs label ("slice") is a data shape variance. If a consumer expects `"kind": "slice"` to display a human-readable kind name, they'll get the opaque prefix instead.
+
+The `prefix` field provides the uppercase prefix separately, which partially addresses the consumer use case, but the `kind` field name suggests it should carry the readable label."""
+disposition = "tolerated"
+response = 'The implementation adds useful fields (total, prefix, status) beyond the design example — additive, not breaking. The kind field using lowercase prefix ("sl") vs label ("slice") is a real data shape difference, but the prefix field provides the canonical uppercase identifier for script consumers, and the title field carries the human-readable name. A consumer wanting to display "Slice" can use the prefix to look up the kind label via integrity::KINDS. The design example is illustrative, not a binding JSON schema. The extra fields improve the output. If a follow-up wants exact design conformance, changing kind to emit the lowercased label is straightforward (requires a prefix→label lookup against integrity::KINDS). Tolerated.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Expected: snippet ellipsis truncation preserves the text at the window boundary. Observed: window_start + 1 in ellipsis logic skips one byte of content when the window doesn't start at byte 0."
+detail = '''
+snippet() function in src/search.rs:
+
+```
+if window_start > 0 {
+    result.push('\u{2026}');
+    if let Some(s) = doc_text.get(window_start + 1..window_end) {
+        result.push_str(s);
+    }
+}
+```
+
+When window_start > 0, the code pushes an ellipsis character, then slices from `window_start + 1..window_end`. The +1 skips the byte at position `window_start`. For ASCII content, this drops the first character of the snippet window. For example, if `matched.start = 100`, `context_chars = 40`, then `window_start = 60`. The implementation emits `doc_text[61..140]` instead of `doc_text[60..140]`, losing byte 60 (typically the first character of the context window).
+
+The correct slice should be `doc_text.get(window_start..window_end)` — the ellipsis already signals truncation; no character should be skipped. This is a genuine bug: the snippet context window is shifted by 1 byte, potentially omitting or splitting the first character.'''
+disposition = "fix-now"
+response = "Confirmed. The `window_start + 1` in the ellipsis branch of snippet() drops the byte at position `window_start` from the extracted window. For ASCII content, this drops the first character of the snippet context (e.g. 'i' from 'ick brown fox' → 'ck brown fox'). This is a genuine correctness bug — the context window is shifted by 1 byte, and at UTF-8 multi-byte boundaries the `+ 1` could even land in the middle of a multi-byte character, producing a panic from `doc_text.get()` returning None. The fix: change `doc_text.get(window_start + 1..window_end)` to `doc_text.get(window_start..window_end)` — one-line change in src/search.rs line ~172 (ellipsis branch). The ellipsis character in the result string is independent of the source text slice, so no offset compensation is needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

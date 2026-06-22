@@ -1,0 +1,41 @@
+memory_uid = "mem_019eef6b26bc70d18e573936f09f4ed4"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Snippet ellipsis off-by-one: doc_text.get(window_start..) not window_start+1"
+summary = ""
+created = "2026-06-22"
+updated = "2026-06-22"
+
+[scope]
+paths = ["src/search.rs", "src/lexical.rs"]
+globs = []
+commands = []
+tags = ["area:search", "area:snippet", "area:lexical"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a9b8dd62083534330928141f4a3ac5e331237c7b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d09894d1f2c8d0f191fb964dfab2d8dde81d63d07e857f87a35f791dbd45dc29"
+base_commit = "c7f06f22c381b7421a4264107902e067599c22fa"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "minor"
+weight = 0
+
