@@ -725,10 +725,12 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                     "warnings": 0,
                     "output": output
                 }))?),
-                Err(e) if e.to_string().contains("validation warnings found") => Ok(serde_json::to_string_pretty(&json!({
-                    "warnings": output.lines().count(),
-                    "output": output
-                }))?),
+                Err(e) if e.to_string().contains("validation warnings found") => {
+                    Ok(serde_json::to_string_pretty(&json!({
+                        "warnings": output.lines().count(),
+                        "output": output
+                    }))?)
+                }
                 Err(e) => Err(e),
             }
         }
