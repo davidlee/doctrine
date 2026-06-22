@@ -91,7 +91,7 @@ fn tools() -> Vec<McpTool> {
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "format": { "type": "string", "enum": ["table", "json"], "description": "Output format (default: table)" },
-                    "view": { "type": "string", "enum": ["full", "summary"], "description": "summary drops the brief body + per-finding prose, keeping the finding skeleton (default: full)" }
+                    "view": { "type": "string", "enum": ["full", "summary"], "description": "summary blanks `body` → \"\", each finding's `detail` → \"\" and `response` → null; preserves `id`, `status`, `severity`, `title`, `disposition` (default: full)" }
                 },
                 "required": ["reference"]
             }),
@@ -119,7 +119,7 @@ fn tools() -> Vec<McpTool> {
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
-                    "disposition": { "type": "string", "description": "The disposition: fixed | design-wrong | tolerated" },
+                    "disposition": { "type": "string", "description": "The disposition: aligned | fix-now | design-wrong | follow-up | tolerated" },
                     "response": { "type": "string", "description": "The response detail (free-text)" },
                     "as": { "type": "string", "description": "Cooperative role assertion (default: responder)" }
                 },
@@ -185,7 +185,7 @@ fn tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
-                    "seed": { "type": "boolean", "description": "Emit git-changed candidate paths (a starting point, not authority) and exit instead of priming" },
+                    "seed": { "type": "boolean", "description": "Emit git-changed candidate paths (a starting point, not authority) and exit instead of priming — response carries only `canonical` + `tracked_paths`, with all count fields zero" },
                     "from": { "type": "string", "description": "Read the curated domain_map from a file (default: stdin)" }
                 },
                 "required": ["reference"]
