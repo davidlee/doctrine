@@ -30,3 +30,11 @@ target = "ADR-007"
 label = "related"
 target = "ADR-014"
 
+[[relation]]
+label = "related"
+target = "ADR-004"
+
+[[relation]]
+label = "related"
+target = "ADR-010"
+
