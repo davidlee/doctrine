@@ -114,7 +114,10 @@ pub(crate) trait Claim {
 
 - `LocalFs::claim` = `create_dir(ctx.dir)` — behaviour-identical to today.
 - `GitRef::claim` = build `refs/doctrine/reservation/{stem}/{id:03}` → empty-tree
-  commit (`commit_tree`) → `push_ref_cas(remote, ref, new, ZERO_OID)`. `Updated`
+  commit (`commit_tree`, **dangling** — no local `update-ref` before the push;
+  pushed **by oid** so a failed push never advances a local ref past the remote,
+  reinforcing I4; lazyspec prior-art pattern) →
+  `push_ref_cas(remote, ref, new, ZERO_OID)`. `Updated`
   ⇒ also `create_dir(ctx.dir)` (local mkdir; same-machine exclusion + keeps the
   loop's H2 cleanup valid) ⇒ `Won`. `Moved` ⇒ `AlreadyHeld`. A push/network error
   propagates (not swallowed as `AlreadyHeld`).
@@ -123,8 +126,11 @@ pub(crate) trait Claim {
 
 ```rust
 pub(crate) fn fetch_refspec(root, remote, refspec) -> Result<(), CaptureError>;
-// push <new>:<ref> with --force-with-lease=<ref>:<expected_old>; classify
-// rejection (CAS mismatch) distinctly from a transport error.
+// Push the *oid* (new_oid:<ref>), not a local ref, with
+// --force-with-lease=<ref>:<expected_old>. Classify via `git push --porcelain`
+// (F-9/F-10): ONLY the explicit lease/create-CAS rejection ⇒ Moved/AlreadyHeld;
+// `remote rejected`/auth/hook/namespace-policy (e.g. host forbids refs/doctrine/*)
+// ⇒ HARD error surfacing the remote reason — never AlreadyHeld, never silent retry.
 pub(crate) fn push_ref_cas(root, remote, refname, new_oid, expected_old)
     -> Result<RefCas, CaptureError>;          // reuses the RefCas enum
 pub(crate) fn for_each_ref(root, pattern)      // (refname, oid, author, date, msg)
@@ -156,8 +162,9 @@ fn resolve_backend(root, cfg) -> anyhow::Result<(Box<dyn Claim>, ReservedIds)>;
 ```
 
 `resolve_backend` is the **sole** site that selects `LocalFs` vs `GitRef`,
-performs the reachability fetch, and decides degradation. Reservation-ref ids
-fetched here seed the per-retry scan source.
+performs the reachability fetch, and decides degradation (contract: D8 — `auto`
+fail-closes on a configured-remote failure, with an explicit operator opt-in to
+local fallback). Reservation-ref ids fetched here seed the per-retry scan source.
 
 **Survey.** `doctrine reservation list [--kind <stem>] [--remote <name>]` →
 fetch `refs/doctrine/reservation/*` → table `{canonical, holder, acquired}`.
@@ -169,7 +176,9 @@ fetch `refs/doctrine/reservation/*` → table `{canonical, holder, acquired}`.
   `$DOCTRINE_AGENT_ID` else git committer identity. The commit is built with
   `GIT_AUTHOR_NAME/EMAIL` + `GIT_COMMITTER_NAME/EMAIL` set **explicitly** from
   the resolved holder (F-2) — never relying on ambient `git config user.*`, so a
-  human with unset git identity does not fail. Acquired = committer date.
+  human with unset git identity does not fail. Acquired = committer date —
+  **best-effort client-declared metadata** (`GIT_COMMITTER_DATE` is client-set); the
+  survey (REQ-022) reports it as the holder's declared time, not a server clock (F-12).
   Message = canonical ref (`SL-148`). Permanent — never deleted, never reissued;
   one ref per reserved id (no GC, PRD-005 OQ-3 open).
 - **Scan source (GitRef, F-6).** The per-retry `scan()` closure fetches
@@ -192,8 +201,17 @@ fetch `refs/doctrine/reservation/*` → table `{canonical, holder, acquired}`.
 
 Reserve (shared/auto, reachable remote):
 1. `resolve_backend`: fetch reservation refs (this *is* the reachability probe).
-   `auto` + fetch fails / no remote ⇒ fall back to `LocalFs` + one-time signal.
-   `shared` + fetch fails ⇒ hard error.
+   Degradation contract (D8):
+   - `auto` + **no remote configured** (structurally single-tree) ⇒ `LocalFs` +
+     one-time stderr signal (the genuine PRD-005 §6 fallback case).
+   - `auto` + **configured remote that fails** (transient/auth/transport) ⇒
+     **hard error by default** (fail-closed — a silent transient downgrade would
+     mint a colliding local id, B2). Operator opts into local fallback per
+     allocation via an interactive `y/N` prompt (TTY) or, non-interactively,
+     `DOCTRINE_RESERVATION_FALLBACK=1` (config `[reservation] allow_local_fallback`);
+     on accept ⇒ `LocalFs` + one-time stderr signal. Prompt/signal are stderr-only
+     (behaviour gate).
+   - `shared` + fetch fails ⇒ hard error; no fallback, no prompt (shared means shared).
 2. `next_id(local ∪ remote_reservation_ids, trunk_ids)`.
 3. `GitRef::claim`: empty-tree commit → `push_ref_cas(..., ZERO_OID)`.
    - `Updated` ⇒ local mkdir ⇒ `Won` ⇒ scaffold + `write_fileset` (H2 cleanup
@@ -210,9 +228,14 @@ gives offline fork-safety at single-tree+trunk reach.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **I1** At most one holder per id: guaranteed by zero-oid `--force-with-lease`
-  at the remote — exactly one creating push lands; rivals' CAS expectation
-  (absent) no longer holds and they are rejected.
+- **I1** At most one holder per id: guaranteed by `--force-with-lease=<ref>:<zero>`,
+  whose lease receive-pack checks **against the remote's current ref state**, not a
+  local remote-tracking ref (F-11) — stale local fetch state cannot satisfy it.
+  Exactly one creating push finds the ref absent and lands; thereafter every rival's
+  zero-oid expectation no longer holds and receive-pack rejects them. Rivals build
+  *different* commit oids (identity/date differ), but the CAS guards the ref **name**,
+  not object identity, so only one create lands regardless (F-13). Proven in
+  production by lazyspec's lease engine (same primitive).
 - **I2** A claim never holds entity content (empty tree) and never appears in the
   entity's working-tree record (REQ-024).
 - **I3** `LocalFs` path and all existing suites are observably unchanged (gate).
@@ -244,10 +267,16 @@ gives offline fork-safety at single-tree+trunk reach.
 - **OQ-2 (PRD-005 OQ-3)** — permanent ref accumulation at very large volumes;
   no GC in v1.
 - **OQ-3** — `--force-with-lease` portability across git versions / hosted
-  platforms (zero-oid create rejection semantics). Confirm in PHASE-01 against
-  the local-bare-repo substrate.
+  platforms (zero-oid create rejection semantics). **De-risked** by lazyspec prior
+  art (ships the form); still confirm in PHASE-01 against the local-bare-repo
+  substrate.
 - **OQ-4** — agent identity beyond `$DOCTRINE_AGENT_ID` + git committer (session
   id?) — minimal for v1; revisit with leasing (IDE-021).
+- **OQ-5 (F-10)** — should `shared`/`auto` run a one-time *push-capability* probe
+  when first selecting `GitRef` (a host may allow fetch but forbid creating
+  `refs/doctrine/*`)? v1 relies on the first create-push's porcelain classification
+  to hard-error with the remote reason; an up-front probe is a latency-vs-early-
+  failure trade left open.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -257,8 +286,13 @@ gives offline fork-safety at single-tree+trunk reach.
   (breaks the one-loop principle).
 - **D2 — claim linearizes at the remote via `push --force-with-lease=<ref>:0`.**
   The only shape meeting PRD-005's single-linearization invariant for cross-clone
-  reach. Rejected: survey-only / push-race (fails REQ-021); local-ref-now-push-
-  later (no real guarantee until follow-up).
+  reach. The explicit lease `<ref>:<zero-oid>` is compared by receive-pack against
+  the **remote** ref, so correctness does not depend on a fresh remote-tracking ref
+  (F-11). Validated by lazyspec prior art (MIT; `engine/git_ref.rs`
+  `push_ref_with_lease`, `expected_old=ZERO_SHA`) — the zero-oid create form ships
+  and works, de-risking OQ-3 from a blocker to a substrate confirmation. Rejected:
+  survey-only / push-race (fails REQ-021); local-ref-now-push-later (no real
+  guarantee until follow-up).
 - **D3 — empty-tree commit, metadata-as-data.** Most content-free reading of
   REQ-024; holder/acquired are exactly git commit fields. Rejected: a
   `reservation.toml` blob (reintroduces a content object).
@@ -272,6 +306,18 @@ gives offline fork-safety at single-tree+trunk reach.
   repair verb), never a bare "could not reserve".
 - **D7 — reuse `integrity::KINDS` stem as the ref segment.** One id table; no
   second mapping to drift (numbered-kind-identity-table memory).
+- **D8 — `auto` fail-closes on a configured-remote failure; local fallback is an
+  explicit operator opt-in (B2).** PRD-005 §6's "fall back + one-time signal" governs
+  only the **structurally single-tree** case (no remote configured). A configured
+  remote that fails transiently under `auto` is a hard error, because a silent
+  transient downgrade would mint a local id that collides with another clone's
+  accepted remote reservation — violating I-ONEHOLDER under *uniform* `auto` config,
+  not just mixed reach (E5). The operator accepts reduced reach per allocation via an
+  interactive `y/N` prompt (TTY) or `DOCTRINE_RESERVATION_FALLBACK=1` (non-interactive);
+  both routes emit the one-time stderr signal — satisfying PRD-005's "made visible,
+  never silently assumed." Stricter than PRD-005's literal wording; a one-line PRD-005
+  reconcile note records the tightening (R7). Rejected: PRD-literal
+  degrade-on-any-unreachability (the B2 hole).
 
 ## 8. Risks & Mitigations
 
@@ -279,9 +325,13 @@ gives offline fork-safety at single-tree+trunk reach.
   test the lost-race→re-fetch→retry path against a local bare repo with two
   clones racing the same id, not just the happy path (VT, §9). I1 proof.
 - **R2 — first remote surface (auth, transport, partial failure).** Mitigation:
-  all remote ops behind `git.rs` helpers with a mock seam; classify CAS-rejection
-  vs transport error distinctly (a transport error must NOT read as `AlreadyHeld`
-  → would corrupt the retry). `shared` hard-fails on transport error.
+  all remote ops behind `git.rs` helpers with a mock seam; classification is
+  **machine-stable via `git push --porcelain`** (F-9), not English-stderr parsing —
+  ONLY the explicit lease/create-CAS rejection maps to `AlreadyHeld`; `remote
+  rejected`/auth/hook/namespace-policy failures (incl. a host forbidding
+  `refs/doctrine/*`, F-10) are hard errors that surface the remote reason, never a
+  silent 128-retry. `shared` hard-fails on transport error; `auto` fail-closes on a
+  configured-remote failure (D8).
 - **R3 — E1 (remote-won / local-mkdir-failed) split state. RESOLVED.** Leaving
   the remote reservation ref is correct: PRD-005's "an abandoned reservation is a
   harmless gap, not a fault to recover from" governs. The orphaned ref is a
@@ -297,7 +347,10 @@ gives offline fork-safety at single-tree+trunk reach.
   currently scopes coordination/evidence refs as local). No conflict — PRD-005 /
   SPEC-008 ratify the reservation reach — but reconciliation must add a prose note
   to SPEC-008 (the remote reservation ref class + remote ops in `git.rs`) and a
-  cross-reference from SPEC-022. Tracked for /reconcile, not a blocker.
+  cross-reference from SPEC-022. Tracked for /reconcile, not a blocker. **(D8
+  addendum):** also add a PRD-005 §6 reconcile note that `auto` fail-closes on a
+  configured-remote transient failure (stricter than the literal "fall back +
+  signal"), the operator opting into fallback explicitly.
 - **R4 — default-flip breaks stdout-asserting suites.** Mitigation: D5 isolates
   the flip; signal is stderr-only + one-time; final phase sweeps the suite.
 - **R5 — jail prevents network e2e.** Mitigation: local-bare-repo substrate
@@ -352,6 +405,37 @@ extending existing git test fixtures — no network, jail-safe (R5).
 (`:<zero>` vs `:`) confirmed against the local-bare-repo substrate (OQ-3);
 empty-tree oid via the well-known constant or `mktree`.
 
-**Open for external/inquisition pass:** R1 (CAS correctness proof depth), R2
-(transport-vs-CAS error classification), E5 (is uniform-reach an acceptable v1
-posture, or must shared reach union branch heads?).
+**External adversarial pass (codex / GPT-5.5) — disposition (R1/R2/E5 closed):**
+- **F-7 (codex B1) → OQ-3/D2** — zero-oid `--force-with-lease=ref:0` is *not* an
+  unverified spell: lazyspec ships it (MIT prior art). Downgraded from blocker;
+  bare-repo confirmation stays in PHASE-01. Adopted lazyspec's push-by-oid +
+  dangling-commit pattern (§5.2, reinforces I4).
+- **F-8 (codex B2) → D8/§5.4** — `auto` could self-collide: a transient fetch
+  failure under *uniform* `auto` silently mints a colliding local id. Accepted;
+  `auto` now fail-closes on a configured-remote failure, operator opt-in fallback via
+  `y/N` prompt or `DOCTRINE_RESERVATION_FALLBACK=1` (user decision). PRD-005 reconcile
+  note added (R7).
+- **F-9 (codex M1) → §5.2/R2** — `push --porcelain` machine-stable classification;
+  only explicit lease/create-CAS rejection ⇒ `AlreadyHeld`. Accepted.
+- **F-10 (codex M2) → R2/OQ-5** — fetch-reachable ≠ push-capable; policy/namespace
+  rejection is a hard error surfacing the remote reason; up-front capability probe
+  left as OQ-5. Accepted.
+- **F-11 (codex m1) → I1/D2** — proof rewritten: the explicit lease compares the
+  *remote* ref via receive-pack; stale local-tracking refs irrelevant. Accepted.
+- **F-12 (codex m2) → §5.3** — `acquired` documented as best-effort client-declared
+  metadata (forgeable `GIT_COMMITTER_DATE`). Accepted.
+- **F-13 (codex m3) → D3** — confirmed content-free per REQ-024: empty tree, no
+  blobs, differing commit oids irrelevant (CAS guards the ref name). No change.
+
+**Resolution of the three originally-open items:**
+- **R1 (CAS proof depth)** — closed by F-7/F-11 + lazyspec prior art: the zero-oid
+  explicit lease is a remote-checked create-CAS; exactly one creating push lands.
+- **R2 (classification)** — closed by F-9/F-10: porcelain-based, only the CAS
+  rejection retries; every other failure hard-errors.
+- **E5 (uniform reach)** — under *uniform* `shared`/`auto`, every authored id reserves
+  a ref at author time, so `remote_reservation_ids` already covers branch-only-authored
+  ids; the E5 gap is purely a `local`/mixed-reach phenomenon and uniform reach (A3) is
+  a sound v1 posture. F-8 additionally closes the `auto`-internal transient hole.
+  codex's "shared unions branch heads" alternative is unnecessary under uniform reach
+  and rejected for v1. The mixed-reach collision remains the documented A3/E5 limit,
+  backstopped by `validate`/`reseat`.
