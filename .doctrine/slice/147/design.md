@@ -153,6 +153,13 @@ existing invariant — no new fork access introduced.
 
 ### D5 — Recorded source-delta registry: arm-neutral runtime state (OQ-D)
 
+*Post-lock revision (2026-06-23, per User; not a REV — per-slice design):* the
+solo-arm writer changed from an explicit-`record-delta`-required contract to
+**deterministic capture on the `slice phase` transitions**. RV-148 reviewed the
+earlier framing; the change strictly tightens it (a confirmed CLI hook replaces a
+discipline contract), so no re-inquisition is warranted — see the solo bullet and
+OQ-conf-1.
+
 One registry both arms write and the auditor reads, resolved to a single shared
 location regardless of which worktree the command runs in.
 
@@ -179,12 +186,24 @@ location regardless of which worktree the command runs in.
   merge commits). A wrong/wide boundary that would pull trunk into `actual` fails
   loudly at write, not silently at audit.
 - **Writers / arms:**
-  - **solo** (`/execute`, incl. inline-on-main): **no automatic beat — an explicit
-    `doctrine slice record-delta` call is required** at phase land (User caveat;
-    RFC-004 OQ-11a). Absent it → no row → degrade. This is a contract, not a hope.
+  - **solo** (`/execute`, incl. inline-on-main): **capture rides the `slice phase`
+    state transitions** — the same CLI write `/execute` already issues (SKILL.md:
+    `in_progress` at phase start, `completed` at land). On `--status in_progress`
+    the handler stamps `code_start_oid = HEAD` into the phase sheet; on `--status
+    completed` it captures `code_end_oid = HEAD`, applies the F-6 guard, and
+    **upserts** the phase's boundary row (reopen re-captures; `start == end` writes
+    the zero-delta row automatically). Deterministic, on the sanctioned state-write
+    path on every phase's critical path — **not** an off-path "remember to also
+    call X." This supersedes the earlier explicit-`record-delta`-required contract
+    (the deterministic CLI hook the User's caveat assumed absent in fact exists).
+  - **`slice record-delta`** remains the **manual escape hatch**, not the happy
+    path: re-record a corrected range, or bootstrap a slice whose phases predate
+    the binding (e.g. SL-147's own early phases). Same writer + F-6 guard.
   - **dispatch**: the orchestrator records into the registry at the landing beat
     (it already captures `code_start`/`code_end`); kept a thin write on the one
     live dispatch path.
+  - Both arms now write **without** an off-critical-path act; F-2 (below) stays the
+    backstop — a completed phase with no row is still caught, never silently clean.
 - **Reader:** `slice conformance` reads only this registry.
 - **Completeness — fail closed on partial coverage (F-2, BLOCKER fix).** Degrade
   is **not** empty-only. The reader cross-checks recorded rows against the slice's
@@ -246,7 +265,11 @@ staleness resolution (D4) consume it. No new glob dependency.
 - `src/state.rs` — `boundaries_path(slice)` (resolved via reused
   `worktree::subagent::primary_worktree`), `record_source_delta` writer with the
   ancestor + non-merge guard (F-6), reader, and the completed-phases completeness
-  check (F-2, reading the phase sheets).
+  check (F-2, reading the phase sheets). The `slice phase` transition handler is
+  the **solo capture hook** (D5): `in_progress` stamps `code_start_oid` into the
+  phase sheet; `completed` reads it back, captures `code_end_oid = HEAD`, guards,
+  and upserts the boundary row. Bare-repo / not-a-repo → the same clean named error
+  as the writer, never a panic that would block a legitimate phase transition.
 - `src/dispatch.rs` — the orchestrator records into the arm-neutral registry at
   the landing beat (thin write; sole-writer).
 - new pure module (e.g. `src/conformance.rs` or under `slice`) — the algebra
@@ -261,7 +284,9 @@ staleness resolution (D4) consume it. No new glob dependency.
 
 - `/slice` — seed coarse `scope-relevant` selectors at cut.
 - `/design` — add `design-target` selectors (the load-bearing input).
-- `/execute` — call `slice record-delta` at phase land (solo arm).
+- `/execute` — **no new step.** Capture rides the `slice phase` transitions
+  `/execute` already issues (D5); the boundary is recorded automatically at
+  `in_progress`/`completed`. `record-delta` is only the manual fallback.
 - `/audit` — run `slice conformance`, read the algebra into the audit.
 
 ## Data flow — `slice conformance SL-147`
@@ -343,10 +368,12 @@ says *where to look*, never *whether it passes*.
 
 ## Open questions (remaining)
 
-- **OQ-conf-1** — `record-delta` ref ergonomics on the solo arm: what `--start`/
-  `--end` does `/execute` pass (phase-base vs `HEAD~n`)? Resolve in `/plan` /
-  `/phase-plan` against the actual solo landing sequence (this is scope-doc OQ-D's
-  residue).
+- **OQ-conf-1** — *Resolved by construction (D5 deterministic capture).* The solo
+  arm no longer passes `--start`/`--end` on the happy path: `code_start = HEAD` at
+  the `slice phase … in_progress` transition, `code_end = HEAD` at `… completed`.
+  The phase-base question dissolves — there is no ref to choose, only HEAD at two
+  well-defined lifecycle moments. (`record-delta`'s explicit `--start`/`--end`
+  survive for the manual-fallback path only.)
 - **OQ-conf-2** — does `record-delta` belong under `slice` or a neutral verb both
   arms share without the `slice` prefix? Lean `slice record-delta` for v0.1.
 - **OQ-conf-3** — *Resolved → (a), reusing `primary_worktree` (D5/R5/F-5).* The

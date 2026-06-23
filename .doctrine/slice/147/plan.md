@@ -39,11 +39,17 @@ The order follows the dependency spine, not the design's narrative order:
   reading the phase sheets where state lives, not in the conformance/command shell;
   P3 only invokes it. `net()` (F-3) and matched-selector transparency (F-7) are
   pure and unit-tested here.
-- **PHASE-04 (record-delta + dispatch write)** supplies real data to the registry
-  on both arms. It is separated from P2 (the engine writer) because it is the *CLI
-  surface + dispatch integration* — the one touch to a live dispatch path, kept
-  thin under sole-writer. The solo arm's explicit-recording contract (no automatic
-  beat) and ref ergonomics (OQ-conf-1) settle here.
+- **PHASE-04 (solo binding + dispatch write + record-delta fallback)** supplies
+  real data to the registry on all three writers. It is separated from P2 (the
+  engine writer) because it is the *wiring* layer — command handlers + dispatch
+  integration — over P2's writer+guard. The solo arm's capture is **deterministic**:
+  it rides the `slice phase` state transitions `/execute` already issues
+  (`in_progress`→code_start, `completed`→code_end+guard+upsert), so there is no
+  off-critical-path "remember to record" act — the earlier explicit-call contract
+  is superseded now that a real CLI hook is confirmed (D5). OQ-conf-1 dissolves: no
+  ref to choose, only HEAD at two lifecycle moments. `record-delta` survives as the
+  manual/bootstrap escape hatch. The dispatch beat remains the one touch to a live
+  dispatch path, thin under sole-writer.
 - **PHASE-05 (burn domain_map + re-point staleness)** is independent of P2 and P4,
   and of P3's *algebra* — but its glob→fileset re-point consumes the shared
   `glob_matches` leaf that P3 lifts (D6), so it lands **after that lift** (P5 EN-2);
@@ -53,34 +59,35 @@ The order follows the dependency spine, not the design's narrative order:
   the staleness *computation* is the invariant; only its input fixtures migrate
   (F-4 scopes the re-point to slice-backed RVs so non-slice RV targets fail clean,
   not silently).
-- **PHASE-06 (skills + dogfood)** wires the lifecycle and proves value. The dogfood
-  is deliberately concrete (F-8): SL-147's own boundaries are recorded *explicitly*
-  via `record-delta` from **live-captured per-phase HEAD oids** (the capture ritual
-  below), not auto-captured and not reconstructed from git log. If the ritual lapsed,
-  the fallback is a forward slice run end-to-end through the wired path (P6 EX-3) —
-  never reconstruction, which would be the POL-002 archaeology this slice exists to
-  kill.
+- **PHASE-06 (skills + dogfood)** wires the lifecycle and proves value. With the
+  deterministic binding (P4), SL-147's own **post-binding** phases (P4 onward)
+  auto-record as they complete — a genuine on-the-deterministic-path proof.
+  Pre-binding phases (P1..P3) carry no rows; either bootstrap them via `record-delta`
+  for a full self-diff, or let conformance report `incomplete` for them — itself a
+  live demonstration of the F-2 backstop. A separate forward slice (P6 EX-3) is the
+  fully-clean, zero-bootstrap proof.
 
 ## Notes
 
-- **Phase-land capture ritual (ALL phases, from PHASE-01).** The dogfood (P6 EX-2)
-  needs SL-147's own per-phase boundaries, but `record-delta` lands in P4 and the
-  `/execute` auto-capture in P6 — so the early phases have no automatic capture. To
-  keep the dogfood POL-002-clean (live-observed oids, never git-log reconstruction):
-  at **every** phase land, jot two oids into the phase sheet/notes —
-  `--start` = `git rev-parse HEAD` before the phase's first commit, `--end` = HEAD
-  after its last commit and **before any trunk merge**. Keep each phase's commits
-  **contiguous on edge** — the F-6 guard rejects merge/non-ancestor ranges but does
-  *not* exclude a foreign commit interleaved on edge, so contiguity is what keeps
-  `start..end` equal to the phase's real source-delta. Phase sheets are runtime
-  state but survive to P6 (in-loop lifetime, pre-close). Miss it on a phase → use the
-  P6 EX-3 forward-slice fallback, do not reconstruct.
+- **Going-forward capture is deterministic — no ritual.** Once the P4 binding
+  lands, every phase on every slice auto-records its boundary at the `slice phase`
+  transitions (solo) or the dispatch beat (dispatch). There is no "remember to do
+  X" on anyone's critical path. The *only* manual residue is a **one-time
+  bootstrap**: SL-147's own pre-binding phases (P1..P3) ran before the binding
+  existed, so they hold no rows. If a full SL-147 self-diff is wanted, `record-delta`
+  them — and capture each one's start/end HEAD oid *live* during execution (not from
+  git log; reconstruction = the (SL-NNN) archaeology POL-002 forbids), keeping each
+  phase's commits contiguous on edge so `start..end` is the real source-delta. This
+  is bounded to three phases of one slice, then gone — not an ongoing posture. If
+  skipped, conformance simply reports `incomplete` for P1..P3 (F-2 working), and the
+  forward-slice proof (P6 EX-3) covers the clean case.
 - **OQ-conf-2 (record-delta namespace)** — resolved: `slice record-delta` for v0.1
   (not a neutral cross-arm verb); revisit if a non-slice writer appears.
-- **OQ-conf-1 (solo ref ergonomics)** — resolved in PHASE-04 EX-3: `--start` =
-  pre-phase HEAD (captured at phase start), `--end` = post-phase HEAD (captured at
-  phase completion, before any trunk merge). PHASE-06 wires `/execute` to capture
-  and pass these.
+- **OQ-conf-1 (solo ref ergonomics)** — **resolved by construction** (D5): the solo
+  arm passes no `--start`/`--end` on the happy path. `code_start = HEAD` at the
+  `slice phase … in_progress` transition, `code_end = HEAD` at `… completed`. The
+  ref-choice question dissolves; `record-delta`'s explicit refs survive for the
+  manual fallback only.
 - **`primary_worktree` bare-repo edge** — out of scope for doctrine's working-tree
   operation; PHASE-02 EX-3 requires the call sites surface a clean named error
   rather than panic.
