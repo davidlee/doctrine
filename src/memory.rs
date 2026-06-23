@@ -2187,7 +2187,10 @@ fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String, 
 /// every shipped memory for a `memory_key` match (SL-018 / ISS-047).
 /// Skips unreadable or corrupt entries rather than aborting the scan — one
 /// bad memory.toml should not hide the rest of the shipped corpus.
-pub(crate) fn resolve_shipped_by_key(shipped_root: &Path, key: &str) -> Option<(Memory, String, PathBuf)> {
+pub(crate) fn resolve_shipped_by_key(
+    shipped_root: &Path,
+    key: &str,
+) -> Option<(Memory, String, PathBuf)> {
     let dirs = std::fs::read_dir(shipped_root).ok()?;
     for entry in dirs.flatten() {
         let path = entry.path();
@@ -2196,7 +2199,9 @@ pub(crate) fn resolve_shipped_by_key(shipped_root: &Path, key: &str) -> Option<(
         }
         let toml_path = path.join("memory.toml");
         let text = std::fs::read_to_string(toml_path).ok()?;
-        let Ok(memory) = Memory::parse(&text) else { continue };
+        let Ok(memory) = Memory::parse(&text) else {
+            continue;
+        };
         if memory.key.as_deref() == Some(key) {
             let body = std::fs::read_to_string(path.join("memory.md")).unwrap_or_default();
             return Some((memory, body, path));
@@ -5591,7 +5596,9 @@ to = "mem_018e000000000000000000000000000b"
         .unwrap();
         assert!(created);
 
-        let symlink = root.join(MEMORY_ITEMS_DIR).join("mem.signpost.project.orientation");
+        let symlink = root
+            .join(MEMORY_ITEMS_DIR)
+            .join("mem.signpost.project.orientation");
         assert!(symlink.is_symlink());
 
         let uid = symlink.read_link().unwrap();
@@ -5635,7 +5642,9 @@ to = "mem_018e000000000000000000000000000b"
         assert!(!second);
 
         // Original body preserved
-        let symlink = root.join(MEMORY_ITEMS_DIR).join("mem.signpost.project.orientation");
+        let symlink = root
+            .join(MEMORY_ITEMS_DIR)
+            .join("mem.signpost.project.orientation");
         let uid = symlink.read_link().unwrap();
         let body =
             std::fs::read_to_string(root.join(MEMORY_ITEMS_DIR).join(&uid).join("memory.md"))
@@ -6348,10 +6357,8 @@ to = "mem_018e000000000000000000000000000b"
         let root = dir.path();
         let shipped = root.join(MEMORY_SHIPPED_DIR);
         let uid = "mem_aabb0000000000000000000000000001";
-        let shipped_toml = titled_toml(uid, "Shipped Mem").replace(
-            "mem.pattern.cli.skinny",
-            "mem.signpost.test.shipped",
-        );
+        let shipped_toml = titled_toml(uid, "Shipped Mem")
+            .replace("mem.pattern.cli.skinny", "mem.signpost.test.shipped");
         write_memory_full(&shipped, uid, &shipped_toml, "shipped body");
 
         // Key resolves via shipped/ fallthrough
@@ -6370,13 +6377,7 @@ to = "mem_018e000000000000000000000000000b"
 
         // Uid resolves via shipped/ fallthrough too
         let mut buf2 = Vec::new();
-        run_show(
-            &mut buf2,
-            Some(root.to_path_buf()),
-            uid,
-            Format::Json,
-        )
-        .unwrap();
+        run_show(&mut buf2, Some(root.to_path_buf()), uid, Format::Json).unwrap();
         let out2: serde_json::Value = serde_json::from_slice(&buf2).unwrap();
         assert_eq!(out2["memory"]["title"], "Shipped Mem");
         assert_eq!(out2["body"], "shipped body");

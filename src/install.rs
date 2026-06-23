@@ -202,7 +202,11 @@ fn seed_authoring_memories(root: &Path, manifest: &Manifest) -> anyhow::Result<(
             &body,
             &item.summary,
         )? {
-            writeln!(stdout, "  seed memory  {} → memory/items/{}/", item.key, item.key)?;
+            writeln!(
+                stdout,
+                "  seed memory  {} → memory/items/{}/",
+                item.key, item.key
+            )?;
         } else {
             writeln!(stdout, "  skip seed    {} (exists)", item.key)?;
         }
