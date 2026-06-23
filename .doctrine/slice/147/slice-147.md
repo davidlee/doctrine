@@ -99,8 +99,12 @@ necessary, not sufficient — it says *where to look*, not *whether it passes*.
   SHA capture point.
 - `src/git.rs` — `git_text`/`git_bytes` (:521/:537); `name-status` invocation.
 - Solo `/execute` landing path — second SHA capture point.
+- `src/root.rs` — new primary-working-tree resolver (git-common-dir → primary
+  worktree) so the registry is shared across worktrees (design R5/a).
+- A new pure module for the set algebra; lift `worktree/allowlist::glob_matches`
+  to a shared leaf (design D6/D7).
 - Skills: `/audit` (new diff consumer), `/slice` + `/design` (authoring the
-  declared list). CLI surface for the new verb(s).
+  declared list), `/execute` (record-delta). CLI surface for the new verb(s).
 
 ## Verification / closure intent
 
@@ -115,20 +119,26 @@ necessary, not sufficient — it says *where to look*, not *whether it passes*.
 - Pure/imperative split honoured (set algebra pure; git/disk in the shell).
 - `just gate` green.
 
-## Open questions (for /design)
+## Open questions — resolved in design.md
 
-- **OQ-A Reviewer re-point vs deferral.** RFC roles say the reviewer re-points
-  `review status` at the declared list and the dead prose authoring is *deleted*;
-  the RFC's own deferred list names "review `domain_map` migration". Settle the
-  exact boundary: does v0.1 retire `domain_map` authoring entirely, retire only
-  its prose tier while keeping the path-set reader, or add the new list beside it
-  and re-point reads? (Leaning: retire prose, re-point the path-set reader.)
-- **OQ-B Declared-list storage home.** New tier on `SliceDoc` (slice-147.toml) vs
-  a sibling authored file. Honour the storage rule (structured in TOML).
-- **OQ-C New verb shape & home.** `doctrine audit delta <SL>`? `doctrine review
-  delta`? A standalone verb? No `audit` namespace exists yet.
-- **OQ-D SHA capture mechanism.** How the solo `/execute` path records its
-  source-delta SHA with the same fidelity the dispatch funnel gets for free.
+- **OQ-A** *Resolved.* **Burn `domain_map`** — remove the hand-authored input and
+  the prose tier; re-point `review status` staleness to resolve the declared
+  selector list (design D4). One path-set surface; the dead anchor goes.
+- **OQ-B** *Resolved.* `[[selector]]` table in `slice-NNN.toml` on `SliceDoc`
+  (design D2). Entry noun: **selector** (path|glob neutral).
+- **OQ-C** *Resolved.* `doctrine slice selector add|note|list|rm` (batch-first,
+  variadic) + `doctrine slice conformance <SL>` (the killer consumer) + `doctrine
+  slice record-delta` (the writer). Staleness stays `review status`, re-pointed.
+  Under the `slice` namespace — no `audit` namespace minted (design D3).
+- **OQ-D** *Resolved (A + degrade).* Arm-neutral recorded source-delta registry
+  reusing ledger's `BoundaryRow`, written by both the dispatch `integrate` beat
+  and a solo `/execute` `record-delta` call; absent → honest "audit manually"
+  degrade. Registry resolves against the **primary working tree** (new `root`
+  helper) so all worktrees share one file (design D5, R5 option a).
+
+Intent vocabulary settled minimal: `scope-relevant` vs `design-target`; git's
+A/M/D carries the actual-side change verb (design D1). MCP reader deferred to a
+mechanical fast-follow.
 
 ## Summary
 
