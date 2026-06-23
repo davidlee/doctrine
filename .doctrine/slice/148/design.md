@@ -98,29 +98,46 @@ leasing (IDE-021) and git-ref content storage out by governance.
 
 ### 5.2 Interfaces & Contracts
 
-**Claim seam (enriched — D1).** `&Path` → a descriptor carrying the ref identity:
+**Claim seam (enriched — D1; Fresh-numeric-only — D9).** `&Path` → a minimal
+descriptor. The seam now serves the **Fresh numbered path only** (D9 splits the
+named/memory path off it, below). Only `id` varies per retry, so it alone rides
+`claim()`; the per-kind/per-repo constants (`stem`, repo `root`, `remote`,
+`holder`) are **captured by the backend at construction** (`reserve::backend`),
+not threaded through the ctx — keeping `ClaimCtx` to the two values already live
+at the claim site (`entity.rs` `claim_fresh_id`):
 
 ```rust
 pub(crate) struct ClaimCtx<'a> {
-    pub dir: &'a Path,      // entity dir (LocalFs claims this)
-    pub root: &'a Path,     // repo root (GitRef runs git here)
-    pub stem: &'a str,      // KINDS stem — the reservation ref segment ("slice")
-    pub id: u32,            // the candidate id
+    pub dir: &'a Path,      // entity dir — LocalFs/GitRef mkdir this
+    pub id:  u32,           // candidate id — GitRef's ref segment; recomputed each retry
 }
 pub(crate) trait Claim {
     fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired>;
 }
 ```
 
-- `LocalFs::claim` = `create_dir(ctx.dir)` — behaviour-identical to today.
-- `GitRef::claim` = build `refs/doctrine/reservation/{stem}/{id:03}` → empty-tree
-  commit (`commit_tree`, **dangling** — no local `update-ref` before the push;
-  pushed **by oid** so a failed push never advances a local ref past the remote,
-  reinforcing I4; lazyspec prior-art pattern) →
+- `LocalFs::claim` = `create_dir(ctx.dir)` — behaviour-identical to today; ignores `id`.
+- `GitRef { root, stem, remote, holder }` (captured in `reserve::backend`).
+  `GitRef::claim` = build `refs/doctrine/reservation/{self.stem}/{ctx.id:03}` →
+  empty-tree commit (`commit_tree`, **dangling** — no local `update-ref` before the
+  push; pushed **by oid** so a failed push never advances a local ref past the
+  remote, reinforcing I4; lazyspec prior-art pattern) →
   `push_ref_cas(remote, ref, new, ZERO_OID)`. `Updated`
   ⇒ also `create_dir(ctx.dir)` (local mkdir; same-machine exclusion + keeps the
   loop's H2 cleanup valid) ⇒ `Won`. `Moved` ⇒ `AlreadyHeld`. A push/network error
   propagates (not swallowed as `AlreadyHeld`).
+
+**Named path off the seam (D9).** `materialise_named` (memory's only caller, ×2)
+no longer takes `&dyn Claim`; its directory claim is an inline
+`fs::create_dir(entity_dir)` → `Ok` / `AlreadyExists` ⇒ `bail!("… already exists")`,
+with the existing H2 won-dir cleanup retained verbatim. Memory's uid is a
+client-minted v7 UUID (minted-once-stored, never numbered, never reserved
+cross-clone — SPEC-008 D5), so it has no `id`/`stem` to give a `ClaimCtx` and
+never selects `GitRef`. The seam is therefore honestly Fresh-numeric-only;
+memory's *remote* future is a **separate storage seam** at this same
+`materialise_named` write body (see §6, OQ-6). This supersedes the SL-005 D7
+named+numeric claim-seam unification (`mem.system.engine.identity-claim-seam` §2 —
+update at /reconcile, R8).
 
 **New `git.rs` remote ops** (thin, shell-out, mirror existing helpers):
 
@@ -137,14 +154,27 @@ pub(crate) fn for_each_ref(root, pattern)      // (refname, oid, author, date, m
     -> Result<Vec<RefRow>, CaptureError>;
 ```
 
-**Backend selection blast radius (F-3).** Shared reach applies to *any* numbered
-kind (PRD-005), so **every Fresh-allocating materialise site** (slice / spec ×2 /
-adr / requirement / backlog ×5 / knowledge / concept_map) swaps its literal
-`&LocalFs` for a single resolved-backend helper `reserve::backend(root)?`.
-`InExisting` sub-entity sites (design, phases) take no claim and are untouched.
-This caller swap — not the seam signature — is the bulk of the change and drives
-phasing (seam + LocalFs parity first, then GitRef behind the helper, then the
-default flip).
+**Backend selection blast radius (F-3, corrected F-V1).** Shared reach applies to
+*any* numbered kind (PRD-005), so **every Fresh-allocating materialise site** swaps
+its literal `&LocalFs` for the resolved-backend helper `reserve::backend(root, stem)?`.
+Code-verification (F-V1) corrected the count to **11 production sites in two
+families** — the original enumeration omitted the entire `materialise_fresh_prebuilt`
+family:
+- via `entity::materialise(.., Fresh)` (7): `slice`, `spec`, `governance`/adr,
+  `requirement`, `backlog`, `knowledge`, `concept_map`.
+- via `entity::materialise_fresh_prebuilt` (4): **`review` (RV), `rec` ×2,
+  `revision` (REV)** — also `claim_fresh_id → .claim()`, also numbered, also in scope.
+
+`InExisting` sub-entity sites (design, phases) take no claim and are untouched. The
+**named** sites (memory ×2) are *not* "untouched" — they drop the `&LocalFs`
+argument entirely (D9). This caller swap — not the seam signature — is the bulk of
+the change and drives phasing (seam + LocalFs parity first, then GitRef behind the
+helper, then the default flip).
+
+`reserve` is a **new module** (engine tier — reaches `git`/`entity`/`dtoml`, no
+command module): it needs an ADR-001 `layering.toml` classification entry or
+`just gate`'s `MixedUmbrella` assertion goes red
+(`mem.pattern.lint.module-split-needs-layering-entry`) — a PHASE-01 exit criterion.
 
 **Reach config.** New section, parsed via the shared reader, consumed by a
 `reservation_config` module (never eagerly validated in `dtoml::parse` —
@@ -277,13 +307,26 @@ gives offline fork-safety at single-tree+trunk reach.
   `refs/doctrine/*`)? v1 relies on the first create-push's porcelain classification
   to hard-error with the remote reason; an up-front probe is a latency-vs-early-
   failure trade left open.
+- **OQ-6 (memory remote storage — out of scope, recorded so D9 isn't re-litigated)**
+  — memory wants a *remote storage/coordination* backend in future
+  (`scratch/memory-contract.local.md`: the external decision register / `the external backend`, an HTTP+JSON
+  append-only event log; idempotency is **server-side** via a deterministic
+  `event_id` + `409 duplicate_event`=success, not a reservation CAS). That is a
+  **separate seam** from this slice's reservation `Claim` — it slots into the
+  `materialise_named` *write body* (`fs::create_dir` + `write_fileset` → a memory
+  storage backend `FsMarkdown | the external decision registerHttp`), not into the numbered-id claim
+  loop. D9 (splitting the named path off `Claim`) **enables** this cleanly — it does
+  not foreclose it; forcing memory onto the reservation seam would misfit
+  HTTP-append-with-server-idempotency onto mkdir-or-`AlreadyHeld`. No v1 work.
 
 ## 7. Decisions, Rationale & Alternatives
 
 - **D1 — enrich the claim seam to `ClaimCtx`, keep one loop.** Smallest change
   that gives `GitRef` the ref identity while preserving `LocalFs` exactly.
   Rejected: derive-ref-from-`&Path` (fragile, fs-coupled); a second trait
-  (breaks the one-loop principle).
+  (breaks the one-loop principle). **(D9 refines):** `ClaimCtx` carries only
+  `{dir, id}` — `stem`/`root`/`remote`/`holder` are backend-captured at
+  construction (only `id` varies per retry), and the seam is Fresh-numeric-only.
 - **D2 — claim linearizes at the remote via `push --force-with-lease=<ref>:0`.**
   The only shape meeting PRD-005's single-linearization invariant for cross-clone
   reach. The explicit lease `<ref>:<zero-oid>` is compared by receive-pack against
@@ -318,6 +361,22 @@ gives offline fork-safety at single-tree+trunk reach.
   never silently assumed." Stricter than PRD-005's literal wording; a one-line PRD-005
   reconcile note records the tightening (R7). Rejected: PRD-literal
   degrade-on-any-unreachability (the B2 hole).
+- **D9 — split the named (memory) path off the `Claim` seam; the seam is
+  Fresh-numeric-only (supersedes SL-005 D7).** Code-verification (F-V2) found the
+  shared seam forces the named path to construct a `ClaimCtx` with no numeric
+  `id`/`stem`. SL-005 D7 deliberately *unified* named+numeric on one generic claim
+  seam (`mem.system.engine.identity-claim-seam` §2: "Reservation is one caller's
+  interpretation of the generic claim"). But SL-148's enrichment makes the ctx
+  numeric-shaped (`id` is a reservation concept), so the named caller no longer fits
+  a "generic" seam. Resolution: `materialise_named` drops `&dyn Claim` and inlines
+  its mkdir-or-bail; `Claim`/`ClaimCtx`/`reserve::backend` serve only numbered
+  allocation. Faithful to §4's "generalise only as far as the second backend
+  forces" — GitRef forces generality on the *numbered* path only. Loses zero test
+  capability (no mock-`Claim` is ever injected into the named path — only Fresh
+  uses `AlwaysHeld`). Memory's remote future is a distinct storage seam (OQ-6).
+  Rejected: sentinel `id:0`/`stem:""` (a numeric field on a non-numeric path);
+  `id: Option<u32>` (a `.expect()` that re-encodes the very invariant the type
+  can't prove). Requires a /reconcile update to the SL-005 memory (R8).
 
 ## 8. Risks & Mitigations
 
@@ -356,6 +415,18 @@ gives offline fork-safety at single-tree+trunk reach.
 - **R5 — jail prevents network e2e.** Mitigation: local-bare-repo substrate
   covers the mechanism; network e2e is a manual dev affordance (jail-relax
   follow-up), never a CI dependency.
+- **R8 — D9 supersedes a recorded SL-005 decision.** D9 reverses the SL-005 D7
+  named+numeric claim-seam unification documented in
+  `mem.system.engine.identity-claim-seam` §2. Mitigation: at /reconcile, update
+  that memory's §2 to record the seam is now Fresh-numeric-only and why (the
+  enrichment made the ctx numeric-shaped); note memory's directory claim is now an
+  inline mkdir, not a `Claim` backend. Tracked for /reconcile, not a blocker.
+- **R9 — new `reserve` module needs an ADR-001 layering entry.** A new `src` unit
+  under the layering gate requires a `layering.toml` classification or `just gate`'s
+  `MixedUmbrella` assertion goes red (recurring design omission,
+  `mem.pattern.lint.module-split-needs-layering-entry`). Mitigation: PHASE-01 exit
+  criterion; `reserve` is engine tier (reaches `git`/`entity`/`dtoml`, no command
+  module). Regenerate authoritatively, don't hand-guess.
 
 ## 9. Quality Engineering & Validation
 
@@ -404,6 +475,34 @@ extending existing git test fixtures — no network, jail-safe (R5).
 **Deferred to plan-level detail:** exact `--force-with-lease` create flag form
 (`:<zero>` vs `:`) confirmed against the local-bare-repo substrate (OQ-3);
 empty-tree oid via the well-known constant or `mktree`.
+
+**Code-verification pass (source-read, pre-plan-lock) — disposition:**
+- **F-V1 → §5.2/blast radius.** Original ~10-by-kind enumeration omitted the
+  `materialise_fresh_prebuilt` family — true count is **11 production Fresh sites**
+  (+`review`, `rec`×2, `revision`). Corrected.
+- **F-V2 → D9.** Shared seam forces the named path to fabricate `id`/`stem`. Split
+  the named path off `Claim` (supersedes SL-005 D7). See D9, R8.
+- **F-V3 → D1/§5.2.** `ClaimCtx.root` (and `stem`) are redundant — backend-captured
+  at construction; ctx reduced to `{dir, id}`. Folded.
+- **F-V4 → PHASE-03 detail.** `commit_tree` routes through `run_git` with **empty
+  env**; the `GIT_AUTHOR_*`/`GIT_COMMITTER_*` (F-2) commit needs a small env-aware
+  helper over the existing private `run_git_env` seam (`git.rs`). Empty-tree oid has
+  no existing constant (only unrelated `ZERO_OID`) → net-new (`4b825dc…` or
+  `mktree`). Confirms OQ-3 scope; no design change.
+- **F-V5 → §5.3.** No `$DOCTRINE_AGENT_ID` resolution exists in `src` today — holder
+  resolution is fully net-new (as F-2 already implies). Confirmed, no change.
+- **F-V6 → §5.3/plan.** The per-retry scan closure is built *inside* `materialise`
+  (hardcoded `scan_ids`); GitRef's re-fetch means the scan **source** must be
+  injected from `reserve::backend` through `materialise`/`materialise_fresh_prebuilt`
+  into `claim_fresh_id`'s `scan` param — so `ReservedIds` must be a *re-fetching
+  closure*, not a static `Vec` (a snapshot would miss a rival's post-`AlreadyHeld`
+  ref). Behaviour already in §5.3 F-6; the signature-change wiring is a /plan +
+  phase-plan concern.
+- **Confirmed sound (no change):** `next_id(local,trunk)` signature + re-invoked
+  `scan` closure (F-6); `RefCas::{Updated,Moved}` → `Won`/`AlreadyHeld` (Q4);
+  `run_git`→raw `Output` gives separable stdout/stderr/exit-code for `--porcelain`
+  (R2 viable, Q5); config lazy-projection idiom + `install::prompt_confirm`/`tty`
+  reuse for the D8 prompt (Q7).
 
 **External adversarial pass (codex / GPT-5.5) — disposition (R1/R2/E5 closed):**
 - **F-7 (codex B1) → OQ-3/D2** — zero-oid `--force-with-lease=ref:0` is *not* an
