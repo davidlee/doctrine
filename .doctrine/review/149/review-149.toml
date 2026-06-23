@@ -1,0 +1,52 @@
+id    = 149
+slug  = "audit-config-coefficient-cli-implementation"
+title = "Audit: config coefficient CLI implementation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-146"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "`config set --tag` and `config unset --tag` require superfluous KEY positional arg"
+detail = "The slice scope specifies `doctrine config set --tag <TAG> <f64>` as a shortcut where only TAG and VALUE are provided — the key is auto-derived as `tag_coefficients.<TAG>`. The current implementation requires three positional args: `--tag <TAG> <KEY> <VALUE>`, making the shortcut non-functional. Same issue for `config unset --tag` and `config get --tag`. The KEY positional should be optional when `--tag` is provided."
+disposition = "fix-now"
+response = 'Confirmed. The --tag shortcut is non-functional because KEY is required_unless_present="tag" was not set. Fix: add `#[arg(required_unless_present = "tag")]` to KEY in ConfigSetArgs and ConfigUnsetArgs, and `#[arg(required_unless_present = "tag")]` to KEY in ConfigGetArgs. When tag is set, derive key from tag.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = 'NaN set shows misleading "already set" message instead of clamp note'
+detail = """When `config set` is called with NaN value (e.g., `-- nan`), the value is clamped to the field default. The no-op guard compares this clamped value against the existing stored value — if they match, it prints "already set to N". This is misleading because the user's input was NaN, not the field default. The clamping annotation should still be shown even for no-ops: "Set key = N (clamped from NaN to default N)"."""
+disposition = "fix-now"
+response = "Agreed. The no-op guard fires before the clamping annotation is shown. Fix: detect clamping FIRST, then check no-op. If clamping occurred, always show the annotation even when the resulting value is unchanged."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "`config show` output: no-annotation rows lose default/clamped signal when values match defaults but authored in TOML"
+detail = 'When a value is explicitly authored in doctrine.toml but equals the field default (e.g., `dep_coeff = 0.5` which matches the default), show displays the value with no annotation. This makes it indistinguishable from the case where the key is absent (shown with `# default`). An explicit `# as-authored` or similar annotation would help operators distinguish "I wrote this" from "the system defaulted this". The design mentions "raw TOML + clamped effective" dual display — currently only the effective value is shown.'
+disposition = "aligned"
+response = 'This is a reasonable UX enhancement but was not in the slice scope. The current behavior correctly shows effective values. An "as-authored" annotation can be added in a follow-up slice. No code change needed for this slice.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "`config show`: unused `--path` flag in ConfigShowArgs"
+detail = "ConfigShowArgs has a `#[arg(long)] pub(crate) path: Option<String>` field that is never used by `run_config_show`. The scope does not mention a `--path` flag for show. This is dead code that may confuse users. Either implement the flag (as a key-path filter) or remove it until a later phase."
+disposition = "fix-now"
+response = "Agreed. The `path: Option<String>` field in ConfigShowArgs is never read. Remove it and add `#[expect(dead_code, reason = ...)]` if needed for a future phase, or defer adding it to the phase that implements it."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
