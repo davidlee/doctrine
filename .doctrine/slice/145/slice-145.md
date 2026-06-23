@@ -38,6 +38,12 @@ In scope:
   `IllegalForSource` goldens that currently assert a backlog item is refused.
 - Verify the per-kind legality `read_block` (X2) and `validate_link` surface the widened
   legality (a backlog item authoring `governed_by`/`related` now *resolves*).
+- **CLI end-to-end** — the widened sets must work through the actual verb surface, not
+  just the rule table: `doctrine link <BACKLOG-id> governed_by|related <target>` authors
+  → validates → persists a `[[relation]]` row in the backlog item's TOML → reads back on
+  `backlog show` / `inspect` (outbound) → renders the derived inbound reciprocal on the
+  target's `inspect`. `unlink` round-trips. Confirm no backlog-authoring path (e.g.
+  `backlog new`/`relate`, if any) bypasses or duplicates the generic `link` seam.
 
 Objective: a backlog item can structurally express "governed by this ADR" and "related
 to that entity" through `doctrine link`, with the validator accepting it and `inspect`
@@ -85,9 +91,10 @@ rendering the derived inbound reciprocal.
 ## Verification / Closure Intent
 
 - A backlog item (e.g. `CHR-NNN`) `governed_by` an ADR and `related` to any numbered
-  entity both **resolve** through `doctrine link` (no `IllegalForSource`).
-- `doctrine inspect` on both source and target renders the outbound + derived inbound
-  edge.
+  entity both **resolve** through `doctrine link` (no `IllegalForSource`), persist to the
+  source TOML, and survive an `unlink` round-trip.
+- `doctrine inspect` / `backlog show` on both source and target render the outbound +
+  derived inbound edge — the full author→persist→read loop, exercised through the CLI.
 - The vocabulary lockstep tests (VT-1 enum order, VT-2 `sources_match_shipped_accessors`)
   pass against the widened sets; the former refusal goldens are updated to assert
   acceptance.
