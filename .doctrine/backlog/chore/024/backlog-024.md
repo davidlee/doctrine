@@ -513,3 +513,32 @@ Related backlog items:
 - IMP-150/151/152: MCP review tool documentation
 - IMP-105: Extend lazyspec projection to new entity kinds
 - IMP-134: Extend tagging to all appropriate entity types
+
+## Progress
+
+**Deliverable (§8.1) drafted + reviewed: RFC-003** (`open` — asserts no canon;
+ratification is a later ADR/Revision + slices). Prep subtasks 1–3 DONE
+(`state/chr-024/{artifact-index,code-map,research-synthesis}.md`); design
+conversation locked the spine (`design-position.md`, 13 §); P1 evidence classified
+113 edges (`p1-classification.md`).
+
+The seven findings collapsed to four axes: **A** backlog second-class (easy win,
+slice now), **B** overloaded edge intent (the RFC's core: `references` + closed role
+grammar, `(source,label,role)→TargetSpec`), **C** coverage (not vocabulary →
+validate/close/SPEC-002), **D** decomposition (`part_of` + altitude, sibling spec).
+RFC-003 proposes slices A/B/C/D.
+
+Review (2026-06-23): two-pass on RFC-003.
+- Pass 1 (fidelity vs locked spine) — folded 5 dropped LOCKED rulings (`1c8cc6da`).
+- Pass 2 (GPT-5.5 adversarial, codex mcp) — verified every contested claim against
+  `relation.rs` + live census; corrected a label-vs-role error (`62c84a1e`); folded
+  6 defects (`129f0ff7`): stale counts pinned to snapshot, drift per-edge
+  disposition, `unspecified`/seam costs, inbound `(label,role)` keying, slices
+  closure caveat, ADR dropped from `implements` (stays `governed_by`).
+
+**Open questions filed in RFC-003 Outcome** (not resolved here): ADR-implements
+(ADR→REQ projection path), role-derived vs label-flat inbound, non-entity-target
+edge (IMP-012/IDE-015), altitude lattice (D), prose-hunt pass.
+
+**Next:** ratification decision (ADR/Revision) → spawn slices A–D. Chore stays
+`open` until the design is ratified and the implementing slices are scoped.
