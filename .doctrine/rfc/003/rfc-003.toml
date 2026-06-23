@@ -1,0 +1,64 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 3
+slug = "relation-structure-vs-role-intent"
+title = "Relation model: durable structural shape vs contextual role-intent"
+status = "open"
+created = "2026-06-23"
+updated = "2026-06-23"
+tags = ["design", "model", "relations", "vocabulary"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "CHR-024"
+
+[[relation]]
+label = "related"
+target = "SPEC-018"
+
+[[relation]]
+label = "related"
+target = "ADR-004"
+
+[[relation]]
+label = "related"
+target = "ADR-010"
+
+[[relation]]
+label = "related"
+target = "IMP-047"
+
+[[relation]]
+label = "related"
+target = "ISS-041"
+
+[[relation]]
+label = "related"
+target = "IMP-149"
+
+[[relation]]
+label = "related"
+target = "IMP-141"
+
+[[relation]]
+label = "related"
+target = "IMP-138"
+
+[[relation]]
+label = "related"
+target = "IMP-053"
+
+[[relation]]
+label = "related"
+target = "IDE-015"
+
+[[relation]]
+label = "related"
+target = "IMP-012"
+
