@@ -22,10 +22,6 @@ pub(crate) struct ConfigShowArgs {
     /// Output as JSON
     #[arg(long)]
     pub(crate) json: bool,
-
-    /// Key path to show (e.g. "coefficients.value")
-    #[arg(long)]
-    pub(crate) path: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -35,6 +31,7 @@ pub(crate) struct ConfigSetArgs {
     pub(crate) priority: bool,
 
     /// Coefficient key (e.g. "coefficients.value" or "`kind_weights.SL`")
+    #[arg(required_unless_present = "tag")]
     pub(crate) key: String,
 
     /// New f64 value
@@ -52,6 +49,7 @@ pub(crate) struct ConfigGetArgs {
     pub(crate) priority: bool,
 
     /// Coefficient key
+    #[arg(required_unless_present = "tag")]
     pub(crate) key: String,
 
     /// Target a specific tag in `tag_coefficients`
@@ -74,6 +72,7 @@ pub(crate) struct ConfigUnsetArgs {
     pub(crate) priority: bool,
 
     /// Coefficient key to remove
+    #[arg(required_unless_present = "tag")]
     pub(crate) key: String,
 
     /// Target a specific tag in `tag_coefficients`
@@ -306,14 +305,26 @@ pub(crate) fn run_config_set(root: &Path, args: &ConfigSetArgs) -> Result<()> {
         .and_then(toml_edit::Item::as_table_mut)
         .ok_or_else(|| anyhow::anyhow!("[priority] exists but is not a table"))?;
 
+    // Build clamping annotation before the no-op check.
+    let mut clamp_note = String::new();
+    if !args.value.is_finite() {
+        write!(
+            clamp_note,
+            " (clamped from non-finite to default {clamped})"
+        )?;
+    } else if (args.value - clamped).abs() > f64::EPSILON {
+        write!(clamp_note, " (clamped from {})", args.value)?;
+    }
+
     // Navigate/Create sub-tables
     let mut current_table = priority;
     for (i, component) in path.components.iter().enumerate() {
         if i == path.components.len() - 1 {
-            // Check if already set to the same value
-            if let Some(existing) = current_table
-                .get(component)
-                .and_then(toml_edit::Item::as_value)
+            // No-op guard: if existing == clamped and no clamping occurred, skip.
+            if clamp_note.is_empty()
+                && let Some(existing) = current_table
+                    .get(component)
+                    .and_then(toml_edit::Item::as_value)
                 && let Some(existing_f) = existing.as_float()
                 && (existing_f - clamped).abs() < f64::EPSILON
             {
@@ -341,11 +352,7 @@ pub(crate) fn run_config_set(root: &Path, args: &ConfigSetArgs) -> Result<()> {
     fsutil::write_atomic(&config_path, doc.to_string().as_bytes())?;
 
     let mut msg = format!("Set {key} = {clamped}");
-    if (args.value - clamped).abs() > f64::EPSILON {
-        write!(msg, " (clamped from {})", args.value)?;
-    } else if !args.value.is_finite() {
-        write!(msg, " (clamped from non-finite to default {clamped})")?;
-    }
+    msg.push_str(&clamp_note);
     writeln!(std::io::stdout().lock(), "{msg}")?;
 
     Ok(())
@@ -436,7 +443,11 @@ pub(crate) fn run_config_unset(root: &Path, args: &ConfigUnsetArgs) -> Result<()
     }
 
     // Re-navigating from root to be safe and avoid unsafe
-    if let Some(p) = doc.as_table_mut().get_mut("priority").and_then(toml_edit::Item::as_table_mut) {
+    if let Some(p) = doc
+        .as_table_mut()
+        .get_mut("priority")
+        .and_then(toml_edit::Item::as_table_mut)
+    {
         let mut current = p;
         for (i, component) in path.components.iter().enumerate() {
             if i == path.components.len() - 1 {
@@ -444,7 +455,10 @@ pub(crate) fn run_config_unset(root: &Path, args: &ConfigUnsetArgs) -> Result<()
                     writeln!(std::io::stdout().lock(), "{key} is not set")?;
                     return Ok(());
                 }
-            } else if let Some(next) = current.get_mut(component).and_then(toml_edit::Item::as_table_mut) {
+            } else if let Some(next) = current
+                .get_mut(component)
+                .and_then(toml_edit::Item::as_table_mut)
+            {
                 current = next;
             } else {
                 writeln!(std::io::stdout().lock(), "{key} is not set")?;
@@ -455,16 +469,21 @@ pub(crate) fn run_config_unset(root: &Path, args: &ConfigUnsetArgs) -> Result<()
 
     // Optional: cleanup empty tables
     // We'll do a simple one-level cleanup for now: if the immediate sub-table is empty, remove it from [priority]
-    if let Some(p) = doc.as_table_mut().get_mut("priority").and_then(toml_edit::Item::as_table_mut) {
+    if let Some(p) = doc
+        .as_table_mut()
+        .get_mut("priority")
+        .and_then(toml_edit::Item::as_table_mut)
+    {
         if let [sub_table_name, _leaf] = path.components.as_slice() {
-            let is_empty = p.get(sub_table_name)
+            let is_empty = p
+                .get(sub_table_name)
                 .and_then(toml_edit::Item::as_table)
                 .is_some_and(toml_edit::Table::is_empty);
             if is_empty {
                 p.remove(sub_table_name);
             }
         }
-        
+
         // If [priority] itself is now empty, remove it from doc
         if p.is_empty() {
             doc.as_table_mut().remove("priority");
@@ -606,7 +625,7 @@ mod tests {
             tag: None,
         };
         run_config_set(root, &set_args).unwrap();
-        
+
         let set_args2 = ConfigSetArgs {
             priority: true,
             key: "kind_weights.SL".to_string(),
@@ -636,7 +655,7 @@ mod tests {
             tag: None,
         };
         run_config_unset(root, &unset_args2).unwrap();
-        
+
         let content2 = fs::read_to_string(root.join("doctrine.toml")).unwrap();
         assert!(content2.trim().is_empty() || !content2.contains("[priority]"));
 
