@@ -38,3 +38,7 @@ target = "ADR-004"
 label = "related"
 target = "ADR-010"
 
+[[relation]]
+label = "related"
+target = "IMP-042"
+
