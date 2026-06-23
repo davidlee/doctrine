@@ -1,6 +1,3 @@
-<!-- Canonical doctrine digest — embedded, read by `doctrine boot`. Edit the
-     source in `install/routing-process.md`; the installed copy is inert. -->
-
 **Route before you act.** At the start of ANY substantive work, choose the
 governing skill *before* inspecting files, running commands, or writing code.
 When unsure, route to the stricter skill. No code without an approved plan.
