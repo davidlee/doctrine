@@ -1,9 +1,9 @@
 id = 14
 slug = "codex-boot-hook"
 title = "codex SessionStart-emit boot wiring"
-status = "reconcile"
+status = "done"
 created = "2026-06-05"
-updated = "2026-06-21"
+updated = "2026-06-23"
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
