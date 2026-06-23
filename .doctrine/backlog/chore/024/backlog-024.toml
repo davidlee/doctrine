@@ -1,0 +1,25 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 24
+slug = "entity-relationship-design-review-spec-coverage-gap-analysis-and-redesign-rfc"
+title = "Entity relationship design review: spec coverage, gap analysis, and redesign RFC"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-23"
+updated = "2026-06-23"
+tags = ["area:audit", "area:cli", "area:design", "area:memory", "area:model", "area:relations", "area:skills", "area:spec"]
+
+# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
+# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = [{ to = "ISS-041", rank = 0 }, { to = "IMP-141", rank = 0 }, { to = "IMP-149", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[after]
+# ordered after the existing relation-surface backlog items that this review
+# subsumes or touches (sequencing, not hard deps)

@@ -44,3 +44,13 @@ Evidence: `cargo clippy` zero warnings, 2235+ tests green, code review against
 design.md D1–D8.
 
 Ready for reconcile → close.
+
+## Close (2026-06-23)
+
+Reconcile pass: no-op (empty brief — RV-128 F-1 tolerated). Outcome recorded
+on RV-128. Slice transitioned to done.
+
+Integration: `dispatch sync --integrate` advanced `refs/heads/main` to
+`37eb7933` (close-003 candidate). Tree verified (ISS-030 (b) pass).
+
+No originating backlog item to close.
