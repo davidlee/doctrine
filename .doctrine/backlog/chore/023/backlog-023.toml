@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 21
-slug = "audit-and-improve-shipped-memory-corpus-currency-completeness-onboarding-cross-linking"
-title = "Audit and improve shipped memory corpus (currency, completeness, onboarding, cross-linking)"
+id = 23
+slug = "adr-005-full-compliance"
+title = "ADR-005 full compliance: reference-doc IA, user hooks, restate-line audit"
 kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-06-22"
-updated = "2026-06-22"
-tags = ["memory", "shipped-memory", "audit", "onboarding", "documentation"]
+created = "2026-06-23"
+updated = "2026-06-23"
+tags = ["governance", "docs", "adr-005", "templates", "hooks", "skills"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
@@ -20,17 +20,6 @@ needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
-[value]
-value = 2.4
-
 [[relation]]
 label = "drift"
-target = "mem.pattern.distribution.shipped-memory-authoring: the authoring flow for shipped memories"
-
-[[relation]]
-label = "drift"
-target = "IMP-148: MCP tool help gaps — the response-field section feeds into this audit"
-
-[[relation]]
-label = "slices"
-target = "SL-143"
+target = "SL-143: carved out from shipped-memory corpus overhaul"
