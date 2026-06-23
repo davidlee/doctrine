@@ -1,0 +1,130 @@
+# Implementation plan for SL-148 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-148"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Claim seam enrichment + call-site swap (behaviour gate)"
+objective = "Enrich the Claim seam from &Path to ClaimCtx (D1) and route every Fresh-allocating materialise site through a single reserve::backend(root) helper that returns LocalFs, with zero observable behaviour change. This is the PHASE-01 boundary: the bulk of the change (F-3) lands here with LocalFs behaviour-identical and the full existing suite green before any remote code exists."
+entrance_criteria = [
+  { id = "EN-1", text = "Design is locked (status >= plan); the Claim seam and the ~10 Fresh call-sites are enumerated (slice/spec x2/adr/requirement/backlog x5/knowledge/concept_map)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Claim::claim takes &ClaimCtx<'_> (dir/root/stem/id) in place of &Path; LocalFs::claim = create_dir(ctx.dir), ignoring root/stem/id." },
+  { id = "EX-2", text = "Every Fresh-allocating materialise site resolves its backend via reserve::backend(root)? returning Box<dyn Claim> (LocalFs in v1); InExisting sub-entity sites (design, phases) take no claim and are untouched." },
+  { id = "EX-3", text = "The reserve module is the home of the backend helper; no [reservation] config is read yet (the helper hardcodes LocalFs)." },
+  { id = "EX-4", text = "Full existing entity-engine suite passes unchanged; cargo clippy zero warnings; just gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "The full pre-existing suite passes byte-identical to pre-slice HEAD (behaviour-preservation gate, I3)." },
+  { id = "VT-2", expects = "ClaimCtx unit: LocalFs::claim creates ctx.dir and is indifferent to root/stem/id; Won/AlreadyHeld outcomes match the prior &Path contract." },
+  { id = "VA-1", expects = "Agent diff-review confirms no create-command stdout/CLI output changed (LocalFs parity) and InExisting sites carry no claim." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "git.rs remote ops + porcelain classification + bare-remote substrate"
+objective = "Add the three remote git ops (fetch_refspec, push_ref_cas, for_each_ref) to git.rs behind a mockable seam, with machine-stable CAS-vs-transport classification via git push --porcelain (R2/F-9/F-10), and build the bare-remote test substrate. Pure plumbing + units; no allocator wiring."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged; behaviour gate green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "push_ref_cas shells `git push --porcelain --force-with-lease=<ref>:<expected_old> <remote> <new_oid>:<ref>` (push by oid), returning RefCas::{Updated|Moved}; ONLY the explicit lease/create-CAS rejection maps to Moved." },
+  { id = "EX-2", text = "Transport/auth/hook/namespace-policy failures (e.g. a host forbidding refs/doctrine/*) return a hard CaptureError surfacing the remote reason — never Moved/AlreadyHeld, never a silent retry (R2/F-10)." },
+  { id = "EX-3", text = "fetch_refspec (explicit per-command refspec, no .git/config mutation, D4) and for_each_ref (refname, oid, author, date, msg) implemented; the remote-op seam is mockable (FIFO mock, lazyspec MockGitRefClient pattern)." },
+  { id = "EX-4", text = "bare-remote test helper (git init --bare temp + two clones) exists in the git test fixtures; jail-safe, no network (R5)." },
+]
+verification = [
+  { id = "VT-1", expects = "push_ref_cas classification: a CAS-rejection (ref exists) maps to Moved; an injected transport/auth/hook/policy failure returns a hard error, asserted to never read as Moved (R2)." },
+  { id = "VT-2", expects = "Against the bare-remote: a zero-oid create lands on an absent ref (Updated); a second create on the now-existing ref maps to Moved — confirms the --force-with-lease=<ref>:<zero> create-CAS form on the substrate (OQ-3)." },
+  { id = "VT-3", expects = "for_each_ref over a populated reservation namespace returns parsed RefRow tuples; fetch_refspec round-trips refs into the local namespace." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "GitRef backend + [reservation] config + resolve_backend (reach selection)"
+objective = "Implement the GitRef Claim backend (dangling empty-tree commit, push-by-oid ZERO_OID CAS), the [reservation] config + reservation_config module, and resolve_backend as the sole backend selector / reachability probe / degradation decider (reach local|shared|auto with the D8 fail-closed contract). Wire GitRef's re-fetching scan() into claim_fresh_id and prove cross-clone collision-freedom. Ships default reach=local."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 merged; remote ops + classification proven; bare-remote substrate available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "GitRef::claim builds a DANGLING empty-tree commit with GIT_AUTHOR_*/GIT_COMMITTER_* set explicitly from the resolved holder ($DOCTRINE_AGENT_ID else git committer, F-2), message = canonical ref; push by oid under ZERO_OID CAS; Updated -> create_dir -> Won, Moved -> AlreadyHeld, transport error -> propagate (E1 split-state -> hard error + reseat hint, no remote rollback, R3)." },
+  { id = "EX-2", text = "[reservation] reach/remote/allow_local_fallback parsed via the shared dtoml reader inside reservation_config — never eagerly validated in dtoml::parse." },
+  { id = "EX-3", text = "resolve_backend is the SOLE LocalFs-vs-GitRef selector: it performs the reachability fetch and decides degradation per D8 — auto+no-remote -> LocalFs + one-time stderr signal; auto+configured-remote-failure -> hard error by default, with operator opt-in to local fallback via interactive y/N prompt (TTY) or DOCTRINE_RESERVATION_FALLBACK=1 (config allow_local_fallback); shared+failure -> hard error, no fallback. It returns (Box<dyn Claim>, ReservedIds), widening the PHASE-01 helper signature and re-touching the Fresh call-sites to seed the scan — the accepted second mechanical pass over the ~10 sites." },
+  { id = "EX-4", text = "GitRef scan() re-fetches +refs/doctrine/reservation/*:refs/doctrine/reservation/* each retry and returns local_dirs union remote_reservation_ids; next_id signature unchanged (the remote union rides the local argument, F-6)." },
+  { id = "EX-5", text = "Default ships reach=local; a repo with no [reservation] and no remote behaves bit-for-bit as today (POL-002 back-compat). Degradation signal is stderr-only (behaviour gate)." },
+]
+verification = [
+  { id = "VT-1", expects = "Collision-freedom under contention: two clones of the bare-remote compute the same candidate; exactly one push lands; the loser re-fetches, recomputes, and lands the next id — no duplicate holder (I1, REQ-020/REQ-021)." },
+  { id = "VT-2", expects = "Reach selection: local never touches the remote; shared uses it and hard-fails when absent; auto uses it when reachable; an explicit reach choice overrides (REQ-021)." },
+  { id = "VT-3", expects = "D8: auto + a configured-remote failure hard-errors by default; DOCTRINE_RESERVATION_FALLBACK=1 opts into LocalFs + a single stderr signal; the failure is never silently downgraded." },
+  { id = "VT-4", expects = "Content-free claim: the reservation commit's tree is the empty tree (no blobs); the entity's working-tree record carries no coordination bytes (REQ-024, I2)." },
+  { id = "VT-5", expects = "Retry-exhaustion (128) bails with an error whose text contains the `doctrine reseat <canonical>` remediation (D6); E1 split-state likewise hard-errors with the hint." },
+  { id = "VT-6", expects = "Back-compat: a no-[reservation] repo with no remote produces byte-identical stdout/behaviour to pre-slice HEAD (POL-002); the full prior suite stays green." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Survey verb — doctrine reservation list"
+objective = "Add the held-claims survey (REQ-022): doctrine reservation list [--kind <stem>] [--remote <name>] fetches refs/doctrine/reservation/* and renders a holder/acquired table. A read path sibling to the claim write path."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 merged; reservation refs can be created and fetched." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine reservation list` fetches refs/doctrine/reservation/* -> for_each_ref -> table {canonical, holder, acquired}." },
+  { id = "EX-2", text = "--kind narrows by KINDS stem; --remote overrides remote selection; unparseable ref names under the namespace are ignored, not fatal (E3)." },
+  { id = "EX-3", text = "Help/output documents `acquired` as best-effort client-declared metadata, not a server-attested clock (F-12)." },
+]
+verification = [
+  { id = "VT-1", expects = "Survey over a populated bare-remote reports holder + acquired per held id and filters correctly by --kind (REQ-022)." },
+  { id = "VT-2", expects = "A malformed/out-of-band ref under the namespace is skipped without aborting the listing (E3)." },
+  { id = "VA-1", expects = "Agent confirms the output/help states `acquired` is client-declared best-effort (F-12)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Default-flip reach local->auto (isolated, gated, reversible)"
+objective = "Flip the shipped default reach from local to auto (D5) as its own isolated, reversible, behaviour-gate-sensitive phase. The auto mechanism already landed in PHASE-03 behind a non-default value; this phase changes only the default and sweeps the stdout-asserting suites (R4)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 and PHASE-04 merged; all suites green; auto's D8 contract proven." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "With no [reservation] section, reach defaults to auto; an explicit reach=local still pins single-tree." },
+  { id = "EX-2", text = "The degradation signal stays stderr-only and one-time-per-process; create-command stdout is byte-identical to before the flip." },
+  { id = "EX-3", text = "The flip is a localised, easily-reverted change (a single default value), kept last in the sequence." },
+]
+verification = [
+  { id = "VT-1", expects = "No-remote auto resolves to LocalFs with byte-identical stdout and exactly one stderr signal per process (ADR-006 D3, R4)." },
+  { id = "VT-2", expects = "Full suite green after the flip — no stdout-asserting test regresses (R4)." },
+  { id = "VH-1", expects = "Human accepts shipping auto-by-default (cross-team reach on by default, reversible) before close." },
+]
+specs        = []
+requirements = []
