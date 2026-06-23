@@ -1,0 +1,163 @@
+# Implementation plan for SL-146 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-146"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Foundations: priority/config refactor + config module skeleton"
+objective = """
+Extract shared parse helpers from src/priority/config.rs (read_priority_table,
+load_from_table, promote clamp_general/clamp_dep to pub(crate)), refactor load()
+to delegate, create src/commands/config.rs with arg structs, parse_config_path,
+and empty handler stubs, and register Command::Config in cli.rs + mod.rs.
+
+This phase delivers the infrastructure all subcommands (show, set, get, unset)
+depend on — no subcommand logic ships yet.
+"""
+entrance_criteria = [
+  { id = "EN-01", text = "Design locked (RV-147 done); plan authored and approved." },
+  { id = "EN-02", text = "Existing priority/config.rs tests pass (no regressions)." },
+]
+exit_criteria = [
+  { id = "EX-01", text = "read_priority_table() extracted and tested: returns Ok(None) on FileNotFound, Ok(Some(table)) when [priority] present, errors on malformed TOML." },
+  { id = "EX-02", text = "load_from_table() extracted: deserialises raw table → clamped PriorityConfig, tolerant on deserialisation failure (→ defaults)." },
+  { id = "EX-03", text = "load(root) refactored to compose read_priority_table → load_from_table; signature unchanged; existing tests pass with zero changes." },
+  { id = "EX-04", text = "clamp_general and clamp_dep visibility promoted to pub(crate)." },
+  { id = "EX-05", text = "src/commands/config.rs exists with ConfigAction enum, ConfigShowArgs/ConfigSetArgs/ConfigGetArgs/ConfigUnsetArgs structs, parse_config_path() implementation handling all ConfigPath variants and rejection branches (unknown subsection, 1-segment path)." },
+  { id = "EX-06", text = "Command::Config registered in cli.rs with dispatch match arms calling stub handlers (compile-but-noop). mod.rs declares pub(crate) mod config;." },
+  { id = "EX-07", text = "parse_config_path unit tests pass: all variants accepted, all rejection branches exercised." },
+  { id = "EX-08", text = "cargo clippy --workspace zero warnings on changed files." },
+]
+verification = [
+  { id = "VT-01", expects = "cargo test — existing priority/config tests pass unchanged." },
+  { id = "VT-02", expects = "New read_priority_table unit tests: missing file → Ok(None), [priority] present → Ok(Some), malformed TOML → Err." },
+  { id = "VT-03", expects = "New parse_config_path unit tests: coefficients.value → CoefficientsCoeff { field: \"value\" }, coefficients.nonesuch → ConfigPath::Unknown, unknown.nonesuch → Err, bare coefficients → Err, kind_weights.SL → KindWeight, tag_coefficients.area:cli → TagCoefficient." },
+  { id = "VT-04", expects = "cargo build succeeds; doctrine --help lists `config` subcommand." },
+  { id = "VA-01", expects = "load_from_table returns defaults on malformed [priority] (tolerance unchanged from original inline logic)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "config show + config get — read surface"
+objective = """
+Implement `config show --priority [--json]` and `config get (--priority|--tag) <key> [--json]`.
+
+show: read doctrine.toml once via read_priority_table, diff raw vs effective via
+load_from_table, emit flattened dotted keys with subsection headers, inline
+# default / # clamped annotations, key quoting for special chars, --json output.
+
+get: resolve a single key path to its effective value with optional annotation,
+support --tag shortcut, --json output, handle absent/unknown keys per design.
+"""
+entrance_criteria = [
+  { id = "EN-01", text = "PHASE-01 complete (infrastructure available)." },
+]
+exit_criteria = [
+  { id = "EX-01", text = "config show --priority outputs flattened dotted keys under # subsection headers; presents file values for present keys with # clamped from N annotations when value differs post-clamp; shows # default for absent keys." },
+  { id = "EX-02", text = "config show skips empty kind_weights / tag_coefficients subsections; quotes keys containing special chars (e.g. tag_coefficients.\"area:risk\")." },
+  { id = "EX-03", text = "config show --json produces correct JSON shape with effective/raw/annotation per key." },
+  { id = "EX-04", text = "config show with no [priority] section → all defaults annotated." },
+  { id = "EX-05", text = "config get --priority coefficients.value prints effective value; absent key prints default with # default; absent map key returns 1.0; unknown static key reads raw f64 from file if present." },
+  { id = "EX-06", text = "config get --tag \"area:cli\" targets tag_coefficients.area:cli; --tag and --priority are mutually exclusive." },
+  { id = "EX-07", text = "config get --json produces correct JSON shape." },
+  { id = "EX-08", text = "All edge cases from design table exercised in tests: unknown subsection, 1-segment path, missing flag, both flags, get absent key, get unknown key present/absent." },
+  { id = "EX-09", text = "cargo clippy --workspace zero warnings on changed files." },
+]
+verification = [
+  { id = "VT-01", expects = "E2E golden test: config show --priority on real doctrine.toml produces expected output." },
+  { id = "VT-02", expects = "Unit tests: show with no [priority] → all defaults; show with partial config → mix of file values and # default; show with clamped value → # clamped from N." },
+  { id = "VT-03", expects = "Unit tests: show --json output format; empty subsection skipping; key quoting." },
+  { id = "VT-04", expects = "Unit tests: get present/absent scalar, present/absent map key, unknown key present/absent, --tag shortcut, --json." },
+  { id = "VT-05", expects = "Unit tests: get with --priority and --tag both → error; get with neither → error." },
+  { id = "VA-01", expects = "config show annotation alignment: column spacing computed from max key width per TTY column formatting rules." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "config set — write surface"
+objective = """
+Implement `config set (--priority|--tag) <key> <value>`.
+
+Parse doctrine.toml as DocumentMut, validate path via parse_config_path, clamp
+the user value per existing policy, upsert the leaf key (creating intermediate
+tables via entry().or_insert()), no-op when existing value == clamped, write
+back preserving existing formatting. Echo confirmation with clamp note when
+applicable.
+"""
+entrance_criteria = [
+  { id = "EN-01", text = "PHASE-02 complete (read path validated; no blocker surfaced that would change write semantics)." },
+]
+exit_criteria = [
+  { id = "EX-01", text = "config set --priority coefficients.value 2.0 updates doctrine.toml with the clamped value, echoes confirmation." },
+  { id = "EX-02", text = "config set --priority coefficients.value 99e9 clamps to COEFF_MAX, writes clamped value, echoes clamp note." },
+  { id = "EX-03", text = "config set --priority kind_weights.SL 3.0 adds the entry to [priority.kind_weights]; config set --tag \"area:risk\" 2.5 writes to [priority.tag_coefficients]." },
+  { id = "EX-04", text = "config set idempotent: setting the same clamped value again produces no file change, echoes unchanged." },
+  { id = "EX-05", text = "config set creates missing [priority] section and intermediate subsections (entry().or_insert() safe per CHR-019)." },
+  { id = "EX-06", text = "config set overwrites a malformed (non-float) prior entry." },
+  { id = "EX-07", text = "config set preserves existing TOML formatting outside the [priority] section (toml_edit round-trip)." },
+  { id = "EX-08", text = "config set dep_coeff clamps correctly per clamp_dep (≤ 1.0, min 0.0); ref_coeff clamps per clamp_general (non-negative, ≤ COEFF_MAX)." },
+  { id = "EX-09", text = "config set on ConfigPath::Unknown → error: 'cannot set unknown key'." },
+  { id = "EX-10", text = "config set with --priority and --tag both → error; with neither → error." },
+  { id = "EX-11", text = "cargo clippy --workspace zero warnings on changed files." },
+]
+verification = [
+  { id = "VT-01", expects = "Unit tests: set scalar write, verify file contents via re-read; set map entry write, verify TOML structure." },
+  { id = "VT-02", expects = "Unit tests: set clamp scenarios — 99e9 → COEFF_MAX, negative → 0.0, NaN → default, Inf → COEFF_MAX, dep_coeff 2.0 → 1.0, dep_coeff -1.0 → 0.0." },
+  { id = "VT-03", expects = "Unit tests: set idempotent → file unchanged; set missing section → creates [priority]; set malformed overwrite." },
+  { id = "VT-04", expects = "Unit tests: set error on ConfigPath::Unknown; set error on mutual flag; set error on no flag." },
+  { id = "VA-01", expects = "toml_edit round-trip: existing non-priority sections (conduct, verification, dispatch, etc.) are preserved byte-for-byte after a set operation on a [priority] key." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "config unset — delete surface"
+objective = """
+Implement `config unset (--priority|--tag) <key>`.
+
+Parse doctrine.toml as DocumentMut, validate path via parse_config_path, walk
+to parent table, remove the leaf key, keep empty parent subtable. Idempotent:
+absent key is a no-op (echo 'already absent'). Write back only if changed.
+"""
+entrance_criteria = [
+  { id = "EN-01", text = "PHASE-03 complete (toml_edit write path proven; unset is a subset of the same machinery)." },
+]
+exit_criteria = [
+  { id = "EX-01", text = "config unset --priority coefficients.value removes the scalar key from [priority.coefficients]; next load() restores default 1.0." },
+  { id = "EX-02", text = "config unset --priority kind_weights.SL removes the map entry; config unset --tag \"area:cli\" removes from tag_coefficients." },
+  { id = "EX-03", text = "config unset idempotent: absent key → no-op, echoes 'already absent'; file unchanged." },
+  { id = "EX-04", text = "config unset removing last key from a subsection leaves the empty [priority.coefficients] table header (toml_edit default behaviour)." },
+  { id = "EX-05", text = "config unset on ConfigPath::Unknown removes the key from file (same as any leaf)." },
+  { id = "EX-06", text = "config unset with --priority and --tag both → error; with neither → error." },
+  { id = "EX-07", text = "config unset preserves existing TOML formatting outside [priority]." },
+  { id = "EX-08", text = "cargo clippy --workspace zero warnings on changed files." },
+]
+verification = [
+  { id = "VT-01", expects = "Unit tests: unset existing scalar key → removed from file; unset existing map key → removed." },
+  { id = "VT-02", expects = "Unit tests: unset absent key → no-op, file unchanged, echo 'already absent'." },
+  { id = "VT-03", expects = "Unit tests: unset last key in subsection → empty table header preserved." },
+  { id = "VT-04", expects = "Unit tests: unset ConfigPath::Unknown → key removed; unset error on mutual flag; unset error on no flag." },
+  { id = "VA-01", expects = "toml_edit round-trip: existing non-priority sections preserved after unset." },
+  { id = "VA-02", expects = "Existing survey/next/explain commands read the updated doctrine.toml without restart (PriorityConfig::load reads fresh each invocation)." },
+]
+specs        = []
+requirements = []
