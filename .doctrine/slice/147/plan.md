@@ -12,8 +12,9 @@ Six phases deliver RFC-004 v0.1: a slice carries an accreting `[[selector]]` lis
 each phase's source-delta SHA is recorded into an arm-neutral runtime registry, and
 `slice conformance` computes the declared-vs-actual path algebra — the killer
 consumer. The reviewer-role migration (burning `domain_map`) rides alongside but is
-deliberately kept off the critical path. All eight RV-148 findings are folded into
-the criteria below.
+deliberately kept off the critical path. RV-148 findings F-2…F-8 fold into the
+criteria below; F-1 (the RFC self-contradiction) was discharged upstream in
+RFC-004's reconciliation, not in any SL-147 phase.
 
 ## Sequencing & Rationale
 
@@ -33,27 +34,49 @@ The order follows the dependency spine, not the design's narrative order:
 - **PHASE-03 (algebra + conformance)** is the north star. It depends on P1
   (selectors) and P2 (registry reader). It can be built and tested against
   *synthetic* fixture registries, so it does not wait on P4's real writers. The
-  completeness check (F-2, a blocker fix) lives here because it is a *read-time*
-  guard: the reader cross-checks recorded rows against completed phases and fails
-  closed. `net()` (F-3) and matched-selector transparency (F-7) are pure and
-  unit-tested here.
+  completeness check (F-2, a blocker fix) is *delivered* here because it is a
+  *read-time* guard — but it is **authored at `state.rs` altitude** (design D7),
+  reading the phase sheets where state lives, not in the conformance/command shell;
+  P3 only invokes it. `net()` (F-3) and matched-selector transparency (F-7) are
+  pure and unit-tested here.
 - **PHASE-04 (record-delta + dispatch write)** supplies real data to the registry
   on both arms. It is separated from P2 (the engine writer) because it is the *CLI
   surface + dispatch integration* — the one touch to a live dispatch path, kept
   thin under sole-writer. The solo arm's explicit-recording contract (no automatic
   beat) and ref ergonomics (OQ-conf-1) settle here.
-- **PHASE-05 (burn domain_map + re-point staleness)** is independent of P2/P3/P4
-  and is the riskiest surgery on a live subsystem, so it is sequenced late where it
-  cannot block the killer consumer. The behaviour-preservation gate is explicit:
+- **PHASE-05 (burn domain_map + re-point staleness)** is independent of P2 and P4,
+  and of P3's *algebra* — but its glob→fileset re-point consumes the shared
+  `glob_matches` leaf that P3 lifts (D6), so it lands **after that lift** (P5 EN-2);
+  it must not re-implement matching. It is the riskiest surgery on a live subsystem,
+  so it is sequenced late where it cannot block the killer consumer. The
+  behaviour-preservation gate is explicit:
   the staleness *computation* is the invariant; only its input fixtures migrate
   (F-4 scopes the re-point to slice-backed RVs so non-slice RV targets fail clean,
   not silently).
 - **PHASE-06 (skills + dogfood)** wires the lifecycle and proves value. The dogfood
   is deliberately concrete (F-8): SL-147's own boundaries are recorded *explicitly*
-  via `record-delta` (the solo contract), not assumed to have been auto-captured.
+  via `record-delta` from **live-captured per-phase HEAD oids** (the capture ritual
+  below), not auto-captured and not reconstructed from git log. If the ritual lapsed,
+  the fallback is a forward slice run end-to-end through the wired path (P6 EX-3) —
+  never reconstruction, which would be the POL-002 archaeology this slice exists to
+  kill.
 
 ## Notes
 
+- **Phase-land capture ritual (ALL phases, from PHASE-01).** The dogfood (P6 EX-2)
+  needs SL-147's own per-phase boundaries, but `record-delta` lands in P4 and the
+  `/execute` auto-capture in P6 — so the early phases have no automatic capture. To
+  keep the dogfood POL-002-clean (live-observed oids, never git-log reconstruction):
+  at **every** phase land, jot two oids into the phase sheet/notes —
+  `--start` = `git rev-parse HEAD` before the phase's first commit, `--end` = HEAD
+  after its last commit and **before any trunk merge**. Keep each phase's commits
+  **contiguous on edge** — the F-6 guard rejects merge/non-ancestor ranges but does
+  *not* exclude a foreign commit interleaved on edge, so contiguity is what keeps
+  `start..end` equal to the phase's real source-delta. Phase sheets are runtime
+  state but survive to P6 (in-loop lifetime, pre-close). Miss it on a phase → use the
+  P6 EX-3 forward-slice fallback, do not reconstruct.
+- **OQ-conf-2 (record-delta namespace)** — resolved: `slice record-delta` for v0.1
+  (not a neutral cross-arm verb); revisit if a non-slice writer appears.
 - **OQ-conf-1 (solo ref ergonomics)** — resolved in PHASE-04 EX-3: `--start` =
   pre-phase HEAD (captured at phase start), `--end` = post-phase HEAD (captured at
   phase completion, before any trunk merge). PHASE-06 wires `/execute` to capture

@@ -64,7 +64,7 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "Pure module computes {conformant (carrying the matched selector), undeclared (carrying net() verb), undelivered} over (design-target selectors, actual event-sets); glob_matches lifted to a shared leaf and consumed here. net() rule: trailing D ⇒ removed; A w/o trailing D ⇒ added; else modified." },
-  { id = "EX-2", text = "`slice conformance <SL>` shell: read design-target selectors + the registry, run the completeness check against the slice's COMPLETED phases (one row per landed phase, explicit zero-delta allowed), then emit the algebra; mismatch ⇒ `incomplete` naming the gap; empty registry ⇒ `unavailable`. Never a clean diff from partial coverage." },
+  { id = "EX-2", text = "`slice conformance <SL>` shell: read design-target selectors + the registry, invoke the completeness check against the slice's COMPLETED phases (one row per landed phase, explicit zero-delta allowed), then emit the algebra; mismatch ⇒ `incomplete` naming the gap; empty registry ⇒ `unavailable`. Never a clean diff from partial coverage. The completeness check is AUTHORED at state.rs altitude (D7) — it reads the phase sheets via state.rs's existing sheet access; the conformance shell only invokes it. No phase-sheet reading in the command/conformance layer." },
 ]
 verification = [
   { id = "VT-1", expects = "Pure: net() over A→M, A→D, M→M, M→D→A; algebra cells incl. matched-selector reporting; glob vs literal matching." },
@@ -100,6 +100,7 @@ name      = "Burn domain_map + re-point staleness"
 objective = "Retire the dead domain_map authored input and prose tier; re-point review prime/status staleness onto the selector list with a glob→fileset resolution step, scoped to slice-backed RVs (design D4, F-4). Independent of the conformance path; the review suite is the behaviour-preservation gate."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete (selector source exists)." },
+  { id = "EN-2", text = "The shared glob_matches leaf (PHASE-03 EX-1) exists. The glob→fileset re-point (EX-2) consumes the lifted leaf — it must NOT re-implement matching (no parallel impl). Under serial execution P3 precedes P5; declared here so the dependency is not lost if order changes." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Removed: CacheNote (invariant/risk), CacheArea.purpose, validate_domain_map's prose checks, run_prime's domain_map.toml parse/arg. Cache slimmed to { paths, hashes }." },
@@ -123,7 +124,8 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "/slice seeds coarse scope-relevant selectors; /design adds design-target selectors; /execute records the solo boundary at phase land (--start pre-phase HEAD, --end post-phase HEAD); /audit runs slice conformance and reads the algebra." },
-  { id = "EX-2", text = "Dogfood: explicitly record SL-147's own per-phase boundaries via record-delta, then run `slice conformance SL-147` and capture the output." },
+  { id = "EX-2", text = "Dogfood: feed SL-147's own per-phase HEAD oids — captured LIVE at each phase land from PHASE-01 onward (see plan.md capture ritual), NOT reconstructed from git log (reconstruction = the (SL-NNN) archaeology POL-002 forbids) — to record-delta, then run `slice conformance SL-147` and capture the output. Live-observed oids are doctrine-owned, so this stays POL-002-clean." },
+  { id = "EX-3", text = "Fallback if the capture ritual lapsed on any phase: do NOT reconstruct. Prove value instead on the next slice cut after SL-147, run end-to-end through the wired path (selectors at /slice, design-targets at /design, live record-delta at land, conformance at /audit) — the fully non-circular proof (design F-8)." },
 ]
 verification = [
   { id = "VT-1", expects = "Every command shape referenced by the edited skills resolves (no dangling verb/flag) — checked against the CLI." },
