@@ -8,7 +8,7 @@ tags = ["memory", "shipped-memory", "onboarding", "audit", "self-correction"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = []                      # slice→work soft sequence: { to, rank }
+after = [{ to = "SL-144", rank = 1 }]  # slice→work soft sequence: { to, rank } — self-correction gate integrates with SL-144's reconcile-rules hook
 
 [[relation]]
 label = "governed_by"
@@ -21,6 +21,10 @@ target = "ADR-005"
 [[relation]]
 label = "specs"
 target = "SPEC-007"
+
+[[relation]]
+label = "related"
+target = "SL-144"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

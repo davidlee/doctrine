@@ -38,6 +38,8 @@ Several symptoms indicate drift:
    reconcile/close loop that flags when shipped memories may be stale relative
    to codebase changes (e.g. new CLI verbs, new entity kinds, changed flag
    shapes), prompting the agent to re-audit the affected memories.
+   *Depends on SL-144* — the self-correction gate integrates with
+   SL-144's reconcile-rules.md hook for its closed-loop evergreen AC.
 4. **Ensure memory reachability** — verify every shipped memory is reachable
    via the wikilink web and from at least one skill or boot digest; fix orphans.
 
