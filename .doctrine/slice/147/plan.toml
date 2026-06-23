@@ -77,20 +77,22 @@ requirements = []
 [[phase]]
 id        = "PHASE-04"
 name      = "Solo capture binding + dispatch write + record-delta fallback"
-objective = "Wire all three registry writers onto the PHASE-02 writer+guard: (1) the SOLO capture binding on the `slice phase` transitions — the deterministic happy path, no off-critical-path call; (2) the dispatch orchestrator's landing-beat write; (3) `slice record-delta` as the manual/bootstrap escape hatch (design D5; OQ-conf-1 resolved by construction; POL-002)."
+objective = "Wire all three registry writers onto the PHASE-02 writer+guard, mutually exclusive by arm: (1) the SOLO capture binding on the `slice phase` transitions — deterministic, no off-critical-path call, SKIPPED in a dispatch coordination context; (2) the dispatch `record-boundary` beat, which also writes the arm-neutral registry; (3) `slice record-delta` as the manual/bootstrap escape hatch. Dispatch-compatible: solo binding and dispatch beat never both record a phase (design D5; OQ-conf-1 resolved by construction; POL-002)."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 complete (registry writer + guard)." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "SOLO binding (the happy path): `slice phase <SL> <P> --status in_progress` stamps code_start_oid=HEAD into the phase sheet; `--status completed` captures code_end_oid=HEAD, applies the PHASE-02 guard, and UPSERTS the phase's boundary row (reopen re-captures; start==end ⇒ explicit zero-delta row). A git/bare-repo failure degrades to no-row with a clean named message and NEVER blocks the phase-status transition itself — F-2 then catches the completed-but-unrecorded phase. OQ-conf-1 dissolves: no ref to choose, only HEAD at two lifecycle moments." },
-  { id = "EX-2", text = "The dispatch landing beat records into the same primary-tree registry (sole-writer thin write); existing dispatch suites stay green." },
-  { id = "EX-3", text = "`doctrine slice record-delta <SL> --phase <P> --start <ref> --end <ref>` resolves refs → oids, applies the guard, and upserts one row per phase — the MANUAL escape hatch (corrected range / bootstrap a slice whose phases predate the binding), not the solo happy path." },
+  { id = "EX-2", text = "ARM DISCRIMINATION (dispatch-compat): the solo binding fires ONLY outside a dispatch coordination context. It detects that context via a doctrine-owned signal (`dispatch/<N>` coordination branch / coordination-worktree role — NOT a host convention, POL-002-clean) and SKIPS capture there, so the dispatch beat is the sole recorder and HEAD==coordination-B is never mistaken for a phase delta. The gate keys on dispatch-coordination, NOT on linked-worktree (a solo `/worktree` fork still captures). Verified premise: dispatch does not call `slice phase` today — the guard is belt-and-braces, enforced not assumed." },
+  { id = "EX-3", text = "The dispatch beat (`dispatch record-boundary`, funnel step 8) ALSO writes the arm-neutral registry — the conformance reader's only source — in addition to its existing committed `.doctrine/dispatch/<N>/` boundary (unchanged; dispatch integrate still depends on it). One row type, two consumer homes (not a parallel impl). Existing dispatch suites stay green. Coverage limit: `record-boundary` is claude-arm-only (skip on codex/pi) — codex/pi-dispatched slices record nothing → conformance `incomplete` (deferred, design Non-goals)." },
+  { id = "EX-4", text = "`doctrine slice record-delta <SL> --phase <P> --start <ref> --end <ref>` resolves refs → oids, applies the guard, and upserts one row per phase — the MANUAL escape hatch (corrected range / bootstrap a slice whose phases predate the binding), not the solo happy path." },
 ]
 verification = [
   { id = "VT-1", expects = "Solo binding: in_progress→completed writes the boundary row deterministically; reopen updates it (upsert by phase); a no-commit phase writes a zero-delta row; a git-unavailable transition still COMPLETES (degrades to no-row, no panic, no block)." },
-  { id = "VT-2", expects = "record-delta fallback: happy path (row upserted) and guard rejection (non-ancestor / merge) exercised via the CLI." },
-  { id = "VA-1", expects = "Dispatch landing write verified against a dispatch fixture / extended dispatch test; only the orchestrator writes (sole-writer)." },
-  { id = "VA-2", expects = "POL-002 conformance: the slice-delta is computed only from recorded oids — no (SL-NNN) or other host-convention grep anywhere in the path." },
+  { id = "VT-2", expects = "Arm mutual-exclusion: a `slice phase --status completed` issued in a SIMULATED dispatch coordination context writes ZERO rows from the binding (skipped); a solo-context completion writes exactly one. The dispatch beat writes exactly one per phase." },
+  { id = "VT-3", expects = "record-delta fallback: happy path (row upserted) and guard rejection (non-ancestor / merge) exercised via the CLI." },
+  { id = "VA-1", expects = "Dispatch beat → arm-neutral registry verified against a dispatch fixture / extended dispatch test; only the orchestrator writes (sole-writer); the existing committed dispatch boundary is untouched." },
+  { id = "VA-2", expects = "POL-002 conformance: the slice-delta is computed only from recorded oids and doctrine-owned signals (dispatch-context detection keys on `dispatch/<N>`, doctrine's own branch) — no (SL-NNN) or other host-convention grep anywhere in the path." },
 ]
 specs        = []
 requirements = []
