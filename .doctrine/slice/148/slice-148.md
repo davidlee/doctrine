@@ -154,6 +154,13 @@ storage out by governance.
   git ops in `git.rs`) and a cross-reference from SPEC-022 (git interaction model
   ref taxonomy). No conflict — PRD-005/SPEC-008 ratify the reach — but the spec
   prose should record the widened ref surface.
+- **Memory reconcile (design R8, D9)** — at /reconcile, update
+  `mem.system.engine.identity-claim-seam` §2: the `Claim` seam is now
+  **Fresh-numeric-only**; the named (memory) path claims via an inline
+  `fs::create_dir`, not a `Claim` backend. Supersedes the SL-005 D7 named+numeric
+  unification (the enrichment made `ClaimCtx` numeric-shaped). Memory's remote
+  future is a separate storage seam (design OQ-6, `scratch/memory-contract.local.md`
+  — forgettable HTTP), not the reservation `Claim`.
 - **Jail relaxation for network e2e** — relax the bubblewrap jail's git-push block
   to dev/test the backend against a real network remote (e.g. GitHub). Dev-only;
   not a CI dependency.
