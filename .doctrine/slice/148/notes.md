@@ -6,12 +6,31 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Stage
 
-**Design internally + externally reviewed; awaiting user lock approval → `/plan`.**
-No code yet. `just check` N/A (nothing modified). External adversarial pass (codex
-/ GPT-5.5) integrated as F-7..F-13 (design §10); all three originally-open items
-(R1/R2/E5) closed. One governance call taken by the User: D8 — `auto` fail-closes
-on a configured-remote failure, operator opt-in fallback (`y/N` prompt /
-`DOCTRINE_RESERVATION_FALLBACK=1`). On lock: `doctrine slice status 148 plan`.
+**Plan code-verified against source; design revised (D9) + plan tightened to match;
+awaiting final lock → `/phase-plan PHASE-01`.** No code yet. External adversarial
+pass (codex/GPT-5.5) integrated F-7..F-13 (design §10); D8 governance call taken.
+
+**Code-verification pass (this session, commits `341809e8` design / `18e1e637` plan).**
+Read the seam, git.rs primitives, config idiom, every call-site. 8/8 handover Qs
+resolved (§10 "Code-verification pass" disposition). Findings F-V1..F-V6:
+- **F-V2 → D9 (design change, user-approved).** Shared `Claim` trait forced the named
+  (memory) path to fabricate `id`/`stem`. Resolution: split the named path off `Claim`
+  (inline `fs::create_dir`-or-bail); `Claim`/`ClaimCtx`/`reserve::backend` are now
+  Fresh-numeric-only. **Supersedes SL-005 D7** (the named+numeric unification in
+  `mem.system.engine.identity-claim-seam` §2) → memory update at /reconcile (R8).
+  Checked against `scratch/memory-contract.local.md`: memory's remote future
+  (the external decision register HTTP, server-side idempotency) is a **separate storage seam** at the
+  `materialise_named` write body — D9 *enables* it, doesn't foreclose it (OQ-6).
+- **F-V1 → 11 Fresh sites**, not ~10: the design omitted the `materialise_fresh_prebuilt`
+  family (review/rec×2/revision). EN-1/EX-2 corrected.
+- **F-V3 → `ClaimCtx{dir,id}`** (stem/root/remote/holder backend-captured).
+- **F-V4/5/6 → PHASE-03 detail:** env-aware commit helper + empty-tree oid net-new;
+  `$DOCTRINE_AGENT_ID` resolution net-new; the re-fetching scan source must be injected
+  through `materialise` (so `ReservedIds` is a closure, not a static `Vec`).
+- **R9:** new `reserve` module needs an ADR-001 `layering.toml` entry (PHASE-01 EX-6).
+- **Confirmed sound:** `next_id` sig + scan closure (F-6); `RefCas`→Won/AlreadyHeld;
+  `run_git` raw `Output` → separable streams for `--porcelain` (R2 viable);
+  `install::prompt_confirm`/`tty` reuse for D8.
 
 ## Context-building map (read order for a fresh reviewer / planner / designer)
 
