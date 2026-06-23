@@ -6,9 +6,12 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Stage
 
-**Design locked, pending hostile pass.** No code yet. `just check` N/A (nothing
-modified). Routing: `/slice` → `/design` done; next is `/inquisition` or external
-review (codex/GPT-5.5), then `/plan`.
+**Design internally + externally reviewed; awaiting user lock approval → `/plan`.**
+No code yet. `just check` N/A (nothing modified). External adversarial pass (codex
+/ GPT-5.5) integrated as F-7..F-13 (design §10); all three originally-open items
+(R1/R2/E5) closed. One governance call taken by the User: D8 — `auto` fail-closes
+on a configured-remote failure, operator opt-in fallback (`y/N` prompt /
+`DOCTRINE_RESERVATION_FALLBACK=1`). On lock: `doctrine slice status 148 plan`.
 
 ## Context-building map (read order for a fresh reviewer / planner / designer)
 
@@ -28,7 +31,11 @@ review (codex/GPT-5.5), then `/plan`.
 4. **Reference**: lazyspec **RFC-035** (`/workspace/lazyspec/docs/rfcs/`) — the
    parity source. Doctrine adopts only its *reservation-over-git-ref* half;
    diverges deliberately (no `.git/config` mutation; metadata-as-data not
-   `lease.json`; leasing split out).
+   `lease.json`; leasing split out). **Working prior art** (MIT) digested in
+   `scratch/lazyspec.git.research.md` — `engine/git_ref.rs` (GitRefOps trait +
+   `GitCli` + `MockGitRefClient`), `engine/lease.rs`, `engine/agent.rs`. It ships
+   the exact zero-oid `--force-with-lease=ref:0` create-CAS, which is what
+   de-risked codex's first blocker (OQ-3/D2).
 5. **Code surface** (current state): `src/entity.rs` (`Claim`/`LocalFs`,
    `claim_fresh_id` loop ~L372, `next_id` ~L203, `materialise*`); `src/git.rs`
    (has `update_ref_cas`/`RefCas`/`ZERO_OID`, `commit_tree`, `resolve_ref`,
@@ -46,7 +53,12 @@ review (codex/GPT-5.5), then `/plan`.
 - **GitRef + new git.rs remote ops** (`fetch_refspec`, `push_ref_cas`,
   `for_each_ref`) behind a mock seam — second phase. CAS-rejection vs transport-
   error classification is load-bearing (R2): a transport error must NOT read as
-  `AlreadyHeld`.
+  `AlreadyHeld`. **Classification is `git push --porcelain`-based** (F-9), not
+  stderr parsing — only the explicit lease/create-CAS rejection retries; auth/hook/
+  namespace-policy → hard error. **Crib mechanics from lazyspec** (research file):
+  push **by oid** of a **dangling** commit (no local `update-ref` pre-push — avoids
+  phantom-create, F-7/I4); glob-fetch `+refs/.../*:refs/.../*`; `read_commit_timestamp`
+  via `cat-file -p` committer line; FIFO-queue mock (`MockGitRefClient`) for the seam.
 - **Survey verb** (`reservation list`) — can parallel or follow GitRef.
 - **Default flip `local`→`auto`** — the FINAL, isolated, gated phase (D5). It is
   behaviour-gate-sensitive (stdout must stay byte-identical; signal is stderr-only
@@ -56,10 +68,12 @@ review (codex/GPT-5.5), then `/plan`.
 
 ## Open questions still live (don't let them get lost)
 
-- **E5/R6 (for the hostile pass):** is team-wide *uniform reach* an acceptable v1
-  posture, or must `shared` also union unmerged branch-head ids? Mixed `local`+
-  `shared` clones can still collide. Current stance: documented assumption +
-  `validate`/`reseat` backstop.
+- **E5/R6 (RESOLVED by external pass):** uniform reach IS a sound v1 posture —
+  under uniform `shared`/`auto`, every authored id reserves a ref at author time, so
+  branch-only-authored ids are already covered; the gap is purely a `local`/mixed
+  phenomenon. `shared`-unions-branch-heads rejected as unnecessary. F-8 closed the
+  separate `auto`-internal transient hole (D8). Mixed-reach remains the documented
+  A3/E5 limit + `validate`/`reseat` backstop.
 - **OQ-3 (design):** exact `--force-with-lease` create-flag form (`:<zero>` vs
   `:`) — confirm against the bare-repo substrate in the GitRef phase.
 - **PRD-005 OQ-2/OQ-3:** auto-probe round-trip amortisation; permanent-ref volume
@@ -71,7 +85,10 @@ review (codex/GPT-5.5), then `/plan`.
   half). Needs its own PRD/spec before slicing.
 - **Spec reconcile (R7):** at `/reconcile`, add SPEC-008 prose for the remote
   reservation ref class + `git.rs` remote ops, and a SPEC-022 cross-ref. No
-  conflict; the prose just needs to record the widened ref surface.
+  conflict; the prose just needs to record the widened ref surface. **Plus a
+  PRD-005 §6 note** (D8): `auto` fail-closes on a configured-remote transient
+  failure — stricter than PRD's literal "fall back + signal" — operator opts into
+  fallback explicitly. Records the deliberate tightening.
 - **Jail relaxation:** dev-only, for network e2e against a real remote. Not a CI
   dependency (bare-repo substrate covers the mechanism).
 
