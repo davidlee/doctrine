@@ -1,0 +1,53 @@
+# Implementation plan for SL-145 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-145"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Widen governed_by + related to BACKLOG, proven end to end"
+objective = """
+Make `governed_by` and `related` legal for BACKLOG sources (ISS/IMP/CHR/RSK/IDE)
+in `RELATION_RULES` (src/relation.rs), and prove the full CLI loop (link → TOML
+row → read_block → inspect outbound + derived inbound → unlink round-trip) works
+for a real backlog item. Table-only widening per design D1; no command, accessor,
+or consumer code changes. Behaviour-preserving for every existing edge.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; slice scope, design, and plan tell the same story (D1/D2/D3 reflected)." },
+  { id = "EN-2", text = "Fresh dev binary buildable (./target/debug/doctrine) — not the RO jail binary (R3)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`governed_by` row sources include BACKLOG; target gate stays Kinds(GOV)." },
+  { id = "EX-2", text = "`related` [SL, RFC] row sources extended to include BACKLOG (D1, single row); target stays AnyNumbered." },
+  { id = "EX-3", text = "read_block golden (relation.rs:1429) flipped: backlog `governed_by ADR` now emits an edge, illegal empty; a backlog `related <numbered>` legal-emit assertion added." },
+  { id = "EX-4", text = "VT-2 `sources_match_shipped_accessors` Related expected set extended to add ISS/IMP/CHR/RSK/IDE; its doc-comment (accessor-emit prose) updated to stop claiming backlog emits only slices/specs/drift." },
+  { id = "EX-5", text = "Positive validate_link tests added for (ISSUE_KIND, governed_by) and (ISSUE_KIND, related); a backlog-source target-gate negative (governed_by → non-GOV refused) added." },
+  { id = "EX-6", text = "Whole existing relation/relation_graph/integrity/inspect suite green UNCHANGED except the intentional refusal-golden flips (behaviour-preservation gate)." },
+  { id = "EX-7", text = "`just gate` clean — clippy zero-warning, fmt." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: flipped read_block golden + new positive validate_link + target-gate-negative tests pass; VT-2 passes against the widened Related set." },
+  { id = "VT-2", expects = "Full root suite (`just gate` / cargo test) green with no unintended golden churn — the behaviour-preservation proof." },
+  { id = "VH-1", expects = "CLI end-to-end on a fresh dev build: `link <CHR|IMP> governed_by <ADR>` and `link <…> related <numbered>` both succeed, persist a [[relation]] row in the item TOML, render outbound via `inspect` and derived inbound (`governs`/`related`) on the target's `inspect`, and `unlink` round-trips. `backlog show` confirmed as best-effort (inspect is the oracle)." },
+]
+specs             = []
+requirements      = []
