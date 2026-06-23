@@ -366,7 +366,11 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SL, PRD, SPEC, CM, ASM, DEC, QUE, CON],
+        // SL-145: BACKLOG (ISS/IMP/CHR/RSK/IDE) widened in so a backlog item may be
+        // governed by an ADR/POL/STD. Target gate (Kinds(GOV)) unchanged.
+        sources: &[
+            SL, PRD, SPEC, CM, ASM, DEC, QUE, CON, ISS, IMP, CHR, RSK, IDE,
+        ],
         label: RelationLabel::GovernedBy,
         inbound_name: "governs",
         target: TargetSpec::Kinds(GOV),
@@ -398,7 +402,9 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SL, RFC],
+        // SL-145 (D1): extend this AnyNumbered row — not a new row — so a backlog item may
+        // author a peer `related` edge to any numbered entity. Target/tier/inbound unchanged.
+        sources: &[SL, RFC, ISS, IMP, CHR, RSK, IDE],
         label: RelationLabel::Related,
         inbound_name: "related",
         target: TargetSpec::AnyNumbered,
@@ -1052,7 +1058,8 @@ mod tests {
     fn sources_match_shipped_accessors() {
         // (label, the source prefixes the shipped accessor proves can emit it).
         // slice::relation_edges emits specs/requirements/supersedes for SL.
-        // backlog::relation_edges emits slices/specs/drift for every backlog kind.
+        // backlog::relation_edges emits slices/specs/drift plus (post-SL-145)
+        // governed_by/related for every backlog kind.
         // governance::relation_edges emits supersedes/related for ADR·POL·STD.
         // spec::relation_edges (subtype-blind) emits descends_from/parent/members/
         //   interactions; members is the one design-corrected PRD·SPEC cell.
@@ -1073,7 +1080,12 @@ mod tests {
             (RelationLabel::Members, &["PRD", "SPEC"]),
             (RelationLabel::Interactions, &["SPEC"]),
             (RelationLabel::Slices, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
-            (RelationLabel::Related, &["ADR", "POL", "RFC", "SL", "STD"]),
+            (
+                RelationLabel::Related,
+                &[
+                    "ADR", "POL", "RFC", "SL", "STD", "ISS", "IMP", "CHR", "RSK", "IDE",
+                ],
+            ),
             (RelationLabel::Reviews, &["RV"]),
             (RelationLabel::OwningSlice, &["REC"]),
             (RelationLabel::Drift, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
@@ -1404,9 +1416,10 @@ mod tests {
     }
 
     /// VT-2 (X2): the generic parser preserves the per-kind legality the hardcoded
-    /// readers had for free. A slice row carrying `related` and a backlog row carrying
-    /// `governed_by` ⇒ `IllegalRow` (IllegalForSource), NEVER a live edge; a legal row
-    /// ⇒ a `RelationEdge`. An unknown label spelling ⇒ `IllegalRow` (UnknownLabel).
+    /// readers had for free. A slice row carrying `related` (SL-095) and a backlog row
+    /// carrying `governed_by`/`related` (SL-145) are legal and emit edges; a backlog row
+    /// carrying `requirements` (SL-only) ⇒ `IllegalRow` (IllegalForSource), NEVER a live
+    /// edge. An unknown label spelling ⇒ `IllegalRow` (UnknownLabel).
     #[test]
     fn read_block_rejects_illegal_source_label_pairs() {
         // A slice authoring `related` plus a legal `specs`.
@@ -1426,22 +1439,35 @@ mod tests {
         );
         assert!(illegal.is_empty(), "related is legal for a slice source");
 
-        // A backlog item authoring `governed_by` (SL·PRD·SPEC-only) plus a legal `slices`.
+        // A backlog item authoring `governed_by ADR-010` and `related IMP-005` (both legal
+        // for a backlog source post-SL-145) plus a legal `slices`, and a `requirements` row
+        // that stays IllegalForSource (REQ is SL-only). Legal edges emit in table-declaration
+        // order: governed_by, slices, related.
         let backlog_doc = RelationDoc::parse(
             "[[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-010\"\n\
-             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-020\"\n",
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-020\"\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"IMP-005\"\n\
+             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n",
         )
         .unwrap();
         let (edges, illegal) = read_block(&ISSUE_KIND, &backlog_doc);
-        assert_eq!(edge_pairs(&edges), vec![(RelationLabel::Slices, "SL-020")]);
+        assert_eq!(
+            edge_pairs(&edges),
+            vec![
+                (RelationLabel::GovernedBy, "ADR-010"),
+                (RelationLabel::Slices, "SL-020"),
+                (RelationLabel::Related, "IMP-005"),
+            ],
+            "governed_by, slices, and related all emit edges for a backlog source (SL-145)"
+        );
         assert_eq!(
             illegal,
             vec![IllegalRow {
-                label: "governed_by".to_string(),
-                target: "ADR-010".to_string(),
+                label: "requirements".to_string(),
+                target: "REQ-001".to_string(),
                 reason: IllegalReason::IllegalForSource,
             }],
-            "governed_by is illegal for a backlog source"
+            "requirements stays illegal for a backlog source (REQ is SL-only)"
         );
 
         // An unknown label spelling (a typo / an inverse spelling) ⇒ UnknownLabel.
@@ -1666,6 +1692,16 @@ mod tests {
             Err(e) => panic!("related should be writable for a slice (SL-095): {e}"),
         }
 
+        // SL-145: a backlog item CAN author `governed_by` and `related` (source widened).
+        match validate_link(&ISSUE_KIND, "governed_by") {
+            Ok(rule) => assert_eq!(rule.label, RelationLabel::GovernedBy),
+            Err(e) => panic!("governed_by should be writable for a backlog item (SL-145): {e}"),
+        }
+        match validate_link(&ISSUE_KIND, "related") {
+            Ok(rule) => assert_eq!(rule.label, RelationLabel::Related),
+            Err(e) => panic!("related should be writable for a backlog item (SL-145): {e}"),
+        }
+
         // Governance `supersedes` is LifecycleOnly — refused, names the supersede verb.
         let e = refusal(&ADR_KIND.kind, "supersedes");
         assert!(e.contains("supersede verb"), "names the owning verb: {e}");
@@ -1710,6 +1746,21 @@ mod tests {
         assert!(check_target_kind(sl_related, &SLICE_KIND, "ADR").is_ok());
         assert!(check_target_kind(sl_related, &SLICE_KIND, "SPEC").is_ok());
         assert!(check_target_kind(sl_related, &SLICE_KIND, "RV").is_ok());
+
+        // SL-145: a backlog source widens `governed_by`/`related` but the TARGET gate is
+        // unchanged. `governed_by` still enforces Kinds(GOV) — a slice target refused,
+        // ADR/POL/STD pass; `related` stays AnyNumbered — any kind accepted.
+        let bk_gov = unwrap_rule(validate_link(&ISSUE_KIND, "governed_by"));
+        assert!(
+            check_target_kind(bk_gov, &ISSUE_KIND, "SL").is_err(),
+            "backlog governed_by still refuses a non-GOV target"
+        );
+        for p in ["ADR", "POL", "STD"] {
+            assert!(check_target_kind(bk_gov, &ISSUE_KIND, p).is_ok());
+        }
+        let bk_related = unwrap_rule(validate_link(&ISSUE_KIND, "related"));
+        assert!(check_target_kind(bk_related, &ISSUE_KIND, "SL").is_ok());
+        assert!(check_target_kind(bk_related, &ISSUE_KIND, "ADR").is_ok());
     }
 
     /// SL-066 VT-2: the `revises` rule. Source REV, targets the six authored-truth
@@ -1750,8 +1801,9 @@ mod tests {
     /// `None` (the X2 legality `read_block` will enforce), a legal one the rule.
     #[test]
     fn lookup_keys_on_source_and_label() {
-        // A backlog item cannot author `governed_by`; a slice can author `related`.
-        assert!(lookup(&ISSUE_KIND, RelationLabel::GovernedBy).is_none());
+        // SL-145: a backlog item CAN author `governed_by` (source widened); a slice can
+        // author `related`.
+        assert!(lookup(&ISSUE_KIND, RelationLabel::GovernedBy).is_some());
         let sl_related = lookup(&SLICE_KIND, RelationLabel::Related);
         assert!(sl_related.is_some());
         assert!(matches!(

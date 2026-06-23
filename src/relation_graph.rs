@@ -1679,7 +1679,8 @@ mod tests {
             "governance reader emits exactly supersedes + related"
         );
 
-        // --- ISS (backlog): specs + slices + related + drift (all tier-1) ---
+        // --- ISS (backlog): specs + slices + related + drift + governed_by (all tier-1;
+        //     governed_by + related widened in for backlog by SL-145) ---
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
@@ -1688,13 +1689,14 @@ mod tests {
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
         assert_eq!(
             emitted_labels(root, "ISS", 1),
             table_labels_for("ISS"),
-            "backlog reader emits exactly specs + slices + related + drift"
+            "backlog reader emits exactly specs + slices + related + governed_by + drift"
         );
 
         // --- SPEC (tech): governed_by (tier-1) + descends_from/parent (typed) +
