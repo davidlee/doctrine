@@ -131,6 +131,15 @@ pub(crate) fn for_each_ref(root, pattern)      // (refname, oid, author, date, m
     -> Result<Vec<RefRow>, CaptureError>;
 ```
 
+**Backend selection blast radius (F-3).** Shared reach applies to *any* numbered
+kind (PRD-005), so **every Fresh-allocating materialise site** (slice / spec ×2 /
+adr / requirement / backlog ×5 / knowledge / concept_map) swaps its literal
+`&LocalFs` for a single resolved-backend helper `reserve::backend(root)?`.
+`InExisting` sub-entity sites (design, phases) take no claim and are untouched.
+This caller swap — not the seam signature — is the bulk of the change and drives
+phasing (seam + LocalFs parity first, then GitRef behind the helper, then the
+default flip).
+
 **Reach config.** New section, parsed via the shared reader, consumed by a
 `reservation_config` module (never eagerly validated in `dtoml::parse` —
 dtoml-shared-reader memory):
@@ -156,10 +165,19 @@ fetch `refs/doctrine/reservation/*` → table `{canonical, holder, acquired}`.
 ### 5.3 Data, State & Ownership
 
 - **Reservation ref** `refs/doctrine/reservation/<stem>/<NNN>` → empty-tree
-  commit. **No blobs** (REQ-024). Holder = `$DOCTRINE_AGENT_ID` else git
-  committer identity (set as the commit author/committer). Acquired = committer
-  date. Message = canonical ref (`SL-148`). Permanent — never deleted, never
-  reissued; one ref per reserved id (no GC, PRD-005 OQ-3 open).
+  commit (the well-known empty tree). **No blobs** (REQ-024). Holder =
+  `$DOCTRINE_AGENT_ID` else git committer identity. The commit is built with
+  `GIT_AUTHOR_NAME/EMAIL` + `GIT_COMMITTER_NAME/EMAIL` set **explicitly** from
+  the resolved holder (F-2) — never relying on ambient `git config user.*`, so a
+  human with unset git identity does not fail. Acquired = committer date.
+  Message = canonical ref (`SL-148`). Permanent — never deleted, never reissued;
+  one ref per reserved id (no GC, PRD-005 OQ-3 open).
+- **Scan source (GitRef, F-6).** The per-retry `scan()` closure fetches
+  `+refs/doctrine/reservation/*:refs/doctrine/reservation/*`, then reads the
+  fetched **local** refs (`for_each_ref`) ∪ local dirs → ids. It re-fetches each
+  iteration (the iter-1 fetch overlaps `resolve_backend`'s reachability probe — a
+  harmless double-fetch; retries are rare). `next_id`'s signature is unchanged —
+  the remote union rides the `local` argument.
 - **Refspec** passed explicitly per fetch/push
   (`+refs/doctrine/reservation/*:refs/doctrine/reservation/*`). **`.git/config`
   is never mutated** (diverges from RFC-035; no setup step).
@@ -210,6 +228,14 @@ gives offline fork-safety at single-tree+trunk reach.
   ignored, not fatal.
 - **E4** Ref existence checks use `for-each-ref`/`rev-parse --verify`, never
   `cat-file -e` (rtk false-positive memory).
+- **E5 — reach is a team-wide agreement (F-1), an assumption, not a guarantee.**
+  The candidate set is `local_dirs ∪ remote_reservation_ids ∪ trunk_ids`. It does
+  **not** cover an id authored under `local` reach on an unmerged branch (no
+  reservation ref, not on trunk). So a team mixing `local` and `shared` clones can
+  still collide. Supported posture: a repo's reach is uniform across its
+  clones (all `shared`/`auto`, or all `local`). Mixing is unsupported and
+  documented, not defended in code. Single-tree collision (separate clones, no
+  shared backend) remains the visible accepted limit (PRD-005 §6).
 
 ## 6. Open Questions & Unknowns
 
@@ -256,9 +282,22 @@ gives offline fork-safety at single-tree+trunk reach.
   all remote ops behind `git.rs` helpers with a mock seam; classify CAS-rejection
   vs transport error distinctly (a transport error must NOT read as `AlreadyHeld`
   → would corrupt the retry). `shared` hard-fails on transport error.
-- **R3 — E1 (remote-won / local-mkdir-failed) split state.** Mitigation: hard
-  error + reseat hint; documented edge; no silent orphan. Flag for adversarial
-  review — is leaving the remote ref acceptable (it's a harmless permanent gap)?
+- **R3 — E1 (remote-won / local-mkdir-failed) split state. RESOLVED.** Leaving
+  the remote reservation ref is correct: PRD-005's "an abandoned reservation is a
+  harmless gap, not a fault to recover from" governs. The orphaned ref is a
+  permanent gap; the operator gets a hard error + reseat hint and picks another
+  id. No rollback of the remote ref (rollback would itself need a second remote
+  round-trip and contradict permanence).
+- **R6 — mixed-reach unsoundness (E5/F-1).** Mitigation: documented team-wide
+  uniform-reach assumption; `validate`/`reseat` remain the cross-fork collision
+  backstop (SPEC-008) when a mixed-reach or pre-merge race lands a collision
+  anyway. Out of scope to defend in code this slice.
+- **R7 — SPEC-022 ref-taxonomy extension (F-4).** `refs/doctrine/reservation/*`
+  and the new remote git ops widen git's ref surface SPEC-022 enumerates (it
+  currently scopes coordination/evidence refs as local). No conflict — PRD-005 /
+  SPEC-008 ratify the reservation reach — but reconciliation must add a prose note
+  to SPEC-008 (the remote reservation ref class + remote ops in `git.rs`) and a
+  cross-reference from SPEC-022. Tracked for /reconcile, not a blocker.
 - **R4 — default-flip breaks stdout-asserting suites.** Mitigation: D5 isolates
   the flip; signal is stderr-only + one-time; final phase sweeps the suite.
 - **R5 — jail prevents network e2e.** Mitigation: local-bare-repo substrate
@@ -293,4 +332,26 @@ extending existing git test fixtures — no network, jail-safe (R5).
 
 ## 10. Review Notes
 
-(Adversarial pass findings recorded here.)
+**Internal adversarial pass (self) — integrated:**
+- **F-1 → E5/R6** — mixed-reach is unsound; the candidate set misses branch-only
+  authored ids. Stated as a team-wide uniform-reach assumption; `validate`/`reseat`
+  backstop. Integrated §5.5, §8.
+- **F-2 → §5.3** — holder must not depend on ambient `git config user.*`; set
+  `GIT_AUTHOR_*`/`GIT_COMMITTER_*` explicitly from the resolved holder.
+- **F-3 → §5.2** — real blast radius is the ~10 Fresh materialise call sites
+  swapping `&LocalFs` → `reserve::backend(root)?`, not the seam signature. Drives
+  phasing.
+- **F-4 → R7** — reservation refs + remote ops extend SPEC-022's ref taxonomy;
+  reconcile-time spec note required (not a blocker).
+- **F-5 → R3** — split-state (remote-won/local-failed) resolved by PRD-005's
+  harmless-gap principle; no remote rollback.
+- **F-6 → §5.3** — GitRef `scan()` reads fetched local reservation refs, re-fetched
+  per iteration; `next_id` signature unchanged.
+
+**Deferred to plan-level detail:** exact `--force-with-lease` create flag form
+(`:<zero>` vs `:`) confirmed against the local-bare-repo substrate (OQ-3);
+empty-tree oid via the well-known constant or `mktree`.
+
+**Open for external/inquisition pass:** R1 (CAS correctness proof depth), R2
+(transport-vs-CAS error classification), E5 (is uniform-reach an acceptable v1
+posture, or must shared reach union branch heads?).

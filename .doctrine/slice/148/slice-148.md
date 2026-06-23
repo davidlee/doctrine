@@ -110,6 +110,14 @@ storage out by governance.
 - **A2 — behaviour-preservation gate.** Existing entity-engine suites must stay
   green unchanged; numeric callers' observable behaviour is the proof
   (identity-claim-seam memory invariant).
+- **A3 — reach is a team-wide agreement** (design E5/F-1). The candidate set does
+  not cover ids authored under `local` reach on an unmerged branch, so a team
+  mixing `local` and `shared` clones can still collide. A repo's reach is assumed
+  uniform across clones; mixing is unsupported and documented, not defended in
+  code (`validate`/`reseat` stay the cross-fork backstop).
+- **R3 — jail blocks network push.** The cross-clone guarantee is proven against a
+  local bare repo; no test depends on a network remote (jail-relax is a dev-only
+  follow-up).
 
 ### Open questions (for `/design`)
 
@@ -140,4 +148,12 @@ storage out by governance.
 
 - **Lease-based coordination** (RFC-035 coordination half) — author the deferred
   "specified elsewhere" capability: a PRD/tech spec for transient edit-exclusion
-  leases, then slice(s). Capture as a backlog item if not already tracked.
+  leases, then slice(s). Tracked as IDE-021.
+- **Spec reconcile (design R7)** — at /reconcile, add a prose note to SPEC-008
+  (the remote reservation ref class `refs/doctrine/reservation/*` + the new remote
+  git ops in `git.rs`) and a cross-reference from SPEC-022 (git interaction model
+  ref taxonomy). No conflict — PRD-005/SPEC-008 ratify the reach — but the spec
+  prose should record the widened ref surface.
+- **Jail relaxation for network e2e** — relax the bubblewrap jail's git-push block
+  to dev/test the backend against a real network remote (e.g. GitHub). Dev-only;
+  not a CI dependency.
