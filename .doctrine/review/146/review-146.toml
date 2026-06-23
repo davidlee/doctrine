@@ -1,0 +1,70 @@
+id    = 146
+slug  = "reconciliation-review-of-sl-145"
+title = "reconciliation review of SL-145"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-145"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "nit"
+title = "Scope: expected table-only widening / observed table-only widening"
+detail = "Diff (73c56a8) touches only src/relation.rs (two sources sets + their test goldens) and one VT-4 fixture in src/relation_graph.rs. No command, accessor, consumer, or graph-effect code (D3); no new label, no role grammar (Axis B deferred per D2), no migration. Stayed inside the design envelope."
+disposition = "aligned"
+response = "Confirmed table-only; diff stayed inside the design envelope."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Widenings: expected EX-1/EX-2 with gates intact + D1 single-row / observed exactly that"
+detail = "governed_by sources = [SL,PRD,SPEC,CM,ASM,DEC,QUE,CON,ISS,IMP,CHR,RSK,IDE], target gate Kinds(GOV) unchanged (EX-1). related widened by EXTENDING the existing [SL,RFC] AnyNumbered row to [SL,RFC,ISS,IMP,CHR,RSK,IDE] (D1 — not a new row), target AnyNumbered unchanged (EX-2). Target-gate negative test confirms backlog governed_by still refuses non-GOV; related still AnyNumbered."
+disposition = "aligned"
+response = "Both widenings + D1 single-row + intact gates verified against diff and tests."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Behaviour-preservation: expected only intended golden flips + clean gate / observed exactly that"
+detail = "just gate exit 0 (workspace clippy/fmt/test) and just check exit 0. Golden churn limited to the intended refusal flips: read_block, VT-2 Related set, lookup is_some, validate_link positives + backlog target-gate negative, and the relation_graph VT-4 ISS fixture authoring the newly-legal governed_by axis (EX-6/EX-7). Monotonicity invariant held — no previously-legal pair changed."
+disposition = "aligned"
+response = "just gate exit 0; golden churn limited to intended flips; monotonicity held."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Goldens honesty: expected EX-3/4/5 truthful goldens / observed truthful"
+detail = "read_block emits governed_by ADR-010 + related IMP-005 for a backlog source and keeps a requirements row IllegalForSource (REQ is SL-only) — emit order governed_by,slices,related matches table declaration (EX-3). VT-2 sources_match_shipped_accessors Related expected widened AND its doc-comment updated to stop claiming backlog emits only slices/specs/drift (EX-4). Positive validate_link asserts for (ISSUE_KIND, governed_by|related); backlog target-gate negative present (EX-5). lookup flipped to is_some."
+disposition = "aligned"
+response = "read_block/VT-2/validate_link/lookup goldens all truthful and updated; doc-comment fixed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "VH-1 e2e: expected full CLI loop + no leaked edges / observed clean round-trip"
+detail = "Commit 73c56a8 records link CHR-024 governed_by ADR-010 / related RFC-003 on a fresh dev binary: persisted [[relation]] rows, rendered outbound via inspect + derived inbound (governs/related) on targets, unlink round-tripped. Re-verified now: CHR-024 TOML carries NO [[relation]] rows — round-trip left zero residue on real entities (outbound-only model, ADR-004 — inbound is derived, never stored)."
+disposition = "aligned"
+response = "e2e loop recorded in 73c56a8; re-verified zero residual rows on CHR-024 (outbound-only)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "Doc nit: stale SL-095 test comment at relation.rs:1717 (design §10 flagged optional)"
+detail = "The doc-comment on check_target_kind_enforces_target_kind reads 'SL-095: a slice related now resolves (new BACKLOG/SLICE row)'. Design §10 flagged this as loose historical phrasing (the SL-095 row was [SL,RFC], no backlog) and offered an optional non-blocking tidy. Post-D1 the related row genuinely includes BACKLOG, so the phrasing is doubly misleading about which slice added what. Cosmetic, in-file, audit-scope code fix."
+disposition = "fix-now"
+response = "Comment tidied in-place (relation.rs:1717) to name both SL-095 and SL-145 accurately; just check exit 0. Lands with the audit commit."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
