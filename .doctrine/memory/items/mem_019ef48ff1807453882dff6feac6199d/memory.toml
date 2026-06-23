@@ -1,0 +1,42 @@
+memory_uid = "mem_019ef48ff1807453882dff6feac6199d"
+memory_key = "mem.pattern.worktree.primary-tree-resolver-and-contextual-review-fork-ban"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Primary-tree resolver reuse and the contextual review fork-ban"
+summary = "Reuse worktree::subagent::primary_worktree for cross-worktree state; review.rs:1953 fork ban is contextual, not a universal law"
+created = "2026-06-23"
+updated = "2026-06-23"
+
+[scope]
+paths = ["src/worktree/subagent.rs", "src/review.rs"]
+globs = []
+commands = []
+tags = ["worktree", "dispatch", "state"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2c792cce9a69506fd833c8a85e182b11fda54e00"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b8ba4bd75f704b39e33158cb977ccc4af89efe44aa5cbe484e1d8e190f18fd47"
+base_commit = "fddf6b9f5bcde89ccfe5358090fd8ca78f76d293"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
