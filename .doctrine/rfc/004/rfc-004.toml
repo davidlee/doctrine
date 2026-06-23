@@ -1,0 +1,32 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 4
+slug = "path-intent-selector-role-stamped-selectorintent-primitive"
+title = "Path-intent selector: role-stamped selector+intent primitive"
+status = "open"
+created = "2026-06-23"
+updated = "2026-06-23"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "IMP-012"
+
+[[relation]]
+label = "related"
+target = "IMP-152"
+
+[[relation]]
+label = "related"
+target = "ADR-007"
+
+[[relation]]
+label = "related"
+target = "ADR-014"
+
