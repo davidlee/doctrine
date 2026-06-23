@@ -209,23 +209,27 @@ location regardless of which worktree the command runs in.
     "linked worktree" — a solo `/worktree` fork is not a dispatch context and still
     captures. (In fact dispatch never calls `slice phase` today, so this is a
     belt-and-braces guard, not a load-bearing assumption — verified, then enforced.)
-  - **`slice record-delta`** remains the **manual escape hatch**, not the happy
-    path: re-record a corrected range, or bootstrap a slice whose phases predate
-    the binding (e.g. SL-147's own early phases). Same writer + F-6 guard.
-  - **dispatch**: the orchestrator's existing `dispatch record-boundary` beat
-    (funnel step 8, `--code-start B --code-end B+1`) is the sole dispatch recorder.
-    It **also writes the arm-neutral registry** (the conformance reader's only
-    source), *in addition to* its existing committed `.doctrine/dispatch/<N>/`
-    boundary (unchanged — dispatch integrate still depends on it). One row type, one
-    reader; the dual home is two consumers, not a parallel impl.
-    - **Coverage limit (codex/pi arm).** `record-boundary` is **claude-arm-only**
-      today (`skip on codex/pi`, dispatch-agent:67 — the subprocess arm has no fork
-      branch to range). So a **codex/pi-dispatched** slice records no rows → its
-      conformance degrades to `incomplete` (F-2), never a false-clean. Extending the
-      subprocess arm to record is **deferred** (Non-goal); v0.1 conformance covers
-      **solo + claude-dispatch**.
-  - All covered arms write **without** an off-critical-path act; F-2 (below) stays
-    the backstop — a completed phase with no row is still caught, never silently
+  - **dispatch (both arms — claude AND codex/pi).** At the funnel **record** beat
+    (step 8) the orchestrator calls `doctrine slice record-delta <SL> --phase <P>
+    --start <B> --end <B+1>` — the coordination boundary it already holds (`B`
+    captured pre-spawn, `B+1` the funnel's one commit). This reuses the same
+    arm-neutral writer + F-6 guard as the solo path and resolves to the primary-tree
+    registry via `primary_worktree` (the funnel runs in the coordination worktree;
+    the write still lands in the primary registry). **Arm-agnostic by construction:**
+    both arms run the *shared* funnel (`/dispatch` router) and produce the same
+    per-phase `B→B+1`, so codex/pi records identically — no claude-only gate.
+    - *Why the historical skip didn't generalize:* the **existing** `dispatch
+      record-boundary` → committed `.doctrine/dispatch/<N>/boundaries.toml` is the
+      **claude-arm `phase/<N>` ref-cut's input** (ledger.rs:10-11/74) — that
+      consumer, not oid availability, is why it's claude-only. We do **not** touch
+      it; conformance's registry is a *separate* arm-neutral write keyed off the same
+      coordination oids, so it covers codex/pi for free.
+  - **`slice record-delta`** is therefore dual-purpose: the **dispatch funnel's
+    recorder** (orchestrator-issued, both arms) **and** the **manual escape hatch**
+    (re-record a corrected range; bootstrap a slice whose phases predate the
+    binding, e.g. SL-147's own early phases). One verb, one writer, one F-6 guard.
+  - Every arm writes **without** an off-critical-path act; F-2 (below) stays the
+    backstop — a completed phase with no row is still caught, never silently
     clean.
 - **Reader:** `slice conformance` reads only this registry.
 - **Completeness — fail closed on partial coverage (F-2, BLOCKER fix).** Degrade
@@ -357,11 +361,10 @@ staleness resolution (D4) consume it. No new glob dependency.
 Per-PHASE attribution · author-declared verb sub-tags · target sum type /
 non-entity edge generalization (OQ-6) · new verify mode VG (OQ-9) · prose
 invariants/risks · dispatch disjointness · IMP-012 wiring · durable post-close
-registry · MCP reader (fast-follow) · **codex/pi-dispatch boundary recording**
-(the subprocess arm's `record-boundary` is claude-arm-only today; codex/pi-
-dispatched slices degrade to `incomplete`, never false-clean — extending that arm
-is a follow-up). Conformance is necessary-not-sufficient: it says *where to look*,
-never *whether it passes*.
+registry · MCP reader (fast-follow). Conformance is necessary-not-sufficient: it
+says *where to look*, never *whether it passes*. (Coverage is now **all three
+arms** — solo, claude-dispatch, codex/pi-dispatch; the funnel records via
+`record-delta` on both dispatch arms, D5.)
 
 ## Residual risks
 
