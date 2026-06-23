@@ -141,48 +141,93 @@ expected, the input is being burned.
 of all selectors** (both intents) — both are "paths this slice cares about"; the
 conformance diff keys only on `design-target` (D6).
 
+**F-4 — the re-point is scoped to slice-backed RVs.** `run_prime`/`run_status`
+are RV-generic: an RV `--target` may be a phase or a backlog item, not only a
+slice. The selector source exists **only** for a slice-backed RV. So: `run_prime`
+resolves the RV's `--target` → if it is a slice, source the selector list; if it
+is **not** a slice (or the slice has zero selectors), fail clearly with a named
+message (no silent empty cache), not a panic. The RV→slice resolution is explicit.
+Selectors are *committed* authored slice TOML, read in the parent tree (review
+verbs already refuse fork roots, review.rs:1953), so the read is fork-safe by the
+existing invariant — no new fork access introduced.
+
 ### D5 — Recorded source-delta registry: arm-neutral runtime state (OQ-D)
 
 One registry both arms write and the auditor reads, resolved to a single shared
 location regardless of which worktree the command runs in.
 
 - **Home:** `.doctrine/state/slice/<NNN>/boundaries.toml` under the **primary
-  working tree**, resolved via a new `root` helper (git-common-dir → primary
-  worktree), *not* CWD-relative `root::find`. This closes R5: dispatch (in the
-  coordination tree), solo `/execute` (in a fork), and `conformance` (in the main
-  tree) all hit the same file. Worktree layout is a doctrine-owned contract
-  (ADR-006/012), so this is POL-002-clean. Runtime, gitignored, in-loop lifetime.
+  working tree**, resolved by **reusing the existing `worktree::subagent::
+  primary_worktree(cwd)`** (subagent.rs:33 — `git worktree list --porcelain`,
+  correct across layouts), *not* a new helper and *not* CWD-relative `root::find`.
+  Lift/share it as needed; do **not** reinvent (F-5). All commands hit one file
+  regardless of cwd worktree. Worktree layout is a doctrine-owned contract
+  (ADR-006/012) → POL-002-clean. Runtime, gitignored, in-loop lifetime.
+- **Writer = the un-jailed orchestrator / solo agent (F-5).** The only writer is
+  the session process (dispatch orchestrator, or the solo agent), never a jailed
+  worker — so it can write the primary tree by absolute path. `review.rs:1953`'s
+  fork ban does **not** transfer: it guards (i) review verbs invoked *from inside*
+  a `WITHHELD` fork and (ii) an interactive per-review CAS baton. We have neither
+  — **orchestrator-sole-writer (ADR-006)** means a single atomic write, no baton.
 - **Row type:** reuse ledger's `BoundaryRow { phase, code_start_oid,
-  code_end_oid }` — no new parallel row type. (Shared type; if a move is needed to
-  avoid a layering cycle, it relocates to a leaf module both can import.)
-- **Writers:**
-  - solo `/execute` → `doctrine slice record-delta` at phase land.
-  - dispatch `integrate` (dispatch.rs:519/1550) → projects its already-recorded
-    coordination boundaries into the arm-neutral registry as each phase lands (a
-    thin read-coordination-boundaries → write-state-registry call; the one touch
-    to a live dispatch path — kept minimal).
+  code_end_oid }` — no new parallel row type. Extract it to a **leaf module** both
+  `ledger` and `state` import (ADR-001: no engine↔engine cycle); this is a struct
+  move, not a re-implementation.
+- **Write-time validation (F-6).** `record-delta` refuses an under-constrained
+  range: assert `code_start_oid` is an **ancestor of** `code_end_oid` and confine
+  the recorded range to the source-delta commit class (`--first-parent` / reject
+  merge commits). A wrong/wide boundary that would pull trunk into `actual` fails
+  loudly at write, not silently at audit.
+- **Writers / arms:**
+  - **solo** (`/execute`, incl. inline-on-main): **no automatic beat — an explicit
+    `doctrine slice record-delta` call is required** at phase land (User caveat;
+    RFC-004 OQ-11a). Absent it → no row → degrade. This is a contract, not a hope.
+  - **dispatch**: the orchestrator records into the registry at the landing beat
+    (it already captures `code_start`/`code_end`); kept a thin write on the one
+    live dispatch path.
 - **Reader:** `slice conformance` reads only this registry.
-- **Degrade (OQ-1):** empty/absent registry → an honest `unavailable` verdict
-  ("no recorded delta — audit the diff manually"). No fabricated weaker
-  substitute (inline-on-main work falls back to human eyeballing).
+- **Completeness — fail closed on partial coverage (F-2, BLOCKER fix).** Degrade
+  is **not** empty-only. The reader cross-checks recorded rows against the slice's
+  **completed phases** (the `state.rs` phase sheets): it expects **exactly one row
+  per landed phase** (a phase with no code change records an explicit **zero-delta
+  row**, never an omission). On any mismatch — missing phase, extra row, phase
+  completed but unrecorded — it emits `incomplete` (names the gap) and refuses the
+  confident algebra. Empty registry → `unavailable`. Neither ever fabricates a
+  clean diff from a partial actual.
 
 ### D6 — Slice-delta + the algebra (pure core)
 
 ```
-actual : Map<path, Status(A|M|D)>
-       = ⋃ over registry rows of: git diff --name-status <code_start>..<code_end>
+actual : Map<path, StatusSet>     # StatusSet = ordered per-phase events (A|M|D)
+       = fold over registry rows of: git diff --name-status <code_start>..<code_end>
 ```
 
-Per-phase code ranges never include the merge commits that pull `main` in, so
-interleaved trunk contributes nothing and **no base ref is needed** (RFC-004
-OQ-11). Match git's actual paths against the **design-target** selectors by glob
-(a literal path is a degenerate glob — no tree resolution needed for the diff):
+**Net-status rule (F-3).** A path can be touched across phases (A in phase 1, M in
+phase 2; or A then D). The fold does **not** collapse to one ambiguous status —
+each path carries its ordered **event set**, and a defined `net()` derives the
+displayed verb: contains `D` as the last event ⇒ `removed`; contains `A` and no
+trailing `D` ⇒ `added`; otherwise `modified`. Presence in `actual` (the algebra
+key) is order-independent; only the display verb uses `net()`. `net()` is pure and
+unit-tested across A→M, A→D, M→M, M→D→A orderings.
+
+Per-phase code ranges exclude trunk merges by the **write-time guard** (D5/F-6:
+ancestor + non-merge), not by assumption — so interleaved trunk contributes
+nothing and **no base ref is needed** (RFC-004 OQ-11). Match git's actual paths
+against the **design-target** selectors by glob (a literal path is a degenerate
+glob — no tree resolution needed for the diff):
 
 ```
-conformant  = { p ∈ actual.keys | ∃ design-target selector matching p }
-undeclared  = { p ∈ actual.keys | no design-target selector matches p }   # highest signal; carries A|M|D
+conformant  = { p ∈ actual.keys | ∃ design-target selector matching p }   # carries the matched selector
+undeclared  = { p ∈ actual.keys | no design-target selector matches p }   # highest signal; carries net() verb
 undelivered = { design-target selector | no actual path matches it }
 ```
+
+**Glob-breadth transparency (F-7).** A broad `design-target` glob (`src/**`) would
+silently absorb surprise edits into `conformant`, gutting `undeclared`. Mitigation:
+every `conformant` path is reported **with the selector that matched it**, so a
+blanket declaration is visible in the output (the audit sees "all 40 paths matched
+by `src/**`" and can challenge it). A lint that refuses over-broad design-target
+globs is deferred (a follow-up); transparency is the v0.1 guard.
 
 Pure function over `(selectors, actual_map)`. Git + registry + selector reads sit
 in the shell. *Correction (internal review):* the glob matcher is **not**
@@ -196,9 +241,14 @@ staleness resolution (D4) consume it. No new glob dependency.
 - `src/slice.rs` — `Selector`, `SelectorIntent`, `[[selector]]` on `SliceDoc`;
   `selector add|note|list|rm` handlers (upsert/dedup by string).
 - `src/review.rs` — burn + re-point per D4; `Cache` slimmed.
-- `src/state.rs` — `boundaries_path(slice)`, `record_source_delta` writer,
-  reader (reusing `BoundaryRow`).
-- `src/dispatch.rs` — projection into the arm-neutral registry at `integrate`.
+- a **leaf module** — `BoundaryRow` extracted here, imported by both `ledger`
+  and `state` (ADR-001, no engine↔engine cycle; F-5/R3).
+- `src/state.rs` — `boundaries_path(slice)` (resolved via reused
+  `worktree::subagent::primary_worktree`), `record_source_delta` writer with the
+  ancestor + non-merge guard (F-6), reader, and the completed-phases completeness
+  check (F-2, reading the phase sheets).
+- `src/dispatch.rs` — the orchestrator records into the arm-neutral registry at
+  the landing beat (thin write; sole-writer).
 - new pure module (e.g. `src/conformance.rs` or under `slice`) — the algebra
   (D6), unit-tested in isolation.
 - `src/commands/*` — `slice conformance`, `slice record-delta`, `slice selector*`
@@ -228,18 +278,32 @@ staleness resolution (D4) consume it. No new glob dependency.
 ## Verification & test plan
 
 - **Pure algebra unit tests** — conformant / undeclared / undelivered / glob vs
-  literal / empty-registry-degrade / multi-phase union.
-- **`slice conformance` integration test** — fixture slice with a recorded
-  registry + a synthetic commit range; assert the three cells.
+  literal / multi-phase event-set; `net()` over A→M, A→D, M→M, M→D→A (F-3).
+- **Degrade tests (F-2)** — empty registry → `unavailable`; recorded-rows vs
+  completed-phases mismatch (missing / extra / unrecorded-completed) → `incomplete`
+  naming the gap; never a clean diff from partial coverage.
+- **Write-time guard tests (F-6)** — `record-delta` refuses a non-ancestor range
+  and a merge-commit `code_end`.
+- **`slice conformance` integration test** — fixture slice with a complete
+  recorded registry + synthetic ranges; assert the three cells **and** the matched
+  selector per conformant path (F-7).
 - **`slice selector` tests** — batch add (variadic), upsert semantics, `note`
   override, `rm`, round-trip through `slice-NNN.toml`.
-- **Review behaviour-preservation** — existing staleness tests stay green with
-  the selector source swapped in; domain_map-input tests migrated.
+- **Non-slice RV (F-4)** — `run_prime` against a phase/backlog RV target fails
+  with the named message, not a panic or silent-empty cache.
+- **Review behaviour-preservation** — the staleness *computation* (the pure
+  `diff`) stays green; only its input fixtures migrate from `domain_map.toml` to
+  the selector source (the invariant is the computation, not the input format).
 - **POL-002 conformance (VH)** — reviewer challenge: no `(SL-NNN)` grep; delta
   rests only on recorded oids.
-- **Prove-value (VA/VH)** — dogfood `slice conformance SL-147` against SL-147's
-  own recorded boundaries before close; confirm the diff surfaces signal a human
-  would otherwise hand-hunt.
+- **Prove-value (VA/VH) — concrete, achievable target (F-8).** The earlier
+  dogfood was circular (SL-147's own boundaries presuppose the recorder works and
+  that SL-147 ran through a recording arm — false if built inline on edge).
+  Instead: after `record-delta` lands (its phase), **explicitly record SL-147's
+  own per-phase boundaries via `record-delta`** (the solo arm's required explicit
+  call), then run `slice conformance SL-147` and confirm it surfaces real signal.
+  Fallback target: a separate slice executed through dispatch. The proof no longer
+  depends on an automatic capture that may not have fired.
 
 ## Non-goals (reaffirmed)
 
@@ -259,21 +323,23 @@ says *where to look*, never *whether it passes*.
   correct signal (declared, not delivered), but a glob matching nothing because
   the work is *pending* (mid-slice) is noise. Mitigate: conformance is an
   audit-time (slice-complete) read; document the timing assumption.
-- **R3 — `BoundaryRow` reuse across modules.** Risk of an ADR-001 layering cycle
-  if `state.rs` imports `ledger`. Mitigate: relocate the row to a shared leaf if
-  needed (a struct move, not a re-implementation).
+- **R3 — `BoundaryRow` reuse across modules (RESOLVED).** ADR-001 forbids an
+  engine↔engine cycle, so the row is **extracted to a leaf module** both `ledger`
+  and `state` import (D5). A struct move, not a re-implementation — confirmed a
+  non-violation under that move (external review concurred).
 - **R4 — review suite churn.** Burning the input changes test fixtures; the
   computation behaviour is the invariant, not the input format.
-- **R5 — cross-worktree registry visibility (RESOLVED → option (a)).**
-  `root::find` is CWD-relative with no git-common-dir awareness, and the dispatch
-  orchestrator `cd`s into the coordination worktree before `sync` (dispatch-agent
-  SKILL.md), so a coordination-tree `.doctrine/state/` registry is invisible to
-  `conformance` in the main tree. **Resolution:** a new `root` helper resolves the
-  registry against the **primary working tree** (git-common-dir → primary
-  worktree), used by both `record-delta` and `conformance` (D5). Single shared
-  file, arm-agnostic. The helper is reusable platform infrastructure (likely
-  wanted elsewhere). Residual: the helper must handle the non-worktree / bare-repo
-  edge and the "not in a repo" error path.
+- **R5 — cross-worktree registry visibility (RESOLVED → option (a), F-5).**
+  `root::find` is CWD-relative, and the dispatch orchestrator `cd`s into the
+  coordination worktree, so a coordination-tree registry is invisible to
+  `conformance` in the main tree. **Resolution:** reuse the **existing**
+  `worktree::subagent::primary_worktree(cwd)` (subagent.rs:33) — not a new helper —
+  for both `record-delta` and `conformance`; one shared file under the primary
+  tree (D5). Safe because the sole writer is the un-jailed orchestrator/solo agent
+  (ADR-006), a single atomic write, no baton — the `review.rs:1953` fork ban is
+  contextual (fork `WITHHELD` tier + interactive CAS baton) and does not transfer.
+  Residual: confirm `primary_worktree`'s bare-repo / not-a-repo error path suits
+  the conformance + record-delta call sites.
 
 ## Open questions (remaining)
 
@@ -283,8 +349,9 @@ says *where to look*, never *whether it passes*.
   residue).
 - **OQ-conf-2** — does `record-delta` belong under `slice` or a neutral verb both
   arms share without the `slice` prefix? Lean `slice record-delta` for v0.1.
-- **OQ-conf-3** — *Resolved → (a).* Primary-working-tree resolver (D5/R5). The
-  helper's edge cases (bare repo, not-a-repo) land in `/plan`.
+- **OQ-conf-3** — *Resolved → (a), reusing `primary_worktree` (D5/R5/F-5).* The
+  resolver's bare-repo / not-a-repo error path is confirmed at the call sites in
+  `/plan`.
 
 ## References
 

@@ -1,0 +1,88 @@
+id    = 148
+slug  = "inquisition-sl-147-design-heresy-hunt"
+title = "Inquisition: SL-147 design heresy hunt"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-147"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Design ships against an unreconciled, self-contradictory RFC-004 cut"
+detail = "Expected: SL-147 either stays within RFC-004 v0.1's literal cut or revises the RFC first. Observed: RFC-004 v0.1 §'The cut that simplifies everything' states 'L2 (actual-delta) is never stored — git is the source ... v0.1 has no orchestrator writer' and lists 'review domain_map migration' under Explicitly-deferred; yet design.md D4 BURNS domain_map and D5 ADDS a recorded runtime source-delta registry with orchestrator/solo writers. The design follows RFC OQ-11a (resolved later: 'records each phase's source-delta SHA as runtime/derived state at land-time'), which directly contradicts the earlier v0.1 'no writer / L2 never stored' line. RFC-004 is internally inconsistent and SL-147 silently picks the later arm. Penance: reconcile RFC-004 (record that OQ-11a supersedes the v0.1 no-writer line) and note the deliberate, User-authorized scope decision in design.md, before planning. (codex finding 1)"
+disposition = "design-wrong"
+response = "RFC-004 was the defect: its v0.1 'no orchestrator writer / L2 never stored' line predates and contradicts its own later-resolved OQ-11a (record source-delta SHA at land). Reconciled the RFC (rfc-004.md §'The cut that simplifies everything' now clarifies: 'never stored' governs the L2 file-set, not the SHA boundary identity; OQ-11a's recording beat is consistent; solo arm depends on explicit SHA recording). design.md D5/RFC note records the User-authorized decision. Contradiction killed at source."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Partial boundary coverage yields a false-clean diff (degrades only on empty)"
+detail = "Expected: conformance fails closed when phase coverage is incomplete. Observed: D5 degrades to 'unavailable' ONLY on an empty/absent registry; D6 unions whatever rows exist. If some phases recorded a boundary and others did not (e.g. one phase done inline-on-main, others via dispatch; or dispatch.rs omits empty-code phases), the union is computed over a PARTIAL actual set and emits a confident-but-wrong {conformant/undeclared/undelivered} — the worst failure for an audit gate. Penance: an auditable completeness check — exactly one row per landed/completed phase (explicit zero-delta row, never omission), compared against the slice's completed phases; mismatch degrades or warns, never silently proceeds. (codex finding 2 + Inquisitor H1)"
+disposition = "fix-now"
+response = "design.md D5 now fails closed on partial coverage: reader cross-checks recorded rows against the slice's completed phases (state.rs phase sheets), expects exactly one row per landed phase (explicit zero-delta row, never omission), emits 'incomplete' naming the gap on any mismatch; empty → 'unavailable'. Never a clean diff from partial actual. Degrade tests added to the plan."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Union name-status into Map<path,Status> is lossy and order-dependent"
+detail = "Expected: a well-defined actual-side status per path. Observed: D6 defines actual = ⋃ git diff --name-status over per-phase ranges folded into Map<path,Status(A|M|D)>. A path that is A in phase 1 then M in phase 2 (net A), or A then D (net absent), has no defined single status; the fold is order-dependent. Penance: define and TEST an explicit netting rule (per-path event set, or net status over the full recorded range) rather than relying on an undefined map collapse. (codex finding 3 + Inquisitor H4)"
+disposition = "fix-now"
+response = "design.md D6 now carries an ordered per-path event set, not an ambiguous Map collapse; a defined pure net() derives the display verb (trailing D ⇒ removed; A w/o trailing D ⇒ added; else modified). Presence (the algebra key) is order-independent. Unit-tested across A→M, A→D, M→M, M→D→A."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "domain_map burn specializes the RV-generic staleness reader; non-slice RV + fork reads unhandled"
+detail = "Expected: burning domain_map leaves review status (run_status, review.rs:2682) working for ALL RV subjects. Observed: run_status/run_prime are RV-generic (an RV target may be a phase or backlog item, not only a slice); D4 says run_prime 'resolves the slice's selectors' but gives no rule for non-slice RV targets (no selector source → prime breaks or must fall back), and no review→slice resolution is specified. Also review.rs:1953 forbids fork-resolved review roots — selectors are committed authored slice state (object-db readable), so confirm the re-point reads them without tripping that ban. Penance: explicitly scope the selector-sourced staleness to slice-backed RVs and fail clearly (or fall back) for non-slice targets; specify the RV-target→slice→selectors resolution; confirm committed-selector reads are fork-safe. (codex finding 4 + Inquisitor H8)"
+disposition = "fix-now"
+response = "design.md D4 now scopes the selector-sourced staleness to slice-backed RVs: run_prime resolves RV --target; non-slice target (or zero selectors) fails with a named message, not a silent-empty cache or panic. RV→slice resolution explicit. Selectors are committed authored slice TOML read in the parent tree, fork-safe by the existing review.rs:1953 invariant — no new fork access."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Cross-worktree registry: reinvents an existing resolver and co-writes gitignored primary-tree state"
+detail = "Expected: a safe, shared, non-duplicated cross-worktree surface. Observed: (a) D5/R5 proposes a NEW primary-working-tree resolver, but one already exists at src/worktree/subagent.rs:33 — reinventing it is parallel implementation. (b) Writing a gitignored primary-tree file from another worktree is the pattern review.rs:1953 bans (fork-invoked review refused precisely because parent-tree gitignored co-writes are unsafe) and that dispatch avoids by committed object-db tree-reads (dispatch.rs); ISS-039 is the same visibility-bug family. Penance: REUSE worktree/subagent.rs:33; justify the cross-worktree write explicitly via orchestrator-sole-writer (ADR-006, no concurrent writers) and cover the solo-fork and inline-on-main cases — or adopt the committed/ref-backed pattern. (codex finding 5 + Inquisitor R5)"
+disposition = "fix-now"
+response = "design.md D5/R5 now REUSES worktree::subagent::primary_worktree (subagent.rs:33), not a reinvented helper. Cross-worktree write justified: sole writer is the un-jailed orchestrator/solo agent (ADR-006), single atomic write, no baton. review.rs:1953's fork ban shown contextual (fork WITHHELD tier + interactive CAS baton) and non-transferable — verified by reading resolve_review_root. The reinvention (real) is removed; the safety concern (a misread of context) is rebutted in-design."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Recorded-delta range under-constrained — no ancestry/non-merge guard against trunk pollution"
+detail = "Expected: the recorded range provably excludes merged-in trunk (RFC OQ-11). Observed: D6 ASSERTS 'per-phase code ranges never include the merge commits that pull main in' but nothing enforces it — run_record_boundary (dispatch.rs:535) only resolves refs to oids, BoundaryRow (ledger.rs:85/87) carries bare start/end strings, no ancestry or non-merge validation. A wrong/wide boundary (code_start predating a trunk merge) silently pollutes actual with trunk files. Penance: validate at write time that code_start_oid is an ancestor of code_end_oid and constrain to the source-delta commit class (e.g. --first-parent / non-merge), or record exact delta-commit oids. (codex finding 6)"
+disposition = "fix-now"
+response = "design.md D5 adds a write-time guard to record-delta: assert code_start_oid ancestor-of code_end_oid and confine to the source-delta commit class (--first-parent / reject merge). A wide/wrong boundary that would pull trunk into actual fails loudly at write, not silently at audit. The OQ-11 'trunk contributes nothing' claim is now enforced, not assumed. Guard tests added."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Broad design-target globs silently neuter the undeclared signal"
+detail = "Expected: undeclared (touched-but-undeclared) stays the highest-value audit cell. Observed: D2 permits a glob selector for any intent and D6 marks any actual path matching ANY design-target selector as conformant — so a single broad 'src/**' design-target declaration makes every surprise edit vanish from undeclared. The core signal degrades silently with glob breadth. Penance: at minimum surface which selector matched each conformant path (so blanket declarations are visible in the output); optionally lint/refuse over-broad design-target globs. (codex finding 7 + Inquisitor H5)"
+disposition = "fix-now"
+response = "design.md D6 now reports every conformant path WITH the design-target selector that matched it, so a blanket 'src/**' declaration is visible in the audit output ('40 paths matched by src/**' invites challenge) rather than silently absorbing surprises. A lint refusing over-broad design-target globs is deferred to follow-up; transparency is the v0.1 guard. Integration test asserts matched-selector reporting."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "Prove-value dogfood (conformance on SL-147's own boundaries) may be unachievable"
+detail = "Expected: a concrete, runnable prove-value demo. Observed: the design's verification dogfoods 'slice conformance SL-147' against SL-147's own recorded boundaries — but that presupposes (i) record-delta already works and (ii) SL-147 itself is executed via an arm that records (dispatch or worktree-solo). If SL-147 is built inline on edge/main (likely, given multi-file surgery), NO boundary is recorded → degrade → the demo proves nothing. The killer-consumer proof is circular/vapor. Penance: pin a concrete achievable demo target — e.g. manually record SL-147's per-phase boundaries via record-delta, or run conformance against a separate slice executed through dispatch. (Inquisitor H7)"
+disposition = "fix-now"
+response = "design.md verification replaces the circular dogfood (SL-147's own auto-captured boundaries, which may never fire if built inline) with a concrete achievable target: after record-delta lands, explicitly record SL-147's per-phase boundaries via the solo arm's required record-delta call, then run slice conformance SL-147. Fallback: a separate dispatched slice. Proof no longer depends on an automatic capture that may not have fired."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
