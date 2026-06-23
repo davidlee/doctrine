@@ -36,6 +36,95 @@ use std::str::FromStr;
 use clap::Subcommand;
 
 // ---------------------------------------------------------------------------
+// Selector types (SL-147 PHASE-01)
+// ---------------------------------------------------------------------------
+
+/// The author-declared relationship between a selector and the slice's work.
+/// `scope-relevant` = read-relevant (L0); `design-target` = will-touch (L1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, Serialize, clap::ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum SelectorIntent {
+    ScopeRelevant,
+    DesignTarget,
+}
+
+/// One authored `[[selector]]` entry in the slice's TOML — a path|glob
+/// annotation carrying an intent and an optional one-line note.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub(crate) struct Selector {
+    /// Path or glob string — identity of the selector.
+    #[expect(clippy::struct_field_names, reason = "`selector` is the canonical noun from RFC-004")]
+    pub(crate) selector: String,
+    pub(crate) intent: SelectorIntent,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub(crate) note: Option<String>,
+}
+
+/// Subcommands under `doctrine slice selector`.
+#[derive(Subcommand)]
+pub(crate) enum SelectorCommand {
+    /// Add or update one or more selectors (batch, one shared intent).
+    Add {
+        /// Slice id, e.g. 147.
+        id: u32,
+
+        /// One intent for all selectors in this batch.
+        #[arg(long, value_parser = clap::value_parser!(SelectorIntent))]
+        intent: SelectorIntent,
+
+        /// Path-or-glob selector strings to add/update.
+        globs: Vec<String>,
+
+        /// Optional shared note.
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Upsert the `note` field on one selector.
+    Note {
+        /// Slice id.
+        id: u32,
+
+        /// The exact selector string to annotate.
+        selector: String,
+
+        /// The note text.
+        text: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List the selectors for a slice.
+    List {
+        /// Slice id.
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Remove one or more selectors by exact string match.
+    Rm {
+        /// Slice id.
+        id: u32,
+
+        /// Selector strings to remove.
+        globs: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+// ---------------------------------------------------------------------------
 // CLI enum & dispatch (PHASE-03 relocation from main.rs)
 // ---------------------------------------------------------------------------
 
@@ -185,6 +274,12 @@ pub(crate) enum SliceCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Manage the selector list (path|glob + intent) for a slice.
+    Selector {
+        #[command(subcommand)]
+        command: SelectorCommand,
+    },
 }
 
 pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
@@ -249,6 +344,7 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             write!(io::stdout(), "{}", all_lines.join("\n"))?;
             Ok(())
         }
+        SliceCommand::Selector { command } => dispatch_selector(command),
     }
 }
 
@@ -1238,6 +1334,9 @@ struct SliceDoc {
     estimate: Option<crate::estimate::EstimateFacet>,
     #[serde(default)]
     value: Option<crate::value::ValueFacet>,
+    /// Selectors — path|glob annotations with intent (SL-147).
+    #[serde(default, rename = "selector")]
+    selectors: Vec<Selector>,
 }
 
 // note: `gate` carries `#[serde(default)]` so a hand-trimmed file with no `[gate]`
@@ -1520,6 +1619,227 @@ fn show_json(
     }
     let value = serde_json::json!({ "kind": "slice", "slice": slice, "body": body });
     serde_json::to_string_pretty(&value).context("failed to serialize slice show JSON")
+}
+
+// ---------------------------------------------------------------------------
+// Selector handlers (SL-147 PHASE-01)
+// ---------------------------------------------------------------------------
+
+fn dispatch_selector(cmd: SelectorCommand) -> anyhow::Result<()> {
+    match cmd {
+        SelectorCommand::Add {
+            id,
+            intent,
+            globs,
+            note,
+            path,
+        } => run_selector_add(path, id, intent, &globs, note.as_deref()),
+        SelectorCommand::Note {
+            id,
+            selector,
+            text,
+            path,
+        } => run_selector_note(path, id, &selector, &text),
+        SelectorCommand::List { id, path } => run_selector_list(path, id),
+        SelectorCommand::Rm { id, globs, path } => run_selector_rm(path, id, &globs),
+    }
+}
+
+/// Open a slice's TOML as a `toml_edit::DocumentMut` for edit-preserving writes.
+fn open_selector_doc(root: &Path, id: u32) -> anyhow::Result<(PathBuf, toml_edit::DocumentMut)> {
+    let slice_root = root.join(SLICE_DIR);
+    let toml_path = slice_toml_path(&slice_root, id);
+    let text = fs::read_to_string(&toml_path)
+        .with_context(|| format!("slice {} not found at {}", id, toml_path.display()))?;
+    let doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+    Ok((toml_path, doc))
+}
+
+fn run_selector_add(
+    path: Option<PathBuf>,
+    id: u32,
+    intent: SelectorIntent,
+    globs: &[String],
+    note: Option<&str>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (toml_path, mut doc) = open_selector_doc(&root, id)?;
+
+    let intent_str = serde_rename_kebab(intent);
+    for glob in globs {
+        selector_upsert(&mut doc, glob, intent_str, note)?;
+    }
+
+    crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())?;
+    let cid = canonical_id(id);
+    writeln!(
+        io::stdout(),
+        "{cid}: upserted {} selector(s)\n",
+        globs.len()
+    )?;
+    Ok(())
+}
+
+fn run_selector_note(
+    path: Option<PathBuf>,
+    id: u32,
+    selector: &str,
+    text: &str,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (toml_path, mut doc) = open_selector_doc(&root, id)?;
+
+    let found = selector_set_note(&mut doc, selector, text);
+    if !found {
+        let cid = canonical_id(id);
+        anyhow::bail!("{cid}: no selector `{selector}` — add it first");
+    }
+
+    crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())?;
+    writeln!(io::stdout(), "{selector}: note set")?;
+    Ok(())
+}
+
+fn run_selector_list(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    let (doc, _toml_text, _body) = read_slice(&slice_root, id)?;
+
+    if doc.selectors.is_empty() {
+        writeln!(io::stdout(), "(no selectors)")?;
+        return Ok(());
+    }
+    for s in &doc.selectors {
+        let note = s.note.as_deref().unwrap_or("-");
+        writeln!(
+            io::stdout(),
+            "{}  {: <16}  {}",
+            s.selector,
+            serde_rename_kebab(s.intent),
+            note
+        )?;
+    }
+    Ok(())
+}
+
+fn run_selector_rm(
+    path: Option<PathBuf>,
+    id: u32,
+    globs: &[String],
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (toml_path, mut doc) = open_selector_doc(&root, id)?;
+
+    let removed = selector_remove_many(&mut doc, globs);
+    if removed > 0 {
+        crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())?;
+    }
+    writeln!(io::stdout(), "Removed {removed} selector(s)")?;
+    Ok(())
+}
+
+// -- pure helpers (edit `toml_edit::DocumentMut`) ----------------------------
+
+/// Serialise a `SelectorIntent` as its kebab-case wire value.
+fn serde_rename_kebab(intent: SelectorIntent) -> &'static str {
+    match intent {
+        SelectorIntent::ScopeRelevant => "scope-relevant",
+        SelectorIntent::DesignTarget => "design-target",
+    }
+}
+
+/// Upsert one selector row into `doc`'s `[[selector]]` array-of-tables.
+/// Identity = the `selector` string. When a row with the same string exists,
+/// its `intent` (and optionally `note`) are updated in-place rather than
+/// appended.
+fn selector_upsert(
+    doc: &mut toml_edit::DocumentMut,
+    glob: &str,
+    intent: &str,
+    note: Option<&str>,
+) -> anyhow::Result<()> {
+    let array = doc
+        .as_table_mut()
+        .entry("selector")
+        .or_insert_with(|| {
+            toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new())
+        })
+        .as_array_of_tables_mut()
+        .ok_or_else(|| anyhow::anyhow!("`selector` key exists but is not an array-of-tables (corrupt file)"))?;
+
+    // In-place update if the selector string already exists.
+    for row in array.iter_mut() {
+        if row.get("selector")
+            .and_then(toml_edit::Item::as_str)
+            .is_some_and(|s| s == glob)
+        {
+            row.insert("intent", toml_edit::value(intent));
+            if let Some(n) = note {
+                row.insert("note", toml_edit::value(n));
+            }
+            return Ok(());
+        }
+    }
+
+    // Append a new row.
+    let mut row = toml_edit::Table::new();
+    row.insert("selector", toml_edit::value(glob));
+    row.insert("intent", toml_edit::value(intent));
+    if let Some(n) = note {
+        row.insert("note", toml_edit::value(n));
+    }
+    array.push(row);
+    Ok(())
+}
+
+/// Set `note` on the selector row whose `selector` string matches exactly.
+/// Returns `true` when a row was found and updated.
+fn selector_set_note(
+    doc: &mut toml_edit::DocumentMut,
+    selector: &str,
+    text: &str,
+) -> bool {
+    let Some(array) = doc
+        .as_table_mut()
+        .get_mut("selector")
+        .and_then(toml_edit::Item::as_array_of_tables_mut)
+    else {
+        return false;
+    };
+    for row in array.iter_mut() {
+        if row
+            .get("selector")
+            .and_then(toml_edit::Item::as_str)
+            .is_some_and(|s| s == selector)
+        {
+            row.insert("note", toml_edit::value(text));
+            return true;
+        }
+    }
+    false
+}
+
+/// Remove every selector row whose selector string matches one of `globs`.
+/// Returns the count of rows removed.
+fn selector_remove_many(doc: &mut toml_edit::DocumentMut, globs: &[String]) -> usize {
+    let Some(array) = doc
+        .as_table_mut()
+        .get_mut("selector")
+        .and_then(toml_edit::Item::as_array_of_tables_mut)
+    else {
+        return 0;
+    };
+    let before = array.len();
+    array.retain(|row| {
+        let s = row
+            .get("selector")
+            .and_then(toml_edit::Item::as_str)
+            .unwrap_or("");
+        !globs.iter().any(|g| g == s)
+    });
+    before - array.len()
 }
 
 // ---------------------------------------------------------------------------
@@ -2445,6 +2765,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         // SL-048: tier-1 edges are passed in (read from `[[relation]]`), not a struct.
         let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
@@ -2489,6 +2810,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
         let posture =
@@ -2539,6 +2861,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
         let posture =
@@ -2584,6 +2907,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
@@ -2619,6 +2943,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
@@ -2660,6 +2985,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
@@ -2695,6 +3021,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
@@ -2740,6 +3067,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
@@ -2844,6 +3172,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let tier1 = Vec::new();
         let ds = DepSeq {
@@ -2911,6 +3240,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
         let json = show_json(&doc, &[], &crate::dep_seq::DepSeq::default(), "# body\n").unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -2935,6 +3265,7 @@ mod tests {
                 upper: 8.0,
             }),
             value: None,
+            selectors: vec![],
         };
 
         let toml = toml::to_string_pretty(&doc).unwrap();
@@ -2958,6 +3289,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: Some(crate::value::ValueFacet { value: 5.0 }),
+            selectors: vec![],
         };
 
         let toml = toml::to_string_pretty(&doc).unwrap();
@@ -2982,6 +3314,7 @@ mod tests {
             gate: Gate::default(),
             estimate: None,
             value: None,
+            selectors: vec![],
         };
 
         let toml = toml::to_string_pretty(&doc).unwrap();
@@ -4508,5 +4841,182 @@ mod tests {
             root,
         );
         assert!(result.is_err());
+    }
+
+    // -- SL-147 PHASE-01: selector tests -------------------------------
+
+    #[test]
+    fn selector_intent_serde_kebab_case_round_trip() {
+        // VT-2: kebab-case round-trip via Selector struct
+        let selector: Selector = toml::from_str(
+            "selector = \"src/x.rs\"\nintent = \"scope-relevant\"\n"
+        ).unwrap();
+        assert_eq!(selector.intent, SelectorIntent::ScopeRelevant);
+
+        let selector: Selector = toml::from_str(
+            "selector = \"src/y.rs\"\nintent = \"design-target\"\nnote = \"hi\"\n"
+        ).unwrap();
+        assert_eq!(selector.intent, SelectorIntent::DesignTarget);
+        assert_eq!(selector.note.as_deref(), Some("hi"));
+
+        // Unknown variant rejected
+        let err = toml::from_str::<Selector>(
+            "selector = \"x\"\nintent = \"bogus\"\n"
+        );
+        assert!(err.is_err(), "unknown intent should be rejected");
+    }
+
+    #[test]
+    fn slice_doc_without_selectors_deserializes_empty() {
+        // EX-1 / VT-2: absent [[selector]] → empty Vec
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "no-selectors", "No Selectors", "2026-06-24");
+        let (doc, _toml_text, _body) =
+            read_slice(&slice_root(root), 1).unwrap();
+        assert!(doc.selectors.is_empty());
+    }
+
+    #[test]
+    fn selector_add_and_read_back() {
+        // VT-1: add selectors, read back via (re)deserialization
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "test", "Test", "2026-06-24");
+
+        let slice_root = root.join(SLICE_DIR);
+        let toml_path = slice_toml_path(&slice_root, 1);
+
+        // Add 3 selectors
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        selector_upsert(&mut doc, "src/x.rs", "design-target", None).unwrap();
+        selector_upsert(&mut doc, "src/y.rs", "design-target", Some("shared note")).unwrap();
+        selector_upsert(&mut doc, "docs/*.md", "scope-relevant", None).unwrap();
+        fs::write(&toml_path, doc.to_string()).unwrap();
+
+        // Re-read as SliceDoc
+        let (doc, _toml_text, _body) = read_slice(&slice_root, 1).unwrap();
+        assert_eq!(doc.selectors.len(), 3);
+        assert_eq!(doc.selectors[0].selector, "src/x.rs");
+        assert_eq!(doc.selectors[0].intent, SelectorIntent::DesignTarget);
+        assert_eq!(doc.selectors[0].note, None);
+        assert_eq!(doc.selectors[1].selector, "src/y.rs");
+        assert_eq!(doc.selectors[1].note.as_deref(), Some("shared note"));
+        assert_eq!(doc.selectors[2].selector, "docs/*.md");
+        assert_eq!(doc.selectors[2].intent, SelectorIntent::ScopeRelevant);
+    }
+
+    #[test]
+    fn selector_upsert_is_idempotent() {
+        // VT-1: re-add same selector updates intent/note
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "test", "Test", "2026-06-24");
+
+        let slice_root = root.join(SLICE_DIR);
+        let toml_path = slice_toml_path(&slice_root, 1);
+
+        // First add
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        selector_upsert(&mut doc, "src/x.rs", "scope-relevant", Some("first")).unwrap();
+        fs::write(&toml_path, doc.to_string()).unwrap();
+
+        // Re-add with different intent + note
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        selector_upsert(&mut doc, "src/x.rs", "design-target", Some("updated")).unwrap();
+        fs::write(&toml_path, doc.to_string()).unwrap();
+
+        // Read back — should have ONE entry with updated values
+        let (doc, _toml_text, _body) = read_slice(&slice_root, 1).unwrap();
+        assert_eq!(doc.selectors.len(), 1, "upsert should not duplicate");
+        assert_eq!(doc.selectors[0].selector, "src/x.rs");
+        assert_eq!(doc.selectors[0].intent, SelectorIntent::DesignTarget);
+        assert_eq!(doc.selectors[0].note.as_deref(), Some("updated"));
+    }
+
+    #[test]
+    fn selector_note_sets_per_file_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "test", "Test", "2026-06-24");
+
+        let slice_root = root.join(SLICE_DIR);
+        let toml_path = slice_toml_path(&slice_root, 1);
+
+        // Add two selectors with shared note
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        selector_upsert(&mut doc, "src/x.rs", "design-target", Some("shared")).unwrap();
+        selector_upsert(&mut doc, "src/y.rs", "design-target", Some("shared")).unwrap();
+        fs::write(&toml_path, doc.to_string()).unwrap();
+
+        // Override note on just one
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        assert!(selector_set_note(&mut doc, "src/x.rs", "per-file override"));
+        fs::write(&toml_path, doc.to_string()).unwrap();
+
+        let (doc, _toml_text, _body) = read_slice(&slice_root, 1).unwrap();
+        assert_eq!(doc.selectors.len(), 2);
+        assert_eq!(doc.selectors[0].note.as_deref(), Some("per-file override"));
+        assert_eq!(doc.selectors[1].note.as_deref(), Some("shared"));
+    }
+
+    #[test]
+    fn selector_note_missing_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "test", "Test", "2026-06-24");
+
+        let slice_root = root.join(SLICE_DIR);
+        let toml_path = slice_toml_path(&slice_root, 1);
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        assert!(!selector_set_note(&mut doc, "nonexistent", "note"));
+    }
+
+    #[test]
+    fn selector_rm_variadic() {
+        // VT-1: add 3, rm 2, verify 1 remains
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "test", "Test", "2026-06-24");
+
+        let slice_root = root.join(SLICE_DIR);
+        let toml_path = slice_toml_path(&slice_root, 1);
+
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        selector_upsert(&mut doc, "src/a.rs", "design-target", None).unwrap();
+        selector_upsert(&mut doc, "src/b.rs", "design-target", None).unwrap();
+        selector_upsert(&mut doc, "src/c.rs", "design-target", None).unwrap();
+        fs::write(&toml_path, doc.to_string()).unwrap();
+
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        let removed = selector_remove_many(&mut doc, &["src/a.rs".into(), "src/b.rs".into()]);
+        assert_eq!(removed, 2);
+        fs::write(&toml_path, doc.to_string()).unwrap();
+
+        let (doc, _toml_text, _body) = read_slice(&slice_root, 1).unwrap();
+        assert_eq!(doc.selectors.len(), 1);
+        assert_eq!(doc.selectors[0].selector, "src/c.rs");
+    }
+
+    #[test]
+    fn selector_rm_noop_on_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "test", "Test", "2026-06-24");
+
+        let slice_root = root.join(SLICE_DIR);
+        let toml_path = slice_toml_path(&slice_root, 1);
+        let mut doc = fs::read_to_string(&toml_path).unwrap()
+            .parse::<toml_edit::DocumentMut>().unwrap();
+        let removed = selector_remove_many(&mut doc, &["nonexistent".into()]);
+        assert_eq!(removed, 0);
     }
 }

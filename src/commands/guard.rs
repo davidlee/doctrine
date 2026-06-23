@@ -82,6 +82,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::slice::SliceCommand::List { .. }
             | crate::slice::SliceCommand::Show { .. }
             | crate::slice::SliceCommand::Paths { .. } => Read,
+            crate::slice::SliceCommand::Selector { .. } => Write("slice selector"),
         },
         Command::Memory { command } => match command {
             MemoryCommand::Record { .. } => Write("memory record"),
