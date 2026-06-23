@@ -81,3 +81,22 @@ artifact tells an untruth post-implementation — nothing for `/reconcile` to wr
 `/reconcile` has no write surface to action — the brief is empty by construction.
 Hand straight through to status `reconcile`, then `/reconcile` confirms the
 no-op and routes to `/close`.
+
+## Reconciliation Outcome
+
+All six findings (F-1..F-6) were `verified` — no dispositions required amendment.
+No writes needed on either surface:
+
+### Direct edits applied
+- **None.** per-slice artefacts (design.md, plan.toml, slice-145.md) match the
+  shipped implementation 1:1; conformance findings F-1..F-5 all `aligned`.
+
+### REVs completed
+- **None.** No finding touched an ADR, POL, STD, spec, or requirement. No
+  governance/spec artefact needed amendment.
+
+### Fixed in-audit
+- RV-146 F-6 (`fix-now`): stale SL-095 test comment at `relation.rs:1717` tidied
+  in-place during audit; `just check` exit 0.
+
+Reconcile pass complete — handoff to /close.
