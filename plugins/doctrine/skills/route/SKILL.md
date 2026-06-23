@@ -5,8 +5,10 @@ description: Use at the very start of ANY substantive work in a Doctrine repo â€
 
 # Route
 
-The mandatory routing layer for Doctrine. Follow it rigorously unless the user
-has explicitly instructed otherwise.
+The mandatory routing layer for Doctrine. Follow it rigorously *unless* the user
+has instructed otherwise. If the user explicitly invoked a skill, use that 
+now; if the routing layer indicates a subsequent action in a chain, go on 
+with it afterwards.
 
 Do not respond, explore, inspect files, run commands, or start implementation
 until you have chosen the skill that governs the task. If there is a reasonable
