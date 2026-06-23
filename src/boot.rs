@@ -159,6 +159,52 @@ fn gov_nudge(heading: &str) -> String {
     format!("<!-- No active {kind} yet. See mem.signpost.doctrine.policies-standards -->")
 }
 
+/// Strip HTML comments (`<!-- ... -->`) from `s`, collapsing runs of
+/// 3+ consecutive newlines to at most 2 (eliminates blank-line artifacts
+/// from removed comments). Leading/trailing whitespace is trimmed (the
+/// result is injected into a code-block section heading, not free-form
+/// prose, so leading indentation is not semantic).
+///
+/// Single pass — no intermediate allocation beyond the output buffer.
+fn strip_html_comments(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    let mut newline_count = 0u8;
+
+    while let Some(start) = rest.find("<!--") {
+        // Push content before comment, collapsing newlines.
+        for c in rest[..start].chars() {
+            push_collapsed_newline(&mut out, c, &mut newline_count);
+        }
+        if let Some(end) = rest[start..].find("-->") {
+            rest = &rest[start + end + 3..];
+        } else {
+            rest = "";
+            break;
+        }
+    }
+    // Push remaining content after last comment.
+    for c in rest.chars() {
+        push_collapsed_newline(&mut out, c, &mut newline_count);
+    }
+
+    out.trim().to_string()
+}
+
+/// Push `c` to `out`, capping consecutive newlines at 2.
+/// A non-newline character resets the counter.
+fn push_collapsed_newline(out: &mut String, c: char, count: &mut u8) {
+    if c == '\n' {
+        *count = count.saturating_add(1);
+        if *count <= 2 {
+            out.push(c);
+        }
+    } else {
+        *count = 0;
+        out.push(c);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Impure shell: produce each body, write on change, run the verb
 // ---------------------------------------------------------------------------
@@ -226,7 +272,9 @@ fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Sectio
         // optional user-authored footer — read from disk, marker when absent.
         SourceKind::Footer => section_or_marker(
             heading,
-            fs::read_to_string(root.join(FOOTER_REL)).map_err(anyhow::Error::from),
+            fs::read_to_string(root.join(FOOTER_REL))
+                .map_err(anyhow::Error::from)
+                .map(|s| strip_html_comments(&s)),
         ),
     };
     Section {
@@ -2293,6 +2341,85 @@ mod tests {
             "<!-- Memory: not yet populated -->",
             "producer error → marker, never a crash",
         );
+    }
+
+    // --- VT-1: strip_html_comments ---
+
+    #[test]
+    fn strip_html_comments_strips_simple_comment() {
+        assert_eq!(
+            strip_html_comments("before<!-- comment -->after"),
+            "beforeafter"
+        );
+    }
+
+    #[test]
+    fn strip_html_comments_handles_multiline_comment() {
+        let input = "\
+keep
+
+<!-- this is
+  a multi-line
+  comment -->
+
+also keep";
+        assert_eq!(strip_html_comments(input), "keep\n\nalso keep");
+    }
+
+    #[test]
+    fn strip_html_comments_collapses_excess_newlines() {
+        // 5 consecutive newlines → 2
+        let input = "a\n\n\n\n\nb";
+        assert_eq!(strip_html_comments(input), "a\n\nb");
+    }
+
+    #[test]
+    fn strip_html_comments_trims_surrounding_whitespace() {
+        assert_eq!(strip_html_comments("  \n  \ncontent\n  "), "content");
+    }
+
+    #[test]
+    fn strip_html_comments_noop_on_plain_text() {
+        let input = "just plain text\nwith lines";
+        assert_eq!(strip_html_comments(input), input.trim());
+    }
+
+    #[test]
+    fn strip_html_comments_strips_leading_comment() {
+        let input = "\
+<!-- start comment -->
+
+go";
+        assert_eq!(strip_html_comments(input), "go");
+    }
+
+    #[test]
+    fn strip_html_comments_strips_trailing_comment() {
+        let input = "\
+before
+
+<!-- end comment -->";
+        assert_eq!(strip_html_comments(input), "before");
+    }
+
+    #[test]
+    fn strip_html_comments_strips_multiple_comments() {
+        let input = "\
+one<!-- first -->two<!-- second -->three";
+        assert_eq!(strip_html_comments(input), "onetwothree");
+    }
+
+    #[test]
+    fn strip_html_comments_produces_no_blank_lines_for_inline_comment() {
+        // Comment on its own line between text: after stripping, the two
+        // newlines either side of the comment remain but no extra ones.
+        let input = "\
+hello
+
+<!-- comment -->
+
+world";
+        assert_eq!(strip_html_comments(input), "hello\n\nworld");
     }
 
     // --- VT-3: real producers — accepted ADRs (filtered) + memory pointers ---
