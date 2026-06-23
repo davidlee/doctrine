@@ -48,8 +48,13 @@ The order follows the dependency spine, not the design's narrative order:
   off-critical-path "remember to record" act — the earlier explicit-call contract
   is superseded now that a real CLI hook is confirmed (D5). OQ-conf-1 dissolves: no
   ref to choose, only HEAD at two lifecycle moments. `record-delta` survives as the
-  manual/bootstrap escape hatch. The dispatch beat remains the one touch to a live
-  dispatch path, thin under sole-writer.
+  manual/bootstrap escape hatch. **Dispatch-compat is the load-bearing integration
+  here** (EX-2): the binding skips in a dispatch coordination context (where the
+  orchestrator's HEAD is the coordination base, not a phase delta), leaving the
+  `dispatch record-boundary` beat as the sole dispatch recorder — which now also
+  writes the arm-neutral registry. Solo binding and dispatch beat are mutually
+  exclusive per phase; codex/pi-dispatch records nothing yet (deferred → conformance
+  `incomplete`, never false-clean).
 - **PHASE-05 (burn domain_map + re-point staleness)** is independent of P2 and P4,
   and of P3's *algebra* — but its glob→fileset re-point consumes the shared
   `glob_matches` leaf that P3 lifts (D6), so it lands **after that lift** (P5 EN-2);
@@ -81,6 +86,18 @@ The order follows the dependency spine, not the design's narrative order:
   is bounded to three phases of one slice, then gone — not an ongoing posture. If
   skipped, conformance simply reports `incomplete` for P1..P3 (F-2 working), and the
   forward-slice proof (P6 EX-3) covers the clean case.
+- **Dispatch-compat (the binding's one real assumption, now guarded).** The solo
+  binding captures `HEAD`, correct only where `HEAD` == the phase's code-end — true
+  solo (inline-on-edge or a `/worktree` fork), false in dispatch (the orchestrator
+  flips status from the coordination tree at base `B`). Verified facts: dispatch
+  records via `dispatch record-boundary` (funnel step 8) and does **not** call
+  `slice phase` — so the binding is solo-only by construction, and P4 EX-2 *enforces*
+  it (skip on a doctrine-owned `dispatch/<N>` coordination signal — POL-002-clean).
+  The dispatch beat now also writes the arm-neutral registry (P4 EX-3). Two known
+  edges: (i) the gate must key on *dispatch-coordination*, not *any linked worktree*,
+  or it would wrongly skip a solo fork; (ii) the **codex/pi** subprocess arm skips
+  `record-boundary` entirely (claude-arm-only) → those slices read `incomplete`,
+  recorder extension deferred.
 - **OQ-conf-2 (record-delta namespace)** — resolved: `slice record-delta` for v0.1
   (not a neutral cross-arm verb); revisit if a non-slice writer appears.
 - **OQ-conf-1 (solo ref ergonomics)** — **resolved by construction** (D5): the solo

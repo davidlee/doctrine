@@ -186,24 +186,47 @@ location regardless of which worktree the command runs in.
   merge commits). A wrong/wide boundary that would pull trunk into `actual` fails
   loudly at write, not silently at audit.
 - **Writers / arms:**
-  - **solo** (`/execute`, incl. inline-on-main): **capture rides the `slice phase`
-    state transitions** — the same CLI write `/execute` already issues (SKILL.md:
-    `in_progress` at phase start, `completed` at land). On `--status in_progress`
-    the handler stamps `code_start_oid = HEAD` into the phase sheet; on `--status
-    completed` it captures `code_end_oid = HEAD`, applies the F-6 guard, and
-    **upserts** the phase's boundary row (reopen re-captures; `start == end` writes
-    the zero-delta row automatically). Deterministic, on the sanctioned state-write
-    path on every phase's critical path — **not** an off-path "remember to also
-    call X." This supersedes the earlier explicit-`record-delta`-required contract
-    (the deterministic CLI hook the User's caveat assumed absent in fact exists).
+  - **solo** (`/execute`, inline-on-main **or** a solo `/worktree` fork): **capture
+    rides the `slice phase` state transitions** — the same CLI write `/execute`
+    already issues (SKILL.md: `in_progress` at phase start, `completed` at land). On
+    `--status in_progress` the handler stamps `code_start_oid = HEAD` into the phase
+    sheet; on `--status completed` it captures `code_end_oid = HEAD`, applies the
+    F-6 guard, and **upserts** the phase's boundary row (reopen re-captures; `start
+    == end` writes the zero-delta row automatically). HEAD is the phase's true
+    code-end here because the flip is issued from the tree where the phase landed
+    (primary edge, or the solo fork). Deterministic, on every phase's critical path
+    — **not** an off-path "remember to also call X." Supersedes the earlier
+    explicit-`record-delta`-required contract.
+  - **Arm discrimination (dispatch-compat).** The binding fires **only outside a
+    dispatch coordination context**. The dispatch orchestrator flips phase status
+    from the **coordination worktree**, whose `HEAD` is the coordination base `B`
+    (not the worker's source-delta) — so a HEAD capture there would record the wrong
+    range *and* duplicate the dispatch beat. The handler therefore **detects the
+    dispatch coordination context** (doctrine-owned signal — a `dispatch/<N>`
+    coordination branch / coordination worktree role, *not* a host convention, so
+    POL-002-clean) and **skips** capture; the dispatch beat is the sole recorder
+    there. The gate keys on *dispatch-coordination*, **not** on
+    "linked worktree" — a solo `/worktree` fork is not a dispatch context and still
+    captures. (In fact dispatch never calls `slice phase` today, so this is a
+    belt-and-braces guard, not a load-bearing assumption — verified, then enforced.)
   - **`slice record-delta`** remains the **manual escape hatch**, not the happy
     path: re-record a corrected range, or bootstrap a slice whose phases predate
     the binding (e.g. SL-147's own early phases). Same writer + F-6 guard.
-  - **dispatch**: the orchestrator records into the registry at the landing beat
-    (it already captures `code_start`/`code_end`); kept a thin write on the one
-    live dispatch path.
-  - Both arms now write **without** an off-critical-path act; F-2 (below) stays the
-    backstop — a completed phase with no row is still caught, never silently clean.
+  - **dispatch**: the orchestrator's existing `dispatch record-boundary` beat
+    (funnel step 8, `--code-start B --code-end B+1`) is the sole dispatch recorder.
+    It **also writes the arm-neutral registry** (the conformance reader's only
+    source), *in addition to* its existing committed `.doctrine/dispatch/<N>/`
+    boundary (unchanged — dispatch integrate still depends on it). One row type, one
+    reader; the dual home is two consumers, not a parallel impl.
+    - **Coverage limit (codex/pi arm).** `record-boundary` is **claude-arm-only**
+      today (`skip on codex/pi`, dispatch-agent:67 — the subprocess arm has no fork
+      branch to range). So a **codex/pi-dispatched** slice records no rows → its
+      conformance degrades to `incomplete` (F-2), never a false-clean. Extending the
+      subprocess arm to record is **deferred** (Non-goal); v0.1 conformance covers
+      **solo + claude-dispatch**.
+  - All covered arms write **without** an off-critical-path act; F-2 (below) stays
+    the backstop — a completed phase with no row is still caught, never silently
+    clean.
 - **Reader:** `slice conformance` reads only this registry.
 - **Completeness — fail closed on partial coverage (F-2, BLOCKER fix).** Degrade
   is **not** empty-only. The reader cross-checks recorded rows against the slice's
@@ -322,21 +345,23 @@ staleness resolution (D4) consume it. No new glob dependency.
 - **POL-002 conformance (VH)** — reviewer challenge: no `(SL-NNN)` grep; delta
   rests only on recorded oids.
 - **Prove-value (VA/VH) — concrete, achievable target (F-8).** The earlier
-  dogfood was circular (SL-147's own boundaries presuppose the recorder works and
-  that SL-147 ran through a recording arm — false if built inline on edge).
-  Instead: after `record-delta` lands (its phase), **explicitly record SL-147's
-  own per-phase boundaries via `record-delta`** (the solo arm's required explicit
-  call), then run `slice conformance SL-147` and confirm it surfaces real signal.
-  Fallback target: a separate slice executed through dispatch. The proof no longer
-  depends on an automatic capture that may not have fired.
+  dogfood was circular (SL-147's own boundaries presuppose the recorder works).
+  With the deterministic binding, SL-147's **post-binding** phases (PHASE-04
+  onward) auto-record as they complete — run `slice conformance SL-147` and confirm
+  real signal. Pre-binding phases (P1..P3) either get a one-time `record-delta`
+  bootstrap or read `incomplete` (a live F-2 demonstration). A separate forward
+  slice run end-to-end is the fully-clean, zero-bootstrap proof.
 
 ## Non-goals (reaffirmed)
 
 Per-PHASE attribution · author-declared verb sub-tags · target sum type /
 non-entity edge generalization (OQ-6) · new verify mode VG (OQ-9) · prose
 invariants/risks · dispatch disjointness · IMP-012 wiring · durable post-close
-registry · MCP reader (fast-follow). Conformance is necessary-not-sufficient: it
-says *where to look*, never *whether it passes*.
+registry · MCP reader (fast-follow) · **codex/pi-dispatch boundary recording**
+(the subprocess arm's `record-boundary` is claude-arm-only today; codex/pi-
+dispatched slices degrade to `incomplete`, never false-clean — extending that arm
+is a follow-up). Conformance is necessary-not-sufficient: it says *where to look*,
+never *whether it passes*.
 
 ## Residual risks
 
