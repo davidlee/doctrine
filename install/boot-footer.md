@@ -3,9 +3,13 @@
      (just before `## Invoking doctrine`), so every agent session
      sees these instructions.
 
-     Use it to tell agents to read specific memories, review a
-     spec, or anything else they should do on session start.
-     Keep it short -- the boot snapshot is scanned, not studied. -->
+     Use it to tell agents to read specific memories, or anything 
+     else they should do on every session start.
+     Keep it short. -->
 
-Before starting work, retrieve these relevant memories:
-<!-- - `doctrine memory retrieve mem.signpost.doctrine.adrs` -->
+Immediately on beginning your NEXT TURN, use /retrieving-memory skill
+to retrieve and read the following two memories:
+
+/retrieving-memory `mem.signpost.doctrine.overview`
+/retrieving-memory `mem.signpost.project.orientation`
+
