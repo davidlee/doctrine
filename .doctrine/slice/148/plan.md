@@ -19,11 +19,13 @@ flip — into a reversible final phase.
 The phase cut mirrors the design's own phasing drivers (design §5.2 F-3, §9, notes
 "What the planner needs to know"):
 
-- **PHASE-01** is the *blast radius*, not the *new feature*. F-3 found the real change
-  is mechanical breadth — every Fresh materialise site swapping `&LocalFs` for one
-  `reserve::backend(root)?` helper — not the seam signature. Landing this alone, green,
-  retires the largest risk (a wide refactor) under the cheapest proof (the existing
-  suite, unchanged).
+- **PHASE-01** is the *blast radius*, not the *new feature*. F-3/F-V1 found the real
+  change is mechanical breadth — all **11** Fresh materialise sites swapping `&LocalFs`
+  for one `reserve::backend(root, stem)?` helper (7 via `materialise(Fresh)` + 4 via
+  `materialise_fresh_prebuilt`: review/rec×2/revision) — plus splitting the named
+  (memory) path off the `Claim` trait entirely (D9, inline mkdir-or-bail) — not the
+  seam signature. Landing this alone, green, retires the largest risk (a wide refactor)
+  under the cheapest proof (the existing suite, unchanged).
 - **PHASE-02** builds the remote plumbing in `git.rs` and, critically, the
   **classification** that R2 made load-bearing — proven in isolation with units + the
   bare-remote substrate before any allocator depends on it. A transport/auth/policy
@@ -85,13 +87,20 @@ scheduled here.
 `validate`/`reseat` (slice Non-Goals). The mixed-reach collision (E5/A3) stays a
 documented limit backstopped by `validate`/`reseat`, not defended in code this slice.
 
-**Deliberate two-pass call-site touch.** PHASE-01 keeps `reserve::backend(root)` minimal
-(returns `Box<dyn Claim>`, LocalFs) so the gate proof is a pure seam swap. PHASE-03 then
-widens it to `(Box<dyn Claim>, ReservedIds)` to seed the scan, re-touching the same Fresh
-call-sites. This is accepted, not an oversight: introducing an always-empty `ReservedIds`
-in PHASE-01 would be speculative generality, and the second pass is mechanical and
-re-proven by the gate. The alternative (final signature in PHASE-01) was rejected to keep
-the behaviour-gate phase a minimal identity transform.
+**Deliberate two-pass call-site touch.** PHASE-01 keeps `reserve::backend(root, stem)`
+minimal (returns `Box<dyn Claim>`, LocalFs) so the gate proof is a pure seam swap across
+all 11 Fresh sites. PHASE-03 then widens it to `reserve::backend(root, stem, cfg) ->
+(Box<dyn Claim>, ReservedIds)` to seed the scan, re-touching the same 11 sites and
+capturing stem/root/remote/holder into `GitRef`. This is accepted, not an oversight:
+introducing an always-empty `ReservedIds` in PHASE-01 would be speculative generality,
+and the second pass is mechanical and re-proven by the gate. The alternative (final
+signature in PHASE-01) was rejected to keep the behaviour-gate phase a minimal identity
+transform. **D9 note:** the seam enrichment stays in PHASE-01 (ctx `{dir,id}`, with `id`
+already live at the claim site) so the seam signature is stable thereafter — and the
+named-path split lands in the same gate, behaviour-preserving. **F-V6 caveat:** the
+PHASE-03 widening is more than the helper return type — `materialise`/
+`materialise_fresh_prebuilt` must also accept the re-fetching scan source (today they own
+a hardcoded `scan_ids`), so `ReservedIds` is a closure, not a static `Vec`.
 
 **Risk the plan still carries into execution:** PHASE-03 is the heaviest phase (backend +
 config + resolve_backend + loop wiring + six VTs). If `phase-plan` finds its task
