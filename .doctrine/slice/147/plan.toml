@@ -76,18 +76,19 @@ requirements = []
 
 [[phase]]
 id        = "PHASE-04"
-name      = "record-delta verb + dispatch landing write"
-objective = "Wire both writer arms: the explicit `slice record-delta` CLI (the solo arm's required call) and the dispatch orchestrator's landing-beat write into the arm-neutral registry (design D5, OQ-conf-1; POL-002)."
+name      = "Solo capture binding + dispatch write + record-delta fallback"
+objective = "Wire all three registry writers onto the PHASE-02 writer+guard: (1) the SOLO capture binding on the `slice phase` transitions — the deterministic happy path, no off-critical-path call; (2) the dispatch orchestrator's landing-beat write; (3) `slice record-delta` as the manual/bootstrap escape hatch (design D5; OQ-conf-1 resolved by construction; POL-002)."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 complete (registry writer + guard)." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`doctrine slice record-delta <SL> --phase <P> --start <ref> --end <ref>` resolves refs → oids, applies the PHASE-02 write guard, and appends one row per phase (explicit zero-delta permitted)." },
+  { id = "EX-1", text = "SOLO binding (the happy path): `slice phase <SL> <P> --status in_progress` stamps code_start_oid=HEAD into the phase sheet; `--status completed` captures code_end_oid=HEAD, applies the PHASE-02 guard, and UPSERTS the phase's boundary row (reopen re-captures; start==end ⇒ explicit zero-delta row). A git/bare-repo failure degrades to no-row with a clean named message and NEVER blocks the phase-status transition itself — F-2 then catches the completed-but-unrecorded phase. OQ-conf-1 dissolves: no ref to choose, only HEAD at two lifecycle moments." },
   { id = "EX-2", text = "The dispatch landing beat records into the same primary-tree registry (sole-writer thin write); existing dispatch suites stay green." },
-  { id = "EX-3", text = "Solo ref ergonomics settled (OQ-conf-1): --start = pre-phase HEAD, --end = post-phase HEAD captured before any trunk merge; documented for the PHASE-06 skill wiring." },
+  { id = "EX-3", text = "`doctrine slice record-delta <SL> --phase <P> --start <ref> --end <ref>` resolves refs → oids, applies the guard, and upserts one row per phase — the MANUAL escape hatch (corrected range / bootstrap a slice whose phases predate the binding), not the solo happy path." },
 ]
 verification = [
-  { id = "VT-1", expects = "record-delta happy path (row appended) and guard rejection (non-ancestor / merge) exercised via the CLI." },
+  { id = "VT-1", expects = "Solo binding: in_progress→completed writes the boundary row deterministically; reopen updates it (upsert by phase); a no-commit phase writes a zero-delta row; a git-unavailable transition still COMPLETES (degrades to no-row, no panic, no block)." },
+  { id = "VT-2", expects = "record-delta fallback: happy path (row upserted) and guard rejection (non-ancestor / merge) exercised via the CLI." },
   { id = "VA-1", expects = "Dispatch landing write verified against a dispatch fixture / extended dispatch test; only the orchestrator writes (sole-writer)." },
   { id = "VA-2", expects = "POL-002 conformance: the slice-delta is computed only from recorded oids — no (SL-NNN) or other host-convention grep anywhere in the path." },
 ]
@@ -123,9 +124,9 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01..05 complete." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "/slice seeds coarse scope-relevant selectors; /design adds design-target selectors; /execute records the solo boundary at phase land (--start pre-phase HEAD, --end post-phase HEAD); /audit runs slice conformance and reads the algebra." },
-  { id = "EX-2", text = "Dogfood: feed SL-147's own per-phase HEAD oids — captured LIVE at each phase land from PHASE-01 onward (see plan.md capture ritual), NOT reconstructed from git log (reconstruction = the (SL-NNN) archaeology POL-002 forbids) — to record-delta, then run `slice conformance SL-147` and capture the output. Live-observed oids are doctrine-owned, so this stays POL-002-clean." },
-  { id = "EX-3", text = "Fallback if the capture ritual lapsed on any phase: do NOT reconstruct. Prove value instead on the next slice cut after SL-147, run end-to-end through the wired path (selectors at /slice, design-targets at /design, live record-delta at land, conformance at /audit) — the fully non-circular proof (design F-8)." },
+  { id = "EX-1", text = "/slice seeds coarse scope-relevant selectors; /design adds design-target selectors; /execute needs NO new off-path step — phase completion auto-records the boundary via the PHASE-04 `slice phase` binding (document this in the skill, do not add a separate record-delta call); /audit runs slice conformance and reads the algebra." },
+  { id = "EX-2", text = "Dogfood on the deterministic path: SL-147's own post-binding phases (PHASE-04 onward) auto-record as they complete; run `slice conformance SL-147` and capture the output. The pre-binding phases (PHASE-01..03) carry no rows — either bootstrap them via record-delta for a full self-diff, or let conformance report `incomplete` for them (a live demonstration of the F-2 backstop). Either way the captured signal is real, never a false-clean diff." },
+  { id = "EX-3", text = "Fully-clean proof (optional, belt-and-suspenders): a separate forward slice cut after SL-147, run end-to-end so EVERY phase auto-records via the binding — no bootstrap, no manual call, the non-circular proof (design F-8)." },
 ]
 verification = [
   { id = "VT-1", expects = "Every command shape referenced by the edited skills resolves (no dangling verb/flag) — checked against the CLI." },
