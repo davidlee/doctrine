@@ -11,6 +11,7 @@ use anyhow::Result;
 use clap::CommandFactory;
 use clap::Subcommand;
 
+use crate::commands::config::ConfigCommand;
 use crate::commands::facet::{
     EstimateClearArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs, ValueClearArgs, ValueSetArgs,
 };
@@ -457,6 +458,12 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Inspect and modify doctrine.toml [priority] coefficients.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+
     /// Remove a tier-1 relation edge.
     ///
     /// Removes an edge authored by `link` (SL-048 §5.4). Symmetric on the same write
@@ -830,6 +837,23 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             target,
             path,
         } => crate::commands::relation::run_link(path, &source, &label, &target),
+        Command::Config { command } => {
+            let root = crate::root::find(None, &crate::root::default_markers())?;
+            match command {
+                ConfigCommand::Show(ref args) => {
+                    crate::commands::config::run_config_show(&root, args)
+                }
+                ConfigCommand::Set(ref args) => {
+                    crate::commands::config::run_config_set(&root, args)
+                }
+                ConfigCommand::Get(ref args) => {
+                    crate::commands::config::run_config_get(&root, args)
+                }
+                ConfigCommand::Unset(ref args) => {
+                    crate::commands::config::run_config_unset(&root, args)
+                }
+            }
+        }
         Command::Unlink {
             source,
             label,
