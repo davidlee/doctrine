@@ -12,6 +12,7 @@
 - Linked SL-146 → RFC-002 (`related`), ADR-015 (`governed_by`), SPEC-001 (`specs`)
 - Soft-sequenced SL-146 after SL-136, SL-133, SL-134 (`after`)
 - Advanced SL-146 lifecycle: `proposed → design`
+- **Inquisition RV-147** — adversarial design review; 9 findings raised, all resolved. Design penance applied (see below).
 
 ## Research sources consulted
 
@@ -90,9 +91,29 @@ Also modified: RFC-002's `[[relation]]` table (gained an SL-146 entry via `doctr
 
 ## Next step
 
-Hand off to `/design` — SL-146 is at `design` phase. The design phase will:
-1. Confirm the path syntax
-2. Detail the `config show` output format
-3. Design the `toml_edit` write path (section-insert vs key-mutation logic)
-4. Plan the `commands/config.rs` module structure
-5. Lock down the phase plan
+Hand off to `/plan` — SL-146 design is locked and inquisited. The design phase completed:
+1. Confirmed the path syntax (dot-separated, 2 segments)
+2. Detailed the `config show` output format (flattened dotted keys, annotations, --json)
+3. Designed the `toml_edit` write path (section-insert via `entry().or_insert()`, CHR-019 safe)
+4. Planned the `commands/config.rs` module structure (four subcommands, shared path parser)
+5. Locked down edge-case table and test plan
+6. **Inquisition RV-147** applied 9 corrections (see below)
+
+## Inquisition RV-147 — applied penance
+
+2026-06-23 — adversarial design review against ADR-015, SPEC-001, scope, and terrain.
+9 findings, all verified terminal. Corrections applied to `design.md`:
+
+| Finding | Change |
+|---------|--------|
+| F-1 (blocker) | D7 `read_priority_table`/`load_from_table` now marked NEW — described as extractions from existing inline `load()`, not existing code |
+| F-2 (major) | D2a path validation relaxed: unknown static keys → `ConfigPath::Unknown` variant. `get`/`unset` proceed; `set` bails. Scope extensibility preserved. |
+| F-3 (major) | Edge-case table: added `set ref_coeff < 0` and `set ref_coeff > COEFF_MAX` rows. Test plan: added `set coefficients.value 99e9` test. |
+| F-4 (minor) | Test plan: added note that scope verification 11 (survey/next/explain re-reads config) is inherited from `PriorityConfig::load()`. |
+| F-5 (minor) | D7 7b clamp detection expanded with IEEE 754 explanation. D5 step 3 cross-references D7 7b. |
+| F-6 (minor) | D5/D6: documented `--json` asymmetry rationale (imperative verbs, exit code as script interface, cf. `estimate set`/`tag add`). |
+| F-7 (nit) | D2: added `--path` justification note (standard doctrine project-root override, wired uniformly). |
+| F-8 (nit) | Test plan: added `unset` removes the LAST key from a subsection → empty subsection header remains test. |
+| F-9 (minor) | Integration test: removed "optional" qualifier. Golden `config show --priority` test is required. |
+
+Design is now doctrinally clean. Ready for `/plan`.
