@@ -28,36 +28,44 @@ but the *consumption surface* (RFC-002 thesis) is absent.
 
 ## Scope & Objectives
 
-### Phase 1: `doctrine config show` — read surface
+### Phase 1: `doctrine config show --priority` — read surface
 
 A subcommand that dumps the active `[priority]` section with resolved defaults
 for absent keys. The output shows both the TOML source values and the clamped
 values the scoring engine actually uses (since `load()` clamps silently).
+`-P`/`--priority` selects the `[priority]` section.
 
-### Phase 2: `doctrine config set` — scalar fields
+### Phase 2: `doctrine config set --priority` — write any leaf key
 
-Write individual scalar coefficients under `[priority]`:
-- `doctrine config set priority.coefficients.value <f64>`
-- `doctrine config set priority.coefficients.risk <f64>`
-- `doctrine config set priority.consequence.dep_coeff <f64>`
-- `doctrine config set priority.consequence.ref_coeff <f64>`
+Write any leaf key under `[priority]` (scalars and map entries):
+- `doctrine config set --priority coefficients.value <f64>`
+- `doctrine config set --priority coefficients.risk <f64>`
+- `doctrine config set --priority consequence.dep_coeff <f64>`
+- `doctrine config set --priority consequence.ref_coeff <f64>`
+- `doctrine config set --priority kind_weights.<KIND> <f64>` — upsert a kind weight
+- `doctrine config set --priority tag_coefficients.<TAG> <f64>` — upsert a tag coeff
+- `doctrine config set --tag <TAG> <f64>` — shortcut for tag_coefficients
 
 Edit-preserving via `toml_edit` — reads file, mutates the `DocumentMut`,
-writes back. Section is created if absent (root-level key insertion per
-the `toml_edit` root-inserts-above-headers guarantee from CHR-019 / RV-129).
-Value is clamped inline and the clamped value is displayed to the user.
+writes back. Missing sections created via `entry().or_insert()` (safe per
+CHR-019 / RV-129). Value is clamped inline and the clamped value is displayed
+to the user; unchanged values are a no-op.
 
-### Phase 3: `doctrine config get` — read a single key
+### Phase 3: `doctrine config get --priority` — read a single key
 
-- `doctrine config get priority.coefficients.value` — displays the resolved
+- `doctrine config get --priority coefficients.value` — displays the resolved
   value (file value or default if absent)
 
-### Phase 4: Key-value map fields
+### Phase 4: `doctrine config unset --priority` — remove any leaf key
 
-- `doctrine config set priority.kind_weights.<KIND> <f64>` — upsert a kind weight
-- `doctrine config set priority.tag_coefficients.<TAG> <f64>` — upsert a tag coeff
-- `doctrine config unset priority.kind_weights.<KIND>` — remove a map entry
-- `doctrine config unset priority.tag_coefficients.<TAG>` — remove a map entry
+Remove any leaf key, restoring the engine default on next `load()`:
+- `doctrine config unset --priority coefficients.value` — scalar
+- `doctrine config unset --priority kind_weights.<KIND>` — map entry
+- `doctrine config unset --priority tag_coefficients.<TAG>` — map entry
+- `doctrine config unset --tag <TAG>` — shortcut
+
+Idempotent (absent key is a no-op). Section-level paths (`coefficients`)
+are refused — only fully-qualified leaf keys accepted.
 
 All values clamped per `PriorityConfig::load()`'s existing policy (silent clamp,
 no hard error).
@@ -80,8 +88,8 @@ no hard error).
 |------|--------|
 | `src/commands/config.rs` (new) | `doctrine config` verb — `show`, `set`, `get`, `unset` subcommands |
 | `src/commands/cli.rs` | Register `Command::Config` |
-| `src/priority/config.rs` | Expose `load_active()` or similar to return both raw + clamped values for `config show` |
-| `src/main.rs` | Wire `Config` into subcommand dispatch |
+| `src/priority/config.rs` | Expose `read_priority_table()` (shared parse), `clamp_general`/`clamp_dep` (pub(crate)) |
+| `src/commands/mod.rs` | Declare `pub(crate) mod config;` |
 | `doctrine.toml` | Test fixtures may exercise writes |
 | `tests/` | E2E golden tests for `config show`/`set`/`get`/`unset` |
 
@@ -98,27 +106,25 @@ no hard error).
 
 ## Verification / Closure Intent
 
-- `doctrine config show` on a `doctrine.toml` without `[priority]` prints defaults
-  with "(default)" annotation
-- `doctrine config set priority.coefficients.value 2.0` updates the file and
+- `doctrine config show --priority` on a `doctrine.toml` without `[priority]` prints defaults
+  with `# default` annotation
+- `doctrine config set --priority coefficients.value 2.0` updates the file and
   prints the new clamped value
-- `doctrine config set priority.coefficients.value 99e9` clamps to `COEFF_MAX`
+- `doctrine config set --priority coefficients.value 99e9` clamps to `COEFF_MAX`
   and prints a note about clamping
-- `doctrine config get priority.coefficients.value` prints the resolved value
-- `doctrine config set priority.kind_weights.SL 3.0` adds the entry
-- `doctrine config unset priority.kind_weights.SL` removes the entry
+- `doctrine config get --priority coefficients.value` prints the resolved value
+- `doctrine config set --priority kind_weights.SL 3.0` adds the entry
+- `doctrine config unset --priority kind_weights.SL` removes the entry
+- `doctrine config unset --priority coefficients.value` removes the scalar key (next `load()` restores default `1.0`)
+- `doctrine config set --tag "area:cli" 0.9` writes to `tag_coefficients."area:cli"`
 - Existing `survey`/`next`/`explain` output uses the new config without restart
   (config is re-read at each invocation via `load()`)
 
-## Open Questions
+## Open Questions (resolved in design)
 
-- **Path syntax**: `priority.coefficients.value` vs `priority:coefficients:value`?
-  Dot-separated mirrors the TOML key path, which is idiomatic for TOML tools.
-- **`config show` scope**: Show only `[priority]` (this slice) or a future
-  `--all` flag for full-file dump? Phase 1 only shows `[priority]`; `--all` is
-  deferred.
-- **`config show` format**: TOML output, JSON, or human table? Start with
-  human-friendly TOML-like output (shows raw + effective).
+- ~~Path syntax~~ → Dot-separated, section-relative (`coefficients.value`). Section selected by `--priority` flag. Confirmed in design.
+- ~~`config show` scope~~ → `[priority]` only; `--all` deferred.
+- ~~`config show` format~~ → Flattened dotted keys with inline `# default` / `# clamped from N` annotations, subsection header comments, `--json` flag.
 
 ## Summary
 

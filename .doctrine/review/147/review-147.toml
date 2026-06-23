@@ -1,0 +1,363 @@
+id    = 147
+slug  = "inquisition-of-sl-146-design-config-coefficient-cli-surface"
+title = "Inquisition of SL-146 design — config coefficient CLI surface"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-146"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "D7 prescribes a load() refactor that does not match the existing code — design is inaccurate about its terrain"
+detail = '''
+D7 of design.md declares:
+
+"""
+`load(root)` calls `read_priority_table` internally, swallows errors, deserialises + clamps.
+"""
+
+The actual code in `src/priority/config.rs` does NOT call `read_priority_table`. The current `load()`:
+
+```rust
+pub(crate) fn load(root: &Path) -> PriorityConfig {
+    let Ok(text) = std::fs::read_to_string(root.join("doctrine.toml")) else {
+        return PriorityConfig::default();
+    };
+    let raw: toml::Value = match text.parse() {
+        Ok(v) => v,
+        Err(_) => return PriorityConfig::default(),
+    };
+    let cfg: PriorityConfig = match raw.get("priority") {
+        Some(priority) => match priority.clone().try_into::<PriorityConfig>() {
+            Ok(c) => c,
+            Err(_) => return PriorityConfig::default(),
+        },
+        None => return PriorityConfig::default(),
+    };
+    clamp(cfg)
+}
+```
+
+The current `load()` performs a single `read_to_string` + `text.parse()` chain inline — it has NO separate `read_priority_table` helper and NO separate `load_from_table` deserialise+clamp step. D7 7a and 7c propose to CREATE these functions and then refactor `load()` to call them.
+
+The design is NOT describing existing code — it is prescribing a refactor AS IF it described the ground truth. This is a fundamental accuracy defect: a phase-plan built on this design will expect `read_priority_table` and `load_from_table` to exist when they do not. The implementer will be refactoring `load()` — a load-bearing leaf function consumed by the scoring engine — rather than adding new code alongside it.
+
+Expected: Design accurately describes the code that exists, then clearly separates what is NEW (to be created) from what is CHANGED (to be refactored).
+Observed: Design states "`load(root)` calls `read_priority_table` internally" — a false statement about the current code.
+
+The fix is small: add a sentence like "`read_priority_table` and `load_from_table` are NEW functions to extract from the current inline logic in `load()`; `load()` will be REFACTORED to delegate to them, preserving its tolerant signature." The design is otherwise correct about what those functions should do. But the inaccuracy about the existing terrain makes the design unreliable as a construction blueprint.
+
+Evidence: `src/priority/config.rs` lines 71-87 (the `load` function).'''
+disposition = "fix-now"
+response = """
+The design is guilty as charged. D7 states "load(root) calls read_priority_table internally" — this describes a refactored state, not the code that exists. 
+    
+Fix: Add a preamble sentence to D7 clarifying the extraction. Replace the current 7a preamble:
+  
+  "7a. Shared parse function" → "7a. NEW: extract shared parse function. The current `load()` inlines read_to_string + text.parse(). Extract into `read_priority_table(root)` so `config show` can read the raw table without duplicating the file-open logic."
+
+And in 7c:
+  
+  "7c. Internal load_from_table helper" → "7c. NEW: extract the deserialise+clamp step from `load()` into `pub(crate) fn load_from_table(table: Option<toml::Table>) -> PriorityConfig`. `load(root)` will be REFACTORED to chain `read_priority_table(root)?` → `load_from_table(raw)`, preserving its tolerant signature."
+
+This is a three-word fix to an accuracy defect — no architectural change required."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "D2a parse_config_path rejects unknown static keys — blocks forward-compatible extensibility promised by scope"
+detail = """
+D2a's `parse_config_path` function rejects unknown static keys with `bail!`:
+
+```
+For `coefficients`: must be `value` or `risk` (else `"unknown key 'coefficients.{seg1}'"`).
+For `consequence`: must be `dep_coeff` or `ref_coeff` (else `"unknown key 'consequence.{seg1}'"`).
+```
+
+This means `doctrine config get --priority coefficients.future_key` hard-errors, and `doctrine config set --priority coefficients.future_key 2.0` also hard-errors. A future version of doctrine that adds a new coefficient (e.g. `coefficients.urgency`) would be invisible to the CLI until a code change re-opens the enum.
+
+This contradicts the scope document's explicit design intent:
+> "The `show`/`set`/`get` arg parser is designed to be extensible but this slice only wires `[priority]`."
+
+"Extensible" implies that adding a new subsection key should not require changing the path parser. The approved approach for `show` is already forward-compatible (it iterates known keys but ignores unknown ones), and `read_priority_table` + `PriorityConfig` tolerate unknown keys per ADR-015 ("Unknown keys are tolerated for forward compatibility").
+
+But `get` and `set` are the breach: they need the `ConfigPath` enum to know the clamp policy. For `set`, the path parser MUST know the key to apply the correct clamp — this is a legitimate closure. But for `get`, the clamp is irrelevant — `get` only reads the effective value. Similarly, if a user hand-edits `doctrine.toml` to add `coefficients.bonus = 5.0`, `show` would display it but `get` would reject it.
+
+Two possible remedies:
+1. Accept the closure for `set` (clamp policy requires type knowledge) but let `get` through with a generic `Unknown { subsection, key }` path variant that reads the raw value.
+2. Defer the extensibility concern entirely and document that unknown keys require a code change — but then REMOVE the "extensible" claim from the scope.
+
+Either way: design and scope must not contradict.
+
+Evidence: design.md D2a `parse_config_path` validation rules; scope §Non-Goals "The `show`/`set`/`get` arg parser is designed to be extensible"."""
+disposition = "design-wrong"
+response = """
+The tension between D2a's strictness and the scope's "extensible" claim is real. Two resolutions exist, and the design must pick one:
+
+Option A (preferred): Accept the closure for `set` (needs clamp knowledge), open `get` and `unset` for unknown keys.
+
+- Add a `ConfigPath::Unknown { subsection: String, key: String }` variant.
+- `parse_config_path` accepts ANY 2-segment path where segment 0 is a known subsection (coefficients/consequence/kind_weights/tag_coefficients). Segment 1 validation is relaxed to "any non-empty string" for ALL subsections — not just kind_weights/tag_coefficients.
+- `set` on an unknown static key: bail with "cannot set unknown key 'coefficients.future_key' — add it by hand-editing doctrine.toml or wait for a doctrine update." (The clamp policy cannot be determined for unknown keys.)
+- `get` on an unknown static key: read the raw f64 from the TOML table and print it (no clamp annotation, since we don't know the policy).
+- `unset` on an unknown static key: remove it (same as any leaf key).
+
+Option B: Remove the "extensible" claim from the scope. The parser is NOT extensible; unknown keys require a code change. This is simpler but honest.
+
+Either way: fix the scope or fix the design. The current state — design strict, scope claiming extensibility — is unresolved drift."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Edge-case table omits negative ref_coeff and silent-clamp message verification for set"
+detail = """
+The design's edge-case table explicitly covers NaN/Inf/negative for general coefficients and dep_coeff clamp, but has two gaps:
+
+1. **Negative `ref_coeff`** — ADR-015 declares `ref_coeff` "flat and non-negative." The clamp handles it (clamp_general with fallback 1.0, negative → 0.0), and the edge-case table DOES have a row:
+   `set NaN / Inf / negative / > COEFF_MAX | Clamp and write; echo clamped`
+   …but this row appears under `set` general and doesn't specifically call out `ref_coeff` as a consequence coefficient with its own identity. The `dep_coeff` row is explicit: `set dep_coeff > 1 → Clamp to 1.0` and `set dep_coeff ≤ 0 → Clamp to 0.0`. `ref_coeff` deserves equal explicitness since it's part of the same `[priority.consequence]` subsection. The generic row covers it functionally, but the asymmetry in how dep_coeff gets its own rows while ref_coeff is swept into the generic bucket is a coherence defect.
+
+2. **Missing test for set's clamp message output.** The scope verification explicitly requires: "`doctrine config set --priority coefficients.value 99e9` clamps to `COEFF_MAX` and prints a note about clamping." The test plan covers `show`'s clamp annotation (`# clamped from N`) but does NOT have an explicit test that `set` outputs the clamping note. The tests "set value clamps, verify file + output message" covers it generically but the scope's specific `99e9 → COEFF_MAX` case is not named.
+
+Expected: Edge-case table explicitly covers `ref_coeff` clamp scenarios with the same specificity as `dep_coeff`. Test plan includes an explicit `99e9 → COEFF_MAX` set test matching the scope verification.
+Observed: `ref_coeff` clamp behavior is correct in D5.3's clamp dispatch but only implicitly covered by the generic row. `99e9` test is absent.
+
+Evidence: design.md edge-case table; scope §Verification bullet 3."""
+disposition = "fix-now"
+response = """
+The finding is correct — the edge-case table has asymmetry between dep_coeff and ref_coeff specificity, and the 99e9 scope-required test is missing.
+
+Fix: Add two rows to the edge-case table:
+
+| `set ref_coeff < 0` | Clamp to 0.0; echo clamped (ADR-015: non-negative) |
+| `set ref_coeff > COEFF_MAX` | Clamp to COEFF_MAX; echo clamped |
+
+And add to the test plan:
+
+| `set coefficients.value 99e9 → clamped to COEFF_MAX` | Verify file contents + clamp message in output |
+
+The ref_coeff rows are deliberately placed after the existing dep_coeff rows in the table, keeping the consequence subsection together. The 99e9 test is not a separate category — it's already covered by "set value clamps, verify file + output message" but the scope explicitly calls it out, so it deserves a named entry."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = 'Scope verification "survey/next/explain uses new config without restart" has no corresponding test'
+detail = """
+The scope's verification criteria include:
+> "Existing `survey`/`next`/`explain` output uses the new config without restart (config is re-read at each invocation via `load()`)"
+
+This is a behavioural claim about OTHER commands — `survey`, `next`, `explain` — not about `config` itself. The claim is that editing doctrine.toml via `config set` changes the scoring output of those commands immediately because they re-`load()` on each invocation.
+
+The design's test plan tests ONLY the `config` subcommands — show/set/get/unset. It does NOT test that `survey` output changes after a `config set`. This is correct per the design's remit (design owns `commands/config.rs`, not the survey pipeline) but it means a scope-level verification criterion has no owning test anywhere in the design.
+
+The remedy is not to add survey tests to the config module: it is to either (a) acknowledge in the design that this verification is inherited from `PriorityConfig::load()`'s existing tolerance (re-read on every call), or (b) flag it as an integration test that the design does not own but the scope requires.
+
+Expected: Design explicitly addresses scope verification bullet 11, even if only to note that it's inherited.
+Observed: No mention of this criterion in the test plan.
+
+Evidence: scope §Verification bullet 11; design.md test plan."""
+disposition = "aligned"
+response = """
+The design does not own the survey/next/explain pipeline — it owns the config CLI surface. The scope verification criterion "survey/next/explain uses new config without restart" is a correctness claim that is inherited from `PriorityConfig::load()`'s existing behaviour: every invocation reads `doctrine.toml` fresh. This is not something the `config set` implementation must prove — it is a property of the scoring engine the config module writes for.
+
+However, the finding is valid in one respect: the design should acknowledge this. Fix: Add a note to the test plan:
+
+"Scope verification 11 (survey/next/explain re-reads config) is inherited from `PriorityConfig::load(root)` — the config module writes `doctrine.toml`, and every subsequent scoring engine invocation reads it fresh via `load()`. No new test needed."
+
+One sentence, no new code."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Clamp detection explanation in D5.3/D7 is correct but truncated — design relies on implicit FP semantics without stating them"
+detail = """
+D5.3 Step 3 and D7 7b both state the clamp detection strategy:
+
+> "Clamp detection: compare `clamped != value` (NaN/Inf naturally differ)."
+
+This is CORRECT — the logic works because:
+- `clamp_general(NaN, fallback)` returns `fallback` (a finite f64)
+- `fallback != NaN` → `true` (NaN ≠ everything, including itself, per IEEE 754)
+- `clamp_general(Inf, fallback)` returns `COEFF_MAX` (a finite f64)
+- `COEFF_MAX != Inf` → `true` (finite ≠ non-finite)
+
+But the design's statement "NaN/Inf naturally differ" is ambiguous: it could be read as "NaN and Infinity differ from each other" rather than "post-clamp finite values differ from NaN/Inf." A future maintainer unfamiliar with IEEE 754 comparison semantics might wonder whether `clamp_general(Inf, 1.0)` returns `COEFF_MAX` and then `COEFF_MAX != Inf` — is that true? Yes, but the design doesn't state WHY.
+
+The design should replace the parenthetical with a brief explanation: "(NaN ≠ any value including itself; Infinity ≠ any finite value — so `clamp_general` replacing non-finite with a finite fallback ensures `clamped != value` is always true for non-finite inputs)."
+
+Expected: Design explains the comparison semantics, not merely asserts them.
+Observed: A three-word parenthetical "(NaN/Inf naturally differ)" that assumes IEEE 754 fluency.
+
+Evidence: design.md D5.3, D7 7b."""
+disposition = "fix-now"
+response = """
+The finding is valid — the design's clamp detection justification is correct but underspecified. Fix: In D7 7b, replace the parenthetical:
+
+BEFORE: "(NaN/Inf naturally differ)"
+
+AFTER: "(post-clamp, the clamp function replaces NaN/Inf with a finite fallback; a finite f64 ≠ NaN is always true per IEEE 754, and finite ≠ Infinity is always true — so `clamped != value` correctly detects clamping for all non-finite inputs without a separate sentinel)"
+
+This adds ~40 words of explanation and closes the clarity gap. No code change."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "`--json` flag asymmetry — show/get have it, set/unset do not"
+detail = """
+D2's CLI surface:
+
+```
+doctrine config show   --priority [--json] [-p PATH]
+doctrine config get    (--priority | --tag) <key> [--json] [-p PATH]
+doctrine config set    (--priority | --tag) <key> <value> [-p PATH]
+doctrine config unset  (--priority | --tag) <key> [-p PATH]
+```
+
+`show` and `get` accept `--json` for structured output. `set` and `unset` do not. D5 (set behaviour) says `set` echoes `"config set: path = written_value"` — plain text only. D6 (unset) echoes `"config unset: path (was old_value)"` — plain text only.
+
+This is not a correctness defect — `set` and `unset` are imperative mutating verbs, and their plain-text confirmation is adequate. But the asymmetry means a script that calls `config set` cannot parse structured output. A `--json` flag on `set` that returns `{"path": "coefficients.value", "written": 2.0, "clamped_from": null}` would cost little and make the surface uniform.
+
+The scope does NOT mandate `--json` on `set`/`unset`, so this is a design smell, not a scope violation. However, the scope says "The `show`/`set`/`get` arg parser is designed to be extensible" — and uniform JSON support is part of extensibility.
+
+Expected: Either (a) add `--json` to set/unset for surface uniformity, or (b) document the intentional asymmetry with rationale.
+Observed: Asymmetry with no rationale.
+
+Evidence: design.md D2 CLI surface table; D5, D6 output specifications."""
+disposition = "tolerated"
+response = """
+The `--json` asymmetry is acknowledged but accepted. Rationale:
+
+- `show` and `get` are read verbs — their output is consumed by scripts and pipelines; structured JSON is table stakes.
+- `set` and `unset` are imperative mutating verbs — their output is a human confirmation message. The exit code (0 = success, non-zero = error) is the script interface; the message text is for the operator.
+- Adding `--json` to `set`/`unset` would mean maintaining TWO output formats for confirmation messages, and the structured output would be mechanically duplicative of what the operator already typed (`{"path": "...", "value": 2.0}` — same as the input plus the clamp note).
+- The precedent from `doctrine estimate set` / `doctrine value set` / `doctrine tag add` — none of these emit JSON confirmation.
+
+The design should document this rationale: add a sentence to D5 and D6 noting "`--json` is not provided on `set`/`unset`; the exit code is the script interface, and the confirmation message is for the operator (cf. `estimate set`, `tag add`).""""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "`--path`/`-p` wired on every subcommand without justification — show/get have no obvious multi-project use case"
+detail = """
+D2 wires `[-p PATH]` on ALL four subcommands:
+
+```
+ConfigShowArgs   — path: Option<PathBuf>
+ConfigSetArgs    — path: Option<PathBuf>
+ConfigGetArgs    — path: Option<PathBuf>
+ConfigUnsetArgs  — path: Option<PathBuf>
+```
+
+`set` and `unset` need `--path` — they mutate a specific project's `doctrine.toml`. But `show` and `get` are read-only — in what scenario would an operator run `doctrine config show --priority --path /other/project`? The design doesn't discuss this. It wires `--path` uniformly as a convenience without examining whether it serves a purpose on every verb.
+
+This is not a defect — the flag is harmless and the implementation cost is zero (it's just `root::find(path)`). But the uniform wiring without design rationale is a pattern that, if repeated, produces kitchen-sink CLIs where every flag appears on every subcommand "just in case."
+
+Expected: Design notes that `-p` is uniform for consistency with other doctrine verbs (like `doctrine survey --path`), or restricts it to `set`/`unset` with rationale.
+Observed: Uniform wiring with no stated rationale.
+
+Evidence: design.md D2 arg struct definitions."""
+disposition = "aligned"
+response = """
+The `--path`/`-p` flag is wired uniformly across ALL doctrine verbs (`survey`, `next`, `explain`, `estimate`, `value`, `tag`, etc.) — it is not a design choice unique to `config`. Every doctrine command that operates on a project supports `--path` for project-root override. `show` and `get` are query verbs that, like `survey --path /other/project`, can inspect a non-current project's config.
+
+However, the finding is correct that the design should justify this. Fix: Add a note to D2:
+
+"`-p`/`--path` is the standard doctrine project-root override (cf. every other verb). It is wired uniformly on all subcommands for consistency; `show`/`get` benefit when inspecting a non-current project's config."
+
+One sentence, no code change."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = 'Unset "keep empty subtable" edge case has no corresponding test'
+detail = """
+The edge-case table states:
+
+> `unset` existing leaf key | Removes key; echo "was N"
+
+And in D6 step 4:
+
+> "Remove the leaf key from its parent table. **Keep empty subtable** if this was the last key."
+
+The test plan includes:
+- `unset` existing scalar key → removed from file
+- `unset` existing map key → removed from file
+
+Neither of these tests asserts the behavior of the EMPTY subtable after removal. If the user has `[priority.coefficients]` with only `value = 2.0`, and runs `config unset --priority coefficients.value`, the design promises an empty `[priority.coefficients]` section remains. But the test plan does not verify this.
+
+The toml_edit behavior on removing the last key from a table is subtle: `table.remove("value")` removes the key but the table itself persists. This is likely correct by construction, but without a test, a future refactor of the unset path could accidentally delete the empty table (e.g., by walking up and cleaning empty parents), changing behaviour silently.
+
+Expected: Test plan includes "unset removes the last key from a subsection, empty subsection header remains in TOML output."
+Observed: No test for the "keep empty subtable" invariant.
+
+Evidence: design.md D6 step 4; test plan unset section."""
+disposition = "fix-now"
+response = '''
+The "keep empty subtable" invariant in D6 step 4 lacks a corresponding test. Fix: Add to the test plan, in the unset section:
+
+| `unset` removes the LAST key from a subsection | Empty subsection header `[priority.coefficients]` remains in file output |
+
+The test can be implemented by:
+1. Writing a `doctrine.toml` with `[priority.coefficients]\nvalue = 2.0\nrisk = 3.0`
+2. Running `config unset --priority coefficients.value` and `config unset --priority coefficients.risk` 
+3. Asserting the output contains `[priority.coefficients]` (empty, no keys)
+
+This is a single test addition.'''
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = 'Integration/E2E golden test marked "optional" — a CLI verb with file I/O should have at least one integration test'
+detail = """
+The design's test plan states:
+
+> "Integration/behaviour tests in `tests/` (**optional**, one e2e golden): `doctrine config show` on the real `doctrine.toml` — captures output"
+
+The word "optional" is troubling. The `config` verb is a file-I/O surface — it reads and writes `doctrine.toml`. Unit tests with tempfiles cover individual functions, but an integration test against the actual CLI binary with the actual `doctrine.toml` is the only test that exercises:
+
+1. The full CLI arg parse → dispatch → output pipeline
+2. Actual file round-trip (write with toml_edit, read back with PriorityConfig::load)
+3. Integration with the real `doctrine.toml` (which has comments like `# SL-133 — multi-dimensional...`)
+4. Regression protection when the TOML format evolves
+
+Unit tests in `commands/config.rs` using tempfiles can test `read_priority_table` and the write path in isolation, but they cannot test that the clap arg structs parse correctly, that the `Command::Config` dispatch is wired into `cli.rs`, or that the output format matches what a real operator sees.
+
+The scope's verification criteria include behavioural claims like "Existing `survey`/`next`/`explain` output uses the new config" — these are inherently integration-level.
+
+Expected: The integration test is NOT marked optional. At minimum, one golden test that runs `doctrine config show --priority` against the real `doctrine.toml` and asserts output.
+Observed: "optional, one e2e golden" — hedging on a test that should be table stakes for a file-I/O CLI verb.
+
+Evidence: design.md test plan, final section."""
+disposition = "fix-now"
+response = """
+A CLI verb that reads and writes files needs at least one integration test that exercises the full pipeline. The "optional" qualifier is unwarranted. Fix: Change the test plan from:
+
+"Integration/behaviour tests in `tests/` (optional, one e2e golden)"
+
+to:
+
+"Integration/behaviour tests in `tests/`:
+- `doctrine config show --priority` against real `doctrine.toml` → golden output assertion"
+
+Remove the "(optional)" qualifier. The golden test is the minimum viable integration test — it proves the CLI binary parses args, finds the project root, reads the live TOML, and formats output correctly. If `config show` produces malformed output, no unit test will catch it; only the integration test will.
+
+This costs nothing — the test already exists in the plan, it's just marked optional. Making it required is a one-word deletion."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
