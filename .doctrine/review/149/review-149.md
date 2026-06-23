@@ -60,3 +60,20 @@ and is clippy-clean.
 - No governance or spec findings. The implementation is a pure code addition
   under ADR-015 (multi-dimensional priority scoring) and does not alter any
   existing ADR, spec, or policy.
+
+## Reconciliation Outcome
+
+All findings were withdrawn/tolerated with rationale, or their fixes were committed
+directly as code changes. No governance/spec REV needed. No per-slice document
+edits needed.
+
+### Direct edits applied
+- src/commands/config.rs (7a56c93b): F-1 (tag shortcut KEY optional), F-2 (NaN
+  clamp message), F-4 (rm unused --path field).
+
+### REVs completed
+- None required.
+
+### Withdrawn / tolerated
+- F-3 (RV-149): tolerated — "as-authored" annotation for default values deferred
+  to follow-up slice.
