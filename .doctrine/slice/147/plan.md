@@ -102,6 +102,12 @@ The order follows the dependency spine, not the design's narrative order:
   artifact is left untouched. One known edge: (i) the gate must key on
   *dispatch-coordination*, not *any linked worktree*, or it would wrongly skip a solo
   fork. The codex/pi recorder is verified by its own dispatch fixture (P4 VA-1).
+- **P4 assumption — funnel phase↔commit mapping.** The dispatch funnel recorder
+  (`record-delta --start B --end B+1`) assumes one `--phase` maps to one non-merge
+  `B→B+1` commit, so the F-6 guard (ancestor + non-merge) passes cleanly. Holds
+  under "v1 lands one per base" (one phase per batch). If a batch ever spans
+  multiple phases, the `--phase` ↔ `B→B+1` mapping needs revisiting. Verify against
+  the live funnel when P4 lands.
 - **OQ-conf-2 (record-delta namespace)** — resolved: `slice record-delta` for v0.1
   (not a neutral cross-arm verb); revisit if a non-slice writer appears.
 - **OQ-conf-1 (solo ref ergonomics)** — **resolved by construction** (D5): the solo
