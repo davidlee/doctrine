@@ -103,21 +103,24 @@ impl PriorityConfig {
 /// every coefficient to a safe finite range. NEVER errors — absent file, missing
 /// section, and malformed values all silently fall back to defaults.
 pub(crate) fn load(root: &Path) -> PriorityConfig {
-    let Ok(text) = std::fs::read_to_string(root.join("doctrine.toml")) else {
+    let Some(table) = read_priority_table(root) else {
         return PriorityConfig::default();
     };
-    let raw: toml::Value = match text.parse() {
-        Ok(v) => v,
-        Err(_) => return PriorityConfig::default(),
-    };
-    let cfg: PriorityConfig = match raw.get("priority") {
-        Some(priority) => match priority.clone().try_into::<PriorityConfig>() {
-            Ok(c) => c,
-            Err(_) => return PriorityConfig::default(),
-        },
-        None => return PriorityConfig::default(),
-    };
-    clamp(cfg)
+    load_from_table(&table)
+}
+
+pub(crate) fn read_priority_table(root: &Path) -> Option<toml::Table> {
+    let text = std::fs::read_to_string(root.join("doctrine.toml")).ok()?;
+    let raw: toml::Value = text.parse().ok()?;
+    raw.get("priority")?.as_table().cloned()
+}
+
+pub(crate) fn load_from_table(table: &toml::value::Table) -> PriorityConfig {
+    let value = toml::Value::Table(table.clone());
+    match value.try_into::<PriorityConfig>() {
+        Ok(c) => clamp(c),
+        Err(_) => PriorityConfig::default(),
+    }
 }
 
 // ── clamping ──────────────────────────────────────────────────────────────
@@ -146,7 +149,7 @@ fn clamp(mut cfg: PriorityConfig) -> PriorityConfig {
 }
 
 /// General coefficient clamp: non-finite → fallback; negative → 0.0; > `COEFF_MAX` → `COEFF_MAX`.
-fn clamp_general(value: f64, fallback: f64) -> f64 {
+pub(crate) fn clamp_general(value: f64, fallback: f64) -> f64 {
     if !value.is_finite() {
         return fallback;
     }
@@ -160,7 +163,7 @@ fn clamp_general(value: f64, fallback: f64) -> f64 {
 }
 
 /// Dep-coeff clamp: non-finite → fallback (0.5); ≤ 0 → 0.0; > 1 → 1.0.
-fn clamp_dep(value: f64) -> f64 {
+pub(crate) fn clamp_dep(value: f64) -> f64 {
     if !value.is_finite() {
         return 0.5;
     }

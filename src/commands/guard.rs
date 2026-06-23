@@ -4,6 +4,7 @@
 
 use crate::boot::BootCommand;
 use crate::commands::cli::Command;
+use crate::commands::config::ConfigCommand;
 use crate::knowledge::KnowledgeCommand;
 use crate::policy::PolicyCommand;
 use crate::rec::RecCommand;
@@ -291,6 +292,10 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         Command::Reseat { .. } => Write("reseat"),
         // Author / remove a tier-1 `[[relation]]` edge — authored writes (SL-048 §5.4).
         Command::Link { .. } => Write("link"),
+        Command::Config { command } => match command {
+            ConfigCommand::Set { .. } | ConfigCommand::Unset { .. } => Write("config"),
+            ConfigCommand::Show { .. } | ConfigCommand::Get { .. } => Read,
+        },
         Command::Unlink { .. } => Write("unlink"),
         // Author a dep/seq edge into `[relationships]` — authored writes (SL-060 §5.4).
         Command::Needs { .. } => Write("needs"),
