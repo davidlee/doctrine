@@ -291,7 +291,10 @@ pub(crate) fn run_config_set(root: &Path, args: &ConfigSetArgs) -> Result<()> {
         _ => anyhow::bail!("Unknown config key: {key}"),
     };
 
-    let config_path = root.join("doctrine.toml");
+    let config_path = root.join(".doctrine/doctrine.toml");
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let text = std::fs::read_to_string(&config_path).unwrap_or_default();
     let mut doc = text.parse::<toml_edit::DocumentMut>()?;
 
@@ -418,7 +421,7 @@ pub(crate) fn run_config_unset(root: &Path, args: &ConfigUnsetArgs) -> Result<()
         _ => anyhow::bail!("Unknown or invalid config key: {key}"),
     }
 
-    let config_path = root.join("doctrine.toml");
+    let config_path = root.join(".doctrine/doctrine.toml");
     if !config_path.exists() {
         writeln!(std::io::stdout().lock(), "{key} is not set")?;
         return Ok(());
@@ -505,7 +508,9 @@ mod tests {
     #[expect(dead_code, reason = "test helper")]
     fn setup_root(toml_content: &str) -> tempfile::TempDir {
         let dir = tempdir().unwrap();
-        fs::write(dir.path().join("doctrine.toml"), toml_content).unwrap();
+        let config_dir = dir.path().join(".doctrine");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(config_dir.join("doctrine.toml"), toml_content).unwrap();
         dir
     }
 
@@ -571,7 +576,8 @@ mod tests {
         };
         run_config_set(root, &args).unwrap();
 
-        let content = fs::read_to_string(root.join("doctrine.toml")).unwrap();
+        let config_file = root.join(".doctrine/doctrine.toml");
+        let content = fs::read_to_string(&config_file).unwrap();
         assert!(content.contains("[priority.coefficients]"));
         assert!(content.contains("value = 5.5"));
 
@@ -583,7 +589,7 @@ mod tests {
             tag: None,
         };
         run_config_set(root, &args2).unwrap();
-        let content2 = fs::read_to_string(root.join("doctrine.toml")).unwrap();
+        let content2 = fs::read_to_string(&config_file).unwrap();
         assert!(content2.contains("[priority.consequence]"));
         assert!(content2.contains("dep_coeff = 0.8"));
         assert!(content2.contains("value = 5.5")); // Still there
@@ -596,7 +602,7 @@ mod tests {
             tag: None,
         };
         run_config_set(root, &args3).unwrap();
-        let content3 = fs::read_to_string(root.join("doctrine.toml")).unwrap();
+        let content3 = fs::read_to_string(&config_file).unwrap();
         assert!(content3.contains("risk = 0.0"));
 
         // 4. Tag shortcut
@@ -607,7 +613,7 @@ mod tests {
             tag: Some("area:risk".to_string()),
         };
         run_config_set(root, &args4).unwrap();
-        let content4 = fs::read_to_string(root.join("doctrine.toml")).unwrap();
+        let content4 = fs::read_to_string(&config_file).unwrap();
         assert!(content4.contains("[priority.tag_coefficients]"));
         assert!(content4.contains("\"area:risk\" = 1.5"));
     }
@@ -642,7 +648,8 @@ mod tests {
         };
         run_config_unset(root, &unset_args).unwrap();
 
-        let content = fs::read_to_string(root.join("doctrine.toml")).unwrap();
+        let config_file = root.join(".doctrine/doctrine.toml");
+        let content = fs::read_to_string(&config_file).unwrap();
         assert!(!content.contains("value = 5.5"));
         assert!(!content.contains("[priority.coefficients]")); // Table should be cleaned up
         assert!(content.contains("[priority.kind_weights]"));
@@ -656,7 +663,7 @@ mod tests {
         };
         run_config_unset(root, &unset_args2).unwrap();
 
-        let content2 = fs::read_to_string(root.join("doctrine.toml")).unwrap();
+        let content2 = fs::read_to_string(&config_file).unwrap();
         assert!(content2.trim().is_empty() || !content2.contains("[priority]"));
 
         // 4. Unset non-existent (idempotent)

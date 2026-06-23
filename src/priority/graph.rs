@@ -1427,7 +1427,7 @@ mod tests {
         let max_val = config::COEFF_MAX;
         write(
             root,
-            "doctrine.toml",
+            ".doctrine/doctrine.toml",
             &format!(
                 "[priority]\ncoefficients = {{ value = {max_val}, risk = {max_val} }}\n\
                  consequence = {{ dep_coeff = 1.0, ref_coeff = {max_val} }}\n"
@@ -1617,7 +1617,7 @@ mod tests {
         let root = dir.path();
         write(
             root,
-            "doctrine.toml",
+            ".doctrine/doctrine.toml",
             "[priority]\ntag_coefficients = { \"area:foo\" = 2.0 }\n",
         );
         seed_issue_with_tags(
@@ -1644,7 +1644,7 @@ mod tests {
         let root = dir.path();
         write(
             root,
-            "doctrine.toml",
+            ".doctrine/doctrine.toml",
             "[priority]\ntag_coefficients = { a = 1.5, b = 2.0 }\n",
         );
         seed_issue_with_tags(
@@ -1671,7 +1671,7 @@ mod tests {
         let root = dir.path();
         write(
             root,
-            "doctrine.toml",
+            ".doctrine/doctrine.toml",
             "[priority]\ntag_coefficients = { wontfix = 0.5 }\n",
         );
         seed_issue_with_tags(
@@ -1698,7 +1698,7 @@ mod tests {
         let root = dir.path();
         write(
             root,
-            "doctrine.toml",
+            ".doctrine/doctrine.toml",
             "[priority]\ntag_coefficients = { x = 0.0, y = 0.0 }\n",
         );
         seed_issue_with_tags(
