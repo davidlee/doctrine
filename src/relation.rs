@@ -1714,8 +1714,9 @@ mod tests {
     /// VT-2 (R2-M1): the forward legal-KIND check. `governed_by` (→ ADR·POL·STD) refuses
     /// a slice target even though it would resolve; `SameKind` (gov `related`) refuses a
     /// cross-gov target; the legal kinds pass.
-    /// SL-095: a slice `related` now resolves (new BACKLOG/SLICE row); verify
-    /// `AnyNumbered` accepts any target kind.
+    /// SL-095 widened the `[SL, RFC]` `related` row to make a slice `related`
+    /// resolve (SL-145 later added BACKLOG to the same row); verify `AnyNumbered`
+    /// accepts any target kind.
     #[test]
     fn check_target_kind_enforces_target_kind() {
         // `RelationRule` has no Debug — unwrap the rule by hand.
