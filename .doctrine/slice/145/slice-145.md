@@ -75,18 +75,14 @@ rendering the derived inbound reciprocal.
   edge (the behaviour-preservation gate — existing suites stay green unchanged except
   the goldens that asserted the refusal). Confirm no overlay/accessor assumes BACKLOG is
   absent.
-- **OQ-1 (review outlet, F-5):** the `reviews` label is `RV`-only `TypedVerbOnly`; a
-  non-RV reviewer outlet for a backlog source has no clean home *without* the role
-  grammar (RFC-003 reserves the reference-family `reviews` *role* for exactly this, but
-  that role lands in Axis B). **Proposed:** defer the review outlet to B; keep this
-  slice to `governed_by` + `related`. Confirm in `/design`.
-- **OQ-2:** for `related`, extend the existing `[SL, RFC]` AnyNumbered row vs add a
-  dedicated BACKLOG row — affects the enum-order lockstep test (VT-1) and inbound
-  rendering. Design decides.
-- **OQ-3:** does any consumer (priority overlay, `/close`, transitive walk) need to
-  *react* to backlog-sourced governance edges, or is permitting the edge sufficient?
-  RFC's Layer-1 says graph-effect is a consumer decision — assume out of scope here,
-  confirm.
+- **OQ-1 (review outlet, F-5) — RESOLVED (design D2):** defer the review outlet to Axis B.
+  `reviews` is `RV`-only `TypedVerbOnly`; a non-RV backlog reviewer edge has no clean home
+  without B's role grammar (which reserves `references(reviews)` for it). This slice ships
+  `governed_by` + `related` only. F-5 stays open against B.
+- **OQ-2 — RESOLVED (design D1):** extend the existing `related` `[SL, RFC]` AnyNumbered
+  row to include BACKLOG (not a separate row). VT-1 enum-order unaffected (no new label).
+- **OQ-3 — RESOLVED (design D3):** permit the edge only; no consumer reaction. RFC-003
+  Layer-1 — graph-effect is a consumer decision, out of scope here.
 
 ## Verification / Closure Intent
 
