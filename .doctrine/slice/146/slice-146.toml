@@ -1,7 +1,7 @@
 id = 146
 slug = "config-coefficient-cli"
 title = "Config coefficient CLI — doctrine config get/set for priority coefficients, kind_weights, tag_coefficients"
-status = "design"
+status = "ready"
 created = "2026-06-23"
 updated = "2026-06-23"
 tags = ["area:cli", "area:config"]
