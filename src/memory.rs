@@ -541,7 +541,11 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
             let args = list.into_list_args(color);
             if orphans {
                 let root = crate::root::find(path, &crate::root::default_markers())?;
-                write!(io::stdout(), "{}", orphan_list_rows(&root, memory_type, args)?)?;
+                write!(
+                    io::stdout(),
+                    "{}",
+                    orphan_list_rows(&root, memory_type, args)?
+                )?;
                 Ok(())
             } else {
                 run_list(&mut io::stdout(), path, memory_type, args)
@@ -2758,7 +2762,11 @@ fn render_memory_rows(
 ) -> Result<String> {
     match format {
         Format::Table => {
-            let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, columns.map(Vec::as_slice))?;
+            let sel = listing::select_columns(
+                &MEMORY_COLUMNS,
+                MEMORY_DEFAULT,
+                columns.map(Vec::as_slice),
+            )?;
             Ok(listing::render_columns(rows, &sel, render))
         }
         Format::Json => listing::json_envelope("memory", &json_rows(rows)),
@@ -2798,13 +2806,14 @@ fn collect_list_rows(
 /// shared spine (SL-025). Pure: delegates to [`collect_list_rows`] then renders.
 /// `boot` calls this directly with an explicit `status:["active"]`
 /// to render its memory section ACTIVE-ONLY (drafts excluded from agent context, C-4).
-pub(crate) fn list_rows(
-    root: &Path,
-    type_f: Option<MemoryType>,
-    args: ListArgs,
-) -> Result<String> {
+pub(crate) fn list_rows(root: &Path, type_f: Option<MemoryType>, args: ListArgs) -> Result<String> {
     let input = collect_list_rows(root, type_f, args)?;
-    render_memory_rows(&input.rows, input.format, input.columns.as_ref(), input.render)
+    render_memory_rows(
+        &input.rows,
+        input.format,
+        input.columns.as_ref(),
+        input.render,
+    )
 }
 
 /// Narrow boot-snapshot producer: active signpost keys, key-ascending, with uid
@@ -2825,13 +2834,13 @@ pub(crate) fn boot_keys(root: &Path) -> Result<Vec<String>> {
 /// [`collect_list_rows`], builds the backlinks index + outbound set in one
 /// pass, post-filters the rows, then renders. The pure [`list_rows`] path is
 /// untouched.
-fn orphan_list_rows(
-    root: &Path,
-    type_f: Option<MemoryType>,
-    args: ListArgs,
-) -> Result<String> {
-    let ListRowsInput { mut rows, format, columns, render } =
-        collect_list_rows(root, type_f, args)?;
+fn orphan_list_rows(root: &Path, type_f: Option<MemoryType>, args: ListArgs) -> Result<String> {
+    let ListRowsInput {
+        mut rows,
+        format,
+        columns,
+        render,
+    } = collect_list_rows(root, type_f, args)?;
 
     let all = collect_all(root)?;
     let (known_uids, key_to_uid) = known_link_maps(&all);
@@ -3348,12 +3357,13 @@ pub(crate) fn run_validate(
 
 /// Validate that a relation target resolves to an existing entity.
 fn validate_relation_target(root: &Path, target: &str) -> Result<()> {
-    // Try parsing as a memory reference first
-    if let Ok(mref) = MemoryRef::parse(target) {
-        let items_root = root.join(MEMORY_ITEMS_DIR);
-        if resolve_show(&items_root, &mref).is_ok() {
-            return Ok(());
-        }
+    // Try parsing as a memory reference first — check items/ then fall back
+    // to shipped/ (ISS-048: shipped memories live in a separate tree).
+    if let Ok(mref) = MemoryRef::parse(target)
+        && (resolve_show(&root.join(MEMORY_ITEMS_DIR), &mref).is_ok()
+            || memory_ref_resolves_in_shipped(root, &mref))
+    {
+        return Ok(());
     }
 
     // Try catalog scan for other entities (SL-999, ADR-001, etc.)
@@ -3365,6 +3375,19 @@ fn validate_relation_target(root: &Path, target: &str) -> Result<()> {
     }
 
     bail!("target '{target}' not found")
+}
+
+/// Check whether a parsed `MemoryRef` resolves in the shipped corpus (ISS-048).
+/// `Uid`: same uid-dir layout as items/ — reuse `resolve_show` directly.
+/// `Key`: shipped/ has no key symlinks — scan with `resolve_shipped_by_key`.
+/// `UidPrefix`: not supported in shipped/ (no prefix scan there).
+fn memory_ref_resolves_in_shipped(root: &Path, mref: &MemoryRef) -> bool {
+    let shipped_root = root.join(MEMORY_SHIPPED_DIR);
+    match mref {
+        MemoryRef::Uid(_) => resolve_show(&shipped_root, mref).is_ok(),
+        MemoryRef::Key(key) => resolve_shipped_by_key(&shipped_root, key).is_some(),
+        MemoryRef::UidPrefix(_) => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -4868,10 +4891,7 @@ to = "mem_018e000000000000000000000000000b"
         fs::create_dir_all(&items).unwrap();
 
         // empty store → the empty string (the agreed empty marker upstream).
-        assert_eq!(
-            list_rows(root, None, ListArgs::default()).unwrap(),
-            ""
-        );
+        assert_eq!(list_rows(root, None, ListArgs::default()).unwrap(), "");
 
         let uid_a = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
         let uid_b = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8";
@@ -8521,6 +8541,131 @@ mod phase07_tests {
         let result = validate_relation_target(&repo.path, "nonexistent-target");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    // ISS-048: validate_relation_target resolves a shipped memory by uid
+    #[test]
+    fn validate_relation_target_resolves_shipped_memory_by_uid() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        let shipped_dir = repo
+            .path
+            .join(MEMORY_SHIPPED_DIR)
+            .join("mem_019e9a11b3797af3a8833c67acfa69bf");
+        std::fs::create_dir_all(&shipped_dir).unwrap();
+        std::fs::write(
+            shipped_dir.join("memory.toml"),
+            r#"memory_uid = "mem_019e9a11b3797af3a8833c67acfa69bf"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "Shipped Test"
+created = "2026-06-18"
+updated = "2026-06-18"
+lifespan = "semantic"
+review_by = ""
+
+[scope]
+workspace = "default"
+repo = ""
+repo_id_kind = ""
+repo_confidence = ""
+paths = []
+globs = []
+commands = []
+tags = []
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[review]
+verification_state = ""
+reviewed = ""
+
+[git]
+anchor_kind = "none"
+commit = ""
+tree = ""
+ref_name = ""
+checkout_state_id = ""
+base_commit = ""
+verified_sha = ""
+"#,
+        )
+        .unwrap();
+        std::fs::write(shipped_dir.join("memory.md"), "body").unwrap();
+        let result = validate_relation_target(&repo.path, "mem_019e9a11b3797af3a8833c67acfa69bf");
+        assert!(
+            result.is_ok(),
+            "shipped memory by uid should resolve: {result:?}"
+        );
+    }
+
+    // ISS-048: validate_relation_target resolves a shipped memory by key
+    #[test]
+    fn validate_relation_target_resolves_shipped_memory_by_key() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        let shipped_dir = repo
+            .path
+            .join(MEMORY_SHIPPED_DIR)
+            .join("mem_019e9a11b3797af3a8833c67acfa0000");
+        std::fs::create_dir_all(&shipped_dir).unwrap();
+        std::fs::write(
+            shipped_dir.join("memory.toml"),
+            r#"memory_uid = "mem_019e9a11b3797af3a8833c67acfa0000"
+memory_key = "mem.signpost.shipped.test"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "Shipped Key Test"
+created = "2026-06-18"
+updated = "2026-06-18"
+lifespan = "semantic"
+review_by = ""
+
+[scope]
+workspace = "default"
+repo = ""
+repo_id_kind = ""
+repo_confidence = ""
+paths = []
+globs = []
+commands = []
+tags = []
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[review]
+verification_state = ""
+reviewed = ""
+
+[git]
+anchor_kind = "none"
+commit = ""
+tree = ""
+ref_name = ""
+checkout_state_id = ""
+base_commit = ""
+verified_sha = ""
+"#,
+        )
+        .unwrap();
+        std::fs::write(shipped_dir.join("memory.md"), "body").unwrap();
+        let result = validate_relation_target(&repo.path, "mem.signpost.shipped.test");
+        assert!(
+            result.is_ok(),
+            "shipped memory by key should resolve: {result:?}"
+        );
     }
 
     // VT-3: Integration test — `memory validate` on a memory with dangling relation target → exit 1, warning output
