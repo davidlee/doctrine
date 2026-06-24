@@ -99,3 +99,32 @@ conformant.
 - **F-5 (nit, tolerated) — stale `specs` label example** in
   `mem_019ec0d9.../memory.md`. Optional memory/dreaming hygiene; not worth a dedicated
   backlog item unless dreaming sweeps it.
+
+## Reconciliation Outcome
+
+Reconcile pass complete. **No write-surface changes** — the design and the shipped
+code agree (the hybrid execution deviation is documented in `notes.md`, not a design
+correction), and P6 already brought SPEC-018 + `relation-vocabulary.md` coherent with
+the code. No per-slice direct edits and no REVs were required.
+
+### Direct edits applied
+- None.
+
+### REVs completed
+- None.
+
+### Follow-up work filed (audit-surfaced, owned future work)
+- **IMP-168** — Web-graph TS frontend renders `references(<role>)` in the edge label
+  (covers RV-156 F-3).
+- **CHR-026** — Rewire SPEC-005/006/016 to reference SPEC-018 (covers RV-156 F-4).
+
+### Knowledge harvested
+- `mem.pattern.jail.stale-test-fixture-vocabulary-change`
+  (`mem_019ef8c35b407a738b66e1fa5eaaa0f3`) — the stale-test-binary-embeds-old-fixture
+  footgun + the `| tail` exit-code mask that hid it during P05.
+
+### Withdrawn / tolerated
+- RV-156 F-5: tolerated — stale `specs` example in a foreign-owned memory body;
+  rationale in the finding disposition. Optional dreaming sweep.
+
+Reconcile pass complete — handoff to /close.

@@ -1,0 +1,46 @@
+memory_uid = "mem_019ef8c35b407a738b66e1fa5eaaa0f3"
+memory_key = "mem.pattern.jail.stale-test-fixture-vocabulary-change"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Stale test binary embeds the OLD fixture corpus; a vocabulary change reads as a logic regression"
+summary = "After a relation/parse vocabulary change, integration-test binaries embed the pre-change fixture; not rebuilt => false assertion failure, not a logic bug. Also: pipe-to-tail masks a non-zero exit."
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = ["tests/"]
+globs = []
+commands = []
+tags = ["jail", "testing", "stale-binary"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ea153d9203e64dfb9b86acd21b1821037a74a36a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1e85855bff5ae3b12f6cf4b3682e05787e62423cf55f166c59af0b1755f3d665"
+base_commit = "7d7d10943f2065de618984ae7be39c0da5910dde"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-149"
+
