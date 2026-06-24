@@ -16,10 +16,12 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (25) ────────────────────────────────────────────────────────────
+# ── leaf (28) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
+boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
 clock = "leaf"              # out=0: std-only time helpers
 conduct = "leaf"            # out=0: conduct.toml defaults — pure constants
+conformance = "leaf"        # out=0: path-conformance set algebra — pure (SL-147 PHASE-03)
 contentset = "leaf"         # out=0: content set wrapper — pure library
 dep_seq = "leaf"            # out=0: dependency-sequence data types — pure
 dispatch_config = "leaf"    # out=0: dispatch config defaults — pure
@@ -29,6 +31,7 @@ facet = "leaf"              # → estimate, value, risk: EntityFacets aggregatio
 facet_write = "leaf"        # → fsutil (SL-113): shared facet read→mutate→write core — std+leaf only
 fsutil = "leaf"             # out=0: filesystem utility — impure seam, no domain
 git = "leaf"                # out=0: git ops — impure seam, no domain
+globmatch = "leaf"          # → glob (external): shared glob_matches matcher (SL-147 PHASE-03)
 kinds = "leaf"              # out=0: entity-kind vocabulary — pure constants
 ledger = "leaf"             # out=0: review ledger types — pure
 lexical = "leaf"            # out=0: BM25/lexical engine — pure (no domain)

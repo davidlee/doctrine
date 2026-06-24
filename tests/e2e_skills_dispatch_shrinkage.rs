@@ -52,9 +52,11 @@ fn dispatch_router_skill_is_shrunk() {
     let body = body_lines(&full);
     // SL-127 PHASE-05 added the "Base freshness (mid-drive)" routing section
     // (refresh-base), raising the lean-router budget from 64 to 74.
+    // SL-147 PHASE-06 added the conformance record beat (step 8, per-arm
+    // boundary write), raising it from 74 to 80.
     assert!(
-        body.len() <= 74,
-        "dispatch router body lines: {} (target ≤74)",
+        body.len() <= 80,
+        "dispatch router body lines: {} (target ≤80)",
         body.len()
     );
 
@@ -87,9 +89,11 @@ fn dispatch_router_skill_is_shrunk() {
 fn dispatch_agent_skill_is_shrunk() {
     let full = source_skill_text("dispatch-agent");
     let body = body_lines(&full);
+    // SL-147 PHASE-06: record-boundary now double-writes the conformance
+    // registry — documenting that raised the budget from 78 to 82.
     assert!(
-        body.len() <= 78,
-        "dispatch-agent body lines: {} (target ≤78)",
+        body.len() <= 82,
+        "dispatch-agent body lines: {} (target ≤82)",
         body.len()
     );
 
@@ -123,9 +127,11 @@ fn dispatch_agent_skill_is_shrunk() {
 fn dispatch_subprocess_skill_is_shrunk() {
     let full = source_skill_text("dispatch-subprocess");
     let body = body_lines(&full);
+    // SL-147 PHASE-06 added the codex/pi conformance record beat (this arm's
+    // only neutral-registry write), raising the budget from 40 to 48.
     assert!(
-        body.len() <= 40,
-        "dispatch-subprocess body lines: {} (target ≤40)",
+        body.len() <= 48,
+        "dispatch-subprocess body lines: {} (target ≤48)",
         body.len()
     );
 

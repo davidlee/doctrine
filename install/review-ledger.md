@@ -83,16 +83,16 @@ doctrine review new --facet <F> --target <REF> [--phase <P>] [--raiser <L>]
 
 ### Prime
 
-Warm the reviewer context so findings land against a curated map, not a blank page:
+Warm the reviewer context so the staleness signal has a path-set to hash:
 
-1. `doctrine review prime RV-NNN --seed` — emits git-changed candidate paths. A
-   **starting point, not authority**: a curation seed, never the scope itself.
-2. Curate those into a `domain_map` — the areas, invariants, and risks this review
-   actually holds the subject to.
-3. `doctrine review prime RV-NNN` (stdin) or `--from <file>` — persists the curated
-   `domain_map`.
-4. Seed the ledger's `## Brief` (in `review-NNN.md`) with the **lines of attack**:
-   what this review is probing and the invariants it pins the subject to.
+1. `doctrine review prime RV-NNN` — populates the warm-cache from the **target
+   slice's selectors** (`scope-relevant` + `design-target`; the path-set the
+   staleness signal hashes). One call, no curation step. (The hand-authored
+   `domain_map` of areas/invariants/risks was a dead authoring tax — retired in
+   SL-147; selectors, seeded at `/slice` and `/design`, are the path-set now.)
+2. Seed the ledger's `## Brief` (in `review-NNN.md`) with the **lines of attack**:
+   what this review is probing and the invariants it pins the subject to — this is
+   where the reviewer's intent lives, not in a persisted map.
 
 `doctrine review status RV-NNN` reports `cache: current` / `stale` as an
 **optimization signal, never a gate** — a stale cache costs a re-prime, not a

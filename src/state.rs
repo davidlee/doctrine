@@ -18,6 +18,7 @@ use clap::ValueEnum;
 use serde::Deserialize;
 use toml_edit::Item;
 
+use crate::boundary::BoundaryRow;
 use crate::fsutil;
 // `Plan`/`PlanPhase` are now an engine-tier leaf (`crate::plan`, SL-016): the
 // state layer depends *down* on a neutral home, not up into the slice-CLI
@@ -399,6 +400,17 @@ pub(crate) fn set_phase_status(
         table.insert("completed", toml_edit::value(""));
     }
 
+    // Solo phase-binding capture (SL-147 PHASE-04, design D5): a SEPARATE,
+    // ADDITIVE, DEGRADING step that records the per-phase code boundary into the
+    // arm-neutral registry. It NEVER alters the status-flip behaviour above — on
+    // any git/bare-repo failure (or in a dispatch coordination context) it
+    // degrades to a no-op with a NAMED warning and the transition still
+    // completes. On InProgress it stamps `code_start_oid` (HEAD) into the sheet
+    // once; on Completed it reads that back and records `(start, HEAD)` via the
+    // F-6 guard + upsert. The stamp must ride THIS doc write, so it mutates the
+    // table before the write; the registry record happens AFTER the write.
+    let capture_end = capture_phase_boundary(project_root, slice_id, phase_id, status, table);
+
     let mut row = toml_edit::Table::new();
     row.insert("timestamp", toml_edit::value(now));
     row.insert("status", toml_edit::value(status.as_str()));
@@ -412,7 +424,355 @@ pub(crate) fn set_phase_status(
         .context("`progress` exists but is not an array of tables")?
         .push(row);
 
-    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
+    fs::write(&path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", path.display()))?;
+
+    // The registry write is the tail of the DEGRADING capture: it runs only on a
+    // completion that resolved a `(start, end)` pair, and its failure is reported
+    // (named warning) but never returned — the status transition above already
+    // succeeded and must stand.
+    if let Some(CaptureCompletion { start, end }) = capture_end
+        && let Err(e) = record_source_delta(
+            project_root,
+            slice_id,
+            BoundaryRow {
+                phase: phase_id.to_string(),
+                code_start_oid: start,
+                code_end_oid: end,
+            },
+        )
+    {
+        warn_capture(phase_id, &format!("recording source delta failed: {e:#}"));
+    }
+
+    Ok(())
+}
+
+/// The resolved completion boundary handed back by [`capture_phase_boundary`]
+/// when a `Completed` transition has both a stamped start and a readable HEAD —
+/// the input to the registry record that runs AFTER the sheet write.
+struct CaptureCompletion {
+    start: String,
+    end: String,
+}
+
+/// Solo phase-binding capture step (SL-147 PHASE-04). Mutates `table` (the phase
+/// sheet) to stamp `code_start_oid` on entry to `InProgress`, and returns the
+/// `(start, end)` pair to record on `Completed`. Returns `None` (no registry
+/// write) for every other status, when the arm guard fires (current branch ==
+/// `dispatch/<slice_id>`), or when any git read degrades — emitting a NAMED
+/// warning so the operator sees why no row landed, WITHOUT blocking the
+/// transition. `project_root` doubles as the git cwd (the repo it lives in).
+fn capture_phase_boundary(
+    project_root: &Path,
+    slice_id: u32,
+    phase_id: &str,
+    status: PhaseStatus,
+    table: &mut toml_edit::Table,
+) -> Option<CaptureCompletion> {
+    if status != PhaseStatus::InProgress && status != PhaseStatus::Completed {
+        return None;
+    }
+
+    // Arm guard: a dispatch coordination context records via the funnel recorder,
+    // never the solo binding — they must NEVER both record a phase. Key on the
+    // doctrine-owned branch, not "is a linked worktree" (a solo /worktree fork
+    // must still capture) and not any host commit convention (POL-002).
+    match crate::git::current_branch(project_root) {
+        Ok(Some(branch)) if branch == format!("dispatch/{slice_id:03}") => return None,
+        Ok(_) => {}
+        Err(e) => {
+            warn_capture(phase_id, &format!("branch probe failed: {e}"));
+            return None;
+        }
+    }
+
+    let head = match crate::git::resolve_ref(project_root, "HEAD") {
+        Ok(Some(oid)) => oid,
+        Ok(None) => {
+            warn_capture(phase_id, "HEAD does not resolve (unborn/detached)");
+            return None;
+        }
+        Err(e) => {
+            warn_capture(phase_id, &format!("HEAD probe failed: {e}"));
+            return None;
+        }
+    };
+
+    if status == PhaseStatus::InProgress {
+        // Stamp the start once: an in-progress re-entry (or a reopen → re-start)
+        // keeps the original start so the boundary spans the whole phase.
+        if table
+            .get("code_start_oid")
+            .and_then(Item::as_str)
+            .is_none_or(str::is_empty)
+        {
+            table.insert("code_start_oid", toml_edit::value(&head));
+        }
+        return None;
+    }
+
+    // status == Completed: read the stamped start back. An absent start (the
+    // phase was never flipped in_progress under the binding) degrades — without a
+    // start there is no boundary to record.
+    let Some(start) = table
+        .get("code_start_oid")
+        .and_then(Item::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+    else {
+        warn_capture(
+            phase_id,
+            "no code_start_oid stamped (phase never entered in_progress under the binding) — no boundary recorded",
+        );
+        return None;
+    };
+
+    Some(CaptureCompletion { start, end: head })
+}
+
+/// Emit a single NAMED capture-degradation warning to stderr (the binding never
+/// blocks a status transition — design D5). Routed through one helper so the
+/// message shape is uniform and greppable.
+fn warn_capture(phase_id: &str, detail: &str) {
+    let _ignored = writeln!(
+        std::io::stderr(),
+        "warning: phase-binding capture skipped for {phase_id}: {detail}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Recorded source-delta registry (SL-147 PHASE-02)
+// ---------------------------------------------------------------------------
+//
+// The arm-neutral record of each phase's committed code boundary — the same
+// per-phase `(code_start, code_end)` pair the claude arm writes into its
+// committed dispatch ledger, but for ANY arm and persisted as gitignored
+// runtime state. ONE file per slice, shared across every worktree of the repo:
+// it resolves against the PRIMARY working tree (`crate::git::primary_worktree`),
+// NOT `root::find(cwd)`, so a worker recording from a linked worktree writes the
+// row a later integrator reads from the main tree.
+//
+// Tier: `.doctrine/state/slice/<NNN>/boundaries.toml` — disposable, never
+// authored (mirrors `phases_dir`'s path idiom one level up). No funnel consumer
+// is wired yet; PHASE-03 reads it (slice conformance) and PHASE-04 writes
+// through it (record-delta / slice phase binding), so the symbols are
+// dead-code-phased per-symbol until then.
+
+/// The slice's recorded source-delta registry: a thin container over the
+/// arm-neutral [`BoundaryRow`] (the row type is owned by the `boundary` leaf,
+/// not re-declared here — this is a container, not a parallel row). Round-trips
+/// through `boundaries.toml` with `[[boundary]]` table headers.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) struct SourceDeltas {
+    #[serde(default, rename = "boundary")]
+    pub rows: Vec<BoundaryRow>,
+}
+
+/// Canonical registry path for a slice, resolved against the PRIMARY working
+/// tree so every worktree shares one file:
+/// `<primary>/.doctrine/state/slice/<NNN>/boundaries.toml`. `cwd` may be any
+/// path in the repo (a linked worker worktree is the typical caller). A
+/// bare/not-a-repo `cwd` yields a clean named error via `primary_worktree`.
+pub(crate) fn boundaries_path(cwd: &Path, slice_id: u32) -> anyhow::Result<PathBuf> {
+    let primary = crate::git::primary_worktree(cwd)?;
+    Ok(primary
+        .join(STATE_SLICE_DIR)
+        .join(format!("{slice_id:03}"))
+        .join("boundaries.toml"))
+}
+
+/// Read the recorded source deltas for `slice_id` (empty Vec when the file is
+/// absent or empty — never an error). Mirrors the `read_phase_status`
+/// not-found-is-empty idiom; a present-but-malformed file is a hard error.
+pub(crate) fn read_source_deltas(cwd: &Path, slice_id: u32) -> anyhow::Result<Vec<BoundaryRow>> {
+    let path = boundaries_path(cwd, slice_id)?;
+    let text = match fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    };
+    let registry: SourceDeltas =
+        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    Ok(registry.rows)
+}
+
+/// Record (UPSERT by phase) one phase's committed source delta into the slice's
+/// registry. The guard runs BEFORE the write: `code_start` must be an ancestor
+/// of `code_end` (a real forward delta, possibly empty when equal) AND
+/// `code_end` must be a non-merge commit (`parents().len() <= 1`) — the boundary
+/// is a single linear code tip, never a merge. A bare/not-a-repo `cwd`, or a
+/// `code_*` oid git cannot resolve, surfaces as a clean named error (the git
+/// leaf's `CaptureError`), never a panic. Read-modify-write; the dir/file are
+/// created on first write. `row.phase` keys the upsert so a re-record of the
+/// same phase replaces (never duplicates) its row.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "runtime registry — disposable gitignored state, atomicity not required"
+)]
+pub(crate) fn record_source_delta(
+    cwd: &Path,
+    slice_id: u32,
+    row: BoundaryRow,
+) -> anyhow::Result<()> {
+    if !crate::git::is_ancestor(cwd, &row.code_start_oid, &row.code_end_oid)? {
+        anyhow::bail!(
+            "record_source_delta: code_start {} is not an ancestor of code_end {} (not a forward delta)",
+            row.code_start_oid,
+            row.code_end_oid
+        );
+    }
+    if crate::git::parents(cwd, &row.code_end_oid)?.len() > 1 {
+        anyhow::bail!(
+            "record_source_delta: code_end {} is a merge commit (boundary must be a non-merge code tip)",
+            row.code_end_oid
+        );
+    }
+
+    let path = boundaries_path(cwd, slice_id)?;
+    let mut registry: SourceDeltas = match fs::read_to_string(&path) {
+        Ok(text) => {
+            toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => SourceDeltas::default(),
+        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    };
+
+    match registry.rows.iter_mut().find(|r| r.phase == row.phase) {
+        Some(existing) => *existing = row,
+        None => registry.rows.push(row),
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    let body = toml::to_string(&registry).context("serialize source-delta registry")?;
+    fs::write(&path, body).with_context(|| format!("Failed to write {}", path.display()))
+}
+
+/// The completeness verdict of the recorded registry against a slice's completed
+/// phases (design F-2): either every completed phase has exactly one row (and no
+/// row belongs to a non-completed phase), or the registry is incomplete with a
+/// named gap. `slice conformance` refuses to emit a clean diff when this returns
+/// `Incomplete` — partial coverage must never read as conformance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Completeness {
+    /// One row per completed phase, no extras — the registry covers the work.
+    Complete,
+    /// A coverage gap, naming the offending phase(s) so the operator can act.
+    Incomplete { gaps: Vec<CompletenessGap> },
+}
+
+/// A single named coverage gap between recorded rows and completed phases.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CompletenessGap {
+    /// A completed phase with no recorded boundary row.
+    Missing { phase: String },
+    /// A recorded row whose phase is not completed (or does not exist).
+    Extra { phase: String },
+    /// More than one recorded row for the same phase.
+    Duplicate { phase: String },
+}
+
+impl CompletenessGap {
+    /// One-line, phase-naming description for the `incomplete` render.
+    pub(crate) fn describe(&self) -> String {
+        match self {
+            CompletenessGap::Missing { phase } => {
+                format!("completed phase {phase} has no recorded source-delta row")
+            }
+            CompletenessGap::Extra { phase } => {
+                format!("recorded row for {phase}, which is not a completed phase")
+            }
+            CompletenessGap::Duplicate { phase } => {
+                format!("recorded more than one row for phase {phase}")
+            }
+        }
+    }
+}
+
+/// Pure cross-check (design F-2): every completed phase id MUST have exactly one
+/// recorded row, and every recorded row's phase MUST be completed. `completed`
+/// is the set of completed `PHASE-NN` ids; `recorded` is the ordered list of
+/// `row.phase` strings (duplicates surfaced). Zero-delta rows (start==end) are
+/// not special-cased here — a recorded row is a recorded row; the writer's guard
+/// owns range validity. Gaps are reported in a stable order (missing, extra,
+/// duplicate) so the message is deterministic. No IO — the reads are the caller's.
+pub(crate) fn check_completeness(
+    completed: &BTreeSet<String>,
+    recorded: &[String],
+) -> Completeness {
+    let mut counts: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+    for phase in recorded {
+        *counts.entry(phase.as_str()).or_insert(0) += 1;
+    }
+
+    let mut gaps = Vec::new();
+    for phase in completed {
+        if !counts.contains_key(phase.as_str()) {
+            gaps.push(CompletenessGap::Missing {
+                phase: phase.clone(),
+            });
+        }
+    }
+    for (phase, count) in &counts {
+        if !completed.contains(*phase) {
+            gaps.push(CompletenessGap::Extra {
+                phase: (*phase).to_string(),
+            });
+        } else if *count > 1 {
+            gaps.push(CompletenessGap::Duplicate {
+                phase: (*phase).to_string(),
+            });
+        }
+    }
+
+    if gaps.is_empty() {
+        Completeness::Complete
+    } else {
+        Completeness::Incomplete { gaps }
+    }
+}
+
+/// The set of completed `PHASE-NN` ids for a slice, read from its runtime phase
+/// sheets (the same id-derived tree `phase_rollup` reads — the `phases` symlink
+/// is never followed). A `.md`-only crash-partial or unreadable `.toml` is not
+/// "completed", so it is excluded (and will surface as a `MissingRow` gap if a
+/// row was nonetheless recorded — fail-closed). Empty when no phase exists.
+pub(crate) fn completed_phase_ids(
+    project_root: &Path,
+    slice_id: u32,
+) -> anyhow::Result<BTreeSet<String>> {
+    let dir = phases_dir(project_root, slice_id);
+    let mut completed = BTreeSet::new();
+    for stem in existing_phase_stems(&dir)? {
+        if let Some(status) = read_phase_status(&dir, &stem)?
+            && PhaseStatus::from_str(&status, false) == Ok(PhaseStatus::Completed)
+        {
+            completed.insert(phase_id_from_stem(&stem));
+        }
+    }
+    Ok(completed)
+}
+
+/// IO wrapper over [`check_completeness`] (design F-2): reads the recorded rows
+/// (from the primary-tree registry, via `cwd`) and the completed phase ids (from
+/// the `project_root` state tree), then cross-checks them. The conformance shell
+/// invokes ONLY this — no phase-sheet reading leaks into the command/algebra
+/// layers. `cwd` resolves the shared registry; `project_root` is the local state
+/// tree (they coincide in the primary worktree).
+pub(crate) fn registry_completeness(
+    cwd: &Path,
+    project_root: &Path,
+    slice_id: u32,
+) -> anyhow::Result<Completeness> {
+    let recorded: Vec<String> = read_source_deltas(cwd, slice_id)?
+        .into_iter()
+        .map(|row| row.phase)
+        .collect();
+    let completed = completed_phase_ids(project_root, slice_id)?;
+    Ok(check_completeness(&completed, &recorded))
 }
 
 // ---------------------------------------------------------------------------
@@ -850,5 +1210,451 @@ mod tests {
         let r = phase_rollup(root, 9).unwrap().unwrap();
         assert_eq!(r.unknown, 1, "typo status → unknown");
         assert_eq!(r.missing_toml, 1, "unparseable .toml → missing_toml");
+    }
+
+    // --- recorded source-delta registry (SL-147 PHASE-02) ------------------
+
+    /// Run git in `dir` with a pinned identity; panic on failure, return stdout.
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "Doctrine Test")
+            .env("GIT_AUTHOR_EMAIL", "test@doctrine.invalid")
+            .env("GIT_COMMITTER_NAME", "Doctrine Test")
+            .env("GIT_COMMITTER_EMAIL", "test@doctrine.invalid")
+            .output()
+            .expect("spawn git");
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    /// A fresh repo with one commit on `main`; returns its canonical path.
+    fn init_repo(dir: &Path) -> PathBuf {
+        fs::create_dir_all(dir).unwrap();
+        git(dir, &["init", "-q", "-b", "main"]);
+        git(dir, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        fs::canonicalize(dir).unwrap()
+    }
+
+    fn row(phase: &str, start: &str, end: &str) -> BoundaryRow {
+        BoundaryRow {
+            phase: phase.into(),
+            code_start_oid: start.into(),
+            code_end_oid: end.into(),
+        }
+    }
+
+    // VT-2: round-trip — write rows then read them back identically.
+    #[test]
+    fn source_deltas_round_trip_through_disk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let a = git(&repo, &["rev-parse", "HEAD"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "two"]);
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+
+        // Absent file reads as empty, not an error.
+        assert!(read_source_deltas(&repo, 147).unwrap().is_empty());
+
+        record_source_delta(&repo, 147, row("PHASE-01", &a, &a)).unwrap();
+        record_source_delta(&repo, 147, row("PHASE-02", &a, &head)).unwrap();
+
+        let rows = read_source_deltas(&repo, 147).unwrap();
+        assert_eq!(
+            rows,
+            vec![row("PHASE-01", &a, &a), row("PHASE-02", &a, &head)]
+        );
+    }
+
+    // VT-2: the file lands under the slice's runtime tree with `[[boundary]]`.
+    #[test]
+    fn source_deltas_path_is_slice_scoped_runtime_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+        record_source_delta(&repo, 147, row("PHASE-01", &head, &head)).unwrap();
+
+        let path = boundaries_path(&repo, 147).unwrap();
+        assert!(
+            path.ends_with(".doctrine/state/slice/147/boundaries.toml"),
+            "{path:?}"
+        );
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("[[boundary]]"), "table header: {text}");
+        assert!(text.contains("phase = \"PHASE-01\""), "{text}");
+    }
+
+    // VT-1: a re-record of the same phase UPSERTs (replaces) rather than dupes.
+    #[test]
+    fn record_upserts_by_phase() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let a = git(&repo, &["rev-parse", "HEAD"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "two"]);
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+
+        record_source_delta(&repo, 147, row("PHASE-01", &a, &a)).unwrap();
+        record_source_delta(&repo, 147, row("PHASE-01", &a, &head)).unwrap();
+
+        let rows = read_source_deltas(&repo, 147).unwrap();
+        assert_eq!(rows, vec![row("PHASE-01", &a, &head)], "one row, replaced");
+    }
+
+    // VT-2 resolver: a record from a LINKED worktree lands the row in the
+    // PRIMARY tree's file (the cross-worktree shared-file contract).
+    #[test]
+    fn record_from_linked_worktree_targets_primary_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("primary"));
+        let head = git(&primary, &["rev-parse", "HEAD"]);
+        let fork = tmp.path().join("fork");
+        git(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "feat",
+                fork.to_str().unwrap(),
+            ],
+        );
+        let fork = fs::canonicalize(&fork).unwrap();
+
+        // Record from the LINKED worktree.
+        record_source_delta(&fork, 147, row("PHASE-01", &head, &head)).unwrap();
+
+        // The file exists under the PRIMARY tree, NOT the fork.
+        assert!(
+            primary
+                .join(".doctrine/state/slice/147/boundaries.toml")
+                .exists()
+        );
+        assert!(
+            !fork
+                .join(".doctrine/state/slice/147/boundaries.toml")
+                .exists()
+        );
+        // And reads back from either worktree (same resolved path).
+        assert_eq!(
+            read_source_deltas(&fork, 147).unwrap(),
+            vec![row("PHASE-01", &head, &head)]
+        );
+        assert_eq!(
+            read_source_deltas(&primary, 147).unwrap(),
+            vec![row("PHASE-01", &head, &head)]
+        );
+    }
+
+    // VT-1 guard: a non-ancestor (start NOT before end) range is rejected.
+    #[test]
+    fn guard_rejects_non_ancestor_range() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let a = git(&repo, &["rev-parse", "HEAD"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "two"]);
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+
+        // start = later commit, end = earlier → not an ancestor.
+        let err = record_source_delta(&repo, 147, row("PHASE-01", &head, &a)).unwrap_err();
+        assert!(format!("{err:#}").contains("not an ancestor"), "{err:#}");
+        // Nothing was persisted.
+        assert!(read_source_deltas(&repo, 147).unwrap().is_empty());
+    }
+
+    // VT-1 guard: a merge commit as code_end is rejected.
+    #[test]
+    fn guard_rejects_merge_code_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let base = git(&repo, &["rev-parse", "HEAD"]);
+        // Branch A.
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "a"]);
+        let a = git(&repo, &["rev-parse", "HEAD"]);
+        // Branch B off base.
+        git(&repo, &["checkout", "-q", "-b", "side", &base]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "b"]);
+        // Merge B into A → a 2-parent merge tip.
+        git(&repo, &["checkout", "-q", "main"]);
+        git(&repo, &["merge", "-q", "--no-ff", "--no-edit", "side"]);
+        let merge = git(&repo, &["rev-parse", "HEAD"]);
+        assert_eq!(crate::git::parents(&repo, &merge).unwrap().len(), 2);
+
+        let err = record_source_delta(&repo, 147, row("PHASE-01", &a, &merge)).unwrap_err();
+        assert!(format!("{err:#}").contains("merge commit"), "{err:#}");
+        assert!(read_source_deltas(&repo, 147).unwrap().is_empty());
+    }
+
+    // VT-1 guard: a valid ancestor + non-merge pair is accepted and persisted.
+    #[test]
+    fn guard_accepts_valid_ancestor_non_merge_pair() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let a = git(&repo, &["rev-parse", "HEAD"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "two"]);
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+        assert!(crate::git::parents(&repo, &head).unwrap().len() <= 1);
+
+        record_source_delta(&repo, 147, row("PHASE-01", &a, &head)).unwrap();
+        assert_eq!(
+            read_source_deltas(&repo, 147).unwrap(),
+            vec![row("PHASE-01", &a, &head)]
+        );
+    }
+
+    // VT-2: a not-a-repo cwd surfaces a clean named error, never a panic.
+    #[test]
+    fn record_in_non_repo_is_a_named_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = record_source_delta(tmp.path(), 147, row("PHASE-01", "x", "y")).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(!msg.is_empty(), "named error, not a panic: {msg}");
+    }
+
+    // --- solo phase-binding capture (SL-147 PHASE-04, T1) ------------------
+
+    /// A phase sheet under a repo's runtime tree, ready for `set_phase_status`.
+    fn seed_phase_sheet(repo: &Path, slice: u32, stem: &str) {
+        let dir = phases_dir(repo, slice);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(format!("{stem}.toml")),
+            "status = \"planned\"\nstarted = \"\"\ncompleted = \"\"\n",
+        )
+        .unwrap();
+    }
+
+    // VT-1: in_progress → completed records the boundary deterministically; a
+    // re-record (reopen → re-complete) upserts to the new tip.
+    #[test]
+    fn binding_records_boundary_on_completion_and_upserts_on_reopen() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+
+        let start = git(&repo, &["rev-parse", "HEAD"]);
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        // Land a code commit, then complete: the row spans start → new HEAD.
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "code"]);
+        let end1 = git(&repo, &["rev-parse", "HEAD"]);
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        assert_eq!(
+            read_source_deltas(&repo, 147).unwrap(),
+            vec![row("PHASE-01", &start, &end1)],
+            "one boundary spanning the phase"
+        );
+
+        // Reopen + re-complete after another commit → the SAME phase upserts, the
+        // start is preserved (stamped once), the end advances.
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T3").unwrap();
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "more"]);
+        let end2 = git(&repo, &["rev-parse", "HEAD"]);
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T4").unwrap();
+
+        assert_eq!(
+            read_source_deltas(&repo, 147).unwrap(),
+            vec![row("PHASE-01", &start, &end2)],
+            "upsert: one row, start preserved, end advanced"
+        );
+    }
+
+    // VT-1: a no-commit phase (no code landed between start and completion) records
+    // a zero-delta row (start == end), never an error.
+    #[test]
+    fn binding_records_zero_delta_for_a_no_commit_phase() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        assert_eq!(
+            read_source_deltas(&repo, 147).unwrap(),
+            vec![row("PHASE-01", &head, &head)],
+            "zero-delta row, start == end"
+        );
+    }
+
+    // VT-1: a git-unavailable transition (non-repo cwd) DEGRADES — no row, no
+    // panic, and the status flip still COMPLETES.
+    #[test]
+    fn binding_degrades_without_blocking_when_git_unavailable() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path(); // not a git repo
+        init_one(root); // seeds slice 4 / PHASE-01 sheet via init_phases
+
+        // Transition succeeds despite no resolvable HEAD.
+        set_phase_status(root, 4, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        set_phase_status(root, 4, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        let doc = fs::read_to_string(phases_dir(root, 4).join("phase-01.toml"))
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
+        assert_eq!(
+            doc["status"].as_str(),
+            Some("completed"),
+            "flip still landed"
+        );
+        // No registry written (boundaries_path itself errors in a non-repo, so the
+        // read returns a named error — the point is the transition above succeeded).
+        assert!(read_source_deltas(root, 4).is_err());
+    }
+
+    // VT-2: arm mutual-exclusion — a completion in a SIMULATED dispatch context
+    // (current branch `dispatch/<NNN>`) records ZERO rows from the binding; a
+    // solo-context completion records exactly one.
+    #[test]
+    fn binding_skips_capture_in_a_dispatch_context() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        // Put the repo on the doctrine-owned coordination branch for slice 147.
+        git(&repo, &["checkout", "-q", "-b", "dispatch/147"]);
+
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "code"]);
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        assert!(
+            read_source_deltas(&repo, 147).unwrap().is_empty(),
+            "dispatch context: the binding records nothing (the funnel recorder owns it)"
+        );
+    }
+
+    // VT-2: a solo-context completion (NOT on `dispatch/<NNN>`) records exactly one
+    // — the mutual-exclusion's positive arm. A solo `/worktree` fork is on its own
+    // feature branch, never the coordination branch, so it still captures.
+    #[test]
+    fn binding_captures_on_a_solo_feature_branch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        // A solo fork's own branch — NOT dispatch/147.
+        git(&repo, &["checkout", "-q", "-b", "feat/solo-work"]);
+        let start = git(&repo, &["rev-parse", "HEAD"]);
+
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "code"]);
+        let end = git(&repo, &["rev-parse", "HEAD"]);
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        assert_eq!(
+            read_source_deltas(&repo, 147).unwrap(),
+            vec![row("PHASE-01", &start, &end)],
+            "solo context: exactly one boundary"
+        );
+    }
+
+    // --- completeness check (SL-147 PHASE-03, design F-2) -------------------
+
+    fn completed_set(ids: &[&str]) -> BTreeSet<String> {
+        ids.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    // VT-2: one row per completed phase, no extras → Complete.
+    #[test]
+    fn completeness_is_complete_when_rows_cover_completed_phases() {
+        let completed = completed_set(&["PHASE-01", "PHASE-02"]);
+        let recorded = vec!["PHASE-01".to_string(), "PHASE-02".to_string()];
+        assert_eq!(
+            check_completeness(&completed, &recorded),
+            Completeness::Complete
+        );
+    }
+
+    // VT-2: a completed phase with no recorded row → Incomplete, naming it.
+    #[test]
+    fn completeness_flags_a_missing_row_for_a_completed_phase() {
+        let completed = completed_set(&["PHASE-01", "PHASE-02"]);
+        let recorded = vec!["PHASE-01".to_string()];
+        let Completeness::Incomplete { gaps } = check_completeness(&completed, &recorded) else {
+            panic!("expected incomplete");
+        };
+        assert_eq!(
+            gaps,
+            vec![CompletenessGap::Missing {
+                phase: "PHASE-02".to_string()
+            }]
+        );
+        assert!(gaps[0].describe().contains("PHASE-02"));
+    }
+
+    // VT-2: a recorded row whose phase is not completed → Incomplete (ExtraRow).
+    #[test]
+    fn completeness_flags_an_extra_row() {
+        let completed = completed_set(&["PHASE-01"]);
+        let recorded = vec!["PHASE-01".to_string(), "PHASE-09".to_string()];
+        let Completeness::Incomplete { gaps } = check_completeness(&completed, &recorded) else {
+            panic!("expected incomplete");
+        };
+        assert_eq!(
+            gaps,
+            vec![CompletenessGap::Extra {
+                phase: "PHASE-09".to_string()
+            }]
+        );
+    }
+
+    // VT-2: more than one row for the same completed phase → DuplicateRow.
+    #[test]
+    fn completeness_flags_a_duplicate_row() {
+        let completed = completed_set(&["PHASE-01"]);
+        let recorded = vec!["PHASE-01".to_string(), "PHASE-01".to_string()];
+        assert_eq!(
+            check_completeness(&completed, &recorded),
+            Completeness::Incomplete {
+                gaps: vec![CompletenessGap::Duplicate {
+                    phase: "PHASE-01".to_string()
+                }]
+            }
+        );
+    }
+
+    // VT-2: `completed_phase_ids` reads only `completed` phases from the sheets.
+    #[test]
+    fn completed_phase_ids_returns_only_completed_phases() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let phases = phases_dir(root, 147);
+        write_phase_toml(&phases, "phase-01", "completed");
+        write_phase_toml(&phases, "phase-02", "in_progress");
+        write_phase_toml(&phases, "phase-03", "completed");
+
+        let completed = completed_phase_ids(root, 147).unwrap();
+        assert_eq!(completed, completed_set(&["PHASE-01", "PHASE-03"]));
+    }
+
+    // VT-2 (integration): registry_completeness composes the registry read +
+    // phase-sheet read — a completed phase missing its row fails closed.
+    #[test]
+    fn registry_completeness_fails_closed_on_unrecorded_completed_phase() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+
+        let phases = phases_dir(&repo, 147);
+        write_phase_toml(&phases, "phase-01", "completed");
+        write_phase_toml(&phases, "phase-02", "completed");
+        record_source_delta(&repo, 147, row("PHASE-01", &head, &head)).unwrap();
+
+        let verdict = registry_completeness(&repo, &repo, 147).unwrap();
+        assert_eq!(
+            verdict,
+            Completeness::Incomplete {
+                gaps: vec![CompletenessGap::Missing {
+                    phase: "PHASE-02".to_string()
+                }]
+            }
+        );
     }
 }
