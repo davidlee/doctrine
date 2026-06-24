@@ -5,10 +5,10 @@ id = 12
 slug = "read-only-doctrine-memory-retrieval-tool-for-agent-harnesses"
 title = "Read-only doctrine memory retrieval tool for agent harnesses"
 kind = "idea"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-19"
-updated = "2026-06-21"
+updated = "2026-06-24"
 tags = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

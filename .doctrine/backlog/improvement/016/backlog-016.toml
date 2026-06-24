@@ -5,10 +5,10 @@ id = 16
 slug = "structural-relation-surface-for-product-to-product-and-spec-to-adr-links-cross-corpus-relations-are-prose-only"
 title = "Structural relation surface for product-to-product and spec-to-ADR links — cross-corpus relations are prose-only"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-18"
+updated = "2026-06-24"
 tags = ["area:relations", "area:spec"]
 
 [relationships]                 # outbound-only (ADR-004)

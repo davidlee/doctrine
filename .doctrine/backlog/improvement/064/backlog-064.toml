@@ -5,10 +5,10 @@ id = 64
 slug = "sl-048-od-3-migrate-gov-supersedes-typed-array-to-relation-lifecycleonly-slot-repoint-supersede-verb"
 title = "SL-048 OD-3: migrate gov supersedes typed array to [[relation]] LifecycleOnly slot; repoint supersede verb"
 kind = "improvement"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-14"
-updated = "2026-06-18"
+updated = "2026-06-24"
 tags = ["area:governance"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

@@ -5,10 +5,10 @@ id = 11
 slug = "warn-on-record-of-an-unverified-thread-invisible-to-findretrieve-until-verified"
 title = "Warn on record of an unverified thread (invisible to find/retrieve until verified)"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:memory"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

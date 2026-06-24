@@ -5,10 +5,10 @@ id = 106
 slug = "dispatch-preferred-worker-harness-for-subagent-vs-subprocess-arm-selection"
 title = "dispatch: preferred worker harness for subagent-vs-subprocess arm selection"
 kind = "improvement"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-24"
 tags = ["area:dispatch"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

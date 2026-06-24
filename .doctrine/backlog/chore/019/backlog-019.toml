@@ -5,10 +5,10 @@ id = 19
 slug = "spike-toml-edit-022-root-tag-stripinsert-vs-real-worst-case-corpus-shapes-sl-136-f1rv-129"
 title = "Spike: toml_edit 0.22 root-tag strip+insert vs real worst-case corpus shapes (SL-136 F1/RV-129)"
 kind = "chore"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-24"
 tags = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

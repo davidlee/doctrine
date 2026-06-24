@@ -5,10 +5,10 @@ id = 28
 slug = "retire-backlog-order-fold-ordering-into-list-as-a-flag"
 title = "retire backlog order; fold ordering into list as a flag (--order)"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-11"
-updated = "2026-06-16"
+updated = "2026-06-24"
 tags = ["area:backlog", "area:cli"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

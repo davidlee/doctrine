@@ -5,10 +5,10 @@ id = 50
 slug = "scopeship-spec-019-fr-005-knowledge-record-relation-seam-record-source-group-minted-relatespawns"
 title = "Scope+ship SPEC-019 FR-005: knowledge-record relation seam (RECORD source-group, minted relate/spawns labels, outbound_for arm, record reader)"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-13"
-updated = "2026-06-18"
+updated = "2026-06-24"
 tags = ["area:memory", "area:relations", "area:spec"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

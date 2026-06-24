@@ -5,10 +5,10 @@ id = 3
 slug = "cordage-tarjan-and-level-of-recursion-depth-overflows-stack-at-multi-thousand-graph-depth"
 title = "cordage Tarjan and level_of recursion depth overflows stack at multi-thousand graph depth"
 kind = "risk"
-status = "resolved"
-resolution = "mitigated"
+status = "closed"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:relations", "cordage", "perf", "quadratic", "recursion", "scale"]
 
 [facet]                         # risk only — every field typed; seeded empty

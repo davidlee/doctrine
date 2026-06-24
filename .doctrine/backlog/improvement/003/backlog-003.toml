@@ -5,10 +5,10 @@ id = 3
 slug = "dispatch-worktree-creation"
 title = "Dispatch worktree creation: detection and creation paths with guards"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-08"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:dispatch"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

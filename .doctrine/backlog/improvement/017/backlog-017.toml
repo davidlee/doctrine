@@ -5,10 +5,10 @@ id = 17
 slug = "memory-list-adopts-shared-column-model"
 title = "memory list adopts the shared column model"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:cli", "area:memory"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

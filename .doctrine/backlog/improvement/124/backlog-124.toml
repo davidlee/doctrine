@@ -5,10 +5,10 @@ id = 124
 slug = "dispatch-deliver-to-config"
 title = "dispatch: [dispatch] deliver_to config as single source of trunk delivery ref"
 kind = "improvement"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-06-24"
 tags = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

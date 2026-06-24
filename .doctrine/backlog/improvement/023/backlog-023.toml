@@ -5,10 +5,10 @@ id = 23
 slug = "rewire-remaining-review-skills-onto-rv-kind-inquisition-code-review-drift-reconciliation-beyond-the-one-piloted-in-imp-001"
 title = "Rewire remaining review skills onto RV kind (/inquisition, /code-review, drift, reconciliation) beyond the one piloted in IMP-001"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-11"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:review", "area:skills"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

@@ -5,10 +5,10 @@ id = 51
 slug = "scopeship-spec-019-fr-006-knowledge-record-cross-kind-supersession-imp-006-verb-6-matrix-supersedes"
 title = "Scope+ship SPEC-019 FR-006: knowledge-record cross-kind supersession (IMP-006 verb, §6 matrix, Supersedes RECORD LifecycleOnly row)"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-13"
-updated = "2026-06-18"
+updated = "2026-06-24"
 tags = ["area:memory", "area:spec"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

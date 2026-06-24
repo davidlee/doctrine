@@ -5,10 +5,10 @@ id = 4
 slug = "cordage-evaluate-channel-eval-is-quadratic-ovve-per-node-reachable-bfs"
 title = "cordage evaluate() channel eval is quadratic O(V*(V+E)) per-node reachable BFS"
 kind = "risk"
-status = "resolved"
-resolution = "mitigated"
+status = "closed"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:relations", "cordage", "perf", "scale"]
 
 [facet]                         # risk only — every field typed; seeded empty
