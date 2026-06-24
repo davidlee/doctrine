@@ -973,17 +973,12 @@ pub(crate) fn run_new(
 }
 
 // ---------------------------------------------------------------------------
-// `knowledge show` — reassemble one record (table | json)
+// `knowledge show` / `knowledge inspect` — reassemble one record (table | json)
 // ---------------------------------------------------------------------------
 
-/// Render a [`KnowledgeRecord`] for `show` — a PURE fn of the record's OWN local state
-/// ("cannot go stale"), so it reads no other file and surfaces no inbound refs (the
-/// reverse view is the deferred registry surface's, ADR-004). House style: `Vec<String>`
-/// parts each carrying their own newline, joined by `concat()` (the `backlog::format_show`
-/// precedent — avoids the `push_str(&format!)` lint). The `[facet]` block is
-/// kind-dispatched; each axis renders only when populated; the `[evidence]` block
-/// renders only when any axis is non-empty.
-fn format_show(record: &KnowledgeRecord) -> String {
+/// Render the metadata portion of a [`KnowledgeRecord`] — a PURE fn of the record's
+/// OWN local state ("cannot go stale"), shared by `format_show` and `format_inspect`.
+fn format_metadata(record: &KnowledgeRecord) -> Vec<String> {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
         "{} — {}\n",
@@ -1017,8 +1012,19 @@ fn format_show(record: &KnowledgeRecord) -> String {
             parts.push(format!("{}: [{}]\n", label.name(), targets_str));
         }
     }
+    parts
+}
+
+/// Render a [`KnowledgeRecord`] for `show` — metadata + prose body.
+fn format_show(record: &KnowledgeRecord) -> String {
+    let mut parts = format_metadata(record);
     parts.push(format!("\n{}", record.body));
     parts.concat()
+}
+
+/// Render a [`KnowledgeRecord`] for `inspect` — metadata only, no prose body.
+fn format_inspect(record: &KnowledgeRecord) -> String {
+    format_metadata(record).concat()
 }
 
 /// One `  key: value` show line for an optional text/enum field — emitted only when
@@ -1183,7 +1189,7 @@ fn facet_json(facet: &RecordFacet) -> serde_json::Value {
     }
 }
 
-/// `doctrine knowledge show <ID> [--format table|json]` — the inspect verb (design §6).
+/// `doctrine knowledge show <ID> [--format table|json]` — metadata + prose body.
 /// Thin shell: find the root, `resolve_ref` the id to its kind (prefix auto-detect),
 /// read THAT record's single toml, render it to stdout. READ-ONLY — no mutation, no
 /// cross-corpus scan (only the one record's file is opened).
@@ -1197,6 +1203,24 @@ pub(crate) fn run_show(
     let record = read_record(&root, kind, id)?;
     let out = match format {
         Format::Table => format_show(&record),
+        Format::Json => show_json(&record)?,
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// `doctrine knowledge inspect <ID> [--format table|json]` — metadata only, no prose
+/// body. Thin shell: same read path as `show`, rendered via `format_inspect`.
+pub(crate) fn run_inspect(
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+    let record = read_record(&root, kind, id)?;
+    let out = match format {
+        Format::Table => format_inspect(&record),
         Format::Json => show_json(&record)?,
     };
     write!(io::stdout(), "{out}")?;
@@ -1458,8 +1482,18 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
-    /// Show one knowledge record.
+    /// Show one knowledge record (metadata + prose body).
     Show {
+        id: String,
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+        #[arg(long)]
+        json: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    /// Inspect one knowledge record's metadata only (no prose body).
+    Inspect {
         id: String,
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
         format: Format,
@@ -1515,6 +1549,12 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             json,
             path,
         } => run_show(path, &id, if json { Format::Json } else { format }),
+        KnowledgeCommand::Inspect {
+            id,
+            format,
+            json,
+            path,
+        } => run_inspect(path, &id, if json { Format::Json } else { format }),
         KnowledgeCommand::Status { id, state, path } => run_status(path, &id, &state, color),
         KnowledgeCommand::Paths {
             refs,

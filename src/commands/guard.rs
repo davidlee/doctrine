@@ -183,6 +183,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             BacklogCommand::Tag { .. } => Write("backlog tag"),
             BacklogCommand::List { .. }
             | BacklogCommand::Show { .. }
+            | BacklogCommand::Inspect { .. }
             | BacklogCommand::Paths { .. } => Read,
         },
         Command::Knowledge { command } => match command {
@@ -190,6 +191,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             KnowledgeCommand::Status { .. } => Write("knowledge status"),
             KnowledgeCommand::List { .. }
             | KnowledgeCommand::Show { .. }
+            | KnowledgeCommand::Inspect { .. }
             | KnowledgeCommand::Paths { .. } => Read,
         },
         Command::Tag { .. } => Write("tag"),
