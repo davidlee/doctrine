@@ -289,7 +289,7 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
 
     // --- Gather slice counts ---
     let slice_metas =
-        crate::meta::read_metas(&root.join(".doctrine/slice"), "slice").unwrap_or_default();
+        crate::meta::read_metas(&root.join(".doctrine/slice"), "slice", "SL").unwrap_or_default();
     let slice_total = slice_metas.len();
     let slice_active: Vec<&crate::meta::Meta> = slice_metas
         .iter()
@@ -311,7 +311,8 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
     }
 
     // --- Gather RFCs ---
-    let rfc_metas = crate::meta::read_metas(&root.join(".doctrine/rfc"), "rfc").unwrap_or_default();
+    let rfc_metas =
+        crate::meta::read_metas(&root.join(".doctrine/rfc"), "rfc", "RFC").unwrap_or_default();
     let rfc_total = rfc_metas.len();
     let mut open_rfc_ids: Vec<u32> = rfc_metas
         .iter()

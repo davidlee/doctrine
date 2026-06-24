@@ -29,6 +29,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
+use crate::dtoml;
+
 use crate::backlog_order::{BacklogOrder, ItemId, OrderInput, Override, OverrideReason};
 use crate::tag::{self, normalize_tag};
 // SL-060 PHASE-02: the dep/sequence schema + the strict edit-preserving append now
@@ -915,8 +917,8 @@ fn read_item(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::Result<Backlo
         .join(format!("{BACKLOG_STEM}-{name}.toml"));
     let text = std::fs::read_to_string(&path)
         .with_context(|| format!("backlog item not found at {}", path.display()))?;
-    let raw: RawBacklogToml =
-        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    let raw: RawBacklogToml = dtoml::parse_entity_toml(&text, item_kind.prefix(), id)
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
     let mut item = validate(raw)?;
     // SL-048 PHASE-04: the migrated tier-1 axes (slices/specs/drift) come from the
     // `[[relation]]` block, read generically in canonical order.
