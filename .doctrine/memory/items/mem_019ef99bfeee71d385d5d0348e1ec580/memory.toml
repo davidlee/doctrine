@@ -26,12 +26,12 @@ tree = "e5a8da4a2e3d0888aef14a4f741bd29ba3c9da78"
 ref_name = "refs/heads/edge"
 checkout_state_id = ""
 base_commit = "6e6388b37a40ea6446f082baee26d649a2e0a8ba"
-verified_sha = ""
+verified_sha = "b6b6af6ccd1f13641983940ef76127db2822965a"
 normalizer = ""
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-06-24"
 review_by = ""
 
 [trust]
