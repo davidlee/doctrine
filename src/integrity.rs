@@ -252,7 +252,15 @@ fn check_kind(snap: &KindSnapshot) -> Vec<Finding> {
 /// Read one kind's namespace under `root` into a [`KindSnapshot`]. A malformed
 /// metadata toml is a hard error (propagated), distinct from an integrity
 /// finding — `validate` reports inconsistency, it does not paper over corruption.
-fn scan_kind(root: &Path, kind: &'static KindRef) -> anyhow::Result<KindSnapshot> {
+///
+/// `diagnostics` collects schema-agnostic full-TOML parse errors (SL-151 D2):
+/// parse as `toml::Value` catches non-contiguous sections and other
+/// well-formedness failures that the typed id-only deserialize never sees.
+fn scan_kind(
+    root: &Path,
+    kind: &'static KindRef,
+    diagnostics: &mut Vec<String>,
+) -> anyhow::Result<KindSnapshot> {
     let tree_root = root.join(kind.kind.dir);
 
     let mut entities = Vec::new();
@@ -260,11 +268,31 @@ fn scan_kind(root: &Path, kind: &'static KindRef) -> anyhow::Result<KindSnapshot
         // The scan path needs only the id (design §5 D2): read it via the id-only
         // reader so review's intentionally status-less toml scans cleanly, while
         // the strict `Meta` (status-bearing readers) is untouched.
-        let toml_id = meta::read_id(&tree_root, kind.kind.stem, dir_id)?;
+        //
+        // Schema-agnostic full-Toml parse first (SL-151 D2): catch
+        // non-contiguous sections and other well-formedness errors the typed
+        // deserialize won't see. The file text is read once; if the full parse
+        // fails we push a canonical-id-tagged diagnostic and skip the entity —
+        // the diagnostic is the hard error, and the entity is omitted from the
+        // snapshot because its metadata is unreadable.
+        let name = format!("{dir_id:03}");
+        let path = tree_root
+            .join(&name)
+            .join(format!("{}-{name}.toml", kind.kind.stem));
+        let text = std::fs::read_to_string(&path)
+            .with_context(|| format!("read {stem} {name}", stem = kind.kind.stem))?;
+        if let Err(e) = toml::from_str::<toml::Value>(&text) {
+            diagnostics.push(format!(
+                "{}-{dir_id:03}: TOML parse failed: {e}",
+                kind.kind.prefix
+            ));
+            continue;
+        }
+        let toml_id = meta::read_id(&tree_root, kind.kind.stem, dir_id, kind.kind.prefix)?;
         entities.push(EntityFacts { dir_id, toml_id });
     }
 
-    let aliases = scan_aliases(&tree_root, kind.kind.stem)?;
+    let aliases = scan_aliases(&tree_root, kind.kind.stem, kind.kind.prefix)?;
     Ok(KindSnapshot {
         prefix: kind.kind.prefix,
         entities,
@@ -276,7 +304,7 @@ fn scan_kind(root: &Path, kind: &'static KindRef) -> anyhow::Result<KindSnapshot
 /// the id its name encodes and the declared id of the dir it resolves to. A
 /// symlink whose name does not lead with `NNN-` is not an entity alias and is
 /// skipped (memory's `mem.*` aliases never appear under a numbered tree anyway).
-fn scan_aliases(tree_root: &Path, stem: &str) -> anyhow::Result<Vec<AliasFacts>> {
+fn scan_aliases(tree_root: &Path, stem: &str, prefix: &str) -> anyhow::Result<Vec<AliasFacts>> {
     let mut aliases = Vec::new();
     let entries = match std::fs::read_dir(tree_root) {
         Ok(e) => e,
@@ -301,7 +329,7 @@ fn scan_aliases(tree_root: &Path, stem: &str) -> anyhow::Result<Vec<AliasFacts>>
         let target_toml_id = std::fs::read_link(entry.path())
             .ok()
             .and_then(|t| t.file_name().and_then(|b| b.to_str()?.parse::<u32>().ok()))
-            .and_then(|target_dir_id| meta::read_id(tree_root, stem, target_dir_id).ok());
+            .and_then(|target_dir_id| meta::read_id(tree_root, stem, target_dir_id, prefix).ok());
 
         aliases.push(AliasFacts {
             encoded_id,
@@ -318,9 +346,15 @@ fn scan_aliases(tree_root: &Path, stem: &str) -> anyhow::Result<Vec<AliasFacts>>
 /// on `relation_graph` (which depends back on `integrity` — the cycle the split avoids).
 pub(crate) fn id_integrity_findings(root: &Path) -> anyhow::Result<Vec<String>> {
     let mut findings = Vec::new();
+    let mut diagnostics = Vec::new();
     for kind in KINDS {
-        findings.extend(check_kind(&scan_kind(root, kind)?).into_iter().map(|f| f.0));
+        findings.extend(
+            check_kind(&scan_kind(root, kind, &mut diagnostics)?)
+                .into_iter()
+                .map(|f| f.0),
+        );
     }
+    findings.append(&mut diagnostics);
     Ok(findings)
 }
 
@@ -411,7 +445,7 @@ pub(crate) fn run_reseat(
         src_dir.display()
     );
     // Slug from the authored metadata — the alias name component.
-    let slug = meta::read_meta(&tree_root, kind.kind.stem, src_id)?.slug;
+    let slug = meta::read_meta(&tree_root, kind.kind.stem, src_id, kind.kind.prefix)?.slug;
 
     // The free-id pick: explicit `--to`, else the trunk-aware default (PHASE-02).
     let dst_id = match to {
@@ -690,7 +724,10 @@ mod tests {
         )
         .unwrap();
         let review_kind = kind_by_prefix("RV").expect("RV in KINDS");
-        let snap = scan_kind(root, review_kind).expect("status-less review scans cleanly");
+        let mut diagnostics = Vec::new();
+        let snap = scan_kind(root, review_kind, &mut diagnostics)
+            .expect("status-less review scans cleanly");
+        assert!(diagnostics.is_empty());
         assert_eq!(snap.entities.len(), 1);
         assert_eq!(snap.entities[0].toml_id, 1);
     }
@@ -803,6 +840,111 @@ mod tests {
             distinct.len(),
             prefixes.len(),
             "all KINDS prefixes are distinct: {prefixes:?}"
+        );
+    }
+
+    /// SL-151 D2 (VT-3): scan_kind flags a non-contiguous TOML (duplicate
+    /// `[relationships]` header) via the schema-agnostic full parse.
+    #[test]
+    fn scan_kind_flags_non_contiguous_toml() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // Use slice (SL) — any numbered kind works.
+        let dir = root.join(".doctrine/slice/001");
+        std::fs::create_dir_all(&dir).unwrap();
+        // Non-contiguous: `[relationships]` appears twice, which toml::Value
+        // rejects as a duplicate key.
+        std::fs::write(
+            dir.join("slice-001.toml"),
+            "id = 1\n\
+             slug = \"s\"\n\
+             title = \"T\"\n\
+             status = \"proposed\"\n\
+             created = \"2026-01-01\"\n\
+             updated = \"2026-01-01\"\n\
+             \n\
+             [relationships]\n\
+             [relationships]\n",
+        )
+        .unwrap();
+        let slice_kind = kind_by_prefix("SL").expect("SL in KINDS");
+        let mut diagnostics = Vec::new();
+        let snap = scan_kind(root, slice_kind, &mut diagnostics).expect("scan_kind succeeds");
+        assert_eq!(
+            snap.entities.len(),
+            0,
+            "unparseable entity is omitted from snapshot"
+        );
+        assert!(
+            !diagnostics.is_empty(),
+            "non-contiguous TOML must produce a diagnostic: {diagnostics:?}"
+        );
+        assert!(
+            diagnostics[0].starts_with("SL-001: TOML parse failed:"),
+            "diagnostic must be canonical-id tagged: {}",
+            diagnostics[0]
+        );
+    }
+
+    /// SL-151 D2 (VT-4): scan_kind produces no diagnostics on a valid TOML.
+    #[test]
+    fn scan_kind_no_diagnostics_on_valid_toml() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join(".doctrine/slice/001");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("slice-001.toml"),
+            "id = 1\n\
+             slug = \"s\"\n\
+             title = \"T\"\n\
+             status = \"proposed\"\n\
+             created = \"2026-01-01\"\n\
+             updated = \"2026-01-01\"\n\
+             \n\
+             [relationships]\n",
+        )
+        .unwrap();
+        let slice_kind = kind_by_prefix("SL").expect("SL in KINDS");
+        let mut diagnostics = Vec::new();
+        let snap = scan_kind(root, slice_kind, &mut diagnostics).expect("scan_kind succeeds");
+        assert_eq!(snap.entities.len(), 1);
+        assert!(
+            diagnostics.is_empty(),
+            "valid TOML must produce no diagnostics: {diagnostics:?}"
+        );
+    }
+
+    /// SL-151 D2 (VT-4 false-positive guard): scan_kind does NOT flag a TOML
+    /// where `[section]` appears inside a string value (valid TOML, not a real
+    /// duplicate key).
+    #[test]
+    fn scan_kind_no_false_positive_on_section_in_string() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join(".doctrine/slice/001");
+        std::fs::create_dir_all(&dir).unwrap();
+        // `[relationships]` inside a string value — valid TOML, not a duplicate key.
+        std::fs::write(
+            dir.join("slice-001.toml"),
+            "id = 1\n\
+             slug = \"s\"\n\
+             title = \"T\"\n\
+             status = \"proposed\"\n\
+             created = \"2026-01-01\"\n\
+             updated = \"2026-01-01\"\n\
+             note = \"inner [relationships] key\"\n\
+             \n\
+             [relationships]\n",
+        )
+        .unwrap();
+        let slice_kind = kind_by_prefix("SL").expect("SL in KINDS");
+        let mut diagnostics = Vec::new();
+        let snap = scan_kind(root, slice_kind, &mut diagnostics).expect("scan_kind succeeds");
+        assert_eq!(snap.entities.len(), 1);
+        assert!(
+            diagnostics.is_empty(),
+            "section inside a string value must not be reported: {diagnostics:?}"
         );
     }
 }

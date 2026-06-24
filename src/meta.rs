@@ -26,6 +26,7 @@ use std::path::Path;
 use anyhow::Context;
 use serde::Deserialize;
 
+use crate::dtoml;
 use crate::entity;
 
 /// The fields a reader extracts from a `<stem>-<id>.toml`. Unknown keys (the
@@ -42,12 +43,18 @@ pub(crate) struct Meta {
 
 /// Parse the `Meta` of a single entity by id, reading `<stem>-<id>.toml` under
 /// its numeric dir in `tree_root`.
-pub(crate) fn read_meta(tree_root: &Path, stem: &str, id: u32) -> anyhow::Result<Meta> {
+pub(crate) fn read_meta(
+    tree_root: &Path,
+    stem: &str,
+    id: u32,
+    prefix: &str,
+) -> anyhow::Result<Meta> {
     let name = format!("{id:03}");
     let path = tree_root.join(&name).join(format!("{stem}-{name}.toml"));
     let text = fs::read_to_string(&path)
         .with_context(|| format!("{stem} {name} not found at {}", path.display()))?;
-    toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
+    dtoml::parse_entity_toml(&text, prefix, id)
+        .with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 /// The id, and only the id, of a `<stem>-<id>.toml` — the scan-path reader
@@ -65,23 +72,23 @@ pub(crate) struct IdOnly {
 /// Read just the `id` of a single entity's `<stem>-<id>.toml` — the [`IdOnly`]
 /// scan-path reader. Used by `integrity::scan_kind`, the one place a status-less
 /// kind (review) must be read without tripping the strict [`Meta`] (D2).
-pub(crate) fn read_id(tree_root: &Path, stem: &str, id: u32) -> anyhow::Result<u32> {
+pub(crate) fn read_id(tree_root: &Path, stem: &str, id: u32, prefix: &str) -> anyhow::Result<u32> {
     let name = format!("{id:03}");
     let path = tree_root.join(&name).join(format!("{stem}-{name}.toml"));
     let text = fs::read_to_string(&path)
         .with_context(|| format!("{stem} {name} not found at {}", path.display()))?;
-    let parsed: IdOnly =
-        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    let parsed: IdOnly = dtoml::parse_entity_toml(&text, prefix, id)
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
     Ok(parsed.id)
 }
 
 /// Read and parse every `<stem>-<id>.toml` under `tree_root`. `scan_ids` yields
 /// numeric dirs only, so `<id>-<slug>` symlinks and non-numeric entries are
 /// skipped.
-pub(crate) fn read_metas(tree_root: &Path, stem: &str) -> anyhow::Result<Vec<Meta>> {
+pub(crate) fn read_metas(tree_root: &Path, stem: &str, prefix: &str) -> anyhow::Result<Vec<Meta>> {
     let mut metas = Vec::new();
     for id in entity::scan_ids(tree_root)? {
-        metas.push(read_meta(tree_root, stem, id)?);
+        metas.push(read_meta(tree_root, stem, id, prefix)?);
     }
     Ok(metas)
 }
@@ -122,7 +129,7 @@ mod tests {
         let root = dir.path();
         write_meta_toml(root, "slice", 1, "proposed", "my-slug");
 
-        let m = read_meta(root, "slice", 1).unwrap();
+        let m = read_meta(root, "slice", 1, "TK").unwrap();
         assert_eq!(m, meta(1, "proposed", "my-slug", "Title 1"));
     }
 
@@ -133,10 +140,10 @@ mod tests {
         // same id, different stem — the stem selects the file.
         write_meta_toml(root, "adr", 7, "accepted", "use-rust");
 
-        let m = read_meta(root, "adr", 7).unwrap();
+        let m = read_meta(root, "adr", 7, "TK").unwrap();
         assert_eq!(m.status, "accepted");
         // the wrong stem does not find it
-        assert!(read_meta(root, "slice", 7).is_err());
+        assert!(read_meta(root, "slice", 7, "TK").is_err());
     }
 
     /// Write a status-LESS `<stem>-<id>.toml` carrying only `id`/`slug`/`title`
@@ -156,7 +163,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         write_statusless_toml(root, "review", 7);
-        assert_eq!(read_id(root, "review", 7).unwrap(), 7);
+        assert_eq!(read_id(root, "review", 7, "TK").unwrap(), 7);
     }
 
     /// SL-040 D2 (VT-1, the preserved-invariant half): the strict `Meta` reader
@@ -167,7 +174,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         write_statusless_toml(root, "slice", 7);
-        let err = read_meta(root, "slice", 7).unwrap_err();
+        let err = read_meta(root, "slice", 7, "TK").unwrap_err();
         assert!(
             err.to_string().contains("Failed to parse"),
             "missing status must be a hard parse error: {err}"
@@ -186,7 +193,7 @@ mod tests {
         std::os::unix::fs::symlink("001", root.join("001-one")).unwrap();
         fs::create_dir_all(root.join("notes")).unwrap();
 
-        let mut ids: Vec<u32> = read_metas(root, "slice")
+        let mut ids: Vec<u32> = read_metas(root, "slice", "TK")
             .unwrap()
             .iter()
             .map(|m| m.id)

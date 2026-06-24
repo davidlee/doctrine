@@ -56,6 +56,21 @@ pub(crate) fn parse(text: &str) -> anyhow::Result<DoctrineToml> {
     Ok(doc)
 }
 
+/// Parse an entity TOML with canonical-id error context.
+///
+/// Wraps `toml::from_str`. On parse failure, injects the entity's canonical
+/// id so the user sees which entity is broken. The raw `toml` error already
+/// describes *what* went wrong.
+///
+/// Pure leaf (ADR-001): owned text in, no IO, no config dependency.
+pub(crate) fn parse_entity_toml<T: serde::de::DeserializeOwned>(
+    text: &str,
+    prefix: &str,
+    id: u32,
+) -> anyhow::Result<T> {
+    toml::from_str(text).with_context(|| format!("{prefix}-{id:03}: TOML parse failed"))
+}
+
 /// The project config filename at the repo root (the structured sibling of
 /// `governance.md`), NOT a `.doctrine/` entity.
 pub(crate) const DOCTRINE_TOML: &str = "doctrine.toml";

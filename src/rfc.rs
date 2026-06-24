@@ -418,7 +418,7 @@ mod tests {
         )
         .unwrap();
 
-        let meta = crate::meta::read_meta(&rfc_root(root), "rfc", 1).unwrap();
+        let meta = crate::meta::read_meta(&rfc_root(root), "rfc", 1, "RFC").unwrap();
         assert_eq!(meta.status, "resolved");
         // The file carries the stamp; `set_status` preserved the rest.
         let body = std::fs::read_to_string(rfc_root(root).join("001/rfc-001.toml")).unwrap();
@@ -442,7 +442,7 @@ mod tests {
         )
         .unwrap();
 
-        let meta = crate::meta::read_meta(&rfc_root(root), "rfc", 3).unwrap();
+        let meta = crate::meta::read_meta(&rfc_root(root), "rfc", 3, "RFC").unwrap();
         assert_eq!(meta.status, "withdrawn");
     }
 
@@ -465,7 +465,7 @@ mod tests {
                 &format!("Title {id}"),
             );
             governance::set_status(&RFC_KIND, root, id, target, "2099-01-01").unwrap();
-            let meta = crate::meta::read_meta(&rfc_root(root), "rfc", id).unwrap();
+            let meta = crate::meta::read_meta(&rfc_root(root), "rfc", id, "RFC").unwrap();
             assert_eq!(meta.status, target, "id {id}");
         }
     }
