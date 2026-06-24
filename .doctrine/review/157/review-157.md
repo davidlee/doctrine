@@ -85,3 +85,35 @@ integrate blind.
   promote edge, then merge/rebase the bundle onto current `edge`. Expect
   conflicts in `src/review.rs` (-568 lines), `src/dispatch.rs`, `src/state.rs`
   against RFC-005 / ISS-025. Do not integrate from the stale `main` base.
+
+## Reconciliation Outcome
+
+### Direct edits applied (design.md)
+- **D5 dispatch-arm bullet (RV-157 F-1)** — rewritten from the symmetric
+  "both arms call a separate `slice record-delta`; record-boundary untouched"
+  framing to the shipped **arm-asymmetric double-write**: claude arm's
+  `dispatch record-boundary` (`run_record_boundary`, dispatch.rs) double-writes
+  the committed ref-cut ledger AND the arm-neutral registry in one call; codex/pi
+  (no `record-boundary`) uses the separate `record-delta` at funnel step 8.
+  Coverage arm-agnostic via the shared funnel. Decision unchanged.
+- **D5 Home / D7 / R5 primary_worktree home pointer (RV-157 F-2)** — all three
+  cites of `worktree::subagent::primary_worktree` → `git::primary_worktree`,
+  noting the P02 relocation to the `git` leaf (the original was an ADR-001
+  engine→command upward edge). Decision (reuse, don't reinvent) unchanged.
+  OQ-conf-3's bare `primary_worktree` needed no edit.
+
+### REVs completed
+- None. No governance/spec change implicated; both drifts were per-slice
+  design-prose syncs.
+
+### Deferred to /close (not reconcile)
+- **RV-157 F-3** — stale-`main` base / edge +28 integration hazard. A close
+  stage-2 concern (merge onto current edge before integrate), recorded above as
+  the close-gate note. No reconcile write.
+
+### Aligned (no write)
+- **RV-157 F-4** — layering.toml rows orchestrator-authored in funnel (sanctioned).
+- **RV-157 F-5** — conformance verb evidenced by green `just check` + P06 dogfood;
+  live run blocked by a jail `icu_provider` build artifact, not a defect.
+
+Reconcile pass complete — handoff to /close.

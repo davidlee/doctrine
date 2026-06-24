@@ -164,9 +164,11 @@ One registry both arms write and the auditor reads, resolved to a single shared
 location regardless of which worktree the command runs in.
 
 - **Home:** `.doctrine/state/slice/<NNN>/boundaries.toml` under the **primary
-  working tree**, resolved by **reusing the existing `worktree::subagent::
-  primary_worktree(cwd)`** (subagent.rs:33 — `git worktree list --porcelain`,
-  correct across layouts), *not* a new helper and *not* CWD-relative `root::find`.
+  working tree**, resolved by **reusing the existing `git::primary_worktree(cwd)`**
+  (the `git worktree list --porcelain` resolver, *relocated to the `git` leaf in
+  P02* — the original `worktree::subagent` home was an ADR-001 engine→command
+  upward edge; see F-5/R5, RV-157 F-2), *not* a new helper and *not* CWD-relative
+  `root::find`.
   Lift/share it as needed; do **not** reinvent (F-5). All commands hit one file
   regardless of cwd worktree. Worktree layout is a doctrine-owned contract
   (ADR-006/012) → POL-002-clean. Runtime, gitignored, in-loop lifetime.
@@ -209,21 +211,26 @@ location regardless of which worktree the command runs in.
     "linked worktree" — a solo `/worktree` fork is not a dispatch context and still
     captures. (In fact dispatch never calls `slice phase` today, so this is a
     belt-and-braces guard, not a load-bearing assumption — verified, then enforced.)
-  - **dispatch (both arms — claude AND codex/pi).** At the funnel **record** beat
-    (step 8) the orchestrator calls `doctrine slice record-delta <SL> --phase <P>
-    --start <B> --end <B+1>` — the coordination boundary it already holds (`B`
-    captured pre-spawn, `B+1` the funnel's one commit). This reuses the same
-    arm-neutral writer + F-6 guard as the solo path and resolves to the primary-tree
-    registry via `primary_worktree` (the funnel runs in the coordination worktree;
-    the write still lands in the primary registry). **Arm-agnostic by construction:**
-    both arms run the *shared* funnel (`/dispatch` router) and produce the same
-    per-phase `B→B+1`, so codex/pi records identically — no claude-only gate.
-    - *Why the historical skip didn't generalize:* the **existing** `dispatch
-      record-boundary` → committed `.doctrine/dispatch/<N>/boundaries.toml` is the
-      **claude-arm `phase/<N>` ref-cut's input** (ledger.rs:10-11/74) — that
-      consumer, not oid availability, is why it's claude-only. We do **not** touch
-      it; conformance's registry is a *separate* arm-neutral write keyed off the same
-      coordination oids, so it covers codex/pi for free.
+  - **dispatch (both arms — claude AND codex/pi).** Both arms populate the
+    arm-neutral registry off the same per-phase coordination boundary (`B`
+    captured pre-spawn, `B+1` the funnel's one commit), via the same writer +
+    F-6 guard, resolved to the primary-tree registry (the funnel runs in the
+    coordination worktree; the write still lands in the primary registry). The
+    **mechanism is arm-asymmetric** *(shipped — SL-147 PHASE-04; reconciled from
+    the earlier symmetric-separate-beat framing, RV-157 F-1)*:
+    - **claude arm** — the funnel's **existing** `dispatch record-boundary` beat
+      (which already cuts the `phase/<N>` ref-cut input, ledger.rs:10-11/74) is
+      the recorder. `run_record_boundary` (dispatch.rs) **double-writes**: BOTH
+      the committed `.doctrine/dispatch/<N>/boundaries.toml` ref-cut ledger
+      **and** the arm-neutral registry, in one call. **No** separate
+      `record-delta` on this arm.
+    - **codex/pi arm** — has **no** `record-boundary` beat, so the funnel issues
+      `doctrine slice record-delta <SL> --phase <P> --start <B> --end <B+1>` at
+      step 8 to populate the registry.
+    - **Coverage is arm-agnostic by construction:** both arms run the *shared*
+      funnel (`/dispatch` router) and produce the same per-phase `B→B+1`, so the
+      registry is populated identically regardless of arm. The lifecycle skills
+      (`/dispatch-agent`, `/dispatch`) carry the per-arm beat.
   - **`slice record-delta`** is therefore dual-purpose: the **dispatch funnel's
     recorder** (orchestrator-issued, both arms) **and** the **manual escape hatch**
     (re-record a corrected range; bootstrap a slice whose phases predate the
@@ -290,7 +297,7 @@ staleness resolution (D4) consume it. No new glob dependency.
 - a **leaf module** — `BoundaryRow` extracted here, imported by both `ledger`
   and `state` (ADR-001, no engine↔engine cycle; F-5/R3).
 - `src/state.rs` — `boundaries_path(slice)` (resolved via reused
-  `worktree::subagent::primary_worktree`), `record_source_delta` writer with the
+  `git::primary_worktree`), `record_source_delta` writer with the
   ancestor + non-merge guard (F-6), reader, and the completed-phases completeness
   check (F-2, reading the phase sheets). The `slice phase` transition handler is
   the **solo capture hook** (D5): `in_progress` stamps `code_start_oid` into the
@@ -386,8 +393,9 @@ arms** — solo, claude-dispatch, codex/pi-dispatch; the funnel records via
   `root::find` is CWD-relative, and the dispatch orchestrator `cd`s into the
   coordination worktree, so a coordination-tree registry is invisible to
   `conformance` in the main tree. **Resolution:** reuse the **existing**
-  `worktree::subagent::primary_worktree(cwd)` (subagent.rs:33) — not a new helper —
-  for both `record-delta` and `conformance`; one shared file under the primary
+  `git::primary_worktree(cwd)` (relocated to the `git` leaf in P02; ADR-001-clean,
+  RV-157 F-2) — not a new helper — for both `record-delta` and `conformance`;
+  one shared file under the primary
   tree (D5). Safe because the sole writer is the un-jailed orchestrator/solo agent
   (ADR-006), a single atomic write, no baton — the `review.rs:1953` fork ban is
   contextual (fork `WITHHELD` tier + interactive CAS baton) and does not transfer.
