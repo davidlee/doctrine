@@ -114,6 +114,25 @@ pub(crate) enum BacklogCommand {
         path: Option<PathBuf>,
     },
 
+    /// Inspect one item's metadata only (no prose body) — kind auto-detected from
+    /// the prefix.
+    Inspect {
+        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Transition one item's status (and resolution) in place — kind auto-detected
     /// from the prefix. Coupling holds: a terminal status requires a resolution, a
     /// non-terminal forbids one (re-opening auto-clears it).
@@ -251,6 +270,12 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
             json,
             path,
         } => run_show(path, &id, if json { Format::Json } else { format }),
+        BacklogCommand::Inspect {
+            id,
+            format,
+            json,
+            path,
+        } => run_inspect(path, &id, if json { Format::Json } else { format }),
         BacklogCommand::Edit {
             id,
             status,
@@ -1325,14 +1350,14 @@ fn parse_ref(reference: &str) -> anyhow::Result<(ItemKind, u32)> {
     Ok((kind, id))
 }
 
-/// Render a `BacklogItem` for `show` — a pure fn of the item's OWN local state
-/// ("cannot go stale"), so it reads no other file and surfaces no inbound refs
-/// (the reverse view is the deferred registry surface's, ADR-004). House style:
-/// `Vec<String>` parts each carrying their own newline, joined by `concat()` (the
-/// `spec::render`/`format_rows` precedent — avoids the `push_str(&format!)` lint).
-/// The facet block is gated on `item.facet` (risk only); relationship axes and the
-/// optional fields render only when populated.
-fn format_show(item: &BacklogItem) -> String {
+/// Render a `BacklogItem` for `show` or `inspect` — a pure fn of the item's OWN
+/// local state ("cannot go stale"), so it reads no other file and surfaces no
+/// inbound refs (the reverse view is the deferred registry surface's, ADR-004).
+/// House style: `Vec<String>` parts each carrying their own newline, joined by
+/// `concat()` (the `spec::render`/`format_rows` precedent — avoids the
+/// `push_str(&format!)` lint). The facet block is gated on `item.facet` (risk
+/// only); relationship axes and the optional fields render only when populated.
+fn format_metadata(item: &BacklogItem) -> Vec<String> {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
 
@@ -1449,11 +1474,22 @@ fn format_show(item: &BacklogItem) -> String {
         }
     }
 
+    parts
+}
+
+/// Render a `BacklogItem` for `show` — metadata + prose body.
+fn format_show(item: &BacklogItem) -> String {
+    let mut parts = format_metadata(item);
     parts.push(format!("\n{}", item.body));
     parts.concat()
 }
 
-/// `doctrine backlog show <ID>` — the inspect verb (PRD-009 REQ-051, §5.4). Thin
+/// Render a `BacklogItem` for `inspect` — metadata only, no prose body.
+fn format_inspect(item: &BacklogItem) -> String {
+    format_metadata(item).concat()
+}
+
+/// `doctrine backlog show <ID>` — reassemble metadata + prose body (PRD-009 REQ-051, §5.4). Thin
 /// shell: find the root, `parse_ref` the id to its kind (prefix auto-detect), read
 /// THAT item's single toml, render it to stdout. READ-ONLY — no mutation, no
 /// cross-corpus scan (only the one item's file is opened); the render is pure over
@@ -1529,6 +1565,24 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
         },
     });
     serde_json::to_string_pretty(&value).context("failed to serialize backlog show JSON")
+}
+
+/// `doctrine backlog inspect <ID> [--format table|json]` — metadata-only (no prose
+/// body). Thin shell: same read path as `show`, rendered via `format_inspect`.
+pub(crate) fn run_inspect(
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (item_kind, id) = parse_ref(reference)?;
+    let item = read_item(&root, item_kind, id)?;
+    let out = match format {
+        Format::Table => format_inspect(&item),
+        Format::Json => show_json(&item)?,
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -3416,7 +3470,7 @@ tags = []
         );
     }
 
-    // --- PHASE-04: the `backlog show <ID>` inspect verb (id parse + render) ---
+    // --- PHASE-04: the `backlog show <ID>` verb (id parse + render) ---
 
     // --- VT-2: id-parse tolerance + both hard-error modes ---
 
