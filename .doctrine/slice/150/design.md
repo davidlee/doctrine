@@ -172,14 +172,28 @@ pub fn paint_full_width_band(content: &str, fg: DynColors, bg: DynColors, opts: 
 New in `src/boot.rs`:
 
 ```rust
-enum SourceKind { …, CommandMap }                 // new variant
+enum SourceKind { …, CommandMap }                 // new variant (marker; renderer INJECTED)
 
 // boot_sequence(): insert right AFTER "Routing & Process"
 ("Commands", SourceKind::CommandMap),
 
-// produce(): new arm — pure, infallible, build-stable
-SourceKind::CommandMap => Section { heading, body: cli::render_boot_map() },
+// produce(): new arm — pure, infallible, build-stable. The renderer is
+// INJECTED as `command_map: fn() -> String` (threaded dispatch → build_sections
+// → produce, alongside root/exec), NOT reached for. boot never names cli.
+SourceKind::CommandMap => Section { heading, body: command_map() },
 ```
+
+**Injection, not a back-edge (D9).** `boot` must not call `cli::render_boot_map()`
+directly: `cli → boot` already exists (the `boot` subcommand at `cli.rs` dispatches
+to `boot::dispatch`), so a `boot → cli` call would close a `boot↔cli` cycle, pull
+`boot` into the ~32-module Command SCC, and ratchet the ADR-001 `tangle_baseline`
+(123 → 144). Instead the renderer is injected: `boot::dispatch`/`build_sections`/
+`produce` gain a `command_map: fn() -> String` parameter (mirroring the existing
+`root`/`exec` injection); the `cli.rs` boot arm — which already imports `boot` —
+supplies `render_boot_map`. The only module edge stays `cli → boot`; no cycle,
+baseline unchanged. `main.rs`'s `--boot-map` intercept calls `cli::render_boot_map()`
+directly (legal: `main` is the composition root, imported by nothing). Single-source
+property (D3) preserved — one `render_boot_map()` in `cli.rs` behind both surfaces.
 
 ### 5.3 Data, State & Ownership
 
@@ -335,6 +349,13 @@ clean.
   dump (keeps `worktree`/`dispatch`'s 10+ verbs out of the snapshot).
 - **D8 — shared column widths across sub-tables** — vertical divider alignment
   across the 8 family sections; a UX requirement from the design conversation.
+- **D9 — inject the boot-map renderer into `boot`, don't call `cli` from `boot`**
+  (consult-driven amendment, PHASE-02). The original §5.2 had `produce` call
+  `cli::render_boot_map()` directly; that closes a `boot↔cli` SCC cycle (`cli→boot`
+  pre-exists) and ratchets the ADR-001 Command `tangle_baseline` 123→144. Resolved
+  by dependency inversion: `command_map: fn() -> String` is threaded into
+  `produce` and supplied by the `cli` boot arm (already importing `boot`). Keeps
+  the graph acyclic, baseline at 123, and the single-renderer property (D3).
 
 ## 8. Risks & Mitigations
 
@@ -390,8 +411,13 @@ clean.
     unaffected.
   No unit test embeds the full real snapshot byte-for-byte, so there is no
   hidden golden to regenerate. **New** tests this slice adds: a
-  `produce(CommandMap)` arm test, and an ordering test pinning CommandMap
-  immediately after "Routing & Process" and before "Governance".
+  `produce(CommandMap)` arm test (asserting the arm renders the *injected*
+  `command_map` body — D9), and an ordering test pinning CommandMap immediately
+  after "Routing & Process" and before "Governance".
+- **Tangle gate (D9)** — `tests/architecture_layering.rs` Command-tier
+  `tangle_baseline` stays 123: the injected renderer keeps `boot` out of the
+  `cli` SCC. A regression that reintroduces a direct `boot → cli` call trips the
+  gate (123 → 144), which is the guard.
 
 ## 10. Review Notes
 
