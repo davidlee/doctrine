@@ -1,0 +1,59 @@
+id    = 156
+slug  = "sl-149-conformance-audit-references-role-grammar"
+title = "SL-149 conformance audit — references role grammar"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-149"
+
+[[finding]]
+id = "F-1"
+status = "withdrawn"
+severity = "minor"
+title = "Test finding"
+detail = "Test detail"
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Plan EX deviation: P2-P4 shipped additive, Specs/Requirements removal deferred to P5"
+detail = "Plan authored P2 to remove the Specs/Requirements RelationLabel variants (P2 EX-1) and P4 to remove legacy specs/requirements show keys (P4 EX-3). Observed: shipped additively — References+role rode alongside retained variants through P2-P4; the hard cut moved to P5, where the corpus migration must still read the old edges. User-approved via /consult; recorded in notes.md. End-state matches design 2.9 hard-cut intent."
+disposition = "aligned"
+response = "Deviation is documented (notes.md), user-approved via /consult, and the end-state matches design 2.9: P5's hard cut removed the variants/rows/legacy keys after the migration read the old edges. Plan EX-1(P2)/EX-3(P4) satisfied in P5, not abandoned. No change needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Web-graph TS frontend does not render edge.role"
+detail = "Design 2.7 lists 'web graph edge label shows role verb'. P4a wired role through the BACKEND (catalog/graph.rs serialises role) but the TS frontend (web/map/) does not read edge.role to render references(<role>) in the dot label. Outside the design's named seam (2.7 cites catalog/graph.rs, not the JS). Backend data correct; only JS rendering lags. Not blocking."
+disposition = "verified"
+response = "Observation confirmed: backend serialises role, JS frontend does not yet render it. Remediation is owned future work -> reconciliation brief -> backlog (web-graph TS role rendering). Outside this slice's named seam."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "SPEC-005/006/016 not rewired to reference SPEC-018"
+detail = "With the relation contract now in code + SPEC-018/relation-vocabulary.md (P6), the specs describing relation vocabulary (SPEC-005/006/016) should reference SPEC-018 rather than re-transcribe. Not done in SL-149 (out of scope). Carried follow-up from handover."
+disposition = "verified"
+response = "Confirmed out-of-scope follow-up. Remediation -> reconciliation brief -> backlog (rewire SPEC-005/006/016 to reference SPEC-018 now that the contract lives in code)."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Stale 'specs' label example in a foreign memory body"
+detail = "mem_019ec0d9.../memory.md line 22 shows label=specs as a relation-syntax example — the removed label. Prose only (not a live relation row; validate clean). Foreign-owned memory corpus, outside SL-149 scope; belongs to memory/dreaming maintenance."
+disposition = "tolerated"
+response = "Accepted drift: prose-only example in a foreign-owned memory body (not a live relation row; validate clean). Outside SL-149 scope; memory/dreaming maintenance owns corpus hygiene. Noted in brief as optional dreaming follow-up."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
