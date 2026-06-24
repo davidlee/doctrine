@@ -1,0 +1,104 @@
+# Claude-arm WorktreeCreate worker creation
+
+## Context
+
+The claude `/dispatch` arm spawns workers via the `Agent` tool with
+`isolation: worktree`. Today the **harness** creates that worktree, which is the
+root of hazard **H1** (RFC-005): under shared-clone git-lock contention the
+spawn silently falls back to the main worktree, where `baseRef:"head"` tracks a
+**moving `main`** — the worker runs on a wrong/dirty/moving base instead of the
+coordination tip B (ISS-034). SL-123 hardened a **post-run** `verify-worker`
+belt (loud, pre-import halt) but the race is unchanged: throughput under churn is
+zero, and the wasted-worker-run residual remains.
+
+A `WorktreeCreate` hook **fully replaces** native creation. Proven empirically on
+claude-code **2.1.181** (wtc-probe, 2026-06-25,
+[[mem.pattern.dispatch.worktreecreate-replace-base-control]]): a named
+`dispatch-worker` spawned with the hook active landed at a **doctrine-chosen
+base** (`68250bcd`), overriding `baseRef:"head"`, in doctrine's own worktree
+path. When doctrine is the creator there is **no native creation to fall back
+to** — the H1 fallback cannot occur, and a hook failure aborts the spawn
+fail-closed (the only hook event where any non-zero exit blocks). This converts
+H1 from a permanent harness tax into a **fixable mechanism defect**, and lets the
+claude arm create workers through the **same `doctrine worktree fork --worker`**
+path the subprocess arm already uses (converging H3) while provisioning
+gitignored build artefacts inside the hook (addressing H4 for the claude arm).
+
+Origin: **IMP-072** (re-scoped — its "base control solved by placement" premise
+was falsified by contention + the probe). Governing canon: **ADR-006**
+(orchestrator-sole-writer worktree posture; D9 gitignored-allowlist
+provisioning), **ADR-011** (harness-agnostic spawn interface, per-harness
+capability altitude), **ADR-012** (dispatch integration topology). Supersedes the
+placement-only decision in **SL-064** design §8 (option Y).
+
+## Scope & Objectives
+
+- A repo-global `WorktreeCreate` hook (claude harness) that **replaces** native
+  worktree creation for `isolation:worktree` spawns and is **installed by
+  `doctrine install`** (not hand-wired).
+- **Out-of-band discrimination.** The matcher does **not** scope by `agent_type`
+  (probed: the hook fires for `general-purpose` too; payload carries no
+  `agent_type`). The orchestrator (sole writer, serial dispatch → race-free)
+  drops a marker carrying the intended **base B** immediately before the worker
+  spawn; the hook consumes it and forks at B.
+- **Marker present → dispatch worker:** `doctrine worktree fork --worker` at base
+  B, **fail-closed**, folding in ADR-006 D9 provisioning + the worker-marker
+  stamp as one trusted act (mirrors the subprocess arm).
+- **Marker absent → benign isolated subagent:** pass through — replicate default
+  creation (`git worktree add <path> HEAD`) so non-dispatch isolated subagents
+  still work. No silent base hijack of unrelated subagents.
+- Wire the claude `/dispatch-agent` flow to drop the marker before spawn and to
+  rely on hook-created placement instead of the cwd-placement hack.
+
+## Non-Goals
+
+- The subprocess arm (`doctrine worktree fork --worker` direct) — unchanged.
+- Removing the SL-123 post-run `verify-worker` belt — it stays as defence in
+  depth (this slice makes it rarely-triggered, not redundant).
+- The `WorktreeRemove` lifecycle (cleanup) beyond what is needed to not leak the
+  hook-created worktree — full removal-hook ownership is a possible follow-up.
+- H2 integration hazards (ISS-038 / IMP-122) — separate.
+- Non-claude harness altitude changes (ADR-011 is satisfied, not amended).
+
+## Affected surface (provisional)
+
+- `doctrine install` hook-emission (settings.json `WorktreeCreate` block) +
+  the hook script/seam it points at.
+- `src/worktree.rs` / `fork --worker` path (reuse, not reimplement — the hook
+  shells the existing verb).
+- The claude `/dispatch-agent` skill (drop marker; drop cwd-placement reliance).
+- Marker read/write seam (orchestrator-sole-writer; pure/imperative split — the
+  base is an input, not derived in a pure layer).
+
+## Risks / Assumptions / Open Questions
+
+- **OQ-1.** Marker handshake shape: file under runtime state vs env vs a CLI
+  call the hook makes back into doctrine. Sole-writer + serial dispatch makes it
+  race-free; parallel file-disjoint phases need a per-spawn key (the payload
+  `name`? — only field available).
+- **OQ-2.** Benign pass-through fidelity: does `git worktree add <path> HEAD`
+  (detached) fully satisfy what the harness expects for a non-dispatch isolated
+  subagent (branch name, `.worktreeinclude`)? `.worktreeinclude` is **not**
+  processed under a hook — the pass-through must replicate it or accept the gap.
+- **OQ-3.** Hook failure UX: a fail-closed abort surfaces how to the orchestrator?
+  Confirm the abort is legible (vs a generic spawn error).
+- **ASM-1.** `worktree.baseRef:"head"` stays the harness default; the hook
+  overrides base regardless, so this is belt-not-load-bearing.
+- **RSK-1.** Repo-global blast radius (ADR-011 D7 σ): every `isolation:worktree`
+  subagent in the repo now routes through doctrine's hook. The benign
+  pass-through must be robust or it breaks unrelated subagent use.
+
+## Verification / closure intent
+
+- A dispatch worker spawned through the funnel lands at base B deterministically
+  under simulated `main` churn (the H1 scenario) — no fallback-to-main.
+- A non-dispatch `isolation:worktree` subagent still gets a working worktree
+  (pass-through) and is **not** stamped/forked as a worker.
+- Hook failure aborts the spawn fail-closed (no silent fallback).
+- `doctrine install` emits the hook; existing dispatch suites stay green
+  (behaviour-preservation on the subprocess arm).
+
+## Follow-Ups
+
+- `WorktreeRemove` hook ownership (cleanup of hook-created worktrees).
+- Reassess SL-123 belt scope once this lands (defence-in-depth vs prune).

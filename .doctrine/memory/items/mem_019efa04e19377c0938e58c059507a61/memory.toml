@@ -60,3 +60,7 @@ target = "IMP-072"
 label = "related"
 target = "RFC-005"
 
+[[relation]]
+label = "related"
+target = "SL-152"
+
