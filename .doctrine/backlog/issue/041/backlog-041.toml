@@ -5,10 +5,10 @@ id = 41
 slug = "cm-contextualizes-scan-gap"
 title = "Concept-map contextualizes edges: writable via link but invisible to read paths (outbound_for scan gap)"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "triaged"
+resolution = ""
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-24"
 tags = ["area:cli", "area:relations", "area:ux"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
@@ -23,3 +23,11 @@ triggers = []                   # watched source globs: { globs, note? }
 [[relation]]
 label = "slices"
 target = "SL-135"
+
+[[relation]]
+label = "drift"
+target = "RFC-003"
+
+[[relation]]
+label = "related"
+target = "IDE-015"

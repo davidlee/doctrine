@@ -5,10 +5,10 @@ id = 20
 slug = "cordage-queryrs-traversal-triplication-reachablespine-pathextend-chains-diverged-walks"
 title = "cordage query.rs traversal triplication: reachable/spine_path/extend_chains diverged walks"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-16"
+updated = "2026-06-24"
 tags = ["area:relations", "cordage", "reuse"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

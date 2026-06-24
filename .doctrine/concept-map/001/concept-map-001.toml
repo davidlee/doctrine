@@ -3,7 +3,7 @@ slug = "requirements"
 title = "Requirements"
 status = "draft"
 created = "2026-06-16"
-updated = "2026-06-16"
+updated = "2026-06-24"
 description = ""
 dsl = """
 Non-Functional Requirement > is a > Requirement
@@ -50,3 +50,4 @@ PRD > has a > Product Altitude
 Requirement > belongs to one or more > Spec
 Requirement > concreteness depends on > Product Altitude
 Requirement > specificity depends on > C4 Level"""
+tags = []
