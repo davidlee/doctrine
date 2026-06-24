@@ -426,7 +426,7 @@ fn status_and_title_for(
         // Every other kind stores both `status` and `title` top-level — ONE parse.
         _ => {
             let tree_root = root.join(kref.kind.dir);
-            let m = crate::meta::read_meta(&tree_root, kref.kind.stem, id)?;
+            let m = crate::meta::read_meta(&tree_root, kref.kind.stem, id, kref.kind.prefix)?;
             Ok((Some(m.status), m.title))
         }
     }

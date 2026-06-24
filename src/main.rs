@@ -795,7 +795,10 @@ mod write_class_tests {
         // Leaf commands have em-dash placeholder
         assert!(out.contains("—"), "em-dash for leaf commands");
         // Three-column headers
-        assert!(out.contains("command") && out.contains("verb") && out.contains("description"), "headers");
+        assert!(
+            out.contains("command") && out.contains("verb") && out.contains("description"),
+            "headers"
+        );
     }
 
     // ── Parse-regression tests ──────────────────────────────────────────────────

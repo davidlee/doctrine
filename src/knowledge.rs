@@ -31,6 +31,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
+use crate::dtoml;
 use crate::entity::{self, Artifact, Fileset, Inputs, Kind, MaterialiseRequest, ScaffoldCtx};
 use crate::listing::{self, Format, ListArgs};
 use crate::tomlfmt::toml_string;
@@ -869,8 +870,8 @@ fn read_record(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Knowled
         .join(format!("{RECORD_STEM}-{name}.toml"));
     let text = std::fs::read_to_string(&path)
         .with_context(|| format!("record not found at {}", path.display()))?;
-    let raw: RawRecordToml =
-        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    let raw: RawRecordToml = dtoml::parse_entity_toml(&text, kind.prefix(), id)
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
     let mut record = validate(raw)?;
     record.tier1 = crate::relation::tier1_edges(kind.kind(), &text)?;
     Ok(record)
