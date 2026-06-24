@@ -33,12 +33,24 @@ pub(crate) enum Acquired {
     AlreadyHeld,
 }
 
+/// What an atomic claim arbitrates over: the directory to create, plus the
+/// numeric `id` the future `git-ref` backend reads as its ref segment. The
+/// named path does not ride this — it has no `id` (D9).
+pub(crate) struct ClaimCtx<'a> {
+    pub(crate) dir: &'a Path,
+    #[expect(
+        dead_code,
+        reason = "GitRef reads ctx.id as the ref segment in PHASE-03 (SL-148)"
+    )]
+    pub(crate) id: u32,
+}
+
 /// The one impure-critical operation, behind a one-method trait so the future
 /// `git-ref` backend drops in without a Kind-caller rewrite (reservation-spec).
 pub(crate) trait Claim {
-    /// Atomic, exclusive claim. `Won` if this caller created `claim`;
+    /// Atomic, exclusive claim. `Won` if this caller created `ctx.dir`;
     /// `AlreadyHeld` if another agent won the race. Only this op arbitrates.
-    fn claim(&self, claim: &Path) -> anyhow::Result<Acquired>;
+    fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired>;
 }
 
 /// The local-filesystem backend: the `mkdir` is the claim (D1 — the dir *is*
@@ -47,11 +59,11 @@ pub(crate) trait Claim {
 pub(crate) struct LocalFs;
 
 impl Claim for LocalFs {
-    fn claim(&self, claim: &Path) -> anyhow::Result<Acquired> {
-        match fs::create_dir(claim) {
+    fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired> {
+        match fs::create_dir(ctx.dir) {
             Ok(()) => Ok(Acquired::Won),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(Acquired::AlreadyHeld),
-            Err(e) => Err(e).with_context(|| format!("Failed to claim {}", claim.display())),
+            Err(e) => Err(e).with_context(|| format!("Failed to claim {}", ctx.dir.display())),
         }
     }
 }
@@ -381,7 +393,8 @@ fn claim_fresh_id(
         let id = next_id(&scan()?, trunk_ids);
         let name = format!("{id:03}");
         let dir = tree_root.join(&name);
-        match claim.claim(&dir)? {
+        let ctx = ClaimCtx { dir: &dir, id };
+        match claim.claim(&ctx)? {
             Acquired::Won => {
                 let canonical = format!("{prefix}-{name}");
                 let written = build(id, &canonical).and_then(|fs| write_fileset(tree_root, &fs));
@@ -442,7 +455,6 @@ fn create_in_existing(
 /// This is the *only* named placement path (the `MaterialiseRequest`/`ScaffoldCtx`
 /// named arm was retired — seam A subsumed it).
 pub(crate) fn materialise_named(
-    claim: &dyn Claim,
     project_root: &Path,
     dir: &str,
     name: &str,
@@ -451,7 +463,7 @@ pub(crate) fn materialise_named(
     let tree_root = project_root.join(dir);
     fs::create_dir_all(&tree_root)
         .with_context(|| format!("Failed to create {}", tree_root.display()))?;
-    let entity_dir = claim_and_write_named(claim, &tree_root, name, fileset)?;
+    let entity_dir = claim_and_write_named(&tree_root, name, fileset)?;
     Ok(Materialised {
         eid: OwnedEntityId::Named {
             name: name.to_string(),
@@ -460,26 +472,28 @@ pub(crate) fn materialise_named(
     })
 }
 
-/// The claim+write+H2 core of the named path. Claim `tree_root/<name>`
-/// once: `Won` writes the fileset transactionally and, on a write failure, removes
-/// the won dir (Won ⟹ ours to clean, H2 — as in `allocate_fresh`); `AlreadyHeld`
-/// is a duplicate name and a hard error. Returns the entity dir.
+/// The claim+write+H2 core of the named path. The named entity has no numeric
+/// `id`, so it claims `tree_root/<name>` with an inline `mkdir` rather than the
+/// `Claim` seam (D9 — the seam carries `ClaimCtx{dir,id}` for the numeric path
+/// only). A won dir writes the fileset transactionally and, on a write failure,
+/// removes the won dir (Won ⟹ ours to clean, H2 — as in `allocate_fresh`); an
+/// already-existing dir is a duplicate name and a hard error. Returns the entity dir.
 fn claim_and_write_named(
-    claim: &dyn Claim,
     tree_root: &Path,
     name: &str,
     fileset: &Fileset,
 ) -> anyhow::Result<PathBuf> {
     let dir = tree_root.join(name);
-    match claim.claim(&dir)? {
-        Acquired::Won => match write_fileset(tree_root, fileset) {
+    match fs::create_dir(&dir) {
+        Ok(()) => match write_fileset(tree_root, fileset) {
             Ok(()) => Ok(dir),
             Err(e) => {
                 drop(fs::remove_dir_all(&dir));
                 Err(e)
             }
         },
-        Acquired::AlreadyHeld => bail!("entity {name} already exists"),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => bail!("entity {name} already exists"),
+        Err(e) => Err(e).with_context(|| format!("Failed to claim {}", dir.display())),
     }
 }
 
@@ -688,12 +702,22 @@ mod tests {
     // --- the acquire seam ---
 
     #[test]
-    fn local_fs_acquire_wins_then_already_held() {
+    fn local_fs_claim_creates_the_dir_indifferent_to_id() {
         let dir = tempfile::tempdir().unwrap();
         let claim = dir.path().join("001");
-        assert!(matches!(LocalFs.claim(&claim).unwrap(), Acquired::Won));
+        // The first claim wins and creates the dir; `id` rides the ctx but LocalFs
+        // arbitrates on `dir` alone (VT-2).
+        let won = ClaimCtx { dir: &claim, id: 1 };
+        assert!(matches!(LocalFs.claim(&won).unwrap(), Acquired::Won));
+        assert!(claim.is_dir(), "a won claim creates the dir");
+        // A second claim on the same dir loses the race — a different `id` does not
+        // change the verdict.
+        let again = ClaimCtx {
+            dir: &claim,
+            id: 999,
+        };
         assert!(matches!(
-            LocalFs.claim(&claim).unwrap(),
+            LocalFs.claim(&again).unwrap(),
             Acquired::AlreadyHeld
         ));
     }
@@ -767,7 +791,7 @@ mod tests {
         // exhausts the bounded loop rather than spinning forever.
         struct AlwaysHeld;
         impl Claim for AlwaysHeld {
-            fn claim(&self, _claim: &Path) -> anyhow::Result<Acquired> {
+            fn claim(&self, _ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired> {
                 Ok(Acquired::AlreadyHeld)
             }
         }
@@ -1097,14 +1121,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        let out = materialise_named(
-            &LocalFs,
-            root,
-            "tree",
-            "mem_abc",
-            &named_fileset("mem_abc", None),
-        )
-        .unwrap();
+        let out =
+            materialise_named(root, "tree", "mem_abc", &named_fileset("mem_abc", None)).unwrap();
         assert_eq!(
             out.eid,
             OwnedEntityId::Named {
@@ -1128,7 +1146,6 @@ mod tests {
         let root = dir.path();
 
         materialise_named(
-            &LocalFs,
             root,
             "tree",
             "mem_abc",
@@ -1157,14 +1174,8 @@ mod tests {
         let root = dir.path();
         fs::create_dir_all(root.join("tree/mem_abc")).unwrap();
 
-        let err = materialise_named(
-            &LocalFs,
-            root,
-            "tree",
-            "mem_abc",
-            &named_fileset("mem_abc", None),
-        )
-        .unwrap_err();
+        let err = materialise_named(root, "tree", "mem_abc", &named_fileset("mem_abc", None))
+            .unwrap_err();
         assert!(err.to_string().contains("already exists"));
     }
 
@@ -1185,7 +1196,7 @@ mod tests {
             },
         ];
 
-        let err = materialise_named(&LocalFs, root, "tree", "mem_abc", &doomed).unwrap_err();
+        let err = materialise_named(root, "tree", "mem_abc", &doomed).unwrap_err();
         assert!(err.to_string().contains("Failed to create"));
         assert!(
             !root.join("tree/mem_abc").exists(),
@@ -1206,7 +1217,6 @@ mod tests {
         fs::write(tree.join("mem.a.b"), "stale").unwrap();
 
         let err = materialise_named(
-            &LocalFs,
             root,
             "tree",
             "mem_abc",

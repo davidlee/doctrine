@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::scan::ScanMode;
 
-use crate::entity::{self, Artifact, Fileset, LocalFs};
+use crate::entity::{self, Artifact, Fileset};
 use crate::git::{AnchorKind, Confidence, RepoIdKind};
 use crate::links::{backlinks_index, extract_wikilinks, resolve_wikilink};
 use crate::listing::{self, Column, Format, ListArgs};
@@ -1704,7 +1704,7 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result
     } else {
         MEMORY_ITEMS_DIR
     };
-    let out = entity::materialise_named(&LocalFs, &root, target_dir, &uid, &fileset)
+    let out = entity::materialise_named(&root, target_dir, &uid, &fileset)
         .context("Failed to record memory")?;
 
     let mut stdout = io::stdout();
@@ -1779,7 +1779,7 @@ pub(crate) fn seed_by_key(
         body.clone_into(b);
     }
 
-    entity::materialise_named(&LocalFs, root, MEMORY_ITEMS_DIR, &uid, &fileset)
+    entity::materialise_named(root, MEMORY_ITEMS_DIR, &uid, &fileset)
         .context("Failed to seed memory")?;
     Ok(true)
 }
