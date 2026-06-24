@@ -29,20 +29,24 @@ model. Complete wikilink web. Self-correction deferred to SL-147.
 
 ## Design Decisions
 
-D1. **Overview is the single PULL hub.** The boot digest lists signpost keys
-    (unchanged). One `retrieve-memory mem.signpost.doctrine.overview` after
-    boot gives the agent: doctrine's four pillars, the essential mental model
-    (TOML+MD tiers, read-via-show, authored/runtime/derived), key conventions
-    (reference forms, CLI is truth, no guessing), and a **when-to-retrieve-what**
-    index — a context-keyed decision guide: "about to relate entities? →
-    relating-entities. Unsure which skill? → skill-map." Concept/fact/pattern
-    memories stay as deep reference; overview inlines just enough that the
-    agent can function without pulling them.
+D1. **Overview is the single PULL hub.** The boot digest differentiates
+    overview from other signposts — it is listed first or marked as the
+    starting point (e.g. `mem.signpost.doctrine.overview ← start here`).
+    One `retrieve-memory mem.signpost.doctrine.overview` after boot gives
+    the agent: doctrine's four pillars, the essential mental model (TOML+MD
+    tiers, read-via-show, authored/runtime/derived), key conventions (reference
+    forms, CLI is truth, no guessing), and a **when-to-retrieve-what** index —
+    a markdown table with columns "When you need to..." | "Retrieve..." that
+    maps situations to shipped memory keys. Concept/fact/pattern memories stay
+    as deep reference; overview inlines just enough that the agent can function
+    without pulling them.
 
 D2. **Phase order: overview-first, audit-inform rest.** Overview is the hub
     that everything links back to. Getting it right early gives a target for
-    the remaining memories. Preflight findings already surfaced critical gaps;
-    the formal PHASE-01 audit ledger confirms and extends them.
+    the remaining memories. Preflight findings (`.doctrine/state/sl-143-preflight-*.md`)
+    already surfaced critical gaps; the formal PHASE-01 audit ledger confirms
+    and extends them. PHASE-02 depends on preflight, not PHASE-01 — it can
+    start immediately.
 
 D3. **Self-correction deferred to SL-147 domain-map mechanism.** Filed as
     IMP-163 (:after SL-147). SL-147 creates a domain-map of changed files;
@@ -59,10 +63,15 @@ D5. **CLI verb enumeration is a binary concern, not a memory concern.**
     "use `doctrine --help`." No shipped memory enumerates verbs, subcommands,
     or flags.
 
-D6. **Wikilink rule: every memory has ≥1 inbound link.** Overview is the
-    root — everything links back to it (directly or within 3 hops). Boot
-    digest lists all signpost keys. Skills point to concept memories where
-    their operations depend on the concept.
+D6. **Wikilink reachability, not universal inbound links.** Overview is the
+    root — every shipped memory is reachable from overview within ≤3 hops.
+    Overview itself has ≥1 inbound wikilink from another shipped memory (the
+    orphan fix). Not every leaf needs an explicit backlink — the reachability
+    property ensures navigability without forced bi-directional links. Boot
+    digest lists all signpost keys. Per ADR-005, every pull-reference memory
+    must be pointed-at by at least one skill or the boot digest; concept/fact/pattern
+    memories gain skill pointers in PHASE-04 where their content directly
+    informs the skill's operation.
 
 ## Phase Plan
 
@@ -81,7 +90,19 @@ Output: `.doctrine/state/sl-143-phase-01-ledger.md`.
 Rewrite `mem.signpost.doctrine.overview` as the hub. Sections:
 1. What doctrine is (four pillars)
 2. Mental model (TOML+MD tiers, show, tiers)
-3. When to retrieve what (context-keyed index of all shipped memories)
+3. When to retrieve what — a markdown table:
+   ```
+   | When you need to... | Retrieve... |
+   |---|---|
+   | Understand where files live | `mem.signpost.doctrine.file-map` |
+   | Choose the right skill | `mem.signpost.doctrine.skill-map` |
+   | Understand the core workflow | `mem.signpost.doctrine.lifecycle-start` |
+   | Work with entity relations | `mem.signpost.doctrine.relating-entities` |
+   | Record a durable finding | `mem.signpost.doctrine.recording-memories` |
+   | ... | ... |
+   ```
+   One row per shipped memory (excluding overview itself). Situations are
+   action-oriented ("when you need to X"), not entity-kind-oriented.
 4. Key conventions (reference forms, CLI is truth, no guessing)
 5. Quick-links to file-map, skill-map, lifecycle-start
 
@@ -122,8 +143,8 @@ For each remaining memory (27 existing + 4 new):
 |----|------|
 | VT-01 | `doctrine memory find --glob 'shipped/*'` returns exactly 32 entries |
 | VT-02 | `mem.signpost.doctrine.overview` body has sections: pillars, mental model, when-to-retrieve-what, conventions, links |
-| VT-03 | Every shipped memory has ≥1 inbound wikilink from another shipped memory |
-| VT-04 | Overview key listed in boot digest Memory section |
+| VT-03 | Every shipped memory reachable from overview within ≤3 hops; overview has ≥1 inbound wikilink |
+| VT-04 | Overview key listed in boot digest Memory section and differentiated as starting point |
 | VT-05 | `mem.signpost.doctrine.cli-command-map` key absent from shipped corpus |
 | VT-06 | `mem.signpost.doctrine.{rec,rfc,concept-map}` keys exist with non-empty bodies |
 | VT-07 | `mem.concept.backlog.work-intake-membership` has `repo=""`, `anchor_kind=none` |
