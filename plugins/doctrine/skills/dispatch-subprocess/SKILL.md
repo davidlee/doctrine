@@ -37,6 +37,14 @@ rm -f "$PI_FIFO"
 Same confinement as codex arm; fifo keeps stdin open (pi RPC exits on EOF).
 `sleep 300` keepalive, `agent_end` gives typed completion. Ignore
 `extension_ui_request` widget events from installed packages.
+
+## Boundary recording
+At the funnel **Record** beat (router step 8), after the code commit:
+`doctrine slice record-delta <SL> PHASE-NN --start <B> --end <B+1>` — writes the
+per-phase boundary into the primary-tree conformance registry (F-5 resolves it
+from the coord tree; F-6 guard; upsert). This arm has no `record-boundary`, so
+this is its only conformance write; orchestrator-issued, every landed phase.
+
 ## Red Flags
 **Never:** `eval`; spawn outside `env -C "$D"`; omit `timeout`; use a heredoc
 for RPC mode (stdin EOF kills pi).

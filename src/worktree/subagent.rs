@@ -23,22 +23,6 @@ use std::fs;
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
-/// The repo's PRIMARY (main) worktree root, as git reports it: the FIRST
-/// `worktree <path>` entry of `git worktree list --porcelain`, run against any
-/// path in the repo. Correct across ordinary, separate-git-dir, and submodule
-/// layouts (unlike `parent(--git-common-dir)`). Used as the stamp provision SOURCE
-/// so it is independent of the process cwd — the `SubagentStart` hook fires inside
-/// the worker worktree, which must never be the source (ISS-011 Defect C). Impure
-/// (git read). Bare repos (no main worktree) are out of scope for dispatch.
-pub(crate) fn primary_worktree(cwd: &Path) -> anyhow::Result<PathBuf> {
-    let listing = git::git_text(cwd, &["worktree", "list", "--porcelain"])?;
-    let first = listing
-        .lines()
-        .find_map(|l| l.strip_prefix("worktree "))
-        .ok_or_else(|| anyhow::anyhow!("no main worktree for {}", cwd.display()))?;
-    fs::canonicalize(first).with_context(|| format!("canonicalize primary worktree {first}"))
-}
-
 /// Verdict of the PURE stamp classifier: the resolved inputs hold ⇒ the shell may
 /// provision + mark the already-created worktree. Mirror of [`Apply`]/[`Merge`] —
 /// the pure core decides, the shell ([`run_stamp_subagent`]) acts.
@@ -236,7 +220,7 @@ pub(crate) fn run_stamp_subagent(path: Option<PathBuf>) -> anyhow::Result<()> {
     // --- act: provision (SOLE copier) THEN mark. M3: NO rollback on failure. ---
     // R2: provision SOURCE is the PRIMARY worktree, NOT the binding anchor — which is
     // the fork itself when the hook fires inside the worker worktree (ISS-011 Defect C).
-    let act = primary_worktree(&cwd)
+    let act = git::primary_worktree(&cwd)
         .and_then(|source| run_provision(Some(source), &cwd))
         .and_then(|()| write_marker(&cwd));
     if let Err(cause) = act {

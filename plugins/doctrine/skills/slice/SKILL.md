@@ -32,6 +32,17 @@ evergreen spec material (`.doctrine/spec/`).
    - risks, assumptions, open questions
    - verification / closure intent — how "done" will be judged
 
+   Seed the affected surface as **coarse `scope-relevant` selectors** — a rough
+   path/glob fence on where the change lives, captured now while scope is fresh:
+
+   ```
+   doctrine slice selector add <id> "src/foo/**" "src/bar.rs" --intent scope-relevant
+   ```
+
+   These are intentionally loose (the exact touch-set is `/design`'s job). They
+   feed the audit-time `slice conformance` delta; an unfenced slice has nothing to
+   diff git actuals against.
+
 4. **Record structure** in `slice-nnn.toml`: metadata, lifecycle status. Honour
    the storage rule — structured data in TOML, prose in MD, never queried/derived
    data in prose. **Relations are written with `doctrine link`, not hand-authored

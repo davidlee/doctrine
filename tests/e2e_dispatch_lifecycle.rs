@@ -96,6 +96,12 @@ fn init_repo(dir: &Path) {
     git(dir, &["config", "user.email", "t@example.com"]);
     git(dir, &["config", "user.name", "Test"]);
     std::fs::write(dir.join("root-sentinel.txt"), "untouched").unwrap();
+    // Mirror the real repo invariant: `.doctrine/state/` is gitignored runtime
+    // state (the storage model). The funnel's recorded source-delta registry
+    // (SL-147) lands there in the PRIMARY tree — a gitignored runtime write that
+    // must NOT dirty the session tree's `status --porcelain` (the EX-1 invariant
+    // is "no tracked/authored write to the session tree", not "no runtime write").
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
     let plan = ".doctrine/slice/064/plan.toml";
     let full = dir.join(plan);
     std::fs::create_dir_all(full.parent().unwrap()).unwrap();

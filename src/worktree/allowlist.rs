@@ -2,7 +2,9 @@
 //! Pure leaf (ADR-001 D4): the exclusion core — tier classification, allowlist parsing,
 //! copy selection, and the static smell test. No disk, git, clock, or rng.
 
-use glob::{MatchOptions, Pattern};
+use glob::Pattern;
+
+use crate::globmatch::glob_matches;
 
 // ---------------------------------------------------------------------------
 // Tier & withheld globs — the structured authority
@@ -80,19 +82,6 @@ pub(crate) const WITHHELD: &[Withhold] = &[
     )
 )]
 pub(crate) const DERIVED_RUNTIME: &[&str] = &[".doctrine/skills/*", ".doctrine/agents/*"];
-
-/// Match options shared by every glob comparison: `**` is the *only* way to cross
-/// a path separator, so a single `*` matches one component (gitignore-ish, and
-/// what keeps `*` from silently spanning `.doctrine/state/...`).
-const MATCH_OPTS: MatchOptions = MatchOptions {
-    case_sensitive: true,
-    require_literal_separator: true,
-    require_literal_leading_dot: false,
-};
-
-pub(crate) fn glob_matches(pat: &Pattern, path: &str) -> bool {
-    pat.matches_with(path, MATCH_OPTS)
-}
 
 // ---------------------------------------------------------------------------
 // Allowlist (the documented `glob` subset, design §3 M6)

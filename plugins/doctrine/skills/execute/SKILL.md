@@ -27,7 +27,11 @@ Inputs:
    - first phase starting → move the slice: `doctrine slice status <id> started`
      (bare number), if not already there.
    - flip the phase to `in_progress` with `doctrine slice phase` (see
-     `using-doctrine.md`).
+     `using-doctrine.md`). **This auto-records the conformance boundary** — the
+     handler stamps `code_start_oid = HEAD` into the phase sheet. No extra call;
+     the binding rides the transition you already issue (design D5). (It self-skips
+     in a dispatch coordination context, where the funnel beat is the recorder
+     instead.)
 5. Implement phase tasks in small coherent units, **TDD red/green/refactor**
    (documented in [[mem.pattern.doctrine.tdd-loop]]):
    write a failing test, make it pass, then refactor. Test behaviour, not
@@ -49,9 +53,14 @@ Inputs:
     more for missed memory-capture candidates.
 13. When exit criteria (`EX-`) and verification (`VT-`, plus any agent/human
     `VA-`/`VH-` modes) are satisfied, flip the
-    phase to `completed` with `doctrine slice phase`, then hand off: `/phase-plan`
-    for the next phase, or — when the slice's phases are all done — `doctrine
-    slice status <id> audit` and `/audit`.
+    phase to `completed` with `doctrine slice phase`. **This closes the conformance
+    boundary** — the handler captures `code_end_oid = HEAD`, applies the F-6
+    ancestor/non-merge guard, and upserts the phase's row into the slice's
+    arm-neutral registry. Deterministic, on the critical path — **not** a
+    "remember to also record" step; `slice record-delta` is only the manual
+    fallback (correct a range, or bootstrap a pre-binding phase). Then hand off:
+    `/phase-plan` for the next phase, or — when the slice's phases are all done —
+    `doctrine slice status <id> audit` and `/audit`.
 
 ## Optional: solo isolation (opt-in)
 

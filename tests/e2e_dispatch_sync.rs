@@ -1129,6 +1129,45 @@ fn record_boundary_refused_under_worker_mode() {
     assert!(!ledger.exists(), "still records nothing");
 }
 
+// SL-147 PHASE-04 T3 — the funnel record beat ALSO writes the arm-neutral
+// recorded source-delta registry (`.doctrine/state/slice/<NNN>/boundaries.toml`),
+// ALONGSIDE — never replacing — the committed claude-arm ledger
+// (`.doctrine/dispatch/<NNN>/boundaries.toml`). Both files get the row; the two
+// are independent artifacts.
+#[test]
+fn record_boundary_also_writes_the_arm_neutral_registry() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let fx = build_fixture(dir);
+    let committed_ledger = dir.join(".doctrine/dispatch/064/boundaries.toml");
+    let neutral_registry = dir.join(".doctrine/state/slice/064/boundaries.toml");
+
+    let out = record_boundary(dir, dir, "PHASE-09", &fx.base, &fx.code_end_1);
+    assert!(out.status.success(), "record-boundary ok: {}", stderr(&out));
+
+    // (1) The committed ledger still carries the row (untouched behaviour).
+    let committed = std::fs::read_to_string(&committed_ledger).expect("committed ledger written");
+    assert!(
+        committed.contains("phase = \"PHASE-09\""),
+        "committed: {committed}"
+    );
+
+    // (2) The arm-neutral registry under the runtime state tree ALSO carries it.
+    let neutral = std::fs::read_to_string(&neutral_registry).expect("neutral registry written");
+    assert!(
+        neutral.contains("[[boundary]]"),
+        "neutral header: {neutral}"
+    );
+    assert!(
+        neutral.contains("phase = \"PHASE-09\""),
+        "neutral phase: {neutral}"
+    );
+    assert!(
+        neutral.contains(&fx.code_end_1),
+        "neutral end oid: {neutral}"
+    );
+}
+
 // ====================================================================
 // PHASE-03 (SL-121) — close-verify read surface (EX-1 / VT-1, design §3(b))
 // ====================================================================
