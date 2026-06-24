@@ -31,9 +31,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{
-    self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
-};
+use crate::entity::{self, Artifact, Fileset, Inputs, Kind, MaterialiseRequest, ScaffoldCtx};
 use crate::listing::{self, Format, ListArgs};
 use crate::tomlfmt::toml_string;
 // `toml_array_inner` is spliced only by the test-only hand-emit render subtree
@@ -932,9 +930,10 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, record_kind.kind().dir)?;
+    let backend = crate::reserve::backend(&root, record_kind.kind().prefix)?;
     let out = entity::materialise(
         record_kind.kind(),
-        &LocalFs,
+        &*backend,
         &root,
         &MaterialiseRequest::Fresh,
         &Inputs {

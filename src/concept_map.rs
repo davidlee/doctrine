@@ -18,9 +18,7 @@ use anyhow::Context;
 use clap::Subcommand;
 use serde::Serialize;
 
-use crate::entity::{
-    self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
-};
+use crate::entity::{self, Artifact, Fileset, Inputs, Kind, MaterialiseRequest, ScaffoldCtx};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
 use crate::tomlfmt::toml_string;
@@ -310,9 +308,10 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, CONCEPT_MAP_KIND.dir)?;
+    let backend = crate::reserve::backend(&root, CONCEPT_MAP_KIND.prefix)?;
     let out = entity::materialise(
         &CONCEPT_MAP_KIND,
-        &LocalFs,
+        &*backend,
         &root,
         &MaterialiseRequest::Fresh,
         &Inputs {

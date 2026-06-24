@@ -30,9 +30,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{
-    self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
-};
+use crate::entity::{self, Artifact, Fileset, Inputs, Kind, MaterialiseRequest, ScaffoldCtx};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
 use crate::registry::{
@@ -1066,9 +1064,10 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, subtype.kind().dir)?;
+    let backend = crate::reserve::backend(&root, subtype.kind().prefix)?;
     let out = entity::materialise(
         subtype.kind(),
-        &LocalFs,
+        &*backend,
         &root,
         &MaterialiseRequest::Fresh,
         &Inputs {
@@ -1845,6 +1844,7 @@ pub(crate) fn run_req_list(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entity::LocalFs;
     use crate::requirement::ReqStatus;
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;

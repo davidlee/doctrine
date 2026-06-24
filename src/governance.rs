@@ -24,7 +24,7 @@ use anyhow::Context;
 
 use serde::Serialize;
 
-use crate::entity::{self, Inputs, Kind, LocalFs, MaterialiseRequest};
+use crate::entity::{self, Inputs, Kind, MaterialiseRequest};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
 
@@ -427,9 +427,10 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, g.kind.dir)?;
+    let backend = crate::reserve::backend(&root, g.kind.prefix)?;
     let out = entity::materialise(
         &g.kind,
-        &LocalFs,
+        &*backend,
         &root,
         &MaterialiseRequest::Fresh,
         &Inputs {
