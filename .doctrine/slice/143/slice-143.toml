@@ -1,14 +1,14 @@
 id = 143
 slug = "shipped-memory-corpus-overhaul"
 title = "Shipped memory corpus overhaul: holistic onboarding & self-correction"
-status = "design"
+status = "ready"
 created = "2026-06-23"
-updated = "2026-06-23"
+updated = "2026-06-24"
 tags = ["memory", "shipped-memory", "onboarding", "audit", "self-correction"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = [{ to = "SL-144", rank = 1 }]  # slice→work soft sequence: { to, rank } — self-correction gate integrates with SL-144's reconcile-rules hook
+after = [{ to = "SL-147", rank = 1 }]  # slice→work soft sequence: { to, rank } — self-correction gate (IMP-163) integrates with SL-147's domain-map mechanism
 
 [[relation]]
 label = "governed_by"
@@ -25,6 +25,14 @@ target = "SPEC-007"
 [[relation]]
 label = "related"
 target = "SL-144"
+
+[[relation]]
+label = "related"
+target = "SL-147"
+
+[[relation]]
+label = "tracked_by"
+target = "IMP-163"
 
 [[relation]]
 label = "governed_by"

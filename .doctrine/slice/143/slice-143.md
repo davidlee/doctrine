@@ -2,7 +2,7 @@
 
 ## Context
 
-Doctrine ships a corpus of 30 global-orientation (shipped) memories under
+Doctrine ships a corpus of 29 global-orientation (shipped) memories under
 `.doctrine/memory/shipped/` — signposts, concepts, patterns, and facts that
 orient agents via `/retrieve-memory` in any client repo. They were authored
 in two batches (June 5–6 core, June 15–16 entity-kind signposts) and have not
@@ -28,29 +28,20 @@ Several symptoms indicate drift:
 
 ### Objectives
 
-1. **Audit & update** all 30 shipped memories for currency, correctness, and
+1. **Audit & update** all 29 shipped memories for currency, correctness, and
    completeness against the current codebase (commit edge as of slice start).
 2. **Restructure as a holistic onboarding path** — curated progression from
    overview → core concepts → workflow patterns → entity reference → CLI
    surface, with coherent cross-linking that lets an agent orient in minutes,
    not sessions.
-3. **Install self-correction** — add a drift detection step into the
-   reconcile/close loop that flags when shipped memories may be stale relative
-   to codebase changes (e.g. new CLI verbs, new entity kinds, changed flag
-   shapes), prompting the agent to re-audit the affected memories.
-   *Depends on SL-144* — the self-correction gate integrates with
-   SL-144's reconcile-rules.md hook for its closed-loop evergreen AC.
-4. **Ensure memory reachability** — verify every shipped memory is reachable
+3. **Ensure memory reachability** — verify every shipped memory is reachable
    via the wikilink web and from at least one skill or boot digest; fix orphans.
 
 ### In scope
 
-- Review and revision of all 30 shipped memory bodies (`memory.md` + `memory.toml`
+- Review and revision of all 29 shipped memory bodies (`memory.md` + `memory.toml`
   metadata) in the `memory/` source directory.
 - Re-embed and re-sync cycle per batch of edits.
-- A new or amended skill mechanism (likely in `/reconcile` SKILL.md or a new
-  hook) that checks shipped-memory staleness against a manifest of known CLI
-  verbs, entity kinds, and conventions.
 - `doctrine memory sync` and `doctrine claude install` re-run to materialize
   changes.
 - Minimal reachability fixes: if a shipped memory has no inbound wikilinks,
@@ -97,22 +88,22 @@ Several symptoms indicate drift:
 
 ## Open Questions
 
-1. **Self-correction mechanism shape.** Is it a CLI command (`doctrine memory
-   check-staleness`), a MCP tool, or purely a skill-level check in `/reconcile`
-   that runs `git diff --stat` against a known manifest? The skill-level check
-   is lighter; a CLI verb is more testable. Defer to design.
-2. **Manifest format.** What should the "known truths" manifest contain — a list
-   of entity kinds with their CLI show verbs? A hash of expected CLI `--help`
-   output per verb? A snapshot of installed reference docs? Needs design.
-3. **Ordering of phases.** Should the audit (phase 1) and update (phase 2) be
-   one phase or two? The audit would produce a ledger of findings; the update
-   executes fixes. Two phases keeps evidence separate from action.
+All resolved by design lock (2026-06-24):
+
+1. **Self-correction mechanism shape** → Deferred to IMP-163, which depends on
+   SL-147's domain-map mechanism. No new CLI verb or skill mechanism in this slice.
+2. **Manifest format** → Deferred with self-correction. The domain-map from SL-147
+   will drive staleness detection.
+3. **Ordering of phases** → Resolved: PHASE-01 (audit), PHASE-02 (content update),
+   PHASE-03 (overview rewrite), PHASE-04 (reachability), PHASE-05 (re-embed & gate).
+   Two phases keep evidence (audit ledger) separate from action (content update).
 
 ## Verification / Closure Intent
 
 "Done" means:
 
-- All 30 shipped memories reviewed and updated for currency.
+- All 29 shipped memories reviewed and updated for currency; 3 new signposts
+  created, 1 local memory promoted, 1 stale signpost deleted (net 32).
 - References to CLI verbs tested against `doctrine --help`.
 - Wikilinks between memories form a coherent onboarding path (no dead ends,
   orphans, or loops) — an agent new to doctrine can follow a curated
@@ -124,6 +115,12 @@ Several symptoms indicate drift:
 
 ## Follow-Ups
 
+- **Self-correction gate** — tracked as IMP-163 (:after SL-147). Once SL-147's
+  domain-map mechanism lands, the reconcile/close loop will use it to flag
+  potentially stale shipped memories.
 - ADR-005 full compliance (reference-doc IA, user hooks, restate-line audit) —
-  filed as a separate backlog item (CHR-023).
+  tracked as SL-144.
 - IMP-148 Gap 8 (show fallthrough) — monitor for edge cases surfaced during audit.
+- Entity kind signposts for knowledge-record kinds (ASM, DEC, QUE, CON) and
+  backlog-item kinds (CHR, IMP, ISS, RSK, IDE) — deferred to future slices;
+  this slice fills the 3 most critical gaps (REC, RFC, CM).
