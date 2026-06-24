@@ -83,9 +83,10 @@ findings can be queried, gated, and handed off:
 1. **Context gathering**
    - Understand scope, linked issues, and intent.
    - Read relevant governing artifacts, memories, etc.
-   - Open + prime the RV: seed the git-changed candidates, curate the `domain_map`
-     to the areas and invariants this review actually holds the code to, and seed
-     the ledger's `## Brief` with your lines of attack (`review-ledger.md` §2).
+   - Open + prime the RV: `doctrine review prime` warms the cache from the target
+     slice's selectors (the path-set the staleness signal hashes; the hand-curated
+     `domain_map` was retired in SL-147), then seed the ledger's `## Brief` with
+     your lines of attack (`review-ledger.md` §2).
 2. **High-level review**
    - Architecture
    - Performance impact

@@ -22,6 +22,7 @@ use anyhow::Context;
 
 use serde::Serialize;
 
+use crate::conformance::{self, Status};
 use crate::dtoml;
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
@@ -284,6 +285,45 @@ pub(crate) enum SliceCommand {
         #[command(subcommand)]
         command: SelectorCommand,
     },
+
+    /// Cross-check a slice's recorded source deltas against its design-target
+    /// selectors: undeclared edits (highest signal), undelivered selectors, and
+    /// the conformant paths (each with the selector that matched it). Refuses a
+    /// clean diff when the registry is unavailable or incomplete (fail-closed).
+    Conformance {
+        /// Slice id, e.g. 147.
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Manually record one phase's source delta into the slice's arm-neutral
+    /// registry — the escape hatch beside the automatic solo phase-binding
+    /// (correct a recorded range, or bootstrap a pre-binding slice). `start`/`end`
+    /// are resolved to oids, guarded (`start` ancestor of `end`, non-merge `end`),
+    /// and `UPSERTed` by phase. Resolves to the PRIMARY tree's registry even from a
+    /// linked/coordination worktree.
+    RecordDelta {
+        /// Slice id owning the phase, e.g. 147.
+        id: u32,
+
+        /// Canonical phase id, e.g. PHASE-01.
+        phase: String,
+
+        /// Commit-ish for HEAD before the phase's code landed.
+        #[arg(long)]
+        start: String,
+
+        /// Commit-ish for the phase's cumulative code tip (pre-knowledge-record).
+        #[arg(long)]
+        end: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
@@ -349,6 +389,14 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             Ok(())
         }
         SliceCommand::Selector { command } => dispatch_selector(command),
+        SliceCommand::Conformance { id, path } => run_conformance(path, id),
+        SliceCommand::RecordDelta {
+            id,
+            phase,
+            start,
+            end,
+            path,
+        } => run_record_delta(path, id, &phase, &start, &end),
     }
 }
 
@@ -1468,6 +1516,21 @@ pub(crate) fn relation_edges(
     crate::relation::tier1_edges(&SLICE_KIND, &toml_text)
 }
 
+/// The slice's authored selector strings — the UNION of every intent
+/// (`scope-relevant` AND `design-target`), sorted+deduped (SL-147 PHASE-05). The
+/// review-prime staleness source-of-truth: every path the slice touches or reads.
+/// Mirrors the conformance shell's selector read (`conformance_outcome`) but
+/// WITHOUT the design-target filter — staleness cares about the whole declared
+/// surface. `root` is the parent tree; the slice subtree is joined internally.
+pub(crate) fn selector_paths(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+    let (doc, _toml, _body) = read_slice(&root.join(SLICE_DIR), id)?;
+    let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for sel in &doc.selectors {
+        set.insert(sel.selector.clone());
+    }
+    Ok(set.into_iter().collect())
+}
+
 /// Render the readable whole for `Table` mode: an identity header, the flat
 /// fields, the advisory conduct posture line (`resolve(current)`, F15/F19), the
 /// non-empty relationship axes, then the scope body verbatim. House style:
@@ -1758,6 +1821,203 @@ fn run_selector_rm(path: Option<PathBuf>, id: u32, globs: &[String]) -> anyhow::
         crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())?;
     }
     writeln!(io::stdout(), "Removed {removed} selector(s)")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `slice conformance` — the conformance shell (SL-147 PHASE-03, design D6)
+// ---------------------------------------------------------------------------
+
+/// Parse the events out of one `git diff --name-status A..B` line, folding them
+/// into `actual`. Plain `A`/`M`/`D` key the path directly; a rename (`R<score>`)
+/// presents two paths and is folded as a `Deleted` of the source plus an `Added`
+/// of the destination (the conservative reading — the source disappears, the
+/// destination appears). Pure (no IO) so it is unit-testable; unknown status
+/// letters are ignored. Within one diff, repeated events for a path accumulate
+/// in order (the per-phase event set, F-3).
+fn fold_name_status_line(line: &str, actual: &mut std::collections::BTreeMap<String, Vec<Status>>) {
+    let mut cols = line.split('\t');
+    let Some(code) = cols.next() else { return };
+    let letter = code.chars().next().unwrap_or(' ');
+    match letter {
+        'A' | 'M' | 'D' => {
+            if let Some(p) = cols.next() {
+                let st = match letter {
+                    'A' => Status::Added,
+                    'D' => Status::Deleted,
+                    _ => Status::Modified,
+                };
+                actual.entry(p.to_string()).or_default().push(st);
+            }
+        }
+        'R' | 'C' => {
+            // rename/copy: `<code>\t<src>\t<dst>`. Source removed, dest added.
+            let src = cols.next();
+            if let Some(dst) = cols.next() {
+                if letter == 'R'
+                    && let Some(src) = src
+                {
+                    actual
+                        .entry(src.to_string())
+                        .or_default()
+                        .push(Status::Deleted);
+                }
+                actual
+                    .entry(dst.to_string())
+                    .or_default()
+                    .push(Status::Added);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The degrade-aware result of the conformance shell: either the registry is
+/// unavailable (no rows), incomplete (partial coverage, gaps named), or the
+/// full three-cell algebra ran. The IO sits in [`conformance_outcome`]; the
+/// render in [`render_conformance`] — both off this enum so the degrade ladder
+/// (design F-2) is testable without capturing stdout.
+#[derive(Debug)]
+enum ConformanceOutcome {
+    Unavailable,
+    Incomplete(Vec<crate::state::CompletenessGap>),
+    Computed(conformance::Conformance),
+}
+
+/// The conformance shell IO (design Data flow): resolve the design-target
+/// selectors + the recorded registry, run the completeness gate, then fold each
+/// row's git name-status diff into the `actual` map and run the pure algebra.
+/// Fails closed: an empty registry → `Unavailable`, an incomplete registry →
+/// `Incomplete` (never a misleading clean diff from partial coverage). `root`
+/// resolves both the shared registry (via the primary worktree) and the local
+/// phase-sheet state tree.
+fn conformance_outcome(root: &Path, id: u32) -> anyhow::Result<ConformanceOutcome> {
+    let slice_root = root.join(SLICE_DIR);
+    let (doc, _toml, _body) = read_slice(&slice_root, id)?;
+
+    let selectors: Vec<String> = doc
+        .selectors
+        .iter()
+        .filter(|s| s.intent == SelectorIntent::DesignTarget)
+        .map(|s| s.selector.clone())
+        .collect();
+
+    let rows = crate::state::read_source_deltas(root, id)?;
+    if rows.is_empty() {
+        return Ok(ConformanceOutcome::Unavailable);
+    }
+
+    if let crate::state::Completeness::Incomplete { gaps } =
+        crate::state::registry_completeness(root, root, id)?
+    {
+        return Ok(ConformanceOutcome::Incomplete(gaps));
+    }
+
+    let mut actual: std::collections::BTreeMap<String, Vec<Status>> =
+        std::collections::BTreeMap::new();
+    for row in &rows {
+        let diff = crate::git::git_text(
+            root,
+            &[
+                "diff",
+                "--name-status",
+                &format!("{}..{}", row.code_start_oid, row.code_end_oid),
+            ],
+        )?;
+        for line in diff.lines().filter(|l| !l.trim().is_empty()) {
+            fold_name_status_line(line, &mut actual);
+        }
+    }
+
+    Ok(ConformanceOutcome::Computed(conformance::compute(
+        &selectors, &actual,
+    )))
+}
+
+/// `slice conformance <SL>` — resolve the root, compute the outcome, render it.
+fn run_conformance(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let cid = canonical_id(id);
+    let mut out = io::stdout();
+    match conformance_outcome(&root, id)? {
+        ConformanceOutcome::Unavailable => {
+            writeln!(
+                out,
+                "{cid}: conformance unavailable — no recorded source deltas"
+            )?;
+            Ok(())
+        }
+        ConformanceOutcome::Incomplete(gaps) => {
+            writeln!(out, "{cid}: conformance incomplete — partial coverage")?;
+            for gap in &gaps {
+                writeln!(out, "  - {}", gap.describe())?;
+            }
+            Ok(())
+        }
+        ConformanceOutcome::Computed(result) => render_conformance(&cid, &result),
+    }
+}
+
+/// `slice record-delta <id> <PHASE-NN> --start <ref> --end <ref>` (SL-147
+/// PHASE-04) — the MANUAL escape hatch beside the automatic solo phase-binding.
+/// Resolves `start`/`end` to full oids (against the resolved root's repo), builds
+/// the [`BoundaryRow`], and calls [`record_source_delta`] (F-6 guard +
+/// upsert) — which resolves the one shared registry file against the PRIMARY tree,
+/// so this works from a linked/coordination worktree as well as the main tree.
+/// Mutually exclusive with the solo binding by USE, not by mechanism: an operator
+/// runs this to correct a range or bootstrap a slice recorded before the binding
+/// existed.
+fn run_record_delta(
+    path: Option<PathBuf>,
+    id: u32,
+    phase: &str,
+    start: &str,
+    end: &str,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let resolve = |refish: &str| -> anyhow::Result<String> {
+        crate::git::resolve_ref(&root, refish)?
+            .with_context(|| format!("record-delta: {refish} does not resolve to a commit"))
+    };
+    crate::state::record_source_delta(
+        &root,
+        id,
+        crate::boundary::BoundaryRow {
+            phase: phase.to_string(),
+            code_start_oid: resolve(start)?,
+            code_end_oid: resolve(end)?,
+        },
+    )?;
+    writeln!(
+        io::stdout(),
+        "{}: recorded source delta for {phase}",
+        canonical_id(id)
+    )?;
+    Ok(())
+}
+
+/// Render the three conformance cells (design Data flow step 5): undeclared
+/// first (highest signal, each with its A/M/D net verb), then undelivered (the
+/// unmatched design-target selectors), then a conformant count with the matched
+/// selector per conformant path (F-7).
+fn render_conformance(cid: &str, result: &conformance::Conformance) -> anyhow::Result<()> {
+    let mut out = io::stdout();
+    writeln!(out, "{cid}: conformance")?;
+
+    writeln!(out, "undeclared ({}):", result.undeclared.len())?;
+    for u in &result.undeclared {
+        writeln!(out, "  {} {}", u.verb.marker(), u.path)?;
+    }
+
+    writeln!(out, "undelivered ({}):", result.undelivered.len())?;
+    for sel in &result.undelivered {
+        writeln!(out, "  {sel}")?;
+    }
+
+    writeln!(out, "conformant ({}):", result.conformant.len())?;
+    for c in &result.conformant {
+        writeln!(out, "  {}  ⟵ {}", c.path, c.matched_selector)?;
+    }
     Ok(())
 }
 
@@ -5180,5 +5440,164 @@ mod tests {
             .unwrap();
         let removed = selector_remove_many(&mut doc, &["nonexistent".into()]);
         assert_eq!(removed, 0);
+    }
+
+    // --- conformance shell (SL-147 PHASE-03, design D6 / Data flow) --------
+
+    // VT-1: the name-status fold parses A/M/D and folds a rename to D(src)+A(dst).
+    #[test]
+    fn fold_name_status_parses_each_class_and_renames() {
+        let mut actual: std::collections::BTreeMap<String, Vec<Status>> =
+            std::collections::BTreeMap::new();
+        fold_name_status_line("A\tsrc/new.rs", &mut actual);
+        fold_name_status_line("M\tsrc/state.rs", &mut actual);
+        fold_name_status_line("D\tsrc/gone.rs", &mut actual);
+        fold_name_status_line("R100\tsrc/old.rs\tsrc/moved.rs", &mut actual);
+
+        assert_eq!(actual["src/new.rs"], vec![Status::Added]);
+        assert_eq!(actual["src/state.rs"], vec![Status::Modified]);
+        assert_eq!(actual["src/gone.rs"], vec![Status::Deleted]);
+        assert_eq!(actual["src/old.rs"], vec![Status::Deleted]);
+        assert_eq!(actual["src/moved.rs"], vec![Status::Added]);
+    }
+
+    /// Commit `path` (relative to `repo`) with `content`, returning the new HEAD.
+    fn commit_file(repo: &Path, path: &str, content: &str) -> String {
+        let full = repo.join(path);
+        fs::create_dir_all(full.parent().unwrap()).unwrap();
+        fs::write(&full, content).unwrap();
+        git(repo, &["add", path]);
+        git(repo, &["commit", "-q", "-m", &format!("touch {path}")]);
+        git(repo, &["rev-parse", "HEAD"])
+    }
+
+    fn write_phase_completed(repo: &Path, slice_id: u32, stem: &str) {
+        let dir = crate::state::phases_dir(repo, slice_id);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(format!("{stem}.toml")), "status = \"completed\"\n").unwrap();
+    }
+
+    // VT-3: a complete registry over a fixture slice yields the three cells, and
+    // every conformant path carries the selector that matched it (F-7).
+    #[test]
+    fn conformance_partitions_into_the_three_cells_with_matched_selectors() {
+        let dir = tempfile::tempdir().unwrap();
+        // canonicalize so the primary-worktree resolution aligns with `root`.
+        let repo = fs::canonicalize(dir.path()).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        let base = git(&repo, &["rev-parse", "HEAD"]);
+
+        // The fixture slice + its design-target selectors. `src/**` is declared
+        // and delivered; `docs/missing.md` is declared but never touched.
+        make_slice(&repo, "conf", "Conformance Fixture", "2026-06-24");
+        run_selector_add(
+            Some(repo.clone()),
+            1,
+            SelectorIntent::DesignTarget,
+            &["src/**".to_string(), "docs/missing.md".to_string()],
+            None,
+        )
+        .unwrap();
+        // a scope-relevant selector must be ignored by conformance.
+        run_selector_add(
+            Some(repo.clone()),
+            1,
+            SelectorIntent::ScopeRelevant,
+            &["Cargo.toml".to_string()],
+            None,
+        )
+        .unwrap();
+
+        // PHASE-01 touches a declared path; PHASE-02 touches an undeclared one.
+        let p1 = commit_file(&repo, "src/feature.rs", "fn f() {}\n");
+        let p2 = commit_file(&repo, "README.md", "surprise\n");
+
+        write_phase_completed(&repo, 1, "phase-01");
+        write_phase_completed(&repo, 1, "phase-02");
+        crate::state::record_source_delta(
+            &repo,
+            1,
+            crate::boundary::BoundaryRow {
+                phase: "PHASE-01".into(),
+                code_start_oid: base.clone(),
+                code_end_oid: p1.clone(),
+            },
+        )
+        .unwrap();
+        crate::state::record_source_delta(
+            &repo,
+            1,
+            crate::boundary::BoundaryRow {
+                phase: "PHASE-02".into(),
+                code_start_oid: p1.clone(),
+                code_end_oid: p2.clone(),
+            },
+        )
+        .unwrap();
+
+        let ConformanceOutcome::Computed(result) = conformance_outcome(&repo, 1).unwrap() else {
+            panic!("expected a computed outcome");
+        };
+
+        // conformant: src/feature.rs, matched by `src/**`.
+        assert_eq!(result.conformant.len(), 1);
+        assert_eq!(result.conformant[0].path, "src/feature.rs");
+        assert_eq!(result.conformant[0].matched_selector, "src/**");
+        // undeclared: README.md, added.
+        assert_eq!(result.undeclared.len(), 1);
+        assert_eq!(result.undeclared[0].path, "README.md");
+        assert_eq!(result.undeclared[0].verb, conformance::Verb::Added);
+        // undelivered: docs/missing.md (declared, never touched).
+        assert_eq!(result.undelivered, vec!["docs/missing.md".to_string()]);
+    }
+
+    // VT-2: an empty registry degrades to `Unavailable` (never a clean diff).
+    #[test]
+    fn conformance_is_unavailable_with_no_recorded_deltas() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = fs::canonicalize(dir.path()).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        make_slice(&repo, "conf", "Conf", "2026-06-24");
+
+        assert!(matches!(
+            conformance_outcome(&repo, 1).unwrap(),
+            ConformanceOutcome::Unavailable
+        ));
+    }
+
+    // VT-2: a completed phase with no recorded row degrades to `Incomplete`,
+    // naming the gap — partial coverage never reads as conformance.
+    #[test]
+    fn conformance_is_incomplete_on_partial_coverage() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = fs::canonicalize(dir.path()).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        let base = git(&repo, &["rev-parse", "HEAD"]);
+        make_slice(&repo, "conf", "Conf", "2026-06-24");
+
+        let p1 = commit_file(&repo, "src/a.rs", "x\n");
+        write_phase_completed(&repo, 1, "phase-01");
+        write_phase_completed(&repo, 1, "phase-02"); // completed, but no row.
+        crate::state::record_source_delta(
+            &repo,
+            1,
+            crate::boundary::BoundaryRow {
+                phase: "PHASE-01".into(),
+                code_start_oid: base,
+                code_end_oid: p1,
+            },
+        )
+        .unwrap();
+
+        let ConformanceOutcome::Incomplete(gaps) = conformance_outcome(&repo, 1).unwrap() else {
+            panic!("expected incomplete");
+        };
+        assert!(
+            gaps.iter().any(|g| g.describe().contains("PHASE-02")),
+            "names the uncovered phase: {gaps:?}"
+        );
     }
 }

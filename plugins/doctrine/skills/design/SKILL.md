@@ -130,6 +130,24 @@ reflects your current shared understanding before proceeding.
    - Impact on design decisions and remaining open questions
 4. Perform targeted research if required to ensure fit to implementation surface
 
+### Record design-target selectors
+
+The code-impact summary (paths + intended changes) **is** the slice's declared
+touch-set. Capture it as **`design-target` selectors** — the load-bearing input
+the audit-time `slice conformance` delta diffs against git actuals (undeclared
+edits, undelivered targets):
+
+```
+doctrine slice selector add <id> "src/conformance.rs" "src/slice.rs" --intent design-target
+```
+
+Record them when the code-impact section locks (during or right after writing
+`design.md`), at the precision the design commits to — literal paths where the
+design names a file, a glob only where it genuinely declares a directory. These
+are distinct from `/slice`'s coarse `scope-relevant` fence: `design-target` is
+what conformance holds the implementation to. `doctrine slice selector list <id>`
+shows both intents.
+
 ### Adversarial review
 
 1. Once the design feels coherent, perform an adversarial self-review before

@@ -76,22 +76,36 @@ not mutate a finding to `fixed`/`remediated`.
 ## Process
 
 1. **Open the ledger for the slice** (replaces authoring `audit.md`): open a
-   `reconciliation`-facet RV targeting the slice
+   `reconciliation`-facet RV targeting the slice, then fill the ledger's `## Brief`
+   with the lines of attack (what this audit probes and the invariants it holds the
+   slice to). Verbs and flags: `review-ledger.md` §1–§2. Loose notes are
+   insufficient for closure-grade work — findings belong in the ledger.
 
-   > DISABLED: don't do this -- nothing reads it, waste of effort
-   > will be replaced when SL-147 drops.
-   >
-   > ... then prime it — seed the
-   > git-changed candidates, curate the `domain_map`, persist it, and fill the
-   > ledger's `## Brief` with the lines of attack (what this audit probes and the
-   > invariants it holds the slice to). 
-
-   Verbs and flags: `review-ledger.md` §1–§2.
-   Loose notes are insufficient for closure-grade work — findings belong in the
-   ledger.
+   The old `domain_map`/`prime` seeding is **gone** (RFC-004 / SL-147): the
+   hand-authored area map was a dead authoring tax. The mechanical drift signal now
+   comes from `slice conformance` (step 2), computed from recorded source-deltas —
+   no curation.
 2. **Gather evidence** (the audit's divergent work):
    - prepare subject: do NOT change the main repository branch; use a worktree
      instead, if necessary.
+   - **Run `doctrine slice conformance <id>` and read the algebra** — the
+     mechanical path-conformance delta between what `design.md` declared
+     (`design-target` selectors) and what git actually touched (recorded
+     source-deltas). It reports three cells:
+     - **undeclared** (highest signal) — paths edited but not in any
+       `design-target` selector. Each is a finding candidate: scope creep, a
+       missed design update, or an undocumented touch.
+     - **undelivered** — `design-target` selectors that matched no actual edit.
+       Declared-but-not-delivered: dropped work or a stale design.
+     - **conformant** — count of paths that matched (each with its selector).
+
+     Conformance is **necessary, not sufficient**: it says *where to look*, never
+     *whether it passes*. Treat undeclared/undelivered as leads to disposition, not
+     auto-findings. If it reports `unavailable` (empty registry) or `incomplete`
+     (a completed phase carries no row — the F-2 backstop), that gap is itself a
+     finding: the registry was not recorded as phases landed; bootstrap with
+     `doctrine slice record-delta <id> PHASE-NN --start <oid> --end <oid>` or note
+     the partial coverage — never read a partial registry as clean.
    - run the tests/checks the design and plan require, **plus `just check`**;
    - inspect observed behaviour against `design.md` and the phase `VT-` criteria;
    - note where behaviour and design diverge — each divergence is a finding.
