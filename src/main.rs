@@ -188,7 +188,12 @@ fn main() -> anyhow::Result<()> {
                 if !has_real_subcommand {
                     let color = crate::tty::stdout_color_enabled();
                     let term_width = crate::tty::stdout_terminal_width();
-                    let help = crate::commands::cli::render_top_level_help(color, term_width);
+                    let show_commands = args.iter().any(|a| a == "--commands");
+                    let help = if show_commands {
+                        crate::commands::cli::render_commands_table(color, term_width)
+                    } else {
+                        crate::commands::cli::render_top_level_help(color, term_width)
+                    };
                     writeln!(std::io::stdout(), "{help}")?;
                     return Ok(());
                 }
@@ -763,6 +768,30 @@ mod write_class_tests {
         assert!(help.contains("show"));
         assert!(help.contains("validate"));
         assert!(help.contains("req"));
+    }
+
+    #[test]
+    fn commands_table_structure() {
+        let out = crate::commands::cli::render_commands_table(false, Some(80));
+        // Footer present
+        assert!(
+            out.contains("For arguments & options: doctrine <command> <verb> --help"),
+            "footer"
+        );
+        // Representative commands present
+        assert!(out.contains("install"), "install");
+        assert!(out.contains("slice"), "slice");
+        assert!(out.contains("review"), "review");
+        // Subcommand verbs grouped under slice (not mismatched)
+        assert!(out.contains("list"), "list verb");
+        assert!(out.contains("new"), "new verb");
+        assert!(out.contains("show"), "show verb");
+        // help auto-subcommand filtered out
+        assert!(!out.contains("│ help"), "help not listed as verb");
+        // Leaf commands have em-dash placeholder
+        assert!(out.contains("—"), "em-dash for leaf commands");
+        // Three-column headers
+        assert!(out.contains("command") && out.contains("verb") && out.contains("description"), "headers");
     }
 
     // ── Parse-regression tests ──────────────────────────────────────────────────
