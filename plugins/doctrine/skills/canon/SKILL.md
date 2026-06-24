@@ -10,9 +10,11 @@ Understand project governance before you act, so you do not spread heresy.
 ## Articles of truth
 
 Identify the authorities that bear on your task, then read the ones that carry
-meaning for it — not all of them, every time:
+meaning for it — not all of them, every time. The CLI is the source of truth —
+see [[mem.fact.doctrine.cli-source-of-truth]].
 
-- `CLAUDE.md`, `AGENTS.md` — standing instructions and conventions.
+- `CLAUDE.md`, `AGENTS.md` — standing instructions and conventions. Project
+  conventions are documented in [[mem.pattern.doctrine.conventions]].
 - `.doctrine/adr/` — project-global ADRs (authored; status lives in
   `adr-nnn.toml`). List them: `doctrine adr list`. Read the relevant bodies.
 - `.doctrine/spec/tech/` — authoritative technical specs (the *how*).
@@ -24,7 +26,10 @@ commands), `/retrieve-memory` rather than rediscovering it.
 
 **Read entities tier-aware — via `show`, never a single raw file.** The storage
 rule + read-via-`show` discipline are resident in the boot digest and detailed in
-`using-doctrine.md`. Reading one tier and concluding "empty" is false witness.
+`using-doctrine.md`. The storage model and storage rule are documented in
+[[mem.concept.doctrine.storage-model]]; storage tiers: authored, runtime,
+derived — see [[mem.fact.doctrine.storage-tiers]]. Reading one tier and
+concluding "empty" is false witness.
 
 The boot snapshot you are reading (`@.doctrine/state/boot.md`) was inlined
 at session start. If you just edited governance (`governance.md`, an ADR, a

@@ -29,3 +29,5 @@ typed sister files and a cache is deferred). The code lives under `src/`. See
 [[signpost.doctrine.file-map]] for the layout and [[pattern.doctrine.conventions]]
 for the pure/imperative split and no-parallel-implementation rules. For the
 relation-authoring surface, see [[signpost.doctrine.relating-entities]].
+The concept map ([[signpost.doctrine.concept-map]]) provides a visual
+overview of these entity relationships.
