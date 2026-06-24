@@ -22,6 +22,7 @@ use anyhow::Context;
 
 use serde::Serialize;
 
+use crate::dtoml;
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
@@ -552,7 +553,7 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let slice_root = root.join(SLICE_DIR);
     // The design doc inherits its parent's title (the only context its template
     // needs); reading it confirms the parent exists before we materialise.
-    let meta = meta::read_meta(&slice_root, "slice", id)?;
+    let meta = meta::read_meta(&slice_root, "slice", id, "SL")?;
     let date = crate::clock::today();
     let out = entity::materialise(
         &DESIGN_KIND,
@@ -581,7 +582,7 @@ pub(crate) fn run_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_root = root.join(SLICE_DIR);
     // Reading the parent confirms it exists and supplies the prose title.
-    let meta = meta::read_meta(&slice_root, "slice", id)?;
+    let meta = meta::read_meta(&slice_root, "slice", id, "SL")?;
     let date = crate::clock::today();
     let out = entity::materialise(
         &PLAN_KIND,
@@ -636,7 +637,7 @@ pub(crate) fn run_phases(path: Option<PathBuf>, id: u32, prune: bool) -> anyhow:
 pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_root = root.join(SLICE_DIR);
-    let meta = meta::read_meta(&slice_root, "slice", id)?;
+    let meta = meta::read_meta(&slice_root, "slice", id, "SL")?;
     let date = crate::clock::today();
     let out = entity::materialise(
         &NOTES_KIND,
@@ -1262,7 +1263,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
     let (filter, format) = listing::build(args)?;
     let slice_root = root.join(SLICE_DIR);
     let mut metas = listing::retain(
-        meta::read_metas(&slice_root, "slice")?,
+        meta::read_metas(&slice_root, "slice", "SL")?,
         &filter,
         is_hidden,
         key,
@@ -1445,7 +1446,7 @@ fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String, S
     let toml_path = slice_toml_path(slice_root, id);
     let text = fs::read_to_string(&toml_path)
         .with_context(|| format!("slice {name} not found at {}", toml_path.display()))?;
-    let doc: SliceDoc = toml::from_str(&text)
+    let doc: SliceDoc = dtoml::parse_entity_toml(&text, "SL", id)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
     let md_path = dir.join(format!("slice-{name}.md"));
     let body = fs::read_to_string(&md_path)
@@ -2256,7 +2257,7 @@ mod tests {
         let root = dir.path();
         make_slice(root, "my-slug", "My Title", "2026-06-03");
 
-        let metas = meta::read_metas(&root.join(SLICE_DIR), "slice").unwrap();
+        let metas = meta::read_metas(&root.join(SLICE_DIR), "slice", "SL").unwrap();
         assert_eq!(metas, vec![meta(1, "proposed", "my-slug", "My Title")]);
     }
 

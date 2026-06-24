@@ -465,7 +465,7 @@ fn load_entity_record(
     lazyspec_kind: &str,
     id: u32,
 ) -> anyhow::Result<EntityRecord> {
-    let meta = crate::meta::read_meta(tree_root, stem, id)?;
+    let meta = crate::meta::read_meta(tree_root, stem, id, engine_kind.prefix)?;
     let toml_text = read_entity_toml(tree_root, stem, id)?;
     let head = AuthoredHead::parse(&toml_text);
     let edges = relation::tier1_edges(engine_kind, &toml_text)?;
