@@ -263,6 +263,55 @@ fn knowledge_show_unknown_prefix_errors() {
     );
 }
 
+// === T4b — `knowledge inspect` goldens (no body) =========================
+
+#[test]
+fn knowledge_inspect_table_is_byte_exact() {
+    let dir = tmp();
+    seed(dir.path(), "assumption", 7, asm007_toml());
+
+    let out = run(dir.path(), &["inspect", "ASM-007"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "ASM-007 — Token expiry\n\
+         token-expiry · assumption · testing\n\
+         created 2026-01-02 · updated 2026-01-03\n\
+         tags: auth, security\n\
+         \n\
+         [facet]\n\
+         \x20\x20claim: tokens expire in 1h\n\
+         \x20\x20confidence: high\n\
+         \x20\x20basis: observation\n\
+         \x20\x20validation_plan: probe the IdP\n\
+         \n\
+         [evidence]\n\
+         \x20\x20supports: DEC-005-C\n\
+         \x20\x20notes: see the audit\n"
+    );
+}
+
+#[test]
+fn knowledge_inspect_json_omits_body() {
+    let dir = tmp();
+    seed(dir.path(), "assumption", 7, asm007_toml());
+
+    let out = run(dir.path(), &["inspect", "ASM-007", "--json"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let so = stdout(&out);
+    // The JSON must NOT contain `"body"` — inspect is metadata-only.
+    assert!(
+        !so.contains("\"body\""),
+        "inspect --json must not leak body: {so}"
+    );
+    // Sanity: it must still have the identity fields.
+    assert!(so.contains("\"id\""), "inspect --json missing id: {so}");
+    assert!(
+        so.contains("\"title\""),
+        "inspect --json missing title: {so}"
+    );
+}
+
 // === T5 — `knowledge status` goldens (no resolution coupling) =============
 
 #[test]
