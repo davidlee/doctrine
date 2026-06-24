@@ -16,7 +16,7 @@ Detailed blast-radius analysis: ISS-049.
 
 ## Scope & Objectives
 
-1. **Shared entity-parse wrapper** — introduce `dtoml::parse_entity_toml<T>(text, prefix, id)` that wraps `toml::from_str`, injects the canonical entity id into parse errors. No speculative remediation hint — the raw `toml` error already describes *what* went wrong; the wrapper adds *which entity*. Route the main read paths (`read_meta`, `read_slice`, `read_item`, `read_record`, `read_doc`) through it.
+1. **Shared entity-parse wrapper** — introduce `dtoml::parse_entity_toml<T>(text, prefix, id)` that wraps `toml::from_str`, injects the canonical entity id into parse errors. No speculative remediation hint — the raw `toml` error already describes *what* went wrong; the wrapper adds *which entity*. Route the six main read paths (`read_meta`, `read_id`, `read_slice`, `read_item`, `read_record`, `read_doc`) through it.
 
 2. **Augment `doctrine validate`** — add a schema-agnostic full-Toml parse
    (`toml::from_str::<toml::Value>`) to `integrity::scan_kind` so `validate`
@@ -54,9 +54,15 @@ already detects non-contiguous sections; the wrapper just names the entity.
 
 ## Risks
 
-- **Caller surface width.** `read_meta`/`read_id` callers span ~13 modules —
-  each needs a `prefix` argument added. The change per caller is mechanical
-  (one `&str` argument), but the plan should account for the breadth.
+- **Caller surface width.** The `prefix` param is compile-forcing, but the
+  real caller topology is narrower than per-module: most `show`/`list` paths
+  funnel through `meta::read_metas(stem)` (also gaining `prefix`), and **all**
+  governance kinds thread `g.kind.prefix` at one site (`governance.rs:71`).
+  Direct `read_meta` callers: `slice.rs` (×3), `integrity.rs` (reseat),
+  `lazyspec.rs:468`, `catalog/scan.rs:429`. `read_metas` callers: `status.rs`
+  (×2), `governance.rs`, `concept_map.rs`, `slice.rs`, `spec.rs`. See the
+  design's Caller survey for the authoritative list. Mechanical, but threaded
+  at funnels — not sprayed per module.
 - **IMP-109 sequencing.** IMP-109 ("catalog scan: read each entity TOML
   once") may change the parse topology in `catalog/scan.rs`. SL-151's changes
   are orthogonal (entity read paths, not catalog scan) — no conflict, but
@@ -72,13 +78,14 @@ already detects non-contiguous sections; the wrapper just names the entity.
 | `src/slice.rs` | Route `read_slice` through shared wrapper |
 | `src/backlog.rs` | Route `read_item` through shared wrapper |
 | `src/knowledge.rs` | Route `read_record` through shared wrapper |
-| `src/governance.rs` | Route `read_doc` through shared wrapper |
-| ~13 callers of `read_meta` | Add `prefix` argument (mechanical, one `&str` per call) |
+| `src/governance.rs` | Route `read_doc` through shared wrapper; `list_rows` threads `g.kind.prefix` for all gov kinds |
+| `src/lazyspec.rs`, `src/catalog/scan.rs` | Forced `read_meta` callers (`:468`, `:429`) — supply prefix |
+| `read_meta`/`read_metas`/`read_id` funnels | Add `prefix` argument (mechanical); see design Caller survey for the real sites |
 
 ## Verification
 
-- **VT**: Unit tests for `validate_sections` with well-formed TOML,
-  non-contiguous TOML, TOML with `[section]` inside string bodies
+- **VT**: Unit tests for `scan_kind`'s `toml::Value` parse with well-formed
+  TOML, non-contiguous TOML, TOML with `[section]` inside string bodies
   (no false positive), and empty TOML.
 - **VT**: Unit tests for `parse_entity_toml` — error message includes
   canonical entity id.

@@ -12,5 +12,77 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-151"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Design: lazyspec.rs + catalog/scan.rs declared out-of-scope, but both call read_meta in production — a prefix param FORCES them to change"
+detail = "design.md 'Not changed (out of scope)' table lists catalog/scan.rs and lazyspec.rs as untouched. Grep confesses otherwise: src/lazyspec.rs:468 (load_entity_record, prod) and src/catalog/scan.rs:429 (scan_entities status/title path, prod) both call meta::read_meta directly. Adding a prefix: &str param to read_meta is compile-forcing on every caller — these two MUST change. The design claims a surface it cannot deliver. catalog/scan.rs:429 is the catalog hot path; with_context is lazy (closure on error only) so runtime perf holds, but the file IS a forced caller. Move both into the in-scope affected-surface table (lazyspec derives prefix from engine_kind; scan.rs from kref.kind.prefix)."
+disposition = "fix-now"
+response = "Corrected. design.md affected-surface table now lists src/lazyspec.rs:468 and src/catalog/scan.rs:429 as forced read_meta callers (prefix from engine_kind / kref.kind.prefix); removed from the 'Not changed' table with a migration note. Catalog hot-path perf addressed: with_context is lazy (allocates only on error)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Design: caller survey for read_meta is fabricated — lists adr/policy/standard/rfc/revision/requirement/review/rec rows that call read_meta NOWHERE in production"
+detail = "design.md 'Caller survey' table asserts ~13 per-module callers each passing a prefix (adr.rs->ADR, policy.rs->POL, standard.rs->STD, rfc.rs->RFC, revision.rs->REV, requirement.rs->REQ, review.rs->RV, rec.rs->REC). Grep: NONE of those modules call read_meta in prod. All governance kinds funnel through ONE site — governance.rs:71 read_metas(&gov_root, g.kind.stem) — generic over every gov kind. Real direct read_meta prod callers: slice.rs:555/584/639 (SL), integrity.rs:414 (reseat, kind.kind.prefix), lazyspec.rs:468, catalog/scan.rs:429, plus the read_metas loop (meta.rs:84). The survey both invents callers and omits the real ones; the 3.2-4.8 shot estimate rides this fiction."
+disposition = "fix-now"
+response = "Corrected. Caller survey rewritten against grep: dropped the fictional adr/policy/standard/rfc/revision/requirement/review/rec direct-caller rows; documented the real funnel (governance.rs:71 read_metas(g.kind.stem) covers all gov kinds via g.kind.prefix at one site) and the true direct callers (slice.rs, integrity.rs reseat, lazyspec.rs, catalog/scan.rs, read_metas loop). slice-151.md Risks + Affected-Surface aligned."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Design: read_metas (the real list funnel) is stem-parameterised with NO prefix in hand — the 'each caller passes its known prefix' model never addresses it"
+detail = "meta::read_metas(tree_root, stem) is the list-path funnel and loops read_meta internally (meta.rs:84). It holds only stem, not prefix. To thread a prefix the design's model requires read_metas ALSO gain a prefix param, and its callers supply it: status.rs:292/314, governance.rs:71 (g.kind.prefix — covers all gov kinds at once), concept_map.rs:1241, slice.rs:1265, spec.rs:1442. The design's caller model is silent on this seam. ADR-001 forbids meta.rs deriving prefix from integrity::KINDS (meta sits below integrity), so the param IS the right mechanism — but read_metas must be in the threading plan."
+disposition = "fix-now"
+response = "Corrected. design.md meta.rs row + survey now state read_metas itself gains a prefix param (it holds only stem) and list its prefix-supplying callers (status.rs, governance.rs, concept_map.rs, slice.rs, spec.rs). Confirmed the param mechanism is layering-correct: ADR-001 forbids meta.rs reaching up to integrity::KINDS, so prefix must descend from callers."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Design: arithmetic + scope drift — D3 says 'Five read paths' then lists six; scope-151 section1 lists five (omits read_id) while Summary lists six"
+detail = "design.md D3 line 'Five read paths get the wrapper:' then enumerates SIX (read_meta, read_id, read_slice, read_item, read_record, read_doc). slice-151.md Scope&Objectives section1 routes five paths (omits read_id) but the Summary routes six (includes read_id). Pick one count and make the three statements agree; read_id IS wrapped (D3, affected-surface), so 'six' is canonical."
+disposition = "fix-now"
+response = "Corrected. design.md D3 'Five'->'Six'; slice-151.md Scope section1 now lists read_id (six paths), matching the Summary and the affected-surface. read_id is confirmed wrapped (D3)."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Design: read_id caller survey omits integrity.rs:304, where the error is .ok()-swallowed so the new canonical-id context is wasted at that site"
+detail = "design.md read_id survey lists only integrity.rs scan_kind (line 263). A second prod caller exists: integrity.rs:304 (alias/reseat target resolution) calls meta::read_id(...).ok() — the Result is discarded, so threading prefix context there buys nothing. Survey should list it and note the context is moot at the swallowed site."
+disposition = "fix-now"
+response = "Corrected. read_id survey now lists integrity.rs:304 (alias/reseat target resolve) and notes its Result is .ok()-swallowed, so the canonical-id context is moot at that site — accurate rather than silently omitted."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Design: no VT covers the read_id wrapper error-context path — VT-3/VT-4 assert on scan_kind's toml::Value diagnostics, not read_id's prefix injection"
+detail = "Verification table proves parse_entity_toml directly (VT-1/VT-2) and scan_kind's full-Toml parse (VT-3/VT-4), and read_meta via doctrine show (VT-6). But read_id also routes through parse_entity_toml (D3) and its error-context path is asserted nowhere — VT-3/VT-4 check the toml::Value diagnostics, not read_id's canonical-id prefix on a malformed id-only toml. Add a VT pinning read_id's wrapper error shape."
+disposition = "fix-now"
+response = "Corrected. Added VT-7 to design.md: read_id on a malformed id-only TOML must surface the {prefix}-{id:03} TOML-parse-failed context — a wrapper path distinct from read_meta (VT-6 only exercises read_meta via doctrine show)."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "Design: cohesion — parse_entity_toml placed in dtoml.rs, the module documented as 'THE single shared doctrine.toml reader', not an entity-TOML home"
+detail = "dtoml.rs's own header: 'dtoml — THE single shared doctrine.toml reader'. parse_entity_toml parses per-ENTITY tomls (slice/adr/...), a different concern; meta.rs already owns read_meta/read_id and the toml::from_str calls being replaced, making it the cohesion-correct home. Defensible either way (dtoml hosts the pure parse leaf precedent), hence nit — but meta.rs reads cleaner."
+disposition = "tolerated"
+response = "Tolerated (nit). parse_entity_toml placement in dtoml.rs is defensible: dtoml.rs already hosts a pure parse leaf (the doctrine.toml reader), so co-locating a second pure, IO-free TOML-parse leaf is consistent. meta.rs is arguably more cohesive (it owns read_meta/read_id and the toml::from_str calls being replaced) — left to the author at plan/execute. No correctness or layering impact either way; both are pure leaves, ADR-001-clean."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Scope: slice-151.md VT references validate_sections — a function the design never defines (D2 uses scan_kind + toml::Value, no such symbol)"
+detail = "slice-151.md Verification line 'Unit tests for validate_sections with well-formed/non-contiguous/string-body/empty TOML' names validate_sections. The design (D2, API) introduces NO validate_sections — the proactive check is scan_kind doing toml::from_str::<toml::Value>. Stale scope symbol; rename to scan_kind so the VT basis matches the design's actual surface."
+disposition = "fix-now"
+response = "Corrected. slice-151.md VT no longer names validate_sections (a symbol the design never defines); rewritten as 'scan_kind's toml::Value parse', matching D2's actual surface."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
