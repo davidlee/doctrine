@@ -1,7 +1,7 @@
 id = 151
 slug = "toml-section-contiguity-validation"
 title = "Non-contiguous TOML sections cause opaque parse failures"
-status = "design"
+status = "ready"
 created = "2026-06-24"
 updated = "2026-06-24"
 tags = ["area:cli", "area:governance", "correctness", "quality"]
