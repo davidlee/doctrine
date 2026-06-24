@@ -1,0 +1,52 @@
+id    = 154
+slug  = "reconciliation-review-of-sl-150"
+title = "reconciliation review of SL-150"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-150"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "D9 injection conformance: boot receives command_map fn-pointer, never imports cli"
+detail = "Expected (design §5.2/§7 D9): render_boot_map injected as command_map: fn()->String threaded boot::dispatch→build_sections→produce; boot must never name cli; cli boot arm supplies the renderer. Observed: boot.rs threads command_map through dispatch(2096)/produce(230)/build_sections(336)/run*/boot_check; SourceKind::CommandMap=>command_map() (236); boot.rs has ZERO cli imports (only D9 comments); cli.rs:1076 boot::dispatch(...,render_boot_map). As-built matches D9 exactly."
+disposition = "aligned"
+response = "Observation confirmed against the cand-150-review-001 review surface; as-built conforms, no change required."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Layering tangle gate holds at 123 — D9 guard against boot->cli back-edge"
+detail = "Expected (design §9, ADR-001): direct boot->cli call would close a boot<->cli SCC cycle and ratchet Command tangle_baseline 123->144; injection keeps it 123, the gate is the guard. Observed: .doctrine/adr/001/layering.toml [tangle_baseline] command=123; tests/architecture_layering.rs architecture_layering_gate GREEN. No regression."
+disposition = "aligned"
+response = "Observation confirmed against the cand-150-review-001 review surface; as-built conforms, no change required."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Single-renderer (D3): one render_boot_map behind both --boot-map and CommandMap; precedence over --commands"
+detail = "Expected (D3): one render_boot_map() in cli.rs serves both the --boot-map flag and the boot CommandMap section; --boot-map wins over --commands. Observed: cli.rs:748 single def; main.rs:194 '--boot-map wins over --commands' calls render_boot_map(); boot CommandMap routes to injected same fn. e2e_boot_map_golden boot_map_takes_precedence_over_commands GREEN (8/8); help_families 6/6 GREEN."
+disposition = "aligned"
+response = "Observation confirmed against the cand-150-review-001 review surface; as-built conforms, no change required."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Full verification green; lone suite failure is env-var contamination, not slice"
+detail = "Observed: full suite 2466 pass / 1 fail; the fail is reserve::tests::vt3_auto_degradation_is_fail_closed_with_explicit_optin, caused by my DOCTRINE_RESERVATION_FALLBACK=1 env (the test asserts fail-closed WITHOUT opt-in). reserve.rs is NOT in the SL-150 diff; reserve module 18/18 GREEN with env unset. clippy --workspace zero-warn. fmt --check: 7 pre-existing CHR-025 diffs (boot.rs:2879, main.rs:795, memory.rs x5) all OUTSIDE slice hunks. Audited the cand-150-review-001 review surface (web/map/dist symlinked in to satisfy unrelated RustEmbed root)."
+disposition = "aligned"
+response = "Observation confirmed against the cand-150-review-001 review surface; as-built conforms, no change required."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
