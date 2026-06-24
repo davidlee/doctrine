@@ -1558,7 +1558,7 @@ fn install_codex_hook(
 fn plan_append_system(root: &Path) -> SymlinkAction {
     let pi_dir = root.join(".pi");
     let link_path = pi_dir.join("APPEND_SYSTEM.md");
-    let target = "../../.doctrine/state/boot.md";
+    let target = "../.doctrine/state/boot.md";
 
     if !pi_dir.exists() {
         return SymlinkAction::CreateDirAndLink;
@@ -1582,7 +1582,7 @@ fn install_append_system(root: &Path, dry_run: bool) -> anyhow::Result<AppendSys
     let action = plan_append_system(root);
     let pi_dir = root.join(".pi");
     let link_path = pi_dir.join("APPEND_SYSTEM.md");
-    let target = "../../.doctrine/state/boot.md";
+    let target = "../.doctrine/state/boot.md";
 
     let outcome = match action {
         SymlinkAction::CreateDirAndLink => {
@@ -4245,7 +4245,7 @@ world";
         let root = dir.path();
         let pi_dir = root.join(".pi");
         fs::create_dir(&pi_dir).unwrap();
-        let target = "../../.doctrine/state/boot.md";
+        let target = "../.doctrine/state/boot.md";
         unix_fs::symlink(target, pi_dir.join("APPEND_SYSTEM.md")).unwrap();
         assert!(matches!(plan_append_system(root), SymlinkAction::NoOp));
     }
@@ -4297,7 +4297,7 @@ world";
         );
         assert_eq!(
             fs::read_link(&link).unwrap(),
-            Path::new("../../.doctrine/state/boot.md")
+            Path::new("../.doctrine/state/boot.md")
         );
     }
 
