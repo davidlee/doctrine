@@ -1,0 +1,362 @@
+id    = 150
+slug  = "sl-143-design-plan-critical-review"
+title = "SL-143 design & plan: critical review"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-143"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Self-correction deferred to IMP-163 without any hard sequencing gate in plan.toml"
+detail = """
+The slice scope's objective 3 ("Install self-correction") was the original motivation. D3 defers it entirely to SL-147 via IMP-163. But neither slice-143.toml's `needs` nor `after` reflects this dependency, and IMP-163 is a backlog item (not a slice). There is no mechanism ensuring the self-correction gate ever gets wired — it's a promise with no enforcement. If IMP-163 languishes or SL-147 changes shape, SL-143's objective 3 is silently abandoned.
+
+The plan.md acknowledges the deferral but the plan.toml phases have no `after` relationship or verification step that checks IMP-163 status. Phase sheets also omit any tracking.
+
+Suggestion: Either (a) make SL-143 depend on SL-147 via `after` or `needs` and include a PHASE-06 that actually wires the gate, or (b) remove objective 3 from scope entirely and move it to a follow-up slice with explicit dependency tracking."""
+disposition = "fix-now"
+response = "IMP-163 now tracked in slice-143.toml via tracked_by relation. Objective 3 removed from scope; self-correction deferred with explicit tracking."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Dependency declaration (after=SL-144) mismatches actual dependencies (SL-147, IMP-163)"
+detail = """
+SL-143's `after` relationship points to SL-144 with rank 1. But SL-144 is at `status = "design"` with no phases, no plan committed. The plan.md acknowledges this ("SL-144 is at design stage, no plan, no phases") but then D3 defers to SL-147, not SL-144. The `after` relationship is now stale — the design no longer depends on SL-144 for anything substantive.
+
+Meanwhile, the actual dependency (SL-147 for the domain-map mechanism) is not tracked in `needs` or `after`. This misalignment means:
+- The dependency graph is wrong for dispatch/sequencing purposes
+- An agent reading the metadata would sequence against the wrong slice
+- If SL-144's shape changes significantly, SL-143 carries a relationship that doesn't reflect its actual dependencies
+
+Suggestion: Update slice-143.toml: remove or update the SL-144 `after` relationship; add SL-147 as `after` (or `needs` if the self-correction gate is Phase 06)."""
+disposition = "fix-now"
+response = "slice-143.toml updated: after=SL-147, added tracked_by=IMP-163. SL-144 kept as related but no longer the sequencing dependency."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Corpus arithmetic is correct but promotion mechanics and UUID-duplicate cleanup are unspecified"
+detail = """
+D4 says "+4, -1 = 32 memories" but D4 only enumerates:
+
+New: `rec`, `rfc`, `concept-map` (3 signposts)
+Promoted: `work-intake-membership` (1 promoted from local to shipped)
+Deleted: `cli-command-map` (1)
+
+That's 29 + 3 - 1 + 1 = 32. The arithmetic checks. BUT — the design says "32 shipped memories" while the preflight audit found 58 directories under `memory/` (29 human-readable + 29 UUID duplicates from the sync cycle). The design doesn't address whether the UUID-duplicate directories need cleanup. During PHASE-05 (re-embed & sync), the sync cycle will generate new UUID directories for modified memories — potentially leaving stale UUID duplicates that were pointing to old content.
+
+Additionally, the promotion of `work-intake-membership` from a local memory (`repo` is non-empty) to shipped (`repo=""`) changes the entity's identity — it's not just a copy. The plan doesn't specify whether to (a) edit the local memory's TOML in place to `repo=""` and move the directory, or (b) create a new shipped memory and delete/retire the local one. Option (a) risks violating the entity engine's consistency if the memory has an existing `verified_sha` or git anchor.
+
+Suggestion: Document the promotion mechanics for `work-intake-membership`; add a PHASE-03 sub-task to clean up stale UUID-duplicate directories after sync; verify post-sync that `memory/` contains exactly 32 human-readable directories, not stale UUIDs."""
+disposition = "fix-now"
+response = "D9 added: promotion uses move-and-rewrite pattern (new shipped memory, retire local original). PHASE-05 adds UUID-duplicate cleanup verification."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "PHASE-02 (overview) precedes PHASE-03 (content) but overview table must cover new signposts created in PHASE-03"
+detail = """
+PHASE-02 rewrites the overview as the "PULL hub" with a when-to-retrieve-what table. PHASE-04 verifies all memories reachable within ≤3 hops from the overview. But between PHASE-02 and PHASE-04, PHASE-03 creates new signposts (rec, rfc, concept-map), promotes a memory, and deletes cli-command-map. The overview written in PHASE-02 will NOT include rows for the new signposts or account for the deleted memory — because they don't exist yet.
+
+This means:
+- PHASE-03 content creators can't add inbound wikilinks to an overview that references their new memories
+- The when-to-retrieve-what table in the overview will be incomplete after PHASE-03
+- PHASE-04 will discover the overview is missing rows for rec/rfc/concept-map and will need to update the overview body — but PHASE-04's remit is "verification-heavy... No content changes to memory bodies (barring minor wikilink fixes)"
+
+Suggestion: Either (a) swap PHASE-02 and PHASE-03 so the overview is written last against the complete corpus, or (b) add an explicit overview-update step in PHASE-04 to fill in the when-to-retrieve-what table for new memories."""
+disposition = "fix-now"
+response = "Resolved by F-14 re-sequencing: PHASE-02 (content) now runs before PHASE-03 (overview). Overview written against complete corpus."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "D5 (no CLI verb enumeration) is enforced for new content but not systematically applied to surviving memories"
+detail = """
+D5 says "No shipped memory enumerates verbs, subcommands, or flags" and VT-09 checks "No shipped memory references `claude` as a CLI verb." PHASE-02 EX-5 says "No CLI verb enumeration in body — points to doctrine --help."
+
+But the plan has a gap: it doesn't check whether existing shipped memories ALREADY enumerate verbs. The preflight found that `mem.signpost.doctrine.cli-command-map` has a full verb table, `mem.signpost.doctrine.reading-entities` lists 6 CLI show commands, and other memories (skill-map, lifecycle-start, review) enumerate skill routes and verbs inline. These are not just the deleted cli-command-map memory — they're scattered across the corpus.
+
+PHASE-01's audit covers currency but PHASE-03's content update doesn't have an explicit exit criterion to remove CLI verb enumerations from surviving memories. If memories like `reading-entities` keep their inline verb lists, the D5 policy is only partially enforced.
+
+Suggestion: Add an explicit exit criterion to PHASE-03: "No surviving shipped memory body enumerates CLI verbs, subcommands, or flags — all point to doctrine --help per D5." Or alternatively, document which memories are exempt from D5 (e.g., skill-map's /route, /design, /execute sequence may be legitimate concept descriptions, not verb enumeration)."""
+disposition = "fix-now"
+response = "D5 enforcement now systematic: PHASE-01 adds D5 audit flagging every memory with inline verb enumeration; PHASE-02 EX-02-13 mandates cleanup; VT-11 added to design verification table."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "POL-002 audit scope is described in prose but not operationalised in EN/EX criteria with a concrete signature checklist"
+detail = """
+POL-002 states: "A platform mechanism must not depend on a host's commit-message style, branch names, directory layout, tagging habits, or any other local convention."
+
+D7 flags one POL-002 candidate: `mem.pattern.doctrine.conventions` references `(SL-NNN)` commit scoping. The preflight confirms this.
+
+But the preflight inventory also surfaces other potential POL-002 violations that the design doesn't explicitly address:
+- `mem.pattern.doctrine.tdd-loop` references `/execute` which is a skill route, but it also says "red, green, REFACTOR" and "TDD" — these are general concepts, fine
+- `mem.pattern.doctrine.core-loop` references the lifecycle (`/route → /slice → /design → ...`) — these are doctrine-owned paths, fine
+- `mem.signpost.doctrine.file-map` references `doc/*` paths — these are the product's own source layout, not host-convention
+- `mem.signpost.doctrine.install` references the install directory structure — product-owned
+
+The main violation is confirmed as the conventions memory's `(SL-NNN)` commit scoping. But the design's POL-002 audit scope says "PHASE-01 audit checks every memory for: commit-message style conventions (e.g. `fix(SL-NNN):`), project-local branch names (`edge/main`), build commands (`just gate`, `just check`), jail/bwrap specifics, or any other host-local convention." 
+
+It would be useful to also check for things like: references to the `.doctrine/state/` path (runtime-state paths are product-owned, but the conventions memory saying "commit on main" might be host-local if it refers to the edge/main split, or product-owned if it refers to main as default trunk). The current scope is good but should explicitly enumerate what's checked vs what's assumed safe.
+
+Suggestion: Add to PHASE-01 EN criteria or EX criteria a clear checklist of POL-002 violation signatures to scan for: `(SL-NNN)`, `edge/main`, `just gate`, `just check`, `jail`, `bwrap`, `CARGO_TARGET_DIR`, `~/.cargo/doctrine-target-jail`. The current design names these in prose but not in exit criteria."""
+disposition = "fix-now"
+response = "POL-002 audit now operationalised with concrete signature checklist in PHASE-01 description and EX-01-4: (SL-NNN), edge/main, just gate, just check, jail, bwrap, CARGO_TARGET_DIR, fix(SL-/doc(SL-/plan(SL-."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Conventions memory remediation: what replaces the (SL-NNN) commit-scoping section?"
+detail = """
+D7 says POL-002 applies to shipped memories. But the conventions memory (`mem.pattern.doctrine.conventions`) is a *shipped* memory that currently contains host-local conventions. When PHASE-03 remediates the `(SL-NNN)` commit scoping, what replaces it?
+
+POL-002's rationale: "A mechanism that greps for `(SL-NNN)` commit scoping silently couples the product to one client." The conventions memory describes doctrine's conventions — reference forms, CLI-is-truth, no guessing. The `(SL-NNN)` reference is an *example* of a convention (conventional commits), not doctrine's own contract.
+
+The design doesn't specify whether the fix is to:
+- (a) Remove the conventional-commits section entirely (the doctrine product doesn't enforce commit-message style)
+- (b) Replace `(SL-NNN)` with a generic `(SCOPE): ...` placeholder
+- (c) Keep conventional commits as a general recommendation but use doctrine-owned scoping
+
+Option (a) aligns with POL-002 — doctrine doesn't mandate commit style. Option (b) is a grey area. Option (c) is POL-002 compliant if the scoping is doctrine-owned (e.g., `fix(slice): ...` is a doctrine convention, not host-local).
+
+Suggestion: The design should decide whether conventional commits are a doctrine convention (product-owned) or a host convention (POL-002 violation). If doctrine endorses conventional commits as practice, state the generic form without host-local scoping. If not, remove the section."""
+disposition = "fix-now"
+response = "Design now specifies: conventional commits are a doctrine-endorsed practice; replace (SL-NNN) with generic (scope): … examples. PHASE-02 EX-02-10 captures this."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "ADR-005 reachability for concept/fact/pattern memories lacks pre-assigned skill-to-memory mapping"
+detail = """
+ADR-005 states: "Skills — thin task routers. Each states when and what to do for this stage, and references tiers 1-2 for the shared how." And: "A pull-reference doc must be pointed-at (by a skill or boot)."
+
+D6 says "Not every leaf needs an explicit backlink — the reachability property ensures navigability without forced bi-directional links." And for concept/fact/pattern: "concept/fact/pattern memories gain skill pointers in PHASE-04 where their content directly informs the skill's operation."
+
+But ADR-005's requirement is that *every pull-reference artifact* (which concept/fact/pattern memories are — they're shipped, PULL-tier) must be pointed-at by a skill or boot. The boot digest currently lists only signposts, not concept/fact/pattern memories (verified in boot.md). So currently the 10 concept/fact/pattern memories are NOT pointed-at by skills AND NOT in the boot digest — they're only discoverable via wikilink breadcrumbs. This is an ADR-005 violation.
+
+PHASE-04 EX-4 says "Every concept/fact/pattern memory pointed-at by ≥1 skill or the boot digest (ADR-005)." This is correct but underspecified — which skills point at which concepts? The boot digest currently only lists signposts; expanding it to also list concept/fact/pattern memories would bloat the PUSH tier (ADR-005 warns against boot bloat).
+
+Suggestion: In the design, pre-assign which skill(s) will reference each concept/fact/pattern memory. The assignable set:
+- `mem.concept.doctrine.boot-snapshot` → boot (already referenced implicitly), or /canon skill
+- `mem.concept.doctrine.entity-engine` → /spec-tech skill
+- `mem.concept.doctrine.memory-model` → /retrieve-memory or /record-memory skill
+- `mem.concept.doctrine.reading-entities` → /inspect or general
+- `mem.concept.doctrine.routing-gate` → /route skill
+- `mem.concept.doctrine.storage-model` → multiple skills (already heavily linked)
+- `mem.fact.doctrine.cli-source-of-truth` → /canon or /retrieve-memory
+- `mem.fact.doctrine.storage-tiers` → /canon
+- `mem.pattern.doctrine.conventions` → /canon or /inquisition
+- `mem.pattern.doctrine.core-loop` → /route
+- `mem.pattern.doctrine.tdd-loop` → /execute
+
+The promoted `work-intake-membership` → /backlog skill.
+
+Without this pre-assignment, PHASE-04 will discover 12 memories that need pointers and may add ad-hoc references that don't match the skill's actual information need."""
+disposition = "fix-now"
+response = "D11 added with pre-assigned skill-to-memory mapping table. PHASE-04 EX-04-4 enforces it. 12 memories assigned to specific skills or boot digest."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Corpus count inconsistency: scope says 30, preflight found 29, design says 29"
+detail = """
+The slice scope says "30 shipped memories." The preflight found 29. The design says "29 shipped memories" and proposes 32 target. Scope section says "Review and revision of all 30 shipped memory bodies." Design D4 says "29 shipped memories (6 concept, 2 fact, 3 pattern, 18 signpost)." The plan.md says "29 current."
+
+The "30" in the scope is either a typo or refers to a memory that was decommissioned. The preflight's unresolved question Q1/ambiguity #1 flagged this ("'30 shipped memories' vs 29 found"). The design resolved it by saying 29, but the scope section still says 30 in two places: "Review and revision of all 30 shipped memory bodies" and "All 30 shipped memories reviewed and updated for currency."
+
+This inconsistency means a PHASE-01 auditor doesn't know whether to look for the 30th memory or accept 29. The verification says "exactly 32 entries" (post-PHASE-03) and "all 29 current shipped memories" (PHASE-01 VA-1) — the numbers disagree.
+
+Suggestion: Audit the scope text for consistency. Either find the 30th memory and include it, or correct all references from 30 to 29 (and from 30 to 32 post-expansion)."""
+disposition = "fix-now"
+response = 'All references corrected from "30" to "29". Scope, objectives, verification section now consistently say 29 → 32 (post-expansion).'
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Build/tooling assumptions incomplete for jail environment"
+detail = """
+The slice touches no Rust source code, only MD/TOML files under `memory/` and `.agents/skills/`. It's explicitly "not a code heavy slice." The only build action is `touch src/corpus.rs && cargo build` for re-embed.
+
+But there are operational codebase-fit concerns:
+
+1. **`src/corpus.rs` touch target.** The design assumes `touch src/corpus.rs` is sufficient to trigger RustEmbed recompilation. This is correct per the known re-embed footgun pattern (`mem.pattern.embed.rustembed-recompile-and-symlinks`). But in the jail, `CARGO_TARGET_DIR` is redirected to `~/.cargo/doctrine-target-jail`. The `cargo build` must target the jail path, and the `doctrine memory sync` and `doctrine claude install` must use the rebuilt binary. The design doesn't mention the jail target dir redirect.
+
+2. **`doctrine memory sync` availability.** The plan relies on `doctrine memory sync` to materialise embedded memories. If this command is unavailable or broken (which was the case historically — the `show` fallthrough was broken), PHASE-05 will fail silently. The plan doesn't include a pre-check.
+
+3. **`memory/` source directory is a symlink?** The preflight mentioned "mirrored at memory/ via symlinks". If `memory/` is a symlink to `.doctrine/memory/shipped/`, editing files there edits the shipped corpus directly. The design should verify the directory structure before editing.
+
+4. **No test phase.** The plan has no test phase. While this is primarily content editing, PHASE-05's gate (`just gate`) only checks lint/compile. There's no verification that `doctrine memory find --glob 'shipped/*'` returns correct results or that `doctrine memory show mem.signpost.doctrine.overview` returns the rewritten body. VT-01 and VA-2 in PHASE-05 cover this at the plan level, but they're manual verification — not automated. This is acceptable for a content slice but should be explicit.
+
+Suggestion: Add a pre-condition check in PHASE-05 EN to verify the binary path, `memory sync` availability, and source directory structure. Document the jail target-dir redirect."""
+disposition = "fix-now"
+response = "PHASE-05 now includes pre-checks: memory/ directory structure, memory sync availability, jail CARGO_TARGET_DIR redirect documented. Risks section updated."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "No agent delegation strategy — several phases are strong candidates for scout/researcher"
+detail = """
+The user asked: "is it making (or explicit about) appropriate use of eg scout + researcher agents?"
+
+The plan has 5 phases, all marked as serial with no parallelisation. The design says PHASE-02 and PHASE-03 "could run in parallel if desired" but this is noted as a possibility, not planned. No phase includes `scout` or `researcher` agent delegation.
+
+Operationally, several phases are strong candidates for agent delegation:
+
+- **PHASE-01 (Audit)** is pure research — reading 29 memory bodies and comparing against CLI output. This is ideal for a scout or researcher sub-agent since it's read-only, parallelisable across memories, and produces structured output (a findings ledger). A single agent doing this serially will be slow and may miss patterns a parallel scout would catch.
+
+- **PHASE-03 (Content Update)** could use a librarian agent for verifying CLI surface accuracy — fetching `doctrine --help` output and comparing memory body claims.
+
+- **PHASE-04 (Reachability)** involves computing and validating a wikilink graph — a researcher agent could compute the ≤3-hop property independently.
+
+The plan doesn't need to mandate agent use, but it should at minimum note where agent delegation would accelerate or improve quality. The design makes no mention of agent patterns at all.
+
+Suggestion: Add an "Agent Strategy" section to plan.md noting which phases benefit from scout/researcher delegation and whether the orchestrator should fan out per-memory or per-phase."""
+disposition = "fix-now"
+response = "D10 added: agent delegation candidates documented. Plan.md now has Agent Strategy section with per-phase agent type recommendations. No phase mandates sub-agent use."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "major"
+title = "Overview 60-line constraint conflicts with comprehensive when-to-retrieve-what table covering 31 memories"
+detail = """
+D1 positions the overview as "the single PULL hub" — one retrieval after boot orients the agent. The when-to-retrieve-what table is the core mechanism.
+
+But the overview's end-user utility depends on the quality of this table. The design gives a sample with 5 rows. A complete table needs ~31 rows (all shipped memories except overview). The risk section says "Overview bloat — must stay within ~60 lines." PHASE-02 EX-3 says "≤ ~60 lines."
+
+32 rows of a markdown table plus 4 other sections (pillars, mental model, conventions, links) cannot fit in 60 lines. Even a compact 2-column table:
+```
+| When you need to... | Retrieve... |
+|---|---|
+| ... | ... |
+```
+Each row is 1 line, so 31 rows = 31 lines of table body. Plus 2 header lines, 4 section headers (~4 lines), and substantive content for each section (~10-20 lines per section). That's easily 80+ lines.
+
+The 60-line constraint conflicts with the "all memories in one table" goal. Options:
+- (a) Relax the 60-line constraint to ~100 lines and accept the overview is a longer document
+- (b) Group the table into categories (e.g., "Getting Started", "Core Concepts", "Entity Reference") with sub-headers, which makes it longer
+- (c) Trim other sections aggressively to keep the table compact
+- (d) Drop the table from overview and point to a separate "retrieval index" signpost
+
+Suggestion: Decide whether to relax the line-count constraint or restructure the overview. The current design sets contradictory goals (comprehensive table + ≤60 lines)."""
+disposition = "fix-now"
+response = "Line budget relaxed from ~60 to ~100 lines. PHASE-03 EX-03-3 and Risks updated. Table (~33 lines) is the bulk; other sections budgeted with sub-targets."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "Verification IDs inconsistent between plan.md (VA/VT mix) and plan.toml (VA only); design VT table is separate"
+detail = """
+The plan.md has VA (verification) IDs in PHASE-01 and PHASE-02, but then switches to VT (verification test) IDs in PHASE-05. PHASE-03 and PHASE-04 use VA. The plan.toml uses VA uniformly.
+
+Additionally, PHASE-05 in plan.toml has both `VA` and `VT` verification entries interleaved (VA-1, VT-1, VA-2, VT-2, VA-3, VT-3). The schema doesn't distinguish between VA and VT — they share the same `[[phase.verification]]` table. This is cosmetic but suggests the plan authors used two different naming conventions inconsistently.
+
+The plan.md's VT-01 through VT-10 (the design's verification table) don't appear in plan.toml at all — the design's verification assertions are separate from the plan's phase-level verification. This means there's no single source of truth for what "done" means: the plan.toml phases have their own exit criteria, the plan.md adds phase verification, and the design.md has its own VT table. A reconciler would need to check all three.
+
+Suggestion: Consolidate verification in one place — plan.toml exit_criteria should be sufficient. The design's VT table is informational and should reference (not duplicate) the plan's verification. Or, add the design VT items as cross-phase verification entries in plan.toml."""
+disposition = "fix-now"
+response = "All verification IDs unified to VA-NN-N format across plan.toml. Design VT table now has VT-11 through VT-14 added, cross-referenced in PHASE-05 EX criteria."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "blocker"
+title = "PHASE-02 writes overview before PHASE-01/03 determine the final corpus shape — overview will be stale on arrival"
+detail = """
+The plan.md dependency graph shows:
+```
+PHASE-01 (audit) ─────────────────────┐
+                                      ├── PHASE-03 (content) ──┐
+PHASE-02 (overview) ──────────────────┘                        ├── PHASE-04 (reachability) ── PHASE-05 (gate)
+```
+
+But PHASE-02's EN criteria say it depends on "Preflight findings available (overview depends on preflight, not PHASE-01 ledger)." This is stated defensively in the text. However, the overview's when-to-retrieve-what table must reference ALL shipped memory keys. Without PHASE-01's audit, the overview author doesn't know:
+- Which memories will survive (cli-command-map is being deleted in PHASE-03)
+- Which new signposts will exist (rec, rfc, concept-map)
+- Which memory will be promoted (work-intake-membership)
+- Which existing memories are stale and may need key changes
+
+Writing the overview against preflight research means the when-to-retrieve-what table will reference the cli-command-map key (which will be deleted), won't reference the new signposts (which don't exist yet), and won't include the promoted memory. It will be stale on arrival.
+
+The defensible dependency is: PHASE-02 depends on PHASE-01 (to know what the corpus looks like) AND should be sequenced AFTER PHASE-03 (to reflect the final corpus shape). The claim that PHASE-02 "depends on preflight, not PHASE-01" is wrong — the preflight is stale the moment a design decision is made.
+
+Suggestion: Either (a) re-sequence as PHASE-01 → PHASE-03 → PHASE-02 → PHASE-04 → PHASE-05, or (b) accept that PHASE-02 will need a follow-up edit in PHASE-04 to add new rows and remove deleted ones, and document this explicitly in PHASE-04's EN/EX criteria."""
+disposition = "fix-now"
+response = "Phases re-sequenced: PHASE-01 (audit) → PHASE-02 (content) → PHASE-03 (overview) → PHASE-04 (reachability) → PHASE-05 (gate). Overview now written against complete post-PHASE-02 corpus. D2 updated, plan.md dependency graph updated, plan.toml re-ordered."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "minor"
+title = "New signpost scope (3 gaps filled) leaves 9 entity kind gaps and 21 CLI verb gaps unfilled with no follow-up tracking"
+detail = """
+The design creates new signposts for REC, RFC, and CM but the preflight also identified gaps for:
+- Knowledge record kinds (ASM, DEC, QUE, CON) — 4 entity kinds with zero coverage
+- Backlog item kinds (CHR, IMP, ISS, RSK, IDE) — 5 entity kinds with zero coverage
+
+D4 limits scope to the 3 most visible gaps. The scope section says "This slice does not add new memory types, new entity kinds, or new CLI commands — it updates what exists." But D4 explicitly adds 3 new signposts and promotes 1 memory (a net +3). This contradicts the scope statement.
+
+Additionally, 21 of 43 CLI verbs are never mentioned in any shipped memory. The design's D5 says CLI enumeration stays in the binary — but that's about verb enumeration, not about concept coverage. An agent encountering `doctrine catalog` or `doctrine export` has zero shipped memory context for what these verbs DO or when to use them. The overview's when-to-retrieve-what table can't cover them because no memory exists for them.
+
+The gap is partly addressed by the fact that signposts are reference-tier (they point the agent at `--help`), but there's a tension: the shipped corpus is supposed to orient agents, yet 21/43 verbs have zero concept-level coverage. An agent sees `doctrine explain` in --help but no memory tells them *why* they'd use it.
+
+Suggestion: Either (a) explicitly document that the shipped corpus covers workflow verbs only, not the full surface, and CLI `--help` is the authority; or (b) file backlog items for knowledge-record and backlog-kind signposts as follow-up slices."""
+disposition = "fix-now"
+response = "Follow-Ups section now explicitly lists deferred entity kind gaps (knowledge-record kinds, backlog-item kinds) and states this slice fills the 3 most critical gaps."
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "nit"
+title = "TOML `[[...]]` false-positive wikilink check limited to two known cases — should be corpus-wide"
+detail = """
+The preflight identified that `[[relation]]` appears as a wikilink in `cli-command-map` and `relating-entities` — these are TOML-table syntax references, not entity links. If the memory engine resolves them as entity references, they are broken wikilinks. The design addresses this in:
+- D4: cli-command-map is being deleted (resolves that instance)
+- PHASE-04 EX-6: "[[relation]] TOML-table references in relating-entities normalised to backtick formatting"
+- VT-10: "[[relation]] in relating-entities uses backtick formatting, not wikilink syntax"
+
+This is correct for `relating-entities`. But the preflight also found that other memories may have similar TOML-table false-positives (like `[[mem.…]]` in `recording-memories`). The design doesn't extend the check beyond the two known cases.
+
+Suggestion: Add to PHASE-01 audit: check all shipped memory bodies for any `[[...]]` pattern that could be interpreted as a wikilink but references TOML syntax, code patterns, or non-entity artifacts. Flag them all, not just the two known ones."""
+disposition = "fix-now"
+response = "PHASE-01 now includes corpus-wide TOML [[...]] false-positive check as a distinct audit dimension. EX-01-5 requires it."
+
+[[finding]]
+id = "F-17"
+status = "verified"
+severity = "major"
+title = "Scope document lists self-correction (objective 3) but design and plan defer it — scope/design/plan mismatch"
+detail = """
+The scope document (slice-143.md) lists 4 objectives. Objective 3 ("Install self-correction") is now deferred to SL-147 via D3/IMP-163 with no phase executing it. The design still lists objective 3 in the scope section but D3 defers it. The plan has no phase for it.
+
+Additionally, the scope doc's "Open Questions" section asks about self-correction mechanism shape, manifest format, and phase ordering — all three are now resolved by deferral, but the open questions are still present in the scope document, creating confusion about what's decided vs open.
+
+Suggestion: Update scope document to either (a) strike objective 3 and move it to a follow-up (IMP-163), or (b) if objective 3 remains in scope, it needs a phase. Also update the open questions section to reflect resolved decisions (Q1 deferred to IMP-163, Q2 deferred, Q3 answered by D2)."""
+disposition = "fix-now"
+response = "Objective 3 (self-correction) removed from scope. Scope now has 3 objectives. Open Questions section replaced with resolution summary. Follow-Ups now reference IMP-163."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
