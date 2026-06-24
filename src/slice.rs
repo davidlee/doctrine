@@ -519,12 +519,12 @@ pub(crate) fn run_new(
     slug: Option<String>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let title = crate::input::resolve_title(title)?;
-    let slug = crate::input::resolve_slug(&title, slug)?;
-    let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, SLICE_KIND.dir)?;
     let (backend, mut reserved) =
         crate::reserve::backend(&root, SLICE_KIND.prefix, crate::install::prompt_confirm)?;
+    let title = crate::input::resolve_title(title)?;
+    let slug = crate::input::resolve_slug(&title, slug)?;
+    let date = crate::clock::today();
     let out = entity::materialise(
         &SLICE_KIND,
         &*backend,

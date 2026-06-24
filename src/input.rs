@@ -26,11 +26,9 @@ pub(crate) fn resolve_title(title: Option<String>) -> anyhow::Result<String> {
         }
         return Ok(t);
     }
-    {
-        let mut stdout = io::stdout();
-        write!(stdout, "Title: ")?;
-        stdout.flush()?;
-    }
+    let mut stdout = io::stdout();
+    write!(stdout, "Title: ")?;
+    stdout.flush()?;
     let mut line = String::new();
     io::stdin().read_line(&mut line)?;
     let entered = line.trim().to_string();
