@@ -1,0 +1,55 @@
+memory_uid = "mem_019ef99bfeee71d385d5d0348e1ec580"
+memory_key = "mem.pattern.dispatch.claude-arm-isolation-fallback"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Claude-arm dispatch worker stamps a worker marker on the coord tree"
+summary = "The /dispatch-agent worker stamps a worker marker into the coord tree (bricks authored writes) and commits onto the coord branch (expected, no isolated fork). Cure: marker --clear --operator; verify the landed commit; beat the stale-bin footgun."
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = []
+globs = [".claude/skills/dispatch*/**"]
+commands = ["doctrine"]
+tags = ["dispatch"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "6e6388b37a40ea6446f082baee26d649a2e0a8ba"
+tree = "e5a8da4a2e3d0888aef14a4f741bd29ba3c9da78"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "6e6388b37a40ea6446f082baee26d649a2e0a8ba"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019ec4a71f0f7592bc07d9f5dad8efdb"
+
+[[relation]]
+label = "related"
+target = "mem_019ec65ecbc77282bad7e10a5240ad27"
+
+[[relation]]
+label = "related"
+target = "mem_019ebfb61ba870219aafc14f8dc7da3b"
+
