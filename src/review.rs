@@ -2549,6 +2549,7 @@ pub(crate) struct PrimeArgs {
     pub(crate) reference: String,
     /// `--seed`: emit git-changed candidate paths (a starting point, NOT
     /// authority — it writes nothing) and exit, instead of priming.
+    #[serde(default)]
     pub(crate) seed: bool,
     /// `--from <file>`: read the curated `domain_map` from a file rather than stdin.
     pub(crate) from: Option<PathBuf>,

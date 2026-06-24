@@ -475,7 +475,7 @@ fn import_refused_under_worker_mode() {
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("import"),
+        stderr(&out).contains("`import`"),
         "refusal names the verb; stderr: {}",
         stderr(&out)
     );
