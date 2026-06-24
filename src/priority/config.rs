@@ -116,11 +116,47 @@ pub(crate) fn read_priority_table(root: &Path) -> Option<toml::Table> {
 }
 
 pub(crate) fn load_from_table(table: &toml::value::Table) -> PriorityConfig {
-    let value = toml::Value::Table(table.clone());
-    match value.try_into::<PriorityConfig>() {
-        Ok(c) => clamp(c),
-        Err(_) => PriorityConfig::default(),
+    let mut cfg = PriorityConfig::default();
+
+    if let Some(t) = table.get("coefficients").and_then(|v| v.as_table()) {
+        cfg.coefficients.value = f64_or(t, "value", 1.0);
+        cfg.coefficients.risk = f64_or(t, "risk", 2.0);
     }
+    if let Some(t) = table.get("consequence").and_then(|v| v.as_table()) {
+        cfg.consequence.dep_coeff = f64_or(t, "dep_coeff", 0.5);
+        cfg.consequence.ref_coeff = f64_or(t, "ref_coeff", 1.0);
+    }
+    if let Some(t) = table.get("kind_weights").and_then(|v| v.as_table()) {
+        for (k, v) in t {
+            if let Some(f) = f64_val(v) {
+                cfg.kind_weights.insert(k.clone(), f);
+            }
+        }
+    }
+    if let Some(t) = table.get("tag_coefficients").and_then(|v| v.as_table()) {
+        for (k, v) in t {
+            if let Some(f) = f64_val(v) {
+                cfg.tag_coefficients.insert(k.clone(), f);
+            }
+        }
+    }
+
+    clamp(cfg)
+}
+
+/// Extract an f64 from a TOML value, accepting integers (TOML `3` → 3.0).
+/// Returns `None` for strings, booleans, arrays, and other non-numeric types.
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    reason = "i64→f64 safe for TOML config coefficients (never near i64::MAX)"
+)]
+fn f64_val(v: &toml::Value) -> Option<f64> {
+    v.as_float().or_else(|| v.as_integer().map(|i| i as f64))
+}
+
+fn f64_or(table: &toml::value::Table, key: &str, default: f64) -> f64 {
+    table.get(key).and_then(f64_val).unwrap_or(default)
 }
 
 // ── clamping ──────────────────────────────────────────────────────────────
@@ -305,13 +341,11 @@ mod tests {
 
     #[test]
     fn non_numeric_value_clamps_returns_defaults() {
-        // A string where a number was expected.
+        // A string where a number was expected — per-field isolation: only the
+        // offending field falls back to its default; the sibling field survives.
         let cfg = load_from("[priority]\ncoefficients = { value = \"abc\", risk = 4.0 }\n");
-        // The whole Coefficients deserialize fails → PriorityConfig deserialize fails
-        // (since coefficients is required for its struct, even though it has defaults
-        //  for fields). The `try_into` fails → we return default.
-        assert_eq!(cfg.coefficients.value, 1.0);
-        assert_eq!(cfg.coefficients.risk, 2.0);
+        assert_eq!(cfg.coefficients.value, 1.0); // wrong-type → field default
+        assert_eq!(cfg.coefficients.risk, 4.0); // preserved — per-field isolation
     }
 
     // ---- kind_weight / tag_coeff absent key returns 1.0 ----
