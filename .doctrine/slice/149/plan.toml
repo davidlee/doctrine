@@ -1,0 +1,202 @@
+# Implementation plan for SL-149 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-149"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ---------------------------------------------------------------------------
+# PHASE-01 — Ratifying ADR (the gate; no code before acceptance)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Ratifying ADR"
+objective = """
+Author and accept the ADR that ratifies RFC-003 Axis B: the structure/intent split
+(references + closed role dimension, target gate re-keyed (source,label,role)), the
+derivable-not-relational law, and graph-effect-in-consumer. Composes with ADR-010 and
+ADR-004 — does not supersede. No implementation code lands before this ADR is accepted.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (internal + external adversarial passes integrated); slice in plan status" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR authored via `doctrine adr new` with the three decisions + deciding principle + named/deferred boundaries (work-implements-ADR, non-entity target, Axis D, exclusive_with/planes)" },
+  { id = "EX-2", text = "ADR records the bears_on->concerns rename and the reviews-folds-into-concerns ruling (RFC vocabulary divergence explicit)" },
+  { id = "EX-3", text = "ADR linked: related ADR-010, ADR-004; SL-149 governed_by the new ADR; status accepted" },
+]
+verification = [
+  { id = "VH-1", expects = "User accepts the ADR content as the canon SL-149 implements" },
+  { id = "VA-1", expects = "`doctrine adr show <new>` renders accepted status, decisions, and the ADR-010/ADR-004 relations" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-02 — Vocabulary layer: Role enum, references rules, lookup, pure validation
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Role vocabulary + rule table"
+objective = """
+Introduce the closed Role enum {Implements, ScopedFrom, Concerns} and re-key the
+RELATION_RULES contract on (source, label, role). Replace specs/requirements rows with
+role-bearing references rows; remove the Specs/Requirements RelationLabel variants; add
+References. Re-key lookup and inbound_name; add legal_roles and the validate_link error
+taxonomy as pure functions. Leaf/engine only — no storage/IO, no surfaces.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 ADR accepted" },
+  { id = "EN-2", text = "Exact source sets enumerated from live census (AR-4): implements={SL}, scoped_from={SL}, concerns={SL,RFC,backlog kinds} confirmed against `relation list`" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Role enum (Ord, name()/from_str round-trip) + References label added; Specs/Requirements variants removed" },
+  { id = "EX-2", text = "RELATION_RULES carries role: Option<Role>; references rows per §2.4; related/governed_by/supersedes unchanged (role None)" },
+  { id = "EX-3", text = "lookup(source,label,role); legal_roles(source,label); inbound_name(label,role); validate_link(source,label,role) with MissingRole/IllegalRole/RoleNotApplicable" },
+  { id = "EX-4", text = "Table invariants enforced (F4): exactly one rule per (source,label,role); each (source,label) wholly roleful or wholly roleless" },
+]
+verification = [
+  { id = "VT-1", expects = "VT-1 enum-order lockstep passes for the new RelationLabel set (References in, Specs/Requirements out)" },
+  { id = "VT-2", expects = "VT-2 sources_match_shipped_accessors (relation.rs:1052) green against the role-bearing rows" },
+  { id = "VT-3", expects = "VT-3 inbound_name identical per (label,role)" },
+  { id = "VT-4", expects = "New invariant tests: one-rule-per-(source,label,role); roleful-XOR-roleless per (source,label); legal_roles reachability; (source,label,role)->TargetSpec gate goldens" },
+  { id = "VT-5", expects = "validate_link unit tests: MissingRole, IllegalRole, RoleNotApplicable, role-target mismatch refused" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-03 — Storage + IO: edge/row role, read/write, target gate, exact-coverage
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Storage + IO role threading"
+objective = """
+Thread role through the storage seam: RelationEdge and RelationRow carry role; the
+[[relation]] row gains an optional role key (serde skip when None); read_block parses it;
+append_edge/remove_edge match the (label,role,target) triple; check_target_kind reads the
+role-keyed TargetSpec; validate_relations does role-aware lookup and emits role-class
+IllegalRow findings. Light up the exact-coverage lockstep now that the reader emits roles.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 vocabulary layer green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RelationEdge{label,role,target} and RelationRow{label,role:Option,target}; TOML role key serialised only when Some" },
+  { id = "EX-2", text = "read_block parses role; append_edge/remove_edge idempotent on the full triple" },
+  { id = "EX-3", text = "check_target_kind role-keyed; validate_relations role-aware; hand-edited bad/missing-role references row -> IllegalRow" },
+]
+verification = [
+  { id = "VT-1", expects = "VT-4 exact-coverage (relation_graph.rs:1635) extended to per-(label,role): reader-emitted (label,role) set == table's, per source" },
+  { id = "VT-2", expects = "Storage round-trip: author references(implements) -> [[relation]] label/role/target -> read back; unlink matches the triple; label-only edge serialises with no role key" },
+  { id = "VT-3", expects = "validate flags a hand-edited missing-role / illegal-role references row as IllegalRow; no false positive on label-only rows" },
+  { id = "VT-4", expects = "Behaviour-preservation: machinery suites (read/write dispatch, outbound_for) green unchanged on label-only edges" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-04 — Surfaces: inbound payload, inspect/list/census, show schema, CLI --role
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Surfaces + CLI role"
+objective = """
+Carry role through every label-only surface (F1/F5 seam inventory). Role rides as edge
+payload through CatalogEdge -> InspectView; re-key InspectView.inbound by (label,role) and
+pass role to render_inbound + JSON; cordage overlay allocation stays label-keyed. Update
+relation list/census grouping, web graph edge label, and the per-kind show/show--json
+projections (named specs/requirements fields -> references-by-role object). Add link/unlink
+--role with validation wired to PHASE-02 error taxonomy.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 storage/IO green" },
+  { id = "EN-2", text = "Inbound wording settled (R4): implemented by / scoped into / concerned by — before surface goldens harden" },
+  { id = "EN-3", text = "show--json replacement shape decided: references object keyed by role" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CatalogEdge/CatalogEdgeLabel carry role; InspectView.inbound keyed (label,role); render_inbound + JSON inbound role-aware; overlay count unchanged (label-keyed)" },
+  { id = "EX-2", text = "inspect outbound renders references(<role>); relation list/census group by (label,role); web graph edge label shows role verb" },
+  { id = "EX-3", text = "slice/backlog/lazyspec show + show--json emit the references-by-role object; specs/requirements keys removed" },
+  { id = "EX-4", text = "link/unlink accept --role; --role rejected (RoleNotApplicable) on label-only labels; references without --role -> MissingRole" },
+]
+verification = [
+  { id = "VT-1", expects = "inspect golden: mixed references roles + a label-only edge; outbound and (label,role)-grouped inbound both correct" },
+  { id = "VT-2", expects = "relation list/census golden grouped by (label,role); web graph edge-label golden" },
+  { id = "VT-3", expects = "slice + backlog show--json schema goldens: references-by-role object present, specs/requirements keys gone" },
+  { id = "VT-4", expects = "CLI e2e: link references --role implements authors->validates->persists->reads back outbound + target inbound 'implemented by'; unlink round-trips; RoleNotApplicable + MissingRole paths" },
+  { id = "VA-1", expects = "Golden-churn audit: every changed golden is a deliberate vocabulary change, not a machinery regression (R2 machinery/content split documented)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-05 — Out-of-band corpus migration (full transform, single apply, role oracle)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "Corpus migration (hard cut)"
+objective = """
+Migrate the live corpus off specs/requirements/mismapped-related onto references+role, as a
+one-shot out-of-band deterministic pass (no shipped verb). Re-census live; apply the
+(source-kind,label,target-kind) map for unambiguous rows; hand-disposition the ambiguous
+residue (SL->SPEC implements-vs-concerns; non-peer related) into a committed artifact. Build
+the full rewrite in memory, apply as a single atomic swap, validate only after. Parser
+(PHASE-02..04) and rewritten corpus land in the SAME commit (no-dual-read).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 surfaces green; role-aware parser complete end to end" },
+  { id = "EN-2", text = "Live re-census taken at execution time; P1 artifact treated as stale reference only" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Disposition artifact committed: every ambiguous row (SL->SPEC; non-peer related) with chosen role + one-line rationale" },
+  { id = "EX-2", text = "Full corpus rewritten in one in-memory pass, applied as a single swap; no row-by-row link-verb writes" },
+  { id = "EX-3", text = "SL-149's own toml rewritten (specs SPEC-018 -> references(implements); related RFC-003 -> references(concerns))" },
+  { id = "EX-4", text = "No specs/requirements rows remain; post-migration related contains only true peers" },
+]
+verification = [
+  { id = "VT-1", expects = "Role-assignment oracle (F2): exact (source,target)->(label,role) asserted per deterministic row; each ambiguous edge matches its recorded disposition" },
+  { id = "VT-2", expects = "Edge-count + (source,target) multiset preserved (secondary sanity); zero edges added/dropped" },
+  { id = "VT-3", expects = "validate clean post-migration (no IllegalRow, no dangler regression); storage-level row-order post-check passes" },
+  { id = "VH-1", expects = "User confirms the ambiguous-row dispositions before the migration commit" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-06 — Docs + reconcile
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-06"
+name      = "Docs + reconcile"
+objective = """
+Rewrite the relation contract docs to describe references + the role dimension: SPEC-018
+(the (source,label,role) keying, validation policy, the references collapse) and the
+relation-vocabulary.md companion (the role grammar, related-stays-symmetric, reviews folded
+into concerns). Reconcile the slice for audit handoff.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 migration committed; corpus and code coherent" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SPEC-018 updated: (source,label,role) contract, write-strict role validation, dogfood migration recorded; points at code, no transcribed vocabulary (storage rule)" },
+  { id = "EX-2", text = "relation-vocabulary.md updated: references + role grammar; related symmetric-neutral; reviews->concerns; work->canon class rewritten" },
+  { id = "EX-3", text = "slice-149.md Summary written; carried-opens confirmed against the shipped state" },
+]
+verification = [
+  { id = "VA-1", expects = "Docs describe the shipped contract with no stale specs/requirements label references; storage rule honoured (no derived data in prose)" },
+  { id = "VT-1", expects = "`just gate` clean across the workspace; full suite green" },
+]
+specs        = []
+requirements = []
