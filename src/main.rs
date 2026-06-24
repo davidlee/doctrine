@@ -188,8 +188,12 @@ fn main() -> anyhow::Result<()> {
                 if !has_real_subcommand {
                     let color = crate::tty::stdout_color_enabled();
                     let term_width = crate::tty::stdout_terminal_width();
-                    let show_commands = args.iter().any(|a| a == "--commands");
-                    let help = if show_commands {
+                    // `--boot-map` wins over `--commands` when both are passed
+                    // (SL-150 §5.5 EDGE — documented precedence, not enforced
+                    // mutual exclusion).
+                    let help = if args.iter().any(|a| a == "--boot-map") {
+                        crate::commands::cli::render_boot_map()
+                    } else if args.iter().any(|a| a == "--commands") {
                         crate::commands::cli::render_commands_table(color, term_width)
                     } else {
                         crate::commands::cli::render_top_level_help(color, term_width)

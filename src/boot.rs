@@ -87,6 +87,12 @@ enum SourceKind {
     /// Memory pointers — its own variant: `memory::list_rows` takes a distinct
     /// signature (a `None` scope arg), not the `GovKind` spine.
     Memories,
+    /// The dense command-map projection (SL-150 §5.4). A marker variant — no
+    /// payload, so `SourceKind` stays a clean data enum (its derives, incl.
+    /// `Debug`, still hold). The renderer is INJECTED into `produce`/
+    /// `build_sections` (a `fn() -> String` param), never named here: `boot`
+    /// must not depend on `cli` (D9 — the layering edge stays `cli → boot`).
+    CommandMap,
     /// Optional `.doctrine/boot-footer.md` body, read from disk.
     Footer,
 }
@@ -101,6 +107,9 @@ fn boot_sequence() -> Vec<(&'static str, SourceKind)> {
             "Routing & Process",
             SourceKind::Static("routing-process.md"),
         ),
+        // The dense command-map projection — placed immediately after routing so
+        // the agent meets the command surface before governance (SL-150).
+        ("Commands", SourceKind::CommandMap),
         ("Governance (project)", SourceKind::Governance),
         (
             "Accepted ADRs",
@@ -209,12 +218,22 @@ fn push_collapsed_newline(out: &mut String, c: char, count: &mut u8) {
 // Impure shell: produce each body, write on change, run the verb
 // ---------------------------------------------------------------------------
 
-/// Produce one section's body. `ExecPath` carries the resolved exec path; every
-/// other kind renders the benign marker this phase. Never panics on a missing
-/// source — a miss is a marker, not a crash (the ordering-knot break, §5.5).
-fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Section {
+/// Produce one section's body. `ExecPath` carries the resolved exec path;
+/// `CommandMap` renders the INJECTED `command_map` (so `boot` never names `cli`,
+/// keeping the layering edge one-way — D9). Never panics on a missing source —
+/// a miss is a marker, not a crash (the ordering-knot break, §5.5).
+fn produce(
+    heading: &str,
+    kind: &SourceKind,
+    root: &Path,
+    exec: &Path,
+    command_map: fn() -> String,
+) -> Section {
     let body = match kind {
         SourceKind::ExecPath => exec.display().to_string(),
+        // The dense command map — rendered by the injected `command_map` (pure,
+        // infallible; ignores root/exec). `boot` never references `cli` (D9).
+        SourceKind::CommandMap => command_map(),
         // A numbered governance kind, filtered to its IN-FORCE status set: accepted
         // ADRs, required policies, default+required standards. The explicit
         // `status` set reveals these past the list hide-set (deprecated|retired|…) —
@@ -314,23 +333,23 @@ fn write_if_changed(path: &Path, content: &str) -> anyhow::Result<bool> {
 /// Produce every section's body in the declared order — the single render path
 /// shared by `regenerate` (which writes it) and `boot_check` (which diffs it).
 /// One source of the snapshot, never a second fork (Charge V).
-fn build_sections(root: &Path, exec: &Path) -> Vec<Section> {
+fn build_sections(root: &Path, exec: &Path, command_map: fn() -> String) -> Vec<Section> {
     boot_sequence()
         .iter()
-        .map(|(heading, kind)| produce(heading, kind, root, exec))
+        .map(|(heading, kind)| produce(heading, kind, root, exec, command_map))
         .collect()
 }
 
 /// Build every section and render the full snapshot string. Pure — same inputs
 /// yield byte-identical output every time (the deterministic guarantee VT-2).
-fn build_and_render(root: &Path, exec: &Path) -> String {
-    render_boot(&build_sections(root, exec))
+fn build_and_render(root: &Path, exec: &Path, command_map: fn() -> String) -> String {
+    render_boot(&build_sections(root, exec, command_map))
 }
 
 /// Regenerate `.doctrine/state/boot.md` under `root`, resolving section bodies
 /// against `exec`. Returns whether the file changed. Pure assembly, single write.
-fn regenerate(root: &Path, exec: &Path) -> anyhow::Result<bool> {
-    let content = build_and_render(root, exec);
+fn regenerate(root: &Path, exec: &Path, command_map: fn() -> String) -> anyhow::Result<bool> {
+    let content = build_and_render(root, exec, command_map);
     write_if_changed(&root.join(BOOT_REL), &content)
 }
 
@@ -365,8 +384,8 @@ impl CheckReport {
 /// the *current inlined prefix* stays stale until `/clear`/restart — so callers
 /// must NOT read a clean report as proof the live context is fresh. Absent /
 /// unreadable on-disk file ⇒ stale (the recompute differs from nothing).
-pub(crate) fn boot_check(root: &Path, exec: &Path) -> CheckReport {
-    let sections = build_sections(root, exec);
+pub(crate) fn boot_check(root: &Path, exec: &Path, command_map: fn() -> String) -> CheckReport {
+    let sections = build_sections(root, exec, command_map);
     let recomputed = render_boot(&sections);
     let on_disk = fs::read_to_string(root.join(BOOT_REL)).ok();
     CheckReport {
@@ -426,11 +445,11 @@ pub(crate) fn resolve_exec() -> anyhow::Result<PathBuf> {
 
 /// `doctrine boot [-p ROOT]` — resolve the root, resolve `current_exe()` in the
 /// shell (never in the pure layer), regenerate, and report wrote vs unchanged.
-pub(crate) fn run(path: Option<PathBuf>) -> anyhow::Result<()> {
+pub(crate) fn run(path: Option<PathBuf>, command_map: fn() -> String) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let exec = resolve_exec()?;
     let dest = root.join(BOOT_REL);
-    let verb = if regenerate(&root, &exec)? {
+    let verb = if regenerate(&root, &exec, command_map)? {
         "Wrote"
     } else {
         "Unchanged"
@@ -443,10 +462,10 @@ pub(crate) fn run(path: Option<PathBuf>) -> anyhow::Result<()> {
 /// run the disk sentry, and report. DISK-scoped wording only: never claim the
 /// current session's inlined prefix is fresh (§5.4 — that is `/route`'s lag
 /// warning + the freshen-now ritual, not this verb).
-pub(crate) fn run_check(path: Option<PathBuf>) -> anyhow::Result<()> {
+pub(crate) fn run_check(path: Option<PathBuf>, command_map: fn() -> String) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let exec = resolve_exec()?;
-    let report = boot_check(&root, &exec);
+    let report = boot_check(&root, &exec, command_map);
     let dest = root.join(BOOT_REL);
     let mut out = io::stdout();
     if report.is_clean() {
@@ -474,10 +493,10 @@ pub(crate) fn run_check(path: Option<PathBuf>) -> anyhow::Result<()> {
 /// exact bytes to stdout. The same bytes written to disk are written to stdout:
 /// one render, one output path each. No trailing extra newline — `render_boot`
 /// already supplies the terminal newline (the deterministic guarantee).
-pub(crate) fn run_emit(path: Option<PathBuf>) -> anyhow::Result<()> {
+pub(crate) fn run_emit(path: Option<PathBuf>, command_map: fn() -> String) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let exec = resolve_exec()?;
-    let content = build_and_render(&root, &exec);
+    let content = build_and_render(&root, &exec, command_map);
     write_if_changed(&root.join(BOOT_REL), &content)?;
     write!(io::stdout(), "{content}")?;
     Ok(())
@@ -2074,11 +2093,12 @@ pub(crate) fn dispatch(
     emit: bool,
     path: Option<PathBuf>,
     _color: bool,
+    command_map: fn() -> String,
 ) -> anyhow::Result<()> {
     match command {
-        None if emit => run_emit(path),
-        None if check => run_check(path),
-        None => run(path),
+        None if emit => run_emit(path, command_map),
+        None if check => run_check(path, command_map),
+        None => run(path, command_map),
         Some(BootCommand::Install {
             path: install_path,
             agent,
@@ -2100,6 +2120,13 @@ mod tests {
         boot_sequence().iter().map(|(h, _)| *h).collect()
     }
 
+    /// A trivial injected command-map renderer for sections that are NOT the
+    /// CommandMap under test — keeps the boot assembly callable without dragging
+    /// `cli` into these tests (the injection seam, D9).
+    fn noop_map() -> String {
+        String::new()
+    }
+
     // --- VT-1: section order (ExecPath last) ---
 
     #[test]
@@ -2116,6 +2143,82 @@ mod tests {
                 .iter()
                 .all(|(_, k)| !matches!(k, SourceKind::ExecPath)),
             "ExecPath must appear exactly once, at the tail",
+        );
+    }
+
+    // --- VT-3 (SL-150): CommandMap sits immediately after Routing, before Governance ---
+
+    #[test]
+    fn boot_sequence_places_command_map_after_routing_before_governance() {
+        let h = headings();
+        let pos = |needle: &str| {
+            h.iter()
+                .position(|x| *x == needle)
+                .unwrap_or_else(|| panic!("{needle} present"))
+        };
+        let routing = pos("Routing & Process");
+        let commands = pos("Commands");
+        let governance = pos("Governance (project)");
+        assert_eq!(
+            commands,
+            routing + 1,
+            "Commands must sit immediately after Routing & Process"
+        );
+        assert!(
+            commands < governance,
+            "Commands must precede Governance (project)"
+        );
+        // and its source is the marker variant.
+        let seq = boot_sequence();
+        assert!(
+            matches!(seq[commands].1, SourceKind::CommandMap),
+            "the Commands section's source is SourceKind::CommandMap"
+        );
+    }
+
+    // --- VT-4 (SL-150): produce(CommandMap) renders the INJECTED renderer's body (D9) ---
+
+    #[test]
+    fn produce_command_map_renders_the_injected_renderer_body() {
+        let root = Path::new("/r");
+        let exec = Path::new("/abs/target/debug/doctrine");
+        let section = produce("Commands", &SourceKind::CommandMap, root, exec, || {
+            "SENTINEL".to_string()
+        });
+        assert_eq!(section.heading, "Commands", "heading is exactly `Commands`");
+        assert_eq!(
+            section.body, "SENTINEL",
+            "the body is the injected command_map output verbatim — boot never names cli (D9)"
+        );
+    }
+
+    // --- VT-2 (SL-150): boot is byte-stable + check clean with the CommandMap present ---
+
+    #[test]
+    fn boot_is_byte_stable_and_check_clean_with_command_map() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+        // a non-empty, deterministic injected map.
+        let map: fn() -> String = || "change  slice\n".to_string();
+
+        let first = build_and_render(root, exec, map);
+        let second = build_and_render(root, exec, map);
+        assert_eq!(first, second, "two renders are byte-identical (INV-3/VT-2)");
+        assert!(
+            first.contains("## Commands\nchange  slice"),
+            "the CommandMap body is projected under the `## Commands` heading"
+        );
+
+        regenerate(root, exec, map).unwrap();
+        let report = boot_check(root, exec, map);
+        assert!(
+            !report.stale,
+            "freshly regenerated snapshot is not stale with CommandMap present"
+        );
+        assert!(
+            !report.marker_sections.contains(&"Commands".to_string()),
+            "a populated CommandMap is not flagged as an unpopulated section"
         );
     }
 
@@ -2208,10 +2311,16 @@ mod tests {
         let root = Path::new("/r");
         let exec = Path::new("/abs/target/debug/doctrine");
 
-        let memo = produce("Memory", &SourceKind::Memories, root, exec);
+        let memo = produce("Memory", &SourceKind::Memories, root, exec, noop_map);
         assert_eq!(memo.body, "<!-- Memory: not yet populated -->");
 
-        let invoke = produce("Invoking doctrine", &SourceKind::ExecPath, root, exec);
+        let invoke = produce(
+            "Invoking doctrine",
+            &SourceKind::ExecPath,
+            root,
+            exec,
+            noop_map,
+        );
         assert_eq!(invoke.body, "/abs/target/debug/doctrine");
     }
 
@@ -2227,6 +2336,7 @@ mod tests {
             &SourceKind::Static("routing-process.md"),
             root,
             exec,
+            noop_map,
         );
         assert!(
             digest.body.contains("Route before you act"),
@@ -2239,6 +2349,7 @@ mod tests {
             &SourceKind::Static("no-such-asset.md"),
             root,
             exec,
+            noop_map,
         );
         assert_eq!(
             missing.body, "<!-- Routing & Process: not yet populated -->",
@@ -2254,7 +2365,13 @@ mod tests {
         let root = dir.path();
         let exec = Path::new("/abs/target/debug/doctrine");
 
-        let absent = produce("Governance (project)", &SourceKind::Governance, root, exec);
+        let absent = produce(
+            "Governance (project)",
+            &SourceKind::Governance,
+            root,
+            exec,
+            noop_map,
+        );
         assert_eq!(
             absent.body, "<!-- Governance (project): not yet populated -->",
             "absent governance.md → marker",
@@ -2267,7 +2384,13 @@ mod tests {
             "# Governance (project)\n\nlive once, in the prefix.\n",
         )
         .unwrap();
-        let present = produce("Governance (project)", &SourceKind::Governance, root, exec);
+        let present = produce(
+            "Governance (project)",
+            &SourceKind::Governance,
+            root,
+            exec,
+            noop_map,
+        );
         assert!(
             present.body.contains("live once, in the prefix."),
             "governance.md body projected:\n{}",
@@ -2302,7 +2425,10 @@ mod tests {
         let root = dir.path();
         let exec = Path::new("/abs/target/debug/doctrine");
 
-        assert!(regenerate(root, exec).unwrap(), "first regenerate writes");
+        assert!(
+            regenerate(root, exec, noop_map).unwrap(),
+            "first regenerate writes"
+        );
         let snapshot = fs::read_to_string(root.join(BOOT_REL)).unwrap();
 
         assert!(snapshot.starts_with(BOOT_HEADER), "header present");
@@ -2318,7 +2444,7 @@ mod tests {
         );
 
         assert!(
-            !regenerate(root, exec).unwrap(),
+            !regenerate(root, exec, noop_map).unwrap(),
             "second regenerate is a no-op write"
         );
     }
@@ -2459,7 +2585,7 @@ world";
         )
         .unwrap();
 
-        assert!(regenerate(root, exec).unwrap());
+        assert!(regenerate(root, exec, noop_map).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
 
         // SL-025: the ADR section now renders via the migrated spine path —
@@ -2543,7 +2669,7 @@ world";
         .unwrap();
         // policy 2 stays `draft`.
 
-        assert!(regenerate(root, exec).unwrap());
+        assert!(regenerate(root, exec, noop_map).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
 
         // the required policy projects with a prefixed POL- id + header row.
@@ -2625,7 +2751,7 @@ world";
         .unwrap();
         // standard 1 stays `draft`.
 
-        assert!(regenerate(root, exec).unwrap());
+        assert!(regenerate(root, exec, noop_map).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
 
         // both in-force standards project with prefixed STD- ids.
@@ -2664,7 +2790,7 @@ world";
         // a single draft policy — zero `required`, so the section is empty-in-force.
         policy::run_new(Some(root.to_path_buf()), Some("Just a draft".into()), None).unwrap();
 
-        assert!(regenerate(root, exec).unwrap());
+        assert!(regenerate(root, exec, noop_map).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
         assert!(
             snap.contains(
@@ -2724,7 +2850,7 @@ world";
         rec("Quarantined note", memory::Status::Quarantined);
 
         // boot section: ACTIVE ONLY — no draft, no terminal.
-        assert!(regenerate(root, exec).unwrap());
+        assert!(regenerate(root, exec, noop_map).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
         // New format: reference line + key list. Find active memory's uid.
         let all = memory::collect_all(root).unwrap();
@@ -2811,7 +2937,7 @@ world";
         rec("Pattern note", memory::MemoryType::Pattern);
         rec("Fact note", memory::MemoryType::Fact);
 
-        assert!(regenerate(root, exec).unwrap());
+        assert!(regenerate(root, exec, noop_map).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
         // New format: reference line + key list. Find signpost memory's uid.
         let all = memory::collect_all(root).unwrap();
@@ -2861,7 +2987,7 @@ world";
         )
         .unwrap();
 
-        assert!(regenerate(root, exec).unwrap());
+        assert!(regenerate(root, exec, noop_map).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
 
         assert!(
@@ -2963,8 +3089,11 @@ world";
         )
         .unwrap();
 
-        assert!(regenerate(root, exec).unwrap(), "seed the on-disk snapshot");
-        let report = boot_check(root, exec);
+        assert!(
+            regenerate(root, exec, noop_map).unwrap(),
+            "seed the on-disk snapshot"
+        );
+        let report = boot_check(root, exec, noop_map);
         assert!(
             report.is_clean(),
             "fully populated + in sync → clean: stale={}, markers={:?}",
@@ -2982,17 +3111,26 @@ world";
         let exec = Path::new("/abs/target/debug/doctrine");
 
         // absent file: recompute differs from nothing → stale.
-        assert!(boot_check(root, exec).stale, "absent boot.md → stale");
+        assert!(
+            boot_check(root, exec, noop_map).stale,
+            "absent boot.md → stale"
+        );
 
         // a hand-edited file diverges from the recompute → stale.
-        regenerate(root, exec).unwrap();
+        regenerate(root, exec, noop_map).unwrap();
         let dest = root.join(BOOT_REL);
         fs::write(&dest, "# tampered\n").unwrap();
-        assert!(boot_check(root, exec).stale, "edited boot.md → stale");
+        assert!(
+            boot_check(root, exec, noop_map).stale,
+            "edited boot.md → stale"
+        );
 
         // regenerate restores byte-equality → clean.
-        regenerate(root, exec).unwrap();
-        assert!(!boot_check(root, exec).stale, "regenerated → not stale");
+        regenerate(root, exec, noop_map).unwrap();
+        assert!(
+            !boot_check(root, exec, noop_map).stale,
+            "regenerated → not stale"
+        );
     }
 
     // --- VT-1: unpopulated sources surface as marker_sections ---
@@ -3004,8 +3142,8 @@ world";
         let exec = Path::new("/abs/target/debug/doctrine");
 
         // bare root: no ADRs, no memory, no governance.md → those sections marker.
-        regenerate(root, exec).unwrap();
-        let bare = boot_check(root, exec);
+        regenerate(root, exec, noop_map).unwrap();
+        let bare = boot_check(root, exec, noop_map);
         assert!(!bare.stale, "freshly written → not stale");
         assert!(
             bare.marker_sections
@@ -3027,8 +3165,8 @@ world";
         let gov = root.join(GOVERNANCE_REL);
         fs::create_dir_all(gov.parent().unwrap()).unwrap();
         fs::write(&gov, "# Governance\n\npoint at .doctrine/spec/tech/\n").unwrap();
-        regenerate(root, exec).unwrap();
-        let seeded = boot_check(root, exec);
+        regenerate(root, exec, noop_map).unwrap();
+        let seeded = boot_check(root, exec, noop_map);
         assert!(
             !seeded
                 .marker_sections
@@ -3047,8 +3185,8 @@ world";
         let exec = Path::new("/abs/target/debug/doctrine");
 
         // fresh root: zero policies, zero standards → both sections emit nudges.
-        regenerate(root, exec).unwrap();
-        let report = boot_check(root, exec);
+        regenerate(root, exec, noop_map).unwrap();
+        let report = boot_check(root, exec, noop_map);
         assert!(
             report
                 .marker_sections
@@ -3102,8 +3240,8 @@ world";
         )
         .unwrap();
 
-        regenerate(root, exec).unwrap();
-        let report = boot_check(root, exec);
+        regenerate(root, exec, noop_map).unwrap();
+        let report = boot_check(root, exec, noop_map);
         assert!(
             !report
                 .marker_sections
@@ -3129,10 +3267,10 @@ world";
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new("/abs/target/debug/doctrine");
-        regenerate(root, exec).unwrap();
+        regenerate(root, exec, noop_map).unwrap();
         assert_eq!(
-            boot_check(root, exec),
-            boot_check(root, exec),
+            boot_check(root, exec, noop_map),
+            boot_check(root, exec, noop_map),
             "no clock/rng → identical reports"
         );
     }
@@ -4469,7 +4607,7 @@ weight = 0
         write_memory_toml(&items, f, "pattern", "active", Some("mem.pattern"));
 
         let exec = Path::new("/abs/target/debug/doctrine");
-        let section = produce("Memory", &SourceKind::Memories, root, exec);
+        let section = produce("Memory", &SourceKind::Memories, root, exec, noop_map);
 
         assert!(
             section.body.contains("Run /retrieve-memory"),
@@ -4886,8 +5024,8 @@ weight = 0
         let exec = root.join("doctrine");
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
         std::fs::write(root.join("doctrine"), b"fake-exe").unwrap();
-        let result1 = build_and_render(root, &exec);
-        let result2 = build_and_render(root, &exec);
+        let result1 = build_and_render(root, &exec, noop_map);
+        let result2 = build_and_render(root, &exec, noop_map);
         assert_eq!(result1, result2);
     }
 
@@ -4898,9 +5036,9 @@ weight = 0
         let exec = root.join("doctrine");
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
         std::fs::write(root.join("doctrine"), b"fake-exe").unwrap();
-        regenerate(root, &exec).unwrap();
+        regenerate(root, &exec, noop_map).unwrap();
         let on_disk = std::fs::read_to_string(root.join(".doctrine/state/boot.md")).unwrap();
-        let built = build_and_render(root, &exec);
+        let built = build_and_render(root, &exec, noop_map);
         assert_eq!(on_disk, built);
     }
     // =======================================================================

@@ -308,45 +308,18 @@ const SEARCH_COLUMNS: [Column<SearchRow>; 4] = [
 const SNIPPET_FG: owo_colors::DynColors = owo_colors::DynColors::Rgb(100, 125, 105);
 const SNIPPET_BG: owo_colors::DynColors = owo_colors::DynColors::Rgb(10, 30, 14);
 
-/// True when a rendered table line *begins* a logical row — its first column (the
-/// ID cell, everything before the first `│` separator) carries non-whitespace.
-/// comfy-table blanks every non-wrapping column on a wrapped cell's continuation
-/// lines, so a multi-line title's continuations have an all-whitespace first
-/// column. Used to attach each `--context` snippet after the LAST physical line of
-/// its entity rather than after every wrapped line.
-fn is_table_row_start(line: &str) -> bool {
-    let head = line.split('\u{2502}').next().unwrap_or(line);
-    head.chars().any(|c| !c.is_whitespace())
-}
-
 /// Write one `--context` snippet as a full-width band beneath its table row. An
-/// empty snippet writes nothing. Whitespace is collapsed to a single line so a body
-/// newline can't fracture the band, then the line is padded to the terminal width
-/// (when known) so the dark-green band spans the row. Colour is gated on
-/// `render.color`, keeping piped output byte-clean.
+/// empty snippet writes nothing. The band painting (collapse → indent → pad-to-width →
+/// colour-gated paint) is the shared [`crate::listing::paint_full_width_band`] primitive
+/// (SL-150 lifted it out of here — DRY); the sage-on-green palette stays local.
 fn write_context_snippet(snip: &str, render: RenderOpts) -> std::io::Result<()> {
     if snip.is_empty() {
         return Ok(());
     }
     let flat = snip.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut out = std::io::stdout();
-    if render.color {
-        use owo_colors::OwoColorize;
-        let content = format!("  {flat}");
-        // chars()-count is a fine width proxy for this ASCII-leaning prose.
-        let padded = match render.term_width {
-            Some(w) if usize::from(w) > content.chars().count() => {
-                let pad = usize::from(w) - content.chars().count();
-                let mut s = content;
-                s.extend(std::iter::repeat_n(' ', pad));
-                s
-            }
-            _ => content,
-        };
-        writeln!(out, "{}", padded.color(SNIPPET_FG).on_color(SNIPPET_BG))
-    } else {
-        writeln!(out, "  {flat}")
-    }
+    let band =
+        crate::listing::paint_full_width_band(&format!("  {flat}"), SNIPPET_FG, SNIPPET_BG, render);
+    writeln!(std::io::stdout(), "{band}")
 }
 
 // ── run() ─────────────────────────────────────────────────────────────────
@@ -452,7 +425,7 @@ pub(crate) fn run(mut args: SearchArgs, render: RenderOpts) -> Result<()> {
                 let mut pending: Option<usize> = None;
                 let mut next = 0usize;
                 for line in lines {
-                    if is_table_row_start(line) {
+                    if crate::listing::is_table_row_start(line) {
                         if let Some(snip) = pending.and_then(|i| snippets.get(i)) {
                             write_context_snippet(snip, render)?;
                         }
