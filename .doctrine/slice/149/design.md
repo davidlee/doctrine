@@ -121,7 +121,11 @@ references | [SL,RFC,<backlog>]    | Concerns    | "concerned by"   | AnyNumbere
   implement canon directly.
 - `scoped_from` is **SL-only**, target the backlog kinds — "this slice was scoped from
   that idea/improvement." Kept strictly separate from `part_of` (Axis D containment).
-- `concerns` rides **one wide source-set row**, target `AnyNumbered`.
+- `concerns` rides **one wide source-set row**, target `AnyNumbered`. **Pin the exact
+  source set in P2** (no `<backlog>` hand-wave): live census shows `{SL, RFC, ISS, IMP,
+  CHR, RSK, IDE}` authoring concerns-shaped edges (RFC-002 alone authors related→IMP/SL/RFC);
+  derive it from the migration population + SL-145's widened backlog set. `implements`
+  and `scoped_from` are `{SL}` only.
 - `inbound_name` per row (the role-derived inbound, D5). Wording settled in P2 (R4).
 
 ### 2.5 Edge / row shapes — thread role; identity = `(label, role, target)`
@@ -158,8 +162,19 @@ the optional `role`.
 - `inspect` (`commands/inspect.rs`, `relation_graph::render_*`): outbound renders
   `references(implements)`; inbound renders the role-derived name ("implemented by",
   "concerned by", "scoped into").
-- `relation list` / `census` (`commands/relation.rs`): group by `(label, role)`.
+- `relation list` / `census` (`commands/relation.rs`): group by `(label, role)`;
+  `relation_query.rs` row label/grouping handles the role.
 - Web graph (`catalog/graph.rs`): edge label shows the role verb.
+- **Per-kind `show` / `show --json` projections (AR-3 — not just rendering).**
+  `slice.rs` (1533/1536/1599/1603), `backlog.rs` (1374/1489), and `lazyspec.rs` build
+  **named** `specs` / `requirements` JSON fields via `targets_for(tier1,
+  RelationLabel::Specs|Requirements)`; `search.rs:32` maps `"specs" → {PRD,SPEC}` in the
+  search index. Removing the variants forces reworking these into a `references`-grouped-
+  by-role projection — this **changes the slice/backlog `show --json` schema** (the
+  `specs`/`requirements` keys disappear), which is load-bearing for goldens. Decide the
+  replacement shape in P4 (proposal: a `references` object keyed by role, e.g.
+  `{ implements: […], concerns: […] }`, plus a derived flat list for back-compat readers
+  if any).
 
 ### 2.8 CLI
 
@@ -184,12 +199,26 @@ slice — plan picks the vehicle; **not** a CLI verb), mapping per:
 | `related` | GOV↔GOV, SL↔SL (true peer) | **stays `related`** |
 | `slices`, `drift` | — | **untouched** (temporal / out of B) |
 
-Genuinely ambiguous rows — chiefly **SL→SPEC `implements`-vs-`concerns`** (a slice that
-references a spec it doesn't implement) — are emitted as a **triage list, hand-dispositioned
-pre-commit**. No `unspecified` ever persists; every landed row carries a real role.
-Hard-cut, atomic with the code change (SPEC-018 "no dual-read"), verified by round-trip
-`show` + `validate` + before/after render goldens. This slice rewrites its own
-`slice-149.toml` `specs SPEC-018` row to `references(implements) SPEC-018` as part of the pass.
+**The map is per-edge, not purely kind-deterministic (AR-1).** Live census already
+exceeds the RFC snapshot (`specs`=67, `requirements`=52, `related`=74; ~193 edges total,
+vs the RFC's ~185), and `related` is dominated by RFC-001/RFC-002 → `concerns`. Kind
+alone cannot separate `concerns` from a genuine symmetric peer on the `related`-source
+rows. So the migration:
+1. **re-censuses live** (`relation list`) at execution time — the P1 artifact
+   (`.doctrine/state/chr-024/p1-classification.md`) is gitignored, snapshot-stale
+   (counts grown 48→60→74), and is **reference only, not input**;
+2. applies the kind-map where unambiguous;
+3. **triages the residue by hand pre-commit** — which is wider than SL→SPEC: it includes
+   (a) SL→SPEC `implements`-vs-`concerns`, and (b) every `related` row that is not
+   clearly a GOV↔GOV / SL↔SL peer (RFC→* defaults to `concerns`, but RFC→RFC, ADR→ADR,
+   and SL→SL get judged individually). Post-migration `related` ends up small (only the
+   true peers).
+
+No `unspecified` ever persists; every landed row carries a real role. Hard-cut, atomic
+with the code change (SPEC-018 "no dual-read"). This slice rewrites its own
+`slice-149.toml` `specs SPEC-018` row to `references(implements) SPEC-018` (and `related
+RFC-003` → `references(concerns) RFC-003`, since RFC-003 is the deliberation this slice
+is *about*, not a symmetric peer) as part of the pass.
 
 ---
 
@@ -216,10 +245,18 @@ Tests to change / add:
   target` → read back → `inspect` outbound `references(implements)` + target inbound
   "implemented by"; `unlink` matches the `(label, role, target)` triple; a label-only
   edge serializes with no `role` key.
-- **Migration:** before/after render goldens (`inspect` / `*-show` / `show --json`)
-  **plus** a storage-level post-check (render launders on-disk row order — SPEC-018
-  concern); `validate` clean post-migration (no `IllegalRow`, no dangler regression); the
-  SL→SPEC triage dispositions captured as evidence.
+- **Migration — the oracle is edge-set preservation, NOT render-byte-identity (AR-2).**
+  Unlike SL-048's storage-only migration (render unchanged), here the *render changes by
+  design* (`specs` → `references(implements)`; inbound `"specs"` → `"implemented by"`), so
+  before/after render goldens cannot be the oracle. The preservation invariant is:
+  **every pre-migration edge maps to exactly one post-migration edge with identical
+  source + target; only `(label, role)` changes per the map; zero edges added or
+  dropped.** Assert that as a structural diff over `relation list` (source,target multiset
+  preserved). *Additionally:* after-migration render goldens assert the **new** expected
+  vocabulary; a storage-level post-check guards on-disk row order (render launders it —
+  SPEC-018 concern); `validate` is clean (no `IllegalRow`, no dangler regression); the
+  triage dispositions (SL→SPEC + ambiguous `related`) are captured as evidence with
+  per-row rationale.
 - **Surfaces:** `inspect` mixed-roles + label-only golden; `relation list`/`census`
   grouped by `(label, role)`; web-graph edge label.
 - **Determinism:** BTree ordering only; canonical `(label, role)` order = declaration
@@ -264,3 +301,34 @@ Tests to change / add:
 - `related` symmetry / `influences` relation-planes (directionality × valence).
 - **`scoped_from`-vs-`part_of` boundary** — B must not let `scoped_from` creep into
   structural containment (D's territory).
+
+---
+
+## Adversarial review (internal pass — integrated)
+
+Hostile self-review of the draft. Findings AR-1..AR-6 integrated above; recorded here for
+the audit trail.
+
+- **AR-1 — migration is per-edge, not kind-deterministic.** Grounded empirically: live
+  `related`=74 (vs RFC snapshot 48→60), dominated by RFC→* `concerns`; RFC→RFC / ADR→ADR /
+  SL→SL need per-edge judgment. *Fixed:* §2.9 now re-censuses live, treats the P1 artifact
+  as stale reference, and widens hand-triage beyond SL→SPEC.
+- **AR-2 — verification oracle was wrong.** Draft leaned on before/after render byte-identity,
+  but the render changes by design. *Fixed:* §3 oracle is now edge-set preservation
+  (source+target multiset) + new-vocabulary render goldens + storage post-check.
+- **AR-3 — `show`/`show --json` projection ripple (missed code impact).** `slice.rs`,
+  `backlog.rs`, `lazyspec.rs`, `search.rs` hardcode named `specs`/`requirements` fields;
+  removing the variants changes the `show --json` schema. *Fixed:* added to §2.7 + P4 with a
+  replacement-shape proposal.
+- **AR-4 — source sets were hand-waved.** *Fixed:* §2.4 pins them from live census, P2
+  obligation.
+- **AR-5 — `bears_on` → `concerns` renames the RFC's term.** Deliberate (the dialogue judged
+  `bears_on` jargony/weak). *Action:* the ADR records the rename + rationale so the
+  RFC↔ADR vocabulary divergence is explicit, not silent.
+- **AR-6 — slice scope (`slice-149.md`) tells the older story** (lists `reviews`,
+  `bears_on`, and `related`-collapses). *Action:* reconcile the scope doc to the locked
+  ledger before planning (done in this pass).
+
+Residual (accepted, not blocking): the `references` source set will need re-confirmation if
+the corpus grows materially between design and P5 execution — the snapshot caveat applies;
+P5 re-censuses live regardless.

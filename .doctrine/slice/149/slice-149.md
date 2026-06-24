@@ -30,24 +30,32 @@ must lock and emit as an ADR before the plan. No code precedes that ADR.
 
 In scope (the B core, per RFC-003 § Proposed slice decomposition row B):
 
-- **Closed `role` enum** — `{implements, reviews, scoped_from, bears_on, related}` as a
-  code-level closed enum (each new intent a code change, cost #1).
+- **Closed `role` enum** — `{implements, scoped_from, concerns}` as a code-level closed
+  enum, all directional (each new intent a code change, cost #1). Decisions vs RFC-003:
+  `reviews` **dropped** — folds into `concerns` (no structural distinction; heavyweight
+  review stays the RV `reviews` label); `bears_on` **renamed `concerns`** (jargony/weak);
+  `related` **not** a role — stays its own symmetric-neutral label (symmetry is structural).
 - **Two-level closed grammar** in the relation contract:
   - `(source_kind, label) → legal roles` (e.g. `references` from SL admits
-    `{implements, reviews, scoped_from, bears_on}`; from RV admits `{reviews}`).
+    `{implements, scoped_from, concerns}`).
   - `(source_kind, label, role) → TargetSpec` (e.g. `references(implements) →
-    {SPEC,PRD,REQ}`; `references(reviews) → AnyNumbered`).
-- **`references` label** replacing the work→canon family: `specs`, `related`, and the
-  standalone `requirements` label (SL→REQ) fold into `references` + role. `governed_by`,
-  `part_of`, `supersedes`, `exclusive_with` stay distinct labels.
+    {SPEC,PRD,REQ}`; `references(concerns) → AnyNumbered`; `references(scoped_from) →
+    {backlog kinds}`).
+- **`references` label** replacing the work→canon family: `specs` and the standalone
+  `requirements` label (SL→REQ) fold into `references` + role. `governed_by`, `related`,
+  `part_of`, `supersedes`, `exclusive_with` stay distinct labels. (`related` does **not**
+  fold — only its mismapped rows migrate to `references(concerns|scoped_from)`; true peers
+  stay.)
 - **Seam threading** (RFC cost #3 — this is the bulk): the `role` column threads
   `RELATION_RULES`, `lookup(source,label)` → role-aware, `RelationEdge`/`RelationRow {
    label, target }` → carries role, `validate_link`, and the surfaces
   (`CatalogEdgeLabel`, `inspect`, `relation list`, web graph).
-- **Migration** (cost #2): backfill a role onto existing `specs`/`slices`/`related`
-  edges; `migrate` stamps a default (`implements`) or explicit `unspecified` to force
-  triage. `unspecified` is **migration-transient only** — `validate` flags it as
-  unresolved; `role` is mandatory on every persisted `references` edge in steady state.
+- **Migration** (cost #2): out-of-band deterministic one-time rewrite (**no shipped
+  `migrate` verb** — SPEC-018 dogfood precedent), mapping existing `specs`/`requirements`/
+  mismapped-`related` edges per a `(source-kind, label, target-kind)` map, re-censused
+  live. Ambiguous rows (SL→SPEC implements-vs-concerns; `related` peer-vs-concerns)
+  hand-triaged pre-commit. **No persisted `unspecified`** — every landed row carries a
+  real role. Hard-cut, atomic with the code.
 - **Role-derived inbound reciprocal** (cost #4, leaning role-derived per RFC): `inspect`
   renders "implemented by / reviewed by / scoped from / bears on / related to" rather
   than a flat label echo; `inbound_name` re-keyed from label to `(label, role)`, coexisting
@@ -75,17 +83,18 @@ In scope (the B core, per RFC-003 § Proposed slice decomposition row B):
 - **Can work `implements` an ADR?** — ADR excluded from `implements` target set;
   `governed_by` stays the ADR relation. Filed, not resolved here.
 
-## Open Questions (for /design)
+## Open Questions — RESOLVED in /design
 
-- **OQ-1 `related` symmetry tension** — RFC's late finding: `related` is symmetric +
-  neutral, the odd man out among directional `references` roles. Does `related` keep its
-  own symmetric-neutral label rather than collapse to a `references` role? (RFC § Open,
-  "relation planes".) Design must settle or explicitly defer.
-- **OQ-2 inbound rendering** — role-derived vs label-flat inbound (cost #4). RFC leans
-  role-derived; confirm and scope the `(label, role)` `inbound_name` re-key.
-- **OQ-3 migration default** — `implements` blanket default vs `unspecified`-forces-triage
-  per source/target shape. P1 shows `SL→spec` = implements (~44) but `IMP→`/`RSK→` are
-  mismapped; a blanket `implements` would re-mismap them. Design the per-shape default.
+- **OQ-1 `related` symmetry tension — RESOLVED:** `related` stays its own
+  symmetric-neutral label; symmetry changes inbound semantics → structural → label, not
+  role (RFC's own deciding principle). `reviews` likewise dropped (folds into `concerns`).
+- **OQ-2 inbound rendering — RESOLVED:** role-derived inbound; `inbound_name` re-keyed to
+  `(label, role)`; VT-3 re-keyed; `supersedes`/`governed_by` carve-out untouched.
+- **OQ-3 migration default — RESOLVED:** no blanket default; deterministic
+  `(source-kind, label, target-kind)` map re-censused live + hand-triage of the ambiguous
+  residue; no persisted `unspecified`.
+
+See `design.md` decision ledger (D1–D6) and the integrated adversarial review (AR-1–AR-6).
 
 ## Summary
 
