@@ -52,3 +52,7 @@ ref = "ISS-031"
 kind = "issue"
 ref = "ISS-032"
 
+[[relation]]
+label = "related"
+target = "RFC-005"
+

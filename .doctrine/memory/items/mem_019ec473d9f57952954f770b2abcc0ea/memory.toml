@@ -63,3 +63,7 @@ target = "mem.pattern.dispatch.three-way-import-onto-moved-shared-main"
 [[relation]]
 label = "related"
 target = "mem.pattern.dispatch.reanchor-base-on-disjoint-head-move"
+
+[[relation]]
+label = "related"
+target = "RFC-005"

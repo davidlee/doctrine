@@ -40,3 +40,7 @@ trust_level = "high"
 severity = "none"
 weight = 0
 
+[[relation]]
+label = "related"
+target = "RFC-005"
+

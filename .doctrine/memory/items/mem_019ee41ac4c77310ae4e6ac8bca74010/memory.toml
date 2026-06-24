@@ -48,3 +48,7 @@ ref = "SL-125"
 kind = "review"
 ref = "RV-111"
 
+[[relation]]
+label = "related"
+target = "RFC-005"
+

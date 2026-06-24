@@ -48,3 +48,7 @@ ref = "SL-133"
 kind = "phase"
 ref = "PHASE-04"
 
+[[relation]]
+label = "related"
+target = "RFC-005"
+
