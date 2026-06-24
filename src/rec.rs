@@ -259,13 +259,15 @@ fn evidence_ref_table(e: &EvidenceRef) -> String {
 /// Returns the materialised id.
 pub(crate) fn materialise_populated(root: &Path, doc: &RecDoc) -> anyhow::Result<u32> {
     let trunk_ids = crate::git::trunk_entity_ids(root, REC_DIR)?;
-    let backend = crate::reserve::backend(root, REC_KIND.prefix)?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(root, REC_KIND.prefix, crate::install::prompt_confirm)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
         &*backend,
         root,
         REC_DIR,
         REC_KIND.prefix,
         &trunk_ids,
+        &mut reserved,
         |id, canonical| {
             let name = format!("{id:03}");
             // The claimed id overrides the placeholder so the rendered `id =` and
@@ -336,13 +338,15 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<(
     };
 
     let trunk_ids = crate::git::trunk_entity_ids(&root, REC_DIR)?;
-    let backend = crate::reserve::backend(&root, REC_KIND.prefix)?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(&root, REC_KIND.prefix, crate::install::prompt_confirm)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
         &*backend,
         &root,
         REC_DIR,
         REC_KIND.prefix,
         &trunk_ids,
+        &mut reserved,
         |id, canonical| {
             let name = format!("{id:03}");
             Ok(vec![

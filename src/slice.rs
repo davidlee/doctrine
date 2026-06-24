@@ -522,7 +522,8 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, SLICE_KIND.dir)?;
-    let backend = crate::reserve::backend(&root, SLICE_KIND.prefix)?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(&root, SLICE_KIND.prefix, crate::install::prompt_confirm)?;
     let out = entity::materialise(
         &SLICE_KIND,
         &*backend,
@@ -534,6 +535,7 @@ pub(crate) fn run_new(
             date: &date,
         },
         &trunk_ids,
+        &mut reserved,
     )?;
 
     let id = out
@@ -563,6 +565,7 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
             date: &date,
         },
         &[], // inert for InExisting (trunk ids only affect Fresh allocation)
+        &mut entity::local_reserved(), // inert for InExisting (no id allocation)
     )?;
 
     writeln!(
@@ -591,6 +594,7 @@ pub(crate) fn run_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
             date: &date,
         },
         &[], // inert for InExisting (trunk ids only affect Fresh allocation)
+        &mut entity::local_reserved(), // inert for InExisting (no id allocation)
     )?;
 
     writeln!(
@@ -645,6 +649,7 @@ pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
             date: &date,
         },
         &[], // inert for InExisting (trunk ids only affect Fresh allocation)
+        &mut entity::local_reserved(), // inert for InExisting (no id allocation)
     )?;
 
     writeln!(
@@ -2072,6 +2077,7 @@ mod tests {
             &MaterialiseRequest::Fresh,
             &Inputs { slug, title, date },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap()
     }
@@ -2259,6 +2265,7 @@ mod tests {
                 date: "2026-06-03",
             },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap();
 
@@ -2288,6 +2295,7 @@ mod tests {
                 date: "2026-06-03",
             },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap_err();
         assert!(err.to_string().contains("Refusing to overwrite"));
@@ -2317,6 +2325,7 @@ mod tests {
                 date: "2026-06-04",
             },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap();
 
@@ -2348,6 +2357,7 @@ mod tests {
                 date: "2026-06-04",
             },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap_err();
         assert!(err.to_string().contains("Refusing to overwrite"));
@@ -2379,6 +2389,7 @@ mod tests {
                 date: "2026-06-04",
             },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap();
 
@@ -2405,6 +2416,7 @@ mod tests {
                 date: "2026-06-04",
             },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap_err();
         assert!(err.to_string().contains("Refusing to overwrite"));

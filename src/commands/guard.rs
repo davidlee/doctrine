@@ -5,6 +5,7 @@
 use crate::boot::BootCommand;
 use crate::commands::cli::Command;
 use crate::commands::config::ConfigCommand;
+use crate::commands::reservation::ReservationCommand;
 use crate::knowledge::KnowledgeCommand;
 use crate::policy::PolicyCommand;
 use crate::rec::RecCommand;
@@ -192,6 +193,10 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             | KnowledgeCommand::Paths { .. } => Read,
         },
         Command::Tag { .. } => Write("tag"),
+        // The reservation survey only fetches + reads refs — no authored write.
+        Command::Reservation { command } => match command {
+            ReservationCommand::List { .. } => Read,
+        },
         Command::Serve { .. } => Read,
         Command::Boot { command, .. } => match command {
             None => Write("boot"),
