@@ -81,7 +81,7 @@ and a dense, routing-grade boot map. This is a tokens-vs-breadth/clarity exercis
    (human --help)        (boot map)              (--commands, unchanged)
    per-family sub-tables  dense PUSH-tier         lazy full reference
         │                  │        │
-        │            SourceKind::    doctrine --help --map
+        │            SourceKind::    doctrine --help --boot-map
         │            CommandMap       (main.rs intercept)
         │            (boot.rs section)
    FAMILIES table + SPINE set  ◄── shared classification (cli.rs)
@@ -128,9 +128,9 @@ pub(crate) fn render_boot_map() -> String;                                      
 - `render_boot_map()` takes no color/width: the boot snapshot is plain,
   width-independent text (it is `@`-imported, not terminal-rendered). Determinism
   by construction — no tty consult, no wrap.
-- `main.rs`: extend the `--help` intercept — `--map` → `render_boot_map()`
-  (precedence: `--map` before `--commands`; document that `--map` wins if both
-  given, or treat as mutually exclusive — see §5.5).
+- `main.rs`: extend the `--help` intercept — `--boot-map` → `render_boot_map()`
+  (precedence: `--boot-map` before `--commands`; `--boot-map` wins if both
+  given — see §5.5).
 
 New in `src/boot.rs`:
 
@@ -216,9 +216,9 @@ clean.
   order; commands within a family render in member-array order (NOT clap
   `get_subcommands()` order) — so goldens do not depend on derive order. Verbs
   within a command's sub-line render in clap order (stable derive order).
-- **EDGE — `--map` + `--commands` together**: treat as `--map` wins (documented),
-  or reject; default to `--map` precedence, mutually-exclusive not enforced
-  (matches the loose `--commands`/plain coexistence today).
+- **EDGE — `--boot-map` + `--commands` together**: `--boot-map` wins
+  (documented); mutually-exclusive not enforced (matches the loose
+  `--commands`/plain coexistence today).
 - **EDGE — leaf command** (no subcommands, e.g. `search`, `reconcile`, `link`):
   appears in family header only; no sub-line in boot map; one `command |
   description` row in human help.
@@ -231,24 +231,18 @@ clean.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 (D8 mechanism) — MEDIUM risk, the main implementation fork.**
+- **OQ-1 (D8 mechanism) — RESOLVED: plain-text grouped help (option a).**
   `listing::render_columns` (comfy-table) autosizes each table independently and
   has no section-header row, so 8 separate calls cannot share divider columns.
-  Two real options: (a) **plain-text grouped help** with manually-computed shared
-  padding (like `render_boot_map`) — clean alignment, full control, but drops the
-  alternating-row color paint and term_width wrapping the flat help has today;
-  (b) extend `listing` with a shared-width / section-header capability — heavier,
-  keeps color/wrap. Lean (a): the grouped help's value is structure+alignment,
-  not color; wrapping is moot if descriptions stay one short line. Settle at
+  Decision: render the grouped help as **plain text** with manually-computed
+  shared padding (like `render_boot_map`) — clean alignment, full control;
+  accepts dropping the alternating-row color paint and term_width wrapping the
+  flat help has today (the grouped help's value is structure+alignment, not
+  color; descriptions stay one short line). Exact padding mechanics confirmed at
   execute (phase 1).
-- **OQ-2** — `--map` vs `--commands` precedence when both passed (§5.5 EDGE);
-  pick the simplest that keeps a golden stable.
-- **OQ-3 — `--map` flag name collides with the `map` command** (`doctrine map`
-  = web explorer; `doctrine --help --map` = boot map). Same word, unrelated.
-  Candidates: `--map` (approved, accept the overload), `--boot-map`,
-  `--families`, `--brief`. User decision before execute.
-- *(Resolved in design conversation: D1 static table, D2 auto-derive, D3 `--map`
-  flag + CommandMap section, D4 sub-tables, D7 suppress infra verbs.)*
+- *(Resolved: D1 static table, D2 auto-derive, D3 `--boot-map` flag + CommandMap
+  section, D4 sub-tables, D7 suppress infra verbs, D8 shared widths, OQ-1
+  plain-text, OQ-3 `--boot-map` name.)*
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -259,9 +253,10 @@ clean.
   hand-maintained dataset; spine-factoring becomes a computed property. A
   differently-named create verb (`memory record`) correctly surfaces as
   distinctive.
-- **D3 — `--map` flag + `SourceKind::CommandMap`**, one `render_boot_map()`
+- **D3 — `--boot-map` flag + `SourceKind::CommandMap`**, one `render_boot_map()`
   behind both. The flag is near-free, gives the golden a black-box target, and
-  lets an agent pull the map without reading the snapshot file.
+  lets an agent pull the map without reading the snapshot file. Named
+  `--boot-map` (not `--map`) to avoid overloading the `map` command (OQ-3).
 - **D4 — per-family sub-tables** for human `--help` (vs single family-column
   table). Families are navigational headers; sub-tables scan fastest. Human
   help is not token-budgeted.
@@ -299,7 +294,7 @@ clean.
 - **Golden: human `--help`** — black-box via `CARGO_BIN_EXE_doctrine`,
   `force_no_tty`, byte-exact; asserts family order, sub-table grouping, shared
   column alignment (D8).
-- **Golden: `--help --map`** — byte-exact boot-map text; asserts spine line,
+- **Golden: `--help --boot-map`** — byte-exact boot-map text; asserts spine line,
   header+sub-line rule, infra suppression (D7), leaf handling.
 - **Boot byte-stability** — `doctrine boot` twice ⇒ identical; `boot --check`
   clean with the CommandMap section present (extends IMP-123-style assertions).
@@ -318,8 +313,8 @@ Internal adversarial pass (pre-inquisition):
 - **F3 (fixed → OQ-1 upgraded)** — D8 shared-width sub-tables fight comfy-table's
   per-table autosize; underrated as "low risk". Now MEDIUM with two concrete
   options; plain-text grouped help is the lean.
-- **F4 (open → OQ-3)** — `--map` flag overloads the `map` command name. Surfaced
-  to user.
+- **F4 (resolved)** — `--map` flag overloaded the `map` command name. Renamed
+  to `--boot-map` (OQ-3).
 - **F5 (accepted)** — boot-map golden churns on any verb addition; intended
   (surface changes get an explicit review), documented as maintenance cost (R/9).
 - **F6 (no change)** — mid-sequence CommandMap insertion shifts following
