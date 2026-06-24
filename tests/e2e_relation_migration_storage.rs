@@ -82,11 +82,26 @@ fn slice_files() -> Vec<PathBuf> {
     entity_tomls(&doctrine_root().join("slice"), "slice")
 }
 
-fn governance_files() -> Vec<PathBuf> {
-    ["adr", "policy", "standard", "rfc"]
+/// The STRICT governance trio (adr/policy/standard): tier-1 array is `related`-ONLY.
+/// RFC is deliberately excluded — it is the one governance kind in the wide `concerns`
+/// set, so it may ALSO carry `references(concerns)` rows (handled separately below).
+fn strict_governance_files() -> Vec<PathBuf> {
+    ["adr", "policy", "standard"]
         .into_iter()
         .flat_map(|stem| entity_tomls(&doctrine_root().join(stem), stem))
         .collect()
+}
+
+fn rfc_files() -> Vec<PathBuf> {
+    entity_tomls(&doctrine_root().join("rfc"), "rfc")
+}
+
+/// Every governance-kind TOML (strict trio + rfc) — the union the contiguity invariant
+/// scans (RFC's `references` rows are still contiguous, so it belongs here).
+fn governance_files() -> Vec<PathBuf> {
+    let mut v = strict_governance_files();
+    v.extend(rfc_files());
+    v
 }
 
 fn backlog_files() -> Vec<PathBuf> {
@@ -260,14 +275,8 @@ fn slice_corpus_relationships_table_holds_only_dep_seq_keys() {
         // independence — see the note above slice_corpus_*).
         for label in &v.relation_labels {
             assert!(
-                [
-                    "specs",
-                    "requirements",
-                    "supersedes",
-                    "governed_by",
-                    "related"
-                ]
-                .contains(&label.as_str()),
+                // SL-149 PHASE-05: specs/requirements collapsed into references.
+                ["references", "supersedes", "governed_by", "related"].contains(&label.as_str()),
                 "{}: unexpected slice [[relation]] label `{label}`",
                 f.display()
             );
@@ -277,7 +286,8 @@ fn slice_corpus_relationships_table_holds_only_dep_seq_keys() {
 
 #[test]
 fn governance_corpus_supersession_pair_and_tags_stay_typed_relation_is_related_only() {
-    for f in governance_files() {
+    // The STRICT trio (adr/policy/standard): tier-1 array is `related` ONLY.
+    for f in strict_governance_files() {
         let text = std::fs::read_to_string(&f).unwrap();
         let v = line_view(&text);
         assert_f1(&f, &v);
@@ -302,6 +312,25 @@ fn governance_corpus_supersession_pair_and_tags_stay_typed_relation_is_related_o
             );
         }
     }
+    // RFC: the one governance kind in the wide `concerns` set (SL-149 PHASE-05). It
+    // may carry `references(concerns)` rows IN ADDITION TO `related` — but the
+    // supersession pair still stays typed (no `supersedes` in the array).
+    // SSoT: RELATION_RULES `References`/`Related` rows with RFC in `sources`; literal
+    // by oracle independence — see the note above slice_corpus_*.
+    for f in rfc_files() {
+        let text = std::fs::read_to_string(&f).unwrap();
+        let v = line_view(&text);
+        assert_f1(&f, &v);
+        assert_no_migrated_key_left(&f, &v, &["related"]);
+        for label in &v.relation_labels {
+            assert!(
+                ["related", "references"].contains(&label.as_str()),
+                "{}: RFC [[relation]] must be `related`/`references` only, found `{label}` \
+                 (supersedes/superseded_by stay typed — OD-3)",
+                f.display()
+            );
+        }
+    }
 }
 
 #[test]
@@ -320,7 +349,8 @@ fn backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes() {
         // triggers — those stay typed with their per-edge payloads).
         for label in &v.relation_labels {
             assert!(
-                ["slices", "specs", "drift"].contains(&label.as_str()),
+                // SL-149 PHASE-05: backlog specs collapsed into references(concerns).
+                ["slices", "references", "drift"].contains(&label.as_str()),
                 "{}: unexpected backlog [[relation]] label `{label}` (dep/seq axes \
                  needs/after/triggers must stay typed)",
                 f.display()

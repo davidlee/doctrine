@@ -15,30 +15,37 @@ tags = []
 superseded_by = []   # reverse link is derived (REV→RFC originates_from)
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-012"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-152"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ADR-007"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ADR-014"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ADR-004"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ADR-010"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-042"
 

@@ -53,9 +53,20 @@ fn seed_slice(root: &Path, id: u32, edges: &[(&str, &[&str])]) {
     fs::create_dir_all(&dir).unwrap();
     let mut rels = String::new();
     for (label, targets) in edges {
+        // SL-149: `references(<role>)` expands to a roled row.
+        let (label, role) = match label
+            .strip_prefix("references(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            Some(role) => ("references", Some(role)),
+            None => (*label, None),
+        };
+        let role_line = role
+            .map(|r| format!("role = \"{r}\"\n"))
+            .unwrap_or_default();
         for t in *targets {
             rels.push_str(&format!(
-                "[[relation]]\nlabel = \"{label}\"\ntarget = \"{t}\"\n"
+                "[[relation]]\nlabel = \"{label}\"\n{role_line}target = \"{t}\"\n"
             ));
         }
     }
@@ -64,6 +75,34 @@ fn seed_slice(root: &Path, id: u32, edges: &[(&str, &[&str])]) {
         format!(
             "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{rels}"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        dir.join(format!("slice-{id:03}.md")),
+        "# fixture\n\nbody.\n",
+    )
+    .unwrap();
+}
+
+/// Seed a slice authoring raw `(label, role?, target)` rows — the only way to author a
+/// `references` row with a `role` cell (SL-149). `role = None` authors a label-only row.
+fn seed_slice_rows(root: &Path, id: u32, rows: &[(&str, Option<&str>, &str)]) {
+    let dir = root.join(format!(".doctrine/slice/{id:03}"));
+    fs::create_dir_all(&dir).unwrap();
+    let mut block = String::new();
+    for (label, role, target) in rows {
+        block.push_str(&format!("[[relation]]\nlabel = \"{label}\"\n"));
+        if let Some(role) = role {
+            block.push_str(&format!("role = \"{role}\"\n"));
+        }
+        block.push_str(&format!("target = \"{target}\"\n"));
+    }
+    fs::write(
+        dir.join(format!("slice-{id:03}.toml")),
+        format!(
+            "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{block}"
         ),
     )
     .unwrap();
@@ -125,11 +164,15 @@ fn relation_list_filters_and_renders_table() {
     seed_project(root);
     // SL-001 → REQ-005 (requirements, resolved), SL-001 → REQ-999 (requirements, unresolved)
     seed_requirement(root, 5);
-    seed_slice(root, 1, &[("requirements", &["REQ-005", "REQ-999"])]);
+    seed_slice(
+        root,
+        1,
+        &[("references(implements)", &["REQ-005", "REQ-999"])],
+    );
     // SL-002 → REQ-005 (requirements, resolved)
     seed_requirement(root, 5);
     _ = seed_requirement; // REQ-005 already seeded above
-    seed_slice(root, 2, &[("requirements", &["REQ-005"])]);
+    seed_slice(root, 2, &[("references(implements)", &["REQ-005"])]);
 
     // Unfiltered list
     let out = run(root, &["relation", "list"]);
@@ -142,7 +185,7 @@ fn relation_list_filters_and_renders_table() {
     assert!(s.contains("REQ-999"), "has REQ-999: {s}");
 
     // --label filter
-    let out = run(root, &["relation", "list", "--label", "requirements"]);
+    let out = run(root, &["relation", "list", "--label", "references"]);
     let s = stdout(&out);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(s.lines().count(), 4, "header + 3 rows: {s}");
@@ -174,7 +217,7 @@ fn relation_list_json_format() {
     let root = t.path();
     seed_project(root);
     seed_requirement(root, 5);
-    seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
+    seed_slice(root, 1, &[("references(implements)", &["REQ-005"])]);
 
     let out = run(root, &["relation", "list", "--json"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
@@ -184,7 +227,7 @@ fn relation_list_json_format() {
     let rows = v["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["source"].as_str(), Some("SL-001"));
-    assert_eq!(rows[0]["label"].as_str(), Some("requirements"));
+    assert_eq!(rows[0]["label"].as_str(), Some("references(implements)"));
     assert_eq!(rows[0]["target"].as_str(), Some("REQ-005"));
     assert_eq!(rows[0]["state"].as_str(), Some("resolved"));
 }
@@ -203,7 +246,7 @@ fn relation_census_table_and_json() {
         root,
         1,
         &[
-            ("requirements", &["REQ-005", "REQ-999"]),
+            ("references(implements)", &["REQ-005", "REQ-999"]),
             ("related", &["some free text"]),
         ],
     );
@@ -214,8 +257,8 @@ fn relation_census_table_and_json() {
     let s = stdout(&out);
     assert!(s.contains("label"), "has header: {s}");
     assert!(s.contains("count"), "has count: {s}");
-    assert!(s.contains("requirements"), "has requirements: {s}");
-    // requirements: count 2, resolved 1 (REQ-005), unresolved 1 (REQ-999), free_text 0
+    assert!(s.contains("references(implements)"), "has references: {s}");
+    // references(implements): count 2, resolved 1 (REQ-005), unresolved 1 (REQ-999), free_text 0
     assert!(s.contains("2"), "requirements count: {s}");
     // related: count 1, resolved 0, unresolved 0, free_text 1
     assert!(s.contains("related"), "has related: {s}");
@@ -228,8 +271,8 @@ fn relation_census_table_and_json() {
     assert_eq!(v["kind"].as_str(), Some("census"));
     let rows = v["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 2);
-    // requirements should be first (count 2 > count 1)
-    assert_eq!(rows[0]["label"].as_str(), Some("requirements"));
+    // references(implements) should be first (count 2 > count 1)
+    assert_eq!(rows[0]["label"].as_str(), Some("references(implements)"));
     assert_eq!(rows[0]["count"].as_u64(), Some(2));
     assert_eq!(rows[0]["resolved"].as_u64(), Some(1));
     assert_eq!(rows[0]["unresolved"].as_u64(), Some(1));
@@ -262,6 +305,78 @@ fn relation_census_empty_result_is_empty_string() {
     assert!(s.is_empty(), "empty results → empty string, got: '{s}'");
 }
 
+// ── SL-149 PHASE-04: references role rendering in list/census ────────────────
+
+/// VT (SL-149): `relation list` renders the role verb (`references(implements)` /
+/// `references(concerns)`) per row, and `--label references` still matches every role
+/// (the filter compares the BARE label name).
+#[test]
+fn relation_list_renders_role_and_label_filter_matches_bare() {
+    let t = tmp();
+    let root = t.path();
+    seed_project(root);
+    seed_requirement(root, 5);
+    // SL-001 implements REQ-005; SL-002 concerns REQ-005 — same label, different roles.
+    seed_slice_rows(root, 1, &[("references", Some("implements"), "REQ-005")]);
+    seed_slice_rows(root, 2, &[("references", Some("concerns"), "REQ-005")]);
+
+    // Unfiltered list shows BOTH role verbs as distinct rows.
+    let out = run(root, &["relation", "list"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let s = stdout(&out);
+    assert!(
+        s.contains("references(implements)"),
+        "implements verb rendered: {s}"
+    );
+    assert!(
+        s.contains("references(concerns)"),
+        "concerns verb rendered: {s}"
+    );
+
+    // `--label references` matches BOTH roles (filter compares the bare label).
+    let out = run(root, &["relation", "list", "--label", "references"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let s = stdout(&out);
+    assert_eq!(s.lines().count(), 3, "header + 2 role rows: {s}");
+    assert!(s.contains("references(implements)"));
+    assert!(s.contains("references(concerns)"));
+}
+
+/// VT (SL-149): `relation census` groups by `(label, role)` — `references(implements)`
+/// and `references(concerns)` are DISTINCT census rows, not one collapsed `references`.
+#[test]
+fn relation_census_groups_by_label_and_role() {
+    let t = tmp();
+    let root = t.path();
+    seed_project(root);
+    seed_requirement(root, 5);
+    seed_slice_rows(
+        root,
+        1,
+        &[
+            ("references", Some("implements"), "REQ-005"),
+            ("references", Some("concerns"), "REQ-005"),
+        ],
+    );
+
+    let out = run(root, &["relation", "census", "--json"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
+    let rows = v["rows"].as_array().unwrap();
+    let labels: Vec<&str> = rows
+        .iter()
+        .map(|r| r["label"].as_str().expect("label"))
+        .collect();
+    assert!(
+        labels.contains(&"references(implements)") && labels.contains(&"references(concerns)"),
+        "census split by (label, role): {labels:?}"
+    );
+    assert!(
+        !labels.contains(&"references"),
+        "no collapsed bare `references` census row: {labels:?}"
+    );
+}
+
 // ── VT-11: diagnostics policy ────────────────────────────────────────────────
 
 #[test]
@@ -269,7 +384,7 @@ fn malformed_entity_produces_error_line_on_stderr() {
     let t = tmp();
     let root = t.path();
     seed_project(root);
-    seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
+    seed_slice(root, 1, &[("references(implements)", &["REQ-005"])]);
     seed_malformed_slice(root, 2);
 
     // relation list should report the malformed entity error on stderr
@@ -298,7 +413,11 @@ fn dangling_ref_warning_is_suppressed_per_row() {
     seed_project(root);
     seed_requirement(root, 5);
     // SL-001 → REQ-005 (resolved) and SL-001 → REQ-999 (dangling — not seeded)
-    seed_slice(root, 1, &[("requirements", &["REQ-005", "REQ-999"])]);
+    seed_slice(
+        root,
+        1,
+        &[("references(implements)", &["REQ-005", "REQ-999"])],
+    );
 
     let out = run(root, &["relation", "list"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));

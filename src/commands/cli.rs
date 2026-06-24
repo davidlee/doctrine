@@ -456,6 +456,11 @@ pub(crate) enum Command {
         source: String,
         /// The relation label, e.g. `governed_by`, `consumes`, `related`.
         label: String,
+        /// The intent role refining a `references` edge (SL-149): `implements`,
+        /// `scoped_from`, or `concerns`. Required for `references`; refused for
+        /// label-only labels.
+        #[arg(long)]
+        role: Option<String>,
         /// The target — a canonical ref (`ADR-010`) for validated labels, free text
         /// for `drift`.
         target: String,
@@ -479,6 +484,10 @@ pub(crate) enum Command {
         source: String,
         /// The relation label to remove, e.g. `governed_by`.
         label: String,
+        /// The role of the `references` edge to remove (SL-149) — the removal matches
+        /// the full `(label, role, target)` triple.
+        #[arg(long)]
+        role: Option<String>,
         /// The target ref the edge points at.
         target: String,
         /// Explicit project root (default: auto-detect from CWD).
@@ -1113,9 +1122,10 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Link {
             source,
             label,
+            role,
             target,
             path,
-        } => crate::commands::relation::run_link(path, &source, &label, &target),
+        } => crate::commands::relation::run_link(path, &source, &label, role.as_deref(), &target),
         Command::Config { command } => {
             let root = crate::root::find(None, &crate::root::default_markers())?;
             match command {
@@ -1136,9 +1146,10 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Unlink {
             source,
             label,
+            role,
             target,
             path,
-        } => crate::commands::relation::run_unlink(path, &source, &label, &target),
+        } => crate::commands::relation::run_unlink(path, &source, &label, role.as_deref(), &target),
         Command::Needs {
             source,
             target,

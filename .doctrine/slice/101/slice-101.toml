@@ -10,43 +10,53 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-020"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-269"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-270"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-271"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-272"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-275"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-276"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-277"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-278"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-279"
 
 [[relation]]

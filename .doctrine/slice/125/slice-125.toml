@@ -14,7 +14,8 @@ label = "governed_by"
 target = "ADR-006"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "scoped_from"
 target = "IMP-046"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed

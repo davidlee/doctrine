@@ -23,7 +23,8 @@ label = "governed_by"
 target = "POL-002"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "concerns"
 target = "SPEC-007"
 
 [[relation]]

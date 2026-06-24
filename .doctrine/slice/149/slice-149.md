@@ -98,7 +98,31 @@ See `design.md` decision ledger (D1–D6) and the integrated adversarial review 
 
 ## Summary
 
-(to be written at close)
+Shipped the structure/intent split (ADR-016): the work→canon label family — the
+noun-named `specs` (SL→`{SPEC,PRD}`) and the standalone `requirements` label (SL→`REQ`)
+— collapsed onto a single structural `references` label refined by a closed `Role`
+`{implements, scoped_from, concerns}`. Target validation re-keyed from `(source, label)`
+to `(source, label, role)`: the gate relocated from label to role, so type safety is
+preserved while the missing *verb* becomes first-class. `related` did **not** fold
+(symmetry is structural — it stays its own label); only its mismapped rows migrated to
+`references(scoped_from|concerns)`. RFC-003's proposed `reviews`/`bears_on` roles
+resolved to `concerns` (the lightweight `reviews` folds in; heavyweight review keeps the
+RV `reviews` label).
+
+Delivered across six phases: ADR-016 ratified (P1); the closed `Role` enum + two-level
+grammar `legal_roles`/`targets_for_role` (P2); role-bearing `[[relation]]` storage with
+no-dual-read (P3); every surface threaded — reader inbound, `inspect`, `relation
+list`/`census`, web-graph backend data, `show`/`show --json` references-by-role object,
+and `link`/`unlink --role` (P4); the out-of-band corpus migration — 195 edges
+(implements 93 · concerns 76 · scoped_from 14 · related-kept 12), a full in-memory
+transform applied as one atomic swap, parser + rewritten corpus in the same commit,
+gated by the role-assignment oracle and a committed disposition artifact
+(`migration-dispositions.md`, VH-1-confirmed) (P5); and SPEC-018 + relation-vocabulary.md
+rewritten to the references+role contract (P6). `validate` clean; `just gate` green.
+
+Carried-opens confirmed against the shipped state: the web-graph **TS frontend**
+(`web/map/`) renders the backend `role` field but is out of the design's named seam
+(§2.7 points at `catalog/graph.rs`) — filed as a follow-up, not a regression.
 
 ## Follow-Ups
 
@@ -106,3 +130,7 @@ See `design.md` decision ledger (D1–D6) and the integrated adversarial review 
 - Axis D sibling spec (`part_of` + altitude).
 - Non-entity-target edge (IMP-012, IDE-015) — retires remaining `drift` rows.
 - Prose-hunt pass for absent relations expressed as prose (F-1/F-5/F-7).
+- Web-graph TS frontend (`web/map/`) — read `edge.role` to render `references(<role>)`
+  in the dot label; backend already serialises it (P4a). File as backlog at reconcile.
+- SPEC-005/006/016 rewire to *reference* SPEC-018 rather than re-tell the relation story
+  (now the contract is proven in code).

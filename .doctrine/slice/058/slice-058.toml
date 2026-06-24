@@ -16,7 +16,8 @@ after = []                      # slice→work soft sequence: { to, rank }
 # Prior-art siblings SL-048/SL-046 carry no legal slice→slice label — they stay
 # prose in the scope doc (RELATION_RULES: `related` is governance-source only).
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-018"
 
 [[relation]]

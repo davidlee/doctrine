@@ -10,7 +10,8 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-001"
 # No `requirements` — no REQ registry for the backlog capability yet (a backlog
 # spec is SL-021 territory; non-goal here).

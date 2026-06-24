@@ -1491,7 +1491,7 @@ fn format_show(
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
-    use crate::relation::{RelationLabel, targets_for};
+    use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
     parts.push(format!("{} · {}\n", doc.slug, doc.status));
@@ -1527,16 +1527,26 @@ fn format_show(
         ));
     }
 
-    // Tier-1 axes in canonical order (specs, requirements, supersedes, governed_by);
-    // each renders only when non-empty, the block only when any axis is populated.
+    // Tier-1 axes in canonical order (supersedes, governed_by, then references per
+    // role). Each renders only when non-empty, the block only when any axis is
+    // populated. SL-149 PHASE-05: the legacy `specs`/`requirements` axes are gone —
+    // the corpus migration rewrote those edges onto `references(implements)` /
+    // `references(concerns)`, which render per role, one line each.
     let axes = [
-        ("specs", targets_for(tier1, RelationLabel::Specs)),
-        (
-            "requirements",
-            targets_for(tier1, RelationLabel::Requirements),
-        ),
         ("supersedes", targets_for(tier1, RelationLabel::Supersedes)),
         ("governed_by", targets_for(tier1, RelationLabel::GovernedBy)),
+        (
+            "references(implements)",
+            targets_for_role(tier1, RelationLabel::References, Role::Implements),
+        ),
+        (
+            "references(scoped_from)",
+            targets_for_role(tier1, RelationLabel::References, Role::ScopedFrom),
+        ),
+        (
+            "references(concerns)",
+            targets_for_role(tier1, RelationLabel::References, Role::Concerns),
+        ),
     ];
     // The dep/seq payload axes (SL-060) render under the SAME `relationships:` block,
     // after the structural tier-1 axes. `after` edges render `to (rank N)` (rank
@@ -1581,27 +1591,19 @@ fn format_show(
 /// into `[[relation]]`, so the serialized `SliceDoc` no longer carries them — they
 /// are reconstructed here from `tier1` (read via `read_block`) and spliced back into
 /// the `slice` object under the SAME `relationships` key, preserving the byte-exact
-/// JSON shape (OD-2). The three legacy axes (`requirements`/`specs`/`supersedes`) are
-/// ALWAYS present (empty `[]` when unauthored — the pre-migration struct-default
-/// shape); the new `governed_by` axis is emitted only when populated (additive — no
-/// current slice authors it, so the object is byte-identical across the migration).
-/// `serde_json` sorts object keys, so the emitted order is alphabetical (unchanged).
+/// JSON shape (OD-2). The `supersedes` axis is ALWAYS present (empty `[]` when
+/// unauthored); `governed_by` is emitted only when populated. SL-149 PHASE-05: the
+/// legacy `specs`/`requirements` keys are gone — the corpus migration rewrote those
+/// edges onto the `references` role object below. `serde_json` sorts object keys, so
+/// the emitted order is alphabetical.
 fn show_json(
     doc: &SliceDoc,
     tier1: &[crate::relation::RelationEdge],
     dep_seq: &crate::dep_seq::DepSeq,
     body: &str,
 ) -> anyhow::Result<String> {
-    use crate::relation::{RelationLabel, targets_for};
+    use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut relationships = serde_json::Map::new();
-    relationships.insert(
-        "specs".to_string(),
-        serde_json::json!(targets_for(tier1, RelationLabel::Specs)),
-    );
-    relationships.insert(
-        "requirements".to_string(),
-        serde_json::json!(targets_for(tier1, RelationLabel::Requirements)),
-    );
     relationships.insert(
         "supersedes".to_string(),
         serde_json::json!(targets_for(tier1, RelationLabel::Supersedes)),
@@ -1610,6 +1612,19 @@ fn show_json(
     if !governed_by.is_empty() {
         relationships.insert("governed_by".to_string(), serde_json::json!(governed_by));
     }
+    // SL-149: the `references` label projected by role into a sibling object
+    // `{ implements, scoped_from, concerns }`, each an array of targets. ALWAYS present
+    // (the three role keys present, empty `[]` when unauthored — the legacy-axis
+    // convention). PHASE-05's corpus migration moved the old `specs`/`requirements`
+    // edges into `references(implements)`/`references(concerns)` here.
+    relationships.insert(
+        "references".to_string(),
+        serde_json::json!({
+            "implements": targets_for_role(tier1, RelationLabel::References, Role::Implements),
+            "scoped_from": targets_for_role(tier1, RelationLabel::References, Role::ScopedFrom),
+            "concerns": targets_for_role(tier1, RelationLabel::References, Role::Concerns),
+        }),
+    );
     // The dep/seq payload axes (SL-060). Additive — emitted only when populated, so an
     // unauthored slice's JSON object stays byte-identical to the pre-SL-060 shape.
     // `after` serializes as `[{ to, rank }, …]` (the `AfterEdge` derive).
@@ -2762,7 +2777,7 @@ mod tests {
 
     #[test]
     fn format_show_renders_identity_and_scope_body() {
-        use crate::relation::{RelationEdge, RelationLabel};
+        use crate::relation::{RelationEdge, RelationLabel, Role};
         let doc = SliceDoc {
             id: 25,
             slug: "uniform-cli".into(),
@@ -2777,7 +2792,11 @@ mod tests {
             selectors: vec![],
         };
         // SL-048: tier-1 edges are passed in (read from `[[relation]]`), not a struct.
-        let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
+        let tier1 = vec![RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Implements),
+            "PRD-010".into(),
+        )];
         // `started` defaults to self/auto (no plan/reconcile gate) — VT-3 show side.
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
@@ -2797,7 +2816,10 @@ mod tests {
         assert!(out.contains("uniform-cli · started"), "flat fields: {out}");
         assert!(out.contains("conduct: self/auto"), "conduct posture: {out}");
         assert!(out.contains("created 2026-06-01 · updated 2026-06-08"));
-        assert!(out.contains("specs: PRD-010"), "relationships axis: {out}");
+        assert!(
+            out.contains("references(implements): PRD-010"),
+            "relationships axis: {out}"
+        );
         assert!(
             out.contains("the scope body."),
             "scope body appended: {out}"
@@ -2807,7 +2829,7 @@ mod tests {
     // VT-5: absent facets → byte-identical to pre-change format_show output (golden).
     #[test]
     fn vt5_format_show_absent_facets_is_byte_identical() {
-        use crate::relation::{RelationEdge, RelationLabel};
+        use crate::relation::{RelationEdge, RelationLabel, Role};
         let doc = SliceDoc {
             id: 25,
             slug: "uniform-cli".into(),
@@ -2821,7 +2843,11 @@ mod tests {
             value: None,
             selectors: vec![],
         };
-        let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
+        let tier1 = vec![RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Implements),
+            "PRD-010".into(),
+        )];
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
         let out = format_show(
@@ -2843,7 +2869,7 @@ mod tests {
             "created 2026-06-01 · updated 2026-06-08\n",
             "\n",
             "relationships:\n",
-            "  specs: PRD-010\n",
+            "  references(implements): PRD-010\n",
             "\n",
             "# Scope\n",
             "\n",
@@ -2858,7 +2884,7 @@ mod tests {
     // VT-1: estimate present → confidence row rendered in show output.
     #[test]
     fn vt1_format_show_estimate_present_renders_confidence_row() {
-        use crate::relation::{RelationEdge, RelationLabel};
+        use crate::relation::{RelationEdge, RelationLabel, Role};
         let doc = SliceDoc {
             id: 25,
             slug: "uniform-cli".into(),
@@ -2872,7 +2898,11 @@ mod tests {
             value: None,
             selectors: vec![],
         };
-        let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
+        let tier1 = vec![RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Implements),
+            "PRD-010".into(),
+        )];
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
         let facets = crate::facet::EntityFacets {
@@ -3157,12 +3187,120 @@ mod tests {
         assert_eq!(parsed["slice"]["id"], 1);
         assert_eq!(parsed["slice"]["slug"], "my-slug");
         assert_eq!(parsed["slice"]["status"], "proposed");
-        // SL-048: the `relationships` object is reconstructed from `[[relation]]`; the
-        // three legacy axes are always present (empty `[]` here — a virgin slice).
-        assert!(parsed["slice"]["relationships"]["specs"].is_array());
-        assert!(parsed["slice"]["relationships"]["requirements"].is_array());
-        assert!(parsed["slice"]["relationships"]["supersedes"].is_array());
+        // SL-048: the `relationships` object is reconstructed from `[[relation]]`.
+        // SL-149 PHASE-05: the legacy specs/requirements axes are gone; `supersedes` and
+        // the `references` role object are present (empty here — a virgin slice).
+        let rel = &parsed["slice"]["relationships"];
+        assert!(rel.get("specs").is_none());
+        assert!(rel.get("requirements").is_none());
+        assert!(rel["supersedes"].is_array());
+        assert!(rel["references"]["implements"].is_array());
         assert!(parsed["body"].as_str().unwrap().contains("My Title"));
+    }
+
+    /// A minimal `SliceDoc` for the show_json schema tests — identity only, no facets.
+    fn doc_for_json(id: u32) -> SliceDoc {
+        SliceDoc {
+            id,
+            slug: "refs".into(),
+            title: "Refs".into(),
+            status: "proposed".into(),
+            created: "2026-06-01".into(),
+            updated: "2026-06-01".into(),
+            tags: vec![],
+            gate: Gate::default(),
+            estimate: None,
+            value: None,
+            selectors: vec![],
+        }
+    }
+
+    #[test]
+    fn show_json_groups_references_by_role() {
+        // SL-149 PHASE-05: a fixture authoring references(implements/scoped_from/concerns)
+        // → the JSON carries a `references` object grouped by role; the legacy
+        // `specs`/`requirements` keys are gone (the corpus migration retired them).
+        use crate::relation::{RelationEdge, RelationLabel, Role};
+        let tier1 = vec![
+            RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Implements),
+                "SPEC-018".into(),
+            ),
+            RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::ScopedFrom),
+                "IMP-012".into(),
+            ),
+            RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Concerns),
+                "RFC-003".into(),
+            ),
+        ];
+        let json = show_json(
+            &doc_for_json(149),
+            &tier1,
+            &crate::dep_seq::DepSeq::default(),
+            "# b\n",
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let rel = &v["slice"]["relationships"];
+        // references grouped by role
+        assert_eq!(
+            rel["references"]["implements"],
+            serde_json::json!(["SPEC-018"])
+        );
+        assert_eq!(
+            rel["references"]["scoped_from"],
+            serde_json::json!(["IMP-012"])
+        );
+        assert_eq!(
+            rel["references"]["concerns"],
+            serde_json::json!(["RFC-003"])
+        );
+        // legacy keys removed (the hard cut)
+        assert!(rel.get("specs").is_none(), "legacy specs key removed");
+        assert!(
+            rel.get("requirements").is_none(),
+            "legacy requirements key removed"
+        );
+    }
+
+    #[test]
+    fn show_json_references_implements_carries_spec_and_req() {
+        // SL-149 PHASE-05: a slice authoring references(implements) to both a SPEC and a
+        // REQ (the migration target of the old specs/requirements edges) → both land in
+        // the `implements` bucket; no legacy keys.
+        use crate::relation::{RelationEdge, RelationLabel, Role};
+        let tier1 = vec![
+            RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Implements),
+                "SPEC-018".into(),
+            ),
+            RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Implements),
+                "REQ-002".into(),
+            ),
+        ];
+        let json = show_json(
+            &doc_for_json(149),
+            &tier1,
+            &crate::dep_seq::DepSeq::default(),
+            "# b\n",
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let rel = &v["slice"]["relationships"];
+        assert_eq!(
+            rel["references"]["implements"],
+            serde_json::json!(["SPEC-018", "REQ-002"])
+        );
+        assert!(rel.get("specs").is_none());
+        assert!(rel.get("requirements").is_none());
     }
 
     #[test]

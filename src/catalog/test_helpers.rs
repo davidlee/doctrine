@@ -28,9 +28,21 @@ pub(crate) fn tmp() -> tempfile::TempDir {
 pub(crate) fn relation_rows(edges: &[(&str, &[&str])]) -> String {
     let mut parts: Vec<String> = Vec::new();
     for (label, targets) in edges {
+        // SL-149: a `references(<role>)` label string expands to a roled row
+        // (`label = "references"` + `role = "<role>"`); any other label stays roleless.
+        let (label, role) = match label
+            .strip_prefix("references(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            Some(role) => ("references", Some(role)),
+            None => (*label, None),
+        };
+        let role_line = role
+            .map(|r| format!("role = \"{r}\"\n"))
+            .unwrap_or_default();
         for t in *targets {
             parts.push(format!(
-                "[[relation]]\nlabel = \"{label}\"\ntarget = \"{t}\"\n"
+                "[[relation]]\nlabel = \"{label}\"\n{role_line}target = \"{t}\"\n"
             ));
         }
     }

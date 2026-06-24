@@ -10,15 +10,18 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-001"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-072"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-077"
 # REQ-072 (reasons are the render source of truth) — finding 5 renames the
 #   `explain` order label, touching that surface. REQ-077 (determinism) — the
