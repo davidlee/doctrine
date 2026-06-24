@@ -6,12 +6,12 @@ status = "active"
 title = "Reading doctrine entities concept"
 summary = ""
 created = "2026-06-15"
-updated = "2026-06-15"
+updated = "2026-06-24"
 
 [scope]
 paths = [".doctrine/"]
 globs = []
-commands = ["doctrine slice", "doctrine adr", "doctrine spec"]
+commands = ["doctrine slice", "doctrine adr", "doctrine spec", "doctrine memory", "doctrine review", "doctrine inspect"]
 tags = []
 workspace = "default"
 repo = ""

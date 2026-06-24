@@ -47,7 +47,7 @@ The CLI is the source of truth for exact flags: `doctrine backlog --help`
   acceptance, or expiry); NOT a general epistemic note
 - **idea** — a speculative proposal, not yet scoped or committed
 
-The **work-intake membership test** (`mem.concept.backlog.work-intake-membership`):
+The **work-intake membership test** ([[mem.concept.backlog.work-intake-membership]]):
 a candidate that does not fit the work-status lifecycle
 (`open|triaged|started|resolved|closed`) is not a backlog item.
 

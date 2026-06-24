@@ -5,7 +5,7 @@ the project's `CLAUDE.md` and `.doctrine/state/boot.md` — this points at them;
 those for the authoritative wording.
 
 - **Frequent, slice-scoped conventional commits.** Scope every commit with the
-  slice id: `fix(SL-004): …`, `doc(SL-005): …`, `plan(SL-005): …`. Commit small
+  slice id: `fix(<scope>): …`, `doc(<scope>): …`, `plan(<scope>): …`. Commit small
   and often, on `main` (or the slice's worktree branch).
 - **Pure / imperative split.** No clock, rng, git, or disk in the pure layer — pass
   them in as inputs (the date/uid pattern). Impurity lives in a thin shell. See

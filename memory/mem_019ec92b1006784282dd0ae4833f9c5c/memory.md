@@ -3,34 +3,34 @@
 Doctrine memory lets you capture durable facts, patterns, gotchas, and
 constraints so future agents retrieve them instead of rediscovering them.
 
-## Recording
+## CLI
 
-- `doctrine memory record --type <type> --key <key> <title>` — mint a uid and
-  scaffold a new memory under `.doctrine/memory/items/`. Writes `memory.toml`
-  (structured fields: type, scope, trust, git anchor) and `memory.md` (prose
-  body), plus a `mem.<key>` symlink alias.
-- Use `--path-scope`, `--glob`, `--command` to set retrieval scopes.
-- `--global` mints a shipped orientation master (`repo=""`,
-  `anchor_kind=none`) into the repo-root `memory/` tree — only for doctrine's
-  own shipped corpus, not project-local capture.
+The CLI is the source of truth: `doctrine memory --help`, never guess.
+Key verbs: record, verify, find, retrieve, show, list, validate, edit, tag,
+status. Every flag and subcommand shape is verified at the binary — a guessed
+flag is a stale flag.
+
+## What memory records
+
+Each memory carries structured fields (type, scope, trust, git anchor) in
+`memory.toml` and prose body in `memory.md`, plus a `mem.<key>` symlink alias
+for key-based lookup. Records live under `.doctrine/memory/items/` (local) or
+`memory/` (shipped corpus, via `--global`).
 
 ## Verification
 
-`doctrine memory verify <uid|key>` attests a memory against the current working
-tree. It stamps the verification axis — refuses a dirty tree (no false
-attestation). Verified memories carry provenance; unverified memories carry a
-caveat in retrieval.
+A verified memory has been attested against a specific working-tree commit.
+Unverified memories carry a caveat in retrieval. Verification refuses a dirty
+tree — no false attestation. Records decay: a memory attested against a commit
+from 50 commits ago carries a staleness penalty in ranking.
 
 ## Retrieval and trust
 
-- `doctrine memory find` — ranked rows, holdback-exempt. Risk is visible.
-- `doctrine memory retrieve` — data-not-instruction blocks for agent context.
-  Applies a **non-bypassable trust holdback**: low-trust, high-severity memories
-  are suppressed. Use `find` to inspect what `retrieve` withheld.
-- `doctrine memory show <uid|key>` — full body of one memory.
-
-Records decay — a memory attested against a commit from 50 commits ago carries
-a staleness penalty in ranking. Verify after substantial scope churn.
+`doctrine memory retrieve` supplies data-not-instruction blocks for agent
+context. It applies a **non-bypassable trust holdback**: low-trust,
+high-severity memories are suppressed. Use `find` (holdback-exempt) to
+inspect what `retrieve` withheld. `show` provides the full body of one
+memory by uid or key.
 
 See [[concept.doctrine.memory-model]] for the two-faces model,
 [[concept.doctrine.storage-model]] for the storage rule,

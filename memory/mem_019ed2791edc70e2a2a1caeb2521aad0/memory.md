@@ -21,12 +21,8 @@ Each kind carries a `[facet]` table (kind-specific structured data) and an
 
 ## CLI
 
-- `doctrine knowledge new --kind <assumption|decision|question|constraint>`
-  — scaffold a new record.
-- `doctrine knowledge list` — survey records; hides settled states by default.
-- `doctrine knowledge show <ID>` — reassemble one record (kind auto-detected).
-- `doctrine knowledge status <ID> <state>` — transition its lifecycle state
-  (the state must be in the kind's vocabulary).
+The CLI is the source of truth: `doctrine knowledge --help`.
+Key verbs: new, list, show, status.
 
 ## Membership test
 

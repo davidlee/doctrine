@@ -10,10 +10,8 @@ continuously (unlike ADRs, which capture decisions at a point in time).
 
 ## CLI
 
-- `doctrine policy new --title "..."` — scaffold a policy.
-- `doctrine standard new --title "..."` — scaffold a standard.
-- `doctrine policy list` / `doctrine standard list` — list by status.
-- `doctrine policy show <ID>` — full content.
+The CLI is the source of truth: `doctrine policy --help` and
+`doctrine standard --help`.
 
 Policies and standards appear in the boot snapshot's governance section when
 active. If your project has no policies or standards yet, the boot snapshot
