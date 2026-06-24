@@ -1,7 +1,7 @@
 id = 143
 slug = "shipped-memory-corpus-overhaul"
 title = "Shipped memory corpus overhaul: holistic onboarding & self-correction"
-status = "ready"
+status = "reconcile"
 created = "2026-06-23"
 updated = "2026-06-24"
 tags = ["memory", "shipped-memory", "onboarding", "audit", "self-correction"]
