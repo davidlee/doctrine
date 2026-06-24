@@ -1450,12 +1450,16 @@ pub(crate) fn add_edge_to_dsl(
         return Err(ConceptMapMutationError::EmptyField("target".into()));
     }
 
-    // Detect duplicate
+    // Detect duplicate by derived key (parse_dsl deduplicates on (from_key, rel, to_key),
+    // and derive_node_key normalises distinct label spellings into the same key —
+    // e.g. "User Story" and "User-Story" both derive to "user-story").
+    let source_key = derive_node_key(source);
+    let target_key = derive_node_key(target);
     let parsed = parse_dsl(old_dsl);
     if let Some(dup) = parsed
         .edges
         .iter()
-        .find(|e| e.from_label == source && e.rel == rel && e.to_label == target)
+        .find(|e| e.from_key == source_key && e.rel == rel && e.to_key == target_key)
     {
         return Err(ConceptMapMutationError::DuplicateEdge { line: dup.line });
     }
@@ -1508,7 +1512,12 @@ pub(crate) fn remove_edge_from_dsl(
             let ls = segments.first().map_or("", |s| s.trim());
             let lr = segments.get(1).map_or("", |s| s.trim());
             let lt = segments.get(2).map_or("", |s| s.trim());
-            if ls == source && lr == rel && lt == target && !found {
+            // Compare by derived key (same rationale as add_edge_to_dsl).
+            let ls_key = derive_node_key(ls);
+            let lt_key = derive_node_key(lt);
+            let source_key = derive_node_key(source);
+            let target_key = derive_node_key(target);
+            if ls_key == source_key && lr == rel && lt_key == target_key && !found {
                 found = true;
                 continue; // omit only the first matching line
             }
@@ -2845,15 +2854,19 @@ mod tests {
     }
 
     #[test]
-    fn run_remove_case_sensitive_match() {
+    fn run_remove_matches_by_key_case_insensitive() {
         let tmp = tempfile::TempDir::new().unwrap();
         let root = tmp.path();
         install_cm(root, "Test Map", None);
         let cm_root = root.join(CONCEPT_MAP_DIR);
         rewrite_dsl(&cm_root, 1, "User > creates > Document");
 
+        // Lowercase input matches uppercase label because derive_node_key normalises case.
         let res = run_remove(Some(root.to_path_buf()), "1", "user", "creates", "document");
-        assert!(res.is_err(), "case difference should not match");
+        assert!(res.is_ok(), "key-based match is case-insensitive");
+        // Verify the edge was removed.
+        let (_doc, _toml, body) = read_concept_map(&cm_root, 1).unwrap();
+        assert!(!body.contains("User"));
     }
 
     #[test]
@@ -3209,6 +3222,24 @@ mod tests {
     // --- add_edge_to_dsl tests ---
 
     #[test]
+    fn add_edge_detects_duplicate_by_key_not_label() {
+        // "User Story" and "User-Story" both derive to "user-story" — the
+        // duplicate guard must catch the collision by derived key, not raw label.
+        let dsl = make_dsl(&["User Story > relates to > Goal"]);
+        let result = add_edge_to_dsl(&dsl, "User-Story", "relates to", "Goal");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { .. })
+        ));
+        // Also check with underscores.
+        let result2 = add_edge_to_dsl(&dsl, "User_Story", "relates to", "Goal");
+        assert!(matches!(
+            result2,
+            Err(ConceptMapMutationError::DuplicateEdge { .. })
+        ));
+    }
+
+    #[test]
     fn add_edge_appends_to_dsl() {
         let dsl = make_dsl(&["A > depends on > B"]);
         let result = add_edge_to_dsl(&dsl, "B", "depends on", "C").unwrap();
@@ -3250,6 +3281,15 @@ mod tests {
     }
 
     // --- remove_edge_from_dsl tests ---
+
+    #[test]
+    fn remove_edge_matches_by_key_not_label() {
+        // "User_Story" → "user-story" and "User Story" → "user-story" —
+        // remove must match by derived key, not raw label spelling.
+        let dsl = make_dsl(&["User_Story > relates to > Target_Goal"]);
+        let result = remove_edge_from_dsl(&dsl, "User Story", "relates to", "Target-Goal").unwrap();
+        assert!(!result.contains("User_Story"));
+    }
 
     #[test]
     fn remove_edge_removes_matching_line() {
