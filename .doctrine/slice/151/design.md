@@ -40,7 +40,7 @@ the catalog's `scan_entities`). No catalog performance impact.
 
 ### D3 — Route main read paths through shared wrapper, not every path
 
-Five read paths get the wrapper: `meta::read_meta`, `meta::read_id`,
+Six read paths get the wrapper: `meta::read_meta`, `meta::read_id`,
 `slice::read_slice`, `backlog::read_item`, `knowledge::read_record`,
 `governance::read_doc`. These are the high-traffic entity-read paths where a
 user encountering a non-contiguous TOML needs the canonical-id diagnostic.
@@ -120,49 +120,70 @@ replaces `toml::from_str(&text).with_context(...)`.
 | File | Change |
 |---|---|
 | `src/dtoml.rs` | **New:** `parse_entity_toml<T>(text, prefix, id) → T` |
-| `src/meta.rs` | `read_meta`: swap raw `toml::from_str` for `dtoml::parse_entity_toml`. `read_id`: same. Add `prefix` parameter to both. |
-| `src/integrity.rs` | `scan_kind`: add `diagnostics: &mut Vec<String>` param; after `read_id`, do `toml::from_str::<toml::Value>(&text)`, push errors. `id_integrity_findings`: allocate `diagnostics`, pass to `scan_kind`, append to findings. |
+| `src/meta.rs` | `read_meta`: swap raw `toml::from_str` for `dtoml::parse_entity_toml`. `read_id`: same. Add `prefix` parameter to both. **`read_metas` (the list funnel) also gains a `prefix` param** — it loops `read_meta` internally but holds only `stem`, so the prefix must be threaded through it too. |
+| `src/integrity.rs` | `scan_kind`: add `diagnostics: &mut Vec<String>` param; after `read_id`, do `toml::from_str::<toml::Value>(&text)`, push errors. `id_integrity_findings`: allocate `diagnostics`, pass to `scan_kind`, append to findings. Also a forced `read_meta`/`read_id`/`read_metas` caller — see survey. |
 | `src/slice.rs` | `read_slice`: swap raw `toml::from_str` for `dtoml::parse_entity_toml(&text, "SL", id)` |
 | `src/backlog.rs` | `read_item`: swap raw `toml::from_str` for `dtoml::parse_entity_toml(&text, kind.prefix(), id)` |
 | `src/knowledge.rs` | `read_record`: swap raw `toml::from_str` for `dtoml::parse_entity_toml(&text, kind.prefix(), id)` |
-| `src/governance.rs` | `read_doc`: swap raw `toml::from_str` for `dtoml::parse_entity_toml(&text, &g.kind.prefix, id)` |
-| Callers of `read_meta`/`read_id` | Add `prefix` argument — each caller knows its kind's prefix |
+| `src/governance.rs` | `read_doc`: swap raw `toml::from_str` for `dtoml::parse_entity_toml(&text, &g.kind.prefix, id)`. `list_rows` (`read_metas`) supplies `g.kind.prefix` for **all** governance kinds at one site. |
+| `src/lazyspec.rs` | **Forced caller** — `load_entity_record` (`:468`) calls `read_meta`; supply prefix from `engine_kind`. |
+| `src/catalog/scan.rs` | **Forced caller** — status/title path (`:429`) calls `read_meta`; supply `kref.kind.prefix`. Hot path, but `with_context` is lazy (allocates only on error) → no runtime cost. |
+| Direct `read_meta`/`read_metas`/`read_id` callers | Add `prefix` argument — each caller (or its kind-generic funnel) knows its prefix; see Caller survey. |
 
-## Caller survey for `read_meta` / `read_id`
+## Caller survey for `read_meta` / `read_id` / `read_metas`
 
-`read_meta` callers (each needs `prefix` added):
+Surveyed by grep against `src/` (production call sites only). The per-kind
+`show`/`list` paths do **not** each call `read_meta` directly — most funnel
+through `meta::read_metas(tree_root, stem)` (the list loop) or the
+kind-generic governance funnel. The prefix is threaded at the **real** sites
+below, not per-module.
 
-| Caller | Prefix |
+**Direct `read_meta` callers (prod):**
+
+| Caller | Prefix source |
 |---|---|
-| `src/slice.rs` (show/list) | `"SL"` |
-| `src/adr.rs` (show/list) | `"ADR"` |
-| `src/policy.rs` (show/list) | `"POL"` |
-| `src/standard.rs` (show/list) | `"STD"` |
-| `src/spec.rs` (show/list, product) | `"PRD"` |
-| `src/spec.rs` (show/list, tech) | `"SPEC"` |
-| `src/rfc.rs` (show/list) | `"RFC"` |
-| `src/revision.rs` (show/list) | `"REV"` |
-| `src/review.rs` (show/list) | `"RV"` |
-| `src/requirement.rs` (show/list) | `"REQ"` |
-| `src/rec.rs` (show/list) | `"REC"` |
-| `src/backlog.rs` (show/list, all 5 kinds) | `"ISS"`/`"IMP"`/`"CHR"`/`"RSK"`/`"IDE"` |
-| `src/knowledge.rs` (show/list, all 4 kinds) | `"ASM"`/`"DEC"`/`"QUE"`/`"CON"` |
-| `src/integrity.rs` (reseat) | Via `kind.kind.prefix` |
+| `src/slice.rs:555/584/639` (show paths) | `"SL"` |
+| `src/integrity.rs:414` (reseat slug read) | `kind.kind.prefix` |
+| `src/lazyspec.rs:468` (`load_entity_record`) | from `engine_kind` |
+| `src/catalog/scan.rs:429` (status/title path) | `kref.kind.prefix` |
+| `src/meta.rs:84` (`read_metas` internal loop) | threaded `prefix` param |
 
-`read_id` callers:
+**`read_metas` callers (the list funnel — each supplies `prefix`):**
 
-| Caller | Prefix |
+| Caller | Prefix source |
 |---|---|
-| `src/integrity.rs` (`scan_kind`) | `kind.kind.prefix` |
+| `src/governance.rs:71` (`list_rows`, **all** gov kinds: ADR/POL/STD/PRD/SPEC/RFC/REV/REQ) | `g.kind.prefix` |
+| `src/status.rs:292` (slice) / `:314` (rfc) | `"SL"` / `"RFC"` |
+| `src/concept_map.rs:1241` | `"CM"` |
+| `src/slice.rs:1265` (list) | `"SL"` |
+| `src/spec.rs:1442` | `SPEC`/`PRD` per surface |
+
+> The dropped survey rows (`adr.rs`, `policy.rs`, `standard.rs`, `rfc.rs`,
+> `revision.rs`, `requirement.rs`, `review.rs`, `rec.rs` as *direct*
+> `read_meta` callers) were fiction — those kinds reach `read_meta` only via
+> the governance `read_metas` funnel above, at one site (`g.kind.prefix`).
+> Backlog/knowledge `show` likewise route through `read_metas`, not bespoke
+> per-kind `read_meta` calls.
+
+**`read_id` callers (prod):**
+
+| Caller | Prefix source | Note |
+|---|---|---|
+| `src/integrity.rs:263` (`scan_kind`) | `kind.kind.prefix` | context surfaces on `validate` |
+| `src/integrity.rs:304` (alias/reseat target resolve) | `kind.kind.prefix` | error is `.ok()`-swallowed → prefix context is moot here |
 
 ## Not changed (out of scope)
 
 | File | Reason |
 |---|---|
-| `catalog/scan.rs` | Already wraps errors into `CatalogDiagnostic` with entity key |
-| `review.rs`, `rec.rs`, `revision.rs` read paths | Lower-traffic; can adopt wrapper later |
-| `concept_map.rs`, `memory.rs`, `lazyspec.rs`, `dispatch.rs`, `dtoml.rs` (config) | Config/specialised reads, not entity TOMLs |
-| Write paths | Use `toml_edit::DocumentMut` — always contiguous output |
+| `catalog/scan.rs` error wrapping | Already wraps parse errors into `CatalogDiagnostic` with entity key — **but** its `read_meta` call (`:429`) is a forced in-scope caller (see survey); only the diagnostic-wrapping is untouched. |
+| `review.rs`, `rec.rs`, `revision.rs` *dedicated* read paths | Lower-traffic bespoke reads; can adopt wrapper later (their `show`/`list` already flow through `read_metas`, which IS in scope). |
+| `memory.rs`, `dispatch.rs`, `dtoml.rs` (config) | Config/specialised reads, not entity TOMLs. |
+| Write paths | Use `toml_edit::DocumentMut` — always contiguous output. |
+
+> `lazyspec.rs` and `catalog/scan.rs` were previously listed here as
+> out-of-scope; they are **forced `read_meta` callers** and moved into the
+> affected-surface table above (a `prefix` param is compile-forcing).
 
 ## Verification
 
@@ -174,6 +195,7 @@ replaces `toml::from_str(&text).with_context(...)`.
 | VT-4 | Unit | `scan_kind` produces no diagnostics on valid TOML |
 | VT-5 | Integration | `doctrine validate` exits non-zero on a non-contiguous entity TOML fixture |
 | VT-6 | Integration | `doctrine show SL-NNN` on non-contiguous TOML errors with canonical id in message |
+| VT-7 | Unit | `read_id` on a malformed id-only TOML surfaces the `"{prefix}-{id:03}: TOML parse failed"` context (wrapper path distinct from `read_meta`) |
 | VA-1 | Agent | `just gate` — clippy zero warnings across workspace |
 | VH-1 | Human | Manually edit an entity TOML to be non-contiguous, run `doctrine validate`, confirm clear diagnostic with canonical id |
 
