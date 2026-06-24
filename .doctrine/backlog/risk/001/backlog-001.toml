@@ -30,5 +30,6 @@ label = "slices"
 target = "SL-036"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "concerns"
 target = "SPEC-001"

@@ -11,16 +11,18 @@ needs = []                      # slice→work hard prerequisite
 after = [{ to = "SL-136", rank = 0 }, { to = "SL-133", rank = 0 }, { to = "SL-134", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "RFC-002"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "SPEC-001"
 
 [[relation]]
 label = "governed_by"
 target = "ADR-015"
-
-[[relation]]
-label = "specs"
-target = "SPEC-001"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

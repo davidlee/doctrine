@@ -10,15 +10,18 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "concerns"
 target = "SPEC-016"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "concerns"
 target = "SPEC-005"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "concerns"
 target = "SPEC-006"
 
 [[relation]]

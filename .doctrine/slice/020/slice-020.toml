@@ -10,39 +10,48 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "PRD-009"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-049"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-050"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-051"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-052"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-053"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-057"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-058"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-059"
 # Lineage (not edges): rides the same engine seam ADR (SL-006) + spec (SL-015) proved;
 # lands behind its registry gate via the supersede pattern (entity-model.md:147).

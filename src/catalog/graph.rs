@@ -138,7 +138,7 @@ mod tests {
         let root = dir.path();
 
         // SL-001 → REQ-005 (resolved), ADR-002 → ADR-001 (resolved)
-        seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
+        seed_slice(root, 1, &[("references(implements)", &["REQ-005"])]);
         seed_requirement(root, 5);
         seed_adr(root, 2, &[("supersedes", &["ADR-001"])]);
         seed_adr(root, 1, &[]);
@@ -172,7 +172,7 @@ mod tests {
         let root = dir.path();
 
         // SL-001 → REQ-999 (dangling canonical ref)
-        seed_slice(root, 1, &[("requirements", &["REQ-999"])]);
+        seed_slice(root, 1, &[("references(implements)", &["REQ-999"])]);
 
         let graph = build_graph(root);
 
@@ -249,8 +249,8 @@ mod tests {
         let root = dir.path();
 
         // SL-001 → REQ-005, SL-003 → REQ-005 (two sources pointing TO REQ-005)
-        seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
-        seed_slice(root, 3, &[("requirements", &["REQ-005"])]);
+        seed_slice(root, 1, &[("references(implements)", &["REQ-005"])]);
+        seed_slice(root, 3, &[("references(implements)", &["REQ-005"])]);
         seed_requirement(root, 5);
 
         let graph = build_graph(root);
@@ -523,5 +523,51 @@ mod tests {
         assert_eq!(node["estimate"]["lower"], 2.0);
         assert_eq!(node["estimate"]["upper"], 8.0);
         assert_eq!(node["value"]["value"], 5.0);
+    }
+
+    /// SL-149 PHASE-04: the web-graph edge carries the `role` payload for a `references`
+    /// edge, so the rendered edge label can show the role verb (`references(implements)`).
+    /// A label-only edge omits the `role` key entirely (`skip_serializing_if`), so the
+    /// shipped edge contract stays byte-identical for every non-`references` edge.
+    #[test]
+    fn graph_references_edge_serializes_role_label_only_omits_it() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 implements REQ-005 (roled) AND supersedes SL-002 (label-only).
+        crate::catalog::test_helpers::write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s1\"\ntitle = \"S1\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-005\"\n\
+             [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-002\"\n",
+        );
+        crate::catalog::test_helpers::write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        seed_requirement(root, 5);
+
+        let graph = build_graph(root);
+        let json = serde_json::to_value(&graph).unwrap();
+        let edges = json["edges"].as_array().expect("edges array");
+
+        // The `references` edge carries `role: "Implements"` (the Role serde variant,
+        // matching the PascalCase `Validated` label convention the web layer snake-cases).
+        let ref_edge = edges
+            .iter()
+            .find(|e| e["label"]["Validated"] == "References")
+            .expect("references edge present");
+        assert_eq!(
+            ref_edge["role"], "Implements",
+            "references edge carries its role payload: {ref_edge}"
+        );
+
+        // The label-only `supersedes` edge omits the `role` key entirely.
+        let sup_edge = edges
+            .iter()
+            .find(|e| e["label"]["Validated"] == "Supersedes")
+            .expect("supersedes edge present");
+        assert!(
+            sup_edge.get("role").is_none(),
+            "label-only edge omits role: {sup_edge}"
+        );
     }
 }

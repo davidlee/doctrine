@@ -14,11 +14,13 @@ label = "governed_by"
 target = "ADR-004"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "PRD-002"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-006"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed

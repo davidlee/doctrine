@@ -18,19 +18,23 @@ label = "governed_by"
 target = "ADR-012"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-290"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-292"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-294"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-295"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed

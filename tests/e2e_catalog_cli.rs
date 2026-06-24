@@ -26,13 +26,14 @@ fn write(root: &Path, rel: &str, body: &str) {
 }
 
 fn seed_fixture(root: &Path) {
-    // SL-001 — outbound requirements edge to REQ-005.
+    // SL-001 — outbound references(implements) edge to REQ-005 (SL-149 PHASE-05: the
+    // old `requirements` label collapsed into references(implements)).
     write(
         root,
         ".doctrine/slice/001/slice-001.toml",
         "id = 1\nslug = \"s1\"\ntitle = \"S1\"\nstatus = \"proposed\"\n\
          created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-         [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-005\"\n",
+         [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-005\"\n",
     );
     write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
 

@@ -19,70 +19,87 @@ label = "related"
 target = "RFC-001"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-132"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-112"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-133"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-118"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-134"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-132"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-133"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-134"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-118"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ISS-040"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-135"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-136"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-137"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-138"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-142"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-021"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-147"
 

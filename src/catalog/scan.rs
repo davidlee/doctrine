@@ -516,7 +516,7 @@ mod tests {
     /// Seed the shared multi-kind fixture: SL-001, SL-003, ADR-002, REQ-005.
     /// ≥3 entities spanning ≥2 KINDS entries with id gaps.
     fn seed_fixture(root: &Path) {
-        seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
+        seed_slice(root, 1, &[("references(implements)", &["REQ-005"])]);
         seed_slice(root, 3, &[]);
         seed_adr(root, 2, &[("supersedes", &["ADR-001"])]);
         seed_requirement(root, 5);
@@ -570,7 +570,11 @@ mod tests {
         assert_eq!(sl001.outbound.len(), 1);
         assert_eq!(
             sl001.outbound[0].label,
-            crate::relation::RelationLabel::Requirements
+            crate::relation::RelationLabel::References
+        );
+        assert_eq!(
+            sl001.outbound[0].role,
+            Some(crate::relation::Role::Implements)
         );
         assert_eq!(sl001.outbound[0].target, "REQ-005");
 
@@ -649,7 +653,7 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // SL-001: requirements edge to REQ-999 (dangling — not seeded).
-        seed_slice(root, 1, &[("requirements", &["REQ-999"])]);
+        seed_slice(root, 1, &[("references(implements)", &["REQ-999"])]);
         // A backlog issue with a free-text `drift` target (Unvalidated) —
         // must NOT be a finding.
         write(
