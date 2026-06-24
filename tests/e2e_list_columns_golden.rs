@@ -655,13 +655,13 @@ fn memory_list_default_table_is_byte_exact() {
     seed_memory_corpus(dir.path());
     let out = list(dir.path(), "memory", &[]);
     ok(&out);
-    // Default = [uid, type, status, trust, key, title]; FULL uid leads (F-A11); a
+    // Default = [uid, type, status, trust, key, tags, title]; FULL uid leads (F-A11); a
     // keyless memory shows `-`; uid-asc within one date (MEM_A before MEM_B).
     assert_eq!(
         stdout(&out),
-        "uid                                  │ type    │ status │ trust  │ key                    │ title\n\
-         mem_0000000000000000000000000000000a │ pattern │ active │ high   │ mem.pattern.cli.skinny │ Skinny CLI\n\
-         mem_0000000000000000000000000000000b │ fact    │ active │ medium │ -                      │ A bare fact\n"
+        "uid                                  │ type    │ status │ trust  │ key                    │ tags │ title\n\
+         mem_0000000000000000000000000000000a │ pattern │ active │ high   │ mem.pattern.cli.skinny │      │ Skinny CLI\n\
+         mem_0000000000000000000000000000000b │ fact    │ active │ medium │ -                      │      │ A bare fact\n"
     );
 }
 
@@ -690,7 +690,7 @@ fn memory_list_unknown_column_errors_with_the_available_set() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: unknown column `nope` (available: uid, type, status, trust, key, title)\n"
+        "Error: unknown column `nope` (available: uid, type, status, trust, key, tags, title)\n"
     );
 }
 

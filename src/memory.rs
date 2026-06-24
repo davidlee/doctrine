@@ -2094,7 +2094,7 @@ fn json_rows(rows: &[Memory]) -> Vec<MemoryRow> {
 /// `title`) are `scrub_line`d (F-A10) so a newline cannot break a row or forge a
 /// second one. `uid`/`type`/`status` are closed-vocab and pass unscrubbed. Empty
 /// rows → `""` (header suppressed, §5.5). Cells are pure.
-const MEMORY_COLUMNS: [Column<Memory>; 6] = [
+const MEMORY_COLUMNS: [Column<Memory>; 7] = [
     Column {
         name: "uid",
         header: "uid",
@@ -2128,6 +2128,15 @@ const MEMORY_COLUMNS: [Column<Memory>; 6] = [
         paint: listing::ColumnPaint::None,
     },
     Column {
+        name: "tags",
+        header: "tags",
+        cell: |m| m.scope.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |m| m.scope.tags.clone(),
+            render: listing::paint_tag,
+        },
+    },
+    Column {
         name: "title",
         header: "title",
         cell: |m| scrub_line(&m.title),
@@ -2136,7 +2145,7 @@ const MEMORY_COLUMNS: [Column<Memory>; 6] = [
 ];
 
 /// The default visible column set for `memory list`.
-const MEMORY_DEFAULT: &[&str] = &["uid", "type", "status", "trust", "key", "title"];
+const MEMORY_DEFAULT: &[&str] = &["uid", "type", "status", "trust", "key", "tags", "title"];
 
 // ---------------------------------------------------------------------------
 // Shell: the `memory show` / `memory list` read verbs (PHASE-05).
