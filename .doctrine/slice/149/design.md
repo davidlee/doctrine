@@ -52,9 +52,15 @@ true; this ADR adds the intent dimension on top.
      Symmetry is an inbound-semantic difference → structural → label.
    - Corollary — `reviews` is **not** a role: it has no structural distinction from
      `concerns` (work → any target, evaluative/relevance intent, no gate); the
-     heavyweight, dispositioned review is the first-class **RV `reviews` label**. The
-     non-RV "review" outlet (F-5, deferred here by SL-145) is served by
-     `references(concerns)`.
+     heavyweight, dispositioned review is the first-class **RV `reviews` label**.
+     **On F-5 (F6, honest framing):** the review-in-prose cases SL-145 deferred here are
+     *aboutness* — "this work concerns that artefact" — and are captured by
+     `references(concerns)`; B does **not** launder a distinct evaluative edge into
+     `concerns`. A dedicated non-RV evaluative role is **YAGNI** (zero live instances,
+     and minting it would be the speculative vocabulary this slice rejects, cf.
+     `exclusive_with`); if a genuine evaluative-vs-relevance distinction ever earns its
+     keep, it is added then. The information "loss" is therefore a distinction that was
+     never instantiated, not a downgrade of existing data.
 
 2. **Derivable-not-relational law.** Do not encode in the relation what is derivable
    from entity state or facets. **Coverage** (→ `validate` / `/close`), **temporal
@@ -155,26 +161,42 @@ the optional `role`.
 - `inbound_name(label, role) -> &'static str`. VT-3 invariant → identical per
   `(label, role)`. `supersedes`/`governed_by` keep their existing label-keyed inbound
   (role `None`) and the ADR-004 carve-out is untouched.
+- **Role must ride as edge PAYLOAD through the graph, distinct from overlay keying
+  (F1 — resolves the D3/D5 tension).** Cordage **overlay allocation stays label-keyed**
+  (one `references` overlay; graph-effect/priority is consumer policy, D3/R5 hold). But
+  role-derived inbound rendering needs the role at the projection layer, where today
+  `InspectView.inbound` is keyed by `RelationLabel` only (`relation_graph.rs:566-586`)
+  and `render_inbound` calls `inbound_name(*label)` with no role
+  (`relation_graph.rs:703-716`); JSON inbound is likewise label-only
+  (`relation_graph.rs:752-767`). Without change, inbound `implements` and `concerns`
+  edges collapse into one bucket and the verb is unrecoverable. **Fix:** carry
+  `role: Option<Role>` on the graph/projection edge data (`RelationEdge` →
+  `CatalogEdge` → `InspectView`), re-key `InspectView.inbound` by `(label, role)`, and
+  pass role to `render_inbound`/JSON. Overlay count is unchanged; only the rendered
+  grouping gains the role dimension.
 
-### 2.7 Surfaces
+### 2.7 Surfaces — complete seam inventory (F5/F8)
 
-- `CatalogEdge` / `CatalogEdgeLabel` (`catalog/hydrate.rs`) carry role.
-- `inspect` (`commands/inspect.rs`, `relation_graph::render_*`): outbound renders
-  `references(implements)`; inbound renders the role-derived name ("implemented by",
-  "concerned by", "scoped into").
-- `relation list` / `census` (`commands/relation.rs`): group by `(label, role)`;
-  `relation_query.rs` row label/grouping handles the role.
-- Web graph (`catalog/graph.rs`): edge label shows the role verb.
-- **Per-kind `show` / `show --json` projections (AR-3 — not just rendering).**
-  `slice.rs` (1533/1536/1599/1603), `backlog.rs` (1374/1489), and `lazyspec.rs` build
-  **named** `specs` / `requirements` JSON fields via `targets_for(tier1,
-  RelationLabel::Specs|Requirements)`; `search.rs:32` maps `"specs" → {PRD,SPEC}` in the
-  search index. Removing the variants forces reworking these into a `references`-grouped-
-  by-role projection — this **changes the slice/backlog `show --json` schema** (the
-  `specs`/`requirements` keys disappear), which is load-bearing for goldens. Decide the
-  replacement shape in P4 (proposal: a `references` object keyed by role, e.g.
-  `{ implements: […], concerns: […] }`, plus a derived flat list for back-compat readers
-  if any).
+Every seam below is **label-only today** and must thread role. (Codex F8: `search.rs:29-41`
+is `GROUP_ALIASES`, a kind-selector alias table — the `"specs"` entry is a *kind group
+name*, unrelated to the relation label; **removed from blast radius**.)
+
+| seam | file:line | change |
+|---|---|---|
+| `CatalogEdge` / `CatalogEdgeLabel` | `catalog/hydrate.rs:42-55, 127-135, 263-268` | carry `role`; label-only enum + struct extended |
+| inspect grouping/render | `relation_graph.rs:555-586` (`inspect_from`), `703-716` (`render_inbound`), `752-767` (JSON) | re-key `InspectView.inbound` by `(label,role)`; pass role to render + JSON (F1) |
+| `relation list` / `census` rows | `relation_query.rs:91-109, 121-185, 188-226` | row label + grouping carry `(label,role)` |
+| `validate_relations` lookup | `relation_graph.rs:361-368` | role-aware `lookup`; new role-class `IllegalRow` findings |
+| `link` / `unlink` verbs | `commands/relation.rs:17-31, 34-45, 282-321` | add `--role`; thread to `validate_link`/`append_edge`/`remove_edge` |
+| per-kind `show` / `show --json` | `slice.rs:1530-1612`, `backlog.rs:1367-1494`, `lazyspec.rs:218-240` | named `specs`/`requirements` JSON fields disappear (see below) |
+| web graph edge label | `catalog/graph.rs` | edge label shows the role verb |
+
+**`show --json` schema change (the consumer-facing one).** `slice.rs`/`backlog.rs`/
+`lazyspec.rs` build **named** `specs` / `requirements` fields via `targets_for(tier1,
+RelationLabel::Specs|Requirements)`. Removing the variants deletes those keys. P4 decides
+the replacement: proposal — a `references` object keyed by role
+(`{ implements: […], scoped_from: […], concerns: […] }`). This is load-bearing for the
+slice/backlog `show --json` goldens; enumerate the affected goldens in P4.
 
 ### 2.8 CLI
 
@@ -214,11 +236,26 @@ rows. So the migration:
    and SL→SL get judged individually). Post-migration `related` ends up small (only the
    true peers).
 
-No `unspecified` ever persists; every landed row carries a real role. Hard-cut, atomic
-with the code change (SPEC-018 "no dual-read"). This slice rewrites its own
-`slice-149.toml` `specs SPEC-018` row to `references(implements) SPEC-018` (and `related
-RFC-003` → `references(concerns) RFC-003`, since RFC-003 is the deliberation this slice
-is *about*, not a symmetric peer) as part of the pass.
+No `unspecified` ever persists; every landed row carries a real role. This slice rewrites
+its own `slice-149.toml` `specs SPEC-018` row to `references(implements) SPEC-018` (and
+`related RFC-003` → `references(concerns) RFC-003`, since RFC-003 is the deliberation this
+slice is *about*, not a symmetric peer) as part of the pass.
+
+**Execution mechanism — "atomic" is not a mechanism (F3).** SPEC-018 forbids dual-read,
+and current readers (`read_block` `relation.rs:562-616`; `validate_relations`
+`relation_graph.rs:374-398`) reject any unknown label / off-table row. So a
+**partially**-rewritten corpus is invalid under both old and new code — there is no valid
+intermediate state. The migration therefore MUST:
+1. build the **full** rewrite in memory — every `[[relation]]` row across the whole
+   corpus transformed in one pass (deterministic rows + the hand-dispositioned ambiguous
+   rows resolved up front);
+2. apply it as a **single atomic swap** (write all files, then commit) — never
+   row-by-row through the live `link` verb;
+3. run `validate` **only after** the complete rewrite is applied.
+
+The new code (role-aware parser) and the rewritten corpus land in the **same commit**;
+there is no commit in which code and corpus disagree. Plan's vehicle choice (gated test
+vs throwaway bin) must honour this all-or-nothing shape.
 
 ---
 
@@ -233,10 +270,14 @@ legitimately change vs which must stay byte-identical.
 
 Tests to change / add:
 
-- **Lockstep (VT family):** VT-1 (enum incl `References`, minus `Specs`/`Requirements`);
-  VT-2 exact-coverage now over `(label, role)` — per source kind the reader's emitted
-  `(label, role)` set equals the table's; VT-3 `inbound_name` identical per `(label,
-  role)`. New: `legal_roles` reachability; `(source, label, role) → TargetSpec` gate
+- **Lockstep (VT family) — correct attribution (F4):** VT-1 (enum incl `References`,
+  minus `Specs`/`Requirements`); **VT-2 `sources_match_shipped_accessors`
+  (`relation.rs:1052`)** is the *source-set* audit — update to the role-bearing rows;
+  **VT-4 `reader_emitted_labels_equal_table_labels_per_source` (`relation_graph.rs:1635`)**
+  is the *exact-coverage* invariant — extend from per-`label` to per-`(label, role)` (the
+  fully-populated fixture authors one edge of every legal `(label, role)`); VT-3
+  `inbound_name` identical per `(label, role)`. New: `legal_roles` reachability;
+  `(source, label, role) → TargetSpec` gate
   goldens.
 - **Validation:** `MissingRole`, `IllegalRole`, `RoleNotApplicable`, role-target mismatch
   refused; corpus `validate` flags a hand-edited bad/missing-role `references` row as
@@ -245,17 +286,25 @@ Tests to change / add:
   target` → read back → `inspect` outbound `references(implements)` + target inbound
   "implemented by"; `unlink` matches the `(label, role, target)` triple; a label-only
   edge serializes with no `role` key.
-- **Migration — the oracle is edge-set preservation, NOT render-byte-identity (AR-2).**
-  Unlike SL-048's storage-only migration (render unchanged), here the *render changes by
-  design* (`specs` → `references(implements)`; inbound `"specs"` → `"implemented by"`), so
-  before/after render goldens cannot be the oracle. The preservation invariant is:
-  **every pre-migration edge maps to exactly one post-migration edge with identical
-  source + target; only `(label, role)` changes per the map; zero edges added or
-  dropped.** Assert that as a structural diff over `relation list` (source,target multiset
-  preserved). *Additionally:* after-migration render goldens assert the **new** expected
-  vocabulary; a storage-level post-check guards on-disk row order (render launders it —
-  SPEC-018 concern); `validate` is clean (no `IllegalRow`, no dangler regression); the
-  triage dispositions (SL→SPEC + ambiguous `related`) are captured as evidence with
+- **Migration — the oracle must verify role ASSIGNMENT, not just edge survival
+  (F2 supersedes the earlier AR-2 framing).** Edge-set preservation alone is *insufficient*:
+  a bug mapping every `specs` → `references(concerns)` would still preserve the
+  `(source,target)` multiset while silently corrupting exactly the classification this
+  slice exists to set. The oracle is therefore:
+  1. **Exact expected `(source, target) → (label, role)` per deterministic row** — the
+     migration emits its planned mapping; the test asserts each deterministic row landed
+     at its mapped `(label, role)` (not merely that the edge survived).
+  2. **A reviewed disposition artifact for every ambiguous row** (SL→SPEC
+     implements-vs-concerns; non-peer `related`) — each with the chosen role + one-line
+     rationale; the test asserts each ambiguous edge matches its recorded disposition.
+  3. **Edge-count + `(source,target)` multiset preservation** — *secondary* sanity check
+     (zero added/dropped), not the primary proof.
+  *Plus:* render is **not** byte-identical (it changes by design — `specs` →
+  `references(implements)`; inbound `"specs"` → `"implemented by"`); after-migration render
+  goldens assert the **new** expected vocabulary; a storage-level post-check guards on-disk
+  row order (render launders it — SPEC-018 concern); `validate` is clean (no `IllegalRow`,
+  no dangler regression); the disposition artifact (SL→SPEC + ambiguous `related`) is
+  committed as evidence with
   per-row rationale.
 - **Surfaces:** `inspect` mixed-roles + label-only golden; `relation list`/`census`
   grouped by `(label, role)`; web-graph edge label.
@@ -275,8 +324,9 @@ Tests to change / add:
    `validate_link` taxonomy + `check_target_kind`.
 4. **P4** — surfaces (`CatalogEdge`, `inspect`, `relation list`/`census`, web graph) +
    `link --role` CLI.
-5. **P5** — out-of-band migration pass + triage + corpus rewrite + round-trip
-   verification (hard cut).
+5. **P5** — out-of-band migration: full in-memory corpus transform (F3) + ambiguous-row
+   disposition artifact + single-shot apply + role-assignment oracle (F2) + round-trip
+   verification (hard cut, same commit as the parser).
 6. **P6** — docs: rewrite SPEC-018 + `relation-vocabulary.md` to describe
    `references`/role; reconcile.
 
@@ -299,8 +349,45 @@ Tests to change / add:
 - Non-entity-target edge (IMP-012, IDE-015).
 - Axis D `part_of` + altitude facets (sibling spec).
 - `related` symmetry / `influences` relation-planes (directionality × valence).
-- **`scoped_from`-vs-`part_of` boundary** — B must not let `scoped_from` creep into
-  structural containment (D's territory).
+- **`scoped_from`-vs-`part_of` boundary (F7 — accepted residual, no extra tightening).**
+  `scoped_from` ships in B; `part_of` arrives in Axis D. The boundary is held by
+  definition + the target-kind gate (backlog-only targets), **not** a structural
+  invariant. Decision (user): keep `scoped_from`; do **not** add special tightening now;
+  clean up any origin-vs-containment violations when Axis D builds `part_of`. The
+  contamination surface is narrow (backlog-targeted decomposition only) and the role earns
+  its place immediately (the ~13 SL→backlog origin edges).
+
+---
+
+## Adversarial review (external pass — codex/GPT, integrated)
+
+Hostile external review of the committed draft. Findings F1–F8; all code claims verified
+against the source before integration.
+
+- **F1 [BLOCKER] role-derived inbound vs label-keyed graph** — `InspectView.inbound`,
+  `render_inbound`, JSON inbound are label-only (`relation_graph.rs:566-586, 703-716,
+  752-767`); one `references` overlay would collapse `implements`/`concerns` inbound.
+  *Fixed:* §2.6 — role rides as edge payload through the graph/projection; overlay stays
+  label-keyed; inbound re-keyed `(label,role)`.
+- **F2 [BLOCKER] migration oracle too weak** — edge-set preservation can't see role, the
+  thing being changed. *Fixed:* §3 — exact `(source,target)→(label,role)` per
+  deterministic row + reviewed disposition artifact per ambiguous row; preservation
+  demoted to secondary.
+- **F3 [BLOCKER] "atomic" is not a mechanism** — no valid partially-rewritten state under
+  no-dual-read. *Fixed:* §2.9 — full in-memory transform → single-shot apply → validate
+  after; parser + corpus in one commit.
+- **F4 [MAJOR] missing table invariants + mis-attributed tests** — *Fixed:* §3 — VT-2
+  (`relation.rs:1052`, source-audit) and VT-4 (`relation_graph.rs:1635`, exact-coverage)
+  both updated; add "one rule per `(source,label,role)`" + "`(source,label)` wholly
+  roleful or roleless" invariants.
+- **F5/F8 [MAJOR/MINOR] §2.7 incomplete + bogus `search.rs`** — *Fixed:* §2.7 rewritten as
+  a line-level seam inventory; `search.rs` (a `GROUP_ALIASES` kind-selector,
+  `search.rs:29-41`) removed from blast radius.
+- **F6 [MAJOR] `concerns` swallows `reviews`** — *Fixed (framing):* §1 corollary — B does
+  not launder an evaluative edge into `concerns`; F-5's cases are aboutness; a distinct
+  evaluative role is YAGNI (zero instances), not a data downgrade.
+- **F7 [MAJOR] `scoped_from`/`part_of` boundary unenforced** — *Accepted residual* (user):
+  keep `scoped_from`, defer cleanup to Axis D (Carried opens, above).
 
 ---
 
@@ -313,13 +400,11 @@ the audit trail.
   `related`=74 (vs RFC snapshot 48→60), dominated by RFC→* `concerns`; RFC→RFC / ADR→ADR /
   SL→SL need per-edge judgment. *Fixed:* §2.9 now re-censuses live, treats the P1 artifact
   as stale reference, and widens hand-triage beyond SL→SPEC.
-- **AR-2 — verification oracle was wrong.** Draft leaned on before/after render byte-identity,
-  but the render changes by design. *Fixed:* §3 oracle is now edge-set preservation
-  (source+target multiset) + new-vocabulary render goldens + storage post-check.
-- **AR-3 — `show`/`show --json` projection ripple (missed code impact).** `slice.rs`,
-  `backlog.rs`, `lazyspec.rs`, `search.rs` hardcode named `specs`/`requirements` fields;
-  removing the variants changes the `show --json` schema. *Fixed:* added to §2.7 + P4 with a
-  replacement-shape proposal.
+- **AR-2 — verification oracle was wrong** (render-byte-identity). *Superseded by F2:* the
+  edge-set-preservation fix was itself too weak; §3 now asserts role assignment directly.
+- **AR-3 — `show`/`show --json` projection ripple (missed code impact).** *Refined by F5/F8:*
+  `slice.rs`/`backlog.rs`/`lazyspec.rs` are real; `search.rs` was a false positive
+  (kind-alias). §2.7 carries the corrected inventory.
 - **AR-4 — source sets were hand-waved.** *Fixed:* §2.4 pins them from live census, P2
   obligation.
 - **AR-5 — `bears_on` → `concerns` renames the RFC's term.** Deliberate (the dialogue judged
