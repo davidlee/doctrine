@@ -1756,7 +1756,8 @@ pub(crate) fn run_needs(
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let target = require_item(&root, reference)?;
     for prereq in prereqs {
-        require_item(&root, prereq)?;
+        crate::integrity::ensure_ref_resolves(&root, prereq)
+            .with_context(|| format!("prerequisite `{prereq}` does not resolve"))?;
     }
 
     // refuse a closing cycle BEFORE any write (the adapter is the single oracle).
@@ -4256,6 +4257,21 @@ tags = []
             fs::read_to_string(&path).unwrap(),
             "nothing written"
         );
+    }
+
+    #[test]
+    fn run_needs_accepts_cross_kind_slice_prereq() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // ISS-001
+        // Create a minimal slice entity dir so ensure_ref_resolves passes.
+        let sl_dir = root.join(".doctrine/slice/001");
+        fs::create_dir_all(&sl_dir).unwrap();
+
+        run_needs(Some(root.to_path_buf()), "ISS-001", &["SL-001".to_string()]).unwrap();
+
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        assert_eq!(item.relationships.needs, vec!["SL-001"]);
     }
 
     #[test]
