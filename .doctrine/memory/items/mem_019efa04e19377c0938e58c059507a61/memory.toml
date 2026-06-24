@@ -1,0 +1,62 @@
+memory_uid = "mem_019efa04e19377c0938e58c059507a61"
+memory_key = "mem.pattern.dispatch.worktreecreate-replace-base-control"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "WorktreeCreate hook-replace gives deterministic dispatch base control (proven 2.1.181)"
+summary = "WorktreeCreate hook replaces native worktree creation; doctrine sets the base out-of-band — proven on claude-code 2.1.181 (worker landed at chosen base, overriding worktree.baseRef=head). Thin payload (no agent_type/base/path) does NOT block it: the hook is the creator, not an observer."
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:dispatch", "area:worktree", "scope:claude-arm", "harness"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "adac37386b3eb60cdd9b851bc4a986a4a30a586f"
+tree = "206e97f2295f57335bfa959144699d9227ead83d"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "adac37386b3eb60cdd9b851bc4a986a4a30a586f"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "spike"
+ref = "wtc-probe-2026-06-25"
+
+[[relation]]
+label = "related"
+target = "mem_019ec093bd7b71518489dd187b77f0f0"
+
+[[relation]]
+label = "related"
+target = "mem_019ee28ee9ee7d608a22dba762fdcc26"
+
+[[relation]]
+label = "related"
+target = "IMP-072"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+

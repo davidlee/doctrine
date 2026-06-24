@@ -4,6 +4,23 @@
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
 
+> **CORRECTION (2026-06-25, wtc-probe) — the premise below is falsified.** The
+> "base control already solved by placement" claim assumed the worker reliably
+> forks the orchestrator HEAD. Contention falsified that
+> ([[mem.signpost.doctrine.dispatch-claude-arm-wrong-base]]): under shared-clone
+> lock contention `isolation:worktree` silently falls back to the main worktree
+> and `baseRef:head` tracks a **moving `main`**. An empirical probe on
+> claude-code **2.1.181** then proved the `WorktreeCreate` hook **IS** the
+> deterministic base-control mechanism: a named `dispatch-worker` landed at a
+> doctrine-chosen base, **overriding `baseRef:head`**, in doctrine's own worktree
+> path ([[mem.pattern.dispatch.worktreecreate-replace-base-control]]). So this
+> hook is **not** a belt-tightening nicety — it is the H1 fix (deterministic base
+> + fail-closed, no native creation to fall back to). The "no matcher" cost
+> (below) is also unconfirmed empirically: the live `SubagentStart
+> matcher:"dispatch-worker"` proves matchers key off `agent_type` independent of
+> the payload JSON, so a `WorktreeCreate` matcher likely scopes too — one micro-
+> probe outstanding. **Re-scope toward a slice; this is the validated path.**
+
 **Base control is already solved — this hook is NOT needed for it.** Confirmed
 2026-06-14 (controlled marker-commit test): under `worktree.baseRef="head"` the claude
 `Agent isolation:worktree` worker forks the **spawning orchestrator session's local
