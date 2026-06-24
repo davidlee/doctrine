@@ -27,8 +27,11 @@ and a dense, routing-grade boot map. This is a tokens-vs-breadth/clarity exercis
     first-sentence-truncated. This is `--commands`; stays as the lazy full
     reference.
   - `first_sentence(about)` — first-sentence truncation helper (reused).
+- `src/listing.rs` — `render_columns` (comfy-table seam: `Column`, `RenderOpts`,
+  `ColumnPaint`, `force_no_tty`). Gains a sibling `render_grouped` for the
+  family-grouped help (one table, heading rows).
 - `src/main.rs` ~185 — intercepts top-level `--help`; `--commands` switches
-  between the two renderers.
+  between the two renderers (gains the `--boot-map` arm).
 - `src/boot.rs`
   - `boot_sequence()` → ordered `(heading, SourceKind)` pairs.
   - `SourceKind` enum {Static, Governance, GovRows, Memories, Footer, ExecPath}.
@@ -134,8 +137,18 @@ static FAMILIES: &[Family] = &[
 /// so it surfaces as distinctive where present.
 const SPINE: &[&str] = &["new", "list", "show", "paths"];
 
-pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> String; // rewritten
+pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> String; // rewritten — calls listing::render_grouped
 pub(crate) fn render_boot_map() -> String;                                            // new, plain text
+```
+
+New in `src/listing.rs` (the shared comfy-table seam):
+
+```rust
+/// Render groups as ONE table with a styled heading row before each group's
+/// rows — so columns size across the whole table (shared-width alignment) and
+/// color/wrap are retained. The flat `render_columns` is the degenerate
+/// single-group case.
+pub fn render_grouped<T>(groups: &[(&str, Vec<T>)], cols: &[&Column<T>], opts: RenderOpts) -> String;
 ```
 
 - `render_boot_map()` takes no color/width: the boot snapshot is plain,
@@ -169,22 +182,24 @@ SourceKind::CommandMap => Section { heading, body: cli::render_boot_map() },
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Human `--help` (per-family sub-tables, D4a + D8 shared widths):**
+**Human `--help` (one comfy-table, family-heading rows, color + wrap retained):**
 ```
-change
+change                                                            ← styled heading row
   slice       Create and list slices — the unit of intentional change
   revision    Create, show, and transition revisions
-  …
-governance
+governance                                                        ← styled heading row
   adr         Create and list architecture decision records
   …
 ```
-- D8: all 8 sub-tables share **global column widths** (max command-name width
-  across every family) so vertical dividers align across sections. Independent
-  comfy-tables would autosize per-section → ragged. Mechanism (confirmed at
-  execute): compute global widths once, render family bodies at fixed shared
-  widths with plain family-heading lines interleaved — either a single table
-  with header-rows or a shared-width parameter threaded into `listing`.
+- D8: rendered as a **single comfy-table with family-heading rows interleaved**
+  between groups — NOT 8 separate tables. One table sizes its columns across all
+  rows, so shared-width alignment is automatic and `comfy-table`'s color paint +
+  `term_width` wrapping are retained (OQ-1 resolved (b)). A family heading is a
+  styled row (`[family_key, ""]`, bold/underline) that occupies the same columns
+  → dividers align by construction. Implemented via a new `listing` grouped
+  renderer `render_grouped(groups, cols, opts)`; `render_top_level_help` calls
+  it. (8 independent tables were the trap — they autosize per-section and go
+  ragged; the single-table-with-heading-rows shape dissolves it.)
 
 **Boot map (`render_boot_map`, dense PUSH-tier):**
 ```
@@ -246,14 +261,14 @@ clean.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 (D8 mechanism) — RESOLVED: plain-text grouped help (option a).**
-  `listing::render_columns` (comfy-table) autosizes each table independently and
-  has no section-header row, so 8 separate calls cannot share divider columns.
-  Decision: render the grouped help as **plain text** with manually-computed
-  shared padding (like `render_boot_map`) — clean alignment, full control;
-  accepts dropping the alternating-row color paint and term_width wrapping the
-  flat help has today (the grouped help's value is structure+alignment, not
-  color; descriptions stay one short line). Exact padding mechanics confirmed at
+- **OQ-1 (D8 mechanism) — RESOLVED: option (b), single comfy-table + heading
+  rows.** The "8 sub-tables can't share widths" problem only arises if you render
+  8 tables. Don't: render **one** comfy-table with family-heading rows interleaved
+  between groups. One table sizes columns across all rows ⇒ shared-width
+  alignment is free, and color paint + `term_width` wrapping survive. Family
+  heading = a styled row (`[key, ""]`). Adds a `listing::render_grouped` helper.
+  Drops the earlier plain-text decision for human help (boot map stays plain
+  text). Exact heading-row styling + optional group separators confirmed at
   execute (phase 1).
 - *(Resolved: D1 static table, D2 auto-derive, D3 `--boot-map` flag + CommandMap
   section, D4 sub-tables, D7 suppress infra verbs, D8 shared widths, OQ-1
@@ -272,9 +287,12 @@ clean.
   behind both. The flag is near-free, gives the golden a black-box target, and
   lets an agent pull the map without reading the snapshot file. Named
   `--boot-map` (not `--map`) to avoid overloading the `map` command (OQ-3).
-- **D4 — per-family sub-tables** for human `--help` (vs single family-column
-  table). Families are navigational headers; sub-tables scan fastest. Human
-  help is not token-budgeted.
+- **D4 — family-grouped human `--help`** (vs single flat / single
+  family-column table). Families are navigational headers. Rendered as ONE
+  comfy-table with styled family-heading rows interleaved (not 8 tables) — keeps
+  color + wrap + automatic shared-width alignment (D8, OQ-1 (b)). Human help is
+  not token-budgeted, so it keeps the richer terminal rendering; the dense
+  plain-text projection is the boot map's job, not the human help's.
 - **D5 — CommandMap ordered after "Routing & Process"** — navigational, and
   build-stable so it does not disturb the `ExecPath`-last cache invariant.
 - **D7 — suppress infra verb-expansion** — infra is operational / skill-driven,
@@ -307,8 +325,9 @@ clean.
   3. every visible (`!is_hide_set`, ≠ `help`) command appears in some family ⇒
      INV-1 (no orphan).
 - **Golden: human `--help`** — black-box via `CARGO_BIN_EXE_doctrine`,
-  `force_no_tty`, byte-exact; asserts family order, sub-table grouping, shared
-  column alignment (D8).
+  `force_no_tty` (color off for the golden), byte-exact; asserts family order,
+  heading-row grouping, and shared column alignment (D8). A separate
+  color-on smoke check (not byte-golden) guards the paint path.
 - **Golden: `--help --boot-map`** — byte-exact boot-map text; asserts spine line,
   header+sub-line rule, infra suppression (D7), leaf handling.
 - **Boot byte-stability** — `doctrine boot` twice ⇒ identical; `boot --check`
@@ -359,3 +378,8 @@ Formal inquisition (RV-153, facet design, raiser inquisitor) — 5 charges, all
 fix-now, verified: F-1 PUSH-tier defence (§3); F-2 boot blast radius enumerated +
 defused (§9); F-3 slice-Context spine contradiction struck; F-4 `suppress_verbs`
 folded into `Family` (§5.2); F-5 boot-map golden named as the SPINE guard (§9).
+
+Post-inquisition revision (user steer): OQ-1 reopened — human `--help` keeps
+**color + comfy-table** (not the plain-text fallback). Resolved (b): render as ONE
+comfy-table with interleaved family-heading rows (shared widths free, color/wrap
+retained) via a new `listing::render_grouped`. Boot map stays plain text.

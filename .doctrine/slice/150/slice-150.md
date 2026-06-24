@@ -54,12 +54,13 @@ Both renderings walk the *same* clap command tree → cannot drift from reality.
 ## Affected Surface
 
 - `src/commands/cli.rs` — `render_top_level_help` (~597), `render_commands_table`
-  (~672), `HelpEntry`/`VerbEntry` structs; home of the taxonomy + both
-  renderings.
-- `src/boot.rs` — `boot_sequence`/`build_sections` (~98/317); boot-map as a
-  generated section inlined like "Accepted ADRs".
-- `src/main.rs` — top-level help intercept (~185); touched only if the boot map
-  gets an interactive flag.
+  (~672), `HelpEntry`/`VerbEntry` structs; home of the `FAMILIES` taxonomy +
+  `render_boot_map`.
+- `src/listing.rs` — `render_columns` comfy-table seam; gains `render_grouped`
+  (one table, family-heading rows) for the grouped human help.
+- `src/boot.rs` — `boot_sequence`/`produce` (~98/215); `SourceKind::CommandMap`
+  section inserted after "Routing & Process".
+- `src/main.rs` — top-level help intercept (~185); gains the `--boot-map` arm.
 
 ## Risks / Assumptions / Open Questions
 
@@ -77,9 +78,11 @@ Both renderings walk the *same* clap command tree → cannot drift from reality.
   one `render_boot_map()` behind both (D3).
 - **OQ4** *(resolved)* Flag named `--boot-map` (not `--map`) to avoid
   overloading the `map` command.
-- **OQ5** *(resolved)* D8 shared-width grouped help renders as plain text with
-  computed padding (drops flat-help row-color/wrap); padding mechanics confirmed
-  at execute phase 1.
+- **OQ5** *(resolved)* D8 grouped help renders as ONE comfy-table with styled
+  family-heading rows interleaved — shared-width alignment is automatic, and
+  color paint + term_width wrap are RETAINED (not dropped). Adds a
+  `listing::render_grouped` helper. Heading-row styling confirmed at execute
+  phase 1.
 
 ## Verification / Closure Intent
 
