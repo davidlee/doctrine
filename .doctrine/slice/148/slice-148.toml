@@ -11,12 +11,12 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
-label = "specs"
-target = "SPEC-008"
-
-[[relation]]
 label = "governed_by"
 target = "ADR-006"
+
+[[relation]]
+label = "specs"
+target = "SPEC-008"
 
 [[relation]]
 label = "specs"
