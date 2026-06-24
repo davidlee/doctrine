@@ -491,7 +491,12 @@ mod tests {
         // No facets ⇒ base/leverage/optionality all 0 ⇒ score reads 0.0 (the floor),
         // and the readers default to 0.0 for an unseen key (the SL-133 score contract:
         // `channels::score` reads `g.score`, never the old u32 tally).
-        seed_slice(root, 1, "proposed", &[("requirements", &["REQ-005"])]);
+        seed_slice(
+            root,
+            1,
+            "proposed",
+            &[("references(implements)", &["REQ-005"])],
+        );
         seed_requirement(root, 5);
         let g = build(root).unwrap();
         assert_eq!(score(&g, key("REQ", 5)), 0.0, "no facets → score floor 0");
@@ -569,7 +574,7 @@ mod tests {
                     write(r, ".doctrine/backlog/issue/002/backlog-002.md", "b\n");
                 },
                 &|r: &Path| seed_risk(r, 1, "open", &[]),
-                &|r: &Path| seed_slice(r, 5, "design", &[("requirements", &["REQ-007"])]),
+                &|r: &Path| seed_slice(r, 5, "design", &[("references(implements)", &["REQ-007"])]),
                 &|r: &Path| seed_requirement(r, 7),
             ];
             // Two distinct seeding orders over the same logical corpus.

@@ -10,7 +10,8 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-001"
 # No `requirements` — the spike satisfies no REQ; it tests an H1 claim and reds
 # two known risks. Sibling/risk links are OUTBOUND-derived (ADR-004): RSK-002 and

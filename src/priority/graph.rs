@@ -145,8 +145,7 @@ pub(crate) struct PriorityGraph {
 /// reference/lineage consequence-input overlays. Label is overlay identity (the same
 /// label from different source kinds shares ONE overlay).
 const REF_LABELS: &[RelationLabel] = &[
-    RelationLabel::Specs,
-    RelationLabel::Requirements,
+    RelationLabel::References,
     RelationLabel::Supersedes,
     RelationLabel::DescendsFrom,
     RelationLabel::Parent,
@@ -162,8 +161,7 @@ const REF_LABELS: &[RelationLabel] = &[
 /// (design §5.2, EX-3). `reviews`/`owning_slice` are bookkeeping and EXCLUDED; the
 /// two target-unvalidated labels never resolve and so cannot contribute anyway.
 const CONSEQUENCE_LABELS: &[RelationLabel] = &[
-    RelationLabel::Specs,
-    RelationLabel::Requirements,
+    RelationLabel::References,
     RelationLabel::Slices,
     RelationLabel::DescendsFrom,
     RelationLabel::Parent,
@@ -617,7 +615,7 @@ mod tests {
             let is_simple_list = trimmed.contains('[') && !trimmed.contains('{');
             let migrated = is_simple_list
                 && RelationLabel::from_name(key)
-                    .and_then(|l| crate::relation::lookup(source, l))
+                    .and_then(|l| crate::relation::lookup(source, l, None))
                     .is_some_and(|r| {
                         r.tier == crate::relation::Tier::One
                             && r.link != crate::relation::LinkPolicy::LifecycleOnly
@@ -755,7 +753,11 @@ mod tests {
     fn builds_over_multi_kind_corpus_node_set_equals_scanned() {
         let dir = tmp();
         let root = dir.path();
-        seed_slice(root, 1, "requirements = [\"REQ-005\"]\n");
+        seed_slice(
+            root,
+            1,
+            "[[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-005\"\n",
+        );
         seed_requirement(root, 5);
         seed_issue(root, 1, "open", "", "slices = [\"SL-001\"]\n");
         seed_rec(root, 1, "SL-001");
@@ -996,7 +998,11 @@ mod tests {
             "",
         );
         seed_issue(root, 2, "open", "", "");
-        seed_slice(root, 1, "requirements = [\"REQ-005\"]\n");
+        seed_slice(
+            root,
+            1,
+            "[[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-005\"\n",
+        );
         seed_requirement(root, 5);
         seed_slice(root, 2, "");
         let pg = build(root).unwrap();

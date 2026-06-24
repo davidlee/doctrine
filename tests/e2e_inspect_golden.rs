@@ -187,20 +187,27 @@ fn tmp() -> tempfile::TempDir {
 
 /// The shared multi-kind corpus, seeded OUT of id order on disk (proves the
 /// ascending-id sort end-to-end — VT-1 permutation invariance):
-/// - SL-003 supersedes SL-001, requires REQ-005, lists a resolvable spec SPEC-001
-///   AND a dangling spec PRD-099.
+/// - SL-003 supersedes SL-001 (label-only), and `references(implements)` REQ-005,
+///   a resolvable SPEC-001 AND a dangling PRD-099 (SL-149 PHASE-05 hard cut: the
+///   old `requirements`/`specs` axes collapsed into `references(implements)`).
 /// - SL-001 authors nothing — its only relation is the DERIVED inbound "superseded
 ///   by SL-003".
-/// - REQ-005 is an edge target only — derived inbound `requirements` from SL-003.
+/// - REQ-005 is an edge target only — derived inbound `references(implements)` from
+///   SL-003 ("implemented by").
 /// - SPEC-001 is a tech spec with an outbound interaction to a dangling SPEC-002
-///   (free-text type "calls"); it is ALSO the resolvable `specs` target of SL-003.
+///   (free-text type "calls"); it is ALSO a resolvable `references(implements)`
+///   target of SL-003.
 fn seed_corpus(root: &Path) {
     // Out of order on disk: 3 before 1.
-    seed_slice(
+    seed_slice_rows(
         root,
         3,
-        "requirements = [\"REQ-005\"]\nsupersedes = [\"SL-001\"]\n\
-         specs = [\"SPEC-001\", \"PRD-099\"]\n",
+        &[
+            ("references", Some("implements"), "REQ-005"),
+            ("supersedes", None, "SL-001"),
+            ("references", Some("implements"), "SPEC-001"),
+            ("references", Some("implements"), "PRD-099"),
+        ],
     );
     seed_slice(root, 1, "");
     seed_req(root, 5);
@@ -237,10 +244,12 @@ fn inspect_predecessor_human_byte_exact() {
     );
 }
 
-/// The SUPERSEDOR: outbound grouped by label in label order (specs, requirements,
-/// supersedes), then a danglers section for the unresolved spec PRD-099. The
-/// resolvable SPEC-001 is in outbound but NOT a dangler; PRD-099 is in both
-/// (outbound lists every authored target; danglers is the unresolved subset).
+/// The SUPERSEDOR: outbound grouped by (label, role) — `references(implements)`
+/// collects REQ-005, SPEC-001, PRD-099 (the old `specs`/`requirements` axes
+/// collapsed into it, SL-149 PHASE-05), then the label-only `supersedes`. The
+/// danglers section lists the unresolved PRD-099 under the bare `references` label
+/// (danglers drop the role). The resolvable SPEC-001/REQ-005 are in outbound but
+/// NOT danglers; PRD-099 is in both (outbound lists every authored target).
 #[test]
 fn inspect_supersedor_human_byte_exact() {
     let dir = tmp();
@@ -253,12 +262,11 @@ fn inspect_supersedor_human_byte_exact() {
         "SL-003 — relations\n\
          \n\
          outbound:\n\
-         \x20\x20specs: SPEC-001, PRD-099\n\
-         \x20\x20requirements: REQ-005\n\
+         \x20\x20references(implements): REQ-005, SPEC-001, PRD-099\n\
          \x20\x20supersedes: SL-001\n\
          \n\
          danglers:\n\
-         \x20\x20specs: PRD-099\n\
+         \x20\x20references: PRD-099\n\
          \n\
          actionability:\n\
          \x20\x20eligible: true\n\
@@ -270,7 +278,8 @@ fn inspect_supersedor_human_byte_exact() {
 /// A tech spec: its outbound `interactions` target carries the per-edge free-text
 /// `type` annotation, RE-READ from the source `interactions.toml` at render (C2 /
 /// EX-4) — `SPEC-002 (calls)`. The same SPEC-002 dangles (no such entity). SPEC-001
-/// also has a DERIVED inbound `specs` from SL-003.
+/// also has a DERIVED inbound from SL-003's `references(implements)` — rendered as
+/// the role verb "implemented by" (SL-149 PHASE-05).
 #[test]
 fn inspect_tech_spec_interaction_type_annotated_byte_exact() {
     let dir = tmp();
@@ -286,7 +295,7 @@ fn inspect_tech_spec_interaction_type_annotated_byte_exact() {
          \x20\x20interactions: SPEC-002 (calls)\n\
          \n\
          inbound:\n\
-         \x20\x20specs: SL-003\n\
+         \x20\x20implemented by: SL-003\n\
          \n\
          danglers:\n\
          \x20\x20interactions: SPEC-002\n\
@@ -401,7 +410,7 @@ fn inspect_json_supersedor_byte_exact_every_surface() {
     // actionability block (serde_json sorts keys, so `actionability` leads).
     assert_eq!(
         body,
-        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"eligible\": true,\n    \"score\": 0.0\n  },\n  \"danglers\": [\n    {\n      \"label\": \"specs\",\n      \"target\": \"PRD-099\"\n    }\n  ],\n  \"id\": \"SL-003\",\n  \"inbound\": [],\n  \"kind\": \"inspect\",\n  \"outbound\": [\n    {\n      \"label\": \"specs\",\n      \"targets\": [\n        \"SPEC-001\",\n        \"PRD-099\"\n      ]\n    },\n    {\n      \"label\": \"requirements\",\n      \"targets\": [\n        \"REQ-005\"\n      ]\n    },\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-001\"\n      ]\n    }\n  ]\n}"
+        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"eligible\": true,\n    \"score\": 0.0\n  },\n  \"danglers\": [\n    {\n      \"label\": \"references\",\n      \"target\": \"PRD-099\"\n    }\n  ],\n  \"id\": \"SL-003\",\n  \"inbound\": [],\n  \"kind\": \"inspect\",\n  \"outbound\": [\n    {\n      \"label\": \"references\",\n      \"role\": \"implements\",\n      \"targets\": [\n        \"REQ-005\",\n        \"SPEC-001\",\n        \"PRD-099\"\n      ]\n    },\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-001\"\n      ]\n    }\n  ]\n}"
     );
 }
 
@@ -429,7 +438,7 @@ fn inspect_json_predecessor_inbound_supersedes_surface() {
 /// rendered ref is a canonical `KIND-NNN` (the view re-maps the opaque cordage
 /// NodeIds back through `key_of`→`canonical_id`; an agent never sees a raw NodeId).
 /// (2) every edge traces to an authored outbound relation: REQ-005's inbound is the
-/// requirements edge SL-003 *authored* — no synthetic edges, and an entity that
+/// references(implements) edge SL-003 *authored* — no synthetic edges, and an entity that
 /// authors nothing and is referenced by nothing shows no edges.
 #[test]
 fn inspect_req091_ids_remapped_and_edges_authored() {
@@ -442,7 +451,10 @@ fn inspect_req091_ids_remapped_and_edges_authored() {
     assert!(req.status.success(), "stderr: {}", stderr(&req));
     let v: serde_json::Value = serde_json::from_str(&stdout(&req)).expect("json");
     assert_eq!(v["id"], "REQ-005");
-    assert_eq!(v["inbound"][0]["label"], "requirements");
+    // SL-149 PHASE-05: the old `requirements` inbound is now `references` + a
+    // sibling `role` key — the structural label is faithful, the role recovers the verb.
+    assert_eq!(v["inbound"][0]["label"], "references");
+    assert_eq!(v["inbound"][0]["role"], "implements");
     assert_eq!(v["inbound"][0]["targets"][0], "SL-003");
     // No raw NodeId leaks: the whole body is canonical-ref / label strings only.
     let body = stdout(&req);
@@ -460,6 +472,145 @@ fn inspect_req091_ids_remapped_and_edges_authored() {
         pv["outbound"].as_array().expect("array").len(),
         0,
         "predecessor authors no outbound — inbound is derived, not a synthetic edge"
+    );
+}
+
+// === SL-149 PHASE-04 — references role rendering (VT-1, VT-2) ===========
+
+/// Seed a slice authoring raw `[[relation]]` rows verbatim — the only way to author a
+/// `references` row with a `role` cell (the legacy-axis `seed_slice` cannot). Each row
+/// is `(label, role?, target)`; `role = None` authors a label-only row.
+fn seed_slice_rows(root: &Path, id: u32, rows: &[(&str, Option<&str>, &str)]) {
+    let mut block = String::new();
+    for (label, role, target) in rows {
+        block.push_str(&format!("[[relation]]\nlabel = \"{label}\"\n"));
+        if let Some(role) = role {
+            block.push_str(&format!("role = \"{role}\"\n"));
+        }
+        block.push_str(&format!("target = \"{target}\"\n"));
+    }
+    write(
+        root,
+        &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
+        &format!(
+            "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{block}"
+        ),
+    );
+    write(
+        root,
+        &format!(".doctrine/slice/{id:03}/slice-{id:03}.md"),
+        "scope\n",
+    );
+}
+
+/// VT-1: a slice with MIXED `references` roles (implements + concerns) AND a label-only
+/// edge (supersedes). Outbound renders `references(implements)` / `references(concerns)`
+/// as distinct grouped lines, and the label-only `supersedes` renders bare — proving the
+/// role rides the outbound payload without disturbing the label-only surface.
+#[test]
+fn inspect_references_outbound_roles_rendered_byte_exact() {
+    let dir = tmp();
+    let root = dir.path();
+    // SL-001 implements REQ-005, concerns ADR-001, supersedes SL-002 (label-only).
+    seed_slice_rows(
+        root,
+        1,
+        &[
+            ("references", Some("implements"), "REQ-005"),
+            ("references", Some("concerns"), "ADR-001"),
+            ("supersedes", None, "SL-002"),
+        ],
+    );
+    seed_slice(root, 2, "");
+    seed_req(root, 5);
+    write(
+        root,
+        ".doctrine/adr/001/adr-001.toml",
+        "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
+         created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n",
+    );
+    write(root, ".doctrine/adr/001/adr-001.md", "a\n");
+
+    let out = run(root, &["SL-001"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let body = stdout(&out);
+    // Outbound: references rows carry their role verb; supersedes stays bare. References
+    // groups sort by role declaration order (implements < concerns); supersedes (the
+    // `References` label sorts before `Supersedes` in the enum) follows.
+    assert!(
+        body.contains(
+            "outbound:\n\
+             \x20\x20references(implements): REQ-005\n\
+             \x20\x20references(concerns): ADR-001\n\
+             \x20\x20supersedes: SL-002\n"
+        ),
+        "outbound role verbs not rendered distinctly: {body}"
+    );
+}
+
+/// VT-2: the inbound buckets do NOT collapse — two slices reference REQ-005 under
+/// DIFFERENT roles (SL-001 implements, SL-003 concerns). `inspect REQ-005` must render
+/// TWO distinct inbound lines with distinct derived verbs ("implemented by" /
+/// "concerned by"), proving role rides the projection past the single label-keyed
+/// `references` overlay (F1 — the bug this phase fixes).
+#[test]
+fn inspect_references_inbound_roles_do_not_collapse_byte_exact() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_slice_rows(root, 1, &[("references", Some("implements"), "REQ-005")]);
+    seed_slice_rows(root, 3, &[("references", Some("concerns"), "REQ-005")]);
+    seed_req(root, 5);
+
+    let out = run(root, &["REQ-005"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let body = stdout(&out);
+    // Inbound: TWO buckets, role-derived verbs, NOT a single collapsed `references` line.
+    assert!(
+        body.contains(
+            "inbound:\n\
+             \x20\x20implemented by: SL-001\n\
+             \x20\x20concerned by: SL-003\n"
+        ),
+        "inbound role verbs collapsed or mis-rendered: {body}"
+    );
+}
+
+/// VT-2 (JSON): the `--json` inbound carries the STRUCTURAL label faithfully
+/// (`references`, not the human verb) with the `role` as an additive sibling key, so an
+/// agent recovers the `(label, role)` grouping. Two distinct inbound groups, each with
+/// its own `role`.
+#[test]
+fn inspect_references_inbound_json_carries_role_key() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_slice_rows(root, 1, &[("references", Some("implements"), "REQ-005")]);
+    seed_slice_rows(root, 3, &[("references", Some("concerns"), "REQ-005")]);
+    seed_req(root, 5);
+
+    let out = run(root, &["REQ-005", "--json"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
+    let inbound = v["inbound"].as_array().expect("inbound array");
+    assert_eq!(
+        inbound.len(),
+        2,
+        "two distinct (label, role) inbound groups"
+    );
+    // Both groups carry the structural label `references` + their role.
+    let roles: Vec<&str> = inbound
+        .iter()
+        .map(|g| {
+            assert_eq!(
+                g["label"], "references",
+                "structural label faithful in JSON"
+            );
+            g["role"].as_str().expect("role key present")
+        })
+        .collect();
+    assert!(
+        roles.contains(&"implements") && roles.contains(&"concerns"),
+        "both roles surface in JSON: {roles:?}"
     );
 }
 

@@ -10,23 +10,28 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "PRD-011"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-001"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-073"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-075"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-076"
 # REQ-073 (PRD-011 FR-004) — typed blockers/blocking. REQ-075 (FR-006) — exclude
 #   terminal/promoted from default active. REQ-076 (FR-007) — cycle diagnostics +

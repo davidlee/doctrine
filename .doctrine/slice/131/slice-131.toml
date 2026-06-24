@@ -10,19 +10,23 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
-label = "related"
+label = "references"
+role = "scoped_from"
 target = "IDE-012"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "scoped_from"
 target = "IMP-111"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-007"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "PRD-004"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed

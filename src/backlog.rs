@@ -929,8 +929,9 @@ pub(crate) fn kind_from_prefix(prefix: &str) -> Option<ItemKind> {
 }
 
 /// A backlog item's authored outbound relations (SL-046 §5.2/§5.3): `slices` →
-/// [`RelationLabel::Slices`], `specs` → [`RelationLabel::Specs`], and `drift` →
-/// [`RelationLabel::Drift`]. `drift` is free-text with no `DRIFT` kind in `KINDS`, so
+/// [`RelationLabel::Slices`], `references` (role-refined, SL-149) →
+/// [`RelationLabel::References`], and `drift` → [`RelationLabel::Drift`]. `drift` is
+/// free-text with no `DRIFT` kind in `KINDS`, so
 /// it is a TARGET-UNVALIDATED label (ADR-010 Decision 2): emitted so the data is
 /// preserved, but its targets never resolve and surface as danglers at the scan
 /// (PHASE-03), never edges. NEVER `needs`/`after`/`triggers` (the dep/sequence/mask
@@ -1320,7 +1321,7 @@ fn parse_ref(reference: &str) -> anyhow::Result<(ItemKind, u32)> {
 /// The facet block is gated on `item.facet` (risk only); relationship axes and the
 /// optional fields render only when populated.
 fn format_show(item: &BacklogItem) -> String {
-    use crate::relation::{RelationLabel, targets_for};
+    use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
 
     // identity + the flat fields (resolution shown only on a terminal item).
@@ -1366,28 +1367,38 @@ fn format_show(item: &BacklogItem) -> String {
 
     // outbound relations (§5.5) — each axis only when non-empty; inbound is the
     // deferred registry surface's, NOT computed here (D-PHASE04-2 / ADR-004).
-    // SL-048 PHASE-04: the tier-1 axes (slices/specs/drift) come from `item.tier1`
-    // (read via `read_block`), the dep/sequence axes stay typed; render order and
-    // gating are unchanged, so output is byte-identical across the migration.
+    // SL-048 PHASE-04: the tier-1 axes (slices/drift) come from `item.tier1` (read via
+    // `read_block`), the dep/sequence axes stay typed.
     let rel = &item.relationships;
     let slices = targets_for(&item.tier1, RelationLabel::Slices);
-    let specs = targets_for(&item.tier1, RelationLabel::Specs);
     let drift = targets_for(&item.tier1, RelationLabel::Drift);
+    // SL-149: the `references` label by role. A backlog item only ever authors
+    // `concerns` (implements/scoped_from are SL-only), so the other buckets stay empty;
+    // each axis renders only when non-empty. PHASE-05's migration rewrote the old
+    // backlog `specs`→canon edges onto `references(concerns)`.
+    let ref_concerns = targets_for_role(&item.tier1, RelationLabel::References, Role::Concerns);
+    let ref_implements = targets_for_role(&item.tier1, RelationLabel::References, Role::Implements);
+    let ref_scoped_from =
+        targets_for_role(&item.tier1, RelationLabel::References, Role::ScopedFrom);
     if !slices.is_empty()
-        || !specs.is_empty()
         || !drift.is_empty()
         || !rel.needs.is_empty()
         || !rel.after.is_empty()
         || !rel.triggers.is_empty()
+        || !ref_implements.is_empty()
+        || !ref_scoped_from.is_empty()
+        || !ref_concerns.is_empty()
     {
         parts.push("\nrelationships:\n".to_string());
         // the four string axes share the one loop; `after`/`triggers` carry payload
         // (per-edge rank, glob+note) and render bespoke below, in §5.2 key order.
         for (label, refs) in [
             ("slices", &slices),
-            ("specs", &specs),
             ("drift", &drift),
             ("needs", &rel.needs),
+            ("references(implements)", &ref_implements),
+            ("references(scoped_from)", &ref_scoped_from),
+            ("references(concerns)", &ref_concerns),
         ] {
             if !refs.is_empty() {
                 parts.push(format!("  {label}: {}\n", refs.join(", ")));
@@ -1457,7 +1468,7 @@ pub(crate) fn run_show(
 /// `[facet]` (risk only), and the outbound relationships — the same data the table
 /// reassembles, structured. Pure over the item's own state (no cross-corpus scan).
 fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
-    use crate::relation::{RelationLabel, targets_for};
+    use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let facet = item.facet.as_ref().map(|f| {
         serde_json::json!({
             "likelihood": f.likelihood.map(RiskLevel::as_str),
@@ -1486,11 +1497,20 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
             "facet": facet,
             "relationships": {
                 "slices": targets_for(&item.tier1, RelationLabel::Slices),
-                "specs": targets_for(&item.tier1, RelationLabel::Specs),
                 "drift": targets_for(&item.tier1, RelationLabel::Drift),
                 "needs": rel.needs,
                 "after": rel.after,
                 "triggers": rel.triggers,
+                // SL-149: the `references` label by role. A backlog item authors
+                // `concerns` (work → any artefact) edges; `scoped_from`/`implements` are
+                // SL-only, so those buckets stay empty for a backlog item — but the object
+                // carries all three role keys for a stable schema. PHASE-05's migration
+                // rewrote the old backlog `specs`→canon edges onto `references(concerns)`.
+                "references": {
+                    "implements": targets_for_role(&item.tier1, RelationLabel::References, Role::Implements),
+                    "scoped_from": targets_for_role(&item.tier1, RelationLabel::References, Role::ScopedFrom),
+                    "concerns": targets_for_role(&item.tier1, RelationLabel::References, Role::Concerns),
+                },
             },
         },
     });
@@ -2186,9 +2206,12 @@ pub(crate) mod test_support {
                     "\n[[relation]]\nlabel = \"slices\"\ntarget = \"{s}\"\n"
                 ));
             }
+            // SL-149: a backlog item's spec-targeting edges are references(concerns)
+            // (implements/scoped_from are SL-only). The `specs` fixture field name is
+            // retained as a convenience; the authored row is references(concerns).
             for s in x.specs {
                 relation_rows.push_str(&format!(
-                    "\n[[relation]]\nlabel = \"specs\"\ntarget = \"{s}\"\n"
+                    "\n[[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"{s}\"\n"
                 ));
             }
         }
@@ -3311,6 +3334,69 @@ tags = []
         assert_eq!(b["relationships"]["slices"][0], "SL-020");
     }
 
+    #[test]
+    fn backlog_show_json_groups_references_by_role_and_keeps_legacy_keys() {
+        // SL-149 PHASE-04b: a backlog item authoring a `concerns` reference edge (plus a
+        // legacy `slices` edge) → the JSON carries a `references` object grouped by role
+        // (only `concerns` populated — implements/scoped_from are SL-only), and the
+        // legacy `slices` key still carries its data unchanged (additive).
+        use crate::relation::{RelationEdge, RelationLabel, Role};
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Improvement, "Token expiry");
+        let mut item = read_item(root, ItemKind::Improvement, 1).unwrap();
+        item.tier1 = vec![
+            RelationEdge::new(RelationLabel::Slices, "SL-020".into()),
+            RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Concerns),
+                "SPEC-018".into(),
+            ),
+        ];
+        let json = show_json(&item).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let rel = &v["backlog"]["relationships"];
+        assert_eq!(
+            rel["references"]["concerns"],
+            serde_json::json!(["SPEC-018"])
+        );
+        assert_eq!(rel["references"]["implements"], serde_json::json!([]));
+        assert_eq!(rel["references"]["scoped_from"], serde_json::json!([]));
+        // legacy key unchanged
+        assert_eq!(rel["slices"], serde_json::json!(["SL-020"]));
+    }
+
+    #[test]
+    fn backlog_show_json_references_object_carries_concerns() {
+        // SL-149 PHASE-05: a backlog item authors `references(concerns)` (the migration
+        // target of the old backlog `specs`→canon edge); the legacy `specs` key is gone.
+        // implements/scoped_from stay empty (SL-only roles).
+        use crate::relation::{RelationEdge, RelationLabel, Role};
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Improvement, "Concerns only");
+        let mut item = read_item(root, ItemKind::Improvement, 1).unwrap();
+        item.tier1 = vec![
+            RelationEdge::new(RelationLabel::Slices, "SL-007".into()),
+            RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Concerns),
+                "SPEC-018".into(),
+            ),
+        ];
+        let json = show_json(&item).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let rel = &v["backlog"]["relationships"];
+        assert_eq!(rel["slices"], serde_json::json!(["SL-007"]));
+        assert!(rel.get("specs").is_none(), "legacy specs key removed");
+        assert_eq!(rel["references"]["implements"], serde_json::json!([]));
+        assert_eq!(rel["references"]["scoped_from"], serde_json::json!([]));
+        assert_eq!(
+            rel["references"]["concerns"],
+            serde_json::json!(["SPEC-018"])
+        );
+    }
+
     // --- PHASE-04: the `backlog show <ID>` inspect verb (id parse + render) ---
 
     // --- VT-2: id-parse tolerance + both hard-error modes ---
@@ -3384,7 +3470,10 @@ tags = []
         let out = format_show(&read_item(root, ItemKind::Issue, 1).unwrap());
         assert!(out.contains("relationships:"), "the outbound seam renders");
         assert!(out.contains("slices: SL-020"), "outbound slice ref shown");
-        assert!(out.contains("specs: PRD-009"), "outbound spec ref shown");
+        assert!(
+            out.contains("references(concerns): PRD-009"),
+            "outbound spec ref shown as references(concerns)"
+        );
 
         // an item with no outbound relations renders no relationships block —
         // and the reverse view (who points AT it) is never computed here.

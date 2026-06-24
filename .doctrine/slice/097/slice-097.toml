@@ -10,7 +10,8 @@ needs = []                      # slice→work hard prerequisite
 after = [{ to = "SL-096", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-019"
 
 [[relation]]

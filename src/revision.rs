@@ -1062,7 +1062,7 @@ fn build_existing_target_row(
     // Validate the target against the `revises` rule: kind ∈ the six authored-truth
     // kinds (off-target — e.g. `revises SL-001` — refused), then existence.
     let (kref, _) = crate::integrity::parse_canonical_ref(&target)?;
-    let rule = crate::relation::lookup(&REV_KIND, crate::relation::RelationLabel::Revises)
+    let rule = crate::relation::lookup(&REV_KIND, crate::relation::RelationLabel::Revises, None)
         .context("internal: missing `revises` rule row")?;
     crate::relation::check_target_kind(rule, &REV_KIND, kref.kind.prefix)?;
     crate::integrity::ensure_ref_resolves(root, &target)?;

@@ -10,7 +10,8 @@ needs = []                      # slice→work hard prerequisite
 after = [{ to = "SL-097", rank = 0 }]  # SL-097 extracts src/supersede.rs; SL-095's POL/STD arms land there
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-018"
 
 [[relation]]

@@ -10,19 +10,23 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-001"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "PRD-011"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-091"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-074"
 # REQ-091 (SPEC-001 FR-002) — adapter maps doctrine ids to opaque nodes, re-maps
 #   diagnostics back; extended here from backlog-only to all kinds.

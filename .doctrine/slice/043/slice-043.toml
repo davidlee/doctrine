@@ -10,23 +10,28 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-001"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-076"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-077"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-078"
 
 [[relation]]
-label = "requirements"
+label = "references"
+role = "implements"
 target = "REQ-092"
 # Sibling SL-036 built the core and filed every risk this slice closes (RSK-001..004
 # all carry `slices: SL-036`); the backlog risks themselves have no axis in this

@@ -13,12 +13,39 @@ after = []                      # slice→work soft sequence: { to, rank }
 # read generically by the SL-046 reader / `inspect`). No `link` writer wired yet,
 # so these are hand-authored (authored tier; corpus `validate` is read-tolerant).
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-002"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "PRD-013"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "REQ-254"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "REQ-255"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "REQ-256"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "REQ-257"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "REQ-114"
 
 [[relation]]
 label = "governed_by"
@@ -27,26 +54,6 @@ target = "ADR-003"
 [[relation]]
 label = "governed_by"
 target = "ADR-009"
-
-[[relation]]
-label = "requirements"
-target = "REQ-254"
-
-[[relation]]
-label = "requirements"
-target = "REQ-255"
-
-[[relation]]
-label = "requirements"
-target = "REQ-256"
-
-[[relation]]
-label = "requirements"
-target = "REQ-257"
-
-[[relation]]
-label = "requirements"
-target = "REQ-114"
 
 # requirements — none yet. This slice MINTS the test-run-surface capability;
 #   the requirements it realises (the SPEC-002 deltas lifting the deferral) get

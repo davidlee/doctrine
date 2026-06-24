@@ -215,28 +215,30 @@ fn plan_status(rollup: &PhaseRollup) -> &'static str {
 // Total edge map — output ∈ the four rel_type wire strings
 // ---------------------------------------------------------------------------
 
-/// Map a [`RelationLabel`] to one of the four wire `rel_type` strings, or `None`
-/// when the edge is DROPPED (`Requirements` — REQ is inlined, never a node, INV-4).
+/// Map a [`RelationLabel`] to one of the four wire `rel_type` strings.
 /// TOTAL with a `related-to` default arm (INV-2). `blocks` has no v1 source.
-fn map_edge(label: RelationLabel) -> Option<&'static str> {
+/// SL-149: `references` (the migration target of the old `specs`/`requirements`
+/// edges) falls to the `related-to` default; the INV-4 REQ drop is now keyed on the
+/// target kind (see [`project_edges`]), not the label.
+fn map_edge(label: RelationLabel) -> &'static str {
     match label {
-        RelationLabel::Requirements => None,
-        RelationLabel::DescendsFrom | RelationLabel::Parent => Some("implements"),
-        RelationLabel::Supersedes => Some("supersedes"),
-        _ => Some("related-to"),
+        RelationLabel::DescendsFrom | RelationLabel::Parent => "implements",
+        RelationLabel::Supersedes => "supersedes",
+        _ => "related-to",
     }
 }
 
-/// Project a record's tier-1 outbound edges to wire [`Relation`]s, dropping the
-/// inlined `requirements` axis (INV-4) and mapping every other label total.
+/// Project a record's tier-1 outbound edges to wire [`Relation`]s, dropping edges to
+/// an inlined REQ target (INV-4 — REQ is folded into its spec, never a node) and
+/// mapping every other label total. SL-149: the drop keys on the target kind, since
+/// the retired `requirements` label is now `references(implements)` → REQ.
 fn project_edges(edges: &[RelationEdge]) -> Vec<Relation> {
     edges
         .iter()
-        .filter_map(|e| {
-            map_edge(e.label).map(|rel_type| Relation {
-                rel_type: rel_type.to_string(),
-                target: e.target.clone(),
-            })
+        .filter(|e| !e.target.starts_with("REQ-"))
+        .map(|e| Relation {
+            rel_type: map_edge(e.label).to_string(),
+            target: e.target.clone(),
         })
         .collect()
 }
@@ -321,12 +323,10 @@ fn project_spec(spec: &SpecRecord) -> Entity {
                 .map(|t| (RelationLabel::Interactions, t)),
         );
     for (label, target) in typed {
-        if let Some(rel_type) = map_edge(label) {
-            node.related.push(Relation {
-                rel_type: rel_type.to_string(),
-                target: target.clone(),
-            });
-        }
+        node.related.push(Relation {
+            rel_type: map_edge(label).to_string(),
+            target: target.clone(),
+        });
     }
     node
 }
@@ -707,6 +707,7 @@ pub(crate) fn run_export_lazyspec(root: &Path, now: &str, version: &str) -> anyh
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::relation::Role;
 
     fn rec(id: &str, kind: &str, status: &str) -> EntityRecord {
         EntityRecord {
@@ -764,10 +765,10 @@ mod tests {
     #[test]
     fn exotic_edge_label_takes_the_related_to_default() {
         // INV-2: an out-of-vocab-for-lazyspec label still lands in the 4-string vocab.
-        assert_eq!(map_edge(RelationLabel::Drift), Some("related-to"));
-        assert_eq!(map_edge(RelationLabel::Consumes), Some("related-to"));
-        assert_eq!(map_edge(RelationLabel::GovernedBy), Some("related-to"));
-        assert_eq!(map_edge(RelationLabel::Slices), Some("related-to"));
+        assert_eq!(map_edge(RelationLabel::Drift), "related-to");
+        assert_eq!(map_edge(RelationLabel::Consumes), "related-to");
+        assert_eq!(map_edge(RelationLabel::GovernedBy), "related-to");
+        assert_eq!(map_edge(RelationLabel::Slices), "related-to");
     }
 
     // --- VT-2: INV-1, INV-4, INV-5, INV-7 ---
@@ -800,22 +801,24 @@ mod tests {
 
     #[test]
     fn no_req_node_even_when_a_spec_members_requirements() {
-        // INV-4: a tier-1 `requirements` edge is dropped, and no REQ entity exists.
+        // INV-4: a references edge to a REQ target is dropped, and no REQ entity exists.
         let mut corpus = Corpus::default();
         let mut base = rec("SL-003", "slice", "started");
-        base.edges.push(RelationEdge::new(
-            RelationLabel::Requirements,
+        base.edges.push(RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Implements),
             "REQ-009".to_string(),
         ));
-        base.edges.push(RelationEdge::new(
-            RelationLabel::Specs,
+        base.edges.push(RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Implements),
             "SPEC-001".to_string(),
         ));
         corpus.slices.push(SliceRecord { base, plan: None });
         let brief = brief_of(&corpus);
         // no REQ entity emitted
         assert!(brief.entities.iter().all(|e| !e.id.starts_with("REQ-")));
-        // the requirements edge is dropped; the specs edge survives as related-to
+        // the REQ-targeted reference is dropped; the SPEC reference survives as related-to
         let sl = &brief.entities[0];
         assert_eq!(sl.related.len(), 1);
         assert_eq!(sl.related[0].rel_type, "related-to");
@@ -999,8 +1002,9 @@ mod tests {
             RelationLabel::Drift,
             "SL-099".to_string(),
         ));
-        slice_base.edges.push(RelationEdge::new(
-            RelationLabel::Requirements,
+        slice_base.edges.push(RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Implements),
             "REQ-005".to_string(),
         ));
         corpus.slices.push(SliceRecord {
@@ -1102,10 +1106,10 @@ mod tests {
             "exotic label → related-to default: {:?}",
             sl.related
         );
-        // the `Requirements` edge was DROPPED (INV-4) — no REQ target survives.
+        // the references→REQ edge was DROPPED (INV-4) — no REQ target survives.
         assert!(
             sl.related.iter().all(|r| !r.target.starts_with("REQ-")),
-            "INV-4 requirements edge dropped: {:?}",
+            "INV-4 references→REQ edge dropped: {:?}",
             sl.related
         );
 
@@ -1374,7 +1378,7 @@ mod loader_tests {
             },
         );
         // A slice WITH a plan + phase tracking, and a plain slice.
-        seed_slice(root, 9, &[("specs", &["SPEC-002"])]);
+        seed_slice(root, 9, &[("references(implements)", &["SPEC-002"])]);
         seed_slice(root, 3, &[]);
         write_plan(root, 9);
         write_phase(root, 9, "phase-01", "completed");

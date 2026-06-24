@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use crate::entity;
 use crate::integrity;
 use crate::memory::{self, MEMORY_ITEMS_DIR, MemoryCatalogRecord};
-use crate::relation::RelationLabel;
+use crate::relation::{RelationLabel, Role};
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
 use super::scan::{EntityKey, ScanMode, ScannedEntity};
@@ -129,6 +129,16 @@ pub(crate) struct CatalogEntity {
 pub(crate) struct CatalogEdge {
     pub(crate) source: CatalogKey,
     pub(crate) label: CatalogEdgeLabel,
+    /// The intent [`Role`] that refines a `references` edge (SL-149 §2.6 / F1). The
+    /// role rides as edge PAYLOAD through the graph/projection — distinct from cordage
+    /// overlay keying, which stays LABEL-keyed (one `references` overlay regardless of
+    /// role, R5). `Some` only on a `Validated(References)` edge; `None` on every
+    /// label-only edge and every `Raw` (free-text / unvalidated memory) edge — a `Raw`
+    /// edge carries no typed role. Serialized so the projection/render layer (inspect
+    /// inbound, web graph) recovers the role verb (`references(implements)`); the
+    /// overlay count is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) role: Option<Role>,
     pub(crate) target: EdgeTarget,
     /// Where this edge was authored (which entity file, which field).
     pub(crate) origin: EdgeOrigin,
@@ -263,6 +273,9 @@ impl Catalog {
                 edges.push(CatalogEdge {
                     source: CatalogKey::Numbered(se.key),
                     label: CatalogEdgeLabel::Validated(edge.label),
+                    // The typed role rides as edge payload (SL-149 F1) — `Some` on a
+                    // `references` edge, `None` on every label-only edge.
+                    role: edge.role,
                     target,
                     origin,
                 });
@@ -332,6 +345,9 @@ impl Catalog {
                 edges.push(CatalogEdge {
                     source: CatalogKey::Memory(record.uid.clone()),
                     label: CatalogEdgeLabel::Raw(relation.label.clone()),
+                    // A `Raw` (free-text / unvalidated memory) edge carries no typed role
+                    // — the role dimension is only on the validated `references` label.
+                    role: None,
                     target,
                     origin: EdgeOrigin {
                         file: record.path.join("memory.toml"),
@@ -484,7 +500,7 @@ mod tests {
     /// Seed the PHASE-03 fixture: SL-001 → REQ-005 (resolved), ADR-002 → ADR-001
     /// (resolved), SL-003 (no edges). Plus a backlog issue with drift free-text.
     fn seed_hydrate_fixture(root: &Path) {
-        seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
+        seed_slice(root, 1, &[("references(implements)", &["REQ-005"])]);
         seed_slice(root, 3, &[]);
         seed_adr(root, 1, &[]);
         seed_adr(root, 2, &[("supersedes", &["ADR-001"])]);
@@ -535,7 +551,7 @@ mod tests {
             .iter()
             .find(|e| e.source.canonical() == "SL-001")
             .unwrap();
-        assert_eq!(sl001_edge.label.name(), "requirements");
+        assert_eq!(sl001_edge.label.name(), "references");
         assert_eq!(
             sl001_edge.target,
             EdgeTarget::Resolved(CatalogKey::Numbered(EntityKey {
@@ -544,7 +560,7 @@ mod tests {
             }))
         );
         assert_eq!(sl001_edge.origin.file, root.join(".doctrine/slice/001"));
-        assert_eq!(sl001_edge.origin.field.as_deref(), Some("requirements"));
+        assert_eq!(sl001_edge.origin.field.as_deref(), Some("references"));
 
         // ADR-002 → ADR-001: resolved (supersedes)
         let adr002_edge = catalog
@@ -569,7 +585,7 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // SL-001 → REQ-999 (dangling — parses as canonical ref but not seeded).
-        seed_slice(root, 1, &[("requirements", &["REQ-999"])]);
+        seed_slice(root, 1, &[("references(implements)", &["REQ-999"])]);
 
         let catalog = scan_catalog(root, ScanMode::default()).unwrap();
 
@@ -599,7 +615,7 @@ mod tests {
             diag.entity_key.as_ref().map(|k| k.canonical()),
             Some("SL-001".to_string())
         );
-        assert_eq!(diag.field.as_deref(), Some("requirements"));
+        assert_eq!(diag.field.as_deref(), Some("references"));
     }
 
     // == VT-3: unvalidated text produces Info diagnostic ==

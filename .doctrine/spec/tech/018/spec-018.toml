@@ -12,10 +12,10 @@ parent = "SPEC-001"
 descends_from = "PRD-011"
 tags = ["relations", "cross-corpus", "relation-contract", "outbound-only", "vocabulary-table", "link-verb", "tier-partition", "validation"]
 responsibilities = [
-  "Define the relation model: an authored, outbound-only directed edge `(source, label, target)` over `integrity::KINDS`, with inbound always derived from `in_edges` (ADR-004) and the storage shape never reaching the graph layer.",
+  "Define the relation model: an authored, outbound-only directed edge `(source, label, role?, target)` over `integrity::KINDS` — the optional closed `Role` (ADR-016) refining a label whose structure underspecifies intent — with inbound always derived from `in_edges` (ADR-004) and the storage shape never reaching the graph layer.",
   "Fix the tier partition — tier-1 clean multi-ref edges in the uniform `[[relation]]` idiom, tier-2 constrained-or-payload edges and tier-3 free-text edges kept typed — and the rationale for keeping typed guarantees rather than flattening (ADR-010).",
-  "Locate the relation vocabulary's single source of truth: the code-authoritative `RELATION_RULES` legal-set table (`src/relation.rs`) keyed by `(source ∈ sources, label)`, the sole driver of writer, validator, the SL-046 reader, and cordage overlay allocation — pointed at, never transcribed (storage rule).",
-  "Fix the validation policy: write-strict (the `link` verb refuses to create a dangling or illegal-kind numbered edge) and read-tolerant (the reader and corpus `validate` report danglers and illegal hand-edited rows but never rewrite).",
+  "Locate the relation vocabulary's single source of truth: the code-authoritative `RELATION_RULES` legal-set table (`src/relation.rs`) keyed by `(source ∈ sources, label, role)`, the sole driver of writer, validator, the SL-046 reader, and cordage overlay allocation — pointed at, never transcribed (storage rule).",
+  "Fix the validation policy: write-strict (the `link` verb refuses a dangling, illegal-kind, or illegal/missing-role numbered edge — the kind gate keys on the resolved `(source, label, role)`) and read-tolerant (the reader and corpus `validate` report danglers and illegal hand-edited rows but never rewrite).",
   "Define the cross-kind write seam — the uniform `link`/`unlink` verb over the generic `append_edge`/`remove_edge` machinery, gated by the table's `LinkPolicy` — and its composition with the SL-046 graph reader (ADR-004, ADR-010).",
 ]
 

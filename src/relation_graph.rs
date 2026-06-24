@@ -25,7 +25,7 @@ use crate::entity;
 use crate::integrity;
 use crate::listing::{self, Format};
 use crate::projection::Projection;
-use crate::relation::{RELATION_RULES, RelationEdge, RelationLabel, TargetSpec};
+use crate::relation::{RELATION_RULES, RelationEdge, RelationLabel, Role, TargetSpec};
 
 // Re-exports from catalog::scan — the single source of truth (SL-071 D7).
 // Aliases, not wrappers — one body, one source.
@@ -268,6 +268,36 @@ fn build_relation_graph_from(scanned: &[ScannedEntity]) -> anyhow::Result<Relati
     })
 }
 
+/// Build the inbound-role index (SL-149 F1): `(source, label, target) -> role`, the
+/// role payload an inbound render recovers from the SOURCE entity's outbound edges. The
+/// cordage overlay is label-keyed (R5), so the role is NOT carried on the graph edge —
+/// `inspect_from` re-keys inbound by `(label, role)` by reading this index, derived once
+/// from the same scan the graph is built from.
+///
+/// Keyed by the parsed target `EntityKey` (a free-text / unparseable target is skipped —
+/// it dangles, never an inbound edge). For a given `(source, label, target)` the role is
+/// well-defined: edge identity is the `(label, role, target)` triple, and a label has a
+/// single resolved-target reciprocal here; the LAST authored row wins on the (rare,
+/// hand-edited) duplicate, which the render then groups deterministically.
+fn inbound_role_index(
+    scanned: &[ScannedEntity],
+) -> BTreeMap<(EntityKey, RelationLabel, EntityKey), Option<Role>> {
+    let mut index = BTreeMap::new();
+    for entity in scanned {
+        for edge in &entity.outbound {
+            let Ok((kref, tid)) = integrity::parse_canonical_ref(&edge.target) else {
+                continue;
+            };
+            let target = EntityKey {
+                prefix: kref.kind.prefix,
+                id: tid,
+            };
+            index.insert((entity.key, edge.label, target), edge.role);
+        }
+    }
+    index
+}
+
 /// Resolve an authored edge's `target` to a minted node, or `None`. A target that
 /// fails to parse as a canonical ref (free-text — `Drift`/`DecisionRef`), or parses
 /// to an id that was never minted (no entity dir), resolves to `None` → a dangler.
@@ -358,7 +388,14 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
                 ));
                 continue;
             };
-            let validated = crate::relation::lookup(kind, *label)
+            // Role-aware `lookup` (SL-149 PHASE-04): the dangler walk reads the
+            // validated-ness axis off the `(source, label, role)` rule. The `CatalogEdge`
+            // now carries `role` (PHASE-04 threaded it through hydrate), so a `references`
+            // edge resolves its own role-keyed rule rather than missing a label-only
+            // lookup. Inert until the P5 migration authors live `references` edges, but
+            // closed now so references danglers resolve correctly when they land. The
+            // role-class hand-edit finding rides the IllegalRows re-read below.
+            let validated = crate::relation::lookup(kind, *label, edge.role)
                 .is_some_and(|r| !matches!(r.target, TargetSpec::Unvalidated));
             if validated {
                 findings.push(format!(
@@ -386,6 +423,9 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
                 let why = match row.reason {
                     crate::relation::IllegalReason::UnknownLabel => "unknown label",
                     crate::relation::IllegalReason::IllegalForSource => "label illegal for source",
+                    // SL-149: a hand-edited `references` row with a missing/illegal/stray
+                    // role — the role-class finding. Label-only rows never reach here.
+                    crate::relation::IllegalReason::IllegalRole => "missing or illegal role",
                 };
                 findings.push(format!(
                     "{}: [[relation]] row `{}` -> `{}` is illegal ({why})",
@@ -468,16 +508,35 @@ fn validate_supersession(root: &Path) -> anyhow::Result<Vec<String>> {
     Ok(findings)
 }
 
+/// The grouping key of an inspect relation surface (SL-149 §2.6 / F1): the structural
+/// `RelationLabel` plus the intent `Role` that refines a `references` edge (`None` on
+/// every label-only edge). Both outbound and inbound group on this key, so role-bearing
+/// `references` edges render distinct verbs instead of collapsing into one label bucket.
+pub(crate) type RelationKey = (RelationLabel, Option<Role>);
+
+/// One `(label, role)` group of an inspect surface: the key and its targets (canonical
+/// refs), in render order.
+type RelationGroup = (RelationKey, Vec<String>);
+
 /// One entity's direct relation view (design §5.2): its authored outbound relations
-/// grouped by label, the derived inbound relations grouped by label, and its
-/// unresolved/free-text outbound danglers. Direct-only, one-hop, composition-free
+/// grouped by `(label, role)`, the derived inbound relations grouped by `(label, role)`,
+/// and its unresolved/free-text outbound danglers. Direct-only, one-hop, composition-free
 /// (I2). Inbound is recomputed every query from `in_edges` — nothing stores a
 /// reverse field (ADR-004 §3 / REQ-074).
 #[derive(Debug)]
 pub(crate) struct InspectView {
     pub(crate) id: String,
-    pub(crate) outbound: Vec<(RelationLabel, Vec<String>)>,
-    pub(crate) inbound: Vec<(RelationLabel, Vec<String>)>,
+    /// Outbound relations grouped by `(label, role)` (SL-149 §2.6 / F1): a `references`
+    /// edge groups under its `Some(role)` and renders `references(<role>)`; every
+    /// label-only edge groups under `None` and renders the bare label. The role rides
+    /// from the entity's own `outbound_for` edge payload.
+    pub(crate) outbound: Vec<RelationGroup>,
+    /// Inbound relations grouped by `(label, role)` (SL-149 §2.6 / F1). The role is
+    /// recovered from the SOURCE entity's outbound edge PAYLOAD — NOT from the cordage
+    /// overlay, which stays label-keyed (R5). Re-keying by `(label, role)` is what keeps
+    /// inbound `implements` and `concerns` in distinct buckets with distinct verbs
+    /// ("implemented by" / "concerned by") instead of collapsing into one.
+    pub(crate) inbound: Vec<RelationGroup>,
     pub(crate) danglers: Vec<(RelationLabel, String)>,
 }
 
@@ -552,38 +611,56 @@ pub(crate) fn inspect_from(
         anyhow::bail!("{}: no such entity", query_key.canonical());
     };
 
-    // outbound — the entity's own authored edges, grouped by label (targets in
-    // authored order within a label).
-    let mut outbound_by_label: BTreeMap<RelationLabel, Vec<String>> = BTreeMap::new();
+    // outbound — the entity's own authored edges, grouped by `(label, role)` (targets in
+    // authored order within a group). The role rides on the edge payload (SL-149 F1): a
+    // `references` edge groups under `Some(role)`, a label-only edge under `None`.
+    let mut outbound_by_key: BTreeMap<(RelationLabel, Option<Role>), Vec<String>> = BTreeMap::new();
     for edge in outbound_for(root, kref.kind, qid)? {
-        outbound_by_label
-            .entry(edge.label)
+        outbound_by_key
+            .entry((edge.label, edge.role))
             .or_default()
             .push(edge.target);
     }
-    let outbound: Vec<(RelationLabel, Vec<String>)> = outbound_by_label.into_iter().collect();
+    let outbound: Vec<RelationGroup> = outbound_by_key.into_iter().collect();
 
-    // inbound — derived from in_edges per overlay (no stored reverse field read).
-    let mut inbound_by_label: BTreeMap<RelationLabel, Vec<String>> = BTreeMap::new();
+    // inbound — derived from in_edges per overlay (no stored reverse field read). The
+    // cordage overlay is LABEL-keyed (R5 — one `references` overlay), so the role is NOT
+    // in the graph edge; it is recovered from the SOURCE entity's outbound PAYLOAD via
+    // [`inbound_role_index`] (F1). Re-keying by `(label, role)` keeps `implements` and
+    // `concerns` inbound in distinct buckets, each with its own derived verb.
+    let role_index = inbound_role_index(scanned);
+    let mut inbound_by_key: BTreeMap<(RelationLabel, Option<Role>), Vec<EntityKey>> =
+        BTreeMap::new();
     for (&overlay, &label) in &rg.overlays.by_overlay {
-        let mut srcs: Vec<EntityKey> = rg
-            .graph
-            .in_edges(overlay, node)
-            .filter_map(|(src_node, _attrs)| rg.projection.key_of(src_node))
-            .collect::<Vec<EntityKey>>();
-        if !srcs.is_empty() {
-            // in_edges orders by the (src,rank,age) adjacency key, but src NodeId
-            // order is mint order, not ref order — sort by EntityKey::Ord
-            // (prefix lexicographic, id numeric) for a deterministic,
-            // permutation-invariant render correct past id 999 (RSK-007).
-            srcs.sort();
-            inbound_by_label
-                .entry(label)
+        for (src_node, _attrs) in rg.graph.in_edges(overlay, node) {
+            let Some(src_key) = rg.projection.key_of(src_node) else {
+                continue;
+            };
+            // The role of the source's edge to the queried entity under this label —
+            // `None` for a label-only edge, `Some(role)` for a `references` edge. A
+            // missing index entry (cannot happen for a graph edge built from the same
+            // scan) falls back to `None`.
+            let role = role_index
+                .get(&(src_key, label, query_key))
+                .copied()
+                .unwrap_or(None);
+            inbound_by_key
+                .entry((label, role))
                 .or_default()
-                .extend(srcs.into_iter().map(EntityKey::canonical));
+                .push(src_key);
         }
     }
-    let inbound: Vec<(RelationLabel, Vec<String>)> = inbound_by_label.into_iter().collect();
+    // in_edges orders by the (src,rank,age) adjacency key, but src NodeId order is mint
+    // order, not ref order — sort each group by EntityKey::Ord (prefix lexicographic, id
+    // numeric) for a deterministic, permutation-invariant render correct past id 999
+    // (RSK-007).
+    let inbound: Vec<RelationGroup> = inbound_by_key
+        .into_iter()
+        .map(|(key, mut srcs)| {
+            srcs.sort();
+            (key, srcs.into_iter().map(EntityKey::canonical).collect())
+        })
+        .collect();
 
     // danglers — only the queried entity's set (empty if none).
     let danglers = rg.danglers.get(&query_key).cloned().unwrap_or_default();
@@ -681,7 +758,7 @@ fn render_outbound(
         return;
     }
     parts.push("\noutbound:\n".to_string());
-    for (label, targets) in &view.outbound {
+    for ((label, role), targets) in &view.outbound {
         let rendered: Vec<String> = if *label == RelationLabel::Interactions {
             targets
                 .iter()
@@ -693,7 +770,22 @@ fn render_outbound(
         } else {
             targets.clone()
         };
-        parts.push(format!("  {}: {}\n", label.name(), rendered.join(", ")));
+        parts.push(format!(
+            "  {}: {}\n",
+            outbound_label(*label, *role),
+            rendered.join(", ")
+        ));
+    }
+}
+
+/// The rendered outbound label for `(label, role)` (SL-149 §2.6): a `references` edge
+/// renders `references(<role>)` (e.g. `references(implements)`); every label-only edge
+/// (role `None`) renders the bare label, byte-identical to the pre-SL-149 surface
+/// (behaviour-preservation for `specs`/`supersedes`/`governed_by`/… goldens).
+fn outbound_label(label: RelationLabel, role: Option<Role>) -> String {
+    match role {
+        Some(role) => format!("{}({})", label.name(), role.name()),
+        None => label.name().to_string(),
     }
 }
 
@@ -705,13 +797,15 @@ fn render_inbound(parts: &mut Vec<String>, view: &InspectView) {
         return;
     }
     parts.push("\ninbound:\n".to_string());
-    for (label, srcs) in &view.inbound {
-        // Table-driven inbound render text (design §5.5 X5 / R2-M3): the `supersedes` →
-        // "superseded by" special-case collapses into `relation::inbound_name`, which
-        // also renders `governed_by` → "governs", `consumes` → "consumed_by". Legacy
-        // labels carry `inbound_name == name()`, so shipped goldens are unchanged. The
-        // `--json` inbound keeps the raw label (`render_json`), per R2-M3.
-        let word = crate::relation::inbound_name(*label);
+    for ((label, role), srcs) in &view.inbound {
+        // Table-driven inbound render text (design §5.5 X5 / R2-M3, re-keyed SL-149
+        // §2.6): `relation::inbound_name(label, role)` renders `supersedes` → "superseded
+        // by", `governed_by` → "governs", and the role-keyed `references` verbs
+        // (`implements` → "implemented by", `concerns` → "concerned by"). Legacy
+        // label-only edges pass role `None` and carry `inbound_name == name()`, so
+        // shipped goldens are unchanged. The `--json` inbound keeps the raw label +
+        // role (`inspect_value`), per R2-M3.
+        let word = crate::relation::inbound_name(*label, *role);
         parts.push(format!("  {word}: {}\n", srcs.join(", ")));
     }
 }
@@ -750,10 +844,26 @@ fn render_json(view: &InspectView) -> anyhow::Result<String> {
 /// §5.4 / SL-046 D1) without `relation_graph` depending on `priority` (ADR-001) — the
 /// relation surfaces stay byte-identical; only a new key is added.
 pub(crate) fn inspect_value(view: &InspectView) -> serde_json::Value {
-    let group = |label: RelationLabel, targets: &[String]| serde_json::json!({ "label": label.name(), "targets": targets });
-    let outbound: Vec<serde_json::Value> =
-        view.outbound.iter().map(|(l, t)| group(*l, t)).collect();
-    let inbound: Vec<serde_json::Value> = view.inbound.iter().map(|(l, t)| group(*l, t)).collect();
+    // The JSON carries the STRUCTURAL label faithfully (`references`, not the human
+    // `references(implements)`); the role is an additive sibling key, emitted ONLY for a
+    // role-bearing `references` group (SL-149 §2.6 / R2-M3). A label-only group omits the
+    // `role` key, so every shipped label-only golden stays byte-identical.
+    let group = |label: RelationLabel, role: Option<Role>, targets: &[String]| match role {
+        Some(role) => {
+            serde_json::json!({ "label": label.name(), "role": role.name(), "targets": targets })
+        }
+        None => serde_json::json!({ "label": label.name(), "targets": targets }),
+    };
+    let outbound: Vec<serde_json::Value> = view
+        .outbound
+        .iter()
+        .map(|((l, r), t)| group(*l, *r, t))
+        .collect();
+    let inbound: Vec<serde_json::Value> = view
+        .inbound
+        .iter()
+        .map(|((l, r), t)| group(*l, *r, t))
+        .collect();
     let danglers: Vec<serde_json::Value> = view
         .danglers
         .iter()
@@ -803,18 +913,18 @@ mod tests {
     // -- VT-1 outbound correctness per kind + outbound_for dispatch ----------
 
     #[test]
-    fn slice_outbound_specs_requirements_supersedes() {
+    fn slice_outbound_references_supersedes() {
         let dir = tmp();
         let root = dir.path();
         write(
             &root,
             ".doctrine/slice/001/slice-001.toml",
-            // SL-048 PHASE-04: tier-1 axes migrated to `[[relation]]` rows.
+            // SL-149 PHASE-05: the old specs/requirements rows are now references(implements).
             "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"proposed\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
-             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
-             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-002\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"PRD-010\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-002\"\n\
              [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-000\"\n",
         );
         write(&root, ".doctrine/slice/001/slice-001.md", "scope\n");
@@ -822,9 +932,9 @@ mod tests {
         assert_eq!(
             pairs(&edges),
             vec![
-                (RelationLabel::Specs, "PRD-010"),
-                (RelationLabel::Requirements, "REQ-001"),
-                (RelationLabel::Requirements, "REQ-002"),
+                (RelationLabel::References, "PRD-010"),
+                (RelationLabel::References, "REQ-001"),
+                (RelationLabel::References, "REQ-002"),
                 (RelationLabel::Supersedes, "SL-000"),
             ]
         );
@@ -925,7 +1035,7 @@ mod tests {
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [relationships]\nneeds = [\"ISS-002\"]\n\
              [[relation]]\nlabel = \"slices\"\ntarget = \"SL-020\"\n\
-             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-009\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"PRD-009\"\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"some-free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
@@ -938,11 +1048,11 @@ mod tests {
         assert_eq!(
             pairs(&edges),
             vec![
-                (RelationLabel::Specs, "PRD-009"),
+                (RelationLabel::References, "PRD-009"),
                 (RelationLabel::Slices, "SL-020"),
                 (RelationLabel::Drift, "some-free-text"),
             ],
-            "backlog emits slices/specs/drift ONLY (no needs/after/triggers), canonical order"
+            "backlog emits references/slices/drift ONLY (no needs/after/triggers), canonical order"
         );
     }
 
@@ -1260,22 +1370,24 @@ mod tests {
 
     // -- PHASE-03 inspect query ---------------------------------------------
 
-    /// All inbound targets under `label` in a view (sorted-render order).
+    /// All inbound targets under `label` (any role) in a view (sorted-render order).
+    /// SL-149: the view key is `(label, role)`; these label-only helpers match the
+    /// label component and flatten across roles, sufficient for the label-only fixtures.
     fn inbound_for(view: &InspectView, label: RelationLabel) -> Vec<&str> {
         view.inbound
             .iter()
-            .find(|(l, _)| *l == label)
-            .map(|(_, v)| v.iter().map(String::as_str).collect())
-            .unwrap_or_default()
+            .filter(|((l, _), _)| *l == label)
+            .flat_map(|(_, v)| v.iter().map(String::as_str))
+            .collect()
     }
 
-    /// All outbound targets under `label` in a view.
+    /// All outbound targets under `label` (any role) in a view.
     fn outbound_targets(view: &InspectView, label: RelationLabel) -> Vec<&str> {
         view.outbound
             .iter()
-            .find(|(l, _)| *l == label)
-            .map(|(_, v)| v.iter().map(String::as_str).collect())
-            .unwrap_or_default()
+            .filter(|((l, _), _)| *l == label)
+            .flat_map(|(_, v)| v.iter().map(String::as_str))
+            .collect()
     }
 
     /// A minimal slice toml with the given relations, in the SL-048 migrated shape
@@ -1334,7 +1446,10 @@ mod tests {
         seed_slice(
             &root,
             2,
-            &[("requirements", &["REQ-005"]), ("supersedes", &["SL-001"])],
+            &[
+                ("references(implements)", &["REQ-005"]),
+                ("supersedes", &["SL-001"]),
+            ],
         );
         // REQ-005 is an edge target only (no outbound).
         write(
@@ -1354,12 +1469,9 @@ mod tests {
             "supersedes-overlay inbound is the derived reciprocal (renders 'superseded by')"
         );
 
-        // REQ-005's only inbound is the requirements edge from SL-002.
+        // REQ-005's only inbound is the references(implements) edge from SL-002.
         let req = inspect(&root, "REQ-005").unwrap();
-        assert_eq!(
-            inbound_for(&req, RelationLabel::Requirements),
-            vec!["SL-002"]
-        );
+        assert_eq!(inbound_for(&req, RelationLabel::References), vec!["SL-002"]);
 
         // SL-002 owns the outbound; it has no inbound.
         let succ = inspect(&root, "SL-002").unwrap();
@@ -1601,49 +1713,63 @@ mod tests {
                 "{label:?} (Unvalidated) must have no overlay"
             );
         }
-        // The 17 = 20 distinct labels minus the 3 Unvalidated. The set, not just the
-        // count, is the real assertion above; the count is a human-readable sanity tag.
-        assert_eq!(overlay_backed.len(), 17, "overlay-backed label count is 17");
+        // The 16 = 19 distinct labels minus the 3 Unvalidated (SL-149 PHASE-05 retired
+        // specs/requirements, collapsing them into the single resolvable `references`
+        // label → one overlay, label-keyed per R5). The set, not just the count, is the
+        // real assertion above; the count is a sanity tag.
+        assert_eq!(overlay_backed.len(), 16, "overlay-backed label count is 16");
     }
 
     // -- PHASE-04 VT-4 / X3 arm (a): exact reader coverage (read_block live) ---
 
-    /// The distinct labels `RELATION_RULES` legalises for a given source prefix.
-    fn table_labels_for(prefix: &str) -> std::collections::BTreeSet<RelationLabel> {
+    /// The distinct `(label, role)` keys `RELATION_RULES` legalises for a given source
+    /// prefix (SL-149 PHASE-03: role-aware). A label-only row contributes `(label, None)`;
+    /// a `references` row contributes one key per legal role (`(References, Some(role))`).
+    /// The exact-coverage invariant now spans the role dimension — the P2 `references`
+    /// placeholder filter is gone.
+    fn table_labels_for(
+        prefix: &str,
+    ) -> std::collections::BTreeSet<(RelationLabel, Option<crate::relation::Role>)> {
         use crate::relation::RELATION_RULES;
         RELATION_RULES
             .iter()
             .filter(|r| r.sources.iter().any(|k| *k == prefix))
-            .map(|r| r.label)
+            .map(|r| (r.label, r.role))
             .collect()
     }
 
-    /// The distinct labels a kind's live `outbound_for` accessor ACTUALLY emits over a
-    /// corpus where every legal axis is authored.
+    /// The distinct `(label, role)` keys a kind's live `outbound_for` accessor ACTUALLY
+    /// emits over a corpus where every legal axis is authored — read off `RelationEdge`'s
+    /// `(label, role)` (SL-149: the reader now threads role through the storage seam).
     fn emitted_labels(
         root: &Path,
         prefix: &str,
         id: u32,
-    ) -> std::collections::BTreeSet<RelationLabel> {
+    ) -> std::collections::BTreeSet<(RelationLabel, Option<crate::relation::Role>)> {
         outbound_for(root, kind_for(prefix), id)
             .unwrap()
             .iter()
-            .map(|e| e.label)
+            .map(|e| (e.label, e.role))
             .collect()
     }
 
-    /// VT-4 (X3 arm (a), now `read_block` is LIVE): per source kind, the label set the
-    /// shipped `relation_edges` accessor EMITS == the label set `RELATION_RULES`
-    /// legalises for that source — no off-table emission, no table rule without a reader
-    /// path. The exact set (not ⊆) is the assertion: a fully-populated fixture authors
-    /// one edge of every legal axis (tier-1 via `[[relation]]`, tier-2/3 via its typed
+    /// VT-1 (SL-149: exact-coverage, now per-`(label, role)`): per source kind, the
+    /// `(label, role)` set the shipped `relation_edges` accessor EMITS == the `(label,
+    /// role)` set `RELATION_RULES` legalises for that source — no off-table emission, no
+    /// table rule without a reader path. The role dimension is in scope: the fully-populated
+    /// fixture authors one edge of every legal `(label, role)` (`references` once per role),
+    /// and the reader threads the role off the `[[relation]] role` cell. The exact set (not
+    /// ⊆) is the assertion: a fully-populated fixture authors one edge of every legal axis
+    /// (tier-1 via `[[relation]]`, tier-2/3 via its typed
     /// structure), and the emitted distinct-label set must equal the table's.
     #[test]
     fn reader_emitted_labels_equal_table_labels_per_source() {
         let dir = tmp();
         let root = dir.path();
 
-        // --- SL: specs, requirements, supersedes, governed_by, related (all tier-1) ---
+        // --- SL: specs, requirements, supersedes, governed_by, related (all tier-1),
+        //     plus references in all three roles (SL-149: implements/scoped_from/concerns
+        //     — the SL source authors every references role) ---
         write(
             &root,
             ".doctrine/slice/001/slice-001.toml",
@@ -1651,6 +1777,9 @@ mod tests {
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"SPEC-018\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"scoped_from\"\ntarget = \"IMP-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"RFC-003\"\n\
              [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-002\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n",
@@ -1680,13 +1809,16 @@ mod tests {
         );
 
         // --- ISS (backlog): specs + slices + related + drift + governed_by (all tier-1;
-        //     governed_by + related widened in for backlog by SL-145) ---
+        //     governed_by + related widened in for backlog by SL-145) + references(concerns)
+        //     (SL-149: a backlog item authors ONLY the concerns role — implements/scoped_from
+        //     are SL-only) ---
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
             "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
@@ -1804,7 +1936,7 @@ mod tests {
         // parsed, so we compare against the Writable subset.
         {
             let mut expected = table_labels_for("ASM");
-            expected.remove(&RelationLabel::Supersedes);
+            expected.remove(&(RelationLabel::Supersedes, None));
             assert_eq!(
                 emitted_labels(root, "ASM", 1),
                 expected,
@@ -1838,7 +1970,7 @@ mod tests {
         );
         {
             let mut expected = table_labels_for("DEC");
-            expected.remove(&RelationLabel::Supersedes);
+            expected.remove(&(RelationLabel::Supersedes, None));
             assert_eq!(
                 emitted_labels(root, "DEC", 1),
                 expected,
@@ -1871,7 +2003,7 @@ mod tests {
         );
         {
             let mut expected = table_labels_for("QUE");
-            expected.remove(&RelationLabel::Supersedes);
+            expected.remove(&(RelationLabel::Supersedes, None));
             assert_eq!(
                 emitted_labels(root, "QUE", 1),
                 expected,
@@ -1904,7 +2036,7 @@ mod tests {
         );
         {
             let mut expected = table_labels_for("CON");
-            expected.remove(&RelationLabel::Supersedes);
+            expected.remove(&(RelationLabel::Supersedes, None));
             assert_eq!(
                 emitted_labels(root, "CON", 1),
                 expected,
@@ -1926,7 +2058,11 @@ mod tests {
         // SL-001 links requirements to REQ-005, which we DO seed (resolves), and to
         // REQ-999, which we do NOT (a dangler). The free-text `drift` case rides a
         // backlog issue below (`drift` is a backlog label, not a slice one).
-        seed_slice(root, 1, &[("requirements", &["REQ-005", "REQ-999"])]);
+        seed_slice(
+            root,
+            1,
+            &[("references(implements)", &["REQ-005", "REQ-999"])],
+        );
         write(
             root,
             ".doctrine/requirement/005/requirement-005.toml",
@@ -1980,6 +2116,76 @@ mod tests {
         assert!(
             after.contains("label = \"descends_from\""),
             "validate never rewrites the corpus"
+        );
+    }
+
+    /// VT-3 (SL-149): `validate_relations` reports a hand-edited `references` row with a
+    /// MISSING role and one with an ILLEGAL-for-source role as role-class `IllegalRow`s,
+    /// while a well-formed `references(implements)` row and a label-only `governed_by` row
+    /// produce NO finding (no false positive). Report-only — the corpus is never rewritten.
+    #[test]
+    fn validate_relations_flags_bad_references_role() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001: a well-formed references(implements) + a label-only governed_by — both
+        // legal, neither a finding; plus a hand-edited references row with NO role.
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"SPEC-018\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"references\"\ntarget = \"PRD-010\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "s\n");
+        // A backlog issue with a references row whose role is illegal-for-source
+        // (`implements` is SL-only) — a role-class finding.
+        write(
+            root,
+            ".doctrine/backlog/issue/001/backlog-001.toml",
+            "schema = \"doctrine.backlog\"\nversion = 1\n\
+             id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+             resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"SPEC-018\"\n",
+        );
+        write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
+        // Seed the well-formed references(implements) target and the governed_by target so
+        // neither is ALSO a dangler — isolating the role-class findings under test.
+        write(
+            root,
+            ".doctrine/spec/tech/018/spec-018.toml",
+            "id = 18\nslug = \"x\"\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"tech\"\n",
+        );
+        write(root, ".doctrine/spec/tech/018/spec-018.md", "x\n");
+        write(
+            root,
+            ".doctrine/adr/001/adr-001.toml",
+            "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n",
+        );
+        write(root, ".doctrine/adr/001/adr-001.md", "a\n");
+
+        let findings = validate_relations(root).unwrap();
+        let joined = findings.join("\n");
+        // The missing-role SL row and the illegal-role ISS row are both role-class findings.
+        assert!(
+            joined.contains("SL-001: [[relation]] row `references` -> `PRD-010`")
+                && joined.contains("missing or illegal role"),
+            "the missing-role references row is reported as a role-class IllegalRow: {joined}"
+        );
+        assert!(
+            joined.contains("ISS-001: [[relation]] row `references` -> `SPEC-018`")
+                && joined.contains("missing or illegal role"),
+            "the illegal-for-source role is reported: {joined}"
+        );
+        // No false positive: NEITHER the well-formed references(implements) SPEC-018 row nor
+        // the label-only governed_by ADR-001 row appears in ANY finding (both resolve and
+        // are role-legal). The only findings are the two role-class ones above.
+        assert_eq!(
+            findings.len(),
+            2,
+            "exactly the two role-class findings, nothing else: {joined}"
         );
     }
 

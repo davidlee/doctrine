@@ -14,34 +14,42 @@ updated = "2026-06-20"
 superseded_by = []   # reverse link is derived (REV→RFC originates_from)
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SPEC-001"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SPEC-018"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-130"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IDE-013"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-112"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ISS-008"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-137"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SL-138"
 

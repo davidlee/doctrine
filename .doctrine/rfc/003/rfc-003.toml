@@ -15,50 +15,62 @@ tags = ["design", "model", "relations", "vocabulary"]
 superseded_by = []   # reverse link is derived (REV→RFC originates_from)
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "CHR-024"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "SPEC-018"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ADR-004"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ADR-010"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-047"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "ISS-041"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-149"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-141"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-138"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-053"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IDE-015"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "concerns"
 target = "IMP-012"
 
