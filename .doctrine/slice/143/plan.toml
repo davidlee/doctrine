@@ -1,0 +1,176 @@
+# Implementation plan for SL-143 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-143"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Audit shipped memory corpus"
+objective = "Produce a per-memory findings ledger covering currency, completeness, wikilink validity, ADR-002 evergreen compliance, and POL-002 platform independence."
+
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked: design.md committed with D1-D8 decisions" },
+  { id = "EN-2", text = "Preflight findings available: .doctrine/state/sl-143-preflight-*.md" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "Per-memory findings ledger written to .doctrine/state/sl-143-phase-01-ledger.md" },
+  { id = "EX-2", text = "Every shipped memory (29 current) has ≥1 finding entry (can be 'no issues found')" },
+  { id = "EX-3", text = "cli-command-map staleness documented with full verb diff" },
+  { id = "EX-4", text = "POL-002 violations flagged (incl. conventions memory (SL-NNN) commit scoping)" },
+  { id = "EX-5", text = "Wikilink graph validated: broken links, orphans, TOML-table [[relation]] false-positives documented" },
+  { id = "EX-6", text = "Entity kind + CLI verb coverage gaps enumerated per memory" },
+]
+
+verification = [
+  { id = "VA-1", expects = "Ledger file exists and covers all 29 current shipped memories" },
+  { id = "VA-2", expects = "cli-command-map verb diff: ≥14 missing, 1 dead (claude)" },
+  { id = "VA-3", expects = "Ledger is agent-readable — findings are actionable with severity assigned" },
+]
+
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Rewrite overview as the PULL hub"
+objective = "Rewrite mem.signpost.doctrine.overview as a self-contained briefing with mental model, when-to-retrieve-what table, key conventions, and quick-links. One retrieval after boot is sufficient to orient an agent."
+
+entrance_criteria = [
+  { id = "EN-1", text = "Preflight findings available (overview depends on preflight, not PHASE-01 ledger)" },
+  { id = "EN-2", text = "Design D1 and D5 decisions clear: what the overview contains and that CLI enumeration stays in binary" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "memory/mem.signpost.doctrine.overview/memory.md rewritten with sections: pillars, mental model, when-to-retrieve-what table, conventions, quick-links" },
+  { id = "EX-2", text = "When-to-retrieve-what table has one row per shipped memory (excluding overview), situation-keyed" },
+  { id = "EX-3", text = "Memory body ≤ ~60 lines (compact enough to not replace deep reference)" },
+  { id = "EX-4", text = "memory.toml updated: updated date, commands scope refreshed" },
+  { id = "EX-5", text = "No CLI verb enumeration in body — points to doctrine --help" },
+  { id = "EX-6", text = "ADR-002 compliant: repo=\"\", anchor_kind=none, no repo-specific detail" },
+  { id = "EX-7", text = "POL-002 compliant: no host-convention references" },
+]
+
+verification = [
+  { id = "VA-1", expects = "Overview body contains all five required sections" },
+  { id = "VA-2", expects = "When-to-retrieve-what table covers all shipped memory keys (excluding overview)" },
+  { id = "VA-3", expects = "Body references doctrine --help, never enumerates verb subcommands or flags" },
+  { id = "VA-4", expects = "No references to just gate, just check, edge/main, (SL-NNN), jail, bwrap, or other host conventions" },
+]
+
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Update corpus content for currency"
+objective = "Update all remaining shipped memories for currency against the CLI surface and entity model. Delete cli-command-map. Create REC, RFC, CM signposts. Promote work-intake-membership to shipped."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 ledger available (informs per-memory updates)" },
+  { id = "EN-2", text = "PHASE-02 overview written (target for inbound wikilinks)" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "All 27 existing non-overview memories reviewed and updated for currency" },
+  { id = "EX-2", text = "Updated date set to 2026-06-24 on every memory touched" },
+  { id = "EX-3", text = "Commands scope in TOML metadata refreshed per memory" },
+  { id = "EX-4", text = "mem.signpost.doctrine.cli-command-map directory deleted" },
+  { id = "EX-5", text = "mem.signpost.doctrine.rec created: REC kind signpost (what it is, which verbs, where files live)" },
+  { id = "EX-6", text = "mem.signpost.doctrine.rfc created: RFC kind signpost" },
+  { id = "EX-7", text = "mem.signpost.doctrine.concept-map created: CM kind signpost" },
+  { id = "EX-8", text = "mem.concept.backlog.work-intake-membership promoted: repo=\"\", anchor_kind=none, moved to memory/ source dir" },
+  { id = "EX-9", text = "All inbound wikilinks to cli-command-map replaced with links to overview or relevant signposts" },
+  { id = "EX-10", text = "POL-002 violations from PHASE-01 ledger remediated (incl. conventions memory commit-scoping)" },
+  { id = "EX-11", text = "No memory body references claude as a CLI verb" },
+  { id = "EX-12", text = "ADR-002 evergreen compliance maintained throughout" },
+]
+
+verification = [
+  { id = "VA-1", expects = "Exactly 32 shipped memory directories under memory/ (29 - 1 deleted + 4 added)" },
+  { id = "VA-2", expects = "cli-command-map key absent from corpus" },
+  { id = "VA-3", expects = "rec, rfc, concept-map signposts exist with non-empty bodies" },
+  { id = "VA-4", expects = "work-intake-membership has repo=\"\" and anchor_kind=none" },
+  { id = "VA-5", expects = "No memory references the claude verb" },
+  { id = "VA-6", expects = "All updated dates ≥ 2026-06-24 on changed memories" },
+]
+
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Reachability pass"
+objective = "Verify every shipped memory reachable from overview within ≤3 hops. Overview has ≥1 inbound wikilink. Fix wikilink web orphans and broken references. Add skill/boot pointers where ADR-005 requires."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 overview written (root of reachability graph)" },
+  { id = "EN-2", text = "PHASE-03 content updates complete (all memories current, new signposts exist)" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "Every shipped memory reachable from overview within ≤3 hops" },
+  { id = "EX-2", text = "Overview has ≥1 inbound wikilink from another shipped memory (orphan resolved)" },
+  { id = "EX-3", text = "Overview differentiated as starting point in boot digest Memory section (D1)" },
+  { id = "EX-4", text = "Every concept/fact/pattern memory pointed-at by ≥1 skill or the boot digest (ADR-005)" },
+  { id = "EX-5", text = "Broken wikilinks fixed or removed" },
+  { id = "EX-6", text = "[[relation]] TOML-table references in relating-entities normalised to backtick formatting" },
+  { id = "EX-7", text = "New signposts (rec, rfc, concept-map) linked into wikilink web" },
+  { id = "EX-8", text = "Work-intake-membership linked from backlog signpost and conventions" },
+]
+
+verification = [
+  { id = "VA-1", expects = "Walk the wikilink graph: all 32 memories ≤3 hops from overview" },
+  { id = "VA-2", expects = "Overview has ≥1 inbound wikilink (check: grep 'mem.signpost.doctrine.overview' memory/*/memory.md)" },
+  { id = "VA-3", expects = "Boot digest lists overview first or marks it as starting point" },
+  { id = "VA-4", expects = "No bare [[relation]] wikilinks in any shipped memory body" },
+]
+
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Re-embed, re-sync, and gate"
+objective = "Re-embed the updated memory corpus into the binary, sync to shipped/, refresh installed skills, and pass the gate."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 overview written" },
+  { id = "EN-2", text = "PHASE-03 content updates complete" },
+  { id = "EN-3", text = "PHASE-04 reachability verified" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "touch src/corpus.rs && cargo build succeeds" },
+  { id = "EX-2", text = "doctrine memory sync materialises all 32 shipped memories" },
+  { id = "EX-3", text = "doctrine claude install refreshes installed skills" },
+  { id = "EX-4", text = "just gate passes (zero warnings)" },
+  { id = "EX-5", text = "doctrine memory find --glob 'shipped/*' returns exactly 32 entries" },
+]
+
+verification = [
+  { id = "VT-1", expects = "cargo build exits 0 after touch src/corpus.rs" },
+  { id = "VT-2", expects = "just gate exits 0 with zero clippy warnings" },
+  { id = "VA-1", expects = "doctrine memory find --glob 'shipped/*' | wc -l equals 32" },
+  { id = "VA-2", expects = "doctrine memory show mem.signpost.doctrine.overview returns the rewritten body" },
+  { id = "VA-3", expects = "No doctrine memory show mem.signpost.doctrine.cli-command-map (key absent)" },
+]
+
+specs        = []
+requirements = []
+
+# Deferred — not a phase to execute, tracked as IMP-163
+# Wire self-correction gate into reconcile/close via SL-147 domain-map (D3)
