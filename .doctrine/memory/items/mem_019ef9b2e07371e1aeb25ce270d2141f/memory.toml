@@ -52,3 +52,7 @@ target = "mem.fact.build.rebuild-stale-skips-test-binaries"
 label = "related"
 target = "mem_019ebc8e4662732185d4356a9a0f0ad6"
 
+[[relation]]
+label = "related"
+target = "CHR-014"
+
