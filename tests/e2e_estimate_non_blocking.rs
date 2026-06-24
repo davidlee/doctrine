@@ -15,11 +15,10 @@
 //! Because `resolve_confidence` is in the symbol set, this same test also proves
 //! no non-allowlist consumer of confidence exists (the display-only guarantee).
 //!
-//! # CHR-014 stale-shared-target-path hazard
-//! `CARGO_MANIFEST_DIR` is compile-time relative to the test binary's crate root.
-//! In a cargo build with shared target dir (e.g. workspace or `--target-dir`),
-//! stale binaries may embed the wrong path. `cargo clean -p doctrine` before a
-//! suspect run is the escape hatch.
+//! # CHR-014 — runtime repo-root resolution
+//! The repo root comes from `common::repo_root()`, which reads the runtime
+//! `CARGO_MANIFEST_DIR` cargo sets to the invoking tree — never the compile-time
+//! macro, which would bake a stale path into a binary reused across worktrees.
 
 #![allow(
     clippy::expect_used,
@@ -29,6 +28,8 @@
 )]
 
 use std::path::PathBuf;
+
+mod common;
 
 /// The set of precise symbol strings whose presence in a source file
 /// constitutes a facet reference. Bare words like `estimate`/`value` are NOT
@@ -69,7 +70,7 @@ const ALLOWLIST: &[&str] = &[
 ];
 
 fn src_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")
+    common::repo_root().join("src")
 }
 
 /// Walk `src/**/*.rs`, returning every file path relative to `src/`.
