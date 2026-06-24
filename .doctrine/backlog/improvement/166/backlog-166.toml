@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 165
-slug = "add-orphans-flag-to-memory-list-to-find-unlinked-memories"
-title = "Add --orphans flag to memory list to find unlinked memories"
+id = 166
+slug = "structured-help-commands-subcommand-native-flat-table"
+title = "Structured --help --commands: subcommand-native flat table"
 kind = "improvement"
-status = "resolved"
-resolution = "done"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-24"
 updated = "2026-06-24"
-tags = ["area:cli", "area:memory"]
+tags = ["area:cli", "area:ux"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
