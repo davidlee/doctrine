@@ -711,13 +711,15 @@ pub(crate) fn run_new(
     };
 
     let trunk_ids = crate::git::trunk_entity_ids(&root, REV_DIR)?;
-    let backend = crate::reserve::backend(&root, REV_KIND.prefix)?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(&root, REV_KIND.prefix, crate::install::prompt_confirm)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
         &*backend,
         &root,
         REV_DIR,
         REV_KIND.prefix,
         &trunk_ids,
+        &mut reserved,
         |id, canonical| {
             let name = format!("{id:03}");
             Ok(vec![
