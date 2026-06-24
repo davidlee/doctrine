@@ -8,8 +8,8 @@ kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-19"
-updated = "2026-06-19"
-tags = []
+updated = "2026-06-24"
+tags = ["area:dispatch", "docs"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
