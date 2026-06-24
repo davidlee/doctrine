@@ -638,10 +638,26 @@ struct VerbEntry {
     description: String,
 }
 
+/// Truncate a description to its first sentence for the summary table.
+/// Splits on `. ` (period-space) and reappends the period. If no period-space
+/// break exists, returns the full text unchanged. Full text remains available
+/// via `doctrine <command> <verb> --help`.
+fn first_sentence(about: &str) -> String {
+    if let Some(pos) = about.find(". ") {
+        let mut s = about[..=pos].to_string();
+        s.truncate(s.len() - 1); // drop trailing space, keep period
+        s
+    } else {
+        about.to_string()
+    }
+}
+
 /// Render the `--help --commands` table: three-column (`command | verb | description`)
 /// with each top-level command's subcommands grouped beneath it. The command name
 /// appears only on the first subcommand row; continuation rows leave it blank.
 /// Leaf commands (no subcommands) get a single row with an em-dash in the verb column.
+/// Descriptions are truncated to the first sentence for scanability — full text
+/// is available via `doctrine <command> <verb> --help`.
 pub(crate) fn render_commands_table(color: bool, term_width: Option<u16>) -> String {
     use crate::listing::{self, Column, ColumnPaint, RenderOpts};
 
@@ -660,7 +676,7 @@ pub(crate) fn render_commands_table(color: bool, term_width: Option<u16>) -> Str
 
         if grandchildren.is_empty() {
             // Leaf command — single row, em-dash placeholder in verb column.
-            let about = sub.get_about().map_or(String::new(), ToString::to_string);
+            let about = sub.get_about().map_or(String::new(), |a| first_sentence(&a.to_string()));
             entries.push(VerbEntry {
                 command: parent,
                 verb: "\u{2014}".to_string(),
@@ -669,7 +685,9 @@ pub(crate) fn render_commands_table(color: bool, term_width: Option<u16>) -> Str
         } else {
             for (i, gc) in grandchildren.into_iter().enumerate() {
                 let verb = gc.get_name().to_string();
-                let desc = gc.get_about().map_or(String::new(), ToString::to_string);
+                let desc = gc
+                    .get_about()
+                    .map_or(String::new(), |a| first_sentence(&a.to_string()));
                 entries.push(VerbEntry {
                     command: if i == 0 { parent.clone() } else { String::new() },
                     verb,
