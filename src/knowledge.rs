@@ -363,6 +363,8 @@ pub(crate) struct KnowledgeRecord {
     facet: RecordFacet,
     evidence: Evidence,
     tier1: Vec<crate::relation::RelationEdge>,
+    /// Prose body read from the sibling `record-NNN.md`.
+    pub(crate) body: String,
 }
 
 /// The typed facet, kind-dispatched (one variant per kind — no untyped bag). Built
@@ -586,6 +588,8 @@ fn validate(raw: RawRecordToml) -> anyhow::Result<KnowledgeRecord> {
         facet,
         evidence,
         tier1: Vec::new(),
+        // Filled by `read_record` from the sibling .md; empty otherwise.
+        body: String::new(),
     })
 }
 
@@ -873,6 +877,12 @@ fn read_record(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Knowled
         toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
     let mut record = validate(raw)?;
     record.tier1 = crate::relation::tier1_edges(kind.kind(), &text)?;
+    let md_path = root
+        .join(kind.kind().dir)
+        .join(&name)
+        .join(format!("{RECORD_STEM}-{name}.md"));
+    record.body = std::fs::read_to_string(&md_path)
+        .with_context(|| format!("Failed to read {}", md_path.display()))?;
     Ok(record)
 }
 
@@ -1006,6 +1016,7 @@ fn format_show(record: &KnowledgeRecord) -> String {
             parts.push(format!("{}: [{}]\n", label.name(), targets_str));
         }
     }
+    parts.push(format!("\n{}", record.body));
     parts.concat()
 }
 
@@ -1112,6 +1123,7 @@ fn show_json(record: &KnowledgeRecord) -> anyhow::Result<String> {
             "created": record.created,
             "updated": record.updated,
             "tags": record.tags,
+            "body": record.body,
             "facet": facet_json(&record.facet),
             "evidence": {
                 "supports": record.evidence.supports,
@@ -1980,6 +1992,11 @@ notes = []
         let dir = root.join(kind.kind().dir).join(&name);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(format!("record-{name}.toml")), body).unwrap();
+        std::fs::write(
+            dir.join(format!("record-{name}.md")),
+            format!("# {}: Test\n", kind.canonical_id(id)),
+        )
+        .unwrap();
     }
 
     #[test]

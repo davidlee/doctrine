@@ -165,7 +165,9 @@ fn knowledge_show_table_is_byte_exact() {
          \n\
          [evidence]\n\
          \x20\x20supports: DEC-005-C\n\
-         \x20\x20notes: see the audit\n"
+         \x20\x20notes: see the audit\n\
+         \n\
+         # body\n"
     );
 }
 
@@ -182,7 +184,7 @@ fn knowledge_show_json_is_byte_exact() {
     // (`write!`, not `writeln!`). Absent optional facet fields render as `null`.
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"knowledge\",\n  \"knowledge\": {\n    \"created\": \"2026-01-02\",\n    \"evidence\": {\n      \"contradicts\": [],\n      \"notes\": [\n        \"see the audit\"\n      ],\n      \"supports\": [\n        \"DEC-005-C\"\n      ]\n    },\n    \"facet\": {\n      \"basis\": \"observation\",\n      \"claim\": \"tokens expire in 1h\",\n      \"confidence\": \"high\",\n      \"invalidated_by\": null,\n      \"invalidated_on\": null,\n      \"validated_by\": null,\n      \"validated_on\": null,\n      \"validation_plan\": \"probe the IdP\"\n    },\n    \"id\": \"ASM-007\",\n    \"record_kind\": \"assumption\",\n    \"relationships\": {\n      \"governed_by\": [],\n      \"shapes\": [],\n      \"spawns\": []\n    },\n    \"slug\": \"token-expiry\",\n    \"status\": \"testing\",\n    \"tags\": [\n      \"auth\",\n      \"security\"\n    ],\n    \"title\": \"Token expiry\",\n    \"updated\": \"2026-01-03\"\n  }\n}"
+        "{\n  \"kind\": \"knowledge\",\n  \"knowledge\": {\n    \"body\": \"# body\\n\",\n    \"created\": \"2026-01-02\",\n    \"evidence\": {\n      \"contradicts\": [],\n      \"notes\": [\n        \"see the audit\"\n      ],\n      \"supports\": [\n        \"DEC-005-C\"\n      ]\n    },\n    \"facet\": {\n      \"basis\": \"observation\",\n      \"claim\": \"tokens expire in 1h\",\n      \"confidence\": \"high\",\n      \"invalidated_by\": null,\n      \"invalidated_on\": null,\n      \"validated_by\": null,\n      \"validated_on\": null,\n      \"validation_plan\": \"probe the IdP\"\n    },\n    \"id\": \"ASM-007\",\n    \"record_kind\": \"assumption\",\n    \"relationships\": {\n      \"governed_by\": [],\n      \"shapes\": [],\n      \"spawns\": []\n    },\n    \"slug\": \"token-expiry\",\n    \"status\": \"testing\",\n    \"tags\": [\n      \"auth\",\n      \"security\"\n    ],\n    \"title\": \"Token expiry\",\n    \"updated\": \"2026-01-03\"\n  }\n}"
     );
 }
 

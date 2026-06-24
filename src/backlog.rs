@@ -588,6 +588,8 @@ pub(crate) struct BacklogItem {
     /// Populated by [`read_item`] from the raw TOML text; the `validate` test seam
     /// leaves it empty (those tests assert the typed dep/sequence axes, not tier-1).
     tier1: Vec<crate::relation::RelationEdge>,
+    /// Prose body read from the sibling `backlog-NNN.md`.
+    pub(crate) body: String,
 }
 
 /// A `triggers` rider (PRD-009 §5.7): the source `globs` this item watches, with
@@ -669,6 +671,8 @@ fn validate(raw: RawBacklogToml) -> anyhow::Result<BacklogItem> {
         relationships: raw.relationships,
         // Filled by `read_item` from the raw TOML text (read_block); empty otherwise.
         tier1: Vec::new(),
+        // Filled by `read_item` from the sibling .md; empty otherwise.
+        body: String::new(),
     })
 }
 
@@ -917,6 +921,12 @@ fn read_item(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::Result<Backlo
     // SL-048 PHASE-04: the migrated tier-1 axes (slices/specs/drift) come from the
     // `[[relation]]` block, read generically in canonical order.
     item.tier1 = crate::relation::tier1_edges(item_kind.kind(), &text)?;
+    let md_path = root
+        .join(item_kind.kind().dir)
+        .join(&name)
+        .join(format!("{BACKLOG_STEM}-{name}.md"));
+    item.body = std::fs::read_to_string(&md_path)
+        .with_context(|| format!("Failed to read {}", md_path.display()))?;
     Ok(item)
 }
 
@@ -1437,6 +1447,7 @@ fn format_show(item: &BacklogItem) -> String {
         }
     }
 
+    parts.push(format!("\n{}", item.body));
     parts.concat()
 }
 
@@ -1494,6 +1505,7 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
             "created": item.created,
             "updated": item.updated,
             "tags": item.tags,
+            "body": item.body,
             "facet": facet,
             "relationships": {
                 "slices": targets_for(&item.tier1, RelationLabel::Slices),
@@ -2226,6 +2238,11 @@ pub(crate) mod test_support {
         fs::write(
             dir.join(format!("backlog-{name}.toml")),
             render_fixture_toml(&f),
+        )
+        .unwrap();
+        fs::write(
+            dir.join(format!("backlog-{name}.md")),
+            format!("# {}: {}\n", f.kind.canonical_id(f.id), f.title),
         )
         .unwrap();
     }
@@ -4377,6 +4394,12 @@ tags = []
              updated = \"2026-06-08\"\ntags = [\"b\", \"a\"]\n";
         let path = item_path(root, ItemKind::Issue, 1);
         fs::write(&path, toml).unwrap();
+        // .md companion now required by read_item (ISS-050).
+        fs::write(
+            path.parent().unwrap().join(format!("backlog-{:03}.md", 1)),
+            "# ISS-001: A\n",
+        )
+        .unwrap();
         let before = fs::read_to_string(&path).unwrap();
         let mtime0 = fs::metadata(&path).unwrap().modified().unwrap();
 
@@ -4473,6 +4496,12 @@ tags = []
              updated = \"2026-06-08\"\ntags = []\nunknown = \"survives\"\n\
              \n[relationships]\nneeds = []\n";
         fs::write(&path, toml).unwrap();
+        // .md companion now required by read_item (ISS-050).
+        fs::write(
+            path.parent().unwrap().join(format!("backlog-{:03}.md", 1)),
+            "# ISS-001: A\n",
+        )
+        .unwrap();
 
         run_tag(Some(root.to_path_buf()), "ISS-001", &s(&["security"]), &[]).unwrap();
         let after = fs::read_to_string(&path).unwrap();
@@ -4498,6 +4527,11 @@ tags = []
              status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
              updated = \"2026-06-08\"\n";
         fs::write(&path2, no_tags).unwrap();
+        fs::write(
+            path2.parent().unwrap().join(format!("backlog-{:03}.md", 2)),
+            "# ISS-002: B\n",
+        )
+        .unwrap();
         run_tag(Some(root.to_path_buf()), "ISS-002", &s(&["x"]), &[]).unwrap();
         let after2 = fs::read_to_string(&path2).unwrap();
         assert!(
