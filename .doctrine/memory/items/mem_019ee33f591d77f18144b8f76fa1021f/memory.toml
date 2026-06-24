@@ -48,3 +48,7 @@ ref = "SL-123"
 kind = "review"
 ref = "RV-108"
 
+[[relation]]
+label = "related"
+target = "mem_019ee33fa5517e838785bb5976a8f939"
+
