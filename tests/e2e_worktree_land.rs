@@ -384,7 +384,7 @@ fn land_refused_under_worker_mode() {
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("land"),
+        stderr(&out).contains("`land`"),
         "refusal names the verb; stderr: {}",
         stderr(&out)
     );

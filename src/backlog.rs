@@ -132,10 +132,11 @@ pub(crate) enum BacklogCommand {
     /// cycle (naming the members; nothing written).
     Needs {
         /// The dependent item ref (e.g. ISS-007); the prefix selects the kind.
+        #[arg(value_name = "DEPENDENT")]
         id: String,
 
         /// One or more prerequisite refs the item must wait on.
-        #[arg(required = true)]
+        #[arg(required = true, value_name = "PREREQUISITE")]
         prereqs: Vec<String>,
 
         /// Explicit project root (default: auto-detect).
@@ -148,11 +149,12 @@ pub(crate) enum BacklogCommand {
     /// preference, surfaced and evicted at `order` time).
     After {
         /// The item ref that should run after the target (e.g. ISS-007).
+        #[arg(value_name = "DEPENDENT")]
         id: String,
 
         /// The predecessor ref this item should follow.
         /// Required unless --prune is set.
-        #[arg(required_unless_present = "prune")]
+        #[arg(required_unless_present = "prune", value_name = "PREDECESSOR")]
         to: Option<String>,
 
         /// Per-edge rank (a manual tie-break hint; default 0).
