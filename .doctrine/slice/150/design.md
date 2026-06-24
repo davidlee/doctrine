@@ -52,7 +52,17 @@ and a dense, routing-grade boot map. This is a tokens-vs-breadth/clarity exercis
   `ExecPath`-last cache invariant.
 - **ADR-005** (shipped knowledge tiered; PUSH tier is compact, PULL explains):
   the boot map is PUSH-tier — dense, no glosses; the human `--help` and
-  `--commands` are PULL-tier reference. The governing relation.
+  `--commands` are PULL-tier reference. The governing relation. **Why the map
+  earns the PUSH seat** (the cost ADR-005 demands be defended, not assumed): the
+  boot already PUSHes the Routing *table* — which skill governs which situation —
+  but an agent that has routed still cannot name the *command* to run without a
+  `--help` round-trip or guesswork. The command surface is the Routing table's
+  natural companion: both are navigational PUSH context. It earns the seat only
+  because the factored spine + infra suppression keep it to ~20 lines — without
+  that compression it would be the ~150-line `--commands`, which correctly stays
+  PULL. Memory stays PULL because its corpus is unbounded and task-specific; the
+  command surface is bounded and universal. The factoring is what makes PUSH
+  affordable here.
 - **POL-002** (platform independence): no host-project assumptions; pure CLI
   surface work.
 - **Pure/imperative split**: classification + rendering are pure functions over
@@ -98,17 +108,24 @@ New in `src/commands/cli.rs`:
 /// command names matched against the live clap tree.
 struct Family { key: &'static str, members: &'static [&'static str] }
 
+/// A navigational grouping of top-level commands. `suppress_verbs` keeps the
+/// family's commands header-only in the boot map (infra is operational /
+/// skill-driven, not boot-time authoring routing — D7). The flag rides the
+/// struct so the suppression is compile-linked to the family, not matched by a
+/// separate stringly-typed key list (F-4).
+struct Family { key: &'static str, members: &'static [&'static str], suppress_verbs: bool }
+
 /// The 8-family taxonomy. The ONLY hand-maintained classification; the
 /// drift-guard test asserts it partitions the visible clap subcommands exactly.
 static FAMILIES: &[Family] = &[
-    Family { key: "change",     members: &["slice","revision","rfc","rec","review","reconcile","coverage"] },
-    Family { key: "governance", members: &["adr","policy","standard","spec"] },
-    Family { key: "knowledge",  members: &["memory","knowledge","backlog"] },
-    Family { key: "relations",  members: &["link","unlink","needs","after","supersede"] },
-    Family { key: "facets",     members: &["estimate","value","risk","tag"] },
-    Family { key: "reports",    members: &["status","next","blockers","survey","explain"] },
-    Family { key: "explore",    members: &["search","inspect","relation","concept-map","map"] },
-    Family { key: "infra",      members: &["install","boot","serve","config","validate","reseat",
+    Family { key: "change",     suppress_verbs: false, members: &["slice","revision","rfc","rec","review","reconcile","coverage"] },
+    Family { key: "governance", suppress_verbs: false, members: &["adr","policy","standard","spec"] },
+    Family { key: "knowledge",  suppress_verbs: false, members: &["memory","knowledge","backlog"] },
+    Family { key: "relations",  suppress_verbs: false, members: &["link","unlink","needs","after","supersede"] },
+    Family { key: "facets",     suppress_verbs: false, members: &["estimate","value","risk","tag"] },
+    Family { key: "reports",    suppress_verbs: false, members: &["status","next","blockers","survey","explain"] },
+    Family { key: "explore",    suppress_verbs: false, members: &["search","inspect","relation","concept-map","map"] },
+    Family { key: "infra",      suppress_verbs: true,  members: &["install","boot","serve","config","validate","reseat",
                                            "export","reservation","worktree","dispatch","catalog"] },
 ];
 
@@ -116,10 +133,6 @@ static FAMILIES: &[Family] = &[
 /// `status` is deliberately NOT in the spine — not universal, lifecycle-bearing,
 /// so it surfaces as distinctive where present.
 const SPINE: &[&str] = &["new", "list", "show", "paths"];
-
-/// Infra is operational / skill-driven, not boot-time authoring routing — its
-/// commands appear in the family header only, never verb-expanded (D7).
-const SUPPRESS_VERBS: &[&str] = &["infra"];
 
 pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> String; // rewritten
 pub(crate) fn render_boot_map() -> String;                                            // new, plain text
@@ -146,8 +159,9 @@ SourceKind::CommandMap => Section { heading, body: cli::render_boot_map() },
 
 ### 5.3 Data, State & Ownership
 
-- **Owned, hand-maintained**: `FAMILIES`, `SPINE`, `SUPPRESS_VERBS` (cli.rs).
-  Everything else is derived from the clap tree at render time.
+- **Owned, hand-maintained**: `FAMILIES` (incl. each family's `suppress_verbs`
+  flag) and `SPINE` (cli.rs). Everything else is derived from the clap tree at
+  render time.
 - **Derived at render**: distinctive verbs per command (`verbs − SPINE`),
   whether a command is a leaf, command descriptions (`about` / first-sentence).
 - No new persisted/runtime state. The boot-map body is regenerated each
@@ -194,8 +208,9 @@ infra       install boot serve config validate reseat export reservation worktre
 ```
 Rules:
 - Family header line: `{key}  {member member …}` — all members, bare.
-- Sub-line per command **iff** it has distinctive verbs AND its family ∉
-  `SUPPRESS_VERBS`. Leaves and infra never sub-line (already named in header).
+- Sub-line per command **iff** it has distinctive verbs AND its family's
+  `suppress_verbs` is false. Leaves and infra never sub-line (already named in
+  header).
 - Spine declared once at the top.
 
 **Boot integration:** `doctrine boot` → `produce(CommandMap)` →
@@ -298,8 +313,27 @@ clean.
   header+sub-line rule, infra suppression (D7), leaf handling.
 - **Boot byte-stability** — `doctrine boot` twice ⇒ identical; `boot --check`
   clean with the CommandMap section present (extends IMP-123-style assertions).
-- **Behaviour preservation** — existing `--commands` golden/`render_commands_table`
-  unchanged; existing boot suites green.
+- **SPINE guard (F-5)** — the family drift test does NOT guard SPINE validity;
+  the **boot-map golden is the SPINE guard**: rename a spine verb (`list`→`ls`)
+  and every kind's verb surfaces as distinctive, changing the golden output —
+  the golden fails, forcing a deliberate look. Stated so the coupling is
+  explicit, not accidental. (Cheaper belt-and-braces if wanted: assert each
+  SPINE verb appears under ≥2 entity kinds.)
+- **Behaviour preservation + boot blast radius (F-2)** — existing
+  `--commands` golden / `render_commands_table` unchanged. Existing boot tests
+  in `src/boot.rs` survive the CommandMap insertion *by construction*, but are
+  named here as the accounted set:
+  - `boot_sequence_orders_exec_path_last` — survives (ExecPath still last).
+  - `boot_sequence_orders_active_policies_after_accepted_adrs` /
+    `…active_standards_after_active_policies` — assert ADR→Policy→Standard
+    *adjacency*; survive because CommandMap inserts after "Routing & Process"
+    (before Governance), not between the governance sections.
+  - `render_boot_is_byte_deterministic_and_structured` — synthetic sections,
+    unaffected.
+  No unit test embeds the full real snapshot byte-for-byte, so there is no
+  hidden golden to regenerate. **New** tests this slice adds: a
+  `produce(CommandMap)` arm test, and an ordering test pinning CommandMap
+  immediately after "Routing & Process" and before "Governance".
 
 ## 10. Review Notes
 
@@ -320,3 +354,8 @@ Internal adversarial pass (pre-inquisition):
 - **F6 (no change)** — mid-sequence CommandMap insertion shifts following
   sections' byte offsets once on first regen; one-time, content-stable
   thereafter; acceptable (R1).
+
+Formal inquisition (RV-153, facet design, raiser inquisitor) — 5 charges, all
+fix-now, verified: F-1 PUSH-tier defence (§3); F-2 boot blast radius enumerated +
+defused (§9); F-3 slice-Context spine contradiction struck; F-4 `suppress_verbs`
+folded into `Family` (§5.2); F-5 boot-map golden named as the SPINE guard (§9).

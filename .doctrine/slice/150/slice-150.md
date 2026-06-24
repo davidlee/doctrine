@@ -6,7 +6,7 @@
 humans and offering no routing structure to agents. `doctrine --help --commands`
 (IMP-166) adds full per-kind verb tables, but is too heavy (~150 lines) to load
 on every agent boot, and most of its bulk is the repeated CRUD spine
-(`new/list/show/paths/status`) — high tokens, near-zero marginal information.
+(`new/list/show/paths`) — high tokens, near-zero marginal information.
 
 Agent onboarding to the command surface must live in the CLI (generated from the
 clap command tree) so it cannot drift from the real commands. This is a

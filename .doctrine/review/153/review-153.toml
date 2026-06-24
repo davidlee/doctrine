@@ -1,0 +1,61 @@
+id    = 153
+slug  = "inquisition-sl-150-design-taxonomy-partition-auto-derive-boot-determinism"
+title = "Inquisition: SL-150 design — taxonomy partition, auto-derive, boot determinism"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-150"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PUSH-tier inclusion ASSERTED, not EARNED — ADR-005 compactness undefended"
+detail = "§3 confesses 'the boot map is PUSH-tier — dense, no glosses' and claims governed_by ADR-005, yet nowhere argues why ~20 lines of command surface earns a place in EVERY boot when ADR-005's PUSH tier prizes compactness and memory itself is demoted to PULL signposts. The accused asserts the privilege it must defend. Expected: an explicit cost/benefit — routing value of the command surface vs per-boot token cost, and why it rides PUSH beside the Routing table rather than a PULL signpost like memory. Observed: bare assertion. Penance: add the defence to §3/§7 (the command surface is the Routing table's natural companion; the factored spine is precisely what makes it cheap enough to earn the seat)."
+disposition = "fix-now"
+response = "Fixed in design §3 — added the PUSH-tier defence: the boot already PUSHes the Routing table; the command surface is its navigational companion; the factored spine + infra suppression are precisely what keep it to ~20 lines and thus PUSH-affordable, whereas the ~150-line --commands correctly stays PULL and the unbounded memory corpus stays PULL signposts."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Blast radius on existing boot goldens/fixtures unaccounted — behaviour-preservation gate"
+detail = "§5.2 inserts a '## Commands' section into boot_sequence AFTER 'Routing & Process', shifting every following section. §9 says only 'extends IMP-123-style assertions' but NAMES no existing boot snapshot golden/fixture that the new section will break. Expected: enumerate the existing boot tests whose fixtures embed the snapshot (boot.rs unit tests, any e2e boot golden, install/boot fixtures) and declare they must be regenerated as a deliberate surface change. Observed: silence. A snapshot fixture that breaks unannounced reads as a regression, not an intended change. Penance: §9 lists the concrete fixtures to update + asserts boot idempotence with CommandMap present."
+disposition = "fix-now"
+response = "Fixed in design §9 — enumerated the existing src/boot.rs tests and showed they survive the insertion by construction (adjacency invariants hold because CommandMap lands after 'Routing & Process', before Governance); confirmed no unit test embeds the full snapshot byte-for-byte; named the two NEW tests (produce(CommandMap) arm + CommandMap-ordering)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Authored-tier self-contradiction — slice Context spine includes 'status', design SPINE excludes it"
+detail = "slice-150.md §Context (confessed under cross-examination) names the spine '(new/list/show/paths/status)', but design §5.2 SPINE const = {new,list,show,paths} and deliberately EXCLUDES status ('status is deliberately NOT in the spine'). Two authored tiers tell different stories — the storage rule forbids incoherent authored prose. Expected: one truth. Penance: strike 'status' from the slice Context spine listing (design is canon for the SPINE decision)."
+disposition = "fix-now"
+response = "Fixed — struck 'status' from the slice-150.md Context spine listing; design SPINE = {new,list,show,paths} is now the single authored truth across both tiers."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "SUPPRESS_VERBS stringly-typed coupling to family keys — silent break on rename"
+detail = """§5.2 declares 'const SUPPRESS_VERBS: &[&str] = &["infra"]' — a string cross-reference to a Family.key. Rename the 'infra' family and suppression silently dies; worktree/dispatch's 10+ verbs flood the boot map with NO compile error and NO test (the golden would catch the bloat, but the coupling is still a latent footgun). Expected: the suppression bound to the Family at the type level. Penance: fold it into the struct — 'Family { key, members, suppress_verbs: bool }' — so the link is compile-checked, not string-matched."""
+disposition = "fix-now"
+response = "Fixed in design §5.2 — folded suppression into 'Family { key, members, suppress_verbs: bool }'; the per-family flag is compile-linked, the stringly-typed SUPPRESS_VERBS key list is gone."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "SPINE validity unguarded — only the family taxonomy has a drift test"
+detail = "§9's drift test guards FAMILIES↔clap tree, but NOTHING guards that SPINE = {new,list,show,paths} remains the genuine shared spine. Rename 'list'→'ls' in a future refactor and every entity kind's list verb silently surfaces as 'distinctive', bloating the boot map — the family drift test stays green. The boot-map golden WOULD flag the changed output, but that coupling is implicit. Expected: the design names what guards SPINE. Penance: state in §9 that the boot-map golden is the SPINE guard (a spine-verb rename changes the golden), OR add a cheap assertion that each SPINE verb appears under ≥2 entity kinds."
+disposition = "fix-now"
+response = "Fixed in design §9 — named the boot-map golden as the explicit SPINE guard (a spine-verb rename changes the golden output → fails the golden), with the ≥2-kinds assertion offered as optional belt-and-braces."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
