@@ -47,3 +47,7 @@ target = "mem.pattern.dispatch.claude-agent-worktree-integrates-commit-onto-pare
 [[relation]]
 label = "related"
 target = "mem.pattern.dispatch.rtk-git-diff-stat-use-checkout-import"
+
+[[relation]]
+label = "related"
+target = "RFC-005"

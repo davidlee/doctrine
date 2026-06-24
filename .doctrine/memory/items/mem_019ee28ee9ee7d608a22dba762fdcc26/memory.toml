@@ -56,3 +56,7 @@ target = "mem_019ec65ecbc77282bad7e10a5240ad27"
 label = "related"
 target = "ISS-034"
 
+[[relation]]
+label = "related"
+target = "RFC-005"
+

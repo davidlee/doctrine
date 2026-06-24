@@ -51,3 +51,7 @@ target = "mem.system.dispatch.orchestrator-on-shared-main-contention-cost"
 [[relation]]
 label = "descends_from"
 target = "mem.pattern.dispatch.fork-rung3-base-not-session-head"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
