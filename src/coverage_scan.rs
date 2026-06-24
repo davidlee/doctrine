@@ -372,8 +372,9 @@ mod tests {
     /// real fork repo. Returns (total, per_call). Skips gracefully if the fork is
     /// not a usable git repo (e.g. CI without history).
     fn measure_staleness_per_call(n: u32) -> Option<(std::time::Duration, std::time::Duration)> {
-        // The fork repo: CARGO_MANIFEST_DIR is the crate root = the worktree.
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // The fork repo: the runtime repo root is the invoking worktree (CHR-014).
+        let root = crate::test_support::repo_root();
+        let root = root.as_path();
         let head = git::head_sha(root)?;
         // An old SHA reachable from HEAD: first commit on the branch.
         let out = Command::new("git")

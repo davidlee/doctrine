@@ -69,6 +69,8 @@ mod state;
 mod status;
 mod supersede;
 mod tag;
+#[cfg(test)]
+mod test_support;
 mod tomlfmt;
 mod tty;
 mod value;

@@ -29,10 +29,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// The repo root — this test runs from the crate dir, and the corpus is `.doctrine/`
-/// beside `Cargo.toml`.
+mod common;
+
+/// The committed corpus — `.doctrine/` beside `Cargo.toml` in the invoking tree.
 fn doctrine_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".doctrine")
+    common::repo_root().join(".doctrine")
 }
 
 /// The freshly-built binary under test (SL-058 PHASE-01 scaffold goldens).
@@ -42,7 +43,7 @@ const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
 /// binary). The PHASE-01 template guard scans these directly: it guards the SOURCE
 /// shape, while the black-box scaffold test below proves the embedded/rendered shape.
 fn templates_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("install/templates")
+    common::repo_root().join("install/templates")
 }
 
 /// The numeric (`NNN`+) entity dirs directly under `tree` (skips the `NNN-slug` symlink

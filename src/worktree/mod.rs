@@ -959,7 +959,7 @@ mod tests {
     // (PHASE-13). Together they pin every replica of the literal to the const.
     #[test]
     fn dispatch_worker_agent_def_name_matches_const() {
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let manifest = crate::test_support::repo_root();
         let def = manifest.join("install/agents/claude/dispatch-worker.md");
         let text =
             fs::read_to_string(&def).unwrap_or_else(|e| panic!("read {}: {e}", def.display()));
@@ -983,7 +983,7 @@ mod tests {
     // literal is PINNED here, not merely documented.
     #[test]
     fn dispatch_agent_skill_subagent_type_matches_const() {
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let manifest = crate::test_support::repo_root();
         let skill = manifest.join("plugins/doctrine/skills/dispatch-agent/SKILL.md");
         let text =
             fs::read_to_string(&skill).unwrap_or_else(|e| panic!("read {}: {e}", skill.display()));

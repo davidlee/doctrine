@@ -16,12 +16,11 @@
     reason = "integration test: fail-fast unwrap/expect are idiomatic, and test fns live at crate root by construction"
 )]
 
-use std::path::PathBuf;
+mod common;
 
 /// Read a skill file from the plugins directory.
 fn source_skill_text(skill: &str) -> String {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest_dir.join(format!("plugins/doctrine/skills/{skill}/SKILL.md"));
+    let path = common::repo_root().join(format!("plugins/doctrine/skills/{skill}/SKILL.md"));
     std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("Failed to read skill file {path:?}: {e}"))
 }
