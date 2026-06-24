@@ -126,7 +126,12 @@ Reach selection: the reach of a claim is chosen from configuration — a single
 working tree, or every clone of a shared remote. When reach is set to resolve
 automatically, the broader-reach backend is used when its remote is reachable, and
 otherwise allocation falls back to single-tree reach with a one-time signal that
-cross-team reach is off.
+cross-team reach is off. This automatic fall-back governs the structurally
+single-tree case — no remote configured. A *configured* remote that fails is
+treated as a hard error rather than silently downgraded; the operator opts into
+reduced-reach local allocation explicitly. A transient failure can thus never
+silently mint a local id that collides with another clone's accepted remote
+reservation (SL-148 D8, RV-152 F-3).
 
 Survey flow: an operator asks for the held claims under a namespace and receives
 each held identity with its holder and the time it was acquired.

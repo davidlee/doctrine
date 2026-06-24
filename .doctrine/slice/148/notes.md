@@ -141,3 +141,41 @@ resolved (§10 "Code-verification pass" disposition). Findings F-V1..F-V6:
 - Durable seam fact for wrap-up harvest: **the numeric claim seam now carries
   `ClaimCtx{dir,id}`; the named path is OFF the trait** (inline mkdir). PHASE-03's
   GitRef backend reads `ctx.id` as the ref segment under `refs/doctrine/reservation/<prefix>/<id>`.
+
+## Implementation (PHASE-02..05 — landed in impl bundle review/148)
+
+All four phases landed as one squashed src-only commit (`0c11259c`, 18 files,
++1860/−63; "0 phase cuts" — knowledge-commit skipped, boundaries.toml gitignored).
+Runtime phase markers flipped planned→completed at close (audit is the evidence).
+- **PHASE-02** — `git.rs` remote ops: `fetch_refspec`, `push_ref_cas`
+  (`--porcelain` CAS-vs-transport classification — only lease/create rejection →
+  `Moved`), `for_each_ref`; bare-remote substrate (`git init --bare` + N clones).
+- **PHASE-03** — `GitRef` backend (dangling empty-tree commit, push-by-oid ZERO_OID
+  CAS, explicit holder identity), `[reservation]` config + `resolve_backend` (sole
+  reach selector / reachability probe / D8 fail-closed degradation), re-fetching
+  scan source injected through `materialise`. Ships `reach=local`.
+- **PHASE-04** — `doctrine reservation list` survey (`{canonical, holder,
+  acquired}`; `acquired` documented client-declared best-effort; `--kind`/`--remote`).
+- **PHASE-05** — default flip `local`→`auto` (D5). Carried `git::resolve_remote`'s
+  non-repo→`Ok(None)` short-circuit — required so default-auto degrades to `LocalFs`
+  in the bare-TempDir unit suite instead of hard-erroring (latent PHASE-03 gap
+  surfaced by auto-as-default).
+
+## Audit + reconcile + close (RV-152, REV-010)
+
+- **Audit RV-152** — 6 findings, all terminal. Integration gate (bundle cherry-picked
+  onto current `main`, clean): **2874 passed / 0 failed**, clippy zero-warning, fmt
+  clean. Adversarial pass over the CAS/classification path: no defects;
+  collision-freedom (I1) proven by `vt1_two_clones_racing`. VH-1 (ship auto-default)
+  accepted by the User 2026-06-24. The inherited `e2e_memory_sync` failure was
+  confirmed SL-143/base-staleness (green at integration), not SL-148.
+- **Reconcile REV-010** (done) + per-slice direct edits: design.md §5.2 as-built note
+  (3 layering-driven deviations — F-1); SPEC-008/SPEC-022/PRD-005 §6 prose;
+  `mem.system.engine.identity-claim-seam` §2 (D9 supersedes SL-005 D7); ADR-001
+  layering comment. See review-152.md `## Reconciliation Outcome`.
+- **Build-substrate gotcha (confirmed, already canon):** auditing in a fresh
+  `git worktree` fails to compile until the gitignored `web/map/dist/` RustEmbed
+  folder is populated — matches `mem.pattern.dispatch.worker-fork-missing-gitignored-embed`.
+- **Integration (stage-2, operator-driven):** the code bundle still needs
+  `dispatch sync --slice 148 --integrate --trunk refs/heads/main` after finishing
+  the edge→main promotion (re-check `dispatch status --slice 148` for drift first).

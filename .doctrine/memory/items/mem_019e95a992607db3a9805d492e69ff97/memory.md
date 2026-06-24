@@ -40,6 +40,19 @@ Reservation is *one caller's interpretation* of the generic claim, not the seam'
 identity. Reconciles seam reuse with memory-spec § Identity: memory takes no
 reservation namespace and does not arbitrate; it claims-or-fails.
 
+**Superseded by SL-148 D9 (RV-152 R8) — the seam is now Fresh-numeric-only.**
+SL-148 enriched the seam (`&Path` → `ClaimCtx { dir, id }`) to give the new
+`GitRef` backend its reservation-ref identity. That made the ctx *numeric-shaped*
+(`id` is a reservation concept), so the **named (memory) path no longer fits the
+generic seam**: `materialise_named` dropped its `&dyn Claim` parameter and now
+inlines its directory claim as `fs::create_dir(entity_dir)` → `Ok` /
+`AlreadyExists ⇒ bail!("… already exists")` (the H2 won-dir cleanup retained).
+`Claim` / `ClaimCtx` / `reserve::backend` serve **only** numbered (`Fresh`)
+allocation. The D7 unification above is the historical record; the live invariant
+is: numeric path rides `Claim`, named path mkdir-or-bails inline. Memory's *remote*
+future is a distinct storage seam at the `materialise_named` write body, not the
+reservation `Claim` (SL-148 design §6 OQ-6).
+
 ## 3. uid is minted-once-and-stored, not content-derived
 
 `memory_uid` is a client-minted UUID **minted once per logical entity and stored,
