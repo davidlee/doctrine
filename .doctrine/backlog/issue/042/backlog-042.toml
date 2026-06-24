@@ -5,10 +5,10 @@ id = 42
 slug = "audit-of-non-worktree-slices-change-branch-on-mainking-tree"
 title = '"audit of non-worktree slices change branch on mainking tree"'
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-24"
 tags = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

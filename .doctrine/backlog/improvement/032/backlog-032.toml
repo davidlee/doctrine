@@ -7,10 +7,10 @@ title = "Governance superseded_by carve-out: validate cross-check vs derived rec
 # slug retained (non-authoritative; conventions §reference-form) — predates the
 # ADR-010 D4 reclassification that corrected the title below.
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-12"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:governance"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
