@@ -6,7 +6,8 @@ description: Use before making non-trivial assumptions — before touching a sub
 # Retrieve Memory
 
 Default rule: if you cannot cite a source-of-truth file/doc/ADR from the repo,
-consult memories first, then proceed.
+consult memories first, then proceed. The memory model is documented in
+[[mem.concept.doctrine.memory-model]].
 
 ## Tool preference
 

@@ -38,6 +38,9 @@ review, and vice versa.
 For the full review ledger verb surface and coordination protocol, see
 [[signpost.doctrine.review]].
 
+See [[signpost.doctrine.rec]] for reconciliation records
+produced by audit.
+
 See [[signpost.doctrine.lifecycle-start]] for the full lifecycle,
 [[signpost.doctrine.requirements]] for coverage reconciliation,
 and [[pattern.doctrine.core-loop]] for the workflow loop.

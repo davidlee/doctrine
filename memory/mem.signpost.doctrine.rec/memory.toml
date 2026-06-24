@@ -1,18 +1,18 @@
-memory_uid = "mem_019e9a12139e7c52bb0ee2b82fb79868"
-memory_key = "mem.signpost.doctrine.cli-command-map"
+memory_uid = "mem_019ef70e27e07404bdc77001e31ccb03"
+memory_key = "mem.signpost.doctrine.rec"
 schema_version = 1
 memory_type = "signpost"
 status = "active"
-title = "Doctrine CLI command map"
+title = "Doctrine reconciliation records signpost"
 summary = ""
-created = "2026-06-05"
-updated = "2026-06-15"
+created = "2026-06-24"
+updated = "2026-06-24"
 
 [scope]
-paths = []
+paths = [".doctrine/rec/"]
 globs = []
-commands = ["doctrine", "doctrine slice", "doctrine memory", "doctrine adr", "doctrine spec", "doctrine boot"]
-tags = []
+commands = ["doctrine rec"]
+tags = ["rec", "reconciliation"]
 workspace = "default"
 repo = ""
 repo_id_kind = "local_root"
@@ -30,7 +30,7 @@ normalizer = ""
 
 [review]
 verification_state = "unverified"
-reviewed = "2026-06-06"
+reviewed = ""
 review_by = ""
 
 [trust]

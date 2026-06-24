@@ -19,26 +19,13 @@ commands; the skills provide the process.
 
 ## CLI
 
-Verb shapes drift — `doctrine spec --help` is the source of truth; the forms
-below were re-verified 2026-06-18 (PRD-014).
+See `doctrine spec --help` for new (product/tech), show, list, req add,
+and validate subcommands.
 
-- `doctrine spec new product "Title"` — scaffold a PRD. Title is **positional**
-  (prompted if omitted); `--slug` optional. There is **no `--title` flag**.
-- `doctrine spec new tech "Title"` — scaffold a tech spec. The new-time flags are
-  only `--slug`/`--path`; there is **no `--descends-from` flag** — the descent
-  edge onto a PRD is recorded after scaffold, not at `new` time. Confirm via
-  `--help` before wiring.
-- `doctrine spec show <PRD-ID|SPEC-ID>` — reassembled whole.
-- `doctrine spec list` — list specs per subtype.
-- `doctrine spec req add --kind functional|quality <SPEC_REF> "Title"` — reserve a
-  `REQ-NNN` and append it as a labelled member. The label (`FR-`/`NF-`) is
-  auto-assigned next-free-by-kind; `--label` overrides. (The legacy
-  `req new --spec … --label FR --title …` form is **gone**.)
-- **Enrich a requirement by hand:** `req add` seeds bare fields. To render richly
-  under `spec show`, edit `requirement-NNN.toml` directly — add `description`
-  (one-line queryable statement) and an `acceptance_criteria` array. **No flags
-  exist** for these.
-- `doctrine spec validate` — FK-integrity gate; expect `validate: corpus clean`.
+Key notes: title is positional (no `--title` flag); `--slug` is optional.
+The descent edge onto a PRD is recorded after scaffold, not at `new` time.
+Enrichment fields (description, acceptance_criteria) are hand-edited in
+`requirement-NNN.toml` — no CLI flags exist for these.
 
 See [[signpost.doctrine.requirements]] for coverage and reconciliation,
 [[signpost.doctrine.revisions]] for the revision change-axis,

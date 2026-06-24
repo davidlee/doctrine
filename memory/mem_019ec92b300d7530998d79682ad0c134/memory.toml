@@ -6,7 +6,7 @@ status = "active"
 title = "Doctrine ADR authoring signpost"
 summary = ""
 created = "2026-06-15"
-updated = "2026-06-15"
+updated = "2026-06-24"
 
 [scope]
 paths = [".doctrine/adr/"]

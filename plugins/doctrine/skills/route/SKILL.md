@@ -5,7 +5,8 @@ description: Use at the very start of ANY substantive work in a Doctrine repo �
 
 # Route
 
-The mandatory routing layer for Doctrine. Follow it rigorously *unless* the user
+The mandatory routing layer for Doctrine. The routing gate concept is
+documented in [[mem.concept.doctrine.routing-gate]]. Follow it rigorously *unless* the user
 has instructed otherwise. If the user explicitly invoked a skill, use that 
 now; if the routing layer indicates a subsequent action in a chain, go on 
 with it afterwards.
@@ -32,6 +33,9 @@ session's prefix (`@.doctrine/state/boot.md`). Apply them from there — this
 skill does not restate them. What follows is route-unique.
 
 ## Route-unique rules
+
+The core loop (slice→design→plan→execute→audit→close) is documented in
+[[mem.pattern.doctrine.core-loop]].
 
 - **Consult the backlog before choosing**: `backlog list` — is this intent
   already captured, and do open items bear on it?

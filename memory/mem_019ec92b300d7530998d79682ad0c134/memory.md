@@ -18,20 +18,20 @@ rules, use policies or standards.
 
 - `proposed` — drafted, awaiting review.
 - `accepted` — in force. Referenced by slices and governance.
-- `superseded` — replaced by a newer ADR via `doctrine supersede ADR-NEW
-  ADR-OLD`. The old ADR carries a `superseded_by` pointer; the new one carries
+- `superseded` — replaced by a newer ADR via `doctrine supersede <ADR-NEW>
+  <ADR-OLD>`. The old ADR carries a `superseded_by` pointer; the new one carries
   `supersedes`.
 
 ## CLI
 
-- `doctrine adr new --title "..."` — scaffold an ADR.
-- `doctrine adr list` — list all ADRs by status.
-- `doctrine adr show <N>` — full content.
-- `doctrine supersede ADR-NEW ADR-OLD` — record supersession.
+See `doctrine adr --help` for authoring commands and `doctrine supersede
+--help` for the supersede lifecycle.
+Key verbs: new (title is positional), list, show, status.
 
 ADRs are project-global — they live under `.doctrine/adr/nnn/` as
 `adr-nnn.{toml,md}` pairs. Status lives in the TOML, rationale in the MD.
 
 See [[concept.doctrine.entity-engine]] for the entity model,
+[[signpost.doctrine.rfc]] for RFC governance,
 [[signpost.doctrine.file-map]] for the directory layout,
 and [[signpost.doctrine.policies-standards]] for governance standing rules.

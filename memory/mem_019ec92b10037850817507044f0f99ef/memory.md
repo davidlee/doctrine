@@ -12,7 +12,7 @@ of truth for command shapes).
   `doctrine --help` flag tables.
 - **`glossary.md`** — Vocabulary and ids: every entity kind, its abbreviation,
   reference forms, and directory layout. Cite entities by their padded id
-  (e.g. `SL-020`, `ADR-004`, `REQ-059`), never by slug alone.
+  (e.g. `<SLICE-ID>`, `<ADR-ID>`, `<REQ-ID>`), never by slug alone.
 
 These are shipped reference docs (ADR-005 PULL tier) — they install once and
 stay inert unless the installer is re-run. The boot snapshot and shipped
