@@ -2,11 +2,11 @@ memory_uid = "mem_019ea25af18d77e2b0f981473c50753e"
 memory_key = "mem.concept.backlog.work-intake-membership"
 schema_version = 1
 memory_type = "concept"
-status = "active"
+status = "retracted"
 title = "Backlog work-intake membership test"
 summary = "Backlog holds latent work only; epistemic/governance items excluded by the work-intake membership test"
 created = "2026-06-07"
-updated = "2026-06-22"
+updated = "2026-06-24"
 
 [scope]
 paths = [".doctrine/spec/tech/004", ".doctrine/spec/product/009"]
