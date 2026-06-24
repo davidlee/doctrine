@@ -271,8 +271,9 @@ clean.
   text). Exact heading-row styling + optional group separators confirmed at
   execute (phase 1).
 - *(Resolved: D1 static table, D2 auto-derive, D3 `--boot-map` flag + CommandMap
-  section, D4 sub-tables, D7 suppress infra verbs, D8 shared widths, OQ-1
-  plain-text, OQ-3 `--boot-map` name.)*
+  section, D4 family-grouped help (one table + heading rows), D7 suppress infra
+  verbs, D8 shared widths, OQ-1 single comfy-table via `render_grouped`
+  (color/wrap retained), OQ-3 `--boot-map` name.)*
 
 ## 7. Decisions, Rationale & Alternatives
 
