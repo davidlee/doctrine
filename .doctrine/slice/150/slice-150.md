@@ -73,12 +73,13 @@ Both renderings walk the *same* clap command tree → cannot drift from reality.
   across 8 families (`reports` not `views`; `explore` holds search/inspect/
   relation/concept-map/map; `catalog`→infra). See design §5.2 `FAMILIES`.
 - **OQ3** *(resolved)* Boot map gets BOTH an interactive entry point
-  (`doctrine --help --map`) and a `SourceKind::CommandMap` snapshot section,
+  (`doctrine --help --boot-map`) and a `SourceKind::CommandMap` snapshot section,
   one `render_boot_map()` behind both (D3).
-- **OQ4** *(open — design §6 OQ-3)* `--map` flag name overloads the `map`
-  command. User decision before execute.
-- **OQ5** *(open — design §6 OQ-1)* D8 shared-width grouped help: plain-text
-  render vs extend `listing`. Settles at execute phase 1.
+- **OQ4** *(resolved)* Flag named `--boot-map` (not `--map`) to avoid
+  overloading the `map` command.
+- **OQ5** *(resolved)* D8 shared-width grouped help renders as plain text with
+  computed padding (drops flat-help row-color/wrap); padding mechanics confirmed
+  at execute phase 1.
 
 ## Verification / Closure Intent
 
