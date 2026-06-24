@@ -28,8 +28,12 @@ and a dense, routing-grade boot map. This is a tokens-vs-breadth/clarity exercis
     reference.
   - `first_sentence(about)` — first-sentence truncation helper (reused).
 - `src/listing.rs` — `render_columns` (comfy-table seam: `Column`, `RenderOpts`,
-  `ColumnPaint`, `force_no_tty`). Gains a sibling `render_grouped` for the
-  family-grouped help (one table, heading rows).
+  `ColumnPaint`, `force_no_tty`). Gains `render_grouped` + a shared
+  `paint_full_width_band` / row-start probe.
+- `src/search.rs` — `write_context_snippet` (~322), `is_table_row_start` (~317),
+  `SNIPPET_FG/BG`: the full-width-band precedent. Refactored to call the lifted
+  `listing` primitive (DRY); its existing snippet behaviour must stay green
+  (behaviour-preservation).
 - `src/main.rs` ~185 — intercepts top-level `--help`; `--commands` switches
   between the two renderers (gains the `--boot-map` arm).
 - `src/boot.rs`
@@ -144,11 +148,18 @@ pub(crate) fn render_boot_map() -> String;                                      
 New in `src/listing.rs` (the shared comfy-table seam):
 
 ```rust
-/// Render groups as ONE table with a styled heading row before each group's
-/// rows — so columns size across the whole table (shared-width alignment) and
-/// color/wrap are retained. The flat `render_columns` is the degenerate
-/// single-group case.
+/// Render groups from ONE underlying table (columns size across all rows ⇒
+/// shared-width alignment; color/wrap retained), with a full-width heading BAND
+/// injected into the line stream before each group's rows (blank/key/blank,
+/// painted edge-to-edge, color-gated). The flat `render_columns` is the
+/// degenerate single-group case.
 pub fn render_grouped<T>(groups: &[(&str, Vec<T>)], cols: &[&Column<T>], opts: RenderOpts) -> String;
+
+/// Shared full-width band primitive — lifted from search's inline `--context`
+/// painter (DRY). Pads `content` to `opts.term_width` and paints fg-on-bg when
+/// `opts.color`; plain otherwise. Used by `render_grouped`'s heading band AND
+/// `search`'s context snippet.
+pub fn paint_full_width_band(content: &str, fg: DynColors, bg: DynColors, opts: RenderOpts) -> String;
 ```
 
 - `render_boot_map()` takes no color/width: the boot snapshot is plain,
@@ -182,24 +193,47 @@ SourceKind::CommandMap => Section { heading, body: cli::render_boot_map() },
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Human `--help` (one comfy-table, family-heading rows, color + wrap retained):**
+**Human `--help` (one table, full-width banded family headings, color + wrap):**
 ```
-change                                                            ← styled heading row
+                                              ┃ blank band line (bg-coloured)
+ change                                       ┃ family band — bg colour, full width
+                                              ┃ blank band line (bg-coloured)
   slice       Create and list slices — the unit of intentional change
   revision    Create, show, and transition revisions
-governance                                                        ← styled heading row
+                                              ┃ blank band line
+ governance                                   ┃ family band
+                                              ┃ blank band line
   adr         Create and list architecture decision records
   …
 ```
-- D8: rendered as a **single comfy-table with family-heading rows interleaved**
-  between groups — NOT 8 separate tables. One table sizes its columns across all
-  rows, so shared-width alignment is automatic and `comfy-table`'s color paint +
-  `term_width` wrapping are retained (OQ-1 resolved (b)). A family heading is a
-  styled row (`[family_key, ""]`, bold/underline) that occupies the same columns
-  → dividers align by construction. Implemented via a new `listing` grouped
-  renderer `render_grouped(groups, cols, opts)`; `render_top_level_help` calls
-  it. (8 independent tables were the trap — they autosize per-section and go
-  ragged; the single-table-with-heading-rows shape dissolves it.)
+(Bands paint edge-to-edge over the column structure; command rows keep the
+shared table columns. Colour off ⇒ bands degrade to plain text + blank lines.)
+- D8: rendered from a **single underlying comfy-table** of all command rows (so
+  columns size across every row — shared-width alignment is automatic, and
+  `comfy-table` color paint + `term_width` wrapping are retained), with
+  **full-width family-heading bands injected into the rendered line stream** at
+  each group boundary — NOT 8 separate tables, and NOT in-table heading *rows*
+  (a band paints edge-to-edge, over where column separators would sit, so it
+  cannot be a celled row).
+- **Heading band styling** (per user steer — mirrors `doctrine search --context`,
+  `src/search.rs:322` `write_context_snippet`): the family key on a **distinct
+  background colour**, padded to the full terminal width so the band spans
+  edge-to-edge, with a **blank band-coloured line above and below** (each heading
+  = 3 painted full-width lines: blank, `  {family}`, blank). Colour gated on
+  `render.color` — piped / `force_no_tty` output drops the paint to clean text
+  (the byte-golden path). `term_width` unknown ⇒ no padding (plain), as search
+  already handles (`_ => content`).
+- **Injection mechanism**: post-process the table's output lines — walk them,
+  detect logical row starts (`is_table_row_start`, `src/search.rs:317`), map the
+  Nth row to its command's family, and emit the heading band when the family
+  changes. This is exactly the `--context` snippet injection, reused.
+- **DRY (house rule — no parallel implementation)**: the full-width-band
+  primitive (collapse → pad-to-`term_width` → paint, colour-gated) and
+  `is_table_row_start` already live inline in `src/search.rs`. Lift them into a
+  shared `listing` helper (e.g. `paint_full_width_band(content, fg, bg, render)`
+  + the row-start probe); `search` and the grouped-help heading band both call
+  it. Heading-band colours are their own constants (distinct from search's
+  sage/green); the *primitive* is shared, the palette is not.
 
 **Boot map (`render_boot_map`, dense PUSH-tier):**
 ```
@@ -326,9 +360,13 @@ clean.
   3. every visible (`!is_hide_set`, ≠ `help`) command appears in some family ⇒
      INV-1 (no orphan).
 - **Golden: human `--help`** — black-box via `CARGO_BIN_EXE_doctrine`,
-  `force_no_tty` (color off for the golden), byte-exact; asserts family order,
-  heading-row grouping, and shared column alignment (D8). A separate
-  color-on smoke check (not byte-golden) guards the paint path.
+  `force_no_tty` (color off ⇒ bands are plain text + blank lines), byte-exact;
+  asserts family order, banded grouping, and shared column alignment (D8). A
+  separate color-on smoke check (not byte-golden — escape codes) asserts the
+  band paint + full-width pad are present.
+- **Search behaviour-preservation** — the `--context` snippet refactor onto the
+  shared `paint_full_width_band` primitive keeps `src/search.rs`'s existing
+  snippet tests green unchanged (the band-painting move is internal, output-stable).
 - **Golden: `--help --boot-map`** — byte-exact boot-map text; asserts spine line,
   header+sub-line rule, infra suppression (D7), leaf handling.
 - **Boot byte-stability** — `doctrine boot` twice ⇒ identical; `boot --check`
@@ -381,6 +419,10 @@ defused (§9); F-3 slice-Context spine contradiction struck; F-4 `suppress_verbs
 folded into `Family` (§5.2); F-5 boot-map golden named as the SPINE guard (§9).
 
 Post-inquisition revision (user steer): OQ-1 reopened — human `--help` keeps
-**color + comfy-table** (not the plain-text fallback). Resolved (b): render as ONE
-comfy-table with interleaved family-heading rows (shared widths free, color/wrap
-retained) via a new `listing::render_grouped`. Boot map stays plain text.
+**color + comfy-table** (not the plain-text fallback). Resolved (b): one
+underlying comfy-table (shared widths free, color/wrap retained) via a new
+`listing::render_grouped`, with full-width **family-heading bands** injected into
+the line stream — distinct bg colour, edge-to-edge, blank band line above/below
+(mirrors `search --context`). The full-width-band primitive + row-start probe are
+**lifted from `search.rs` into shared `listing` helpers** (DRY); search refactors
+onto them, behaviour-stable. Boot map stays plain text.
