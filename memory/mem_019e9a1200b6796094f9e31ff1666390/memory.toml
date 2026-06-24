@@ -6,12 +6,12 @@ status = "active"
 title = "Doctrine skill and route map"
 summary = ""
 created = "2026-06-05"
-updated = "2026-06-15"
+updated = "2026-06-24"
 
 [scope]
 paths = ["plugins/doctrine/skills/"]
 globs = ["plugins/doctrine/skills/**"]
-commands = ["route"]
+commands = []
 tags = []
 workspace = "default"
 repo = ""

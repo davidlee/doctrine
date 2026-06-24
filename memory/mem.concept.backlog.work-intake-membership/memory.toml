@@ -1,18 +1,18 @@
-memory_uid = "mem_019ec92b300f7d43b4dd911e0a27af1f"
-memory_key = "mem.signpost.doctrine.specs"
+memory_uid = "mem_019ef70e27e0776bb1dba413d209b617"
+memory_key = "mem.concept.backlog.work-intake-membership"
 schema_version = 1
-memory_type = "signpost"
+memory_type = "concept"
 status = "active"
-title = "Doctrine spec authoring signpost"
-summary = ""
-created = "2026-06-15"
+title = "Backlog work-intake membership test"
+summary = "Backlog holds latent work only; epistemic/governance items excluded by the work-intake membership test"
+created = "2026-06-24"
 updated = "2026-06-24"
 
 [scope]
-paths = [".doctrine/spec/"]
+paths = []
 globs = []
-commands = ["doctrine spec"]
-tags = []
+commands = ["doctrine backlog"]
+tags = ["backlog", "taxonomy", "entity-model"]
 workspace = "default"
 repo = ""
 repo_id_kind = "local_root"

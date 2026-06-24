@@ -75,9 +75,10 @@ single tribunal.
 3. Perform the **interrogation** (adversarial review).
    - Compare the target against doctrine and list deviations.
    - Prefer concrete evidence: exact file paths, symbol names, line numbers.
-   - Read each entity via its CLI `show`, never a single raw file — the tier
-     discipline is resident in the boot digest and `using-doctrine.md`. The
-     Inquisitor who reads one tier and cries "empty" bears false witness.
+   - Read each entity via its CLI `show`, never a single raw file. See
+     [[mem.concept.doctrine.reading-entities]] — the tier discipline is
+     resident in the boot digest and `using-doctrine.md`. The Inquisitor who
+     reads one tier and cries "empty" bears false witness.
    - Escalate "unknown unknowns": suspicious assumptions, missing invariants,
      unclear ownership boundaries, vague acceptance criteria, silent error
      handling, hidden randomness, magic numbers/strings, duplicated concepts,

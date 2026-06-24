@@ -6,12 +6,12 @@ status = "active"
 title = "Recording doctrine memories signpost"
 summary = ""
 created = "2026-06-15"
-updated = "2026-06-15"
+updated = "2026-06-24"
 
 [scope]
 paths = [".doctrine/memory/"]
 globs = []
-commands = ["doctrine memory record", "doctrine memory verify", "doctrine memory find", "doctrine memory retrieve", "doctrine memory show"]
+commands = ["doctrine memory"]
 tags = []
 workspace = "default"
 repo = ""
