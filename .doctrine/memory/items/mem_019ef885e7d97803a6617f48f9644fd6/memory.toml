@@ -1,0 +1,42 @@
+memory_uid = "mem_019ef885e7d97803a6617f48f9644fd6"
+memory_key = "mem.pattern.lint.back-edge-tangle-inject-fnptr"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Lower-module → CLI back-edge closes a layering cycle; inject a fn-pointer instead"
+summary = "A lower module calling back into the CLI layer can close a same-tier import cycle and ratchet the ADR-001 Command tangle_baseline; inject the renderer as a fn-pointer from the layer that already depends downward."
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = [".doctrine/adr/001/layering.toml"]
+globs = ["src/**"]
+commands = []
+tags = ["layering", "adr-001", "dependency-inversion", "gate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "bb9ad61476967f6ea45950501b252817ca178c94"
+tree = "79d69919a63fcf3d2b156e6325929518324ffc3c"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "bb9ad61476967f6ea45950501b252817ca178c94"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
