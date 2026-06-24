@@ -76,6 +76,17 @@ an evidence ref, once published, is a fixed object an auditor can re-derive and 
 Treating an evidence ref as an ordinary review branch and fixing it in place is the
 SL-067 trap the candidate layer was built to close.
 
+**Permanent reservation refs (SL-148, RV-152 R7/F-4)** — a third class, distinct
+from both above. `refs/doctrine/reservation/<prefix>/<NNN>` is created exactly once
+under a **zero-oid create-CAS** like an evidence ref, but is **pushed to a shared
+remote** and is **permanent** (never deleted, never reissued — an abandoned
+reservation is a harmless gap, not a fault to recover). This is the model's first
+*remote* ref mutation: PRD-005 / SPEC-008 ratify the cross-clone reservation reach,
+so SPEC-022's otherwise-local framing of coordination refs is widened to admit this
+remote, permanent class. The push classifies via `git push --porcelain` — only the
+explicit lease/create-CAS rejection is a lost race; transport / auth / hook /
+namespace-policy rejections hard-error with the remote reason.
+
 ### The pinned fork-point invariant (RV-030 F-1)
 
 Stage-1 projections are parented on the **pinned fork-point**

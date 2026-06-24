@@ -1,0 +1,43 @@
+memory_uid = "mem_019ef779ed7971d2a88ac19ef2fb601e"
+memory_key = "mem.fact.git.remote-mutation-seam"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "git.rs remote mutations + bare-repo test substrate (SL-148)"
+summary = "SL-148 added doctrine's first remote git mutations to git.rs (push_ref_cas/fetch_refspec/for_each_ref); test distributed git via a local bare-repo, never a network remote."
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = ["src/git.rs"]
+globs = []
+commands = []
+tags = ["entity-engine", "git", "sl-148"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1a2a4e4f844381ccfee5e0ec205e5ff99c107a52"
+ref_name = "refs/heads/edge"
+checkout_state_id = "141777d3d113dc0d0c11ca535d2b95d2255d83c6c529c30710b3be2b07cfd216"
+base_commit = "3313dc1e2d8222280090c0b429a1eb3de6414a33"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

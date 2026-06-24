@@ -63,6 +63,15 @@ allocation, correct and lock-free on one tree but without cross-fork reach
 permanent-claim-over-a-shared-backend generalisation (`git-ref`, leasing) is a
 specified-but-deferred extension of the same algorithm.
 
+**Shipped (SL-148, RV-152 R7).** The deferred extension now exists. A `GitRef`
+claim backend reserves an id by creating `refs/doctrine/reservation/<prefix>/<NNN>`
+— an empty-tree, content-free commit (REQ-024) — at a shared remote under a
+zero-oid create-CAS (`push --force-with-lease=<ref>:0`), linearizing the claim
+across every clone. Three new remote ops in `git.rs` back it (`fetch_refspec`,
+`push_ref_cas`, `for_each_ref`). Reach is config-selected (`[reservation] reach =
+local | shared | auto`); the trunk-union local scan above remains the degraded
+single-tree reach. Leasing (IDE-021) and git-ref content storage stay out of scope.
+
 ### The corpus-wide `KINDS` table
 
 A generic id scan needs three facts the per-kind engine `Kind` descriptor does not

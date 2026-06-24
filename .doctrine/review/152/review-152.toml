@@ -1,0 +1,75 @@
+id    = 152
+slug  = "sl-148-audit-git-ref-reservation-backend-phase-0105-impl-bundle-vs-design"
+title = "SL-148 audit — git-ref reservation backend (PHASE-01..05 impl bundle vs design)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-148"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "PHASE-03 structural deviations from design §5.2 (config module, prompt seam, config projection) — code correct, design prose stale"
+detail = """
+Design §5.2/EX-2 names three structures the impl realises differently — all layering-driven (ADR-001), behaviour-preserving, and documented in reserve.rs's module doc (lines 11-17):
+(a) Config reader: §5.2 says "[reservation] ... consumed by a reservation_config module". Impl folds ReservationConfig + parse/load into `reserve` itself (no separate module) — R9: one already-classified engine module, one layering.toml entry instead of two.
+(b) D8 prompt: §5.2/EX-2 says "reuses install::prompt_confirm + tty". Impl injects a `PromptFn = fn(&str)->Result<bool>` from the command tier (caller passes install::prompt_confirm); `reserve` (engine) never imports `install` (command) — avoids an upward layering edge (pure/imperative split). Capability reused exactly as designed; only the wiring respects ADR-001.
+(c) [reservation] projection: §5.2 says "parsed via the shared reader". Impl reuses the shared file-read seam (dtoml::read_doctrine_toml_text) but projects via reserve's own parse_reservation_config/ReservationDoc, keeping [reservation] OFF dtoml::DoctrineToml — putting Reach/ReservationConfig (engine types) on DoctrineToml (leaf) would force a leaf→engine import. Matches §5.2's own "never eagerly validated in dtoml::parse" intent (estimation lazy-projection precedent).
+Expected: design §5.2 literal text. Observed: three layering-faithful refinements. Evidence: src/reserve.rs:11-17,63-103,228-349; architecture_layering test green; full suite 2874/0."""
+disposition = "design-wrong"
+response = """Code is correct and superior; design.md §5.2 prose is now stale and should be amended to match the as-built (per-slice direct edit at /reconcile). All three deviations are layering-driven (ADR-001), behaviour-preserving, and more faithful to §5.2's own deeper intents (R9 "avoid extra layering.toml entries"; "never eagerly validated in dtoml::parse") than the literal text. No code change. Routed to Reconciliation Brief → Per-slice (direct edit): update §5.2/EX-2 to record (a) reservation config folded into `reserve` (no separate reservation_config module), (b) D8 prompt injected as a PromptFn fn-pointer from the command tier (no engine→command import), (c) [reservation] projected in `reserve` off dtoml::DoctrineToml via the shared file-read seam."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-05 git::resolve_remote non-repo → Ok(None) short-circuit — contract-correct, in-scope (not scope creep)"
+detail = """PHASE-05's diff carries more than the literal default flip: git::resolve_remote gained a non-repo short-circuit (`rev-parse --is-inside-work-tree` != true ⇒ Ok(None)) before `git remote`, which would otherwise hard-error "not a git repository". Assessment: contract-correct and necessary, not scope creep. (1) resolve_remote is net-new in this slice; its only consumers are SL-148 code (reserve::configured_remote, commands/reservation.rs survey) — NOT shared machinery, so no behaviour-preservation risk to other callers. (2) The non-repo→None posture mirrors `capture`'s existing `--is-inside-work-tree` handling (consistent). (3) It is required by the default-flip: with reach=auto default, every entity-creation UNIT test runs in a bare TempDir (non-repo); without the short-circuit, default auto would call `git remote` in a non-repo and hard-error the whole suite. This is exactly §5.4's "auto + no remote configured ⇒ LocalFs" degradation reaching a non-repo root — a latent PHASE-03 gap (resolve_remote only exercised under git-repo substrates / explicit reach there) surfaced when auto became default (PHASE-05 R4 "sweeps the suite"). Expected vs observed: design §5.4 already specifies this degradation; the code now honours it for the non-repo case. Evidence: src/git.rs resolve_remote; test reserve::vt2_default_auto_in_a_non_git_dir_degrades_to_localfs ... ok."""
+disposition = "aligned"
+response = """Contract-correct and in-scope; not scope creep, no design change. resolve_remote is net-new with sole SL-148 consumers (no shared-machinery behaviour risk), the non-repo→None posture mirrors `capture`, and the short-circuit is required for the PHASE-05 default-flip not to hard-error the unit suite (bare-TempDir non-repo roots). It realises design §5.4's already-specified "auto + no remote configured ⇒ LocalFs" for the non-repo case — a latent PHASE-03 gap surfaced by auto-as-default (R4 suite sweep). Proven by vt2_default_auto_in_a_non_git_dir_degrades_to_localfs and the full green suite."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "VH-1: human acceptance of shipping reach=auto by default (cross-team reach on-by-default) — open /close gate"
+detail = "PHASE-05 VH-1 requires human acceptance that doctrine ships reach=auto by default before close. This is the one verification criterion an agent cannot self-attest. The change (D5): with no [reservation] section, reach defaults to auto — cross-clone coordination engages whenever a remote is reachable; degrades to single-tree LocalFs (one-time stderr signal) when no remote is configured or, for a configured-but-failing remote, fail-closes unless the operator opts in (D8). Reversibility: the flip is a single default value (Reach::default() = Auto) — trivially revertable to Local. Behaviour gate: stdout byte-identical (degradation signal is stderr-only, one-time); full suite 2874/0 after the flip; back-compat proven (no-[reservation]+no-remote ⇒ byte-identical to pre-slice HEAD). Raised as blocker because VH-1 explicitly gates close; held open pending the User's acceptance. Evidence: src/reserve.rs:39-54 (Reach default), tests vt2_default_auto_in_a_non_git_dir / PHASE-05 stderr-only signal observed in suite output."
+disposition = "aligned"
+response = "VH-1 satisfied: the User (david.lee@inlight.com.au) accepted shipping reach=auto by default on 2026-06-24 — cross-team reservation on-by-default, degrading to single-tree LocalFs with a one-time stderr signal when no remote is configured, fail-closed on a configured-but-failing remote (operator opt-in), stdout byte-identical, single revertable default. Human gate cleared; the close-gate blocker is resolved."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Inherited e2e_memory_sync::sync_produces_all_shipped_dirs failure is SL-143/base-staleness, NOT SL-148 — resolved on current main"
+detail = """Investigated the inherited failure (29→28 masters) flagged against SL-148's gate. Root cause confirmed: it is SL-143/memory-corpus, surfacing only via review/148's stale base (review/148 = 2148f662 + bundle; 2148f662 predates main's b928dd1d "fix(SL-143): repair relation-row contiguity and valid backlog labels"). SL-148 touches zero memory-corpus / shipped-master files (bundle is 18 src/ files, pure code). Integration evidence: cherry-picking the bundle onto CURRENT main (which carries the SL-143 fix) and running the full doctrine suite ⇒ `e2e_memory_sync::sync_produces_all_shipped_dirs ... ok`, 2874 passed / 0 failed (incl. the 3 previously-flagged e2e_relation_migration_storage, now also green on current main). The edge→main promotion already landed resolves it; it does not taint SL-148. Expected vs observed: SL-148's own delta is green at integration; the failure was a base-staleness artifact, not a regression."""
+disposition = "aligned"
+response = "Not SL-148's defect. Confirmed the e2e_memory_sync failure is SL-143/base-staleness (review/148 based on 2148f662, predating main's b928dd1d SL-143 fix); SL-148 touches no memory-corpus files. Integration gate (bundle cherry-picked onto current main) is fully green — sync_produces_all_shipped_dirs ok, 2874 passed / 0 failed, including the 3 formerly-flagged e2e_relation_migration_storage. The landed edge→main promotion resolves it; no taint on SL-148's gate. No action."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Load-bearing distributed-CAS + porcelain classification (R1/R2) independently verified — no defects"
+detail = '''R1 (distributed CAS correctness) / R2 (classification) are the slice's load-bearing risks; recording the independent adversarial pass as audit evidence. Adversarial code review of git.rs push_ref_cas/classify_push_porcelain + reserve GitRef::claim found no correctness defects: (1) push by oid under --force-with-lease=<ref>:ZERO_OID; classification is machine-stable via git push --porcelain — ONLY the explicit lease/create-CAS rejection ('!' flag + "stale info") maps to RefCas::Moved; transport/auth/hook/namespace-policy rejections return a hard CaptureError surfacing the remote reason (never Moved, never silent retry); no English-stderr parsing on the decision path. (2) commit_empty_tree_as builds a DANGLING empty-tree (4b825dc…/EMPTY_TREE_OID) commit with GIT_AUTHOR_*/GIT_COMMITTER_* set explicitly from the resolved holder (not ambient git config); resolve_holder safe-defaults, never errors. (3) for_each_ref uses splitn(5,'\t') (subject not split); malformed refs filtered, not panicked. Empirical proof: vt1_two_clones_racing_the_same_id_do_not_collide passes (exactly one create-push lands, loser re-fetches→recomputes→lands next id, one ref per id, I1). Disposition: aligned — the mechanism is sound.'''
+disposition = "aligned"
+response = "Mechanism sound; no defects. Independent adversarial review of the CAS/classification path found no correctness issues, and vt1_two_clones_racing empirically proves collision-freedom (I1): exactly one create-push lands, the loser re-fetches/recomputes/lands the next id, one ref per id. Porcelain classification is machine-stable (only lease/create-CAS rejection → Moved; all else hard-errors). R1/R2 closed by evidence. No action."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = 'layering.toml reserve comment "→ entity only (out=1)" is stale — reserve also imports git + dtoml since PHASE-03'
+detail = 'The ADR-001 layering.toml entry `reserve = "engine"` carries the inline comment "claim-backend selection seam; → entity only (out=1)". That was accurate for the PHASE-01 stub (imported only entity::{Claim,LocalFs}) but PHASE-03 added imports of `git` and `dtoml` (both leaf, valid downward engine→leaf edges). The classification (engine) and the enforced architecture_layering test remain correct/green — only the human-readable comment undercounts the out-edges (should be → entity/git/dtoml, out=3). Cosmetic authored-doc drift in an ADR-001 file; no behaviour or gate impact. Evidence: .doctrine/adr/001/layering.toml; src/reserve.rs use-statements (entity, git, dtoml).'
+disposition = "tolerated"
+response = 'Cosmetic authored-doc drift in an ADR-001 file (layering.toml comment), no behaviour/gate impact — the classification and enforced layering test are correct/green. Tolerated through audit close; routed to Reconciliation Brief → Governance/spec as an optional comment correction (reserve out-edges: entity/git/dtoml, out=3, not "entity only/out=1"). Audit does not write the governance file itself; /reconcile owns that surface.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -176,8 +176,8 @@ command module): it needs an ADR-001 `layering.toml` classification entry or
 `just gate`'s `MixedUmbrella` assertion goes red
 (`mem.pattern.lint.module-split-needs-layering-entry`) — a PHASE-01 exit criterion.
 
-**Reach config.** New section, parsed via the shared reader, consumed by a
-`reservation_config` module (never eagerly validated in `dtoml::parse` —
+**Reach config.** New section, parsed via the shared reader, consumed within the
+`reserve` module itself (never eagerly validated in `dtoml::parse` —
 dtoml-shared-reader memory):
 
 ```toml
@@ -195,6 +195,22 @@ fn resolve_backend(root, cfg) -> anyhow::Result<(Box<dyn Claim>, ReservedIds)>;
 performs the reachability fetch, and decides degradation (contract: D8 — `auto`
 fail-closes on a configured-remote failure, with an explicit operator opt-in to
 local fallback). Reservation-ref ids fetched here seed the per-retry scan source.
+
+**As-built (SL-148 reconcile — RV-152 F-1).** Three layering-driven, behaviour-
+preserving refinements vs the text above; all keep `[reservation]` + `GitRef`
+inside the one already-classified engine module, so no extra ADR-001 `layering.toml`
+entry is forced (R9):
+- **Config home.** `ReservationConfig` + its parse/load live **inside `reserve`**,
+  not a separate `reservation_config` module — one engine module, one layering entry.
+- **Config projection.** `[reservation]` is projected by `reserve`'s own
+  `parse_reservation_config` over the shared `dtoml::read_doctrine_toml_text`
+  **file-read seam**, kept **off** `dtoml::DoctrineToml` — putting the engine-tier
+  `Reach`/`ReservationConfig` on the leaf `DoctrineToml` would force a `leaf → engine`
+  import. Faithful to "never eagerly validated in `dtoml::parse`".
+- **D8 prompt seam.** The fallback `y/N` prompt is injected as a `PromptFn`
+  fn-pointer from the command tier (the caller passes `install::prompt_confirm`);
+  `reserve` (engine) never imports `install` (command), preserving the ADR-001
+  engine↛command boundary (the pure/imperative split — impurity passed in).
 
 **Survey.** `doctrine reservation list [--kind <prefix>] [--remote <name>]` →
 fetch `refs/doctrine/reservation/*` → table `{canonical, holder, acquired}`.
