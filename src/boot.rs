@@ -2753,7 +2753,8 @@ world";
         }
 
         // CLI list DEFAULT: hides the four terminal but KEEPS draft (decoupled rule).
-        let listed = memory::list_rows(root, None, crate::listing::ListArgs::default()).unwrap();
+        let listed =
+            memory::list_rows(root, None, crate::listing::ListArgs::default(), false).unwrap();
         assert!(
             listed.contains("Active note"),
             "list shows active:\n{listed}"
