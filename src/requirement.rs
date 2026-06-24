@@ -230,9 +230,10 @@ pub(crate) fn reserve(
     date: &str,
 ) -> anyhow::Result<entity::Materialised> {
     let trunk_ids = crate::git::trunk_entity_ids(root, REQUIREMENT_KIND.dir)?;
+    let backend = crate::reserve::backend(root, REQUIREMENT_KIND.prefix)?;
     entity::materialise(
         &REQUIREMENT_KIND,
-        &entity::LocalFs,
+        &*backend,
         root,
         &entity::MaterialiseRequest::Fresh,
         &entity::Inputs { slug, title, date },

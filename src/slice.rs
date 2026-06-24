@@ -53,7 +53,10 @@ pub(crate) enum SelectorIntent {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
 pub(crate) struct Selector {
     /// Path or glob string — identity of the selector.
-    #[expect(clippy::struct_field_names, reason = "`selector` is the canonical noun from RFC-004")]
+    #[expect(
+        clippy::struct_field_names,
+        reason = "`selector` is the canonical noun from RFC-004"
+    )]
     pub(crate) selector: String,
     pub(crate) intent: SelectorIntent,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -519,9 +522,10 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, SLICE_KIND.dir)?;
+    let backend = crate::reserve::backend(&root, SLICE_KIND.prefix)?;
     let out = entity::materialise(
         &SLICE_KIND,
-        &LocalFs,
+        &*backend,
         &root,
         &MaterialiseRequest::Fresh,
         &Inputs {
@@ -1724,11 +1728,7 @@ fn run_selector_list(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_selector_rm(
-    path: Option<PathBuf>,
-    id: u32,
-    globs: &[String],
-) -> anyhow::Result<()> {
+fn run_selector_rm(path: Option<PathBuf>, id: u32, globs: &[String]) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (toml_path, mut doc) = open_selector_doc(&root, id)?;
 
@@ -1763,15 +1763,16 @@ fn selector_upsert(
     let array = doc
         .as_table_mut()
         .entry("selector")
-        .or_insert_with(|| {
-            toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new())
-        })
+        .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
         .as_array_of_tables_mut()
-        .ok_or_else(|| anyhow::anyhow!("`selector` key exists but is not an array-of-tables (corrupt file)"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("`selector` key exists but is not an array-of-tables (corrupt file)")
+        })?;
 
     // In-place update if the selector string already exists.
     for row in array.iter_mut() {
-        if row.get("selector")
+        if row
+            .get("selector")
             .and_then(toml_edit::Item::as_str)
             .is_some_and(|s| s == glob)
         {
@@ -1796,11 +1797,7 @@ fn selector_upsert(
 
 /// Set `note` on the selector row whose `selector` string matches exactly.
 /// Returns `true` when a row was found and updated.
-fn selector_set_note(
-    doc: &mut toml_edit::DocumentMut,
-    selector: &str,
-    text: &str,
-) -> bool {
+fn selector_set_note(doc: &mut toml_edit::DocumentMut, selector: &str, text: &str) -> bool {
     let Some(array) = doc
         .as_table_mut()
         .get_mut("selector")
@@ -4848,21 +4845,18 @@ mod tests {
     #[test]
     fn selector_intent_serde_kebab_case_round_trip() {
         // VT-2: kebab-case round-trip via Selector struct
-        let selector: Selector = toml::from_str(
-            "selector = \"src/x.rs\"\nintent = \"scope-relevant\"\n"
-        ).unwrap();
+        let selector: Selector =
+            toml::from_str("selector = \"src/x.rs\"\nintent = \"scope-relevant\"\n").unwrap();
         assert_eq!(selector.intent, SelectorIntent::ScopeRelevant);
 
-        let selector: Selector = toml::from_str(
-            "selector = \"src/y.rs\"\nintent = \"design-target\"\nnote = \"hi\"\n"
-        ).unwrap();
+        let selector: Selector =
+            toml::from_str("selector = \"src/y.rs\"\nintent = \"design-target\"\nnote = \"hi\"\n")
+                .unwrap();
         assert_eq!(selector.intent, SelectorIntent::DesignTarget);
         assert_eq!(selector.note.as_deref(), Some("hi"));
 
         // Unknown variant rejected
-        let err = toml::from_str::<Selector>(
-            "selector = \"x\"\nintent = \"bogus\"\n"
-        );
+        let err = toml::from_str::<Selector>("selector = \"x\"\nintent = \"bogus\"\n");
         assert!(err.is_err(), "unknown intent should be rejected");
     }
 
@@ -4872,8 +4866,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         make_slice(root, "no-selectors", "No Selectors", "2026-06-24");
-        let (doc, _toml_text, _body) =
-            read_slice(&slice_root(root), 1).unwrap();
+        let (doc, _toml_text, _body) = read_slice(&slice_root(root), 1).unwrap();
         assert!(doc.selectors.is_empty());
     }
 
@@ -4888,8 +4881,10 @@ mod tests {
         let toml_path = slice_toml_path(&slice_root, 1);
 
         // Add 3 selectors
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         selector_upsert(&mut doc, "src/x.rs", "design-target", None).unwrap();
         selector_upsert(&mut doc, "src/y.rs", "design-target", Some("shared note")).unwrap();
         selector_upsert(&mut doc, "docs/*.md", "scope-relevant", None).unwrap();
@@ -4918,14 +4913,18 @@ mod tests {
         let toml_path = slice_toml_path(&slice_root, 1);
 
         // First add
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         selector_upsert(&mut doc, "src/x.rs", "scope-relevant", Some("first")).unwrap();
         fs::write(&toml_path, doc.to_string()).unwrap();
 
         // Re-add with different intent + note
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         selector_upsert(&mut doc, "src/x.rs", "design-target", Some("updated")).unwrap();
         fs::write(&toml_path, doc.to_string()).unwrap();
 
@@ -4947,15 +4946,19 @@ mod tests {
         let toml_path = slice_toml_path(&slice_root, 1);
 
         // Add two selectors with shared note
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         selector_upsert(&mut doc, "src/x.rs", "design-target", Some("shared")).unwrap();
         selector_upsert(&mut doc, "src/y.rs", "design-target", Some("shared")).unwrap();
         fs::write(&toml_path, doc.to_string()).unwrap();
 
         // Override note on just one
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         assert!(selector_set_note(&mut doc, "src/x.rs", "per-file override"));
         fs::write(&toml_path, doc.to_string()).unwrap();
 
@@ -4973,8 +4976,10 @@ mod tests {
 
         let slice_root = root.join(SLICE_DIR);
         let toml_path = slice_toml_path(&slice_root, 1);
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         assert!(!selector_set_note(&mut doc, "nonexistent", "note"));
     }
 
@@ -4988,15 +4993,19 @@ mod tests {
         let slice_root = root.join(SLICE_DIR);
         let toml_path = slice_toml_path(&slice_root, 1);
 
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         selector_upsert(&mut doc, "src/a.rs", "design-target", None).unwrap();
         selector_upsert(&mut doc, "src/b.rs", "design-target", None).unwrap();
         selector_upsert(&mut doc, "src/c.rs", "design-target", None).unwrap();
         fs::write(&toml_path, doc.to_string()).unwrap();
 
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         let removed = selector_remove_many(&mut doc, &["src/a.rs".into(), "src/b.rs".into()]);
         assert_eq!(removed, 2);
         fs::write(&toml_path, doc.to_string()).unwrap();
@@ -5014,8 +5023,10 @@ mod tests {
 
         let slice_root = root.join(SLICE_DIR);
         let toml_path = slice_toml_path(&slice_root, 1);
-        let mut doc = fs::read_to_string(&toml_path).unwrap()
-            .parse::<toml_edit::DocumentMut>().unwrap();
+        let mut doc = fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         let removed = selector_remove_many(&mut doc, &["nonexistent".into()]);
         assert_eq!(removed, 0);
     }

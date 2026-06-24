@@ -1134,7 +1134,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::contentset::{self, ContentSet};
-use crate::entity::{self, Kind, LocalFs, Materialised};
+use crate::entity::{self, Kind, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 
 /// Relative dir of the review tree inside the project root. A distinct top-level
@@ -1305,8 +1305,9 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<R
     };
 
     let trunk_ids = crate::git::trunk_entity_ids(&root, REVIEW_DIR)?;
+    let backend = crate::reserve::backend(&root, REVIEW_KIND.prefix)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
-        &LocalFs,
+        &*backend,
         &root,
         REVIEW_DIR,
         REVIEW_KIND.prefix,

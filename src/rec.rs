@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{self, Kind, LocalFs, Materialised};
+use crate::entity::{self, Kind, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
@@ -259,8 +259,9 @@ fn evidence_ref_table(e: &EvidenceRef) -> String {
 /// Returns the materialised id.
 pub(crate) fn materialise_populated(root: &Path, doc: &RecDoc) -> anyhow::Result<u32> {
     let trunk_ids = crate::git::trunk_entity_ids(root, REC_DIR)?;
+    let backend = crate::reserve::backend(root, REC_KIND.prefix)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
-        &LocalFs,
+        &*backend,
         root,
         REC_DIR,
         REC_KIND.prefix,
@@ -335,8 +336,9 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<(
     };
 
     let trunk_ids = crate::git::trunk_entity_ids(&root, REC_DIR)?;
+    let backend = crate::reserve::backend(&root, REC_KIND.prefix)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
-        &LocalFs,
+        &*backend,
         &root,
         REC_DIR,
         REC_KIND.prefix,

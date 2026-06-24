@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{self, Kind, LocalFs, Materialised};
+use crate::entity::{self, Kind, Materialised};
 use crate::listing::{self, Format};
 use crate::requirement::ReqStatus;
 use crate::tomlfmt::toml_string;
@@ -711,8 +711,9 @@ pub(crate) fn run_new(
     };
 
     let trunk_ids = crate::git::trunk_entity_ids(&root, REV_DIR)?;
+    let backend = crate::reserve::backend(&root, REV_KIND.prefix)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
-        &LocalFs,
+        &*backend,
         &root,
         REV_DIR,
         REV_KIND.prefix,
