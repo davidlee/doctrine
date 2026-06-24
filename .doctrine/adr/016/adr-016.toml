@@ -1,0 +1,24 @@
+schema = "doctrine.adr"
+version = 1
+
+id = 16
+slug = "relation-intent-as-a-closed-role-dimension"
+title = "Relation intent as a closed role dimension"
+status = "accepted"
+created = "2026-06-24"
+updated = "2026-06-24"
+tags = []
+
+[relationships]
+# The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
+# SL-048). Author them with `doctrine link ADR-NNN supersedes|related <target>`.
+superseded_by = []   # set on the old ADR by F1; reverse link is derived
+
+[[relation]]
+label = "related"
+target = "ADR-010"
+
+[[relation]]
+label = "related"
+target = "ADR-004"
+
