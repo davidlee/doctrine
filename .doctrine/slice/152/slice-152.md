@@ -33,6 +33,14 @@ placement-only decision in **SL-064** design §8 (option Y).
 
 ## Scope & Objectives
 
+### Primary — WorktreeCreate hook (collapse-the-arms hypothesis)
+
+**Hypothesis under test:** with doctrine as the worktree creator on the claude
+arm, the claude and subprocess `/dispatch` arms collapse onto a **single**
+`doctrine worktree fork --worker` path — eliminating **H1** (no native creation
+left to fall back to) and converging **H3** (one creation seam, both harnesses).
+This slice builds the hook to *test* that, not to assume it.
+
 - A repo-global `WorktreeCreate` hook (claude harness) that **replaces** native
   worktree creation for `isolation:worktree` spawns and is **installed by
   `doctrine install`** (not hand-wired).
@@ -50,6 +58,23 @@ placement-only decision in **SL-064** design §8 (option Y).
 - Wire the claude `/dispatch-agent` flow to drop the marker before spawn and to
   rely on hook-created placement instead of the cwd-placement hack.
 
+### Secondary — idiomatic plugin packaging (partial progress)
+
+Today doctrine wires its claude integration bespoke: a `WorktreeCreate` block in
+`settings.local.json` and an `.mcp.json` in the project root. The idiomatic
+Claude Code surface is a **plugin** — a directory with
+`.claude-plugin/plugin.json` plus `hooks/hooks.json`, `.mcp.json`, and `agents/`
+(ground truth: `code.claude.com/docs/en/plugins-reference.md`, fetched raw and
+pinned to claude-code **2.1.181**).
+
+- Take the **first step** toward that idiom by delivering the WorktreeCreate hook
+  **inside a doctrine plugin's `hooks/hooks.json`** rather than a raw settings
+  block — landing the plugin scaffold (`.claude-plugin/plugin.json`) the rest can
+  later move onto.
+- Migrating the MCP server (`.mcp.json`) and subagents (`agents/`) into the
+  plugin is **deferred** (see Non-Goals) — this is a partial step, not a big-bang
+  migration, and it is **droppable** if it threatens the primary (RSK-2).
+
 ## Non-Goals
 
 - The subprocess arm (`doctrine worktree fork --worker` direct) — unchanged.
@@ -59,11 +84,16 @@ placement-only decision in **SL-064** design §8 (option Y).
   hook-created worktree — full removal-hook ownership is a possible follow-up.
 - H2 integration hazards (ISS-038 / IMP-122) — separate.
 - Non-claude harness altitude changes (ADR-011 is satisfied, not amended).
+- **Full plugin migration** — moving the doctrine MCP server (`.mcp.json`) and
+  subagents (`agents/`) into the plugin. This slice scaffolds the plugin and
+  lands only the hook in it; the rest is follow-up.
 
 ## Affected surface (provisional)
 
-- `doctrine install` hook-emission (settings.json `WorktreeCreate` block) +
-  the hook script/seam it points at.
+- `doctrine install` hook-emission: emit the hook via an idiomatic plugin
+  (`.claude-plugin/plugin.json` + `hooks/hooks.json`) rather than a bespoke
+  `settings.local.json` `WorktreeCreate` block — plus the hook script/seam it
+  points at.
 - `src/worktree.rs` / `fork --worker` path (reuse, not reimplement — the hook
   shells the existing verb).
 - The claude `/dispatch-agent` skill (drop marker; drop cwd-placement reliance).
@@ -87,6 +117,17 @@ placement-only decision in **SL-064** design §8 (option Y).
 - **RSK-1.** Repo-global blast radius (ADR-011 D7 σ): every `isolation:worktree`
   subagent in the repo now routes through doctrine's hook. The benign
   pass-through must be robust or it breaks unrelated subagent use.
+- **RSK-2.** Plugin-idiom scope creep: the secondary goal can swallow the slice.
+  Guard — the hypothesis test (primary) is achievable without *any* plugin work;
+  the plugin step is additive and droppable if it threatens the primary.
+- **OQ-4.** Plugin install path: does `doctrine install` write + register a plugin
+  directory (marketplace / `--plugin-dir` / skills-dir auto-load), or keep
+  emitting settings and only scaffold the plugin layout? Pick the lightest step
+  that is genuinely idiomatic, not a half-migration that breaks both.
+- **OQ-5.** Hook-in-plugin fidelity: does a `WorktreeCreate` hook declared in a
+  plugin's `hooks/hooks.json` fire identically to the same hook in
+  `settings.local.json`? The 2.1.181 probe used a settings block — re-probe before
+  relying on the plugin form.
 
 ## Verification / closure intent
 
@@ -97,6 +138,9 @@ placement-only decision in **SL-064** design §8 (option Y).
 - Hook failure aborts the spawn fail-closed (no silent fallback).
 - `doctrine install` emits the hook; existing dispatch suites stay green
   (behaviour-preservation on the subprocess arm).
+- **(Secondary)** the WorktreeCreate hook ships inside a doctrine plugin
+  (`hooks/hooks.json`) and fires identically to the settings-block form (OQ-5
+  resolved) — partial plugin idiom landed without regressing the hook.
 
 ## Follow-Ups
 
