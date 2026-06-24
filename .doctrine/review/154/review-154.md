@@ -81,3 +81,24 @@ Design and code already agree (the D9 amendment closed the only gap mid-flight).
   layer can close a same-tier import cycle and ratchet the ADR-001 Command
   `tangle_baseline` — prefer injecting the renderer as a fn-pointer from the layer
   that already depends downward).
+
+## Reconciliation Outcome
+
+No-op reconcile. The reconciliation brief is empty — all four findings (F-1..F-4)
+are `verified` with disposition `aligned`; no per-slice edit and no governance/spec
+REV are implied. Design and code already agree (the D9 amendment closed the only
+gap mid-flight on `edge` @ `94369d9f`), and ADR-001 `tangle_baseline.command` stays
+123 unchanged.
+
+### Direct edits applied
+- _None._
+
+### REVs completed
+- _None._
+
+### Withdrawn / tolerated
+- _None._ All findings verified-aligned.
+
+Reconcile pass complete — handoff to /close. The brief's integration note (edge→main
+promotion before stage-2 integrate; D9 footgun memory harvest) is close's work, not
+reconcile's.
