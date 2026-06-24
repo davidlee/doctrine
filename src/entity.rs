@@ -28,6 +28,7 @@ const MAX_CLAIM_RETRIES: u32 = 128;
 
 /// Outcome of an atomic claim: this caller created it, or another agent already
 /// holds it.
+#[derive(Debug)]
 pub(crate) enum Acquired {
     Won,
     AlreadyHeld,
@@ -38,10 +39,10 @@ pub(crate) enum Acquired {
 /// named path does not ride this — it has no `id` (D9).
 pub(crate) struct ClaimCtx<'a> {
     pub(crate) dir: &'a Path,
-    #[expect(
-        dead_code,
-        reason = "GitRef reads ctx.id as the ref segment in PHASE-03 (SL-148)"
-    )]
+    /// The candidate id — `GitRef` reads it as the reservation ref segment
+    /// (`refs/doctrine/reservation/<prefix>/<id:03>`); `LocalFs` ignores it. Recomputed
+    /// each retry, so it alone rides `ClaimCtx` (the per-kind/repo constants are
+    /// backend-captured at construction, D1/D9).
     pub(crate) id: u32,
 }
 
@@ -51,6 +52,15 @@ pub(crate) trait Claim {
     /// Atomic, exclusive claim. `Won` if this caller created `ctx.dir`;
     /// `AlreadyHeld` if another agent won the race. Only this op arbitrates.
     fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired>;
+
+    /// Whether this backend arbitrates at a remote (the `GitRef` cross-clone
+    /// backend) vs the local filesystem (`LocalFs`). Test-only discriminator for
+    /// the reach-selection suites (SL-148 VT-2/VT-3/VT-6) — production never branches
+    /// on the backend kind (the seam exists precisely so it doesn't).
+    #[cfg(test)]
+    fn is_remote(&self) -> bool {
+        false
+    }
 }
 
 /// The local-filesystem backend: the `mkdir` is the claim (D1 — the dir *is*
@@ -303,6 +313,7 @@ pub(crate) fn materialise(
     request: &MaterialiseRequest,
     inputs: &Inputs<'_>,
     trunk_ids: &[u32],
+    reserved: ReservedIds<'_>,
 ) -> anyhow::Result<Materialised> {
     let tree_root = project_root.join(kind.dir);
     // The entity-tree root; the non-recursive claim mkdir below needs it to
@@ -312,12 +323,28 @@ pub(crate) fn materialise(
 
     match *request {
         MaterialiseRequest::Fresh => {
-            allocate_fresh(kind, claim, &tree_root, inputs, trunk_ids, || {
-                scan_ids(&tree_root)
-            })
+            allocate_fresh(kind, claim, &tree_root, inputs, trunk_ids, reserved)
         }
         MaterialiseRequest::InExisting { id } => create_in_existing(kind, &tree_root, id, inputs),
     }
+}
+
+/// The fresh-id scan source injected from [`crate::reserve::backend`] (F-V6). Given
+/// the entity tree's local numeric dir ids, it returns the FULL candidate id set the
+/// allocation must avoid. For `LocalFs` this is the identity (just the local dirs);
+/// for `GitRef` it RE-FETCHES `refs/doctrine/reservation/*` and returns
+/// `local_dirs ∪ remote_reservation_ids` (design EX-4). It is a *re-fetching closure*,
+/// not a snapshot `Vec`, because the claim loop calls it again after each lost race so
+/// a rival's freshly-pushed reservation widens the set (a static `Vec` would miss it).
+/// Borrows `'a` so the backend's captured fetch state lives across the retry loop.
+pub(crate) type ReservedIds<'a> = &'a mut dyn FnMut(&[u32]) -> anyhow::Result<Vec<u32>>;
+
+/// The identity scan source — the candidate set is exactly the local dirs (today's
+/// `LocalFs` behaviour). For non-allocating `InExisting` placement (where the source
+/// is never consulted) and for tests that drive `materialise` directly. Production
+/// Fresh sites take the `reserve::backend` source instead (which may union remote ids).
+pub(crate) fn local_reserved() -> impl FnMut(&[u32]) -> anyhow::Result<Vec<u32>> {
+    |local: &[u32]| Ok(local.to_vec())
 }
 
 /// Reserved top-level placement (slice, adr, …): claim the next id with a
@@ -328,14 +355,14 @@ fn allocate_fresh(
     tree_root: &Path,
     inputs: &Inputs<'_>,
     trunk_ids: &[u32],
-    scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
+    reserved: ReservedIds<'_>,
 ) -> anyhow::Result<Materialised> {
     claim_fresh_id(
         claim,
         tree_root,
         kind.prefix,
         trunk_ids,
-        scan,
+        || reserved(&scan_ids(tree_root)?),
         |id, canonical| {
             let ctx = ScaffoldCtx {
                 id,
@@ -361,6 +388,7 @@ pub(crate) fn materialise_fresh_prebuilt(
     dir: &str,
     prefix: &str,
     trunk_ids: &[u32],
+    reserved: ReservedIds<'_>,
     build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
 ) -> anyhow::Result<Materialised> {
     let tree_root = project_root.join(dir);
@@ -371,7 +399,7 @@ pub(crate) fn materialise_fresh_prebuilt(
         &tree_root,
         prefix,
         trunk_ids,
-        || scan_ids(&tree_root),
+        || reserved(&scan_ids(&tree_root)?),
         build,
     )
 }
@@ -389,8 +417,10 @@ fn claim_fresh_id(
     mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
     mut build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
 ) -> anyhow::Result<Materialised> {
+    let mut last_id = 0u32;
     for _ in 0..MAX_CLAIM_RETRIES {
         let id = next_id(&scan()?, trunk_ids);
+        last_id = id;
         let name = format!("{id:03}");
         let dir = tree_root.join(&name);
         let ctx = ClaimCtx { dir: &dir, id };
@@ -414,7 +444,12 @@ fn claim_fresh_id(
             Acquired::AlreadyHeld => {} // lost the race; recompute and retry
         }
     }
-    bail!("Could not reserve an id after {MAX_CLAIM_RETRIES} attempts");
+    // Retry exhaustion is actionable, not a bare failure: cite the reseat repair
+    // verb keyed on the last candidate's canonical ref (D6 / SL-148 VT-5).
+    bail!(
+        "Could not reserve an id after {MAX_CLAIM_RETRIES} attempts; run \
+         `doctrine reseat {prefix}-{last_id:03}` and pick another id"
+    );
 }
 
 /// Sub-artefact placement (design doc, later phases): no claim, no id alloc.
@@ -754,9 +789,14 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let out = allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), &[], || {
-            scan_ids(&tree)
-        })
+        let out = allocate_fresh(
+            &TEST_KIND,
+            &LocalFs,
+            &tree,
+            &inputs(),
+            &[],
+            &mut local_reserved(),
+        )
         .unwrap();
         assert_eq!(out.eid.numeric_id(), Some(1));
         let body = fs::read_to_string(tree.join("001/body.md")).unwrap();
@@ -772,14 +812,18 @@ mod tests {
         // candidate is 001 and the mkdir claim hits AlreadyHeld → recompute.
         fs::create_dir(tree.join("001")).unwrap();
 
+        // The re-fetching scan source (F-V6) returns a stale (empty) view first so
+        // the candidate is 001 and the mkdir claim hits AlreadyHeld → recompute; the
+        // next call returns the rival's id so the candidate advances to 002.
         let calls = Cell::new(0u32);
-        let scan = || {
+        let mut reserved = |_local: &[u32]| {
             let n = calls.get();
             calls.set(n + 1);
             Ok(if n == 0 { vec![] } else { vec![1] })
         };
 
-        let out = allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), &[], scan).unwrap();
+        let out =
+            allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), &[], &mut reserved).unwrap();
         assert_eq!(out.eid.numeric_id(), Some(2));
         assert!(tree.join("002/body.md").is_file());
         assert_eq!(calls.get(), 2, "expected one collision then success");
@@ -799,11 +843,23 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let err = allocate_fresh(&TEST_KIND, &AlwaysHeld, &tree, &inputs(), &[], || {
-            Ok(vec![])
-        })
+        let err = allocate_fresh(
+            &TEST_KIND,
+            &AlwaysHeld,
+            &tree,
+            &inputs(),
+            &[],
+            &mut |_local: &[u32]| Ok(vec![]),
+        )
         .unwrap_err();
-        assert!(err.to_string().contains("Could not reserve an id"));
+        let msg = err.to_string();
+        assert!(msg.contains("Could not reserve an id"));
+        // SL-148 VT-5 / D6: exhaustion cites the reseat remediation for the last
+        // candidate's canonical (TK-001 here — the only candidate over an empty tree).
+        assert!(
+            msg.contains("doctrine reseat TK-001"),
+            "exhaustion error must carry the reseat hint: {msg}"
+        );
     }
 
     // --- H2: a write failure cleans up the won directory ---
@@ -838,9 +894,14 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let err = allocate_fresh(&DOOMED_KIND, &LocalFs, &tree, &inputs(), &[], || {
-            scan_ids(&tree)
-        })
+        let err = allocate_fresh(
+            &DOOMED_KIND,
+            &LocalFs,
+            &tree,
+            &inputs(),
+            &[],
+            &mut local_reserved(),
+        )
         .unwrap_err();
         assert!(err.to_string().contains("Failed to create"));
         assert!(!tree.join("001").exists(), "the won dir must be removed");
@@ -868,9 +929,14 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let err = allocate_fresh(&ESCAPING_KIND, &LocalFs, &tree, &inputs(), &[], || {
-            scan_ids(&tree)
-        })
+        let err = allocate_fresh(
+            &ESCAPING_KIND,
+            &LocalFs,
+            &tree,
+            &inputs(),
+            &[],
+            &mut local_reserved(),
+        )
         .unwrap_err();
         assert!(err.to_string().contains("must not escape"));
         assert!(!tree.join("001").exists());

@@ -1064,7 +1064,8 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, subtype.kind().dir)?;
-    let backend = crate::reserve::backend(&root, subtype.kind().prefix)?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(&root, subtype.kind().prefix, crate::install::prompt_confirm)?;
     let out = entity::materialise(
         subtype.kind(),
         &*backend,
@@ -1076,6 +1077,7 @@ pub(crate) fn run_new(
             date: &date,
         },
         &trunk_ids,
+        &mut reserved,
     )?;
     let id = out
         .eid
@@ -1866,6 +1868,7 @@ mod tests {
                 date: "2026-06-05",
             },
             &[],
+            &mut entity::local_reserved(),
         )
         .unwrap()
     }
