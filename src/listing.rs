@@ -726,6 +726,124 @@ pub(crate) fn render_table(rows: &[Vec<String>], term_width: Option<u16>) -> Str
     out
 }
 
+/// The HELP-table family-heading band palette (SL-150 PHASE-01). Its OWN constant
+/// pair — distinct from `search`'s sage-on-green `--context` palette; only the
+/// band *primitive* ([`paint_full_width_band`]) is shared, not the colours.
+pub(crate) const HELP_BAND_FG: owo_colors::DynColors = owo_colors::DynColors::Rgb(220, 220, 235);
+pub(crate) const HELP_BAND_BG: owo_colors::DynColors = owo_colors::DynColors::Rgb(40, 44, 60);
+
+/// True when a rendered table line *begins* a logical row — its first column
+/// (everything before the first `│` separator) carries non-whitespace. comfy-table
+/// blanks every non-wrapping column on a wrapped cell's continuation lines, so a
+/// wrapped cell's continuations have an all-whitespace first column. Used by the
+/// `--context` snippet injection and grouped-help band injection to map physical
+/// lines back to logical rows (SL-150 lifted this from `search` — DRY).
+pub(crate) fn is_table_row_start(line: &str) -> bool {
+    let head = line.split(COLUMN_SEPARATOR).next().unwrap_or(line);
+    head.chars().any(|c| !c.is_whitespace())
+}
+
+/// Paint `content` as a full-width band: interior whitespace collapses to single
+/// spaces (so a body newline cannot fracture the band) while a LEADING indent is
+/// preserved, then the line is padded to `opts.term_width` (when known) so the band
+/// spans edge-to-edge, and painted fg-on-bg gated on `opts.color`. `term_width == None`
+/// ⇒ no pad (plain). Lifted from `search`'s inline `--context` painter into the shared
+/// `listing` seam (SL-150 — DRY; the primitive is shared, the palette is the caller's).
+///
+/// The leading-indent preservation is what keeps `search`'s `  {snippet}` and
+/// grouped-help's `  {key}` byte-identical to the pre-lift inline painter (which
+/// flattened the body then prepended `  `).
+pub(crate) fn paint_full_width_band(
+    content: &str,
+    fg: owo_colors::DynColors,
+    bg: owo_colors::DynColors,
+    opts: RenderOpts,
+) -> String {
+    use owo_colors::OwoColorize;
+    let indent = content.len() - content.trim_start_matches(' ').len();
+    let body = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    let flat = format!("{}{}", " ".repeat(indent), body);
+    if !opts.color {
+        return flat;
+    }
+    // chars()-count is a fine width proxy for this ASCII-leaning text.
+    let padded = match opts.term_width {
+        Some(w) if usize::from(w) > flat.chars().count() => {
+            let pad = usize::from(w) - flat.chars().count();
+            let mut s = flat;
+            s.extend(std::iter::repeat_n(' ', pad));
+            s
+        }
+        _ => flat,
+    };
+    padded.color(fg).on_color(bg).to_string()
+}
+
+/// Render `groups` (ordered `(key, rows)` pairs) as ONE underlying table — every
+/// group's rows are materialised into a single grid (NO header row) so columns size
+/// across all rows (shared-width alignment is automatic, and comfy-table colour +
+/// `term_width` wrapping are retained). A 3-line full-width heading band (blank /
+/// `  {key}` / blank, via [`paint_full_width_band`] with the HELP palette) is injected
+/// into the rendered line stream at each group boundary, mapping physical lines back to
+/// logical rows with [`is_table_row_start`] (so a wrapped cell's continuation lines stay
+/// under the right group). Non-band lines are `trim_end`ed (colour-off bands degrade to
+/// plain `  {key}` + blank lines, so trailing whitespace cannot break a byte-golden).
+pub(crate) fn render_grouped<T>(
+    groups: &[(&str, Vec<T>)],
+    cols: &[&Column<T>],
+    opts: RenderOpts,
+) -> String {
+    // Pre-materialise ALL rows into one grid (no header) and remember, per logical
+    // row index, which group it belongs to — so the line walk can inject the band at
+    // each boundary.
+    let color = opts.color;
+    let mut grid: Vec<Vec<String>> = Vec::new();
+    let mut row_group: Vec<usize> = Vec::new();
+    for (gi, (_key, rows)) in groups.iter().enumerate() {
+        for (i, r) in rows.iter().enumerate() {
+            grid.push(
+                cols.iter()
+                    .map(|c| paint_cell(&(c.cell)(r), &c.paint, r, color, i))
+                    .collect(),
+            );
+            row_group.push(gi);
+        }
+    }
+    if grid.is_empty() {
+        return String::new();
+    }
+
+    let table = render_table(&grid, opts.term_width);
+
+    // Walk the rendered lines; each logical row start advances `row_idx`, and a
+    // group change emits the 3-line heading band first. Continuation lines (not a
+    // row start) carry the previous row's group, so they stay under it.
+    let band = |key: &str| -> String {
+        let blank = paint_full_width_band("", HELP_BAND_FG, HELP_BAND_BG, opts);
+        let mid = paint_full_width_band(&format!("  {key}"), HELP_BAND_FG, HELP_BAND_BG, opts);
+        format!("{blank}\n{mid}\n{blank}\n")
+    };
+
+    let mut out = String::with_capacity(table.len());
+    let mut row_idx: usize = 0;
+    let mut emitted: Option<usize> = None;
+    for line in table.lines() {
+        if is_table_row_start(line) {
+            let gi = row_group.get(row_idx).copied().unwrap_or(0);
+            if emitted != Some(gi) {
+                if let Some((key, _)) = groups.get(gi) {
+                    out.push_str(&band(key));
+                }
+                emitted = Some(gi);
+            }
+            row_idx += 1;
+        }
+        out.push_str(line.trim_end());
+        out.push('\n');
+    }
+    out
+}
+
 /// Pure structural minimum (in columns) for a `cols`-wide minimalist `│` grid below
 /// which `Dynamic` wrapping degrades to 1-char slivers, so `Disabled` (clean
 /// overflow) is the better fallback. Derived to AGREE with comfy-table 7.2.2's
@@ -784,6 +902,92 @@ pub(crate) fn strip_ansi(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- band primitive + grouped (SL-150) ---------------------------------
+
+    /// `term_width == None` ⇒ plain, no pad, interior whitespace collapsed, leading
+    /// indent preserved (the property that keeps search/help byte-identical).
+    #[test]
+    fn paint_band_plain_collapses_keeps_indent_no_pad() {
+        let opts = RenderOpts {
+            color: false,
+            term_width: None,
+        };
+        let out = paint_full_width_band("  a\n  b   c", HELP_BAND_FG, HELP_BAND_BG, opts);
+        assert_eq!(
+            out, "  a b c",
+            "indent preserved, interior collapsed, no pad"
+        );
+    }
+
+    /// Colour ON pads to `term_width` and emits ANSI — full-width band.
+    #[test]
+    fn paint_band_colour_pads_to_width_and_paints() {
+        let opts = RenderOpts {
+            color: true,
+            term_width: Some(20),
+        };
+        let out = paint_full_width_band("  hi", HELP_BAND_FG, HELP_BAND_BG, opts);
+        assert!(out.contains('\u{1b}'), "colour-on band must emit ANSI");
+        assert_eq!(
+            strip_ansi(&out).chars().count(),
+            20,
+            "band must pad to term_width"
+        );
+    }
+
+    #[test]
+    fn is_table_row_start_detects_continuation_lines() {
+        assert!(is_table_row_start("slice    \u{2502} desc"));
+        // a wrapped continuation: blank first column.
+        assert!(!is_table_row_start("         \u{2502} more desc"));
+    }
+
+    struct BandRow {
+        a: &'static str,
+        b: &'static str,
+    }
+
+    /// `render_grouped` materialises ONE table (shared widths), injects a 3-line band
+    /// per group, and never emits a column header. Colour-off ⇒ plain bands.
+    #[test]
+    fn render_grouped_bands_each_group_over_one_shared_table() {
+        let cols: &[&Column<BandRow>] = &[
+            &Column {
+                name: "a",
+                header: "a",
+                cell: |r: &BandRow| r.a.to_string(),
+                paint: ColumnPaint::None,
+            },
+            &Column {
+                name: "b",
+                header: "b",
+                cell: |r: &BandRow| r.b.to_string(),
+                paint: ColumnPaint::None,
+            },
+        ];
+        let groups: &[(&str, Vec<BandRow>)] = &[
+            (
+                "alpha",
+                vec![BandRow {
+                    a: "longcommand",
+                    b: "x",
+                }],
+            ),
+            ("beta", vec![BandRow { a: "c2", b: "y" }]),
+        ];
+        let out = render_grouped(groups, cols, RenderOpts::default());
+        // Two bands, in order.
+        let a_pos = out.find("  alpha\n").expect("alpha band");
+        let b_pos = out.find("  beta\n").expect("beta band");
+        assert!(a_pos < b_pos, "bands render in group order");
+        // No column header row.
+        assert!(!out.contains("a \u{2502} b"), "no column header");
+        // Shared width: both rows' separators align (one column).
+        let sep_cols: std::collections::BTreeSet<usize> =
+            out.lines().filter_map(|l| l.find('\u{2502}')).collect();
+        assert_eq!(sep_cols.len(), 1, "shared separator column across groups");
+    }
 
     // -- canonical_id ------------------------------------------------------
 
