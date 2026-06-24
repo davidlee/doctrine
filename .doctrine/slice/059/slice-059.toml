@@ -14,5 +14,6 @@ after = []                      # slice→work soft sequence: { to, rank }
 # installed jail binary, so hand-authored (authored tier; corpus `validate` is
 # read-tolerant). slice→spec only; requirement-level coverage links land at /plan.
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-019"

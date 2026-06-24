@@ -12,7 +12,8 @@
   "kind": "inspect",
   "outbound": [
     {
-      "label": "requirements",
+      "label": "references",
+      "role": "implements",
       "targets": [
         "REQ-005"
       ]

@@ -195,7 +195,8 @@ pub(crate) fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyh
             }
 
             // Write NEW's outbound edge via [[relation]].
-            let outcome = relation::append_edge(&new_path, RelationLabel::Supersedes, &old_ref)?;
+            let outcome =
+                relation::append_edge(&new_path, RelationLabel::Supersedes, None, &old_ref)?;
             if matches!(outcome, relation::AppendOutcome::Noop) {
                 writeln!(
                     std::io::stdout(),

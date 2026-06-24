@@ -64,6 +64,18 @@ pub(crate) fn source_kind(key: &CatalogKey) -> &str {
     }
 }
 
+/// The display label for an edge — `references(<role>)` for a role-bearing `references`
+/// edge (SL-149 §2.6), the bare label name otherwise. List rows and census groups key
+/// on this rendered form, so `references(implements)` and `references(concerns)` are
+/// distinct rows/buckets; the `--label` filter compares the BARE name
+/// ([`CatalogEdgeLabel::name`]), so `--label references` still matches every role.
+pub(crate) fn edge_label_display(edge: &crate::catalog::hydrate::CatalogEdge) -> String {
+    match edge.role {
+        Some(role) => format!("{}({})", edge.label.name(), role.name()),
+        None => edge.label.name().to_string(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ListFilter + projection
 // ---------------------------------------------------------------------------
@@ -163,7 +175,9 @@ pub(crate) fn project_list(catalog: &Catalog, filter: &ListFilter) -> Vec<Relati
         })
         .map(|edge| {
             let source = edge.source.canonical();
-            let label = edge.label.name().to_string();
+            // Render the role verb (`references(implements)`) on the row; the `--label`
+            // filter above still compares the bare `name()` (SL-149 §2.6).
+            let label = edge_label_display(edge);
             let target = target_display(&edge.target);
             let state = target_state(&edge.target);
             RelationRow {
@@ -196,7 +210,9 @@ pub(crate) fn project_census(catalog: &Catalog, include_memory: bool) -> Vec<Cen
         if !include_memory && matches!(edge.label, CatalogEdgeLabel::Raw(_)) {
             continue;
         }
-        let label = edge.label.name().to_string();
+        // Group by the rendered `(label, role)` form (SL-149 §2.6): a `references`
+        // census splits into one row per role (`references(implements)`, …).
+        let label = edge_label_display(edge);
         let entry = groups.entry(label).or_insert(CensusRow {
             label: String::new(),
             count: 0,
@@ -432,9 +448,18 @@ mod tests {
         label: &str,
         target: &str,
     ) -> ScannedEntity {
-        use crate::relation::RelationLabel;
+        use crate::relation::{RelationLabel, Role};
         let kind = crate::integrity::kind_by_prefix(prefix).unwrap().kind;
-        let rel_label = RelationLabel::from_name(label).unwrap_or_else(|| {
+        // SL-149: a `references(<role>)` label string carries a role; any other label is
+        // roleless.
+        let (name, role) = match label
+            .strip_prefix("references(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            Some(r) => ("references", Role::from_name(r)),
+            None => (label, None),
+        };
+        let rel_label = RelationLabel::from_name(name).unwrap_or_else(|| {
             panic!("unknown relation label {label}");
         });
         ScannedEntity {
@@ -442,8 +467,9 @@ mod tests {
             kind,
             status: Some("proposed".to_string()),
             title: format!("{prefix}-{id}"),
-            outbound: vec![crate::relation::RelationEdge::new(
+            outbound: vec![crate::relation::RelationEdge::with_role(
                 rel_label,
+                role,
                 target.to_string(),
             )],
             estimate: None,
@@ -505,7 +531,7 @@ mod tests {
         // SL-001 → REQ-005 (requirements, resolved) + REQ-999 (requirements, unresolved)
         // REQ-005 seeded → resolves; REQ-999 absent → unresolved.
         // All four axes + include_memory: true narrow to exactly the REQ-999 row.
-        use crate::relation::{RelationEdge, RelationLabel};
+        use crate::relation::{RelationEdge, RelationLabel, Role};
         let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
         let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
         let sl001 = ScannedEntity {
@@ -517,8 +543,16 @@ mod tests {
             status: Some("proposed".to_string()),
             title: "SL-001".to_string(),
             outbound: vec![
-                RelationEdge::new(RelationLabel::Requirements, "REQ-005".to_string()),
-                RelationEdge::new(RelationLabel::Requirements, "REQ-999".to_string()),
+                RelationEdge::with_role(
+                    RelationLabel::References,
+                    Some(Role::Implements),
+                    "REQ-005".to_string(),
+                ),
+                RelationEdge::with_role(
+                    RelationLabel::References,
+                    Some(Role::Implements),
+                    "REQ-999".to_string(),
+                ),
             ],
             estimate: None,
             value: None,
@@ -548,7 +582,7 @@ mod tests {
             &catalog,
             &ListFilter {
                 include_memory: true,
-                label: Some("requirements".into()),
+                label: Some("references".into()),
                 source_kind: Some("SL".into()),
                 target: Some("REQ-999".into()),
                 unresolved: true,
@@ -560,7 +594,7 @@ mod tests {
             "four axes + include_memory narrows to one row"
         );
         assert_eq!(rows[0].source, "SL-001");
-        assert_eq!(rows[0].label, "requirements");
+        assert_eq!(rows[0].label, "references(implements)");
         assert_eq!(rows[0].target, "REQ-999");
         assert_eq!(rows[0].state, TargetState::Unresolved);
 
@@ -584,12 +618,13 @@ mod tests {
         use crate::catalog::hydrate::{CatalogEdge, CatalogEdgeLabel};
         use std::path::PathBuf;
 
-        let sl001 = numbered_with_edge("SL", 1, "requirements", "REQ-001");
+        let sl001 = numbered_with_edge("SL", 1, "references(implements)", "REQ-001");
         let mut catalog = catalog_from(&[sl001]);
         // Inject a Raw-label edge (simulating a memory-source edge).
         catalog.edges.push(CatalogEdge {
             source: CatalogKey::Memory("mem_user123".to_string()),
             label: CatalogEdgeLabel::Raw("references".to_string()),
+            role: None,
             target: EdgeTarget::UnvalidatedText {
                 raw: "some note".to_string(),
             },
@@ -655,7 +690,7 @@ mod tests {
     fn unresolved_filter_keeps_only_non_resolved() {
         // SL-001 → REQ-005 (resolved, REQ-005 is in the scan).
         // SL-001 → REQ-999 (unresolved, REQ-999 not in the scan).
-        use crate::relation::{RelationEdge, RelationLabel};
+        use crate::relation::{RelationEdge, RelationLabel, Role};
         let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
         let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
         let sl001 = ScannedEntity {
@@ -667,8 +702,16 @@ mod tests {
             status: Some("proposed".to_string()),
             title: "SL-001".to_string(),
             outbound: vec![
-                RelationEdge::new(RelationLabel::Requirements, "REQ-005".to_string()),
-                RelationEdge::new(RelationLabel::Requirements, "REQ-999".to_string()),
+                RelationEdge::with_role(
+                    RelationLabel::References,
+                    Some(Role::Implements),
+                    "REQ-005".to_string(),
+                ),
+                RelationEdge::with_role(
+                    RelationLabel::References,
+                    Some(Role::Implements),
+                    "REQ-999".to_string(),
+                ),
             ],
             estimate: None,
             value: None,
@@ -710,7 +753,7 @@ mod tests {
     #[test]
     fn project_list_sorts_by_label_source_target() {
         // Two SL entities with edges to create mixed order.
-        use crate::relation::{RelationEdge, RelationLabel};
+        use crate::relation::{RelationEdge, RelationLabel, Role};
         let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
         let sl001 = ScannedEntity {
             key: EntityKey {
@@ -720,8 +763,9 @@ mod tests {
             kind,
             status: Some("proposed".to_string()),
             title: "SL-001".to_string(),
-            outbound: vec![RelationEdge::new(
-                RelationLabel::Specs,
+            outbound: vec![RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Implements),
                 "PRD-002".to_string(),
             )],
             estimate: None,
@@ -738,8 +782,9 @@ mod tests {
             kind,
             status: Some("proposed".to_string()),
             title: "SL-002".to_string(),
-            outbound: vec![RelationEdge::new(
-                RelationLabel::Specs,
+            outbound: vec![RelationEdge::with_role(
+                RelationLabel::References,
+                Some(Role::Implements),
                 "PRD-001".to_string(),
             )],
             estimate: None,
@@ -752,7 +797,7 @@ mod tests {
 
         let rows = project_list(&catalog, &ListFilter::default());
         assert_eq!(rows.len(), 2);
-        // Sort: same label "specs", then source: SL-001 < SL-002
+        // Sort: same label "references(implements)", then source: SL-001 < SL-002
         assert_eq!(rows[0].source, "SL-001");
         assert_eq!(rows[1].source, "SL-002");
     }
@@ -768,7 +813,7 @@ mod tests {
     #[test]
     fn census_tallies_honour_breakdown_and_sort() {
         // SL-001 → REQ-005 (resolved), SL-001 → REQ-999 (unresolved), SL-001 → "drift text" (free_text)
-        use crate::relation::{RelationEdge, RelationLabel};
+        use crate::relation::{RelationEdge, RelationLabel, Role};
         let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
         let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
         let sl001 = ScannedEntity {
@@ -780,8 +825,16 @@ mod tests {
             status: Some("proposed".to_string()),
             title: "SL-001".to_string(),
             outbound: vec![
-                RelationEdge::new(RelationLabel::Requirements, "REQ-005".to_string()),
-                RelationEdge::new(RelationLabel::Requirements, "REQ-999".to_string()),
+                RelationEdge::with_role(
+                    RelationLabel::References,
+                    Some(Role::Implements),
+                    "REQ-005".to_string(),
+                ),
+                RelationEdge::with_role(
+                    RelationLabel::References,
+                    Some(Role::Implements),
+                    "REQ-999".to_string(),
+                ),
                 RelationEdge::new(RelationLabel::Drift, "some free text".to_string()),
             ],
             estimate: None,
@@ -808,12 +861,12 @@ mod tests {
         let catalog = two_entities(sl001, req005);
 
         let rows = project_census(&catalog, false);
-        // Two labels: "requirements" (count 2), "drift" (count 1)
+        // Two labels: "references(implements)" (count 2), "drift" (count 1)
         assert_eq!(rows.len(), 2);
 
-        // Sort: count desc → "requirements" first (2), then "drift" (1).
+        // Sort: count desc → "references(implements)" first (2), then "drift" (1).
         let req_row = &rows[0];
-        assert_eq!(req_row.label, "requirements");
+        assert_eq!(req_row.label, "references(implements)");
         assert_eq!(req_row.count, 2);
         assert_eq!(req_row.resolved, 1);
         assert_eq!(req_row.unresolved, 1);
@@ -836,12 +889,12 @@ mod tests {
     #[test]
     fn census_include_memory_drops_raw_labels() {
         // Just a numbered entity; census with/without include_memory is identical.
-        let sl001 = numbered_with_edge("SL", 1, "requirements", "REQ-001");
+        let sl001 = numbered_with_edge("SL", 1, "references(implements)", "REQ-001");
         let catalog = catalog_from(&[sl001]);
 
         let rows = project_census(&catalog, false);
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].label, "requirements");
+        assert_eq!(rows[0].label, "references(implements)");
 
         // With include_memory, same result since no memory edges.
         let rows2 = project_census(&catalog, true);
@@ -854,7 +907,7 @@ mod tests {
     fn list_json_shape_matches_envelope_contract() {
         let row = RelationRow {
             source: "SL-001".to_string(),
-            label: "requirements".to_string(),
+            label: "references(implements)".to_string(),
             target: "REQ-005".to_string(),
             state: TargetState::Resolved,
         };
@@ -870,7 +923,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
         let r = &rows[0];
         assert_eq!(r["source"].as_str(), Some("SL-001"));
-        assert_eq!(r["label"].as_str(), Some("requirements"));
+        assert_eq!(r["label"].as_str(), Some("references(implements)"));
         assert_eq!(r["target"].as_str(), Some("REQ-005"));
         assert_eq!(r["state"].as_str(), Some("resolved"));
     }
@@ -878,7 +931,7 @@ mod tests {
     #[test]
     fn census_json_shape_matches_envelope_contract() {
         let row = CensusRow {
-            label: "requirements".to_string(),
+            label: "references(implements)".to_string(),
             count: 2,
             resolved: 1,
             unresolved: 1,
@@ -895,7 +948,7 @@ mod tests {
         let rows = &v["rows"].as_array().unwrap();
         assert_eq!(rows.len(), 1);
         let r = &rows[0];
-        assert_eq!(r["label"].as_str(), Some("requirements"));
+        assert_eq!(r["label"].as_str(), Some("references(implements)"));
         assert_eq!(r["count"].as_u64(), Some(2));
         assert_eq!(r["resolved"].as_u64(), Some(1));
         assert_eq!(r["unresolved"].as_u64(), Some(1));

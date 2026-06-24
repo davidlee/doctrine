@@ -10,15 +10,18 @@ needs = []                      # slice→work hard prerequisite
 after = []
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "implements"
 target = "SPEC-004"
 
 [[relation]]
-label = "specs"
+label = "references"
+role = "concerns"
 target = "SPEC-008"
 
 [[relation]]
-label = "related"
+label = "references"
+role = "scoped_from"
 target = "IMP-067"
 
 [[relation]]
