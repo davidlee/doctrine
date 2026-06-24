@@ -26,6 +26,10 @@ target = "SPEC-007"
 label = "related"
 target = "SL-144"
 
+[[relation]]
+label = "governed_by"
+target = "POL-002"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
