@@ -67,13 +67,18 @@ Both renderings walk the *same* clap command tree → cannot drift from reality.
   byte-stable / `boot --check` invariants (cf. IMP-123) must be honoured.
 - **A1** The clap command tree is enumerable at runtime for the drift test
   (IMP-166 already walks it for `--commands`, so the seam exists).
-- **OQ1** Boot-map granularity confirmed as families **+ distinctive verbs**
-  (not families-only) in the design conversation.
-- **OQ2** Family taxonomy settled in conversation (`reports` not `views`;
-  `explore` holds search/inspect/relation/concept-map/map; `catalog`→infra).
-  Re-validate during `/design`.
-- **OQ3** Does the boot map get an interactive entry point (e.g. `--help --map`)
-  or exist only as a boot-snapshot section? Design decision.
+- **OQ1** *(resolved)* Boot-map granularity = families **+ distinctive verbs**
+  (auto-derived `verbs − spine`); infra verb-expansion suppressed (D7).
+- **OQ2** *(resolved)* Family taxonomy settled — all 44 commands partitioned
+  across 8 families (`reports` not `views`; `explore` holds search/inspect/
+  relation/concept-map/map; `catalog`→infra). See design §5.2 `FAMILIES`.
+- **OQ3** *(resolved)* Boot map gets BOTH an interactive entry point
+  (`doctrine --help --map`) and a `SourceKind::CommandMap` snapshot section,
+  one `render_boot_map()` behind both (D3).
+- **OQ4** *(open — design §6 OQ-3)* `--map` flag name overloads the `map`
+  command. User decision before execute.
+- **OQ5** *(open — design §6 OQ-1)* D8 shared-width grouped help: plain-text
+  render vs extend `listing`. Settles at execute phase 1.
 
 ## Verification / Closure Intent
 

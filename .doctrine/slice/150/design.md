@@ -212,6 +212,10 @@ clean.
 - **INV-3 Boot stability**: `render_boot_map()` is a pure function of the
   compiled clap tree — no clock/rng/disk/tty — so two runs are byte-identical;
   the snapshot only changes when commands/verbs change.
+- **INV-4 Deterministic ordering**: families render in `FAMILIES`-declared
+  order; commands within a family render in member-array order (NOT clap
+  `get_subcommands()` order) — so goldens do not depend on derive order. Verbs
+  within a command's sub-line render in clap order (stable derive order).
 - **EDGE — `--map` + `--commands` together**: treat as `--map` wins (documented),
   or reject; default to `--map` precedence, mutually-exclusive not enforced
   (matches the loose `--commands`/plain coexistence today).
@@ -227,11 +231,22 @@ clean.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 (D8 mechanism)** — shared-width rendering: single interleaved table vs
-  a shared-width param into `listing`. Deferred to execute; both satisfy the
-  alignment invariant. Low risk.
+- **OQ-1 (D8 mechanism) — MEDIUM risk, the main implementation fork.**
+  `listing::render_columns` (comfy-table) autosizes each table independently and
+  has no section-header row, so 8 separate calls cannot share divider columns.
+  Two real options: (a) **plain-text grouped help** with manually-computed shared
+  padding (like `render_boot_map`) — clean alignment, full control, but drops the
+  alternating-row color paint and term_width wrapping the flat help has today;
+  (b) extend `listing` with a shared-width / section-header capability — heavier,
+  keeps color/wrap. Lean (a): the grouped help's value is structure+alignment,
+  not color; wrapping is moot if descriptions stay one short line. Settle at
+  execute (phase 1).
 - **OQ-2** — `--map` vs `--commands` precedence when both passed (§5.5 EDGE);
   pick the simplest that keeps a golden stable.
+- **OQ-3 — `--map` flag name collides with the `map` command** (`doctrine map`
+  = web explorer; `doctrine --help --map` = boot map). Same word, unrelated.
+  Candidates: `--map` (approved, accept the overload), `--boot-map`,
+  `--families`, `--brief`. User decision before execute.
 - *(Resolved in design conversation: D1 static table, D2 auto-derive, D3 `--map`
   flag + CommandMap section, D4 sub-tables, D7 suppress infra verbs.)*
 
@@ -273,9 +288,14 @@ clean.
 
 ## 9. Quality Engineering & Validation
 
-- **Drift-guard unit test** (pure, over `Cli::command()`): visible commands ==
-  ⋃ family members (set equality) ⇒ proves INV-1 (no orphan) + INV-2 (no
-  phantom) in one assertion; plus per-command single-family membership.
+- **Drift-guard unit test** (pure, over `Cli::command()`), three assertions —
+  set equality alone is insufficient (a command in two families dedups in the
+  union and passes):
+  1. `FAMILIES` members contain **no duplicate** (build a name→family map; a
+     second insert for a name is a collision failure) ⇒ single-family membership.
+  2. every member resolves to a real visible command ⇒ INV-2 (no phantom).
+  3. every visible (`!is_hide_set`, ≠ `help`) command appears in some family ⇒
+     INV-1 (no orphan).
 - **Golden: human `--help`** — black-box via `CARGO_BIN_EXE_doctrine`,
   `force_no_tty`, byte-exact; asserts family order, sub-table grouping, shared
   column alignment (D8).
@@ -288,4 +308,20 @@ clean.
 
 ## 10. Review Notes
 
-<!-- populated by adversarial pass -->
+Internal adversarial pass (pre-inquisition):
+
+- **F1 (fixed)** — INV-1 drift test by set-union alone passes a command listed
+  in two families (union dedups). Hardened to 3 assertions incl. a no-duplicate
+  collision map (§9).
+- **F2 (fixed)** — within-family ordering was unspecified; pinned to
+  `FAMILIES`-declared order via INV-4 so goldens don't ride clap derive order.
+- **F3 (fixed → OQ-1 upgraded)** — D8 shared-width sub-tables fight comfy-table's
+  per-table autosize; underrated as "low risk". Now MEDIUM with two concrete
+  options; plain-text grouped help is the lean.
+- **F4 (open → OQ-3)** — `--map` flag overloads the `map` command name. Surfaced
+  to user.
+- **F5 (accepted)** — boot-map golden churns on any verb addition; intended
+  (surface changes get an explicit review), documented as maintenance cost (R/9).
+- **F6 (no change)** — mid-sequence CommandMap insertion shifts following
+  sections' byte offsets once on first regen; one-time, content-stable
+  thereafter; acceptable (R1).
