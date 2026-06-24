@@ -1,0 +1,68 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 5
+slug = "dispatch-funnel-integrity"
+title = "Dispatch funnel integrity: hazard survey and correctness posture"
+status = "open"
+created = "2026-06-24"
+updated = "2026-06-24"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "ISS-034"
+
+[[relation]]
+label = "related"
+target = "ISS-038"
+
+[[relation]]
+label = "related"
+target = "ISS-039"
+
+[[relation]]
+label = "related"
+target = "CHR-017"
+
+[[relation]]
+label = "related"
+target = "IDE-017"
+
+[[relation]]
+label = "related"
+target = "IMP-072"
+
+[[relation]]
+label = "related"
+target = "IMP-004"
+
+[[relation]]
+label = "related"
+target = "IMP-126"
+
+[[relation]]
+label = "related"
+target = "IMP-127"
+
+[[relation]]
+label = "related"
+target = "ISS-024"
+
+[[relation]]
+label = "related"
+target = "SL-123"
+
+[[relation]]
+label = "related"
+target = "SL-122"
+
+[[relation]]
+label = "related"
+target = "SL-121"
+
