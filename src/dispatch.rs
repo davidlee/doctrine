@@ -32,11 +32,10 @@ use crate::root;
 
 #[derive(Subcommand)]
 pub(crate) enum DispatchCommand {
-    /// Materialise reviewable refs from `dispatch/<slice>` (SL-064 / ADR-012
-    /// §4). The stage selector is required and single-choice; PHASE-04 ships
-    /// `--prepare-review` (stage-1: create `review/<slice>` + `phase/<slice>-NN`
-    /// under a CAS journal, never writing trunk). Orchestrator-classed — refused
-    /// under worker-mode.
+    /// Sync reviewable refs from the dispatch branch.
+    /// Stage selector required; `--prepare-review` creates `review/<slice>` +
+    /// `phase/<slice>-NN` under CAS (never writing trunk). `--integrate` replays
+    /// the journal. Orchestrator-classed — refused under worker-mode.
     Sync {
         /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
         /// coordination branch to project.
@@ -78,12 +77,9 @@ pub(crate) enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
-    /// Funnel-time recording: append a per-phase code boundary to
-    /// `.doctrine/dispatch/<slice>/boundaries.toml` (design §4.3). The
-    /// orchestrator runs this between the funnel's code commit and its knowledge
-    /// commit; stage-1 `sync --prepare-review` tree-reads the committed file to
-    /// cut the claude-arm `phase/<slice>-NN` deliverables. Orchestrator-classed —
-    /// refused under worker-mode.
+    /// Record a phase code boundary.
+    /// Appends a per-phase boundary to `.doctrine/dispatch/<slice>/boundaries.toml`.
+    /// Orchestrator-classed — refused under worker-mode.
     RecordBoundary {
         /// The slice id (bare number, e.g. `64`) whose ledger to append.
         #[arg(long)]
@@ -108,9 +104,10 @@ pub(crate) enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
-    /// Advance dispatch/<slice>'s base by merging current trunk into it in the
-    /// live coordination worktree (design SL-127 §3.2). Merge-only; re-run
-    /// `sync --prepare-review` after. Orchestrator-classed — refused under worker-mode.
+    /// Refresh the coordination base from trunk.
+    /// Merges current trunk into dispatch/<slice> in the live coordination
+    /// worktree. Merge-only; re-run `sync --prepare-review` after.
+    /// Orchestrator-classed — refused under worker-mode.
     RefreshBase {
         #[arg(long)]
         slice: u32,
@@ -118,9 +115,9 @@ pub(crate) enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
-    /// Create OR resume the coordination worktree and emit the dispatch env
-    /// contract on stdout (design §2). Orchestrator-classed — refused under
-    /// worker-mode.
+    /// Create or resume dispatch coordination.
+    /// Emits the dispatch env contract on stdout. Orchestrator-classed — refused
+    /// under worker-mode.
     Setup {
         /// The slice id (bare number, e.g. `85`).
         #[arg(long)]
@@ -135,18 +132,18 @@ pub(crate) enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
-    /// Candidate lifecycle (SL-068 / design §5.3). `create` publishes a
-    /// reviewable/landable candidate at `candidate/<slice>/<label>` by computing
-    /// the no-ff 3-way merge of a verified source ref onto a base, under zero-oid
-    /// CAS. Orchestrator-classed — refused under worker-mode.
+    /// Manage dispatch candidates.
+    /// `create` publishes a reviewable/landable candidate at
+    /// `candidate/<slice>/<label>`. Orchestrator-classed — refused under
+    /// worker-mode.
     Candidate {
         #[command(subcommand)]
         command: CandidateCommand,
     },
 
-    /// Read the plan and runtime phase sheets; print ordered phase rollup
-    /// and identify the next actionable phase(s). Read-only — callable from
-    /// anywhere.
+    /// Plan the next actionable phase.
+    /// Reads the plan and runtime phase sheets; prints ordered phase rollup.
+    /// Read-only — callable from anywhere.
     PlanNext {
         /// The slice id (bare number).
         #[arg(long)]
@@ -161,8 +158,9 @@ pub(crate) enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
-    /// Read-only full dispatch rollup: coordination state, phase table,
-    /// trunk drift, sync state, candidate summary, next-step guidance.
+    /// Show the dispatch rollup.
+    /// Coordination state, phase table, trunk drift, sync state, candidate
+    /// summary, next-step guidance.
     Status {
         /// The slice id (bare number, e.g. `85`).
         #[arg(long)]
@@ -177,8 +175,8 @@ pub(crate) enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
-    /// Print the resolved `[dispatch] deliver_to` trunk delivery ref to stdout
-    /// (SL-128 / IMP-124). Read-only — callable from anywhere.
+    /// Print the deliver-to ref.
+    /// Resolved `[dispatch] deliver_to` trunk delivery ref. Read-only.
     DeliverTo {
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]

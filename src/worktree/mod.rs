@@ -71,8 +71,8 @@ pub(crate) use allowlist::{DERIVED_RUNTIME, WITHHELD, glob_matches};
 
 #[derive(Subcommand)]
 pub(crate) enum WorktreeCommand {
-    /// Copy allowlisted gitignored files from the source tree into `<fork>` —
-    /// the sole copy path; the coordination/runtime tier is always excluded.
+    /// Copy allowlisted files into a worktree fork.
+    /// The sole copy path; the coordination/runtime tier is always excluded.
     Provision {
         /// The target sibling worktree to populate.
         fork: PathBuf,
@@ -82,18 +82,18 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Static smell test: nonzero exit if any `.worktreeinclude` pattern names a
-    /// withheld tier or uses unsupported syntax (`!`/anchoring).
+    /// Check `.worktreeinclude` for invalid patterns.
+    /// Nonzero exit if any pattern names a withheld tier or uses unsupported
+    /// syntax (`!`/anchoring).
     CheckAllowlist {
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
 
-    /// HEAD-stationarity assert at the batch-commit boundary (SL-031, D5
-    /// concurrency extension): exit 0 if coordination HEAD still equals the
-    /// orchestrator's pre-spawn base, 1 otherwise (→ re-dispatch). Not a
-    /// merge-base compute (C-V).
+    /// Check HEAD stationarity at batch-commit boundary.
+    /// Exit 0 if coordination HEAD still equals the orchestrator's pre-spawn base,
+    /// 1 otherwise (→ re-dispatch). Not a merge-base compute (C-V).
     BranchPointCheck {
         /// The orchestrator's pre-spawn captured base commit `B`.
         #[arg(long)]
@@ -108,10 +108,11 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Create an orchestrator-owned worktree fork off `<base>` on a NEW branch,
-    /// provision it (the sole copier), optionally stamp the worker marker, and emit
-    /// the per-worktree env contract on stdout (SL-056 PHASE-06). Orchestrator-classed
-    /// — refused under worker-mode. Atomic via compensating rollback.
+    /// Create a worktree fork.
+    /// Orchestrator-owned fork off `<base>` on a NEW branch, provisioned,
+    /// optionally worker-stamped. Emits the per-worktree env contract on stdout.
+    /// Orchestrator-classed — refused under worker-mode. Atomic via compensating
+    /// rollback.
     Fork {
         /// The base commit `B` the fork is created from (the orchestrator's
         /// captured coordination HEAD).
@@ -135,14 +136,12 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Create OR resume the dispatch coordination worktree for a slice on branch
-    /// `dispatch/<slice>` off the resolved trunk (SL-064 §2). MARKERLESS — the
-    /// coordination tree IS the orchestrator, so no worker marker is stamped;
-    /// provisions via the sole copier and regenerates the runtime phase sheets
-    /// from committed `plan.toml`. A live worktree already on `dispatch/<slice>`
-    /// is refused (`coordination-live`); a branch with no live worktree resumes
-    /// (reattach, never a second branch). Orchestrator-classed — refused under
-    /// worker-mode.
+    /// Create or resume a coordination worktree.
+    /// For a slice on branch `dispatch/<slice>` off the resolved trunk.
+    /// MARKERLESS — the coordination tree IS the orchestrator. A live worktree
+    /// already on `dispatch/<slice>` is refused (`coordination-live`); a branch
+    /// with no live worktree resumes (reattach, never a second branch).
+    /// Orchestrator-classed — refused under worker-mode.
     Coordinate {
         /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
         /// coordination worktree to create or resume.
@@ -158,12 +157,10 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Import a worker fork's single-commit delta into the coordination index,
-    /// NON-committing (SL-056 PHASE-07, ADR-006 D7: import ≠ commit). Stationary-
-    /// head case only — fails closed with a distinct token on any precond/belt
-    /// violation (`head-moved`/`tree-unclean`/`multi-commit`/`doctrine-touch`/
-    /// `claude-touch`); never auto-merges. Orchestrator-classed — refused under
-    /// worker-mode.
+    /// Import a worker's commit into the coordination index.
+    /// NON-committing (ADR-006 D7: import ≠ commit). Stationary-head case only —
+    /// fails closed on any precond/belt violation; never auto-merges.
+    /// Orchestrator-classed — refused under worker-mode.
     Import {
         /// The orchestrator's pre-spawn captured base commit `B`.
         #[arg(long)]
@@ -178,12 +175,10 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Land a solo multi-commit isolated-worktree TDD branch onto the coordination
-    /// branch with ancestry PRESERVED via `git merge --no-ff` (NEVER `--squash` —
-    /// the verb cannot express a squash; SL-056 PHASE-08, design §6). Solo
-    /// `/execute`'s analog of `import`. Fails closed with a distinct token on any
-    /// precond/merge violation (`tree-unclean`/`no-such-fork`/`worktree-gone`/
-    /// `dispatch-fork`/`merge-conflict`/`wedged-merge`/`inconsistent-merge-state`).
+    /// Land a worktree branch onto coordination.
+    /// Merges a solo multi-commit TDD branch with ancestry PRESERVED via
+    /// `git merge --no-ff` (NEVER `--squash`). Solo `/execute`'s analog of
+    /// `import`. Fails closed on any precond/merge violation.
     /// Orchestrator-classed — refused under worker-mode.
     Land {
         /// The solo fork branch to merge onto the coordination branch.
@@ -195,14 +190,12 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Reap a spent worktree fork in ONE idempotent act (SL-056 PHASE-09, design
-    /// §8) — deletes ONLY when the fork has provably landed via the two-leg
-    /// (ancestry ∪ patch-id) durable-git oracle (§8.1). Fails closed with a distinct
-    /// token (`not-landed`/`squash-uncertifiable`); `--superseded-head <SHA>` reaps
-    /// iff the SHA equals the branch's current head (a movement-guard, not a landing
-    /// proof); `--force` bypasses the oracle; `--dry-run` prints the verdict and
-    /// destroys nothing. A crash-interrupted gc completes (or names the leftover) on
-    /// rerun (§8.2). Orchestrator-classed — refused under worker-mode.
+    /// Reap a spent worktree fork.
+    /// One idempotent act — deletes ONLY when the fork has provably landed via
+    /// the durable-git oracle. `--superseded-head <SHA>` reaps iff the SHA equals
+    /// the branch's current head (movement-guard). `--force` bypasses the oracle.
+    /// `--dry-run` prints the verdict and destroys nothing. Orchestrator-classed
+    /// — refused under worker-mode.
     Gc {
         /// The fork branch to reap.
         #[arg(long)]
@@ -227,9 +220,9 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
-    /// non-zero `stale-marker` exit from the SAME state the human line reads.
-    /// Read-classed — open to workers.
+    /// Print the resolved worker-mode and cause.
+    /// `--assert` derives a non-zero `stale-marker` exit. Read-classed — open
+    /// to workers.
     Status {
         /// Gate exit: non-zero with a `stale-marker` token if a stray marker sits
         /// in this linked worktree (clean direct-writer entry ⇒ exit 0).
@@ -241,11 +234,10 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Post-spawn base==B check for the claude `/dispatch` arm (SL-064 §8): prove
-    /// the spawned worker worktree's HEAD descends from the base `B` it was meant
-    /// to fork off. Diagnostic only — fail-loud, NEVER removes the fork. Read-classed
-    /// (callable under worker-mode). Distinct token per refusal
-    /// (`no-worker-head`/`not-isolated`/`unstamped`/`wrong-base`/`branch-mismatch`).
+    /// Verify a worker's base commit.
+    /// Post-spawn check: prove the worker worktree's HEAD descends from the
+    /// base `B` it was meant to fork off. Diagnostic only — fail-loud, NEVER
+    /// removes the fork. Read-classed (callable under worker-mode).
     VerifyWorker {
         /// The base commit `B` the worker was meant to fork off (the
         /// orchestrator's coordination HEAD at spawn).

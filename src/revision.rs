@@ -92,8 +92,8 @@ pub(crate) enum RevisionChangeCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum RevisionCommand {
-    /// Open a new revision — a pending revise-intent against authored truth (the
-    /// REV change-axis kind, ADR-013). A fresh REV is a skeleton (`proposed`,
+    /// Create a new revision.
+    /// A fresh REV is a skeleton (`proposed`,
     /// `approval=none`, no change rows); `revision change add` (PHASE-03) populates
     /// the typed `[[change]]` payload.
     New {
@@ -132,8 +132,8 @@ pub(crate) enum RevisionCommand {
         path: Option<PathBuf>,
     },
 
-    /// Transition a revision's lifecycle: `revision status <REV-N> <state>`
-    /// (proposed→started→done; abandoned from any non-terminal). Approval-blind.
+    /// Transition a revision's status.
+    /// States: proposed→started→done; abandoned from any non-terminal. Approval-blind.
     Status {
         /// REV reference — `REV-007` or the bare id `7`.
         reference: String,
@@ -154,9 +154,9 @@ pub(crate) enum RevisionCommand {
         command: RevisionChangeCommand,
     },
 
-    /// Record an explicit approval (`approval = approved`) on the orthogonal approval
-    /// axis — the enabling act for the apply checkpoint. `revision apply` refuses unless
-    /// approved (invoker-blind: a solo dev self-approves; ADR-009).
+    /// Approve a revision.
+    /// `revision apply` refuses unless approved (invoker-blind: a solo dev
+    /// self-approves; ADR-009).
     Approve {
         /// REV reference — `REV-007` or the bare id `7`.
         reference: String,
@@ -166,9 +166,10 @@ pub(crate) enum RevisionCommand {
         path: Option<PathBuf>,
     },
 
-    /// Apply an approved revision: auto-land its `status` rows (each via the requirement
-    /// status setter + one REC), surface introduce/create/modify/move/prose rows for
-    /// manual handling. Refused unless `approval = approved`. A pre-flight all-or-nothing
+    /// Apply an approved revision.
+    /// Auto-lands `status` rows (each via the requirement status setter + one REC),
+    /// surfaces introduce/create/modify/move/prose rows for manual handling.
+    /// Refused unless `approval = approved`. A pre-flight all-or-nothing
     /// from-guard aborts the whole apply if any target moved since the change was drafted.
     Apply {
         /// REV reference — `REV-007` or the bare id `7`.

@@ -1429,6 +1429,7 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum KnowledgeCommand {
+    /// Create a new knowledge record (assumption / decision / question / constraint).
     New {
         kind: RecordKind,
         title: Option<String>,
@@ -1437,12 +1438,14 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// List knowledge records.
     List {
         #[command(flatten)]
         list: CommonListArgs,
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Show one knowledge record.
     Show {
         id: String,
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
@@ -1452,6 +1455,7 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Set a knowledge record's status.
     Status {
         id: String,
         state: String,

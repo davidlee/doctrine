@@ -639,17 +639,28 @@ struct VerbEntry {
 }
 
 /// Truncate a description to its first sentence for the summary table.
-/// Splits on `. ` (period-space) and reappends the period. If no period-space
-/// break exists, returns the full text unchanged. Full text remains available
-/// via `doctrine <command> <verb> --help`.
+/// Splits on `. ` where the next character is uppercase or a backtick —
+/// avoids false splits on abbreviations ("e.g.", "i.e.", "§5.3").
+/// If no such break exists, returns the full text unchanged.
 fn first_sentence(about: &str) -> String {
-    if let Some(pos) = about.find(". ") {
-        let mut s = about[..=pos].to_string();
-        s.truncate(s.len() - 1); // drop trailing space, keep period
-        s
-    } else {
-        about.to_string()
+    let mut pos = 0;
+    while let Some(candidate) = about[pos..].find(". ") {
+        let abs = pos + candidate;
+        // Skip known abbreviations: "e.g. " and "i.e. "
+        if about[..abs].ends_with("e.g") || about[..abs].ends_with("i.e") {
+            pos = abs + 1; // advance past this period, keep looking
+            continue;
+        }
+        // Check the character after ". " — must start a new sentence
+        if let Some(next_char) = about[abs + 2..].chars().next()
+            && (next_char.is_ascii_uppercase() || next_char == '`')
+        {
+            // Return up to and including the period (drop the space)
+            return about[..=abs].to_string();
+        }
+        pos = abs + 1; // advance past this period, keep looking
     }
+    about.to_string()
 }
 
 /// Render the `--help --commands` table: three-column (`command | verb | description`)

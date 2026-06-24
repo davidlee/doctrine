@@ -177,6 +177,7 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum RfcCommand {
+    /// Allocate the next id and scaffold a new RFC.
     New {
         title: Option<String>,
         #[arg(long)]
@@ -184,12 +185,14 @@ pub(crate) enum RfcCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// List RFCs.
     List {
         #[command(flatten)]
         list: CommonListArgs,
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Show one RFC.
     Show {
         reference: String,
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
@@ -199,6 +202,7 @@ pub(crate) enum RfcCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Set an RFC's status.
     Status {
         id: u32,
         #[arg(long)]
