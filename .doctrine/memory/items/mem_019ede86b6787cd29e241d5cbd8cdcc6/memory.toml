@@ -44,3 +44,7 @@ weight = 0
 kind = "review"
 ref = "RV-092"
 
+[[relation]]
+label = "related"
+target = "mem_019ede92258e795383c677a2ad066b24"
+
