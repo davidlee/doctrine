@@ -31,8 +31,8 @@ label = "related"
 target = "SL-147"
 
 [[relation]]
-label = "tracked_by"
-target = "IMP-163"
+# label = "tracked_by"
+# target = "IMP-163"
 
 [[relation]]
 label = "governed_by"
