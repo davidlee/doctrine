@@ -78,11 +78,13 @@ Both renderings walk the *same* clap command tree → cannot drift from reality.
   one `render_boot_map()` behind both (D3).
 - **OQ4** *(resolved)* Flag named `--boot-map` (not `--map`) to avoid
   overloading the `map` command.
-- **OQ5** *(resolved)* D8 grouped help renders as ONE comfy-table with styled
-  family-heading rows interleaved — shared-width alignment is automatic, and
-  color paint + term_width wrap are RETAINED (not dropped). Adds a
-  `listing::render_grouped` helper. Heading-row styling confirmed at execute
-  phase 1.
+- **OQ5** *(resolved)* D8 grouped help: one underlying comfy-table (shared-width
+  alignment automatic; color + term_width wrap RETAINED) with full-width
+  **family-heading bands** injected into the line stream — distinct bg colour,
+  edge-to-edge, blank band line above/below (mirrors `search --context`). Adds
+  `listing::render_grouped`; the full-width-band primitive + row-start probe are
+  lifted from `search.rs` into shared `listing` helpers (DRY), search refactored
+  onto them behaviour-stable.
 
 ## Verification / Closure Intent
 
