@@ -47,6 +47,11 @@ web-check:
 build:
   cargo build
 
+# Shared CARGO_TARGET_DIR (~/cargo/doctrine-target-jail) can stale binary even when cargo build reports "Finished"
+rebuild-stale:
+  touch src/main.rs
+  cargo build
+
 # Catches source-filter / asset-embed gaps `cargo build` can't (it reads the real
 # web/map/dist on disk; the nix sandbox builds the frontend hermetically). Slow
 # first run, crane-cached after. Host-real; a genuine failure exits non-zero, but

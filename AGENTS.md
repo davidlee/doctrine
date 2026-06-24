@@ -1,13 +1,5 @@
 @.doctrine/state/boot.md
 If you have NOT seen `BOOT-SENTINEL: doctrine-governance-snapshot` anywhere in your context (system prompt or preceding messages), you MUST read the file referenced above now. If you HAVE seen it, you MUST NOT — the content is already in context.
-# jail
-
-if `/workspace` exists, you're in a bubblewrap jail with the system defined in flake.nix,
-including some additional readonly repos mounted ro at `/workspace` plus my ro 
-`~/.cargo/bin/doctrine` - if you need a rw doctrine use the build target.
-
-If you need something else that's missing, STOP and ask the User.
-
 # bootstrap doctrine
 
 **Start EVERY substantive task with `/route`** — it chooses the governing skill
@@ -92,7 +84,17 @@ These are the project-specific additions.)
 
 ## environment
 
-nixos; bubblewrap jails (mounted into /workspace/*).
+### jail
+
+if `/workspace` exists, you're in a nixos bubblewrap jail, defined in flake.nix,
+including some additional readonly repos mounted ro at `/workspace` plus READONLY 
+`~/.cargo/bin/doctrine` - if you need a rw doctrine use the build target.
+
+If you need something else that's missing, STOP and ask the User.
+
+Shared `CARGO_TARGET_DIR` (`/home/david/.cargo/doctrine-target-jail`) 
+-> silently stale binary 
+-> run `just rebuild-stale` -- NOT debugging the CLI
 
 - Always use READ tool *before* writing any substantial edit (e.g.
   filling a template, writing `handover.md`) to avoid expensive write
