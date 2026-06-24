@@ -1238,7 +1238,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     let (filter, format) = listing::build(args)?;
     let cm_root = root.join(CONCEPT_MAP_DIR);
     let mut metas = listing::retain(
-        meta::read_metas(&cm_root, "concept-map")?,
+        meta::read_metas(&cm_root, "concept-map", "CM")?,
         &filter,
         is_hidden,
         key,
@@ -2145,7 +2145,7 @@ mod tests {
         assert!(symlink.is_symlink());
 
         // Read back the TOML and verify Meta fields
-        let meta = meta::read_meta(&cm_root, "concept-map", 1).unwrap();
+        let meta = meta::read_meta(&cm_root, "concept-map", 1, "CM").unwrap();
         assert_eq!(meta.id, 1);
         assert_eq!(meta.slug, "test-map");
         assert_eq!(meta.title, "Test Map");

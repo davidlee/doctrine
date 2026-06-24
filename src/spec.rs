@@ -1439,7 +1439,7 @@ fn subtype_rows(
 ) -> anyhow::Result<Vec<(Meta, usize)>> {
     let tree = root.join(subtype.kind().dir);
     let mut metas = listing::retain(
-        meta::read_metas(&tree, SPEC_STEM)?,
+        meta::read_metas(&tree, SPEC_STEM, subtype.kind().prefix)?,
         filter,
         is_hidden,
         |m| key(subtype, m),
@@ -2119,7 +2119,7 @@ mod tests {
 
         // C2: the scaffolded identity toml round-trips through the SHARED reader.
         let tree = root.join(".doctrine/spec/product");
-        let m = meta::read_meta(&tree, SPEC_STEM, 1).unwrap();
+        let m = meta::read_meta(&tree, SPEC_STEM, 1, SpecSubtype::Product.kind().prefix).unwrap();
         assert_eq!(
             m,
             Meta {
