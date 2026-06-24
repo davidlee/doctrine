@@ -232,12 +232,31 @@ fn path(dir: &tempfile::TempDir) -> String {
 // ===========================================================================
 
 /// VT-1 (SL-069): sync from clean state materialises every INV-signatured
-/// shipped dir under `.doctrine/memory/shipped/`. Count is derived from the
-/// source `memory/` tree (the embed authority) — no hard-coded cardinality.
+/// shipped dir under `.doctrine/memory/shipped/`. The expected count is derived
+/// from the binary's own `--dry-run` output (the embed authority), not from the
+/// on-disk `memory/` tree — avoids the rust-embed re-embed footgun where a
+/// compile-time stale embed disagrees with the runtime filesystem.
 #[test]
 fn sync_produces_all_shipped_dirs() {
     let repo = doctrine_repo();
-    let (ok, _) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
+    let p = path(&repo);
+
+    // Dry-run first: the binary reads its embedded corpus and reports how many
+    // masters it plans to write. This IS the authoritative expected count — zero
+    // filesystem-vs-embed skew.
+    let (ok, stdout) = run(repo.path(), &["memory", "sync", "--dry-run", "-p", &p]);
+    assert!(ok, "dry-run must exit 0: {stdout}");
+    let expected_count: usize = stdout
+        .lines()
+        .find_map(|line| {
+            // Format: "[dry-run] corpus sync → …: N new, …"
+            let (prefix, _suffix) = line.split_once(" new,")?;
+            prefix.rsplit(' ').next()?.parse().ok()
+        })
+        .expect("dry-run output must contain 'N new,' count");
+
+    // Now run the real sync.
+    let (ok, _) = run(repo.path(), &["memory", "sync", "-y", "-p", &p]);
     assert!(ok, "sync must exit 0");
     let shipped = repo.path().join(".doctrine/memory/shipped");
     assert!(shipped.is_dir(), "sync must create shipped/");
@@ -256,31 +275,10 @@ fn sync_produces_all_shipped_dirs() {
         })
         .collect();
 
-    // Count expected masters from the source `memory/` tree — the embed
-    // authority. Symlinks (`mem.<key>`) are skipped; only `mem_*` dirs count.
-    let memory_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("memory");
-    let expected: Vec<_> = std::fs::read_dir(&memory_root)
-        .expect("read memory/")
-        .filter_map(|e| {
-            let e = e.ok()?;
-            let name = e.file_name().into_string().ok()?;
-            if name.starts_with("mem_") && e.file_type().ok()?.is_dir() {
-                Some(name)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    assert!(
-        !expected.is_empty(),
-        "source memory/ must have at least one master"
-    );
     assert_eq!(
         masters.len(),
-        expected.len(),
-        "sync must materialise every source master ({}), got {}: {masters:?}",
-        expected.len(),
+        expected_count,
+        "sync must write exactly what dry-run promised ({expected_count}), got {}: {masters:?}",
         masters.len()
     );
 }
