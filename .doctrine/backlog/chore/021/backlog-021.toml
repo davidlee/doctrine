@@ -5,10 +5,10 @@ id = 21
 slug = "audit-and-improve-shipped-memory-corpus-currency-completeness-onboarding-cross-linking"
 title = "Audit and improve shipped memory corpus (currency, completeness, onboarding, cross-linking)"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-22"
-updated = "2026-06-22"
+updated = "2026-06-24"
 tags = ["memory", "shipped-memory", "audit", "onboarding", "documentation"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
