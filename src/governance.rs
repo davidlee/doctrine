@@ -24,6 +24,7 @@ use anyhow::Context;
 
 use serde::Serialize;
 
+use crate::dtoml;
 use crate::entity::{self, Inputs, Kind, MaterialiseRequest};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
@@ -68,7 +69,7 @@ pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow:
     let (filter, format) = listing::build(args)?;
     let gov_root = root.join(g.kind.dir);
     let mut metas = listing::retain(
-        meta::read_metas(&gov_root, g.kind.stem)?,
+        meta::read_metas(&gov_root, g.kind.stem, g.kind.prefix)?,
         &filter,
         g.hidden,
         |m| key(g, m),
@@ -217,7 +218,7 @@ fn read_doc(g: &GovKind, root: &Path, id: u32) -> anyhow::Result<(Doc, String, S
             toml_path.display()
         )
     })?;
-    let doc: Doc = toml::from_str(&text)
+    let doc: Doc = dtoml::parse_entity_toml(&text, g.kind.prefix, id)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
     let md_path = entity::id_path(root, &g.kind, id, entity::Ext::Md);
     let body = fs::read_to_string(&md_path)
@@ -1173,7 +1174,7 @@ mod tests {
 
         // read_metas reads the stem faithfully (the reader round-trip, VT-3); the
         // spine owns the sort/filter, so sort the read set here to pin id 1's fields.
-        let mut all = meta::read_metas(&adr, "adr").unwrap();
+        let mut all = meta::read_metas(&adr, "adr", "ADR").unwrap();
         all.sort_by_key(|m| m.id);
         assert_eq!(all.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1, 2]);
         assert_eq!(
@@ -1227,7 +1228,10 @@ mod tests {
         .unwrap();
 
         // re-read through the shared reader: the authored status flipped.
-        assert_eq!(meta::read_meta(&adr, "adr", 1).unwrap().status, "accepted");
+        assert_eq!(
+            meta::read_meta(&adr, "adr", 1, "ADR").unwrap().status,
+            "accepted"
+        );
 
         let body = fs::read_to_string(adr.join("001/adr-001.toml")).unwrap();
         // `updated` bumped to the injected date; `created` (the seed) untouched.
