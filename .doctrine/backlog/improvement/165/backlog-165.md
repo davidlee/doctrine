@@ -41,15 +41,23 @@ existing pure `backlinks_index` machinery in `src/links.rs`.
 per-memory queries. The index is pure and fast: it builds `BTreeMap<String,
 BTreeSet<String>>` mapping target uid/key → set of source uids.
 
-Corpus-wide application:
-1. Collect all memories (`collect_all` already called by `filtered_list`)
+Corpus-wide application (precompute pattern — build once, filter O(1)):
+1. Collect all memories via `collect_all` (TOML-only, no body reads — cheap)
 2. Build `known_uids` + `key_to_uid` maps
-3. Build the wikilink and relation storage (same shape as `backlink_rows_for`
-   does for one memory, but corpus-wide)
-4. Compute `backlinks_index`
-5. For each memory, count outbound (from `Memory.relations` + body wikilinks)
-   and inbound (from the backlinks index, resolved through key→uid)
-6. Retain only those with both counts = 0
+3. Build the full backlinks index (one pass over all memories, reads all bodies)
+4. Precompute `has_outbound: BTreeSet<String>` — uids with relations OR body
+   wikilinks (one pass, reads all bodies)
+5. For each filtered row, two O(1) set lookups: `!has_outbound.contains(uid)
+   && no backlinks entry`. No per-row body reads.
+
+**Performance**: O(n) body reads total (step 3 + 4), O(1) per-row filter
+(step 5). The original sketch had the backlinks index rebuilt inside `retain`
+→ O(n²) — fixed here.
+
+**Double `collect_all`**: `filtered_list` already calls `collect_all`
+internally. The orphan path calls it again for the index build. Accepted for
+now — `collect_all` is TOML-parse-only (no body reads), fast enough. Future
+cleanup could refactor `filtered_list` to accept a pre-collected `&[Memory]`.
 
 ### Edge cases
 
@@ -118,7 +126,7 @@ pub(crate) fn run_list(
 }
 ```
 
-### 3. Add orphan filter in `list_rows`
+### 3. Add orphan filter in `list_rows` — precompute, then inline closure
 
 `list_rows` (~line 2730) currently:
 
@@ -137,8 +145,9 @@ pub(crate) fn list_rows(
 }
 ```
 
-Add an `orphans: bool` parameter. When true, call a new pure function
-`is_orphan` on each row:
+Add `orphans: bool`. When true, build the backlinks index + outbound set **once**
+before the filter, then use an inline closure with O(1) set lookups. No
+standalone `is_orphan` function — the signature would invite O(n²) misuse:
 
 ```rust
 pub(crate) fn list_rows(
@@ -153,52 +162,47 @@ pub(crate) fn list_rows(
     let (filter, format) = listing::build(args)?;
     let mut rows = filtered_list(root, type_f, &filter)?;
 
-    // NEW: post-filter to orphans
     if orphans {
         let all = collect_all(root)?;
-        rows.retain(|m| is_orphan(m, &all, root));
+        let (known_uids, key_to_uid) = known_link_maps(&all);
+        let backlinks = backlinks_index_for_all(&all, root, &known_uids, &key_to_uid);
+
+        // Precompute: which uids have ANY outbound (relations OR body wikilinks)
+        let has_outbound: BTreeSet<String> = all
+            .iter()
+            .filter(|m| {
+                !m.relations.is_empty()
+                    || !extract_wikilinks(&read_body(root, &m.uid)).is_empty()
+            })
+            .map(|m| m.uid.clone())
+            .collect();
+
+        rows.retain(|m| {
+            let no_outbound = !has_outbound.contains(&m.uid);
+            let no_inbound = backlinks.get(&m.uid).map_or(true, BTreeSet::is_empty)
+                && m.key.as_ref().map_or(true, |key| {
+                    backlinks.get(key).map_or(true, BTreeSet::is_empty)
+                });
+            no_outbound && no_inbound
+        });
     }
 
     match format { /* ... render unchanged ... */ }
 }
 ```
 
-### 4. New pure function `is_orphan`
+**Design decision**: no standalone `is_orphan(memory, all, root)` function.
+The signature invites the O(n²) mistake (rebuilding the index per row). The
+inline closure captures the precomputed structures, making the correct pattern
+the only pattern.
 
-```rust
-/// Returns true if `memory` has zero inbound backlinks AND zero outbound
-/// relations/wikilinks — a true orphan in the memory graph.
-fn is_orphan(memory: &Memory, all: &[Memory], root: &Path) -> bool {
-    // --- outbound: authored relations ---
-    let has_relations = !memory.relations.is_empty();
-
-    // --- outbound: body wikilinks ---
-    let body = read_body(root, &memory.uid);
-    let has_wikilinks = !extract_wikilinks(&body).is_empty();
-
-    // --- inbound: backlinks index ---
-    let (known_uids, key_to_uid) = known_link_maps(all);
-    let backlinks_index = backlinks_index_for_all(all, root, &known_uids, &key_to_uid);
-
-    let has_backlinks = backlinks_index
-        .get(&memory.uid)
-        .map(|s| !s.is_empty())
-        .unwrap_or(false)
-        || memory.key.as_ref().map_or(false, |key| {
-            backlinks_index
-                .get(key)
-                .map(|s| !s.is_empty())
-                .unwrap_or(false)
-        });
-
-    !has_relations && !has_wikilinks && !has_backlinks
-}
-```
-
-### 5. New helper: `backlinks_index_for_all` (corpus-wide)
+### 4. New helper: `backlinks_index_for_all` (corpus-wide)
 
 Extract the body-scanning loop from `backlink_rows_for` into a reusable
-corpus-wide function:
+corpus-wide function. **Write the refactor gate test first** (test 5 below)
+then extract — existing `backlink_rows_for` delegates to the new function.
+Behaviour-preserving: existing `memory show` and MCP `memory_show` tests
+must stay green unchanged.
 
 ```rust
 /// Build the full backlinks index for all memories in `all`. Returns a map from
@@ -249,7 +253,7 @@ Then `backlink_rows_for` can be refactored to call `backlinks_index_for_all`
 (DRY) — currently it duplicates the same loop. This is a behaviour-preserving
 refactor of existing code; existing tests must stay green.
 
-### 6. Wire dispatch
+### 5. Wire dispatch
 
 In the `dispatch` match arm (~line 528):
 
@@ -268,30 +272,32 @@ MemoryCommand::List {
 ),
 ```
 
-### 7. Update callers of `run_list`
+### 6. Update callers of `run_list`
 
 Check for any other call sites of `run_list` (e.g., MCP handler, boot path) —
 add `orphans: false` to each.
 
-### 8. Gate check
+### 7. Gate check
 
 Callsites in `src/commands/guard.rs` — the `MemoryCommand::List` pattern match
 needs the new field destructured (or `..` catch-all).
 
-### Tests (TDD)
+### Tests (TDD — write in this order)
 
-1. `test_orphans_flag_returns_true_orphans`: seed 4 memories — A links to B, B
+1. `test_backlinks_index_for_all_matches_per_memory` (**refactor gate, write
+   first**): the new corpus-wide function produces the same backlinks as
+   calling the existing `backlink_rows_for` for each memory individually.
+   Seed 3 memories with wikilinks + relations, compare the two paths.
+   Red → extract → green → refactor `backlink_rows_for` to delegate.
+2. `test_orphans_flag_returns_true_orphans`: seed 4 memories — A links to B, B
    links to C (via wikilink), D is fully isolated. `list --orphans` returns
    only D.
-2. `test_orphans_flag_with_type_filter`: seed orphan fact + orphan pattern;
+3. `test_orphans_flag_with_type_filter`: seed orphan fact + orphan pattern;
    `list --orphans --type pattern` returns only the pattern.
-3. `test_orphans_flag_key_resolved_backlinks`: A has key `mem.foo.bar`, B has
+4. `test_orphans_flag_key_resolved_backlinks`: A has key `mem.foo.bar`, B has
    wikilink `[[mem.foo.bar]]`. A is NOT an orphan (has inbound via key
    resolution).
-4. `test_orphans_flag_empty_corpus`: no memories, no panic, empty output.
-5. `test_backlinks_index_for_all_matches_per_memory`: the new corpus-wide
-   function produces the same backlinks as calling `backlink_rows_for` for each
-   memory individually (refactor gate).
+5. `test_orphans_flag_empty_corpus`: no memories, no panic, empty output.
 
 ## References
 
