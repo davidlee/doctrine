@@ -22,7 +22,7 @@
 //! suppression has retired itself, as designed (`mem.pattern.lint.
 //! dead-code-expect-vs-cfg-test`).
 
-use crate::entity;
+use crate::{entity, kinds};
 
 /// How a node's authored status classifies for default-active work selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,7 +56,7 @@ struct KindPartition {
 const PARTITION: &[KindPartition] = &[
     // slice — ADR-009 lifecycle vocabulary (stringly status, no closed enum).
     KindPartition {
-        prefix: "SL",
+        prefix: kinds::SL,
         workable: &[
             "proposed",
             "design",
@@ -70,69 +70,69 @@ const PARTITION: &[KindPartition] = &[
     },
     // ADR
     KindPartition {
-        prefix: "ADR",
+        prefix: kinds::ADR,
         workable: &["proposed"],
         terminal: &["accepted", "rejected", "superseded", "deprecated"],
     },
     // policy
     KindPartition {
-        prefix: "POL",
+        prefix: kinds::POL,
         workable: &["draft"],
         terminal: &["required", "superseded", "deprecated", "retired"],
     },
     // standard
     KindPartition {
-        prefix: "STD",
+        prefix: kinds::STD,
         workable: &["draft"],
         terminal: &["default", "required", "superseded", "deprecated", "retired"],
     },
     // PRD (product spec)
     KindPartition {
-        prefix: "PRD",
+        prefix: kinds::PRD,
         workable: &["draft"],
         terminal: &["active", "deprecated", "superseded"],
     },
     // tech spec
     KindPartition {
-        prefix: "SPEC",
+        prefix: kinds::SPEC,
         workable: &["draft"],
         terminal: &["active", "deprecated", "superseded"],
     },
     // requirement
     KindPartition {
-        prefix: "REQ",
+        prefix: kinds::REQ,
         workable: &["pending", "in-progress"],
         terminal: &["active", "deprecated", "retired", "superseded"],
     },
     // backlog ×5 — one generic vocabulary; `promoted` resolution handled in channels.
     KindPartition {
-        prefix: "ISS",
+        prefix: kinds::ISS,
         workable: BACKLOG_WORKABLE,
         terminal: BACKLOG_TERMINAL,
     },
     KindPartition {
-        prefix: "IMP",
+        prefix: kinds::IMP,
         workable: BACKLOG_WORKABLE,
         terminal: BACKLOG_TERMINAL,
     },
     KindPartition {
-        prefix: "CHR",
+        prefix: kinds::CHR,
         workable: BACKLOG_WORKABLE,
         terminal: BACKLOG_TERMINAL,
     },
     KindPartition {
-        prefix: "RSK",
+        prefix: kinds::RSK,
         workable: BACKLOG_WORKABLE,
         terminal: BACKLOG_TERMINAL,
     },
     KindPartition {
-        prefix: "IDE",
+        prefix: kinds::IDE,
         workable: BACKLOG_WORKABLE,
         terminal: BACKLOG_TERMINAL,
     },
     // RV (review) — DERIVED active/done (NodeAttr already carries the derived string).
     KindPartition {
-        prefix: "RV",
+        prefix: kinds::RV,
         workable: &["active"],
         terminal: &["done"],
     },
@@ -143,7 +143,7 @@ const PARTITION: &[KindPartition] = &[
     // the IDE-010 payoff. The terminal set reads REV's real vocab via the
     // `crate::revision::REV_STATUSES`-bound canary (`revision_partition_covers_the_real_vocabulary`).
     KindPartition {
-        prefix: "REV",
+        prefix: kinds::REV,
         workable: &["proposed", "started"],
         terminal: &["done", "abandoned"],
     },
@@ -154,22 +154,22 @@ const PARTITION: &[KindPartition] = &[
     // reads the REAL `knowledge::*_STATUSES` const, so the VT-1 canary fails if a
     // kind adds a status the table forgot. Direct gating is IMP-047 (out of scope).
     KindPartition {
-        prefix: "ASM",
+        prefix: kinds::ASM,
         workable: &[],
         terminal: crate::knowledge::ASSUMPTION_STATUSES,
     },
     KindPartition {
-        prefix: "DEC",
+        prefix: kinds::DEC,
         workable: &[],
         terminal: crate::knowledge::DECISION_STATUSES,
     },
     KindPartition {
-        prefix: "QUE",
+        prefix: kinds::QUE,
         workable: &[],
         terminal: crate::knowledge::QUESTION_STATUSES,
     },
     KindPartition {
-        prefix: "CON",
+        prefix: kinds::CON,
         workable: &[],
         terminal: crate::knowledge::CONSTRAINT_STATUSES,
     },
