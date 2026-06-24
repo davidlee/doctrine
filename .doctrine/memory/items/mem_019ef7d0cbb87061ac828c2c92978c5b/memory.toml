@@ -1,0 +1,43 @@
+memory_uid = "mem_019ef7d0cbb87061ac828c2c92978c5b"
+memory_key = "mem.pattern.doctrine.jail-reservation-fallback"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Jail id reservation needs DOCTRINE_RESERVATION_FALLBACK"
+summary = "In the jail, entity-creating doctrine commands need DOCTRINE_RESERVATION_FALLBACK=1 (remote reservation unreachable, ssh disabled)"
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine slice new", "doctrine adr new", "doctrine backlog new", "doctrine memory record", "doctrine spec new"]
+tags = ["jail", "reservation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "dd9c0125a4a2cf993a6ba0947cf18314a79ee0cd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1e8b48ef6ac8191a15037e99db8ee106f1f8dcb146461f9d3f28ceed47cf9956"
+base_commit = "439cfd9b9ebcbc0bdde5faf6e3cdb02eecf15cc8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
