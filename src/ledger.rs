@@ -27,6 +27,8 @@ use std::path::{Path, PathBuf};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::boundary::BoundaryRow;
+
 // --- pure read model ---------------------------------------------------------
 
 /// Lifecycle status shared by a journal CAS row and an orthogonal-projection
@@ -76,19 +78,6 @@ pub(crate) struct JournalRow {
 pub(crate) struct Boundaries {
     #[serde(default, rename = "boundary")]
     pub rows: Vec<BoundaryRow>,
-}
-
-/// One phase's code boundary (design §4.3): `code_end_oid` is the worker code
-/// commit *before* the knowledge record commit; an empty-code phase has
-/// `code_start_oid == code_end_oid`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct BoundaryRow {
-    /// The `PHASE-NN` id this boundary belongs to.
-    pub phase: String,
-    /// HEAD before the phase's code landed.
-    pub code_start_oid: String,
-    /// The phase's cumulative code tip (pre-knowledge-record).
-    pub code_end_oid: String,
 }
 
 /// `orthogonal.toml` — entities projected ahead of the impl bundle (design
@@ -552,7 +541,14 @@ pub(crate) fn read_orthogonal(root: &Path, slice: u32) -> anyhow::Result<Orthogo
 pub(crate) fn record_boundary(root: &Path, slice: u32, row: BoundaryRow) -> anyhow::Result<()> {
     let path = dispatch_dir(root, slice).join("boundaries.toml");
     let mut manifest: Boundaries = load(&path)?;
-    manifest.rows.push(row);
+    // UPSERT by phase — a funnel retry that re-records the same phase REPLACES
+    // its row, never appends a duplicate (a duplicate phase is a double
+    // phase-cut for prepare-review). Mirrors the journal manifest and the
+    // neutral registry (`state::record_source_delta`).
+    match manifest.rows.iter_mut().find(|r| r.phase == row.phase) {
+        Some(existing) => *existing = row,
+        None => manifest.rows.push(row),
+    }
     store(&path, &manifest)
 }
 
@@ -728,6 +724,49 @@ mod tests {
         assert_eq!(orthogonal.rows[0].status, LedgerStatus::Verified);
         // The untouched journal manifest is still an absent-file empty default.
         assert_eq!(read_journal(root, slice).unwrap(), Journal::default());
+    }
+
+    #[test]
+    fn record_boundary_upserts_by_phase_never_duplicates() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let slice = 64;
+
+        // Re-recording the same phase (e.g. a funnel retry) must REPLACE its row,
+        // never append a duplicate — mirrors the journal upsert and the neutral
+        // registry (`state::record_source_delta`). A duplicate phase row is a
+        // double phase-cut for prepare-review.
+        record_boundary(
+            root,
+            slice,
+            BoundaryRow {
+                phase: "PHASE-04".into(),
+                code_start_oid: "a".into(),
+                code_end_oid: "b".into(),
+            },
+        )
+        .expect("record boundary 1");
+        record_boundary(
+            root,
+            slice,
+            BoundaryRow {
+                phase: "PHASE-04".into(),
+                code_start_oid: "a".into(),
+                code_end_oid: "c".into(),
+            },
+        )
+        .expect("record boundary 2 (same phase)");
+
+        let boundaries = read_boundaries(root, slice).unwrap();
+        assert_eq!(
+            boundaries.rows.len(),
+            1,
+            "same-phase re-record upserts, never duplicates"
+        );
+        assert_eq!(
+            boundaries.rows[0].code_end_oid, "c",
+            "the upsert replaces with the latest row"
+        );
     }
 
     // --- candidate ledger (SL-068 PHASE-01) --------------------------------

@@ -66,9 +66,10 @@ single tribunal.
    explicit about what is arraigned (the slice, phase, backlog item, design,
    plan, diff). If ambiguous, demand clarification before proceeding. Then open
    the ledger against it: a single-facet RV (the aspect under trial), stamped
-   `--raiser inquisitor`, then primed — seed the git-changed candidates, curate
-   the `domain_map` of areas and invariants the heretic shall answer for, and
-   inscribe the **lines of interrogation** into the ledger's `## Brief`: the
+   `--raiser inquisitor`, then primed — `doctrine review prime` warms the cache
+   from the target slice's selectors (the path-set the staleness signal hashes;
+   the hand-curated `domain_map` was retired in SL-147) — and inscribe the
+   **lines of interrogation** into the ledger's `## Brief`: the
    questions this Inquisition presses and the doctrine it holds the accused to.
    (Verbs and flags: `review-ledger.md` §1–§2.)
 

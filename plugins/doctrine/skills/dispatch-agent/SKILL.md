@@ -65,7 +65,11 @@ prompt: <pre-distilled worker prompt, including the base-guard block above>
 ## Boundary recording
 After the batch's code commit and before the knowledge commit:
 `doctrine dispatch record-boundary --slice <N> --phase PHASE-NN --code-start <B> --code-end <B+1>`.
-Claude-arm-only (no fork branch); skip on codex/pi.
+Claude-arm-only (no fork branch); skip on codex/pi. **One call double-writes both
+registries** (dispatch.rs): the committed `phase/<N>` ref-cut **and** the
+primary-tree conformance registry (F-6 guard, upsert by phase). So the claude arm
+needs **no** separate `slice record-delta` — that funnel beat (router step 8) is
+the codex/pi path; `record-delta` also stays the manual escape hatch on any arm.
 
 ## Red Flags
 **Never:** point `dispatch setup --dir` at an outside-root sibling on the claude

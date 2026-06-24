@@ -42,7 +42,13 @@ Capture `B = git rev-parse HEAD` pre-spawn. After workers return, in exact order
 5. Verify — run project verify; if RED, isolate offender per delta
 6. Branch-point guard — coordination HEAD still `B`?
 7. Commit — ONE commit on coordination branch
-8. Record — knowledge trails the confirmed commit
+8. Record — knowledge trails the confirmed commit, **and the per-phase `B→B+1`
+   boundary lands in the primary-tree conformance registry** (F-5 resolves it from
+   the coord tree; F-6 guard; upsert by phase) — by arm:
+   - **claude** — `dispatch record-boundary` already double-writes it (+ the
+     `phase/<N>` ref-cut); no separate call (`/dispatch-agent`).
+   - **codex/pi** — `doctrine slice record-delta <SL> PHASE-NN --start <B> --end
+     <B+1>` (no `record-boundary` on this arm; `/dispatch-subprocess`).
 **Report-and-halt** on conflict, moved HEAD, or authored-tree touch — never auto-resolve.
 
 ## Handover cadence

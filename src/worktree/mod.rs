@@ -56,14 +56,15 @@ pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land};
 #[cfg(test)]
 pub(crate) use subagent::{
     Stamp, StampRefusal, WorkerVerify, WorkerVerifyRefusal, classify_stamp, classify_worker_verify,
-    primary_worktree,
 };
 
 #[cfg(test)]
 mod test_helpers;
 
 #[cfg(test)]
-pub(crate) use allowlist::{DERIVED_RUNTIME, WITHHELD, glob_matches};
+pub(crate) use crate::globmatch::glob_matches;
+#[cfg(test)]
+pub(crate) use allowlist::{DERIVED_RUNTIME, WITHHELD};
 
 // ---------------------------------------------------------------------------
 // CLI enum & dispatch (PHASE-03 relocation from main.rs)
@@ -708,12 +709,12 @@ mod tests {
         let fork = fs::canonicalize(&fork).unwrap();
 
         assert_eq!(
-            primary_worktree(&fork).unwrap(),
+            crate::git::primary_worktree(&fork).unwrap(),
             primary,
             "a linked worktree resolves to the main tree"
         );
         assert_eq!(
-            primary_worktree(&primary).unwrap(),
+            crate::git::primary_worktree(&primary).unwrap(),
             primary,
             "the main tree resolves to itself"
         );

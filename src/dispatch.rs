@@ -542,15 +542,22 @@ pub(crate) fn run_record_boundary(
         resolve_commit(&root, refish)?
             .with_context(|| format!("record-boundary: {refish} does not resolve to a commit"))
     };
-    crate::ledger::record_boundary(
-        &root,
-        slice,
-        crate::ledger::BoundaryRow {
-            phase: phase.to_string(),
-            code_start_oid: resolve(code_start)?,
-            code_end_oid: resolve(code_end)?,
-        },
-    )
+    let row = crate::boundary::BoundaryRow {
+        phase: phase.to_string(),
+        code_start_oid: resolve(code_start)?,
+        code_end_oid: resolve(code_end)?,
+    };
+    // (1) The committed claude-arm ledger (`.doctrine/dispatch/<N>/boundaries.toml`)
+    // — UNCHANGED, the phase-cut input prepare-review tree-reads.
+    crate::ledger::record_boundary(&root, slice, row.clone())?;
+    // (2) ALONGSIDE it (SL-147 PHASE-04, T3): the arm-NEUTRAL recorded source-delta
+    // registry. The funnel runs this same `record-boundary` beat for BOTH arms with
+    // the per-phase coordination boundary (B → B+1), so this is the funnel's
+    // mutually-exclusive counterpart to the solo binding — never both for one phase.
+    // It resolves its one shared file against the PRIMARY tree (so a coordination
+    // worktree still writes the row the integrator reads) and applies the F-6 guard
+    // + upsert. It does NOT touch the committed ledger above.
+    crate::state::record_source_delta(&root, slice, row)
 }
 
 /// CLI entry — `doctrine dispatch refresh-base --slice N` (SL-127 §3.2). Advance

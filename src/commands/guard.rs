@@ -79,9 +79,11 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::slice::SliceCommand::Phases { .. } => Write("slice phases"),
             crate::slice::SliceCommand::Notes { .. } => Write("slice notes"),
             crate::slice::SliceCommand::Phase { .. } => Write("slice phase"),
+            crate::slice::SliceCommand::RecordDelta { .. } => Write("slice record-delta"),
             crate::slice::SliceCommand::Status { .. } => Write("slice status"),
             crate::slice::SliceCommand::List { .. }
             | crate::slice::SliceCommand::Show { .. }
+            | crate::slice::SliceCommand::Conformance { .. }
             | crate::slice::SliceCommand::Paths { .. } => Read,
             crate::slice::SliceCommand::Selector { .. } => Write("slice selector"),
         },

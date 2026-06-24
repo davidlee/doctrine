@@ -24,7 +24,7 @@ fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
             name: "review_new".to_owned(),
-            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge. Start of the adversarial review protocol — next: `review_prime` (seed → curate → prime) to warm the context cache, then `review_raise` to add findings. Review verbs refuse worktree/fork-resolved roots — drive from the main tree.\n\nReturns: {\"Created\": { id: int, canonical: \"RV-NNN\", dir: string }}".to_owned(),
+            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge. Start of the adversarial review protocol — next: `review_prime` (derive the context cache from the target slice's selectors), then `review_raise` to add findings. Review verbs refuse worktree/fork-resolved roots — drive from the main tree.\n\nReturns: {\"Created\": { id: int, canonical: \"RV-NNN\", dir: string }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -180,13 +180,11 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_prime".to_owned(),
-            description: "Populate the reviewer-context warm-cache from a curated domain_map, or (--seed) emit git-changed candidate paths. Normal prime persists the domain_map and returns `{\"Primed\": { canonical: \"RV-NNN\", tracked_paths: [string], areas_count: int, tracked_count: int, invariants_count: int, risks_count: int }}`; `--seed` emits git-changed candidates (write-nothing) with the same shape; `tracked_count` reflects the git-changed path count, `areas_count`/`invariants_count`/`risks_count` are zero.".to_owned(),
+            description: "Populate the reviewer-context warm-cache from the target slice's selectors (the path-set the staleness signal hashes). The RV's `[target].ref` must be a slice reference; the slice must declare at least one `[[selector]]` (else this errors). Each selector is resolved to concrete files — a literal path as-is, a glob expanded against the tracked file set — then hashed. Returns `{\"Primed\": { canonical: \"RV-NNN\", tracked_paths: [string], tracked_count: int }}`.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
-                    "seed": { "type": "boolean", "description": "Emit git-changed candidate paths (a starting point, not authority) and exit instead of priming — response carries only `canonical` + `tracked_paths`, `tracked_count` reflects git-changed path count; other count fields zero" },
-                    "from": { "type": "string", "description": "Read the curated domain_map from a file (default: stdin)" }
+                    "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" }
                 },
                 "required": ["reference"]
             }),

@@ -541,6 +541,26 @@ pub(crate) fn git_text(root: &Path, args: &[&str]) -> Result<String, CaptureErro
     Ok(text.trim().to_string())
 }
 
+/// The repo's PRIMARY (main) worktree root, as git reports it: the FIRST
+/// `worktree <path>` entry of `git worktree list --porcelain`, run against any
+/// path in the repo. Correct across ordinary, separate-git-dir, and submodule
+/// layouts (unlike `parent(--git-common-dir)`). Used as the stamp provision SOURCE
+/// so it is independent of the process cwd — the `SubagentStart` hook fires inside
+/// the worker worktree, which must never be the source (ISS-011 Defect C) — and by
+/// the recorded source-delta registry (SL-147), which resolves its one shared file
+/// against the primary tree from any linked worktree. Pure `git worktree list`
+/// query — a clean `leaf` fit (depends only on `git_text` + `fs`). Impure (git
+/// read). Bare repos (no main worktree) are out of scope for dispatch.
+pub(crate) fn primary_worktree(cwd: &Path) -> anyhow::Result<PathBuf> {
+    let listing = git_text(cwd, &["worktree", "list", "--porcelain"])?;
+    let first = listing
+        .lines()
+        .find_map(|l| l.strip_prefix("worktree "))
+        .ok_or_else(|| anyhow::anyhow!("no main worktree for {}", cwd.display()))?;
+    std::fs::canonicalize(first)
+        .map_err(|e| anyhow::anyhow!("canonicalize primary worktree {first}: {e}"))
+}
+
 /// Run a git command that may legitimately fail; `None` on non-zero exit.
 /// `pub(crate)` for the worktree fork verb's "is `<B>` a commit?" probe
 /// (`rev-parse --verify --quiet <B>^{commit}`, SL-056 PHASE-06).
@@ -961,6 +981,18 @@ pub(crate) fn replay_ref(
 pub(crate) fn resolve_ref(root: &Path, refish: &str) -> Result<Option<String>, CaptureError> {
     let spec = format!("{refish}^{{commit}}");
     git_opt(root, &["rev-parse", "--verify", "--quiet", &spec])
+}
+
+/// The short symbolic name of the branch HEAD is on (e.g. `dispatch/147`), or
+/// `Ok(None)` when HEAD is detached or unborn. Via `symbolic-ref --quiet --short
+/// HEAD`: `git_opt`'s success/None fold maps a detached HEAD (non-zero exit) to
+/// `None`, distinct from a git/spawn failure (a hard error). Used by the solo
+/// phase-binding arm guard (SL-147): the binding skips its capture when the
+/// current branch is the doctrine-owned `dispatch/<slice>` coordination branch —
+/// keying on the branch, NOT on "is a linked worktree" (a solo `/worktree` fork
+/// must still capture) and NOT on any host commit convention (POL-002).
+pub(crate) fn current_branch(root: &Path) -> Result<Option<String>, CaptureError> {
+    git_opt(root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
 }
 
 /// True iff `ancestor` is an ancestor of (or equal to) `descendant`, via

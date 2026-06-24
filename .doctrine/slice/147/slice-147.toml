@@ -32,6 +32,46 @@ label = "references"
 role = "concerns"
 target = "ADR-007"
 
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+note = "D7 declared module surface"
+
+[[selector]]
+selector = "src/review.rs"
+intent = "design-target"
+note = "D7 declared module surface"
+
+[[selector]]
+selector = "src/state.rs"
+intent = "design-target"
+note = "D7 declared module surface"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "design-target"
+note = "D7 declared module surface"
+
+[[selector]]
+selector = "src/conformance.rs"
+intent = "design-target"
+note = "D7 declared module surface"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+note = "D7 declared module surface"
+
+[[selector]]
+selector = "src/commands/**"
+intent = "design-target"
+note = "D7 declared module surface"
+
+[[selector]]
+selector = "src/**"
+intent = "scope-relevant"
+note = "RFC-004 conformance prototype"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
