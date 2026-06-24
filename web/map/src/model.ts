@@ -180,6 +180,13 @@ export function normalizeGraph(raw: RawGraph): void {
     let label = '';
     if (edge.label.Validated !== undefined) {
       label = pascalToSnake(edge.label.Validated);
+      // A `references` edge carries an intent role (SL-149); fold it into the label
+      // as `references(<role>)` for CLI parity. Edge colour and the static legend
+      // key on the bare relation type — `references` is absent from both, so the
+      // composed label degrades identically to the bare label (grey, undimmed).
+      if (edge.role !== undefined && edge.role !== '') {
+        label = `${label}(${pascalToSnake(edge.role)})`;
+      }
     } else if (edge.label.Raw !== undefined) {
       label = edge.label.Raw;
     }

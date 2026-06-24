@@ -15,6 +15,9 @@ export interface RawCatalogNode {
 export interface RawEdge {
   source: string;
   label: { Validated?: string; Raw?: string };
+  // Intent role refining a `references` edge (SL-149); PascalCase, absent on every
+  // label-only edge. Folded into the rendered label as `references(<role>)`.
+  role?: string;
   target: { Resolved?: string } | null;
 }
 

@@ -353,6 +353,47 @@ describe('normalizeGraph', () => {
     expect(state.graph.edges.map((e) => e.label)).toEqual(['owning_slice']);
   });
 
+  it('folds the references role into the label as references(role)', () => {
+    const raw: RawGraph = {
+      nodes: {
+        'SL-001': makeRawNode(),
+        'REQ-005': makeRawNode(),
+      },
+      edges: [
+        {
+          source: 'SL-001',
+          label: { Validated: 'References' },
+          role: 'Implements',
+          target: { Resolved: 'REQ-005' },
+        },
+      ],
+    };
+
+    normalizeGraph(raw);
+
+    expect(state.graph.edges.map((e) => e.label)).toEqual(['references(implements)']);
+  });
+
+  it('leaves a label-only edge bare when no role is present', () => {
+    const raw: RawGraph = {
+      nodes: {
+        'SL-001': makeRawNode(),
+        'SL-002': makeRawNode(),
+      },
+      edges: [
+        {
+          source: 'SL-001',
+          label: { Validated: 'Supersedes' },
+          target: { Resolved: 'SL-002' },
+        },
+      ],
+    };
+
+    normalizeGraph(raw);
+
+    expect(state.graph.edges.map((e) => e.label)).toEqual(['supersedes']);
+  });
+
   it('uses Raw edge labels as-is', () => {
     const raw: RawGraph = {
       nodes: {
