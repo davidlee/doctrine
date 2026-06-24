@@ -1,7 +1,7 @@
 id = 151
 slug = "toml-section-contiguity-validation"
 title = "Non-contiguous TOML sections cause opaque parse failures"
-status = "proposed"
+status = "design"
 created = "2026-06-24"
 updated = "2026-06-24"
 tags = ["area:cli", "area:governance", "correctness", "quality"]
@@ -17,6 +17,10 @@ target = "ISS-049"
 [[relation]]
 label = "governed_by"
 target = "ADR-006"
+
+[estimate]
+lower = 3.0
+upper = 5.0
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
