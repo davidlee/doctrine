@@ -875,6 +875,7 @@ pub(crate) fn commit_tree_merge(
 }
 
 /// Outcome of a compare-and-swap ref update ([`update_ref_cas`]).
+#[derive(Debug)]
 pub(crate) enum RefCas {
     /// The ref equalled `expected_old` and was advanced to the new oid.
     Updated,
@@ -1656,6 +1657,313 @@ pub(crate) fn head_sha(root: &Path) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
+// Remote ref ops (SL-148 PHASE-02) — CAS push by oid, refspec fetch, and ref
+// enumeration. The CAS-vs-transport classification is machine-stable from
+// `git push --porcelain` (parsed from STDOUT, never English-stderr matching):
+// only the explicit lease/create-CAS rejection ⇒ [`RefCas::Moved`]; every other
+// remote refusal (auth/hook/namespace-policy) and every transport fatal ⇒ a hard
+// [`CaptureError`] surfacing the remote reason — never a silent retry, never
+// `Moved` (design F-9/F-10, EX-1/EX-2). The shell-out is behind a [`PushRunner`]
+// seam so the classifier is unit-testable against canned porcelain WITHOUT a real
+// remote (mirrors lazyspec's `MockGitRefClient`; design EX-3).
+// ---------------------------------------------------------------------------
+
+/// One parsed row of [`for_each_ref`] — a reservation namespace ref with the
+/// metadata the `GitRef` backend (PHASE-03) reads back: the full `refname`, its tip
+/// `oid`, the commit `author`, ISO-8601 `date`, and one-line `msg` (design EX-3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RefRow {
+    /// Full ref name, e.g. `refs/doctrine/reserve/IMP-001`.
+    pub(crate) refname: String,
+    /// The ref's tip commit oid.
+    pub(crate) oid: String,
+    /// Commit author name.
+    pub(crate) author: String,
+    /// Author date, strict ISO-8601 (`%(authordate:iso-strict)`).
+    pub(crate) date: String,
+    /// Commit subject (one line).
+    pub(crate) msg: String,
+}
+
+/// The shell-out seam for the porcelain CAS push (design EX-3). The production
+/// runner ([`GitPushRunner`]) shells the push through the one [`NORMATIVE_FLAGS`]
+/// chokepoint; tests inject a canned [`std::process::Output`] so the porcelain
+/// classifier ([`classify_push_porcelain`]) is exercised WITHOUT a real remote —
+/// the mock for VT-1's injected transport/auth/hook failure.
+pub(crate) trait PushRunner {
+    /// Run `git push --porcelain --force-with-lease=<refname>:<expected_old>
+    /// <remote> <new_oid>:<refname>` and hand back the raw separable
+    /// stdout/stderr/exit. No interpretation here — classification is the pure
+    /// [`classify_push_porcelain`]'s job.
+    fn push(
+        &self,
+        root: &Path,
+        remote: &str,
+        refname: &str,
+        new_oid: &str,
+        expected_old: &str,
+    ) -> Result<std::process::Output, CaptureError>;
+}
+
+/// Production [`PushRunner`]: shells the porcelain push via [`run_git`] (EX-1).
+pub(crate) struct GitPushRunner;
+
+impl PushRunner for GitPushRunner {
+    fn push(
+        &self,
+        root: &Path,
+        remote: &str,
+        refname: &str,
+        new_oid: &str,
+        expected_old: &str,
+    ) -> Result<std::process::Output, CaptureError> {
+        let lease = format!("--force-with-lease={refname}:{expected_old}");
+        let src_dst = format!("{new_oid}:{refname}");
+        run_git(root, &["push", "--porcelain", &lease, remote, &src_dst])
+    }
+}
+
+/// CAS-push a ref BY OID to `remote` under a `--force-with-lease` over
+/// `expected_old` (the zero oid for a *creation*), classifying the porcelain
+/// outcome (design EX-1/EX-2). The lease makes the remote advance the ref ONLY if
+/// it still equals `expected_old`; a lease/create-CAS rejection maps to
+/// [`RefCas::Moved`], while auth/hook/namespace-policy refusals and transport
+/// fatals surface as a hard [`CaptureError`]. Pushing by oid (not a local ref)
+/// keeps the caller free of any local ref bookkeeping.
+pub(crate) fn push_ref_cas(
+    root: &Path,
+    remote: &str,
+    refname: &str,
+    new_oid: &str,
+    expected_old: &str,
+) -> Result<RefCas, CaptureError> {
+    push_ref_cas_with(&GitPushRunner, root, remote, refname, new_oid, expected_old)
+}
+
+/// [`push_ref_cas`] over an injectable [`PushRunner`] — the unit-test seam (EX-3).
+pub(crate) fn push_ref_cas_with(
+    runner: &dyn PushRunner,
+    root: &Path,
+    remote: &str,
+    refname: &str,
+    new_oid: &str,
+    expected_old: &str,
+) -> Result<RefCas, CaptureError> {
+    let output = runner.push(root, remote, refname, new_oid, expected_old)?;
+    classify_push_porcelain(refname, &output)
+}
+
+/// Pure, machine-stable classification of a `git push --porcelain` result for
+/// `refname` (design F-9/F-10, EX-2). Porcelain emits one per-ref status line on
+/// STDOUT — `<flag>\t<src>:<dst>\t<summary>` — whose leading flag is the stable
+/// signal: a `!` (rejected) line whose summary is exactly `[rejected] (stale
+/// info)` is the lease/create-CAS failure ⇒ [`RefCas::Moved`]. Anything else —
+/// any other `!` summary (`[remote rejected] (...)`, auth, hook,
+/// namespace-policy), a non-success exit with no matching porcelain line (a
+/// transport fatal exits before printing one), or a missing line — is a hard
+/// [`CaptureError`] carrying the remote reason. A success exit with the ref's
+/// line present (flag ` `/`*`/`+`/`=`) is [`RefCas::Updated`]. Never English-stderr
+/// matching: the decision rides the flag + bracketed summary token, not prose.
+fn classify_push_porcelain(
+    refname: &str,
+    output: &std::process::Output,
+) -> Result<RefCas, CaptureError> {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout
+        .lines()
+        .find(|l| porcelain_ref_line_matches(l, refname));
+
+    match line {
+        // Rejected line for our ref: only the lease/CAS staleness maps to Moved.
+        Some(l) if l.starts_with('!') => {
+            if porcelain_summary(l).contains("stale info") {
+                Ok(RefCas::Moved { actual: None })
+            } else {
+                Err(push_error(refname, output))
+            }
+        }
+        // A status line present with a non-reject flag + success ⇒ Updated.
+        Some(_) if output.status.success() => Ok(RefCas::Updated),
+        // Line present but the overall push failed (partial/other-ref failure), or
+        // no porcelain line at all (transport fatal) ⇒ hard error.
+        _ => Err(push_error(refname, output)),
+    }
+}
+
+/// True iff porcelain status line `l` is the per-ref line for `refname` — its
+/// tab-separated middle field is `<src>:<refname>`. Pins on the destination ref so
+/// a multi-ref push can't misattribute another ref's status.
+fn porcelain_ref_line_matches(l: &str, refname: &str) -> bool {
+    let suffix = format!(":{refname}");
+    l.split('\t')
+        .nth(1)
+        .is_some_and(|from_to| from_to.ends_with(&suffix))
+}
+
+/// The trailing `<summary>` field of a porcelain status line (3rd tab-field).
+fn porcelain_summary(l: &str) -> &str {
+    l.split('\t').nth(2).unwrap_or("")
+}
+
+/// Build the hard error for a non-CAS push refusal, folding the porcelain status
+/// line (if any) and the trimmed stderr so the remote's reason is surfaced (EX-2).
+fn push_error(refname: &str, output: &std::process::Output) -> CaptureError {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let status = stdout
+        .lines()
+        .find(|l| porcelain_ref_line_matches(l, refname))
+        .map_or("", str::trim);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    CaptureError::Git(format!(
+        "push {refname} rejected: {} {}",
+        status,
+        stderr.trim()
+    ))
+}
+
+/// Fetch `refspec` from `remote` with an EXPLICIT per-command refspec — never
+/// mutating `.git/config` (no `git remote add`/`git config`; design D4, EX-3).
+/// The refspec maps the remote namespace into the local one, e.g.
+/// `refs/doctrine/*:refs/doctrine/*`.
+pub(crate) fn fetch_refspec(root: &Path, remote: &str, refspec: &str) -> Result<(), CaptureError> {
+    let output = run_git(root, &["fetch", remote, refspec])?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(CaptureError::Git(format!(
+            "fetch {remote} {refspec}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// Enumerate refs under `pattern` as parsed [`RefRow`]s via `git for-each-ref`
+/// with an explicit tab-delimited format (design EX-3). Each row carries the
+/// refname, tip oid, author, strict-ISO author date, and commit subject — the
+/// metadata the `GitRef` backend reads back. A field is never split on internally
+/// because only the first four tabs are structural; the subject (which may contain
+/// no tab) is the remainder.
+pub(crate) fn for_each_ref(root: &Path, pattern: &str) -> Result<Vec<RefRow>, CaptureError> {
+    // %00-free, tab-delimited; subject last so an empty/odd subject can't shift
+    // the structural fields.
+    let format = "--format=%(refname)%09%(objectname)%09%(authorname)%09%(authordate:iso-strict)%09%(contents:subject)";
+    let text = git_text(root, &["for-each-ref", format, pattern])?;
+    Ok(text
+        .lines()
+        .filter(|l| !l.is_empty())
+        .filter_map(parse_ref_row)
+        .collect())
+}
+
+/// Parse one tab-delimited `for-each-ref` line into a [`RefRow`]. The first four
+/// fields are structural; the subject is the remainder (it may itself be empty).
+/// A malformed line missing structural fields is dropped (filtered upstream).
+fn parse_ref_row(line: &str) -> Option<RefRow> {
+    let mut fields = line.splitn(5, '\t');
+    let refname = fields.next()?.to_owned();
+    let oid = fields.next()?.to_owned();
+    let author = fields.next()?.to_owned();
+    let date = fields.next()?.to_owned();
+    let msg = fields.next().unwrap_or("").to_owned();
+    Some(RefRow {
+        refname,
+        oid,
+        author,
+        date,
+        msg,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Reservation-claim primitives (SL-148 PHASE-03) — the dangling empty-tree
+// commit the `GitRef` backend pushes by oid, plus the remote/holder resolvers
+// the backend captures at construction (design EX-1/§5.3, F-2/F-V4/F-V5).
+// ---------------------------------------------------------------------------
+
+/// The well-known empty-tree object id — present in every git repository's
+/// object store without an explicit write, so a `commit-tree` against it needs no
+/// `mktree` round-trip (design EX-1, F-V4). The reservation commit carries this
+/// tree so the claim holds NO entity content (REQ-024 / I2).
+pub(crate) const EMPTY_TREE_OID: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/// The reservation holder's declared git identity — `(name, email)` — set
+/// EXPLICITLY on the reservation commit so the claim never depends on ambient
+/// `git config user.*` (design F-2). `$DOCTRINE_AGENT_ID` wins (name = the agent
+/// id, email = `<id>@doctrine`); else the repo's configured `user.name`/`user.email`
+/// if present; else a safe constant so a human with an unset git identity does not
+/// fail to reserve (F-2). Never errors — a missing identity degrades to the default,
+/// it does not abort the claim.
+pub(crate) fn resolve_holder(root: &Path) -> (String, String) {
+    if let Some(agent) = std::env::var_os("DOCTRINE_AGENT_ID")
+        && let Some(agent) = agent.to_str()
+        && !agent.trim().is_empty()
+    {
+        let agent = agent.trim();
+        return (agent.to_owned(), format!("{agent}@doctrine"));
+    }
+    let name = git_opt(root, &["config", "--get", "user.name"])
+        .ok()
+        .flatten()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| "doctrine".to_owned());
+    let email = git_opt(root, &["config", "--get", "user.email"])
+        .ok()
+        .flatten()
+        .filter(|e| !e.trim().is_empty())
+        .unwrap_or_else(|| "doctrine@localhost".to_owned());
+    (name, email)
+}
+
+/// Build a DANGLING commit of the [`EMPTY_TREE_OID`] with `msg` and the holder's
+/// identity set EXPLICITLY via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` (design EX-1, F-2):
+/// no parent (the reservation history is a single content-free commit), no local
+/// ref written (the caller pushes the returned oid by value, so a failed push never
+/// advances a local ref past the remote — I4). Routes through the existing
+/// [`run_git_env`] env seam so the one [`NORMATIVE_FLAGS`] chokepoint is preserved
+/// (F-V4 — `commit_tree` itself passes empty env).
+pub(crate) fn commit_empty_tree_as(
+    root: &Path,
+    msg: &str,
+    holder_name: &str,
+    holder_email: &str,
+) -> Result<String, CaptureError> {
+    use std::ffi::OsStr;
+    let envs: [(&str, &OsStr); 4] = [
+        ("GIT_AUTHOR_NAME", OsStr::new(holder_name)),
+        ("GIT_AUTHOR_EMAIL", OsStr::new(holder_email)),
+        ("GIT_COMMITTER_NAME", OsStr::new(holder_name)),
+        ("GIT_COMMITTER_EMAIL", OsStr::new(holder_email)),
+    ];
+    let output = run_git_env(root, &["commit-tree", EMPTY_TREE_OID, "-m", msg], &envs)?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    } else {
+        Err(CaptureError::Git(format!(
+            "commit-tree empty-tree: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// Resolve the remote name to coordinate reservations through — the same
+/// preferred → `origin` → sole selection the repo-id derivation uses (design
+/// §5.2). `Ok(None)` when no remote is configured (the structurally single-tree
+/// case the `auto` reach degrades to `LocalFs` for). `>1` remote with no
+/// `origin`/preferred is [`CaptureError::AmbiguousRemote`], not a guess.
+pub(crate) fn resolve_remote(root: &Path) -> Result<Option<String>, CaptureError> {
+    // A non-repo root has no configured remote (the same non-repo → `None` posture
+    // `capture` takes via `--is-inside-work-tree`). Short-circuit before `git remote`,
+    // which would hard-error "not a git repository" — that is the structurally
+    // single-tree case `auto` degrades to `LocalFs` for (SL-148 §5.4), not a failure.
+    match git_opt(root, &["rev-parse", "--is-inside-work-tree"])? {
+        Some(ref v) if v == "true" => {}
+        _ => return Ok(None),
+    }
+    let remotes = list_remotes(root)?;
+    select_remote(root, &remotes)
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests — pure logic only (no git, no disk). The byte-identity proof for
 // the remote table is copied verbatim from the external decision register's reference (VT-1).
 // ---------------------------------------------------------------------------
@@ -1976,6 +2284,61 @@ mod tests {
             self.git(&["add", rel]);
             self.git(&["commit", "-m", message]);
             self.git(&["rev-parse", "HEAD"])
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Bare-remote substrate (SL-148 PHASE-02, EX-4) — a `git init --bare` remote
+    // in a temp dir plus a working clone, all local (jail-safe, NO network). The
+    // proving ground for the real-git CAS create/reject and the fetch round-trip
+    // (VT-2/VT-3). The remote is referenced by EXPLICIT path on each command, so
+    // no `.git/config` remote is ever written (design D4).
+    // -----------------------------------------------------------------------
+
+    /// A bare git remote + a working clone, both under temp dirs.
+    struct BareRemote {
+        _remote_dir: tempfile::TempDir,
+        remote_path: PathBuf,
+        work: ScratchRepo,
+    }
+
+    impl BareRemote {
+        /// Create a bare remote and a fresh working repo (one commit) that pushes
+        /// to it by explicit path.
+        fn new() -> Self {
+            let remote_dir = tempfile::tempdir().expect("remote tempdir");
+            let remote_path = remote_dir.path().to_path_buf();
+            let out = Command::new("git")
+                .args(["init", "--bare", "-b", "main"])
+                .arg(&remote_path)
+                .output()
+                .expect("spawn git init --bare");
+            assert!(out.status.success(), "git init --bare failed");
+            let work = ScratchRepo::new();
+            work.commit("seed.txt", "seed", "seed");
+            Self {
+                _remote_dir: remote_dir,
+                remote_path,
+                work,
+            }
+        }
+
+        /// The remote's filesystem path as a `&str` (the explicit refspec target
+        /// passed verbatim to `git push`/`git fetch`).
+        fn remote(&self) -> &str {
+            self.remote_path
+                .to_str()
+                .expect("remote path is valid utf-8")
+        }
+
+        /// The remote's path as `&Path` — for driving `for_each_ref` directly
+        /// against the bare repo (`git -C <bare>`).
+        fn remote_path(&self) -> &Path {
+            &self.remote_path
+        }
+
+        fn work(&self) -> &ScratchRepo {
+            &self.work
         }
     }
 
@@ -2874,6 +3237,265 @@ mod tests {
             super::RefCas::Updated
         ));
         assert_eq!(repo.git(&["rev-parse", refname]), c2);
+    }
+
+    // --- SL-148 PHASE-02: remote ref ops + porcelain CAS classification. -----
+
+    /// A [`PushRunner`] that returns one canned [`std::process::Output`] — the
+    /// mock seam for unit-testing [`classify_push_porcelain`] WITHOUT a real
+    /// remote (design EX-3; VT-1's injected transport/auth/hook case).
+    struct CannedPush {
+        stdout: String,
+        stderr: String,
+        code: i32,
+    }
+
+    impl super::PushRunner for CannedPush {
+        fn push(
+            &self,
+            _root: &Path,
+            _remote: &str,
+            _refname: &str,
+            _new_oid: &str,
+            _expected_old: &str,
+        ) -> Result<std::process::Output, super::CaptureError> {
+            use std::os::unix::process::ExitStatusExt as _;
+            Ok(std::process::Output {
+                // ExitStatus from a raw wait-status: `code << 8` for a normal exit.
+                status: std::process::ExitStatus::from_raw(self.code << 8),
+                stdout: self.stdout.clone().into_bytes(),
+                stderr: self.stderr.clone().into_bytes(),
+            })
+        }
+    }
+
+    fn classify_with(
+        canned: CannedPush,
+        refname: &str,
+    ) -> Result<super::RefCas, super::CaptureError> {
+        super::push_ref_cas_with(
+            &canned,
+            Path::new("/unused"),
+            "unused-remote",
+            refname,
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            super::ZERO_OID,
+        )
+    }
+
+    /// VT-1: porcelain CAS classification is machine-stable. A lease/create-CAS
+    /// staleness rejection maps to [`RefCas::Moved`]; an INJECTED transport/auth/
+    /// hook/namespace-policy failure returns a HARD error and NEVER reads as
+    /// `Moved` — proven over canned porcelain via the mock runner (no real remote).
+    #[test]
+    fn push_porcelain_classifies_cas_vs_transport() {
+        let refname = "refs/doctrine/x";
+
+        // CAS staleness ⇒ Moved (the only path to Moved).
+        let stale = CannedPush {
+            stdout: format!("To /r\n!\tdeadbeef:{refname}\t[rejected] (stale info)\nDone\n"),
+            stderr: String::new(),
+            code: 1,
+        };
+        assert!(
+            matches!(
+                classify_with(stale, refname),
+                Ok(super::RefCas::Moved { .. })
+            ),
+            "lease staleness must classify as Moved"
+        );
+
+        // Hook / namespace-policy refusal ⇒ hard error, NEVER Moved.
+        let hook = CannedPush {
+            stdout: format!(
+                "To /r\n!\tdeadbeef:{refname}\t[remote rejected] (pre-receive hook declined)\nDone\n"
+            ),
+            stderr: "remote: policy: refs/doctrine/* forbidden".to_owned(),
+            code: 1,
+        };
+        let got = classify_with(hook, refname);
+        assert!(
+            matches!(got, Err(super::CaptureError::Git(_))),
+            "hook/policy refusal must be a hard error, got {got:?}"
+        );
+        assert!(
+            !matches!(got, Ok(super::RefCas::Moved { .. })),
+            "policy refusal must NEVER read as Moved"
+        );
+
+        // Transport fatal (no porcelain line, exit 128) ⇒ hard error, never Moved.
+        let transport = CannedPush {
+            stdout: String::new(),
+            stderr: "fatal: Could not read from remote repository.".to_owned(),
+            code: 128,
+        };
+        let got = classify_with(transport, refname);
+        assert!(
+            matches!(got, Err(super::CaptureError::Git(_))),
+            "transport fatal must be a hard error, got {got:?}"
+        );
+    }
+
+    /// VT-2: against the bare-remote substrate, a zero-oid create lands on an
+    /// ABSENT ref ⇒ [`RefCas::Updated`]; a SECOND create on the now-existing ref
+    /// ⇒ [`RefCas::Moved`]. Confirms `--force-with-lease=<ref>:<zero>` create-CAS
+    /// portability on a real git (discharges design OQ-3).
+    #[test]
+    fn push_ref_cas_create_then_reject_on_bare_remote() {
+        let env = BareRemote::new();
+        let work = env.work();
+        let c1 = work.git(&["rev-parse", "HEAD"]);
+        work.commit("b.txt", "2", "second");
+        let c2 = work.git(&["rev-parse", "HEAD"]);
+        let refname = "refs/doctrine/reserve/IMP-001";
+
+        // Create: ref absent, expected_old = ZERO ⇒ Updated.
+        let first = super::push_ref_cas(work.path(), env.remote(), refname, &c1, super::ZERO_OID)
+            .expect("create push");
+        assert!(matches!(first, super::RefCas::Updated), "create ⇒ Updated");
+        // The ref really landed on the remote at c1.
+        let rows = super::for_each_ref(env.remote_path(), refname).expect("for_each_ref");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].oid, c1);
+
+        // Second create on the now-existing ref (lease still ZERO) ⇒ Moved.
+        let second = super::push_ref_cas(work.path(), env.remote(), refname, &c2, super::ZERO_OID)
+            .expect("second push classifies");
+        assert!(
+            matches!(second, super::RefCas::Moved { .. }),
+            "create on existing ref ⇒ Moved, got {second:?}"
+        );
+        // Ref unchanged on the remote (not clobbered).
+        let rows = super::for_each_ref(env.remote_path(), refname).expect("for_each_ref 2");
+        assert_eq!(rows[0].oid, c1, "rejected push must not clobber the ref");
+    }
+
+    /// VT-3: `for_each_ref` over a populated reservation namespace returns parsed
+    /// [`RefRow`]s; `fetch_refspec` round-trips remote refs into the local
+    /// namespace with an explicit per-command refspec (no `.git/config` mutation).
+    #[test]
+    fn for_each_ref_parses_rows_and_fetch_refspec_round_trips() {
+        let env = BareRemote::new();
+        let work = env.work();
+        let a = work.git(&["rev-parse", "HEAD"]);
+        work.commit("b.txt", "2", "second commit subject");
+        let b = work.git(&["rev-parse", "HEAD"]);
+
+        super::push_ref_cas(
+            work.path(),
+            env.remote(),
+            "refs/doctrine/reserve/A",
+            &a,
+            super::ZERO_OID,
+        )
+        .expect("push A");
+        super::push_ref_cas(
+            work.path(),
+            env.remote(),
+            "refs/doctrine/reserve/B",
+            &b,
+            super::ZERO_OID,
+        )
+        .expect("push B");
+
+        // for_each_ref over the namespace → two parsed rows with metadata.
+        let mut rows =
+            super::for_each_ref(env.remote_path(), "refs/doctrine/reserve/").expect("for_each_ref");
+        rows.sort_by(|x, y| x.refname.cmp(&y.refname));
+        assert_eq!(rows.len(), 2, "two reservation refs");
+        assert_eq!(rows[0].refname, "refs/doctrine/reserve/A");
+        assert_eq!(rows[0].oid, a);
+        // author identity is ambient (env/config) — assert the field is parsed
+        // and populated, not a specific name.
+        assert!(!rows[0].author.is_empty(), "author field parsed");
+        assert!(!rows[0].date.is_empty(), "iso-strict author date present");
+        assert_eq!(rows[1].refname, "refs/doctrine/reserve/B");
+        assert_eq!(rows[1].msg, "second commit subject", "subject parsed");
+
+        // fetch_refspec into a fresh clone's local namespace (no config mutation).
+        let local = ScratchRepo::new();
+        local.commit("z.txt", "z", "local seed");
+        super::fetch_refspec(
+            local.path(),
+            env.remote(),
+            "refs/doctrine/reserve/*:refs/doctrine/reserve/*",
+        )
+        .expect("fetch_refspec");
+        let fetched = super::for_each_ref(local.path(), "refs/doctrine/reserve/")
+            .expect("local for_each_ref");
+        assert_eq!(fetched.len(), 2, "both refs round-tripped locally");
+        // No remote was added to .git/config.
+        let remotes = local.git(&["remote"]);
+        assert!(
+            remotes.is_empty(),
+            "no .git/config remote written: {remotes:?}"
+        );
+    }
+
+    /// SL-148 EX-1/VT-4: the dangling reservation commit carries the empty tree
+    /// (no blobs) and the holder identity set explicitly — independent of any
+    /// ambient `git config user.*`. Pushed by oid under a zero-oid create CAS.
+    #[test]
+    fn commit_empty_tree_as_is_content_free_with_explicit_holder() {
+        let env = BareRemote::new();
+        let work = env.work();
+        let oid = super::commit_empty_tree_as(work.path(), "SL-148", "agent-7", "agent-7@doctrine")
+            .expect("commit empty tree");
+
+        // The commit's tree is THE empty tree (content-free claim, REQ-024/I2).
+        let tree = super::git_text(work.path(), &["rev-parse", &format!("{oid}^{{tree}}")])
+            .expect("rev-parse tree");
+        assert_eq!(tree, super::EMPTY_TREE_OID, "reservation tree is empty");
+        // No blobs reachable from the tree.
+        let listing = super::git_text(work.path(), &["ls-tree", "-r", &oid]).expect("ls-tree");
+        assert!(listing.is_empty(), "empty-tree commit lists no entries");
+        // Holder identity is the explicit one, not the repo's configured user.*.
+        let author = super::git_text(work.path(), &["show", "-s", "--format=%an <%ae>", &oid])
+            .expect("show author");
+        assert_eq!(author, "agent-7 <agent-7@doctrine>");
+        // It is dangling: no parent.
+        let parents = super::git_text(work.path(), &["rev-list", "--parents", "-n", "1", &oid])
+            .expect("rev-list parents");
+        assert_eq!(
+            parents.split_whitespace().count(),
+            1,
+            "reservation commit has no parent"
+        );
+
+        // Push by oid under the zero-oid create CAS lands on the remote.
+        let refname = "refs/doctrine/reservation/SL/148";
+        let cas = super::push_ref_cas(work.path(), env.remote(), refname, &oid, super::ZERO_OID)
+            .expect("push reservation");
+        assert!(matches!(cas, super::RefCas::Updated));
+        let rows = super::for_each_ref(env.remote_path(), refname).expect("for_each_ref");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].oid, oid);
+    }
+
+    /// SL-148 EX-1/F-2: `resolve_holder` prefers the configured git identity when
+    /// `DOCTRINE_AGENT_ID` is unset, and never errors. (`set_var` is banned crate-
+    /// wide, so the `DOCTRINE_AGENT_ID` branch is exercised by the holder being
+    /// threaded through the GitRef tests; here we pin the git-config fallback.)
+    #[test]
+    fn resolve_holder_falls_back_to_git_config_identity() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "1", "seed");
+        let (name, email) = super::resolve_holder(repo.path());
+        // ScratchRepo pins user.name/user.email; the fallback reads them.
+        assert_eq!(name, "Doctrine Test");
+        assert_eq!(email, "test@doctrine.invalid");
+    }
+
+    /// SL-148 EX-3: `resolve_remote` reports `None` for a remote-less repo (the
+    /// structurally single-tree case `auto` degrades to LocalFs for).
+    #[test]
+    fn resolve_remote_is_none_without_a_configured_remote() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "1", "seed");
+        assert_eq!(
+            super::resolve_remote(repo.path()).expect("resolve_remote"),
+            None
+        );
     }
 
     /// PHASE-04 journal-commit primitive: splice a file into a base tree without

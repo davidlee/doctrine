@@ -60,17 +60,30 @@ pub(crate) fn parse(text: &str) -> anyhow::Result<DoctrineToml> {
 /// `governance.md`), NOT a `.doctrine/` entity.
 pub(crate) const DOCTRINE_TOML: &str = "doctrine.toml";
 
+/// Read the raw `doctrine.toml` body at `root` (IMPURE shell seam) — `None` when
+/// the file is absent (a genuine read error still surfaces). The single file-read
+/// seam shared by [`load_doctrine_toml`] and any consumer that projects its own
+/// section out-of-band of [`DoctrineToml`] (SL-148 `reserve`: keeps `[reservation]`
+/// parsing inside the engine-tier consumer so no `leaf → engine` import is forced).
+pub(crate) fn read_doctrine_toml_text(root: &Path) -> anyhow::Result<Option<String>> {
+    let path = root.join(DOCTRINE_TOML);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    }
+}
+
 /// Read + parse the project `doctrine.toml` (IMPURE shell seam, ADR-001).
 /// Absent file -> `DoctrineToml::default()`; present -> tolerant [`parse`];
 /// genuinely malformed TOML errors with context. The single reader shared by
 /// the close-integration gate, the sync handler, the `deliver-to` verb, and
 /// `load_conduct`.
 pub(crate) fn load_doctrine_toml(root: &Path) -> anyhow::Result<DoctrineToml> {
-    let path = root.join(DOCTRINE_TOML);
-    match std::fs::read_to_string(&path) {
-        Ok(text) => parse(&text).with_context(|| format!("Failed to parse {}", path.display())),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DoctrineToml::default()),
-        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    match read_doctrine_toml_text(root)? {
+        Some(text) => parse(&text)
+            .with_context(|| format!("Failed to parse {}", root.join(DOCTRINE_TOML).display())),
+        None => Ok(DoctrineToml::default()),
     }
 }
 

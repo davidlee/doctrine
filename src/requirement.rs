@@ -230,7 +230,11 @@ pub(crate) fn reserve(
     date: &str,
 ) -> anyhow::Result<entity::Materialised> {
     let trunk_ids = crate::git::trunk_entity_ids(root, REQUIREMENT_KIND.dir)?;
-    let backend = crate::reserve::backend(root, REQUIREMENT_KIND.prefix)?;
+    let (backend, mut reserved) = crate::reserve::backend(
+        root,
+        REQUIREMENT_KIND.prefix,
+        crate::install::prompt_confirm,
+    )?;
     entity::materialise(
         &REQUIREMENT_KIND,
         &*backend,
@@ -238,6 +242,7 @@ pub(crate) fn reserve(
         &entity::MaterialiseRequest::Fresh,
         &entity::Inputs { slug, title, date },
         &trunk_ids,
+        &mut reserved,
     )
 }
 
@@ -553,6 +558,7 @@ mod tests {
                     date: "2026-06-05",
                 },
                 &[],
+                &mut entity::local_reserved(),
             )
             .unwrap()
         };

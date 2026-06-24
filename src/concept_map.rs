@@ -308,7 +308,11 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let trunk_ids = crate::git::trunk_entity_ids(&root, CONCEPT_MAP_KIND.dir)?;
-    let backend = crate::reserve::backend(&root, CONCEPT_MAP_KIND.prefix)?;
+    let (backend, mut reserved) = crate::reserve::backend(
+        &root,
+        CONCEPT_MAP_KIND.prefix,
+        crate::install::prompt_confirm,
+    )?;
     let out = entity::materialise(
         &CONCEPT_MAP_KIND,
         &*backend,
@@ -320,6 +324,7 @@ pub(crate) fn run_new(
             date: &date,
         },
         &trunk_ids,
+        &mut reserved,
     )?;
 
     let id = out
