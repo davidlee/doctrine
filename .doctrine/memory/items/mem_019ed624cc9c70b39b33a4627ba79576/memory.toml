@@ -39,3 +39,7 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019ed65321737e309c95c0d3a930eef4"
