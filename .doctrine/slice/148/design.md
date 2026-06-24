@@ -85,7 +85,7 @@ leasing (IDE-021) and git-ref content storage out by governance.
         ▼                  ┌──────────────┐ claim(ctx)         ▲
    entity::materialise ───▶│ dyn Claim    │────────────────────┘
         │  (+ reserved_ids  │  LocalFs     │  mkdir
-        │   scan source)    │  GitRef ─────┼─ push refs/doctrine/reservation/<stem>/<NNN>
+        │   scan source)    │  GitRef ─────┼─ push refs/doctrine/reservation/<prefix>/<NNN>
         ▼                   └──────────────┘    under zero-oid CAS, then mkdir
    claim_fresh_id loop:
      id = next_id(scan(), trunk_ids)          scan() = local_dirs (LocalFs)
@@ -101,7 +101,7 @@ leasing (IDE-021) and git-ref content storage out by governance.
 **Claim seam (enriched — D1; Fresh-numeric-only — D9).** `&Path` → a minimal
 descriptor. The seam now serves the **Fresh numbered path only** (D9 splits the
 named/memory path off it, below). Only `id` varies per retry, so it alone rides
-`claim()`; the per-kind/per-repo constants (`stem`, repo `root`, `remote`,
+`claim()`; the per-kind/per-repo constants (`prefix`, repo `root`, `remote`,
 `holder`) are **captured by the backend at construction** (`reserve::backend`),
 not threaded through the ctx — keeping `ClaimCtx` to the two values already live
 at the claim site (`entity.rs` `claim_fresh_id`):
@@ -117,8 +117,8 @@ pub(crate) trait Claim {
 ```
 
 - `LocalFs::claim` = `create_dir(ctx.dir)` — behaviour-identical to today; ignores `id`.
-- `GitRef { root, stem, remote, holder }` (captured in `reserve::backend`).
-  `GitRef::claim` = build `refs/doctrine/reservation/{self.stem}/{ctx.id:03}` →
+- `GitRef { root, prefix, remote, holder }` (captured in `reserve::backend`).
+  `GitRef::claim` = build `refs/doctrine/reservation/{self.prefix}/{ctx.id:03}` →
   empty-tree commit (`commit_tree`, **dangling** — no local `update-ref` before the
   push; pushed **by oid** so a failed push never advances a local ref past the
   remote, reinforcing I4; lazyspec prior-art pattern) →
@@ -132,7 +132,7 @@ no longer takes `&dyn Claim`; its directory claim is an inline
 `fs::create_dir(entity_dir)` → `Ok` / `AlreadyExists` ⇒ `bail!("… already exists")`,
 with the existing H2 won-dir cleanup retained verbatim. Memory's uid is a
 client-minted v7 UUID (minted-once-stored, never numbered, never reserved
-cross-clone — SPEC-008 D5), so it has no `id`/`stem` to give a `ClaimCtx` and
+cross-clone — SPEC-008 D5), so it has no `id`/`prefix` to give a `ClaimCtx` and
 never selects `GitRef`. The seam is therefore honestly Fresh-numeric-only;
 memory's *remote* future is a **separate storage seam** at this same
 `materialise_named` write body (see §6, OQ-6). This supersedes the SL-005 D7
@@ -156,7 +156,7 @@ pub(crate) fn for_each_ref(root, pattern)      // (refname, oid, author, date, m
 
 **Backend selection blast radius (F-3, corrected F-V1).** Shared reach applies to
 *any* numbered kind (PRD-005), so **every Fresh-allocating materialise site** swaps
-its literal `&LocalFs` for the resolved-backend helper `reserve::backend(root, stem)?`.
+its literal `&LocalFs` for the resolved-backend helper `reserve::backend(root, prefix)?`.
 Code-verification (F-V1) corrected the count to **11 production sites in two
 families** — the original enumeration omitted the entire `materialise_fresh_prebuilt`
 family:
@@ -196,12 +196,14 @@ performs the reachability fetch, and decides degradation (contract: D8 — `auto
 fail-closes on a configured-remote failure, with an explicit operator opt-in to
 local fallback). Reservation-ref ids fetched here seed the per-retry scan source.
 
-**Survey.** `doctrine reservation list [--kind <stem>] [--remote <name>]` →
+**Survey.** `doctrine reservation list [--kind <prefix>] [--remote <name>]` →
 fetch `refs/doctrine/reservation/*` → table `{canonical, holder, acquired}`.
 
 ### 5.3 Data, State & Ownership
 
-- **Reservation ref** `refs/doctrine/reservation/<stem>/<NNN>` → empty-tree
+- **Reservation ref** `refs/doctrine/reservation/<prefix>/<NNN>` (`<prefix>` =
+  the canonical id-space prefix, e.g. `SL`/`ASM`/`IMP` — F-V7, **not** the shared
+  file-stem) → empty-tree
   commit (the well-known empty tree). **No blobs** (REQ-024). Holder =
   `$DOCTRINE_AGENT_ID` else git committer identity. The commit is built with
   `GIT_AUTHOR_NAME/EMAIL` + `GIT_COMMITTER_NAME/EMAIL` set **explicitly** from
@@ -325,7 +327,7 @@ gives offline fork-safety at single-tree+trunk reach.
   that gives `GitRef` the ref identity while preserving `LocalFs` exactly.
   Rejected: derive-ref-from-`&Path` (fragile, fs-coupled); a second trait
   (breaks the one-loop principle). **(D9 refines):** `ClaimCtx` carries only
-  `{dir, id}` — `stem`/`root`/`remote`/`holder` are backend-captured at
+  `{dir, id}` — `prefix`/`root`/`remote`/`holder` are backend-captured at
   construction (only `id` varies per retry), and the seam is Fresh-numeric-only.
 - **D2 — claim linearizes at the remote via `push --force-with-lease=<ref>:0`.**
   The only shape meeting PRD-005's single-linearization invariant for cross-clone
@@ -347,8 +349,16 @@ gives offline fork-safety at single-tree+trunk reach.
 - **D6 — failure prints the reseat remediation command.** Retry exhaustion /
   detected collision is actionable: cite `doctrine reseat <canonical>` (SPEC-008
   repair verb), never a bare "could not reserve".
-- **D7 — reuse `integrity::KINDS` stem as the ref segment.** One id table; no
-  second mapping to drift (numbered-kind-identity-table memory).
+- **D7 — reuse `integrity::KINDS` `prefix` as the ref segment (corrected F-V7).**
+  One id table; no second mapping to drift (numbered-kind-identity-table memory).
+  **The segment must key the id-space**, and `prefix` (`SL`/`ASM`/`IMP`…) is the
+  canonical, enforced-unique per-kind identity — `refs/doctrine/reservation/SL/148`
+  mirrors `SL-148`. The originally-written `stem` is the **file-stem**
+  (`record-NNN.toml`), deliberately *shared* across sub-kinds (knowledge ×4 →
+  `record`, backlog ×5 → `backlog`), so it is many-to-one with the id-space and
+  would collapse independent namespaces (ASM-001 and DEC-001 both → `record/001`).
+  `prefix` is also already in scope at all 11 sites (the prebuilt callers already
+  pass it). Rejected: `stem` (wrong granularity); `dir` (correct but slashy/long).
 - **D8 — `auto` fail-closes on a configured-remote failure; local fallback is an
   explicit operator opt-in (B2).** PRD-005 §6's "fall back + one-time signal" governs
   only the **structurally single-tree** case (no remote configured). A configured
@@ -364,7 +374,7 @@ gives offline fork-safety at single-tree+trunk reach.
 - **D9 — split the named (memory) path off the `Claim` seam; the seam is
   Fresh-numeric-only (supersedes SL-005 D7).** Code-verification (F-V2) found the
   shared seam forces the named path to construct a `ClaimCtx` with no numeric
-  `id`/`stem`. SL-005 D7 deliberately *unified* named+numeric on one generic claim
+  `id`/`prefix`. SL-005 D7 deliberately *unified* named+numeric on one generic claim
   seam (`mem.system.engine.identity-claim-seam` §2: "Reservation is one caller's
   interpretation of the generic claim"). But SL-148's enrichment makes the ctx
   numeric-shaped (`id` is a reservation concept), so the named caller no longer fits
@@ -374,7 +384,7 @@ gives offline fork-safety at single-tree+trunk reach.
   forces" — GitRef forces generality on the *numbered* path only. Loses zero test
   capability (no mock-`Claim` is ever injected into the named path — only Fresh
   uses `AlwaysHeld`). Memory's remote future is a distinct storage seam (OQ-6).
-  Rejected: sentinel `id:0`/`stem:""` (a numeric field on a non-numeric path);
+  Rejected: sentinel `id:0`/`prefix:""` (a numeric field on a non-numeric path);
   `id: Option<u32>` (a `.expect()` that re-encodes the very invariant the type
   can't prove). Requires a /reconcile update to the SL-005 memory (R8).
 
@@ -480,10 +490,17 @@ empty-tree oid via the well-known constant or `mktree`.
 - **F-V1 → §5.2/blast radius.** Original ~10-by-kind enumeration omitted the
   `materialise_fresh_prebuilt` family — true count is **11 production Fresh sites**
   (+`review`, `rec`×2, `revision`). Corrected.
-- **F-V2 → D9.** Shared seam forces the named path to fabricate `id`/`stem`. Split
+- **F-V2 → D9.** Shared seam forces the named path to fabricate `id`/`prefix`. Split
   the named path off `Claim` (supersedes SL-005 D7). See D9, R8.
-- **F-V3 → D1/§5.2.** `ClaimCtx.root` (and `stem`) are redundant — backend-captured
+- **F-V3 → D1/§5.2.** `ClaimCtx.root` (and `prefix`) are redundant — backend-captured
   at construction; ctx reduced to `{dir, id}`. Folded.
+- **F-V7 → D7/§5.2/§5.3 (caught at PHASE-01 execution).** The ref segment was keyed
+  on `integrity::KINDS` `stem`, but `stem` is the **file-stem** and is *shared* across
+  sub-kinds (knowledge ×4 → `record`, backlog ×5 → `backlog`, spec ×2), each of which
+  has its **own tree + id-space** ("Own tree + reservation namespace" per KINDS). So
+  `<stem>` collapses independent id-spaces. Corrected to `prefix` (canonical,
+  enforced-unique per kind, already in scope at all 11 sites). `reserve::backend(root,
+  prefix)`; ref = `refs/doctrine/reservation/{prefix}/{id:03}`.
 - **F-V4 → PHASE-03 detail.** `commit_tree` routes through `run_git` with **empty
   env**; the `GIT_AUTHOR_*`/`GIT_COMMITTER_*` (F-2) commit needs a small env-aware
   helper over the existing private `run_git_env` seam (`git.rs`). Empty-tree oid has
