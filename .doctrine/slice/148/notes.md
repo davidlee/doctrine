@@ -6,9 +6,10 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Stage
 
-**Plan code-verified against source; design revised (D9) + plan tightened to match;
-awaiting final lock → `/phase-plan PHASE-01`.** No code yet. External adversarial
-pass (codex/GPT-5.5) integrated F-7..F-13 (design §10); D8 governance call taken.
+**PHASE-01 (behaviour gate) COMPLETE — T1–T4 done, green.** Seam enriched + named
+path split; zero observable behaviour change. Design revised (D9) + plan tightened;
+external adversarial pass (codex/GPT-5.5) integrated F-7..F-13 (design §10); D8
+governance call taken. Next: PHASE-02.
 
 **Code-verification pass (this session, commits `341809e8` design / `18e1e637` plan).**
 Read the seam, git.rs primitives, config idiom, every call-site. 8/8 handover Qs
@@ -124,3 +125,19 @@ resolved (§10 "Code-verification pass" disposition). Findings F-V1..F-V6:
 - `b6fc75b6` slice scope · `33f5c8cd` design v1 · `626f8118` internal adversarial
   pass integrated + slice reconcile. All `.doctrine` committed promptly; no
   pending authored changes; no code yet.
+
+## Implementation (PHASE-01)
+
+- **T1** `284538cc` — `reserve::backend(root,prefix)` seam + 11 Fresh call-site swap;
+  6 unused `LocalFs` imports dropped; `reserve=engine` in layering.toml. 2426/0.
+- **T2** — `ClaimCtx{dir,id}` + `Claim::claim(&ClaimCtx)`; `LocalFs` reads `ctx.dir`
+  (`id` carried for PHASE-03 GitRef ref-segment, `#[expect(dead_code)]`). **D9 split:**
+  `claim_and_write_named` dropped the `Claim` param, inlines `fs::create_dir`-or-bail —
+  dup-bail msg + H2 `remove_dir_all` byte-identical (VA-1). `materialise_named`,
+  `memory.rs` ×2, 5 named tests, `LocalFs` import all updated.
+- Gate: entity 27/0, main bin suite 2426/0 (= baseline, zero new failures, VT-1),
+  clippy clean, `architecture_layering_gate` green. The 3 `e2e_relation_migration_storage`
+  failures are concurrent SL-143/backlog-163 dirty corpus, NOT this slice.
+- Durable seam fact for wrap-up harvest: **the numeric claim seam now carries
+  `ClaimCtx{dir,id}`; the named path is OFF the trait** (inline mkdir). PHASE-03's
+  GitRef backend reads `ctx.id` as the ref segment under `refs/doctrine/reservation/<prefix>/<id>`.
