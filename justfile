@@ -75,6 +75,9 @@ install: web-build
 ff:
   git fetch . edge:main
 
+promote:
+  git fetch . edge:main
+
 force-push-main:
   git push . edge:main
 

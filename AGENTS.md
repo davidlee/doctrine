@@ -48,8 +48,7 @@ becomes:
    dispatch setup --slice N
    dispatch sync --prepare-review
    # ... phases ...
-   dispatch sync --integrate --trunk
- refs/heads/main  # land on main
+   dispatch sync --integrate --trunk refs/heads/main  # land on main
  ```
 
 ---
