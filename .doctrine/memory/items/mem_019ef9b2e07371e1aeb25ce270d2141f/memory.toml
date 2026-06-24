@@ -1,0 +1,54 @@
+memory_uid = "mem_019ef9b2e07371e1aeb25ce270d2141f"
+memory_key = "mem.fact.testing.runtime-manifest-dir"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Runtime CARGO_MANIFEST_DIR beats env! under shared target"
+summary = "Cargo sets CARGO_MANIFEST_DIR at runtime to the invoking tree; under a shared CARGO_TARGET_DIR resolve test paths via runtime read, not the env! macro"
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = []
+globs = []
+commands = ["cargo"]
+tags = ["area:testing", "area:worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d027da2e6505cc920ea4c49a45945a7c7f4684c7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0267c3e6c4f4a130ff5db3b75e43fc0b9d42123e92c2ea9802c6b3071664ba3a"
+base_commit = "a9ac10ebab35eff853fc6d0885d36b3f1c0a37fa"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "backlog"
+ref = "CHR-014"
+
+[[relation]]
+label = "related"
+target = "mem.fact.build.rebuild-stale-skips-test-binaries"
+
+[[relation]]
+label = "related"
+target = "mem_019ebc8e4662732185d4356a9a0f0ad6"
+
