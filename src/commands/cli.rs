@@ -586,6 +586,89 @@ pub(crate) enum Command {
 
 // ── help rendering ───────────────────────────────────────────────────────────
 
+/// A navigational grouping of top-level commands (SL-150). Header-only: `members`
+/// are command names matched against the live clap tree. `suppress_verbs` keeps the
+/// family's commands header-only in the boot map (infra is operational / skill-driven,
+/// not boot-time authoring routing — D7); the flag rides the struct so the suppression
+/// is compile-linked to the family, not a separate stringly-typed key list (F-4).
+struct Family {
+    key: &'static str,
+    members: &'static [&'static str],
+    suppress_verbs: bool,
+}
+
+/// The 8-family taxonomy (SL-150 §5.2). The ONLY hand-maintained classification of
+/// the top-level command surface; the drift-guard test asserts it partitions the
+/// visible clap subcommands exactly (INV-1/INV-2). Families render in this declared
+/// order; members within a family render in member-array order (INV-4).
+static FAMILIES: &[Family] = &[
+    Family {
+        key: "change",
+        suppress_verbs: false,
+        members: &[
+            "slice",
+            "revision",
+            "rfc",
+            "rec",
+            "review",
+            "reconcile",
+            "coverage",
+        ],
+    },
+    Family {
+        key: "governance",
+        suppress_verbs: false,
+        members: &["adr", "policy", "standard", "spec"],
+    },
+    Family {
+        key: "knowledge",
+        suppress_verbs: false,
+        members: &["memory", "knowledge", "backlog"],
+    },
+    Family {
+        key: "relations",
+        suppress_verbs: false,
+        members: &["link", "unlink", "needs", "after", "supersede"],
+    },
+    Family {
+        key: "facets",
+        suppress_verbs: false,
+        members: &["estimate", "value", "risk", "tag"],
+    },
+    Family {
+        key: "reports",
+        suppress_verbs: false,
+        members: &["status", "next", "blockers", "survey", "explain"],
+    },
+    Family {
+        key: "explore",
+        suppress_verbs: false,
+        members: &["search", "inspect", "relation", "concept-map", "map"],
+    },
+    Family {
+        key: "infra",
+        suppress_verbs: true,
+        members: &[
+            "install",
+            "boot",
+            "serve",
+            "config",
+            "validate",
+            "reseat",
+            "export",
+            "reservation",
+            "worktree",
+            "dispatch",
+            "catalog",
+        ],
+    },
+];
+
+/// Verbs every entity kind shares; subtracted to leave the distinctive set (SL-150).
+/// `status` is deliberately NOT in the spine — not universal, lifecycle-bearing, so it
+/// surfaces as distinctive where present.
+const SPINE: &[&str] = &["new", "list", "show", "paths"];
+
 /// One row in the top-level help table.
 struct HelpEntry {
     name: String,
@@ -594,23 +677,39 @@ struct HelpEntry {
 
 /// Render the top-level command list as a comfy-table, replacing clap's built-in
 /// help output. Called from `main()` when `--help` is requested at the top level.
+///
+/// SL-150: commands are grouped by [`FAMILIES`] (declared order; members in member-array
+/// order — INV-4) and rendered from ONE underlying table (shared column widths) via
+/// [`crate::listing::render_grouped`], which injects a full-width family-heading band at
+/// each group boundary. No column header row — families are the structure (A2). A member
+/// that does not resolve to a visible command is skipped (the drift test guards against
+/// that ever happening in practice).
 pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> String {
     use crate::listing::{self, Column, ColumnPaint, RenderOpts};
 
     let cmd = <crate::Cli as CommandFactory>::command();
-    let entries: Vec<HelpEntry> = cmd
-        .get_subcommands()
-        .filter(|sub| !sub.is_hide_set())
-        .map(|sub| {
-            let name = sub.get_name().to_string();
-            let about = sub.get_about().map_or(String::new(), ToString::to_string);
-            HelpEntry { name, about }
+    let about_of = |name: &str| -> Option<String> {
+        cmd.get_subcommands()
+            .find(|sub| !sub.is_hide_set() && sub.get_name() == name)
+            .map(|sub| sub.get_about().map_or(String::new(), ToString::to_string))
+    };
+
+    let groups: Vec<(&str, Vec<HelpEntry>)> = FAMILIES
+        .iter()
+        .map(|fam| {
+            let entries: Vec<HelpEntry> = fam
+                .members
+                .iter()
+                .filter_map(|name| {
+                    about_of(name).map(|about| HelpEntry {
+                        name: (*name).to_string(),
+                        about,
+                    })
+                })
+                .collect();
+            (fam.key, entries)
         })
         .collect();
-
-    if entries.is_empty() {
-        return String::new();
-    }
 
     let cols: &[&Column<HelpEntry>] = &[
         &Column {
@@ -628,7 +727,67 @@ pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> Str
     ];
 
     let opts = RenderOpts { color, term_width };
-    listing::render_columns(&entries, cols, opts)
+    listing::render_grouped(&groups, cols, opts)
+}
+
+/// Render the dense boot-map projection (SL-150 §5.4) — a plain-text, PUSH-tier
+/// command surface for the boot snapshot. PURE: a function of the compiled clap
+/// tree + the [`FAMILIES`]/[`SPINE`] taxonomy only — no clock/rng/disk/tty, so
+/// two runs are byte-identical (INV-3).
+///
+/// Layout:
+/// - a spine legend line once at the top (the [`SPINE`] verbs);
+/// - per family (FAMILIES order), a header line `{key}  {member member …}` —
+///   all members bare, member-array order (INV-4);
+/// - a sub-line for a command IFF its distinctive set (subcommand verbs − SPINE,
+///   in clap derive order — INV-4) is non-empty AND its family's `suppress_verbs`
+///   is false. Leaves (no subcommands) and infra families get a header only (D7).
+///
+/// Names (family keys and sub-line command names) share one left-padded field
+/// width so the surface scans as a column.
+pub(crate) fn render_boot_map() -> String {
+    use std::fmt::Write as _;
+
+    let cmd = <crate::Cli as CommandFactory>::command();
+
+    // Distinctive verbs for one command: its visible subcommand names, minus the
+    // SPINE, preserving clap derive order. Empty for leaves / spine-only commands.
+    let distinctive = |name: &str| -> Vec<String> {
+        cmd.get_subcommands()
+            .find(|sub| !sub.is_hide_set() && sub.get_name() == name)
+            .map(|sub| {
+                sub.get_subcommands()
+                    .filter(|g| !g.is_hide_set() && g.get_name() != "help")
+                    .map(|g| g.get_name().to_string())
+                    .filter(|verb| !SPINE.contains(&verb.as_str()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    // Shared name-field width: the longest family key, plus a two-space gutter.
+    let pad = FAMILIES.iter().map(|f| f.key.len()).max().unwrap_or(0) + 2;
+
+    let mut out = String::new();
+    out.push_str("SPINE: ");
+    out.push_str(&SPINE.join(" "));
+    out.push_str(" (+status where lifecycle) \u{2014} entity kinds\n\n");
+
+    for fam in FAMILIES {
+        _ = writeln!(out, "{:<pad$}{}", fam.key, fam.members.join(" "));
+        if fam.suppress_verbs {
+            continue;
+        }
+        for member in fam.members {
+            let verbs = distinctive(member);
+            if verbs.is_empty() {
+                continue;
+            }
+            // sub-line: two-space indent + the same padded name field + verbs.
+            _ = writeln!(out, "  {:<pad$}{}", member, verbs.join(" "));
+        }
+    }
+    out
 }
 
 /// One row in the `--commands` subcommand-grouped help table.
@@ -687,7 +846,9 @@ pub(crate) fn render_commands_table(color: bool, term_width: Option<u16>) -> Str
 
         if grandchildren.is_empty() {
             // Leaf command — single row, em-dash placeholder in verb column.
-            let about = sub.get_about().map_or(String::new(), |a| first_sentence(&a.to_string()));
+            let about = sub
+                .get_about()
+                .map_or(String::new(), |a| first_sentence(&a.to_string()));
             entries.push(VerbEntry {
                 command: parent,
                 verb: "\u{2014}".to_string(),
@@ -700,7 +861,11 @@ pub(crate) fn render_commands_table(color: bool, term_width: Option<u16>) -> Str
                     .get_about()
                     .map_or(String::new(), |a| first_sentence(&a.to_string()));
                 entries.push(VerbEntry {
-                    command: if i == 0 { parent.clone() } else { String::new() },
+                    command: if i == 0 {
+                        parent.clone()
+                    } else {
+                        String::new()
+                    },
                     verb,
                     description: desc,
                 });
@@ -908,7 +1073,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             check,
             emit,
             path,
-        } => crate::boot::dispatch(command, check, emit, path, color),
+        } => crate::boot::dispatch(command, check, emit, path, color, render_boot_map),
         Command::Catalog { command } => crate::catalog::dispatch(command, color),
         Command::Worktree { command } => crate::worktree::dispatch(command),
         Command::Dispatch { command } => crate::dispatch::dispatch(command, color),
@@ -1022,5 +1187,144 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             crate::commands::supersede::run_supersede(path, &new, &old)
         }
         Command::Map { command } => crate::commands::map::dispatch(command),
+    }
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test code: fail-fast on internal invariant violations"
+)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// Visible top-level command names: `!is_hide_set` and ≠ `help` — the
+    /// classification denominator (mirrors the render filters, INV-1 EDGE).
+    fn visible_commands() -> Vec<String> {
+        let cmd = <crate::Cli as CommandFactory>::command();
+        cmd.get_subcommands()
+            .filter(|s| !s.is_hide_set() && s.get_name() != "help")
+            .map(|s| s.get_name().to_string())
+            .collect()
+    }
+
+    /// VT-1 / EX-2 — the FAMILIES ⟷ clap-tree drift guard (design §9). Three
+    /// assertions; set equality alone is insufficient (a command in two families
+    /// dedups in the union and would pass), so this builds a name→family collision
+    /// map. INV-1 (total partition, no orphan), INV-2 (no phantom), no duplicate.
+    #[test]
+    fn families_partition_the_visible_command_tree() {
+        let visible: std::collections::BTreeSet<String> = visible_commands().into_iter().collect();
+
+        // (a) no duplicate member: a second insert for a name is a collision.
+        let mut owner: BTreeMap<&str, &str> = BTreeMap::new();
+        for fam in FAMILIES {
+            for &member in fam.members {
+                if let Some(prev) = owner.insert(member, fam.key) {
+                    panic!(
+                        "command `{member}` is in two families (`{prev}` and `{}`)",
+                        fam.key
+                    );
+                }
+            }
+        }
+
+        // (b) no phantom: every member resolves to a real visible command.
+        for (&member, &family) in &owner {
+            assert!(
+                visible.contains(member),
+                "FAMILIES member `{member}` (family `{family}`) is not a visible command"
+            );
+        }
+
+        // (c) no orphan: every visible command is in some family (INV-1).
+        for name in &visible {
+            assert!(
+                owner.contains_key(name.as_str()),
+                "visible command `{name}` is not classified into any family"
+            );
+        }
+
+        // The slice's stated census: 44 visible top-level commands (A1).
+        assert_eq!(visible.len(), 44, "expected 44 visible top-level commands");
+    }
+
+    /// R-a — narrow-width WRAP case (design watchout): at a width that forces the
+    /// description column to wrap, band injection must still map each continuation
+    /// line to the right family (a continuation has a blank first column, so
+    /// `is_table_row_start` is false and no spurious band is emitted mid-row). Assert
+    /// exactly 8 family headings survive wrapping, and every `  {key}` heading is
+    /// immediately preceded by a blank line (never mid-row).
+    #[test]
+    fn narrow_width_wrap_keeps_eight_bands_and_no_mid_row_heading() {
+        let out = render_top_level_help(false, Some(40));
+        let lines: Vec<&str> = out.lines().collect();
+        let keys: std::collections::BTreeSet<&str> = [
+            "change",
+            "governance",
+            "knowledge",
+            "relations",
+            "facets",
+            "reports",
+            "explore",
+            "infra",
+        ]
+        .into_iter()
+        .collect();
+        let mut headings = 0;
+        for (i, line) in lines.iter().enumerate() {
+            if let Some(rest) = line.strip_prefix("  ")
+                && keys.contains(rest)
+            {
+                headings += 1;
+                assert!(
+                    i > 0 && lines[i - 1].is_empty(),
+                    "wrapped output put family band `{rest}` mid-row (no blank above)"
+                );
+            }
+        }
+        assert_eq!(headings, 8, "all 8 family bands must survive wrapping");
+        // Wrapping actually happened: some line exceeds none and a continuation
+        // (blank first column, no separator-leading token) exists.
+        assert!(
+            lines.iter().any(|l| {
+                l.starts_with(' ') && !l.trim_start().is_empty() && {
+                    let head = l.split('\u{2502}').next().unwrap_or(l);
+                    head.chars().all(char::is_whitespace)
+                }
+            }),
+            "the 40-col width must actually wrap at least one description"
+        );
+    }
+
+    /// VA-1 — colour-ON smoke (design §9): the family-heading band paints its
+    /// background SGR escape and pads edge-to-edge to `term_width`. NOT a byte
+    /// golden — asserts escape-code presence + full-width pad, not exact bytes.
+    #[test]
+    fn colour_on_help_paints_full_width_family_bands() {
+        let out = render_top_level_help(true, Some(80));
+        // A band carries an SGR background escape (`\x1b[…m`).
+        assert!(
+            out.contains('\u{1b}'),
+            "colour-on help must emit ANSI escapes"
+        );
+        // The first family band header is present and painted.
+        assert!(
+            out.contains("change"),
+            "first family heading `change` must appear"
+        );
+        // Full-width pad: at least one painted line reaches the 80-col width once
+        // ANSI escapes are stripped (the band fills edge-to-edge).
+        let widest = out
+            .lines()
+            .map(|l| crate::listing::strip_ansi(l).chars().count())
+            .max()
+            .unwrap_or(0);
+        assert!(
+            widest >= 80,
+            "a band line must pad to term_width (80); widest visible was {widest}"
+        );
     }
 }
