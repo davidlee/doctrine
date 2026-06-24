@@ -239,6 +239,10 @@ pub(crate) enum MemoryCommand {
         #[command(flatten)]
         list: crate::CommonListArgs,
 
+        /// Show only orphaned memories: zero inbound backlinks and zero outbound relations.
+        #[arg(long = "orphans")]
+        orphans: bool,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -529,11 +533,13 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
             memory_type,
             list,
             path,
+            orphans,
         } => run_list(
             &mut io::stdout(),
             path,
             memory_type,
             list.into_list_args(color),
+            orphans,
         ),
         MemoryCommand::Find { query, args } => {
             // Merge positional query + --query; mutually exclusive.
@@ -2736,12 +2742,38 @@ pub(crate) fn list_rows(
     root: &Path,
     type_f: Option<MemoryType>,
     mut args: ListArgs,
+    orphans: bool,
 ) -> Result<String> {
     listing::validate_statuses(&args.status, MEMORY_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
-    let rows = filtered_list(root, type_f, &filter)?;
+    let mut rows = filtered_list(root, type_f, &filter)?;
+
+    if orphans {
+        let all = collect_all(root)?;
+        let (known_uids, key_to_uid) = known_link_maps(&all);
+        let backlinks = backlinks_index_for_all(&all, root, &known_uids, &key_to_uid);
+
+        // Precompute: which uids have ANY outbound (relations OR body wikilinks)
+        let has_outbound: BTreeSet<String> = all
+            .iter()
+            .filter(|m| {
+                !m.relations.is_empty() || !extract_wikilinks(&read_body(root, &m.uid)).is_empty()
+            })
+            .map(|m| m.uid.clone())
+            .collect();
+
+        rows.retain(|m| {
+            let no_outbound = !has_outbound.contains(&m.uid);
+            let no_inbound = backlinks.get(&m.uid).is_none_or(BTreeSet::is_empty)
+                && m.key
+                    .as_ref()
+                    .is_none_or(|key| backlinks.get(key).is_none_or(BTreeSet::is_empty));
+            no_outbound && no_inbound
+        });
+    }
+
     match format {
         Format::Table => {
             let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, columns.as_deref())?;
@@ -2773,9 +2805,10 @@ pub(crate) fn run_list(
     path: Option<PathBuf>,
     type_f: Option<MemoryType>,
     args: ListArgs,
+    orphans: bool,
 ) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    write!(writer, "{}", list_rows(&root, type_f, args)?)?;
+    write!(writer, "{}", list_rows(&root, type_f, args, orphans)?)?;
     Ok(())
 }
 
@@ -2919,13 +2952,15 @@ fn normalize_backlink_target(
     }
 }
 
-/// Build the backlink row set for one memory uid (design §4). Accepts
-/// pre-collected memories so callers can share one `collect_all` between
-/// `check_retrievable` + `backlink_rows_for` (no double scan). Returns rows
-/// sorted by uid → method → title with method-provenance ("wikilink" or the
-/// actual relation label).
-pub(crate) fn backlink_rows_for(root: &Path, all: &[Memory], reference: &str) -> Vec<BacklinkRow> {
-    let (known_uids, key_to_uid) = known_link_maps(all);
+/// Build the full backlinks index for all memories. Returns a map from target
+/// uid/key → set of source uids. Extracted from `backlink_rows_for` (IMP-165)
+/// so `list_rows --orphans` can reuse it corpus-wide.
+pub(crate) fn backlinks_index_for_all(
+    all: &[Memory],
+    root: &Path,
+    known_uids: &BTreeSet<String>,
+    key_to_uid: &BTreeMap<String, String>,
+) -> BTreeMap<String, BTreeSet<String>> {
     let mut wikilink_storage: BTreeMap<String, Vec<crate::links::Wikilink>> = BTreeMap::new();
     let mut relation_storage: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
@@ -2934,7 +2969,7 @@ pub(crate) fn backlink_rows_for(root: &Path, all: &[Memory], reference: &str) ->
         let resolved: Vec<crate::links::Wikilink> = extract_wikilinks(&body)
             .into_iter()
             .map(|link| {
-                let target = resolve_wikilink(&known_uids, &key_to_uid, &link.target, link.is_uid)
+                let target = resolve_wikilink(known_uids, key_to_uid, &link.target, link.is_uid)
                     .unwrap_or(link.target);
                 crate::links::Wikilink {
                     target,
@@ -2947,7 +2982,7 @@ pub(crate) fn backlink_rows_for(root: &Path, all: &[Memory], reference: &str) ->
         let relation_targets: Vec<String> = memory
             .relations
             .iter()
-            .map(|relation| normalize_backlink_target(&relation.target, &known_uids, &key_to_uid))
+            .map(|relation| normalize_backlink_target(&relation.target, known_uids, key_to_uid))
             .collect();
         relation_storage.insert(memory.uid.clone(), relation_targets);
     }
@@ -2961,7 +2996,17 @@ pub(crate) fn backlink_rows_for(root: &Path, all: &[Memory], reference: &str) ->
         .map(|(uid, targets)| (uid.as_str(), targets.iter().map(String::as_str).collect()))
         .collect();
 
-    let backlinks = backlinks_index(wikilinks_by_uid, relations_by_uid);
+    backlinks_index(wikilinks_by_uid, relations_by_uid)
+}
+
+/// Build the backlink row set for one memory uid (design §4). Accepts
+/// pre-collected memories so callers can share one `collect_all` between
+/// `check_retrievable` + `backlink_rows_for` (no double scan). Returns rows
+/// sorted by uid → method → title with method-provenance ("wikilink" or the
+/// actual relation label).
+pub(crate) fn backlink_rows_for(root: &Path, all: &[Memory], reference: &str) -> Vec<BacklinkRow> {
+    let (known_uids, key_to_uid) = known_link_maps(all);
+    let backlinks = backlinks_index_for_all(all, root, &known_uids, &key_to_uid);
     let mut query_targets = BTreeSet::from([reference.to_owned()]);
     if let Ok(mref) = MemoryRef::parse(reference)
         && let Ok(memory) = resolve_memory_from_all(all, &mref)
@@ -4732,7 +4777,7 @@ to = "mem_018e000000000000000000000000000b"
         mem_at(&items, new_b, "2026-06-09");
         mem_at(&items, new_a, "2026-06-09");
 
-        let out = list_rows(root, None, ListArgs::default()).unwrap();
+        let out = list_rows(root, None, ListArgs::default(), false).unwrap();
         let off = |uid: &str| {
             out.find(uid)
                 .unwrap_or_else(|| panic!("{uid} present: {out}"))
@@ -4751,14 +4796,17 @@ to = "mem_018e000000000000000000000000000b"
         fs::create_dir_all(&items).unwrap();
 
         // empty store → the empty string (the agreed empty marker upstream).
-        assert_eq!(list_rows(root, None, ListArgs::default()).unwrap(), "");
+        assert_eq!(
+            list_rows(root, None, ListArgs::default(), false).unwrap(),
+            ""
+        );
 
         let uid_a = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
         let uid_b = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8";
         write_memory_dir(&items, uid_a);
         write_memory_dir(&items, uid_b);
 
-        let out = list_rows(root, None, ListArgs::default()).unwrap();
+        let out = list_rows(root, None, ListArgs::default(), false).unwrap();
         assert!(out.contains(uid_a), "lists the first pointer");
         assert!(out.contains(uid_b), "lists the second pointer");
         // on the spine: full uid printed, header + trailing newline.
@@ -4777,13 +4825,13 @@ to = "mem_018e000000000000000000000000000b"
         write_memory_dir(&items, uid_item);
 
         // shipped/ absent ⇒ only the items pointer (collect_all == items-only).
-        let before = list_rows(root, None, ListArgs::default()).unwrap();
+        let before = list_rows(root, None, ListArgs::default(), false).unwrap();
         assert!(before.contains(uid_item));
         assert!(!before.contains(uid_ship));
 
         // a shipped memory present ⇒ the boot/list seam surfaces it, exactly once.
         write_memory_full(&shipped, uid_ship, &titled_toml(uid_ship, "Shipped"), "s");
-        let after = list_rows(root, None, ListArgs::default()).unwrap();
+        let after = list_rows(root, None, ListArgs::default(), false).unwrap();
         assert!(after.contains(uid_item), "items pointer still present");
         assert_eq!(
             after.matches(uid_ship).count(),
@@ -4875,7 +4923,7 @@ to = "mem_018e000000000000000000000000000b"
         }
 
         // default: active + draft visible, the four terminal hidden.
-        let def = list_rows(root, None, ListArgs::default()).unwrap();
+        let def = list_rows(root, None, ListArgs::default(), false).unwrap();
         assert!(
             def.contains("mem_00000000000000000000000000000a01"),
             "active visible: {def}"
@@ -4904,6 +4952,7 @@ to = "mem_018e000000000000000000000000000b"
                 status: vec!["superseded".to_string()],
                 ..ListArgs::default()
             },
+            false,
         )
         .unwrap();
         assert!(
@@ -4919,6 +4968,7 @@ to = "mem_018e000000000000000000000000000b"
                 all: true,
                 ..ListArgs::default()
             },
+            false,
         )
         .unwrap();
         for (uid, _) in valid {
@@ -4939,6 +4989,7 @@ to = "mem_018e000000000000000000000000000b"
                 status: vec!["bogus".to_string()],
                 ..ListArgs::default()
             },
+            false,
         )
         .unwrap_err()
         .to_string();
@@ -4965,6 +5016,7 @@ to = "mem_018e000000000000000000000000000b"
                 json: true,
                 ..ListArgs::default()
             },
+            false,
         )
         .unwrap();
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
@@ -4991,7 +5043,7 @@ to = "mem_018e000000000000000000000000000b"
             .replace("memory_type = \"pattern\"", "memory_type = \"fact\"");
         write_memory_full(&items, "mem_00000000000000000000000000000f02", &fact, "b");
 
-        let out = list_rows(root, Some(MemoryType::Fact), ListArgs::default()).unwrap();
+        let out = list_rows(root, Some(MemoryType::Fact), ListArgs::default(), false).unwrap();
         assert!(
             out.contains("mem_00000000000000000000000000000f02"),
             "fact kept: {out}"
@@ -7822,6 +7874,283 @@ weight = 0
         assert_eq!(rows[0].key.as_deref(), Some("mem.test.first"));
     }
 
+    // ── IMP-165: backlinks_index_for_all refactor gate ────────────────────
+
+    /// Seed a memory with authored relations + wikilinks in body.
+    fn seed_linked_memory(
+        root: &Path,
+        uid: &str,
+        title: &str,
+        key: &str,
+        relations: &[(&str, &str)],
+        body: &str,
+    ) {
+        let items = root.join(MEMORY_ITEMS_DIR);
+        let mut rels = String::new();
+        for (label, target) in relations {
+            rels.push_str(&format!(
+                "[[relation]]\nlabel = \"{label}\"\ntarget = \"{target}\"\n"
+            ));
+        }
+        let toml = format!(
+            r#"
+memory_uid = "{uid}"
+memory_key = "{key}"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "{title}"
+summary = ""
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+
+[git]
+anchor_kind = "none"
+
+[review]
+verification_state = "unverified"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+{rels}
+"#
+        );
+        write_memory_full(&items, uid, &toml, body);
+    }
+
+    #[test]
+    fn backlinks_index_for_all_matches_per_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        fs::create_dir_all(&items).unwrap();
+
+        // A → B (relation), B → C (wikilink), C isolated
+        let uid_a = "mem_aaaa0000000000000000000000000001";
+        let uid_b = "mem_bbbb0000000000000000000000000002";
+        let uid_c = "mem_cccc0000000000000000000000000003";
+
+        seed_linked_memory(
+            root,
+            uid_a,
+            "A",
+            "mem.test.a",
+            &[("related", uid_b)],
+            "A body",
+        );
+        seed_linked_memory(
+            root,
+            uid_b,
+            "B",
+            "mem.test.b",
+            &[],
+            &format!("B body links to [[{uid_c}]]"),
+        );
+        seed_linked_memory(root, uid_c, "C", "mem.test.c", &[], "C body, isolated");
+
+        let all = collect_all(root).unwrap();
+        let (known_uids, key_to_uid) = known_link_maps(&all);
+        let index = backlinks_index_for_all(&all, root, &known_uids, &key_to_uid);
+
+        // Compare corpus-wide index against per-memory backlink_rows_for
+        for memory in &all {
+            let per_mem_rows = backlink_rows_for(root, &all, &memory.uid);
+            let per_mem_sources: BTreeSet<String> =
+                per_mem_rows.iter().map(|r| r.uid.clone()).collect();
+            let index_sources: BTreeSet<String> =
+                index.get(&memory.uid).cloned().unwrap_or_default();
+            assert_eq!(
+                index_sources, per_mem_sources,
+                "backlinks mismatch for {} (key={:?})",
+                memory.uid, memory.key
+            );
+        }
+    }
+
+    // ── IMP-165: --orphans flag ───────────────────────────────────────────
+
+    #[test]
+    fn orphans_flag_returns_true_orphans() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        fs::create_dir_all(&items).unwrap();
+
+        // A → B (relation), B → C (wikilink), D fully isolated
+        let uid_a = "mem_aaaa0000000000000000000000000001";
+        let uid_b = "mem_bbbb0000000000000000000000000002";
+        let uid_c = "mem_cccc0000000000000000000000000003";
+        let uid_d = "mem_dddd0000000000000000000000000004";
+
+        seed_linked_memory(
+            root,
+            uid_a,
+            "A",
+            "mem.test.a",
+            &[("related", uid_b)],
+            "A body",
+        );
+        seed_linked_memory(
+            root,
+            uid_b,
+            "B",
+            "mem.test.b",
+            &[],
+            &format!("B body links to [[{uid_c}]]"),
+        );
+        seed_linked_memory(root, uid_c, "C", "mem.test.c", &[], "C body, sink only");
+        seed_linked_memory(root, uid_d, "D", "mem.test.d", &[], "D body, isolated");
+
+        let out = list_rows(root, None, ListArgs::default(), true).unwrap();
+        // Only D is a true orphan (no inbound, no outbound).
+        assert!(out.contains(uid_d), "D is orphaned: {out}");
+        assert!(!out.contains(uid_a), "A not orphan (has outbound): {out}");
+        assert!(!out.contains(uid_b), "B not orphan (has outbound): {out}");
+        assert!(!out.contains(uid_c), "C not orphan (has inbound): {out}");
+    }
+
+    #[test]
+    fn orphans_flag_with_type_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        fs::create_dir_all(&items).unwrap();
+
+        // orphan fact + orphan pattern
+        let uid_fact = "mem_fa0f0000000000000000000000000001";
+        let uid_pat = "mem_0a000000000000000000000000000002";
+        seed_linked_memory(root, uid_fact, "fact", "mem.test.fact", &[], "fact body");
+        // pattern memory needs memory_type = "pattern"
+        let pat_toml = format!(
+            r#"
+memory_uid = "{uid_pat}"
+memory_key = "mem.test.patt"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Pattern orphan"
+summary = ""
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+
+[git]
+anchor_kind = "none"
+
+[review]
+verification_state = "unverified"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+"#
+        );
+        write_memory_full(&items, uid_pat, &pat_toml, "pattern body");
+
+        let out = list_rows(root, Some(MemoryType::Pattern), ListArgs::default(), true).unwrap();
+        assert!(!out.contains(uid_fact), "fact filtered out by type: {out}");
+        assert!(out.contains(uid_pat), "pattern orphan present: {out}");
+    }
+
+    #[test]
+    fn orphans_flag_key_resolved_backlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        fs::create_dir_all(&items).unwrap();
+
+        // A has key mem.foo.bar, B has wikilink [[mem.foo.bar]].
+        // A is NOT an orphan because B's key-based link resolves to A.
+        let uid_a = "mem_aaaa0000000000000000000000000001";
+        let uid_b = "mem_bbbb0000000000000000000000000002";
+
+        let a_toml = format!(
+            r#"
+memory_uid = "{uid_a}"
+memory_key = "mem.foo.bar"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Target A"
+summary = ""
+created = "2026-06-24"
+updated = "2026-06-24"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+
+[git]
+anchor_kind = "none"
+
+[review]
+verification_state = "unverified"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+"#
+        );
+        write_memory_full(&items, uid_a, &a_toml, "A body");
+        seed_linked_memory(
+            root,
+            uid_b,
+            "B",
+            "mem.test.b",
+            &[],
+            "B body links to [[mem.foo.bar]]",
+        );
+
+        let out = list_rows(root, None, ListArgs::default(), true).unwrap();
+        assert!(
+            !out.contains(uid_a),
+            "A is NOT orphan (key-based backlink from B): {out}"
+        );
+    }
+
+    #[test]
+    fn orphans_flag_empty_corpus() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        fs::create_dir_all(&items).unwrap();
+
+        let out = list_rows(root, None, ListArgs::default(), true).unwrap();
+        assert_eq!(out, "", "empty corpus → empty output");
+    }
+
     #[test]
     fn list_for_mcp_returns_paginated_result() {
         let root = temp_project_with_two_memories();
@@ -8499,7 +8828,7 @@ verified_sha = ""
             columns: None,
             render: crate::listing::RenderOpts::default(),
         };
-        run_list(&mut buf, Some(root.path().to_path_buf()), None, args).unwrap();
+        run_list(&mut buf, Some(root.path().to_path_buf()), None, args, false).unwrap();
         let output = String::from_utf8(buf).unwrap();
         assert!(!output.is_empty(), "run_list must write to buffer");
         assert!(
