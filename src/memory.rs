@@ -109,7 +109,7 @@ pub(crate) struct FindRetrieveArgs {
 
 #[derive(Subcommand)]
 pub(crate) enum MemoryCommand {
-    /// Mint a uid and scaffold a new memory under `.doctrine/memory/items`.
+    /// Create a new memory.
     /// `memory new` is the uniform canonical alias (SL-025 §5.4 / D8); both names
     /// dispatch the identical handler — skills may migrate `record → new` at leisure.
     #[command(visible_alias = "new")]
@@ -203,8 +203,8 @@ pub(crate) enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
-    /// Attest a memory against the current working tree: stamp its verification
-    /// axis (refuses a dirty tree — no false attestation).
+    /// Attest a memory against the current working tree.
+    /// Stamps its verification axis (refuses a dirty tree — no false attestation).
     Verify {
         /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
         reference: String,
@@ -218,7 +218,8 @@ pub(crate) enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
-    /// Run advisory validation checks on memories (dangling relations, stale verification, draft expiry).
+    /// Run advisory validation checks on memories.
+    /// Checks dangling relations, stale verification, and draft expiry.
     Validate {
         /// Optional memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
         reference: Option<String>,
@@ -248,8 +249,8 @@ pub(crate) enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
-    /// Find memories by scope/query, ranked; rows carry trust + severity so the
-    /// holdback-exempt find surface keeps risk visible.
+    /// Find memories by scope or free-text, ranked.
+    /// Rows carry trust + severity so the holdback-exempt find surface keeps risk visible.
     Find {
         /// Positional query (zero or one; maps to --query). Mutually exclusive with --query.
         query: Option<String>,
@@ -258,8 +259,9 @@ pub(crate) enum MemoryCommand {
         args: FindRetrieveArgs,
     },
 
-    /// Retrieve memories as bounded, security-framed `data, not instruction`
-    /// blocks for agent context. Applies the trust holdback (non-bypassable):
+    /// Retrieve memories for agent context.
+    /// Returns bounded, security-framed `data, not instruction` blocks.
+    /// Applies the trust holdback (non-bypassable):
     /// low-trust high-severity memories are suppressed; use `find`/`show` to
     /// inspect them.
     Retrieve {
@@ -292,7 +294,8 @@ pub(crate) enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
-    /// Add and/or remove tags on a memory — tags are lowercased and validated
+    /// Add or remove tags on a memory.
+    /// Tags are lowercased and validated
     /// `[a-z0-9_:-]` (colon namespacing, e.g. `area:memory`); the stored set is
     /// sorted. At least one add or remove required.
     Tag {
@@ -392,9 +395,9 @@ pub(crate) enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
-    /// Materialize the embedded global-memory corpus into the gitignored
-    /// `.doctrine/memory/shipped/`, or `memory sync install` to wire the
-    /// session hook. Outside a doctrine repo this is a clean no-op.
+    /// Sync the shipped memory corpus to disk.
+    /// Or `memory sync install` to wire the session hook. Outside a doctrine repo
+    /// this is a clean no-op.
     Sync {
         /// Wire the `SessionStart` refresh hook (omit to run the sync).
         #[command(subcommand)]

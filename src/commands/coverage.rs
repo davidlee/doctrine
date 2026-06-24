@@ -14,9 +14,10 @@ use crate::listing::Format;
 
 #[derive(Subcommand)]
 pub(crate) enum CoverageCommand {
-    /// Read-only requirement coverage / drift view. `<reference>` is REQ-NNN (one
-    /// row) or PRD-/SPEC-NNN (a member fan). Derived observed coverage + the drift
-    /// verdict against authored status — never writes, never derives status.
+    /// Show requirement coverage and drift.
+    /// `<reference>` is REQ-NNN (one row) or PRD-/SPEC-NNN (a member fan).
+    /// Derived observed coverage + the drift verdict against authored status —
+    /// never writes, never derives status.
     Show {
         /// Canonical ref: REQ-NNN | PRD-NNN | SPEC-NNN.
         reference: String,
@@ -38,10 +39,9 @@ pub(crate) enum CoverageCommand {
         path: Option<std::path::PathBuf>,
     },
 
-    /// Record one observed coverage cell into a slice's `coverage.toml`. With any
-    /// check field (`--alias`/`--command`/`--matcher-*`/`--extra-args`/`--regex`)
-    /// the cell is a `VT` recipe (leans Planned until verified); with none it is a
-    /// `VA`/`VH` attestation stamped with today (or `--attested-date`).
+    /// Record a coverage observation.
+    /// With any check field the cell is a `VT` recipe (leans Planned until
+    /// verified); with none it is a `VA`/`VH` attestation.
     Record {
         /// Slice the cell is recorded under — `SL-NNN` or the bare number.
         #[arg(long)]

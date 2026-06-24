@@ -642,6 +642,7 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum RecCommand {
+    /// Create a new reconciliation record.
     New {
         #[arg(long = "move", value_parser = RecMove::parse)]
         r#move: RecMove,
@@ -654,12 +655,14 @@ pub(crate) enum RecCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// List reconciliation records.
     List {
         #[command(flatten)]
         list: CommonListArgs,
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Show one reconciliation record.
     Show {
         reference: String,
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]

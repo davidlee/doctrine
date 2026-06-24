@@ -206,6 +206,7 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum StandardCommand {
+    /// Allocate the next id and scaffold a new standard.
     New {
         title: Option<String>,
         #[arg(long)]
@@ -213,12 +214,14 @@ pub(crate) enum StandardCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// List standards.
     List {
         #[command(flatten)]
         list: CommonListArgs,
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Show one standard.
     Show {
         reference: String,
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
@@ -228,6 +231,7 @@ pub(crate) enum StandardCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Set a standard's status.
     Status {
         id: u32,
         #[arg(long)]

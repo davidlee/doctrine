@@ -225,8 +225,9 @@ pub(crate) enum ReviewCommand {
         path: Option<PathBuf>,
     },
 
-    /// Populate the reviewer-context warm-cache from a curated `domain_map`, or
-    /// (`--seed`) emit git-changed candidate paths to curate from (ADR-007 D-C10).
+    /// Prime the review context cache.
+    /// Populates the warm-cache from a curated `domain_map`. `--seed` emits
+    /// git-changed candidate paths to curate from (ADR-007 D-C10).
     Prime {
         /// Review reference — `RV-007` or the bare id `7`.
         reference: String,
