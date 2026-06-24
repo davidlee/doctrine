@@ -14,7 +14,7 @@ use anyhow::Context;
 
 /// Entity kind prefixes that accept tags (SL-136).
 pub(crate) const TAGGABLE: &[&str] = &[
-    "SL", "ADR", "POL", "STD", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE",
+    "SL", "ADR", "POL", "STD", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "CM", "DEC", "QUE",
     "CON", "PRD", "SPEC", "REQ",
 ];
 

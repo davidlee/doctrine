@@ -1249,6 +1249,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
         .map(|m| ConceptMapRow {
             id: m.id,
             status: m.status,
+            tags: m.tags,
             slug: m.slug,
             title: m.title,
         })
@@ -1283,6 +1284,7 @@ struct ConceptMapRow {
     #[serde(serialize_with = "serialize_cm_id")]
     id: u32,
     status: String,
+    tags: Vec<String>,
     slug: String,
     title: String,
 }
@@ -1302,7 +1304,7 @@ fn key(m: &Meta) -> listing::FilterFields {
         slug: m.slug.clone(),
         title: m.title.clone(),
         status: m.status.clone(),
-        tags: Vec::new(),
+        tags: m.tags.clone(),
     }
 }
 
@@ -1321,6 +1323,15 @@ const CONCEPT_MAP_COLUMNS: &[listing::Column<ConceptMapRow>] = &[
         paint: listing::ColumnPaint::None,
     },
     listing::Column {
+        name: "tags",
+        header: "Tags",
+        cell: |r: &ConceptMapRow| r.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |r: &ConceptMapRow| r.tags.clone(),
+            render: crate::listing::paint_tag,
+        },
+    },
+    listing::Column {
         name: "slug",
         header: "Slug",
         cell: |r: &ConceptMapRow| r.slug.clone(),
@@ -1335,7 +1346,7 @@ const CONCEPT_MAP_COLUMNS: &[listing::Column<ConceptMapRow>] = &[
 ];
 
 /// The default visible columns.
-const CONCEPT_MAP_DEFAULT: &[&str] = &["id", "status", "slug", "title"];
+const CONCEPT_MAP_DEFAULT: &[&str] = &["id", "status", "tags", "slug", "title"];
 
 // ---------------------------------------------------------------------------
 // Pure: get_dsl / set_dsl
