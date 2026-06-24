@@ -5,10 +5,10 @@ id = 113
 slug = "mcp-review-output-token-efficiency-skip-formatted-on-listedstatus-summary-view-for-show-opt-in"
 title = "MCP review-output token efficiency: skip formatted on Listed/Status, summary view for show, opt-in limit for list"
 kind = "improvement"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-24"
 tags = ["area:mcp", "area:review"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

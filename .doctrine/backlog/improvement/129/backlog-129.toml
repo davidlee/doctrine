@@ -5,10 +5,10 @@ id = 129
 slug = "separate-main-from-edge-decouple-dispatch-landing-zone-from-daily-authoring-churn"
 title = "Separate main from edge: decouple dispatch landing zone from daily authoring churn"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-20"
-updated = "2026-06-21"
+updated = "2026-06-24"
 tags = ["area:dispatch", "area:governance"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

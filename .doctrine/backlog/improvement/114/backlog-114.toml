@@ -5,10 +5,10 @@ id = 114
 slug = "review-list-lean-by-default-cap-mcp-output-to-a-sane-default-with-a-non-silent-totaltruncated-signal"
 title = "review_list lean-by-default: cap MCP output to a sane default with a non-silent total/truncated signal"
 kind = "improvement"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-24"
 tags = ["area:mcp", "area:review"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

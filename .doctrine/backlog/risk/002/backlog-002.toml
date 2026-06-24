@@ -5,10 +5,10 @@ id = 2
 slug = "cordage-explain-path-enumeration-is-exponential-on-diamond-lattices-sl-036-r-bn-2"
 title = "cordage explain() path enumeration is exponential on diamond lattices (SL-036 R-B/N-2)"
 kind = "risk"
-status = "resolved"
-resolution = "mitigated"
+status = "closed"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:relations", "cordage", "perf", "scale"]
 
 [facet]                         # risk only — every field typed; seeded empty

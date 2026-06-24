@@ -5,10 +5,10 @@ id = 10
 slug = "dispatch-base-staleness-surfaces-as-a-candidate-time-merge-conflict-on-long-drives"
 title = "Dispatch base-staleness surfaces as a candidate-time merge conflict on long drives"
 kind = "risk"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-06-24"
 tags = []
 
 [facet]                         # risk only — every field typed; seeded empty

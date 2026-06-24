@@ -5,10 +5,10 @@ id = 34
 slug = "claude-dispatch-arm-isolationworktree-falls-back-to-main-under-shared-clone-lock-contention-forking"
 title = "Claude dispatch arm: isolation:worktree falls back to main under shared-clone lock contention, forking wrong/moving base"
 kind = "issue"
-status = "resolved"
-resolution = "mitigated"
+status = "closed"
+resolution = "done"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-06-24"
 tags = ["area:dispatch", "area:harness", "area:worktree", "scope:claude-arm"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

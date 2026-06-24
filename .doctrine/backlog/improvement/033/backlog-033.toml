@@ -5,10 +5,10 @@ id = 33
 slug = "cross-kind-depseq-capture-extend-needsafter-sequencing-beyond-backlog-to-specsslices"
 title = "Cross-kind dep/seq capture — extend needs/after sequencing beyond backlog to specs/slices"
 kind = "improvement"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-12"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:relations"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

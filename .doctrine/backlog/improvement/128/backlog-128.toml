@@ -5,10 +5,10 @@ id = 128
 slug = "author-a-tech-spec-for-the-git-interaction-model-dispatchcandidatereviewintegrate-vs-gits-objectref"
 title = "Author a tech spec for the git interaction model (dispatch/candidate/review/integrate vs git's object+ref model)"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-06-24"
 tags = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

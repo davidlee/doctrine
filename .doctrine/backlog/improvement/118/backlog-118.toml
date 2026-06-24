@@ -5,10 +5,10 @@ id = 118
 slug = "build-item-level-authored-priority-slot-feeding-survey-next"
 title = "Build item-level authored-priority slot feeding survey/next"
 kind = "improvement"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-19"
-updated = "2026-06-22"
+updated = "2026-06-24"
 tags = ["area:priority", "area:spec", "area:survey"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

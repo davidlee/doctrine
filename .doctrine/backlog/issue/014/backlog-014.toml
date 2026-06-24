@@ -5,10 +5,10 @@ id = 14
 slug = "slice-067-committed-without-slice-067toml-breaks-corpus-walk-gate-in-clean-checkouts"
 title = "slice 067 committed without slice-067.toml breaks corpus-walk gate in clean checkouts"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-14"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:slice", "correctness"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

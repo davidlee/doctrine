@@ -5,10 +5,10 @@ id = 22
 slug = "dispatch-sync-integrate-stale-index"
 title = "dispatch sync --integrate left staging area in stale reverse-diff state after advancing trunk"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-18"
-updated = "2026-06-20"
+updated = "2026-06-24"
 tags = ["area:dispatch"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

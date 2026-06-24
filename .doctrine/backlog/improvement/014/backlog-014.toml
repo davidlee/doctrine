@@ -5,10 +5,10 @@ id = 14
 slug = "cross-verb-golden-harness-over-listingrs-shared-render-surface"
 title = "Cross-verb golden harness over listing.rs shared render surface"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:cli", "deferred", "golden", "listing", "render", "risk", "testing", "trigger"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

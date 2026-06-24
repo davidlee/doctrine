@@ -5,10 +5,10 @@ id = 66
 slug = "f1-refuse-reword-slice-backlog-knowledge"
 title = "Finish the F-1 non-destructive refuse reword across slice/backlog/knowledge status setters (RV-024 F-2)"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-14"
-updated = "2026-06-18"
+updated = "2026-06-24"
 tags = ["area:backlog", "area:memory", "area:slice"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

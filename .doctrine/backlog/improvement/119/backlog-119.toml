@@ -5,10 +5,10 @@ id = 119
 slug = "stable-kebab-case-display-formatter-for-coveragestatus"
 title = "Stable kebab-case Display formatter for CoverageStatus"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-06-24"
 tags = ["area:cli", "area:coverage"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

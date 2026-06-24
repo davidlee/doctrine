@@ -5,10 +5,10 @@ id = 134
 slug = "extend-tagging-all-entity-types"
 title = "Extend tagging to all appropriate entity types — model + CLI"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-24"
 tags = ["area:cli", "area:modelling", "area:priority"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

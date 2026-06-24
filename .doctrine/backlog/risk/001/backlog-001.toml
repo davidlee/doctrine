@@ -5,10 +5,10 @@ id = 1
 slug = "cordage-against-orientation-u-re-map-untested-by-any-vt-sl-036-r-d"
 title = "cordage: Against-orientation U re-map untested by any VT (SL-036 R-D)"
 kind = "risk"
-status = "resolved"
-resolution = "mitigated"
+status = "closed"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:relations", "testing"]
 
 [facet]                         # risk only — every field typed; seeded empty

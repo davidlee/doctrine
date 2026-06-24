@@ -5,10 +5,10 @@ id = 29
 slug = "dispatch-claude-arm-worker-isolation-forks-off-advancing-main-head-not-coordination-base-b"
 title = "dispatch claude arm: worker isolation forks off advancing main HEAD, not coordination base B"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
+status = "closed"
+resolution = "done"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-24"
 tags = ["area:dispatch", "area:skills"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

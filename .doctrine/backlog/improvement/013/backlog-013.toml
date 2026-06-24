@@ -5,10 +5,10 @@ id = 13
 slug = "lift-shared-listshow-rowtablejson-shape-across-slice-and-spec-verbs"
 title = "Lift shared list+show row/table/JSON shape across slice and spec verbs"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-24"
 tags = ["area:cli", "deferred", "dry", "quality", "render", "slice", "spec", "trigger"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
