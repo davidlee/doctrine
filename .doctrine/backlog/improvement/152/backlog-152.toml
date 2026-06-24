@@ -5,10 +5,10 @@ id = 152
 slug = "document-review-prime-domain-map-toml-format-shipped-reference-or-memory"
 title = "Document review_prime domain_map TOML format — shipped reference or memory"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "obsolete"
 created = "2026-06-22"
-updated = "2026-06-22"
+updated = "2026-06-24"
 tags = ["mcp", "review", "help-text", "docs"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

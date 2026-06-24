@@ -5,10 +5,10 @@ id = 24
 slug = "entity-relationship-design-review-spec-coverage-gap-analysis-and-redesign-rfc"
 title = "Entity relationship design review: spec coverage, gap analysis, and redesign RFC"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "started"
+resolution = ""
 created = "2026-06-23"
-updated = "2026-06-23"
+updated = "2026-06-24"
 tags = ["area:audit", "area:cli", "area:design", "area:memory", "area:model", "area:relations", "area:skills", "area:spec"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
