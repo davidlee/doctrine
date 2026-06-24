@@ -1,18 +1,18 @@
-memory_uid = "mem_019ec92b300f7d43b4dd911e0a27af1f"
-memory_key = "mem.signpost.doctrine.specs"
+memory_uid = "mem_019ef70e27e07c16b6c59620e728f885"
+memory_key = "mem.signpost.doctrine.concept-map"
 schema_version = 1
 memory_type = "signpost"
 status = "active"
-title = "Doctrine spec authoring signpost"
+title = "Doctrine concept map signpost"
 summary = ""
-created = "2026-06-15"
+created = "2026-06-24"
 updated = "2026-06-24"
 
 [scope]
-paths = [".doctrine/spec/"]
+paths = [".doctrine/concept-map/"]
 globs = []
-commands = ["doctrine spec"]
-tags = []
+commands = ["doctrine concept-map"]
+tags = ["concept-map", "architecture", "diagram"]
 workspace = "default"
 repo = ""
 repo_id_kind = "local_root"

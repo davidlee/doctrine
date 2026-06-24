@@ -27,4 +27,5 @@ Items that are deferred-but-needed-later must be captured in backlog or a slice
 before closing the current work item out.
 
 See [[signpost.doctrine.lifecycle-start]] for the full lifecycle,
+[[concept.backlog.work-intake-membership]] for the membership test,
 and [[concept.doctrine.routing-gate]] for the route-before-you-act gate.
