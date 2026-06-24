@@ -4,17 +4,17 @@
     "audit": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "2c4b3a8b3637a5aba04ff4ebba78d8a9808c238c44966862256eb347df96dc62"
+      "computedHash": "a9c6725cce072c3e92bab1cc826d38422151124a87b583fbeb7895925ac71a04"
     },
     "backlog": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "9126450cfe4701b88d2dfcd57b9b24ddf90822d382bcd4e9356d03989011874b"
+      "computedHash": "889266f2ba72dc948c50aa85652e5d0a4b3cda6bd057cd215f4ccfe3ad3a0ac0"
     },
     "canon": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "257019a6252eacfc61a2c49dc7634c32d5c574f96d0e7daedc1f580f1ef4b8ed"
+      "computedHash": "d659601b03367e3d0ef657745b5f4219cf372f0dcef2d838dc3e26bb3fc9f22b"
     },
     "close": {
       "source": "/home/david/dev/doctrine",
@@ -59,7 +59,7 @@
     "execute": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "8aeb3217f9938fea53a1f8234ae8cdd9e2cad3edc200cff36b4b1267947d31d3"
+      "computedHash": "83c9b775a524e68388b315b28e05d01591824a863467c2c2f1039fdf32548f25"
     },
     "handover": {
       "source": "/home/david/dev/doctrine",
@@ -69,7 +69,7 @@
     "inquisition": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "cc1dc45e79c66e569b86481603fefe8f1ea7f779977be84a5503e8a19267e521"
+      "computedHash": "f1893db7c011c85e0f5ca172ffe718d032ffbccccbd5aa3c66bff274206196e1"
     },
     "next": {
       "source": "/home/david/dev/doctrine",
@@ -114,7 +114,7 @@
     "retrieve-memory": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "11ddb10634d25ff895342b9167e994d56b672d788959ef4fcbe2a46bdece5560"
+      "computedHash": "c5a5824ef1aa0003d5bb30d02fa0b5116c6a392b07d119e36a4c7730972544d8"
     },
     "reviewing-memory": {
       "source": "/home/david/dev/doctrine",
@@ -124,7 +124,7 @@
     "route": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "8caa6dec3c5d596a8edbbef12c3af538375ac2f823019fdda0e6507f149a59d6"
+      "computedHash": "fb0c5ab969a43dfe24db42119e14dca080c5bf69deb59b2b2aa2a0a2fa7acbea"
     },
     "slice": {
       "source": "/home/david/dev/doctrine",
@@ -139,7 +139,7 @@
     "spec-tech": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "7bdb15c0c8c74843d42156fed79afa3df396d69dcc2f960cbf795ed57299464b"
+      "computedHash": "d094dca89dc05634736d30798af151df4c097ee66b5ae3081659ad20832b41f2"
     },
     "walkthrough": {
       "source": "/home/david/dev/doctrine",
