@@ -5,10 +5,10 @@ id = 12
 slug = "fold-prioritypartitionrs-kindpartition-prefixes-onto-kinds-residual-parallel-vocab-after-sl-111"
 title = "Fold priority/partition.rs KindPartition prefixes onto kinds:: (residual parallel vocab after SL-111)"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-24"
 tags = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
