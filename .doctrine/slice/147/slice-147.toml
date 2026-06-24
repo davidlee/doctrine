@@ -1,9 +1,9 @@
 id = 147
 slug = "audit-path-conformance-delta"
 title = "Audit path-conformance delta"
-status = "ready"
+status = "reconcile"
 created = "2026-06-23"
-updated = "2026-06-23"
+updated = "2026-06-24"
 tags = []
 
 [relationships]

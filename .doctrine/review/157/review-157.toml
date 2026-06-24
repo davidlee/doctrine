@@ -1,0 +1,61 @@
+id    = 157
+slug  = "audit-path-conformance-delta-sl-147"
+title = "Audit: path-conformance delta (SL-147)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-147"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "design.md D5 double-write topology stale vs shipped (R-D5 carry)"
+detail = "Design D5 (design.md ~L212-226) says the dispatch funnel issues a SEPARATE 'slice record-delta' beat for BOTH arms and that 'dispatch record-boundary' is untouched. Shipped topology is arm-ASYMMETRIC: claude-arm run_record_boundary (dispatch.rs:552-560) double-writes BOTH the committed ref-cut ledger (ledger::record_boundary) AND the arm-neutral conformance registry (state::record_source_delta) in one call; only codex/pi (no record-boundary) uses the separate record-delta. Lifecycle skills (plugins/.../dispatch-agent/SKILL.md L67-72, dispatch/SKILL.md) WERE reconciled to shipped in P06; design.md D5 was NOT. Decision (both arms populate the registry off coordination oids) intact; the topology + arm-asymmetry drifted."
+disposition = "verified"
+response = "Confirmed. Code+skills correct; design.md D5 prose stale. Routed to reconcile: per-slice DIRECT EDIT to design.md D5 — rewrite the dispatch-arm bullet to the shipped arm-asymmetric double-write (claude record-boundary writes both registries; codex/pi uses separate record-delta). Decision unchanged."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "design D5/R5/F-5/OQ-conf-3/D7 primary_worktree home pointer stale"
+detail = "Design repeatedly says reuse 'worktree::subagent::primary_worktree' (subagent.rs:33). That is an ADR-001 engine->command upward-edge violation, so P02 relocated the resolver to 'git::primary_worktree' (leaf), user-confirmed (phase-02.md Findings L114). Shipped code uses crate::git::primary_worktree. Load-bearing decision (reuse the existing resolver, do not reinvent) intact; only the module home pointer in design prose is stale."
+disposition = "verified"
+response = "Confirmed. Code correct (git::primary_worktree leaf, ADR-001-clean); design prose stale. Routed to reconcile: per-slice DIRECT EDIT to design.md D5/R5/F-5/OQ-conf-3/D7 — correct the resolver home pointer from worktree::subagent::primary_worktree to git::primary_worktree. Decision (reuse, do not reinvent) unchanged."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "impl bundle rooted on stale main; edge +28 with overlapping subsystems (integration risk)"
+detail = "review/147 (186c2ef5) is one commit rooted exactly on main (a9580f02), but edge is 28 commits ahead of main (the pre-dispatch edge->main promotion ritual per AGENTS.md was not run). The 28 commits include RFC-005 (dispatch funnel) and ISS-025 (edge dup guards) touching src/review.rs / src/dispatch.rs / src/state.rs — exactly the files SL-147 heavily rewrote (review.rs -568 lines). Integration onto current edge carries real conflict risk. Not a code defect; a /close stage-2 integrate concern."
+disposition = "verified"
+response = "Confirmed integration hazard. Routed to /close stage-2: before integrate, promote edge->main (git fetch . edge:main) then merge/rebase the bundle onto current edge; expect conflicts in src/review.rs, src/dispatch.rs, src/state.rs vs RFC-005/ISS-025. Recorded in reconciliation brief as a close-gate note."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "layering.toml co-mingled in worker funnel commits — sanctioned?"
+detail = ".doctrine/adr/001/layering.toml is modified inside feat funnel commits 6e7b72ac (P02) and 58a4055e (P03), alongside worker src/ delta. Per handover.md L74-76 this is the SANCTIONED funnel procedure: workers leave new modules Unclassified; the orchestrator authors the '= leaf' rows + bumps the count during the funnel. So it is orchestrator-authored authored-state, not a worker R-5 leak. Verifying the process was followed, not flagging a defect."
+disposition = "aligned"
+response = "Process followed correctly. layering.toml rows are orchestrator-authored in the funnel per the documented procedure (handover L74-76); not a worker R-5 leak. No change needed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "conformance verb not live-runnable this session (env bin-compile)"
+detail = "slice conformance 147 could not be run live: the shared CARGO_TARGET_DIR served a stale bin (selector present, conformance/record-delta absent), and a fresh-target build fails with icu_provider E0599 — a jail-wide transitive-dep clean-build artifact, NOT SL-147 source (SL-147 touches nothing near icu). Correctness is instead evidenced by green 'just check' (compiles+tests conformance.rs, e2e_slice_record_delta.rs) and the recorded P06 EX-2 dogfood. Evidence limitation, not a defect."
+disposition = "aligned"
+response = "No defect. Verb correctness covered by green just check (conformance.rs + e2e_slice_record_delta.rs) and recorded P06 EX-2 dogfood. Live-run blocked by a jail-wide icu_provider clean-build artifact unrelated to SL-147. No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
