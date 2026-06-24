@@ -1,0 +1,64 @@
+# Implementation plan for SL-151 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-151"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Shared entity-parse wrapper + canonical-id threading"
+objective = "Introduce dtoml::parse_entity_toml<T>(text, prefix, id) as a pure leaf wrapping toml::from_str with canonical-id error context (D1). Route the six entity read paths through it (read_meta, read_id, read_slice, read_item, read_record, read_doc) and thread the prefix arg through every compile-forced caller — including the read_metas list funnel and the forced callers lazyspec.rs:468 + catalog/scan.rs:429 (RV-155 F-1/F-2/F-3). Prefix descends from callers; meta.rs must not reach up to integrity::KINDS (ADR-001)."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md D1/D3 locked by user approval; RV-155 (design inquisition) resolved — caller survey corrected against grep." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "parse_entity_toml exists, owned text in, no IO and no config dependency (pure leaf, ADR-001)." },
+  { id = "EX-2", text = "All six entity read paths route through parse_entity_toml; read_meta/read_id/read_metas carry the prefix param; every compile-forced caller (incl lazyspec.rs:468, catalog/scan.rs:429, governance.rs:71 generic funnel) supplies its prefix." },
+  { id = "EX-3", text = "Workspace compiles; cargo clippy zero warnings. Existing entity-engine suites pass with mechanical call-signature updates only — no assertion changes (behaviour-preservation gate)." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: parse_entity_toml passes valid TOML through identically to raw toml::from_str (pure 1:1 replacement)." },
+  { id = "VT-2", expects = "Unit: parse_entity_toml on non-contiguous TOML errors with the '{prefix}-{id:03}: TOML parse failed' context line." },
+  { id = "VT-6", expects = "Integration: doctrine show SL-NNN on a non-contiguous entity TOML errors with the canonical id in the message." },
+  { id = "VT-7", expects = "Unit: read_id on a malformed id-only TOML surfaces the '{prefix}-{id:03}' context — wrapper path distinct from read_meta." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Proactive validate detection via scan_kind"
+objective = "Augment integrity::scan_kind with a schema-agnostic full-Toml parse: after the existing read_id call, parse the entity text as toml::Value and push any parse error (canonical-id tagged) into a new diagnostics: &mut Vec<String> param (D2). Wire id_integrity_findings to allocate diagnostics, pass them through, and append to findings so doctrine validate catches non-contiguous TOML proactively as a hard error. scan_kind is reached only via validate (not scan_entities) — no catalog perf impact."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: read_id signature stable with prefix, parse_entity_toml available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "scan_kind takes diagnostics: &mut Vec<String>; after read_id it parses toml::Value and pushes canonical-id-tagged errors. id_integrity_findings wires it into validate's findings." },
+  { id = "EX-2", text = "doctrine validate exits non-zero on a non-contiguous entity TOML; existing id-integrity + relation-edge findings unchanged (behaviour-preservation gate)." },
+]
+verification = [
+  { id = "VT-3", expects = "Unit: scan_kind flags a non-contiguous [relationships] header in a fixture." },
+  { id = "VT-4", expects = "Unit: scan_kind produces no diagnostics on valid TOML (incl a [section] inside a string body — no false positive)." },
+  { id = "VT-5", expects = "Integration: doctrine validate exits non-zero on a non-contiguous entity TOML fixture." },
+  { id = "VA-1", expects = "Agent: just gate — cargo clippy zero warnings across the workspace; full suite green." },
+  { id = "VH-1", expects = "Human: manually edit an entity TOML to be non-contiguous, run doctrine validate, confirm a clear diagnostic naming the canonical id." },
+]
+specs             = []
+requirements      = []
