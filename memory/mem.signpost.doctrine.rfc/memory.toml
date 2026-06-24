@@ -1,18 +1,18 @@
-memory_uid = "mem_019ec92b300f7d43b4dd911e0a27af1f"
-memory_key = "mem.signpost.doctrine.specs"
+memory_uid = "mem_019ef70e27e0764a949b6569c0d23b89"
+memory_key = "mem.signpost.doctrine.rfc"
 schema_version = 1
 memory_type = "signpost"
 status = "active"
-title = "Doctrine spec authoring signpost"
+title = "Doctrine RFC artifacts signpost"
 summary = ""
-created = "2026-06-15"
+created = "2026-06-24"
 updated = "2026-06-24"
 
 [scope]
-paths = [".doctrine/spec/"]
+paths = [".doctrine/rfc/"]
 globs = []
-commands = ["doctrine spec"]
-tags = []
+commands = ["doctrine rfc"]
+tags = ["rfc", "deliberation"]
 workspace = "default"
 repo = ""
 repo_id_kind = "local_root"

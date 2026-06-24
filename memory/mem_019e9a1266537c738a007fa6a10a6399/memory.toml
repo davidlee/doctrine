@@ -6,12 +6,12 @@ status = "active"
 title = "Doctrine routing gate"
 summary = ""
 created = "2026-06-05"
-updated = "2026-06-06"
+updated = "2026-06-24"
 
 [scope]
 paths = [".doctrine/state/boot.md"]
 globs = []
-commands = ["route"]
+commands = []
 tags = []
 workspace = "default"
 repo = ""

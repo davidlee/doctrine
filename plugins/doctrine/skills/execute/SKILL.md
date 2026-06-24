@@ -28,7 +28,8 @@ Inputs:
      (bare number), if not already there.
    - flip the phase to `in_progress` with `doctrine slice phase` (see
      `using-doctrine.md`).
-5. Implement phase tasks in small coherent units, **TDD red/green/refactor**:
+5. Implement phase tasks in small coherent units, **TDD red/green/refactor**
+   (documented in [[mem.pattern.doctrine.tdd-loop]]):
    write a failing test, make it pass, then refactor. Test behaviour, not
    trivial implementation. Build and improve test helpers and fixtures as you go.
 6. After each meaningful unit, run `/notes`.

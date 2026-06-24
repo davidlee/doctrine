@@ -14,10 +14,8 @@ create a revision rather than editing in place. The revision records:
 
 ## CLI
 
-- `doctrine revision new --target <SPEC-ID> --title "..."` — scaffold a revision.
-- `doctrine revision show <ID>` — full content.
-- `doctrine revision list` — list revisions.
-- `doctrine revision transition <ID> --to <status>` — advance the lifecycle.
+The CLI is the source of truth: `doctrine revision --help`.
+Key verbs: new, show, status, change, approve, apply.
 
 Revisions live under `.doctrine/revision/nnn/`. They are the governance
 counterpart to slices — slices change code; revisions change specs and

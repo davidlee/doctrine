@@ -6,7 +6,9 @@ description: Use when authoring or revising the technical specification — the 
 # Spec Tech
 
 You are authoring the technical spec — the *how*, downstream of the product spec
-(`/spec-product`) and upstream of per-slice design (`/design`).
+(`/spec-product`) and upstream of per-slice design (`/design`). The entity
+engine (TOML+MD tiers, relations, `show` command) is documented in
+[[mem.concept.doctrine.entity-engine]].
 
 > **Structural.** Doctrine manages specs as first-class entities — a tech spec is
 > the same **three coordinated writes** as a product spec: scaffold with `spec new`
