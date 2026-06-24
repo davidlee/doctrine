@@ -11,9 +11,17 @@ cycle-safety is *directly* asserted only by `reachable`'s a↔b test
 into a surviving `Reject` cycle on an `AtMostOne` overlay — it's covered only
 transitively.
 
-Add a characterization test: an `AtMostOne` + `Reject` overlay whose kept-parent
-chain re-enters a surviving cycle; assert `spine_path` stops at re-entry (chain
-ends, no infinite loop, re-entry node excluded). Low priority — the behaviour is
-covered transitively and the input may be hard to construct (pass-1 arity may
-evict the cycle before it survives; confirm a surviving cyclic AtMostOne case is
-even reachable, else close as not-applicable).
+## Resolution (2026-06-24): closed / obsolete
+
+**Spike confirmed:** a surviving cycle IS reachable — a simple 3-cycle A→B→C→A
+in an `AtMostOne`+`Reject` overlay has exactly 1 incoming edge per node, so pass-1
+arity does nothing, and `Reject` diagnoses but doesn't evict.
+
+**Behaviour is correct:** `spine_path(A)` → [B, C, A].  `walk_bfs`'s visited set
+stops the walk at A (B's parent, already visited).  The chain terminates cleanly
+with no infinite loop.  This invariant is **directly** tested by
+`reachable_terminates_and_stays_strict_on_a_reject_cycle` (reachability.rs
+L72–85) — a `spine_path`-specific characterization test would assert behaviour
+that cannot fail without first breaking the `walk_bfs` primitive test.
+
+Closed as obsolete — transitively covered, no marginal value in adding the test.
