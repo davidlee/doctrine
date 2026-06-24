@@ -73,6 +73,23 @@ D6. **Wikilink reachability, not universal inbound links.** Overview is the
     memories gain skill pointers in PHASE-04 where their content directly
     informs the skill's operation.
 
+D7. **POL-002 platform independence.** Shipped memories are part of the shipped
+    product. They must not reference host-project conventions or local state.
+    PHASE-01 audit checks every memory for: commit-message style conventions
+    (e.g. `fix(SL-NNN):`), project-local branch names (`edge/main`), build
+    commands (`just gate`, `just check`), jail/bwrap specifics, or any other
+    host-local convention. Findings: remediate or gate. The preflight found one
+    candidate: `mem.pattern.doctrine.conventions` references `(SL-NNN)` commit
+    scoping — this is this repo's convention, not a doctrine-owned contract.
+
+D8. **Local corpus promotion considered.** Two local patterns
+    (`mem.pattern.distribution.shipped-memory-authoring`,
+    `mem.pattern.distribution.shipped-not-reachable`) describe doctrine's
+    distribution architecture but are developer-facing, not end-user-facing —
+    not promoted. The canonical-change-loop concept overlaps with already-shipped
+    `core-loop` + `lifecycle-start` — not promoted. No other ship-worthy
+    candidates in the local corpus.
+
 ## Phase Plan
 
 ### PHASE-01 — Audit
@@ -82,6 +99,7 @@ Produce a per-memory findings ledger covering:
 - Completeness: does the memory's `commands` scope cover all relevant verbs?
 - Wikilinks: are outbound links valid? are there broken references?
 - ADR-002 compliance: is the memory truly evergreen (no repo-specific detail, no stale anchors)?
+- POL-002 compliance: does the memory reference host-project conventions (commit-message style, branch names, build commands, jail/bwrap specifics)?
 
 Output: `.doctrine/state/sl-143-phase-01-ledger.md`.
 
@@ -164,4 +182,4 @@ For each remaining memory (27 existing + 4 new):
 - **Re-embed footgun.** Every memory edit requires `touch src/corpus.rs && cargo build`. Batch edits per phase, verify in one build cycle.
 - **Corpus must stay evergreen.** Shipped memories carry `repo=""`, `anchor_kind=none`. Edits must not introduce repo-specific detail or stale anchors (ADR-002).
 - **Overview bloat.** The overview must stay within ~60 lines — enough to orient, not enough to replace the deep reference. Review for compactness before lock.
-- **Skill-amendment scope creep.** Adding retrieve-memory calls to skills touches the restate-line (ADR-005). Keep amendments minimal — add pointers only, no flag tables.
+- **POL-002 platform independence.** Shipped memories must not reference host-project conventions. Preflight found one candidate: `mem.pattern.doctrine.conventions` references `(SL-NNN)` commit scoping. PHASE-01 audit must flag any other violations.
