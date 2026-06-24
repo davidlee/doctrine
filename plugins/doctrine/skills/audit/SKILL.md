@@ -15,16 +15,9 @@ disposition vocab, synthesis, the close-gate, the parent-tree caveat) live in
 follows is the audit *lens*: the facet, the modes, the scope, the evidence the
 reconciliation loop demands, and the audit-specific harvest and closure tail.
 
-The ledger replaces the old hand-made `audit.md`: findings are append-only and
-field-owned, "no undispositioned findings before close" is enforced by the binary
+Findings are append-only to the ledger and field-owned, "no undispositioned 
+findings before close" is enforced by the binary
 (the close-gate teeth), and the audit prose becomes the review's `## Synthesis`.
-
-> **`audit.md` is retired for new audits.** Existing `audit.md` files remain valid
-> — there is no migration. Do not author a new one; open an RV instead.
-
-> **Reconciliation scope.** Doctrine has no specs/contracts registry or
-> `sync`/`validate` surface; reconciliation here means reconciling against
-> `design.md`, ADRs, and `.doctrine/spec/tech/`, not a spec engine.
 
 > **Dispatched slice — review the candidate surface, not the raw evidence.** When
 > the slice was driven by `/dispatch`, `review/*` and `phase/*` are immutable
@@ -83,10 +76,17 @@ not mutate a finding to `fixed`/`remediated`.
 ## Process
 
 1. **Open the ledger for the slice** (replaces authoring `audit.md`): open a
-   `reconciliation`-facet RV targeting the slice, then prime it — seed the
-   git-changed candidates, curate the `domain_map`, persist it, and fill the
-   ledger's `## Brief` with the lines of attack (what this audit probes and the
-   invariants it holds the slice to). Verbs and flags: `review-ledger.md` §1–§2.
+   `reconciliation`-facet RV targeting the slice
+
+   > DISABLED: don't do this -- nothing reads it, waste of effort
+   > will be replaced when SL-147 drops.
+   >
+   > ... then prime it — seed the
+   > git-changed candidates, curate the `domain_map`, persist it, and fill the
+   > ledger's `## Brief` with the lines of attack (what this audit probes and the
+   > invariants it holds the slice to). 
+
+   Verbs and flags: `review-ledger.md` §1–§2.
    Loose notes are insufficient for closure-grade work — findings belong in the
    ledger.
 2. **Gather evidence** (the audit's divergent work):
