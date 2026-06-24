@@ -631,6 +631,84 @@ pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> Str
     listing::render_columns(&entries, cols, opts)
 }
 
+/// One row in the `--commands` subcommand-grouped help table.
+struct VerbEntry {
+    command: String,
+    verb: String,
+    description: String,
+}
+
+/// Render the `--help --commands` table: three-column (`command | verb | description`)
+/// with each top-level command's subcommands grouped beneath it. The command name
+/// appears only on the first subcommand row; continuation rows leave it blank.
+/// Leaf commands (no subcommands) get a single row with an em-dash in the verb column.
+pub(crate) fn render_commands_table(color: bool, term_width: Option<u16>) -> String {
+    use crate::listing::{self, Column, ColumnPaint, RenderOpts};
+
+    let cmd = <crate::Cli as CommandFactory>::command();
+    let mut entries: Vec<VerbEntry> = Vec::new();
+
+    for sub in cmd
+        .get_subcommands()
+        .filter(|s| !s.is_hide_set() && s.get_name() != "help")
+    {
+        let parent = sub.get_name().to_string();
+        let grandchildren: Vec<_> = sub
+            .get_subcommands()
+            .filter(|g| !g.is_hide_set() && g.get_name() != "help")
+            .collect();
+
+        if grandchildren.is_empty() {
+            // Leaf command — single row, em-dash placeholder in verb column.
+            let about = sub.get_about().map_or(String::new(), ToString::to_string);
+            entries.push(VerbEntry {
+                command: parent,
+                verb: "\u{2014}".to_string(),
+                description: about,
+            });
+        } else {
+            for (i, gc) in grandchildren.into_iter().enumerate() {
+                let verb = gc.get_name().to_string();
+                let desc = gc.get_about().map_or(String::new(), ToString::to_string);
+                entries.push(VerbEntry {
+                    command: if i == 0 { parent.clone() } else { String::new() },
+                    verb,
+                    description: desc,
+                });
+            }
+        }
+    }
+
+    if entries.is_empty() {
+        return String::new();
+    }
+
+    let cols: &[&Column<VerbEntry>] = &[
+        &Column {
+            name: "command",
+            header: "command",
+            cell: |e| e.command.clone(),
+            paint: ColumnPaint::None,
+        },
+        &Column {
+            name: "verb",
+            header: "verb",
+            cell: |e| e.verb.clone(),
+            paint: ColumnPaint::None,
+        },
+        &Column {
+            name: "description",
+            header: "description",
+            cell: |e| e.description.clone(),
+            paint: ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
+        },
+    ];
+
+    let mut out = listing::render_columns(&entries, cols, RenderOpts { color, term_width });
+    out.push_str("\nFor arguments & options: doctrine <command> <verb> --help\n");
+    out
+}
+
 // ── ExportCommand ───────────────────────────────────────────────────────────
 
 #[derive(Subcommand)]
