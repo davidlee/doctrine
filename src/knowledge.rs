@@ -1112,37 +1112,48 @@ fn format_evidence(e: &Evidence) -> String {
     }
 }
 
-/// Render the `Json` show: the record's faithful state under the shared `{kind, …}`
-/// envelope (the `backlog::show_json` precedent). The validated record's fields are
-/// private and its closed enums render via `as_str`, so the JSON is projected by hand
-/// (not a derive): the flat identity, the kind-dispatched `[facet]`, and the shared
-/// `[evidence]`. Pure over the record's own state (no cross-corpus scan). `serde_json`
-/// sorts object keys.
-fn show_json(record: &KnowledgeRecord) -> anyhow::Result<String> {
+/// Render the `Json` for show (`with_body=true`) or inspect (`with_body=false`).
+/// The shared `{kind, …}` envelope (the `backlog::show_json` precedent). The validated
+/// record's fields are private and its closed enums render via `as_str`, so the JSON is
+/// projected by hand (not a derive): the flat identity, the kind-dispatched `[facet]`,
+/// and the shared `[evidence]`. Pure over the record's own state (no cross-corpus
+/// scan). `serde_json` sorts object keys.
+fn show_json(record: &KnowledgeRecord, with_body: bool) -> anyhow::Result<String> {
+    let mut inner = serde_json::Map::new();
+    inner.insert(
+        "id".into(),
+        serde_json::json!(record.record_kind.canonical_id(record.id)),
+    );
+    inner.insert(
+        "record_kind".into(),
+        serde_json::json!(record.record_kind.as_str()),
+    );
+    inner.insert("slug".into(), serde_json::json!(record.slug));
+    inner.insert("title".into(), serde_json::json!(record.title));
+    inner.insert("status".into(), serde_json::json!(record.status));
+    inner.insert("created".into(), serde_json::json!(record.created));
+    inner.insert("updated".into(), serde_json::json!(record.updated));
+    inner.insert("tags".into(), serde_json::json!(record.tags));
+    if with_body {
+        inner.insert("body".into(), serde_json::json!(record.body));
+    }
+    inner.insert("facet".into(), serde_json::json!(facet_json(&record.facet)));
+    inner.insert(
+        "evidence".into(),
+        serde_json::json!({
+            "supports": record.evidence.supports,
+            "contradicts": record.evidence.contradicts,
+            "notes": record.evidence.notes,
+        }),
+    );
+    inner.insert("relationships".into(), serde_json::json!({
+        "shapes": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Shapes),
+        "spawns": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Spawns),
+        "governed_by": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::GovernedBy),
+    }));
     let value = serde_json::json!({
         "kind": "knowledge",
-        "knowledge": {
-            "id": record.record_kind.canonical_id(record.id),
-            "record_kind": record.record_kind.as_str(),
-            "slug": record.slug,
-            "title": record.title,
-            "status": record.status,
-            "created": record.created,
-            "updated": record.updated,
-            "tags": record.tags,
-            "body": record.body,
-            "facet": facet_json(&record.facet),
-            "evidence": {
-                "supports": record.evidence.supports,
-                "contradicts": record.evidence.contradicts,
-                "notes": record.evidence.notes,
-            },
-            "relationships": {
-                "shapes": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Shapes),
-                "spawns": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Spawns),
-                "governed_by": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::GovernedBy),
-            },
-        },
+        "knowledge": inner,
     });
     serde_json::to_string_pretty(&value).context("failed to serialize knowledge show JSON")
 }
@@ -1189,6 +1200,26 @@ fn facet_json(facet: &RecordFacet) -> serde_json::Value {
     }
 }
 
+/// Shared shell: root-find → resolve → read → render. The `format_table` fn and
+/// `with_body` flag select the table renderer and whether JSON includes the prose body.
+fn run_show_inspect(
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+    format_table: fn(&KnowledgeRecord) -> String,
+    with_body: bool,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+    let record = read_record(&root, kind, id)?;
+    let out = match format {
+        Format::Table => format_table(&record),
+        Format::Json => show_json(&record, with_body)?,
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
 /// `doctrine knowledge show <ID> [--format table|json]` — metadata + prose body.
 /// Thin shell: find the root, `resolve_ref` the id to its kind (prefix auto-detect),
 /// read THAT record's single toml, render it to stdout. READ-ONLY — no mutation, no
@@ -1198,15 +1229,7 @@ pub(crate) fn run_show(
     reference: &str,
     format: Format,
 ) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (kind, id) = resolve_ref(reference)?;
-    let record = read_record(&root, kind, id)?;
-    let out = match format {
-        Format::Table => format_show(&record),
-        Format::Json => show_json(&record)?,
-    };
-    write!(io::stdout(), "{out}")?;
-    Ok(())
+    run_show_inspect(path, reference, format, format_show, true)
 }
 
 /// `doctrine knowledge inspect <ID> [--format table|json]` — metadata only, no prose
@@ -1216,15 +1239,7 @@ pub(crate) fn run_inspect(
     reference: &str,
     format: Format,
 ) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (kind, id) = resolve_ref(reference)?;
-    let record = read_record(&root, kind, id)?;
-    let out = match format {
-        Format::Table => format_inspect(&record),
-        Format::Json => show_json(&record)?,
-    };
-    write!(io::stdout(), "{out}")?;
-    Ok(())
+    run_show_inspect(path, reference, format, format_inspect, false)
 }
 
 // ---------------------------------------------------------------------------
@@ -1459,8 +1474,6 @@ fn run_paths(
 
 // ── CLI dispatch ───────────────────────────────────────────────────────────
 
-use std::str::FromStr;
-
 use crate::CommonListArgs;
 use clap::Subcommand;
 
@@ -1484,23 +1497,13 @@ pub(crate) enum KnowledgeCommand {
     },
     /// Show one knowledge record (metadata + prose body).
     Show {
-        id: String,
-        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
-        format: Format,
-        #[arg(long)]
-        json: bool,
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
+        #[command(flatten)]
+        common: crate::CommonShowArgs,
     },
     /// Inspect one knowledge record's metadata only (no prose body).
     Inspect {
-        id: String,
-        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
-        format: Format,
-        #[arg(long)]
-        json: bool,
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
+        #[command(flatten)]
+        common: crate::CommonShowArgs,
     },
     /// Set a knowledge record's status.
     Status {
@@ -1543,18 +1546,22 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             path,
         } => run_new(path, kind, title, slug),
         KnowledgeCommand::List { list, path } => run_list(path, list.into_list_args(color)),
-        KnowledgeCommand::Show {
-            id,
-            format,
-            json,
-            path,
-        } => run_show(path, &id, if json { Format::Json } else { format }),
-        KnowledgeCommand::Inspect {
-            id,
-            format,
-            json,
-            path,
-        } => run_inspect(path, &id, if json { Format::Json } else { format }),
+        KnowledgeCommand::Show { common } => {
+            let format = if common.json {
+                Format::Json
+            } else {
+                common.format
+            };
+            run_show(common.path, &common.id, format)
+        }
+        KnowledgeCommand::Inspect { common } => {
+            let format = if common.json {
+                Format::Json
+            } else {
+                common.format
+            };
+            run_inspect(common.path, &common.id, format)
+        }
         KnowledgeCommand::Status { id, state, path } => run_status(path, &id, &state, color),
         KnowledgeCommand::Paths {
             refs,

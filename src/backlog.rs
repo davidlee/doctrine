@@ -46,8 +46,6 @@ use crate::tomlfmt::toml_string;
 use crate::risk;
 use crate::risk::{RiskFacet, RiskLevel, exposure, validate_facet};
 
-use std::str::FromStr;
-
 use clap::Subcommand;
 
 // ---------------------------------------------------------------------------
@@ -98,39 +96,15 @@ pub(crate) enum BacklogCommand {
 
     /// Reassemble one item by id (`ISS-007`) — kind auto-detected from the prefix.
     Show {
-        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
-        id: String,
-
-        /// Output format (table | json).
-        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
-        format: Format,
-
-        /// Shorthand for `--format json`.
-        #[arg(long)]
-        json: bool,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
+        #[command(flatten)]
+        common: crate::CommonShowArgs,
     },
 
     /// Inspect one item's metadata only (no prose body) — kind auto-detected from
     /// the prefix.
     Inspect {
-        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
-        id: String,
-
-        /// Output format (table | json).
-        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
-        format: Format,
-
-        /// Shorthand for `--format json`.
-        #[arg(long)]
-        json: bool,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
+        #[command(flatten)]
+        common: crate::CommonShowArgs,
     },
 
     /// Transition one item's status (and resolution) in place — kind auto-detected
@@ -264,18 +238,22 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
             }
             run_list(path, kind, by, list.into_list_args(color))
         }
-        BacklogCommand::Show {
-            id,
-            format,
-            json,
-            path,
-        } => run_show(path, &id, if json { Format::Json } else { format }),
-        BacklogCommand::Inspect {
-            id,
-            format,
-            json,
-            path,
-        } => run_inspect(path, &id, if json { Format::Json } else { format }),
+        BacklogCommand::Show { common } => {
+            let format = if common.json {
+                Format::Json
+            } else {
+                common.format
+            };
+            run_show(common.path, &common.id, format)
+        }
+        BacklogCommand::Inspect { common } => {
+            let format = if common.json {
+                Format::Json
+            } else {
+                common.format
+            };
+            run_inspect(common.path, &common.id, format)
+        }
         BacklogCommand::Edit {
             id,
             status,
@@ -1494,29 +1472,42 @@ fn format_inspect(item: &BacklogItem) -> String {
 /// THAT item's single toml, render it to stdout. READ-ONLY — no mutation, no
 /// cross-corpus scan (only the one item's file is opened); the render is pure over
 /// the item's own state.
-pub(crate) fn run_show(
+/// Shared shell: root-find → parse → read → render. The `format_table` fn and
+/// `with_body` flag select the table renderer and whether JSON includes the prose body.
+fn run_show_inspect(
     path: Option<PathBuf>,
     reference: &str,
     format: Format,
+    format_table: fn(&BacklogItem) -> String,
+    with_body: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (item_kind, id) = parse_ref(reference)?;
     let item = read_item(&root, item_kind, id)?;
     let out = match format {
-        Format::Table => format_show(&item),
-        Format::Json => show_json(&item)?,
+        Format::Table => format_table(&item),
+        Format::Json => show_json(&item, with_body)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
 }
 
-/// Render the `Json` show: the item's faithful state under the shared `{kind, …}`
-/// envelope (the `adr::show_json` precedent). The validated `BacklogItem`'s fields
-/// are private and its closed enums render via `as_str`, so the JSON is projected by
-/// hand here (not a derive): the flat identity, the optional resolution, the risk
-/// `[facet]` (risk only), and the outbound relationships — the same data the table
-/// reassembles, structured. Pure over the item's own state (no cross-corpus scan).
-fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
+/// `doctrine backlog show <ID>` — reassemble metadata + prose body (PRD-009 REQ-051, §5.4).
+pub(crate) fn run_show(
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+) -> anyhow::Result<()> {
+    run_show_inspect(path, reference, format, format_show, true)
+}
+
+/// Render the `Json` for show (`with_body=true`) or inspect (`with_body=false`).
+/// The shared `{kind, …}` envelope (the `adr::show_json` precedent). The validated
+/// `BacklogItem`'s fields are private and its closed enums render via `as_str`, so the
+/// JSON is projected by hand (not a derive): the flat identity, the optional resolution,
+/// the risk `[facet]` (risk only), and the outbound relationships — the same data the
+/// table reassembles, structured. Pure over the item's own state (no cross-corpus scan).
+fn show_json(item: &BacklogItem, with_body: bool) -> anyhow::Result<String> {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let facet = item.facet.as_ref().map(|f| {
         serde_json::json!({
@@ -1526,43 +1517,42 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
             "controls": f.controls,
         })
     });
-    // SL-048 PHASE-04 (R2-C2′): the tier-1 axes (slices/specs/drift) migrated to
-    // `[[relation]]`, so they are reconstructed from `item.tier1` (read via
-    // `read_block`) into the SAME `relationships` JSON shape, preserving OD-2's
-    // byte-identical `show --json`. serde_json sorts object keys, unchanged.
     let rel = &item.relationships;
+    let mut inner = serde_json::Map::new();
+    inner.insert(
+        "id".into(),
+        serde_json::json!(item.kind.canonical_id(item.id)),
+    );
+    inner.insert("kind".into(), serde_json::json!(item.kind.as_str()));
+    inner.insert("slug".into(), serde_json::json!(item.slug));
+    inner.insert("title".into(), serde_json::json!(item.title));
+    inner.insert("status".into(), serde_json::json!(item.status.as_str()));
+    inner.insert(
+        "resolution".into(),
+        serde_json::json!(item.resolution.map(Resolution::as_str)),
+    );
+    inner.insert("created".into(), serde_json::json!(item.created));
+    inner.insert("updated".into(), serde_json::json!(item.updated));
+    inner.insert("tags".into(), serde_json::json!(item.tags));
+    if with_body {
+        inner.insert("body".into(), serde_json::json!(item.body));
+    }
+    inner.insert("facet".into(), serde_json::json!(facet));
+    inner.insert("relationships".into(), serde_json::json!({
+        "slices": targets_for(&item.tier1, RelationLabel::Slices),
+        "drift": targets_for(&item.tier1, RelationLabel::Drift),
+        "needs": rel.needs,
+        "after": rel.after,
+        "triggers": rel.triggers,
+        "references": {
+            "implements": targets_for_role(&item.tier1, RelationLabel::References, Role::Implements),
+            "scoped_from": targets_for_role(&item.tier1, RelationLabel::References, Role::ScopedFrom),
+            "concerns": targets_for_role(&item.tier1, RelationLabel::References, Role::Concerns),
+        },
+    }));
     let value = serde_json::json!({
         "kind": "backlog",
-        "backlog": {
-            "id": item.kind.canonical_id(item.id),
-            "kind": item.kind.as_str(),
-            "slug": item.slug,
-            "title": item.title,
-            "status": item.status.as_str(),
-            "resolution": item.resolution.map(Resolution::as_str),
-            "created": item.created,
-            "updated": item.updated,
-            "tags": item.tags,
-            "body": item.body,
-            "facet": facet,
-            "relationships": {
-                "slices": targets_for(&item.tier1, RelationLabel::Slices),
-                "drift": targets_for(&item.tier1, RelationLabel::Drift),
-                "needs": rel.needs,
-                "after": rel.after,
-                "triggers": rel.triggers,
-                // SL-149: the `references` label by role. A backlog item authors
-                // `concerns` (work → any artefact) edges; `scoped_from`/`implements` are
-                // SL-only, so those buckets stay empty for a backlog item — but the object
-                // carries all three role keys for a stable schema. PHASE-05's migration
-                // rewrote the old backlog `specs`→canon edges onto `references(concerns)`.
-                "references": {
-                    "implements": targets_for_role(&item.tier1, RelationLabel::References, Role::Implements),
-                    "scoped_from": targets_for_role(&item.tier1, RelationLabel::References, Role::ScopedFrom),
-                    "concerns": targets_for_role(&item.tier1, RelationLabel::References, Role::Concerns),
-                },
-            },
-        },
+        "backlog": inner,
     });
     serde_json::to_string_pretty(&value).context("failed to serialize backlog show JSON")
 }
@@ -1574,15 +1564,7 @@ pub(crate) fn run_inspect(
     reference: &str,
     format: Format,
 ) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (item_kind, id) = parse_ref(reference)?;
-    let item = read_item(&root, item_kind, id)?;
-    let out = match format {
-        Format::Table => format_inspect(&item),
-        Format::Json => show_json(&item)?,
-    };
-    write!(io::stdout(), "{out}")?;
-    Ok(())
+    run_show_inspect(path, reference, format, format_inspect, false)
 }
 
 // ---------------------------------------------------------------------------
@@ -3394,7 +3376,7 @@ tags = []
         );
 
         let item = read_item(root, ItemKind::Risk, 1).unwrap();
-        let json = show_json(&item).unwrap();
+        let json = show_json(&item, true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["kind"], "backlog");
         let b = &v["backlog"];
@@ -3426,7 +3408,7 @@ tags = []
                 "SPEC-018".into(),
             ),
         ];
-        let json = show_json(&item).unwrap();
+        let json = show_json(&item, true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["backlog"]["relationships"];
         assert_eq!(
@@ -3457,7 +3439,7 @@ tags = []
                 "SPEC-018".into(),
             ),
         ];
-        let json = show_json(&item).unwrap();
+        let json = show_json(&item, true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["backlog"]["relationships"];
         assert_eq!(rel["slices"], serde_json::json!(["SL-007"]));
@@ -3467,6 +3449,33 @@ tags = []
         assert_eq!(
             rel["references"]["concerns"],
             serde_json::json!(["SPEC-018"])
+        );
+    }
+
+    #[test]
+    fn backlog_inspect_json_omits_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_fixture(
+            root,
+            Fixture {
+                kind: ItemKind::Improvement,
+                id: 1,
+                slug: "token",
+                title: "Token expiry",
+                status: "open",
+                resolution: "",
+                tags: &[],
+                facet: None,
+                rels: None,
+            },
+        );
+        let item = read_item(root, ItemKind::Improvement, 1).unwrap();
+        let json = show_json(&item, false).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(
+            v["backlog"].get("body").is_none(),
+            "inspect JSON must not include body"
         );
     }
 
@@ -3650,7 +3659,7 @@ tags = []
         );
 
         // JSON seam: needs is a string array; after/triggers are arrays of tables.
-        let json = show_json(&item).unwrap();
+        let json = show_json(&item, true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["backlog"]["relationships"];
         assert_eq!(rel["needs"][0], "ISS-002");

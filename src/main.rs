@@ -76,6 +76,7 @@ mod verify;
 mod worktree;
 
 use std::io::Write;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::{Args, Parser};
@@ -165,6 +166,26 @@ impl CommonListArgs {
             },
         }
     }
+}
+
+/// Shared `show`/`inspect` arg bundle — every kind that has both verbs flattens this
+/// struct via `#[command(flatten)]`. DRY: the four fields are defined once.
+#[derive(Args, Debug, Clone)]
+pub(crate) struct CommonShowArgs {
+    /// Canonical entity ref (e.g. ISS-007); the prefix selects the kind.
+    pub(crate) id: String,
+
+    /// Output format (table | json).
+    #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+    pub(crate) format: Format,
+
+    /// Shorthand for `--format json`.
+    #[arg(long)]
+    pub(crate) json: bool,
+
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
