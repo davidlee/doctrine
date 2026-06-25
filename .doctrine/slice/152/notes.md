@@ -38,12 +38,16 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
 ## 1. State (2026-06-25)
 
 - Slice status: **`started`**. Design locked → plan authored. All 3 pre-plan checks
-  discharged (§5). **PHASE-01 + PHASE-02 + PHASE-03 `completed`**. **PHASE-04
-  automatable scope GREEN** (`in_progress`; install emits WorktreeCreate →
-  create-fork, stamp retired at both sites; VT-1..4 automated, `just gate` clean) —
-  **VA-1 (you-run-it live dispatch dry-run) is the sole outstanding gate before
-  flipping PHASE-04 completed.** Next after VA-1: PHASE-05 (dispatch-agent SKILL).
-- **PHASE-04 `in_progress` (auto scope done)** — `HookSpec::create_fork` (event
+  discharged (§5). **PHASE-01..04 `completed`**. Next: **`/phase-plan` PHASE-05**
+  (dispatch-agent SKILL post-spawn contract; PHASE-06 secondary/droppable).
+- **PHASE-04 `completed`** — VT-1..4 automated + green; **VA-1 PASS live** (2.1.181,
+  jail binary): real `Agent isolation:worktree` from the armed cwd → hook created
+  `.worktrees/agent-<hex>` at base B, `dispatch/<name>` branch, worker-marked (F7);
+  benign spawn from coord root → detached, unmarked passthrough. Footer
+  `worktreeBranch: undefined` confirmed (P2/D8 → PHASE-05 derives branch from
+  `worktreePath`). **R-P4-1 confirmed live**: a pre-existing SubagentStart stamp is
+  NOT pruned by install (benign already-marked). Full VA evidence: `phase-04.md`.
+- **PHASE-04 mechanics** — `HookSpec::create_fork` (event
   `WorktreeCreate`, cosmetic matcher `"*"`) emitted at BOTH install sites
   (`skills.rs` run_install + `install.rs`), REPLACING the retired SL-123
   `stamp_subagent` ctor/command/predicate (removed; the `worktree marker
