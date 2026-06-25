@@ -94,6 +94,11 @@ high trust) and `docs/claude/hooks.md` + `plugins-reference.md`:
 - **Repo-global blast radius** (RSK-1): every `isolation:"worktree"` subagent in
   any repo that installs doctrine now routes through the hook. The benign
   pass-through must be robust or it breaks unrelated subagent use.
+- **The hook is a write (ADR-006 fidelity, F6).** `create-fork` creates +
+  provisions + marks. It is a **trusted synchronous extension of the sole
+  writer** — orchestrator-initiated, same standing as the subprocess `fork`
+  invocation — not a second writer. It only acts when the orchestrator has armed
+  a spawn (D4).
 - **Jail**: worker worktrees must live inside the project root
   (bubblewrap-confined `/workspace/<repo>`).
 - **DRY / no parallel implementation**: the hook *shells the existing*
@@ -162,6 +167,11 @@ Two thin verbs, both shells over existing pure logic:
      `git worktree add <root>/.worktrees/<name> HEAD`;
   5. **print the created absolute path on stdout** (the harness path protocol);
   6. **any failure ⇒ non-zero exit** (fail-closed creation).
+- **Root / provision-source resolution (F2).** `create-fork` must resolve its
+  doctrine root to the **coord tree** (the hook runs with cwd there under P3, or
+  pass `-p <root>`), so `run_fork`'s provision source is identical to the
+  subprocess arm's. A divergent root would silently break the "byte-identical
+  core" claim — provisioning would copy from the wrong tree.
 - Branch / dir derived from the payload `name` (harness-unique per spawn) — the
   per-spawn uniqueness git requires (§5.5), without the orchestrator
   pre-choosing them.
@@ -232,20 +242,40 @@ branch/dir from the **return footer** (it already reads `worktreePath:`/
 - **Edge — pass-through fail.** A non-zero exit aborts a *benign* subagent's
   creation (RSK-1). The pass-through must be robust; `.worktreeinclude` fidelity
   is the known gap (OQ-2).
+- **Edge — persistent-marker window (F4).** The bare-base marker is persistent
+  (rewritten per phase, not consumed), so it sits in the coord tree between
+  phases — a wider benign false-positive window than a consumed marker. Bounded
+  by coord-tree lifetime (removed at `dispatch sync`); an optional `dispatch
+  disarm` (clear the marker at drive end) tightens it. The no-consume win (no
+  serialization, parallel-clean) is judged worth this bounded window.
+- **Edge — re-dispatch leak (F5).** A retried worker gets a fresh `name` ⇒ new
+  `dispatch/<name>` branch + `.worktrees/<name>` dir; native remove drops the
+  tree but leaves the branch (D10), so branches accumulate across retries. Prune
+  in the WorktreeRemove follow-up or a `dispatch gc`.
+- **Edge — `name` shape.** Assumed `agent-<hex>` (harness auto-generated for
+  Agent-tool spawns; the orchestrator does not pass a custom name). A
+  user-specified name would still yield a unique branch/dir but is out of the
+  dispatch path.
 
 ## 6. Open Questions & Unknowns
 
 Probes (need a live 2.1.181 dispatch; likely a you-run-it step). The design is
 sequenced so these resolve **before** the dependent schema/emission locks.
+**Run order: P3 → P2 → P1.**
 
-- **P1 (was OQ-5) — plugin-hook parity.** Does a `WorktreeCreate` hook in plugin
-  `hooks/hooks.json` fire identically to the settings-block form? *Gates the
-  secondary plugin step.* Expected yes; verify before relying.
+- **P3 — payload cwd identity (run FIRST; foundational, F1).** Is payload `cwd`
+  the parked Bash cwd (coord tree) or the session root? The entire
+  marker-location seam (§5.3) addresses the marker via `cwd`. A session-root
+  result means the hook cannot identify *which* coord tree armed the spawn
+  (`${CLAUDE_PROJECT_DIR}` gives only main), and single-active-in-main
+  reintroduces the cross-slice/parallel contention D3 rejected — so a negative
+  result **re-opens D3**, it does not merely tune it.
 - **P2 — footer survival.** Does the harness still emit `worktreePath:`/
-  `worktreeBranch:` when the hook created the worktree? *Gates the marker schema
-  fork (D8).*
-- **P3 — payload cwd identity.** Is payload `cwd` the parked Bash cwd (coord
-  tree) or the session root? *Gating* — the marker is located via it.
+  `worktreeBranch:` when the hook created the worktree? *Selects the marker
+  schema (D8).*
+- **P1 (was OQ-5) — plugin-hook parity.** Does a `WorktreeCreate` hook in plugin
+  `hooks/hooks.json` fire identically to the settings-block form? *Gates only
+  the secondary plugin step.* Expected yes; verify before relying.
 - **OQ-2 (residual) — pass-through `.worktreeinclude` fidelity.** What does a
   non-dispatch subagent that relied on `.worktreeinclude` lose? Decide:
   replicate vs accept-the-gap-and-document.
@@ -355,6 +385,10 @@ Verification / closure intent (TDD red/green/refactor; pure core + golden tokens
   proxy.
 - **VT — behaviour preservation.** Existing dispatch suites + the subprocess arm
   stay green unchanged; `doctrine install` emits the hook.
+- **VT — stamp retirement (F7).** `doctrine install` (claude arm) **no longer
+  emits** the SubagentStart stamp hook, **and** a worker spawned through
+  `create-fork` is still marked (provision + `write_marker` ran inside the fork).
+  The worker-marker invariant holds via the new seam, not the retired one.
 - **VT (secondary) — plugin parity.** The hook in `hooks/hooks.json` fires
   identically to the settings-block form (P1 resolved); the settings block is
   removed in the same step (no double-wiring).
@@ -362,9 +396,38 @@ Verification / closure intent (TDD red/green/refactor; pure core + golden tokens
 
 ## 10. Review Notes
 
-(Adversarial pass + external/inquisition findings recorded here.)
+### Internal adversarial pass (2026-06-25)
 
-- The design leans on three live-harness probes (P1/P2/P3). P3 (payload cwd
-  identity) is the load-bearing one — if cwd is the session root rather than the
-  parked coord tree, the marker-location seam needs an alternate address
-  (revisit D3). P2 selects the schema (D8); P1 only gates the secondary.
+Findings raised and dispositioned:
+
+- **F1 — P3 foundational, not just gating.** Integrated: §6 reordered (P3 first);
+  a negative result re-opens D3, with the consequence stated.
+- **F2 — `create-fork` root / provision-source must match the subprocess arm.**
+  Integrated: §5.2 pins root = coord tree.
+- **F3 — `fork --worker` may be extracted-but-not-live** (`fork.rs:1`
+  `expect(unused … PHASE-03 prunes)`). **Pre-plan check (open):** confirm
+  `worktree fork --worker` is CLI-wired and green before planning leans on it.
+- **F4 — persistent-marker false-positive window.** Integrated: §5.5 edge +
+  optional `dispatch disarm`; accepted as bounded by coord-tree lifetime.
+- **F5 — re-dispatch branch/dir leak.** Integrated: §5.5 edge; prune in the
+  WorktreeRemove follow-up / `dispatch gc`.
+- **F6 — hook is a write (ADR-006).** Integrated: §3 trusted-extension framing.
+- **F7 — stamp-retirement verification gap.** Integrated: §9 VT added.
+- **D8 divergence note:** the P2-fails fallback changes marker lifecycle
+  (persistent-shared → one-shot-consumed/serialized), a larger fork than
+  "payload + serialization" alone — flagged for the plan if P2 fails.
+
+### Pre-plan checks (carry into /plan)
+
+1. **F3** — verify `run_fork` / `--worker` is live (not dead extraction).
+2. Confirm `dispatch setup` already persists / can surface base B for
+   `arm-spawn` to write (vs only emitting it to stdout).
+3. Confirm `.worktrees/` is (or will be) gitignored in the coord tree so the
+   nested worker worktree does not pollute the coord working set.
+
+### Load-bearing risk
+
+The design leans on three live-harness probes; **P3 is the spine** — if payload
+`cwd` is the session root rather than the parked coord tree, the
+marker-location seam needs an alternate address and D3 re-opens. Resolve P3
+before committing the marker schema.
