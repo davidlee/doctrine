@@ -540,6 +540,13 @@ const SESSION_MATCHER_CODEX: &str = "startup|resume|clear|compact";
 /// Cosmetic matcher for the `WorktreeCreate` hook entry (SL-152).
 /// `WorktreeCreate` has no matcher support (hooks.md:237), so this never scopes at
 /// runtime — it only gives the merge core a stable canonical-entry identity.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-152 PHASE-06: Claude hooks ship via the plugin; boot/create-fork specs retained as fallback, test-only callers"
+    )
+)]
 const WORKTREE_CREATE_MATCHER: &str = "*";
 
 // ---------------------------------------------------------------------------
@@ -831,6 +838,13 @@ struct HookPlan {
 /// The hook command for `exec`: `<exec> boot`. A **single** space-free argument
 /// (`boot`) — the invariant the ownership match leans on (see
 /// `is_doctrine_boot_command`).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-152 PHASE-06: boot hook ships via the plugin; retained as fallback, test-only callers"
+    )
+)]
 fn boot_command(exec: &Path) -> String {
     format!("{} boot", exec.display())
 }
@@ -858,6 +872,13 @@ fn desired_entry(spec: &HookSpec) -> Value {
 /// is `boot` and the program's file name is `doctrine`. A foreign hook
 /// (`tool boot`, `/x/doctrine-helper run`) never matches. NOTE: if the hook ever
 /// grows a second/spaced arg, this must move to a real shell-word split.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-152 PHASE-06: boot hook ships via the plugin; retained as fallback, test-only callers"
+    )
+)]
 fn is_doctrine_boot_command(cmd: &str) -> bool {
     let Some((program, arg)) = cmd.trim().rsplit_once(char::is_whitespace) else {
         return false;
@@ -908,6 +929,13 @@ fn is_doctrine_emit_command(cmd: &str) -> bool {
 /// The `WorktreeCreate` hook command for `exec`:
 /// `<exec> worktree create-fork` (SL-152 PHASE-04). Multi-arg, so ownership
 /// matches by suffix-strip (see `is_doctrine_create_fork_command`).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-152 PHASE-06: create-fork hook ships via the plugin; retained as fallback, test-only callers"
+    )
+)]
 fn create_fork_command(exec: &Path) -> String {
     format!("{} worktree create-fork", exec.display())
 }
@@ -916,6 +944,13 @@ fn create_fork_command(exec: &Path) -> String {
 /// ` worktree create-fork` suffix and check the remaining program's file name is
 /// `doctrine`. Disjoint from the boot/sync predicates (neither owns the other's
 /// command), so the `WorktreeCreate` entry never clobbers the `SessionStart` ones.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-152 PHASE-06: create-fork hook ships via the plugin; retained as fallback, test-only callers"
+    )
+)]
 fn is_doctrine_create_fork_command(cmd: &str) -> bool {
     let Some(program) = cmd.trim().strip_suffix(" worktree create-fork") else {
         return false;
@@ -939,6 +974,13 @@ pub(crate) struct HookSpec {
 
 impl HookSpec {
     /// The `<exec> boot` hook (SL-011) — a `SessionStart` entry.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-152 PHASE-06: boot hook ships via the plugin; retained as fallback, test-only callers"
+        )
+    )]
     fn boot(exec: &Path) -> Self {
         Self {
             command: boot_command(exec),
@@ -972,6 +1014,13 @@ impl HookSpec {
     /// `WorktreeCreate` entry. `WorktreeCreate` has no matcher support
     /// (hooks.md:237), so `WORKTREE_CREATE_MATCHER` is cosmetic — it only feeds the
     /// merge core's canonical-entry identity, never runtime scoping.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-152 PHASE-06: create-fork hook ships via the plugin; retained as fallback, test-only callers"
+        )
+    )]
     pub(crate) fn create_fork(exec: &Path) -> Self {
         Self {
             command: create_fork_command(exec),
@@ -1232,11 +1281,12 @@ fn install_refresh(
             })
         }
         Harness::Claude => {
-            // The hook merge writes first; the baseRef step reads the SAME settings
-            // file AFTER, so its plan merges onto the just-written content (two
-            // ordered atomic writes — design §8.3 risk note). The baseRef write
-            // rides BESIDE the owner-locked HookSpec merge core, never through it.
-            let hook = install_claude_hook(root, &HookSpec::boot(exec), dry_run)?;
+            // SL-152 PHASE-06: the Claude boot (SessionStart) hook now ships via
+            // the doctrine plugin, NOT settings-wired (it double-fired with the
+            // plugin). The boot hook is no longer written to settings here; the
+            // baseRef write below rides BESIDE the (retained, now-unused-for-Claude)
+            // HookSpec merge core. baseRef + .mcp.json wiring are UNCHANGED.
+            let hook = RefreshOutcome::None;
             let baseref = install_baseref(root, dry_run)?;
             // `.mcp.json` registration (CHR-013) — a SEPARATE project-root file,
             // not the settings file; its own narrow-path merge core.
@@ -3285,13 +3335,15 @@ world";
     const REF: &str = "@.doctrine/state/boot.md";
 
     fn session_entries(json: &str) -> Vec<Value> {
+        // Absent SessionStart → empty (SL-152 PHASE-06: Claude no longer wires the
+        // boot hook into settings, so a settings file may carry only baseRef).
         let value: Value = serde_json::from_str(json).expect("valid JSON");
         value
             .get("hooks")
             .and_then(|h| h.get("SessionStart"))
             .and_then(Value::as_array)
-            .expect("SessionStart array")
-            .clone()
+            .cloned()
+            .unwrap_or_default()
     }
 
     fn commands(json: &str) -> Vec<String> {
@@ -3644,21 +3696,27 @@ world";
         let settings = root.join(SETTINGS_REL);
         let mcp = root.join(MCP_REL);
 
-        // dry-run plans a wire but writes nothing.
+        // SL-152 PHASE-06: the Claude boot hook now ships via the plugin — the
+        // refresh no longer wires it into settings (hook == None). baseRef + .mcp
+        // wiring are UNCHANGED.
+        // dry-run plans a baseRef/mcp write but writes nothing.
         let out = install_refresh(&Harness::Claude, root, exec, true).unwrap();
-        assert!(matches!(out.hook, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.hook, RefreshOutcome::None));
         assert!(matches!(out.baseref, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         assert!(!settings.exists(), "dry-run must not write settings");
         assert!(!mcp.exists(), "dry-run must not write .mcp.json");
 
-        // real run creates the file with the hook AND the baseRef key.
+        // real run creates the settings file with the baseRef key but NO boot hook.
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
-        assert!(matches!(out.hook, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.hook, RefreshOutcome::None));
         assert!(matches!(out.baseref, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         let json = fs::read_to_string(&settings).unwrap();
-        assert_eq!(commands(&json), vec!["/abs/doctrine boot".to_string()]);
+        assert!(
+            commands(&json).is_empty(),
+            "no boot hook wired for Claude (ships via plugin): {json}"
+        );
         let parsed: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
         // ...and registers the MCP server in .mcp.json.
@@ -4482,14 +4540,17 @@ world";
 
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
         assert_eq!(claude_md.matches(REF).count(), 1, "import ref wired once");
+        // SL-152 PHASE-06: the Claude boot hook ships via the plugin — `wire` no
+        // longer settings-wires it. Only the baseRef key lands in settings.
         let settings = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
-        assert_eq!(
-            commands(&settings),
-            vec![format!("{FAKE_EXEC} boot")],
-            "hook wired once"
+        assert!(
+            commands(&settings).is_empty(),
+            "no boot hook settings-wired for Claude (ships via plugin): {settings}"
         );
+        let parsed: Value = serde_json::from_str(&settings).unwrap();
+        assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
 
-        // re-run: import Present, hook current (None) — no duplication.
+        // re-run: import Present, still no hook, baseRef idempotent.
         wire(root, exec, &[Harness::Claude], false).unwrap();
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
         assert_eq!(
@@ -4498,10 +4559,9 @@ world";
             "re-run does not duplicate ref"
         );
         let settings = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
-        assert_eq!(
-            commands(&settings).len(),
-            1,
-            "re-run does not duplicate hook"
+        assert!(
+            commands(&settings).is_empty(),
+            "re-run still wires no boot hook for Claude"
         );
     }
 

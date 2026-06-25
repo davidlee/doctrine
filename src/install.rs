@@ -15,6 +15,36 @@ use serde::Deserialize;
 
 use crate::memory::MemoryType;
 
+/// Build the post-install delegation instructions (PURE — no IO).
+///
+/// Claude hooks now ship via the doctrine plugin (not settings-wired), so the
+/// install verb DELEGATES wiring to the operator via printed commands. Returns
+/// `None` when neither a Claude nor a non-Claude harness is present. Built via
+/// `Vec<String>` + `join` (repo clippy DENIES `format_push_string`).
+pub(crate) fn post_install_instructions(
+    has_claude: bool,
+    has_non_claude: bool,
+    repo: &str,
+) -> Option<String> {
+    if !has_claude && !has_non_claude {
+        return None;
+    }
+    let mut lines: Vec<String> = Vec::new();
+    if has_claude {
+        lines.push("Claude hooks ship via the doctrine plugin. To install:".to_string());
+        lines.push(format!("  /plugin marketplace add {repo}"));
+        lines.push("  /plugin install doctrine@doctrine".to_string());
+    }
+    if has_non_claude {
+        if has_claude {
+            lines.push(String::new());
+        }
+        lines.push("Non-Claude skills install:".to_string());
+        lines.push(format!("  npx skills add {repo} --agent universal -y"));
+    }
+    Some(lines.join("\n"))
+}
+
 /// Embedded install assets — everything under `install/`.
 #[derive(RustEmbed)]
 #[folder = "install/"]
@@ -361,29 +391,10 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                 &mut out,
             ) {
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
-                continue;
             }
-            // WorktreeCreate hook (project-local only). SL-152 D2: replaces the
-            // retired SubagentStart stamp — create-fork provisions+marks inside.
-            if !args.global {
-                let spec = crate::boot::HookSpec::create_fork(exec);
-                match crate::boot::install_claude_hook(root, &spec, false) {
-                    Ok(outcome) => {
-                        let label = match outcome {
-                            crate::boot::RefreshOutcome::Wired(_) => "wired",
-                            crate::boot::RefreshOutcome::Refreshed(_) => "refreshed",
-                            crate::boot::RefreshOutcome::None => "already current",
-                            crate::boot::RefreshOutcome::PrintedFallback { .. } => {
-                                "could not merge (settings left untouched)"
-                            }
-                        };
-                        writeln!(io::stdout(), "  worktree hook: {label}")?;
-                    }
-                    Err(e) => {
-                        writeln!(io::stdout(), "  worktree hook failed: {e:#}")?;
-                    }
-                }
-            }
+            // SL-152 PHASE-06: the Claude hooks (boot + create-fork) now ship via
+            // the doctrine plugin, NOT settings-wired — wiring is delegated to the
+            // operator via printed post-install instructions (see end of fn).
         } else {
             let mut out = io::stdout();
             let runner = crate::skills::real_runner();
@@ -409,6 +420,18 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                 writeln!(io::stdout(), "  {agent} agent-def install failed: {e:#}")?;
             }
         }
+    }
+
+    // SL-152 PHASE-06: delegate Claude hook-wiring to the doctrine plugin (and
+    // non-Claude skills to the universal npx command) via printed instructions,
+    // rather than wiring hooks into settings (which double-fired with the plugin).
+    let repo = crate::dtoml::load_doctrine_toml(root)?.install.repo;
+    let has_claude = agents.iter().any(|a| a == "claude");
+    let has_non_claude = agents.iter().any(|a| a != "claude");
+    if let Some(block) = post_install_instructions(has_claude, has_non_claude, &repo) {
+        let mut out = io::stdout();
+        writeln!(out)?;
+        writeln!(out, "{block}")?;
     }
 
     Ok(())
@@ -1188,6 +1211,39 @@ mod tests {
     // ---------------------------------------------------------------
     // PHASE-02: detect_agents + prompt_step
     // ---------------------------------------------------------------
+
+    // ---------------------------------------------------------------
+    // PHASE-06: post-install delegation instructions (pure builder)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn post_install_instructions_none_when_no_agents() {
+        assert!(post_install_instructions(false, false, "davidlee/doctrine").is_none());
+    }
+
+    #[test]
+    fn post_install_instructions_claude_prints_plugin_block() {
+        let block = post_install_instructions(true, false, "davidlee/doctrine").unwrap();
+        assert!(block.contains("Claude hooks ship via the doctrine plugin"));
+        assert!(block.contains("/plugin marketplace add davidlee/doctrine"));
+        assert!(block.contains("/plugin install doctrine@doctrine"));
+        assert!(!block.contains("npx skills"));
+    }
+
+    #[test]
+    fn post_install_instructions_non_claude_prints_npx_block() {
+        let block = post_install_instructions(false, true, "acme/doctrine").unwrap();
+        assert!(block.contains("Non-Claude skills install:"));
+        assert!(block.contains("npx skills add acme/doctrine --agent universal -y"));
+        assert!(!block.contains("/plugin"));
+    }
+
+    #[test]
+    fn post_install_instructions_both_print_both_blocks() {
+        let block = post_install_instructions(true, true, "davidlee/doctrine").unwrap();
+        assert!(block.contains("/plugin install doctrine@doctrine"));
+        assert!(block.contains("npx skills add davidlee/doctrine --agent universal -y"));
+    }
 
     #[test]
     fn detect_agents_empty_when_no_claude_dir_and_no_flags() {

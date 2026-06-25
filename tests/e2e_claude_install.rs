@@ -2,13 +2,14 @@
 //! SL-088 PHASE-04 — `doctrine install --agent claude` end-to-end over the built binary.
 //!
 //! Drives the consolidated `doctrine install` handler against a temp project and
-//! proves the Claude-surface install does three things in one verb (design §9):
-//!   * VT-1: `install --agent claude --skill code-review` wires skills, agent def,
-//!     and the `WorktreeCreate` hook into `.claude/`.
+//! proves the Claude-surface install (design §9):
+//!   * VT-1: `install --agent claude --skill code-review` wires skills + agent def.
 //!   * VT-2: the dispatch-worker agent def resolves at `.claude/agents/`.
-//!   * the `WorktreeCreate` hook (`worktree create-fork`) is merged into
-//!     `.claude/settings.local.json`, idempotent on reinstall — and the retired
-//!     SL-123 `SubagentStart` stamp hook is NEVER emitted (SL-152 D2).
+//!   * SL-152 PHASE-06: the Claude hooks now ship via the doctrine PLUGIN, so the
+//!     install verb DELEGATES wiring via printed instructions rather than wiring
+//!     the boot (`SessionStart`) / create-fork (`WorktreeCreate`) hooks into
+//!     `.claude/settings.local.json` (they double-fired with the plugin). No
+//!     SessionStart, WorktreeCreate, or retired SubagentStart hook is emitted.
 
 #![allow(
     clippy::expect_used,
@@ -50,9 +51,12 @@ fn install(dir: &Path) -> String {
     String::from_utf8(out.stdout).expect("utf8 stdout")
 }
 
-/// The `hooks.<event>` array of a settings file (empty if absent).
+/// The `hooks.<event>` array of a settings file (empty if the file or event is
+/// absent — SL-152 PHASE-06: with no hooks settings-wired the file may not exist).
 fn event_entries(settings: &Path, event: &str) -> Vec<Value> {
-    let json = fs::read_to_string(settings).expect("settings readable");
+    let Ok(json) = fs::read_to_string(settings) else {
+        return Vec::new();
+    };
     let value: Value = serde_json::from_str(&json).expect("valid settings JSON");
     value
         .get("hooks")
@@ -63,8 +67,8 @@ fn event_entries(settings: &Path, event: &str) -> Vec<Value> {
 }
 
 /// Assert the post-install state holds for a project at `dir`: the agent def
-/// resolves, and the WorktreeCreate hook is wired exactly once (with the retired
-/// SubagentStart stamp absent).
+/// resolves, and NO Claude hooks are settings-wired (they ship via the plugin —
+/// SL-152 PHASE-06).
 fn assert_installed(dir: &Path) {
     // VT-2: the agent def is a link resolving to materialised content.
     let agent_link = dir.join(".claude/agents/dispatch-worker.md");
@@ -85,23 +89,19 @@ fn assert_installed(dir: &Path) {
         "canonical agent def materialised"
     );
 
-    // The WorktreeCreate hook: exactly one entry, command `<exec> worktree create-fork`.
+    // SL-152 PHASE-06: no hooks are settings-wired — they ship via the doctrine
+    // plugin. The boot (SessionStart) and create-fork (WorktreeCreate) hooks, plus
+    // the retired SubagentStart stamp, are all absent (settings file may carry only
+    // baseRef, or not exist at all). `event_entries` treats absent-file as empty.
     let settings = dir.join(".claude/settings.local.json");
-    let wc = event_entries(&settings, "WorktreeCreate");
-    assert_eq!(wc.len(), 1, "exactly one WorktreeCreate entry");
-    let cmd = wc[0]
-        .get("hooks")
-        .and_then(Value::as_array)
-        .and_then(|a| a.first())
-        .and_then(|h| h.get("command"))
-        .and_then(Value::as_str)
-        .expect("WorktreeCreate command");
     assert!(
-        cmd.ends_with(" worktree create-fork"),
-        "create-fork hook command: {cmd}"
+        event_entries(&settings, "WorktreeCreate").is_empty(),
+        "no WorktreeCreate hook settings-wired (ships via plugin)"
     );
-
-    // VT-1 (negative, D2): the retired SubagentStart stamp hook is never emitted.
+    assert!(
+        event_entries(&settings, "SessionStart").is_empty(),
+        "no SessionStart boot hook settings-wired (ships via plugin)"
+    );
     assert!(
         event_entries(&settings, "SubagentStart").is_empty(),
         "no SubagentStart stamp hook after retirement"
@@ -109,7 +109,7 @@ fn assert_installed(dir: &Path) {
 }
 
 #[test]
-fn install_wires_skills_agent_and_hook_idempotently() {
+fn install_wires_skills_agent_and_delegates_hooks_to_plugin() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
@@ -119,14 +119,32 @@ fn install_wires_skills_agent_and_hook_idempotently() {
         out.contains("linked    dispatch-worker.md"),
         "agents leg: {out}"
     );
-    assert!(out.contains("worktree hook: wired"), "hook leg: {out}");
+    // SL-152 PHASE-06: hooks are delegated to the plugin via printed instructions,
+    // not settings-wired.
+    assert!(
+        out.contains("/plugin marketplace add davidlee/doctrine"),
+        "plugin marketplace instruction: {out}"
+    );
+    assert!(
+        out.contains("/plugin install doctrine@doctrine"),
+        "plugin install instruction: {out}"
+    );
+    assert!(
+        !out.contains("worktree hook: wired"),
+        "no settings-wired hook line: {out}"
+    );
     assert_installed(dir);
 
-    // Reinstall is idempotent: no duplicate WorktreeCreate entry, hook now current.
+    // Reinstall is idempotent: skills/agent re-reconcile, the plugin instructions
+    // print again, and still no hooks are settings-wired.
     let out = install(dir);
     assert!(
-        out.contains("worktree hook: already current"),
-        "reinstall hook no-op: {out}"
+        out.contains("/plugin install doctrine@doctrine"),
+        "reinstall prints plugin instructions: {out}"
+    );
+    assert!(
+        !out.contains("worktree hook:"),
+        "reinstall wires no settings hook: {out}"
     );
     assert_installed(dir);
 }

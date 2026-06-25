@@ -441,6 +441,54 @@ sequenced so these resolve **before** the dependent schema/emission locks.
   stdout side-effect. Decision deferred to PHASE-02 (prefer the core/emission
   split — cleaner cohesion, no extra process).
 
+- **D12 — PHASE-06 scope amendment (settled at implementation, 2026-06-25).** The
+  shipped plugin form diverges from plan EX-1/EX-2 on four points; D7 itself
+  ("migrate into `hooks/hooks.json`, remove the settings block") is satisfied
+  unchanged — the divergences are against the plan's *EX text*, which encoded
+  premises that do not hold against the real plugin format / install topology.
+  Recorded here rather than silently expanded (RSK-2 discipline); EX-1/EX-2 ids are
+  immutable, so plan.toml appends EX-3/EX-4 + VT-2 that supersede the false premises.
+  - **Δ1 — command form is bare `doctrine` (PATH), NOT `${CLAUDE_PLUGIN_ROOT}/…`.**
+    The §2 "plugins use `${CLAUDE_PLUGIN_ROOT}` for script paths" known assumes the
+    invoked script *ships inside the plugin*. Doctrine's hook invokes the
+    PATH-installed `doctrine` binary (placed by the dev's `just install`; `doctrine
+    boot --emit` keeps the snapshot fresh regardless), which is NOT
+    bundled in `plugins/doctrine/`; `${CLAUDE_PLUGIN_ROOT}/…` would resolve to a
+    non-existent path. Bare `doctrine` is the only correct form. *Tradeoff:* the
+    plugin form runs whatever `doctrine` is first on PATH (frozen/stale-binary risk
+    under a jail's pinned bin); acceptable — identical to the retired settings-block
+    form, which also called bare `doctrine`. Parity preserved.
+  - **Δ2 — SessionStart `doctrine boot` ALSO migrated into the plugin hooks.json**
+    (EX-1 scoped WorktreeCreate-only). `hooks/hooks.json` is the single coherent home
+    for *all* doctrine session hooks; splitting boot (settings) from worktree
+    (plugin) is incoherent and defeats one-form distribution. Live PASS confirms boot
+    parity (BOOT-SENTINEL regenerates on `clear`-restart).
+  - **Δ3 — hooks live in `hooks/hooks.json`, not inline in plugin.json** (EX-2
+    premise). The actual Claude plugin format auto-discovers a sibling
+    `hooks/hooks.json`; `plugin.json` stays metadata-only (name/version/description).
+    EX-2's "plugin.json carries the hook wiring" is corrected to "the plugin scaffold
+    (`.claude-plugin/plugin.json` + `hooks/hooks.json`) carries it."
+  - **Δ4 — install delegates artifact-wiring to the user via printed post-install
+    instructions; no global-config writes (User decision 2026-06-25).** Two marketplace
+    manifests are retained: `.claude-plugin/marketplace.json` (repo-root, Claude
+    canonical — discovered by the `owner/repo` shorthand) and `plugins/marketplace.json`
+    (codex / universal). `doctrine install` does NOT register marketplaces or flip
+    `enabledPlugins` (RSK-2 — that packaging automation is a follow-up slice). Instead:
+    - **Claude harness:** STOP wiring BOTH boot + create-fork into `settings.local.json`
+      (User chose full migration; touches the shared `boot::wire`/`install_refresh`
+      Claude arm — accepted beyond SL-152's own hook). The plugin (`doctrine@doctrine`)
+      provides both. Print: `/plugin marketplace add <repo>` + `/plugin install
+      doctrine@doctrine`. baseRef belt, mcp, skills, agent-def, boot-import ref UNCHANGED.
+    - **Non-Claude (universal) harness:** print `npx skills add <repo> --agent universal -y`.
+    - `<repo>` = the `[install] repo` doctrine.toml key (default `davidlee/doctrine`,
+      the GitHub `owner/repo` shorthand; the `github:` prefix is NOT a supported form).
+      Neutral section — shared by both prints, not `[claude]`-scoped.
+    - `install_claude_hook` + `HookSpec::boot`/`create_fork` code RETAINED (fallback,
+      not deleted), just not called for the Claude harness.
+  - **Out of scope (NOT a delta):** the SubagentStart-stamp drop is PHASE-04 D2
+    (`install.rs:367`, `skills.rs:1069`), already authored — not reopened here.
+    Marketplace registration / `enabledPlugins` automation = follow-up slice.
+
 ## 8. Risks & Mitigations
 
 - **RSK-1 (repo-global blast radius, ADR-011 D7 σ).** Every

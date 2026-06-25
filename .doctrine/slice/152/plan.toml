@@ -230,10 +230,16 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "the WorktreeCreate hook is declared in plugins/doctrine/hooks/hooks.json (via ${CLAUDE_PLUGIN_ROOT}); the settings.local.json WorktreeCreate block is removed in the same step (mutually exclusive)." },
   { id = "EX-2", text = "plugins/doctrine/.claude-plugin/plugin.json carries the hook wiring (the plugin scaffold the rest can migrate onto)." },
+  # --- Scope amendment, design D12 (2026-06-25). EX-3/EX-4 SUPERSEDE the false
+  # premises in EX-1/EX-2 (ids immutable → append, never edit). ---
+  { id = "EX-3", text = "SUPERSEDES EX-1/EX-2 command+scope premise (D12 Δ1/Δ2/Δ3): hooks declared in plugins/doctrine/hooks/hooks.json carry BOTH SessionStart (doctrine boot) AND WorktreeCreate (doctrine worktree create-fork), command form bare `doctrine` (PATH-installed binary, NOT ${CLAUDE_PLUGIN_ROOT} which holds no executable); plugin.json stays metadata-only; settings.local.json carries neither hook (mutual exclusion)." },
+  { id = "EX-4", text = "install delegates Claude hook-wiring to the plugin (D12 Δ4, no global-config writes): for the Claude harness, doctrine install STOPS wiring boot + create-fork into settings.local.json and instead PRINTS the plugin-install commands `/plugin marketplace add <repo>` + `/plugin install doctrine@doctrine`, where <repo> is the `[claude] plugin-marketplace` doctrine.toml key (default `davidlee/doctrine`, the owner/repo shorthand that resolves the repo-root .claude-plugin/marketplace.json). Codex/pi hook wiring, baseRef, skills, agent-def, and the boot-import ref are UNCHANGED. Both marketplace manifests retained: .claude-plugin/marketplace.json (Claude canonical) + plugins/marketplace.json (codex/universal). install_claude_hook + HookSpec code retained as fallback, not deleted." },
 ]
 verification = [
   { id = "VT-1", expects = "install golden: the plugin hooks.json contains the hook and settings.local.json no longer carries the WorktreeCreate block (no double-wiring)." },
   { id = "VA-1", expects = "P1: the plugin-form hook fires identically to the settings-block form on a live 2.1.181 spawn (the parity probe)." },
+  { id = "VT-2", expects = "install golden (D12/EX-4): post-install the plugin hooks.json carries both SessionStart+WorktreeCreate with bare `doctrine`, marketplace.json lists the doctrine plugin, and settings.local.json carries neither hook." },
+  { id = "VA-2", expects = "PHASE-06 plugin-form live PASS: the plugin's SessionStart fires (boot.md/BOOT-SENTINEL) AND a benign isolation:worktree spawn fires the plugin's WorktreeCreate create-fork (detached+provisioned .worktrees/<name>). PASS 2026-06-25: plugin doctrine@doctrine-edge demonstrably fired live this session (~/.claude.json pluginUsage, lastUsedNumStartups==numStartups==495); boot.md regenerated, worktree provisioned. Note: a transient settings.local.json hooks dup (a later `doctrine install` re-added the absolute-path form for pi-dispatch skills) co-wired both forms briefly — removed; that reinstall double-add IS the EX-4 mutual-exclusion bug, not a test failure." },
 ]
 specs        = []
 requirements = []

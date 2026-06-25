@@ -163,7 +163,7 @@ fn dry_run_prints_the_plan_without_writing() {
 }
 
 #[test]
-fn sync_install_wires_a_separate_session_hook_coexisting_with_boot() {
+fn sync_install_wires_a_session_hook_no_boot_hook_settings_wired() {
     let repo = doctrine_repo();
     let settings = repo.path().join(".claude/settings.local.json");
 
@@ -182,7 +182,18 @@ fn sync_install_wires_a_separate_session_hook_coexisting_with_boot() {
     );
     assert!(ok, "boot install: {out}");
 
-    // then sync install — a SEPARATE SessionStart entry.
+    // SL-152 PHASE-06: `boot install` no longer settings-wires the boot
+    // (SessionStart) hook for Claude — it ships via the doctrine plugin. So no
+    // ` boot"` command lands in settings (the file may carry only baseRef).
+    if let Ok(json) = std::fs::read_to_string(&settings) {
+        assert!(
+            !json.contains(" boot\""),
+            "boot hook must NOT be settings-wired (ships via plugin): {json}"
+        );
+    }
+
+    // then sync install — the sync hook is a separate, retained settings wire
+    // (memory sync install is unchanged by SL-152 PHASE-06).
     let (ok, out) = run(
         repo.path(),
         &["memory", "sync", "install", "-p", &path(&repo), "-y"],
@@ -190,10 +201,13 @@ fn sync_install_wires_a_separate_session_hook_coexisting_with_boot() {
     assert!(ok, "sync install: {out}");
 
     let json = std::fs::read_to_string(&settings).expect("settings written");
-    assert!(json.contains(" boot\""), "boot hook present: {json}");
     assert!(
         json.contains(" memory sync\""),
         "sync hook present as a distinct command: {json}"
+    );
+    assert!(
+        !json.contains(" boot\""),
+        "boot hook still not settings-wired after sync install: {json}"
     );
 
     // re-running sync install is idempotent — no second sync entry.

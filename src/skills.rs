@@ -1061,37 +1061,24 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         crate::install::ensure_gitignored(&base, ".doctrine/agents/*")?;
         crate::install::ensure_gitignored(&base, "!.doctrine/agents/AGENTS.md")?;
         install_agents_for(&root, "claude", None, args.global, args.dry_run, &mut out)?;
+    }
 
-        // Wire the dispatch-worker WorktreeCreate hook into the project's
-        // settings (project-local only — the hook command is an absolute exec
-        // path that belongs out of git, like the boot/sync hooks; `--global`
-        // skips it). Reuses the boot.rs HookSpec merge core — no parallel impl.
-        // SL-152 D2: this REPLACES the retired SubagentStart stamp hook;
-        // create-fork provisions+marks atomically inside WorktreeCreate.
-        if !args.global {
-            let exec = crate::boot::resolve_exec()?;
-            let outcome = crate::boot::install_claude_hook(
-                &root,
-                &crate::boot::HookSpec::create_fork(&exec),
-                args.dry_run,
-            )?;
-            writeln!(out, "worktree hook: {}", hook_outcome_label(&outcome))?;
-        }
+    // SL-152 PHASE-06: the Claude hooks (boot + create-fork) now ship via the
+    // doctrine plugin (NOT settings-wired — they double-fired with the plugin).
+    // Delegate wiring to the operator via printed instructions; non-Claude agents
+    // get the universal npx skills command.
+    let repo = crate::dtoml::load_doctrine_toml(&root)?.install.repo;
+    let has_claude = agents.iter().any(|a| matches!(a, Agent::Claude));
+    let has_non_claude = agents.iter().any(|a| !matches!(a, Agent::Claude));
+    if let Some(block) =
+        crate::install::post_install_instructions(has_claude, has_non_claude, &repo)
+    {
+        writeln!(out)?;
+        writeln!(out, "{block}")?;
     }
 
     writeln!(out, "Done.")?;
     Ok(())
-}
-
-/// A short human label for a hook-merge outcome (the `SubagentStart` wiring line).
-fn hook_outcome_label(outcome: &crate::boot::RefreshOutcome) -> &'static str {
-    use crate::boot::RefreshOutcome::{None, PrintedFallback, Refreshed, Wired};
-    match outcome {
-        Wired(_) => "wired",
-        Refreshed(_) => "refreshed",
-        None => "already current",
-        PrintedFallback { .. } => "could not merge (settings left untouched)",
-    }
 }
 
 // ── CLI dispatch ───────────────────────────────────────────────────────────
