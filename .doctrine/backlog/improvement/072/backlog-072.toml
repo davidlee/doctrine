@@ -5,10 +5,10 @@ id = 72
 slug = "worktreecreate-hook-to-enable-parallel-claude-quality-isolated-dispatch-workers-on-subscription"
 title = "WorktreeCreate hook for pre-worker fail-closability on the claude dispatch arm (deferred; NOT needed for base control)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-14"
-updated = "2026-06-15"
+updated = "2026-06-25"
 tags = ["area:dispatch"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
