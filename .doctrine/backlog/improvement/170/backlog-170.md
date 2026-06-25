@@ -218,6 +218,65 @@ Fix: deduplicate in `relation_edges` or in the `render_outbound` grouping.
 | Backlog | slices, governed_by, references(role), related, drift ✓ | full outbound+inbound ✓ |
 | Knowledge record | tier-1 edges ✓ | full outbound+inbound ✓ |
 
+## List View Audit — what list columns omit (2026-06-26)
+
+List views are the scanning surface. Most omit relation edges entirely. A few
+surface one derived column. The pattern is inconsistent.
+
+### L1 — `revision list` doesn't exist
+
+`doctrine revision` has `new`, `show`, `status`, `change`, `approve`, `apply`,
+`paths` — but no `list`. Every other entity kind has one. No way to survey
+revisions at a glance; you must know their IDs.
+
+### L2 — `slice list` shows no relation columns
+
+`slice list` shows `id | status | phases | title`. No spec (`implements`), no
+governance (`governed_by`), no backlog origin (`scoped_from`). A reader
+scanning the slice list can't see which spec a slice targets.
+
+### L3 — `spec list` has `#members` but no other relation columns
+
+`spec list` shows `id | status | title | #members`. The members count is a
+derived column (surfaced from `members.toml`). No `descends_from`, `parent`,
+`#interactions`, `governed_by`. Product specs don't show `consumes`.
+
+### L4 — `adr list` / `policy list` / `rfc list` show no relation columns
+
+Pure `id | status | title`. No `supersedes`, `superseded_by`, `related`,
+`#governs`, `references`. An ADR reader can't see which ADR supersedes which
+from the list.
+
+### L5 — `backlog list` shows `tags` but no relation columns
+
+`backlog list` shows `id | kind | status | tags | title`. Tags are free-text
+classification, not relations. No `slices`, `governed_by`, `references(concerns)`
+— a reader can't see which slice works on a backlog item.
+
+### L6 — `review list` shows `target` but from typed field, not tier-1
+
+`review list` shows `id | status | facet | target | title`. The `target` column
+comes from the typed `[review].target` field, NOT from `[[relation]]`. Works
+correctly, but by coincidence rather than design.
+
+### L7 — `rec list` shows `owning` but not `decision_ref`
+
+`rec list` shows `id | move | owning | title`. The `owning_slice` is surfaced,
+but `decision_ref` is not.
+
+### List coverage matrix
+
+| Kind | List columns with relations | Missing |
+|---|---|---|
+| Slice | — | implements, governed_by, scoped_from |
+| Spec | #members ✓ | descends_from, parent, #interactions, governed_by, consumes |
+| ADR/POL/STD | — | supersedes, superseded_by, #governs, related |
+| RFC | — | references(concerns), related |
+| Revision | **no list verb** | all |
+| Review | target ✓ (typed) | — |
+| REC | owning ✓ | decision_ref |
+| Backlog | tags (not relations) | slices, governed_by, references |
+
 ## Links
 
 - Spawned from SL-153 design (§8 R2 follow-up).
