@@ -41,6 +41,7 @@ mod provision;
 mod subagent;
 
 pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
+pub(crate) use create::run_create_fork;
 pub(crate) use fork::run_fork;
 pub(crate) use gc::run_gc;
 pub(crate) use import::run_import;
@@ -137,6 +138,15 @@ pub(crate) enum WorktreeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Create a worktree for the claude `WorktreeCreate` hook (stdin payload).
+    /// Reads `{cwd, name}` JSON on stdin; positionally discriminates a dispatch
+    /// worker (cwd IS the arming dir ⇒ fork off the arming `base`, worker-marked)
+    /// from a benign spawn (anywhere else ⇒ detached tree at HEAD, unmarked), both
+    /// provisioned by the sole copier. Prints the created absolute path ALONE on
+    /// stdout. No `-p`: the root is the payload cwd's `--show-toplevel`.
+    /// Orchestrator-classed — fires in the markerless parent coord tree.
+    CreateFork,
 
     /// Create or resume a coordination worktree.
     /// For a slice on branch `dispatch/<slice>` off the resolved trunk.
@@ -293,6 +303,7 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             worker,
             path,
         } => run_fork(path, &base, &branch, &dir, worker),
+        WorktreeCommand::CreateFork => run_create_fork(),
         WorktreeCommand::Coordinate { slice, dir, path } => run_coordinate(path, slice, &dir),
         WorktreeCommand::Import { base, fork, path } => run_import(path, &base, &fork),
         WorktreeCommand::Land { fork, path } => run_land(path, &fork),

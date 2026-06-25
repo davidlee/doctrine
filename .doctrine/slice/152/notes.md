@@ -37,18 +37,28 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
 
 ## 1. State (2026-06-25)
 
-- Slice status: **`ready`** (design locked → plan authored → ready). Design schema
-  settled, **no open forks**. All 3 pre-plan checks discharged (§5).
-- **PHASE-01 `completed`** — pure `classify_create` + `sanitise_name` shipped in
-  `src/worktree/create.rs` (9 tests green, VT-1 matrix + VT-2 sanitiser table; full
-  `just check` clean). **Lid gotcha:** items are test-only-consumed until PHASE-02, so
-  the module lid is `#![cfg_attr(not(test), expect(unused, …))]` NOT a plain
-  `#![expect(unused)]` (the latter is unfulfilled under `cargo test` ⇒ deny). PHASE-02
-  EX-7 reconciles it. Next is `/phase-plan` PHASE-02 (shell + CLI wiring).
-- Commits (edge): `9685a695` probes → `7b76de34` inquisition → `700d1dd6` positional
-  arming → `d830e3f1` memory → `f3fa6187` pre-plan-discharge+flip → `9f119375` plan →
-  `74411a43` /plan review (D11 + plan tighten). Runtime phase sheets are gitignored
-  (not committed).
+- Slice status: **`started`**. Design locked → plan authored. All 3 pre-plan checks
+  discharged (§5). **PHASE-01 + PHASE-02 `completed`**; next is **`/phase-plan` PHASE-03**
+  (`dispatch arm-spawn`).
+- **PHASE-01 `completed`** — pure `classify_create` + `sanitise_name` in
+  `src/worktree/create.rs` (VT-1 matrix + VT-2 sanitiser table).
+- **PHASE-02 `completed`** — `doctrine worktree create-fork` shipped (the heart). The
+  `fork_core` split (byte-identical core, D11) + the impure shell (`run_create_fork`,
+  `act_on_create`, gather) all in `create.rs` alongside the classifier (mirrors
+  `subagent.rs`). CLI-wired `WorktreeCommand::CreateFork`, guard-classed
+  `Orchestrator("create-fork")`. **5 e2e tests green** (`tests/e2e_worktree_create_fork.rs`,
+  VT-1..8); fork/provision/stamp suites green UNCHANGED (VT-6); `just check` clean. Lids
+  on fork.rs/provision.rs REMOVED (masked only dead imports) + dead imports pruned;
+  create.rs lid removed + module doc corrected (no longer claims "no git/disk"). New
+  imperative refusal token **`no-root`** (cwd resolves but outside any git worktree —
+  F-P2-2). Full findings: `phase-02.md` §Findings.
+- **For PHASE-03 — the file contract create-fork now reads is LOCKED:** arming dir =
+  `<root>/.doctrine/state/dispatch/spawn` (const `ARMING_SUBPATH` in create.rs); base
+  file = `<arming_dir>/base`, contents a plausible sha (create-fork TRIMS it, accepts
+  4..=64 hex), so `arm-spawn` may write `"<sha>\n"`. create-fork makes the fork at
+  `<root>/.worktrees/<name>` on branch `dispatch/<name>`.
+- Commits (edge): … `74411a43` /plan review → `a52bc872`/`58ed6ca6` PHASE-01 →
+  (this commit) **`feat(SL-152) PHASE-02 create-fork`**. Runtime phase sheets gitignored.
 
 ---
 
@@ -81,6 +91,10 @@ land on that phase** — read those before coding the phase.
   Writes `<coord>/.doctrine/state/dispatch/spawn/base = <sha>\n`, prints the dir.
   base-B source = `run_setup` stdout `base=` (dispatch.rs:446) — already surfaced.
   Idempotent; arming dir is runtime-tier + D9-withheld (never provisioned).
+  **The READER (create-fork, PHASE-02) is shipped** — the contract is fixed (§1): write
+  exactly `<sha>\n` to `<spawn>/base`; the path const lives in `create.rs::ARMING_SUBPATH`
+  (keep arm-spawn's path in sync — consider sharing the const). create-fork trims, so a
+  trailing newline is fine. arm-spawn does NOT create `.worktrees/` (create-fork does).
 
 - **PHASE-04 — install emission + stamp retirement** (`boot.rs` new `HookSpec` ctor
   event `WorktreeCreate`; retire stamp). **Bites:** G4 — the stamp is emitted at
@@ -233,9 +247,14 @@ dispositioned; both factual premises verified in-repo.
 
 ## 8. Code seams (where to cut)
 
-- `src/worktree/create.rs` — **NEW** (PHASE-01 pure; PHASE-02 shell `run_create_fork`).
-- `src/worktree/fork.rs:133` `run_fork` (shared core; emits env contract :209-211 — G1;
-  `fork.rs:1` + `:51-52` lids/stale-comment — G6; `remove_worktree_dir:63` reuse — G3).
+- `src/worktree/create.rs` — pure classifier + the **shipped** shell: `run_create_fork`
+  (stdin → gather → classify → act → print path), `act_on_create(root, action) ->
+  PathBuf` (the act seam; both arms canonicalise), `resolve_root` (`git -C cwd
+  --show-toplevel`), consts `ARMING_SUBPATH`/`WORKTREES_SUBDIR`. No lid (all live).
+- `src/worktree/fork.rs` — `fork_core(repo,base,branch,dir,worker)` is the SILENT
+  byte-identical core (no stdout/stderr); `run_fork` = `fork_core` + env-contract
+  emission (D11). `remove_worktree_dir` reused by create-fork's passthrough compensation
+  (G3). Lid + dead imports removed; stale comment fixed (G6).
 - `src/worktree/subagent.rs:162` `run_stamp_subagent` (mirror the SHAPE; `classify_stamp:84`;
   payload struct `:107-113`; `:137-139`/`:157` stale "DROPPED" comments — G6;
   `verify-worker:343` `run_verify_worker(base,dir,branch:Option)` — branch is an explicit
