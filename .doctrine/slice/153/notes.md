@@ -82,3 +82,24 @@ Per `mem.pattern.distribution.shipped-memory-authoring`:
 ```
 a52bc872 slice(SL-153): scaffold CLI verbs for spec-internal edges (descends_from, parent, interactions)
 ```
+
+## 2026-06-25 — External inquisition (codex / GPT-5.5)
+
+Ran the external adversarial pass on design.md + source. 4 findings, all verified
+against source, all **accepted** and integrated (design.md §10 E1–E4):
+
+- **E1 (BLOCKER)** — `--parent` lacked a pre-write self/cycle gate; `registry.rs`
+  treats those HARD-invalid (REQ-087). Added acyclicity gate (§5.4) + tests (§9).
+  This was the only block; now resolved in-design.
+- **E2 (MAJOR)** — removal pointed at `dep_seq::remove_after`, which is bound to
+  `[relationships].after`/`to` and can't serve the `[[edge]]`/`target` AoT. New pure
+  helper `spec.rs::remove_interaction_edges` specified instead.
+- **E3 (MAJOR)** — add dup-check must canonicalize existing on-disk row targets
+  (`target="SPEC-2"` vs `SPEC-002`) or it admits a duplicate. §5.3 sharpened + test.
+- **E4 (MINOR)** — inline kind-validation re-encoded `RELATION_RULES`; reuse
+  `lookup`/`check_target_kind` for declared rows + narrow product-`parent` branch.
+
+Residual placement question (`apply_scalar` at the `dep_seq` leaf) was explicitly
+pressure-tested by the reviewer and not flagged → closed (§10).
+
+**Design ready to plan.** Next: `/plan`.

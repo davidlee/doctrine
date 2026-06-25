@@ -39,7 +39,7 @@ idempotent, forward-validated — eliminating the hand-edit gap.
 |---|---|
 | scalar set/clear (edit-preserving) | NEW pure core in `dep_seq.rs`, mirroring `apply_status` core/IO split |
 | `[[edge]]` append | `spec.rs::append_member` (toml_edit AoT push, tolerant `entry().or_insert`) |
-| `[[edge]]` remove | `dep_seq::remove_after` (index-collect, reverse-remove) |
+| `[[edge]]` remove | NEW `spec.rs::remove_interaction_edges` (top-level `edge` AoT, canonical-target match, index-collect/reverse-remove). `dep_seq::remove_after` does NOT serve — it is bound to `[relationships].after` inline-tables keyed by `to` and F-1-bails if absent (E2). |
 | atomic write | `fsutil::write_atomic` |
 | ref → (subtype, id) | `spec.rs::resolve_spec_ref`; canonicalise via `canonicalize_spec_ref` |
 
@@ -113,8 +113,13 @@ fn run_interaction_remove(path, spec_ref, target) -> Result<()>
 
 `run_edit` reads + parses the spec TOML once, validates each requested field, calls
 `apply_scalar` per field on the held doc, and `write_atomic`s **once** iff any field
-changed (batched multi-field write; no-op holds mtime). The interaction shells reuse
-the `append_member` / `remove_after` shapes against `interactions.toml`'s `edge` AoT.
+changed (batched multi-field write; no-op holds mtime). `run_interaction_add` rides
+`append_member`'s AoT-push shape against `interactions.toml`'s top-level `edge` AoT;
+`run_interaction_remove` calls a NEW pure helper `remove_interaction_edges(doc,
+canonical_target) -> usize` (index-collect/reverse-remove over the `edge` AoT,
+matching `target` canonical-to-canonical, write iff count > 0). `dep_seq::remove_after`
+is **not** reused — it targets `[relationships].after` inline-tables keyed by `to`
+and bails when the array is absent (E2).
 
 ### 5.3 Data, State & Ownership
 
@@ -128,6 +133,12 @@ the `append_member` / `remove_after` shapes against `interactions.toml`'s `edge`
   notes? }`. Owned by `spec interactions add|remove`. Target stored canonical.
 - **Target-as-PK** for interactions: at most one edge per target (add no-ops if the
   target is present; remove clears by target, matching canonical-to-canonical).
+  **Both** add's dup-check and remove **canonicalize the existing on-disk row
+  `target` before comparing** (E3) — a hand-authored `target = "SPEC-2"` already in
+  the file is matched by `SPEC-002`, so add does not append a duplicate and remove
+  clears it. (The reader already canonicalizes on read, `spec.rs:read_interactions`;
+  the write path inspects the `toml_edit` row string, so it must canonicalize there
+  too.)
   Consistent with the "degenerate dup-target" stance (`spec.rs` §5.5) and
   `interaction_types` last-wins. The add no-op **informs** ("edge to <target>
   already present; remove + add to change its type") — silence would mislead a user
@@ -141,16 +152,30 @@ Per-verb gates, all evaluated **before any write**:
 | Verb | Source gate | Target kind | Target exists | Idempotency |
 |---|---|---|---|---|
 | `edit --descends-from` | tech only | PRD | yes | re-set same → no-op |
-| `edit --parent` | any subtype | == source subtype (tech→SPEC, product→PRD) | yes | re-set same → no-op |
+| `edit --parent` | any subtype | == source subtype (tech→SPEC, product→PRD) | yes + **acyclic** (E1) | re-set same → no-op |
 | `edit --clear-descends-from` | tech only | — | — | already absent → no-op |
 | `edit --clear-parent` | any subtype | — | — | already absent → no-op |
 | `interactions add` | tech only | SPEC | yes | target present → no-op |
 | `interactions remove` | tech only | — (no validation) | — | no match → no-op (count 0) |
 
-Forward-validation is inline: `resolve_spec_ref(target)` → `(subtype, id)`; assert
-the subtype matches the required kind; assert the target dir `is_dir()`. Same
-posture as `link`'s `check_target_kind` + existence gate, but done inline because
-these are `TypedVerbOnly` — `validate_link` is gated to `Writable` and cannot serve.
+Forward-validation: `resolve_spec_ref(target)` → `(subtype, id)`; kind-check via
+`relation::lookup` + `check_target_kind` for the **declared** rows (`descends_from`,
+tech `parent`, `interactions` — E4: reuse the `RELATION_RULES` table rather than
+re-encode the kinds inline); a narrow product-`parent` branch covers the one
+undeclared case (R2 — closes when the follow-up table-honesty work lands). Then
+assert the target dir `is_dir()`. `validate_link` itself cannot serve — it is gated
+to `LinkPolicy::Writable` and these labels are `TypedVerbOnly` — but `lookup` /
+`check_target_kind` are policy-agnostic and do.
+
+**Parent acyclicity (E1) — before any write.** `--parent` additionally rejects a
+self-parent (`target == source`) and any cycle the new edge would close. The shell
+builds the prospective parent map (existing `parent` scalars across the source's
+subtype family + the proposed edge) and walks from the target: if it reaches the
+source, reject (`"parent edge SPEC-AAA → SPEC-BBB would form a cycle"`). This
+forward-stops a corpus state that `spec validate` already treats as HARD-invalid
+(`registry.rs::self_parent`, `parent_cycle`; REQ-087). `spec validate` remains the
+backstop for pre-existing drift (D5).
+
 `remove` does **not** validate the target (removing a dangling edge is valid).
 
 Each shell prints a per-action confirmation: `Set SPEC-005 parent to SPEC-002` /
@@ -225,7 +250,9 @@ shell reports "removed N edge(s) to <target>".
 **CLI/integration — `spec edit` + `spec interactions`:**
 - `edit --descends-from` on tech → `spec show` reflects it; on product → error.
 - `edit --parent` same-subtype OK; cross-subtype → error; nonexistent target →
-  error.
+  error; **self-parent (`SPEC-005 --parent SPEC-005`) → error, no write/mtime
+  change** (E1); **2-node cycle (B already parents A; `A --parent B`) → error, no
+  write** (E1).
 - `--clear-parent` removes; clear-absent no-op; `--descends-from X
   --clear-descends-from` → clap rejects; no flags → ArgGroup rejects.
 - multi-field one invocation (`--parent X --clear-descends-from`) → single
@@ -233,6 +260,12 @@ shell reports "removed N edge(s) to <target>".
 - `interactions add` appends (`--notes` optional); idempotent on target; `remove`
   by target; remove-absent → count 0 no-op; add on product → error; forward-
   validation (existence + kind) for add and edit.
+- **Non-canonical existing row (E3):** with `target = "SPEC-2"` already on disk,
+  `add SPEC-002` must NOT append a duplicate (canonical dup-match) and `remove
+  SPEC-002` must clear that row.
+- **`remove_interaction_edges` helper:** removes all canonical-target matches over
+  the top-level `edge` AoT, preserves comments/inert rows, writes iff count > 0;
+  asserts `dep_seq::remove_after` is untouched (E2).
 
 **Behaviour-preservation:** full `spec`/`relation`/`dep_seq` suites green unchanged.
 
@@ -259,8 +292,37 @@ Probed for vagueness, hidden assumptions, weak verification. Findings integrated
 Residual judgment call (no blocker): `apply_scalar` could live in `spec.rs` (YAGNI,
 only spec uses it) rather than the `dep_seq` leaf. Kept in `dep_seq` — a top-level
 scalar set is kind-neutral and at the leaf's altitude; `append_member`'s AoT shape
-is spec-specific, this is not. Open to challenge at external review.
+is spec-specific, this is not. Open to challenge at external review. **Closed:** the
+codex pass was explicitly asked to pressure-test this placement and the
+canonicalization/no-op contract (§10 E-pass prompt) and flagged neither — the leaf
+altitude and the no-op guard stand.
 
-### External review
+### External review — codex (GPT-5.5) inquisition (2026-06-25)
 
-(pending — `/inquisition` or external adversarial prompt)
+Adversarial pass over the locked design + source. Four findings, all verified
+against source, all **accepted** (none spurious):
+
+- **E1 — BLOCKER — parent acyclicity gate missing.** `--parent` validated source
+  subtype, target subtype, existence — but not self-parent or cycle, which
+  `registry.rs::self_parent`/`parent_cycle` already treat as HARD-invalid (REQ-087).
+  The typed verb could author a known-invalid corpus state. **Disposition:** accepted.
+  Added a pre-write acyclicity gate (§5.4): self-parent + prospective-cycle walk
+  before `apply_scalar`; tests for self and 2-node cycle (§9). This was the block.
+- **E2 — MAJOR — wrong removal seam.** `dep_seq::remove_after` is bound to
+  `[relationships].after` inline-tables keyed by `to` and F-1-bails on absence; it
+  cannot serve the top-level `[[edge]]` AoT keyed by `target`. **Disposition:**
+  accepted. Design now specifies a new pure `spec.rs::remove_interaction_edges(doc,
+  canonical_target) -> usize` (§2 table, §5.2); `remove_after` explicitly not reused.
+- **E3 — MAJOR — add dup-check must canonicalize existing on-disk targets.** A
+  hand-authored `target = "SPEC-2"` would escape a raw-string dup-check and admit a
+  duplicate edge, violating target-as-PK. **Disposition:** accepted. §5.3 now
+  requires both add and remove to canonicalize the existing row target before
+  comparing; test added (§9).
+- **E4 — MINOR — inline kind-validation re-encodes `RELATION_RULES`.** `validate_link`
+  can't serve (Writable-gated), but `relation::lookup` + `check_target_kind` are
+  policy-agnostic and validate the declared `TypedVerbOnly` rows. **Disposition:**
+  accepted. §5.4 reuses `lookup`/`check_target_kind` for declared rows + a narrow
+  product-`parent` branch (R2), instead of an inline kind table (DRY).
+
+Verdict from reviewer: "not ready to plan" on E1. E1 now resolved in-design →
+**design ready to plan.**
