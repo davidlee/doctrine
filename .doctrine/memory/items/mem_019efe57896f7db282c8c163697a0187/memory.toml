@@ -1,0 +1,46 @@
+memory_uid = "mem_019efe57896f7db282c8c163697a0187"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Relation edges still requiring hand-editing 2026-06-25"
+summary = "Which relation edges still have no CLI verb and require hand-editing (2026-06-25)"
+created = "2026-06-25"
+updated = "2026-06-25"
+
+[scope]
+paths = []
+globs = ["src/relation.rs"]
+commands = ["doctrine link", "doctrine spec"]
+tags = ["relations"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "58ed6ca63caca70666746fc4a4561eaea96b3d63"
+tree = "0c0df4749d4598d08db634752a0ed09790986018"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "58ed6ca63caca70666746fc4a4561eaea96b3d63"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019ec14b58a776429be79bd115d8917c"
+
