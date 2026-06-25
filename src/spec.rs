@@ -109,6 +109,36 @@ pub(crate) enum SpecReqCommand {
 }
 
 #[derive(Subcommand)]
+pub(crate) enum SpecInteractionsCommand {
+    /// Add an interaction edge from a tech spec to another tech spec.
+    Add {
+        /// Canonical spec ref: `SPEC-NNN`.
+        spec_ref: String,
+        /// Target canonical spec ref: `SPEC-NNN`.
+        target: String,
+        /// Free-text edge kind (calls / extends / uses / …).
+        #[arg(long)]
+        r#type: String,
+        /// Optional notes.
+        #[arg(long)]
+        notes: Option<String>,
+        /// Explicit project root.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    /// Remove interaction edges to a target from a tech spec.
+    Remove {
+        /// Canonical spec ref: `SPEC-NNN`.
+        spec_ref: String,
+        /// Target canonical spec ref: `SPEC-NNN`.
+        target: String,
+        /// Explicit project root.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 pub(crate) enum SpecCommand {
     /// Allocate the next id in the subtype's namespace and scaffold a new spec.
     New {
@@ -195,6 +225,27 @@ pub(crate) enum SpecCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Add or remove tech-spec interaction edges.
+    Interactions {
+        #[command(subcommand)]
+        command: SpecInteractionsCommand,
+    },
+
+    /// Edit spec descent/parent scalar fields.
+    Edit {
+        #[arg(long, group = "edit-action")]
+        descends_from: Option<String>,
+        #[arg(long, group = "edit-action", conflicts_with = "descends_from")]
+        clear_descends_from: bool,
+        #[arg(long, group = "edit-action")]
+        parent: Option<String>,
+        #[arg(long, group = "edit-action", conflicts_with = "parent")]
+        clear_parent: bool,
+        spec_ref: String,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: SpecCommand, color: bool) -> anyhow::Result<()> {
@@ -251,12 +302,226 @@ pub(crate) fn dispatch(cmd: SpecCommand, color: bool) -> anyhow::Result<()> {
                 single,
             },
         ),
+        SpecCommand::Interactions { command } => match command {
+            SpecInteractionsCommand::Add {
+                spec_ref,
+                target,
+                r#type,
+                notes,
+                path,
+            } => run_interaction_add(path, &spec_ref, &target, &r#type, notes.as_deref()),
+            SpecInteractionsCommand::Remove {
+                spec_ref,
+                target,
+                path,
+            } => run_interaction_remove(path, &spec_ref, &target),
+        },
+        SpecCommand::Edit {
+            spec_ref,
+            descends_from,
+            clear_descends_from,
+            parent,
+            clear_parent,
+            path,
+        } => run_edit(
+            path,
+            &spec_ref,
+            descends_from.as_deref(),
+            clear_descends_from,
+            parent.as_deref(),
+            clear_parent,
+        ),
     }
 }
 
 // ---------------------------------------------------------------------------
 // `spec paths` — file paths for each spec entity directory
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// `spec edit` — edit descends_from / parent scalar fields
+// ---------------------------------------------------------------------------
+
+/// `doctrine spec edit <spec-ref> [--descends-from <PRD-NNN> | --clear-descends-from]
+/// [--parent <ref> | --clear-parent]` — validate and set/clear spec descent/parent scalars
+/// edit-preserving via `toml_edit`.
+fn run_edit(
+    path: Option<PathBuf>,
+    spec_ref: &str,
+    descends_from: Option<&str>,
+    clear_descends_from: bool,
+    parent: Option<&str>,
+    clear_parent: bool,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (subtype, id) = resolve_spec_ref(spec_ref)?;
+    let spec_dir = root.join(subtype.kind().dir).join(format!("{id:03}"));
+    anyhow::ensure!(
+        spec_dir.is_dir(),
+        "no {} spec {spec_ref} at {}",
+        subtype.label(),
+        spec_dir.display()
+    );
+
+    // Read+parse spec TOML into DocumentMut ONCE.
+    let toml_path = entity::id_path(&root, subtype.kind(), id, entity::Ext::Toml);
+    let text = std::fs::read_to_string(&toml_path)
+        .with_context(|| format!("Failed to read {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    // --- Validate ALL fields BEFORE any write ---
+
+    let canonical_source = subtype.canonical_id(id);
+
+    // descends_from set
+    let canonical_descends_from: Option<String> = if let Some(df) = descends_from {
+        anyhow::ensure!(
+            subtype == SpecSubtype::Tech,
+            "descends_from is a tech-only field; {canonical_source} is a product spec"
+        );
+        let (target_subtype, target_id) = resolve_spec_ref(df)?;
+        let canonical = target_subtype.canonical_id(target_id);
+        let rule = crate::relation::lookup(
+            subtype.kind(),
+            crate::relation::RelationLabel::DescendsFrom,
+            None,
+        )
+        .context("descends_from is not a legal relation for this source")?;
+        crate::relation::check_target_kind(rule, subtype.kind(), target_subtype.kind().prefix)?;
+        let target_dir = root
+            .join(target_subtype.kind().dir)
+            .join(format!("{target_id:03}"));
+        anyhow::ensure!(
+            target_dir.is_dir(),
+            "target spec {canonical} not found at {}",
+            target_dir.display()
+        );
+        Some(canonical)
+    } else {
+        None
+    };
+
+    // clear_descends_from
+    if clear_descends_from {
+        anyhow::ensure!(
+            subtype == SpecSubtype::Tech,
+            "descends_from is a tech-only field; {canonical_source} is a product spec"
+        );
+    }
+
+    // parent set
+    let canonical_parent: Option<String> = if let Some(p) = parent {
+        let (target_subtype, target_id) = resolve_spec_ref(p)?;
+        let canonical = target_subtype.canonical_id(target_id);
+        anyhow::ensure!(
+            target_subtype == subtype,
+            "parent target {canonical} must be the same subtype as {canonical_source} ({}), got {}",
+            subtype.label(),
+            target_subtype.label()
+        );
+        anyhow::ensure!(
+            canonical != canonical_source,
+            "{canonical_source} names itself as parent"
+        );
+        // Check kind via relation::lookup; if None (product parent undeclared),
+        // inline-check target is PRD.
+        if let Some(rule) =
+            crate::relation::lookup(subtype.kind(), crate::relation::RelationLabel::Parent, None)
+        {
+            crate::relation::check_target_kind(rule, subtype.kind(), target_subtype.kind().prefix)?;
+        } else {
+            anyhow::ensure!(
+                target_subtype == SpecSubtype::Product,
+                "parent target for a product spec must be a product spec (PRD-NNN), got {canonical}"
+            );
+        }
+        let target_dir = root
+            .join(target_subtype.kind().dir)
+            .join(format!("{target_id:03}"));
+        anyhow::ensure!(
+            target_dir.is_dir(),
+            "target spec {canonical} not found at {}",
+            target_dir.display()
+        );
+
+        // Acyclicity check: scan same-subtype parent values, build parent_map,
+        // add edge source→target, walk from target — if source is reached,
+        // it's a cycle.
+        let tree = root.join(subtype.kind().dir);
+        let ids = crate::entity::scan_ids(&tree)?;
+        let mut parent_map: std::collections::BTreeMap<String, Option<String>> =
+            std::collections::BTreeMap::new();
+        for spec_id in &ids {
+            if *spec_id == id {
+                parent_map.insert(canonical_source.clone(), Some(canonical.clone()));
+            } else {
+                let spec_canon = subtype.canonical_id(*spec_id);
+                if let Ok((spec, _, _)) = read_spec(subtype, &root, *spec_id) {
+                    let parent_val = spec.parent.map(|raw| canonicalize_spec_ref(&raw));
+                    parent_map.insert(spec_canon, parent_val);
+                }
+                // Skip unparseable specs — they can't participate in a cycle.
+            }
+        }
+        let mut visited: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut current = canonical.clone();
+        loop {
+            if !visited.insert(current.clone()) {
+                anyhow::bail!(
+                    "setting parent of {canonical_source} to {canonical} would create a cycle"
+                );
+            }
+            if current == canonical_source {
+                anyhow::bail!(
+                    "setting parent of {canonical_source} to {canonical} would create a cycle"
+                );
+            }
+            match parent_map.get(&current) {
+                Some(Some(n)) => current = n.clone(),
+                _ => break,
+            }
+        }
+
+        Some(canonical)
+    } else {
+        None
+    };
+
+    // --- Apply changes ---
+    let mut changed = false;
+
+    if let Some(ref v) = canonical_descends_from
+        && crate::dep_seq::apply_scalar(&mut doc, "descends_from", Some(v.as_str()))
+    {
+        changed = true;
+        writeln!(io::stdout(), "Set descends_from = {v}")?;
+    }
+    if clear_descends_from && crate::dep_seq::apply_scalar(&mut doc, "descends_from", None) {
+        changed = true;
+        writeln!(io::stdout(), "Cleared descends_from")?;
+    }
+    if let Some(ref v) = canonical_parent
+        && crate::dep_seq::apply_scalar(&mut doc, "parent", Some(v.as_str()))
+    {
+        changed = true;
+        writeln!(io::stdout(), "Set parent = {v}")?;
+    }
+    if clear_parent && crate::dep_seq::apply_scalar(&mut doc, "parent", None) {
+        changed = true;
+        writeln!(io::stdout(), "Cleared parent")?;
+    }
+
+    if changed {
+        crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
+            .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    } else {
+        writeln!(io::stdout(), "No changes (values already set)")?;
+    }
+
+    Ok(())
+}
 
 /// `doctrine spec paths <ref>…` — resolve each ref to its entity directory and
 /// print the root-relative paths according to the selection.
@@ -1836,6 +2101,176 @@ pub(crate) fn run_req_list(
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     write!(io::stdout(), "{}", req_list_rows(&root, spec_ref, args)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `spec interactions add` / `spec interactions remove` (SL-153 PHASE-03)
+// ---------------------------------------------------------------------------
+
+/// Remove all `[[edge]]` rows from a held interactions.toml `DocumentMut` whose
+/// canonical `target` matches `canonical_target`. Returns how many rows were
+/// removed. Preserves comments and inert rows. Idempotent (returns 0 if no match).
+fn remove_interaction_edges(doc: &mut toml_edit::DocumentMut, canonical_target: &str) -> usize {
+    let Some(edges) = doc.get_mut("edge").and_then(|v| v.as_array_of_tables_mut()) else {
+        return 0;
+    };
+    let mut indices: Vec<usize> = Vec::new();
+    for (i, row) in edges.iter().enumerate() {
+        if let Some(target_val) = row.get("target").and_then(|v| v.as_str()) {
+            let row_canon = canonicalize_spec_ref(target_val);
+            if row_canon == canonical_target {
+                indices.push(i);
+            }
+        }
+    }
+    for i in indices.iter().rev() {
+        edges.remove(*i);
+    }
+    indices.len()
+}
+
+/// `doctrine spec interactions add <SPEC> <SPEC> --type <text> [--notes <text>]` —
+/// append an outbound `[[edge]]` row to a tech spec's `interactions.toml`.
+fn run_interaction_add(
+    path: Option<PathBuf>,
+    spec_ref: &str,
+    target: &str,
+    kind: &str,
+    notes: Option<&str>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // Resolve the source spec — must be Tech (interactions are tech-only).
+    let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
+    anyhow::ensure!(
+        subtype == SpecSubtype::Tech,
+        "interactions are tech-spec-only; {spec_ref} is a product spec"
+    );
+    let spec_dir = root.join(subtype.kind().dir).join(format!("{spec_id:03}"));
+    anyhow::ensure!(
+        spec_dir.is_dir(),
+        "no {} spec {spec_ref} at {}",
+        subtype.label(),
+        spec_dir.display()
+    );
+
+    // Resolve the target — must be a tech spec that exists.
+    let (target_subtype, target_id) = resolve_spec_ref(target)?;
+    anyhow::ensure!(
+        target_subtype == SpecSubtype::Tech,
+        "interaction target must be a tech spec; {target} is a {}",
+        target_subtype.label()
+    );
+    let target_dir = root
+        .join(target_subtype.kind().dir)
+        .join(format!("{target_id:03}"));
+    anyhow::ensure!(
+        target_dir.is_dir(),
+        "target spec {target} not found at {}",
+        target_dir.display()
+    );
+    let canonical_target = target_subtype.canonical_id(target_id);
+
+    // Read interactions.toml into DocumentMut.
+    let interactions_path = spec_dir.join("interactions.toml");
+    let text = std::fs::read_to_string(&interactions_path)
+        .with_context(|| format!("Failed to read {}", interactions_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", interactions_path.display()))?;
+
+    // Canonical dup-check: iterate existing [[edge]] rows, canonicalize each
+    // `target`, if match found → no-op informational.
+    if let Some(edges) = doc.get("edge").and_then(|v| v.as_array_of_tables()) {
+        for row in edges {
+            if let Some(existing_target) = row.get("target").and_then(|v| v.as_str())
+                && canonicalize_spec_ref(existing_target) == canonical_target
+            {
+                writeln!(
+                    io::stdout(),
+                    "edge to {target} already present; remove + add to change its type"
+                )?;
+                return Ok(());
+            }
+        }
+    }
+
+    // Append new [[edge]] table.
+    let edges = doc
+        .entry("edge")
+        .or_insert(toml_edit::Item::ArrayOfTables(
+            toml_edit::ArrayOfTables::new(),
+        ))
+        .as_array_of_tables_mut()
+        .context("`edge` is not an array of tables")?;
+    let mut row = toml_edit::Table::new();
+    row.insert("target", toml_edit::value(target));
+    row.insert("type", toml_edit::value(kind));
+    if let Some(n) = notes {
+        row.insert("notes", toml_edit::value(n));
+    }
+    edges.push(row);
+
+    crate::fsutil::write_atomic(&interactions_path, doc.to_string().as_bytes())
+        .with_context(|| format!("Failed to write {}", interactions_path.display()))?;
+
+    writeln!(
+        io::stdout(),
+        "Added interaction {spec_ref} → {canonical_target} ({kind})"
+    )?;
+    Ok(())
+}
+
+/// `doctrine spec interactions remove <SPEC> <SPEC>` — remove all outbound
+/// `[[edge]]` rows to a target from a tech spec's `interactions.toml`.
+fn run_interaction_remove(
+    path: Option<PathBuf>,
+    spec_ref: &str,
+    target: &str,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // Resolve the source spec — must be Tech.
+    let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
+    anyhow::ensure!(
+        subtype == SpecSubtype::Tech,
+        "interactions are tech-spec-only; {spec_ref} is a product spec"
+    );
+    let spec_dir = root.join(subtype.kind().dir).join(format!("{spec_id:03}"));
+    anyhow::ensure!(
+        spec_dir.is_dir(),
+        "no {} spec {spec_ref} at {}",
+        subtype.label(),
+        spec_dir.display()
+    );
+
+    // Canonicalize the target for comparison.
+    let canonical_target = canonicalize_spec_ref(target);
+
+    // Read interactions.toml into DocumentMut.
+    let interactions_path = spec_dir.join("interactions.toml");
+    let text = std::fs::read_to_string(&interactions_path)
+        .with_context(|| format!("Failed to read {}", interactions_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", interactions_path.display()))?;
+
+    // Remove matching edges.
+    let count = remove_interaction_edges(&mut doc, &canonical_target);
+    if count > 0 {
+        crate::fsutil::write_atomic(&interactions_path, doc.to_string().as_bytes())
+            .with_context(|| format!("Failed to write {}", interactions_path.display()))?;
+        writeln!(
+            io::stdout(),
+            "Removed {count} interaction(s) via {spec_ref} → {canonical_target}"
+        )?;
+    } else {
+        writeln!(
+            io::stdout(),
+            "No interaction edge to {canonical_target} found in {spec_ref}"
+        )?;
+    }
     Ok(())
 }
 
@@ -4281,5 +4716,217 @@ parent = \"SPEC-002\"
         assert_eq!(all_lines.len(), 4);
         assert!(all_lines[0].contains("tech/001/spec-001.toml"));
         assert!(all_lines[2].contains("product/001/spec-001.toml"));
+    }
+
+    // --- SL-153 PHASE-03: spec interactions add/remove ---
+
+    /// VT-1: adding an interaction edge to a tech spec appends it and show reflects it.
+    #[test]
+    fn interaction_add_appends_edge() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+
+        run_interaction_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            "SPEC-002",
+            "uses",
+            Some("calls boot"),
+        )
+        .unwrap();
+
+        let edges =
+            read_interactions(&root.join(".doctrine/spec/tech/001/interactions.toml")).unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].target, "SPEC-002");
+        assert_eq!(edges[0].kind, "uses");
+        assert_eq!(edges[0].notes.as_deref(), Some("calls boot"));
+
+        // show reflects the new edge.
+        run_show(Some(root.to_path_buf()), "SPEC-001", Format::Table).unwrap();
+    }
+
+    /// VT-2: adding an interaction to a product spec errors.
+    #[test]
+    fn interaction_add_product_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding"); // PRD-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-001
+
+        let err = run_interaction_add(
+            Some(root.to_path_buf()),
+            "PRD-001",
+            "SPEC-001",
+            "uses",
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("tech-spec-only"),
+            "product spec source errors: {err}"
+        );
+    }
+
+    /// VT-3: adding an interaction to a nonexistent target spec errors.
+    #[test]
+    fn interaction_add_nonexistent_target_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+
+        let err = run_interaction_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            "SPEC-999",
+            "uses",
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("not found"),
+            "nonexistent target errors: {err}"
+        );
+    }
+
+    /// VT-4: adding an interaction targeting a product spec (PRD) errors.
+    #[test]
+    fn interaction_add_non_spec_target_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding"); // PRD-001
+
+        let err = run_interaction_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            "PRD-001",
+            "uses",
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("must be a tech spec"),
+            "PRD target errors: {err}"
+        );
+    }
+
+    /// VT-5: adding the same target twice via `run_interaction_add` is idempotent —
+    /// a second add is a no-op that prints an informational message.
+    #[test]
+    fn interaction_add_idempotent_on_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+
+        run_interaction_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            "SPEC-002",
+            "uses",
+            None,
+        )
+        .unwrap();
+
+        // Second add to same target → no-op (informational, not error).
+        run_interaction_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            "SPEC-002",
+            "calls",
+            None,
+        )
+        .unwrap();
+
+        // Only one edge remains, and the original type is preserved (idempotent).
+        let edges =
+            read_interactions(&root.join(".doctrine/spec/tech/001/interactions.toml")).unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].kind, "uses", "first write wins");
+    }
+
+    /// VT-6: removing an interaction edge clears it; show no longer reflects it.
+    #[test]
+    fn interaction_remove_clears_edge() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+
+        run_interaction_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            "SPEC-002",
+            "uses",
+            None,
+        )
+        .unwrap();
+
+        run_interaction_remove(Some(root.to_path_buf()), "SPEC-001", "SPEC-002").unwrap();
+
+        let edges =
+            read_interactions(&root.join(".doctrine/spec/tech/001/interactions.toml")).unwrap();
+        assert!(edges.is_empty(), "edge removed");
+    }
+
+    /// VT-7: removing an absent interaction is a no-op (count 0).
+    #[test]
+    fn interaction_remove_absent_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+
+        run_interaction_remove(Some(root.to_path_buf()), "SPEC-001", "SPEC-002").unwrap();
+
+        // file still seeded-empty comment-only.
+        let text =
+            fs::read_to_string(root.join(".doctrine/spec/tech/001/interactions.toml")).unwrap();
+        assert!(
+            text.contains("Seeded empty"),
+            "seeded comment survives no-op remove"
+        );
+    }
+
+    /// VT-8: a non-canonical target in the toml (bare `SPEC-2`) is canonicalised
+    /// by the dup-check, so adding `SPEC-002` is a no-op, and removing `SPEC-002`
+    /// clears the edge.
+    #[test]
+    fn interaction_canonical_dup_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+
+        // Hand-write a non-canonical `target = "SPEC-2"` into interactions.toml.
+        let ipath = root.join(".doctrine/spec/tech/001/interactions.toml");
+        let seeded = fs::read_to_string(&ipath).unwrap();
+        fs::write(
+            &ipath,
+            format!("{seeded}\n[[edge]]\ntarget = \"SPEC-2\"\ntype = \"calls\"\n"),
+        )
+        .unwrap();
+
+        // Adding SPEC-002 → no-op (canonical dup-check matches SPEC-2).
+        run_interaction_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            "SPEC-002",
+            "uses",
+            None,
+        )
+        .unwrap();
+
+        let edges = read_interactions(&ipath).unwrap();
+        assert_eq!(edges.len(), 1, "dup-check prevented second edge");
+        assert_eq!(edges[0].kind, "calls", "original type preserved");
+
+        // Removing SPEC-002 clears the non-canonical SPEC-2 edge.
+        run_interaction_remove(Some(root.to_path_buf()), "SPEC-001", "SPEC-002").unwrap();
+
+        let edges2 = read_interactions(&ipath).unwrap();
+        assert!(edges2.is_empty(), "non-canonical edge removed");
     }
 }
