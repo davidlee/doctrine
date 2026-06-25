@@ -683,10 +683,13 @@ Confirmed F1–F3, F5 integrations sound. Found one residual BLOCKER + one MINOR
 - **F4 re-confirmed insufficient-without-the-blocker → now covered:** the D11 guard closes
   the path where the gate was satisfied by the double-write while projection was empty.
 
-### Revision status — 4 passes clean (2026-06-26)
+### Revision status — committed-ref core solid; D11 REOPENED by pass-5 (2026-06-26)
 
-The committed-ref design has cleared 4 codex passes + an internal pass + the design
-conversation. No residual blockers. **Next:** `slice status 154 plan` → `/plan` (or
-`/inquisition`). Carry to /plan: OQ-6 (shared `splice_ledger_file`), OQ-7 (projection
-re-enable verify), `git::code_delta_paths` helper shape (D11), and the F4 ownership-signal
-hardening (file as backlog).
+The committed-ref core (ISS-039 absorption, D2 derive, D8 reopen, D9 liveness, D10 no-REV)
+has cleared 5 codex passes. **BUT pass-5 proved D11 (the projection-source guard, §5.2
+step 3 / §7 D11) UNSOUND** (empty-only predicate too weak; false-halts mixed
+solo→dispatch; exclusion-set guards the wrong projection), and a User-requested
+efficiency/workflow review surfaced a converging fix (**per-phase landing-path
+provenance** → D11 + F4 + agent navigation). **Both finding-sets + the integration plan
+are in `notes.md` "⚠ OPEN FINDINGS".** §5.2/§7 D11 below are **stale** pending that
+reshape. **NOT plan-ready** — integrate, re-pass, then `/plan`.
