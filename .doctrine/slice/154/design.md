@@ -356,5 +356,44 @@ real phases and manufacture wrong ones for dispatched/mixed slices. Addressed by
 sound coord-worktree guard (D3) + derive-upsert self-correction (D2). This is the
 objective-3 core, surfaced by the user's solo↔dispatch transition concern.
 
-<!-- Next: second external pass — codex (GPT-5.5) on this revision, the guard change
-     (D3) and the unsound-capture model especially. -->
+### External pass 2 — codex (GPT-5.5), 2026-06-26 — findings + dispositions
+
+Pass-1 status (codex's own check): F1 ✓, F2 ✓, F3 moot, F5 ✓; **F4 only partial —
+graduated into the spec conflict (P2-3 below).**
+
+- **P2-1 (BLOCKER) reopen leaves a stale row the gate blesses → ACCEPTED, in scope.**
+  The reopen path (state.rs:386–400) clears `completed`/`started` but **not**
+  `code_start_oid`; capture keeps the original stamp on re-entry (state.rs:503);
+  `registry_completeness` checks *presence*, not *range freshness*. A phase reopened
+  after a transition keeps its old row; guard stands down; derive has no ledger row to
+  overwrite → silent garbage conformance. **Fix:** on reopen (completed→non-completed),
+  **evict that phase's registry row + clear its stamp** so the redo re-captures fresh
+  (or fails loud). Solo-side; independent of the funnel decision.
+- **P2-2 (MAJOR) `worktree_for_ref` is not a liveness probe → ACCEPTED, in scope.**
+  `parse_worktree_for_ref` (git.rs:1163) ignores `prunable` and never stats the path,
+  so a deleted/failed-cleanup coord entry suppresses solo capture **forever** (POL-002
+  footgun). **Fix:** a liveness-verified probe (reject `prunable`, stat the path) **or**
+  a doctrine-owned "dispatch-active" runtime marker. Prefer the marker if one already
+  exists; else the verified probe.
+- **P2-3 (BLOCKER, governance) the working-ledger read violates SPEC-022 → ACCEPTED;
+  RESHAPES the funnel half.** SPEC-022 (spec-022.md:180; a named responsibility in
+  spec-022.toml) requires the run ledger — *including* `boundaries.toml` — be tree-read
+  from the `dispatch/<N>` tip via `read_path_at`, **never the working filesystem**,
+  identically stage-1 and stage-2. The D2/§5.2 working-file read is a direct violation
+  and is **RETRACTED**. There is no spec-legal per-phase source at prepare-review unless
+  the boundaries ledger is **committed** to `dispatch/NNN` (the journal is; boundaries
+  aren't — that *is* ISS-039). So ISS-052's clean fix is blocked on ISS-039.
+
+### DECISION (User, 2026-06-26): absorb ISS-039 into scope (fork option 1)
+
+Commit `boundaries.toml` to `dispatch/NNN` alongside `journal.toml` (ISS-039's
+documented fix direction). Then **both** the derive *and* `plan_phases` read the
+**committed ref** — SPEC-022-legal, F4 divergence eliminated, and claude per-phase
+review cuts (currently 0 from this bug) are restored as a bonus. Bounded to the claude
+arm; does NOT touch the codex/pi phase-ref coupling (IMP-171). The §2/§5 design body
+below still describes the RETRACTED working-file read and **must be revised** by the
+next agent to the committed-ref model — see `handover.md` and `notes.md`.
+
+<!-- §2/§5 body PENDING REVISION to the committed-ref (ISS-039-absorbed) model.
+     §10 supersedes the body where they conflict until then. -->
+
