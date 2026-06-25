@@ -4,15 +4,21 @@
 
 **D1 — Hide terminal states by default.** Revisions have four statuses (`proposed | started | done | abandoned`) and an orthogonal approval axis (`none | requested | approved | rejected`). The list's primary value is "do I have any outstanding revisions?", so terminal states (`done`, `abandoned`) are hidden by default, revealed via `--all`. The hide-set is `&["done", "abandoned"]`. No approval-based hiding (approvals are orthogonal — a `done` revision with `approved` is still done).
 
-**D2 — Tags visible by default.** Tags are a default column (`id, status, approval, tags, title`). The `--tag <value>` filter works via `key()`. The `show`/JSON surface includes tags inline. Governance lists not showing tags is a lag, not a precedent — new surfaces should surface them.
+**D2 — Tags opt-in via `--columns`, not default.** The scope follows governance precedent: `GOV_COLUMNS` does not default-show tags, and the revision list surface mirrors that pattern. Tags are available via `--columns tags` and filterable via `--tag <value>`, but they are not in the default visible set (`id, status, approval, title`). The `--json` output always includes tags inline.
 
 **D3 — REC shape, not governance shape.** The revision list rides the REC pattern (read all TOMLs → project to typed row → column model), not the governance `meta::read_metas` path. Revisions are few (10 in corpus), so the REC `read_all` approach is fine. Unlike REC, revisions HAVE a status axis, so the `REV_STATUSES` const + `validate_statuses` guard + hide-set are wired in.
 
 **D4 — No `created`/`updated` columns.** The revision template stamps `updated` but `RevDoc` doesn't parse it (it's informational). The list won't surface dates unless a follow-up adds them. Governance lists don't show dates in default columns either.
 
+**D5 — No `slug` column.** The scope's default columns mirror `GOV_COLUMNS` (`id, status, approval, title`). Slugs are not a governance list column; adding one here would create an inconsistency without justification. The slug is accessible via `--json` output and `revision show`, not via the list.
+
 ---
 
 ## Code impact
+
+### Scope attribution note
+
+The scope's "Affected surface" lists `src/spec.rs — C2 (two template comment fixes)`. This is a misattribution: C2 items are template files (`install/templates/spec-tech.toml`, `install/templates/spec-product.toml`, `install/templates/interactions.toml`). `src/spec.rs` is only C3 (doc comment fix). The code impact table below shows the correct mapping. The scope should be corrected.
 
 ### Cluster A — one-line fixes (`src/relation.rs`, `src/spec.rs`, `src/tag.rs`, 4 templates)
 
@@ -44,6 +50,8 @@ pub(crate) struct RevDoc {
 }
 ```
 
+`#[serde(default)]` ensures existing tagless revision TOMLs deserialise without error — a round-trip test verifies this.
+
 #### New types
 
 ```rust
@@ -70,15 +78,53 @@ Column extractors stringify enums inline: `|d| d.status.as_str().to_string()`, `
 #### Column definitions
 
 ```rust
-const REV_COLUMNS: [Column<RevDoc>; 6] = [
+const REV_COLUMNS: [Column<RevDoc>; 5] = [
     Column { name: "id",       header: "id",       cell: |d| canonical_id(d.id),            paint: Fixed(Cyan) },
     Column { name: "status",   header: "status",   cell: |d| d.status.as_str().to_string(), paint: ByValue(status_hue) },
     Column { name: "approval", header: "approval", cell: |d| d.approval.as_str().to_string(), paint: None },
-    Column { name: "slug",     header: "slug",     cell: |d| d.slug.clone(),                paint: None },
     Column { name: "tags",     header: "tags",     cell: |d| d.tags.join(", "),             paint: None },
     Column { name: "title",    header: "title",    cell: |d| d.title.clone(),               paint: Alternate(…) },
 ];
-const REV_DEFAULT: &[&str] = &["id", "status", "approval", "tags", "title"];
+const REV_DEFAULT: &[&str] = &["id", "status", "approval", "title"];
+```
+
+Tags are a selectable column but not in the default visible set (D2, following governance precedent).
+
+#### CLI integration
+
+The `RevisionCommand` enum currently holds: `New`, `Show`, `Status`, `Change`, `Approve`, `Apply`, `Paths`. `List` is added alongside them — structurally a peer variant:
+
+```rust
+// src/revision.rs — RevisionCommand enum (existing variants + one addition)
+enum RevisionCommand {
+    New { … },
+    Show { … },
+    Status { … },
+    Change { … },
+    Approve { … },
+    Apply { … },
+    Paths,
+    // SL-155: new list verb
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+```
+
+Dispatch in `run_revision` (existing `match` arm sequence):
+
+```rust
+fn run_revision(cmd: RevisionCommand, …) -> anyhow::Result<()> {
+    match cmd {
+        RevisionCommand::New { … } => run_new(…),
+        RevisionCommand::Show { … } => run_show(…),
+        // … existing arms …
+        RevisionCommand::List { list, path } => run_list(path, list.into_list_args(color)),
+    }
+}
 ```
 
 #### Functions
@@ -90,23 +136,13 @@ const REV_DEFAULT: &[&str] = &["id", "status", "approval", "tags", "title"];
 | `list_rows(root: &Path, args: ListArgs) -> String` | Validate statuses, retain, sort, render |
 | `run_list(path, args)` | Resolve root, call `list_rows`, write to stdout |
 
-#### CLI surface
-
-```rust
-// RevisionCommand gains:
-List {
-    #[command(flatten)]
-    list: CommonListArgs,
-    #[arg(short = 'p', long)]
-    path: Option<PathBuf>,
-},
-```
-
-Dispatch: `RevisionCommand::List { list, path } => run_list(path, list.into_list_args(color)),`
-
 #### Template
 
 `install/templates/revision.toml`: add `tags = []` after `updated = "{{date}}"`.
+
+#### Show-surface tag deferral (IMP-144)
+
+Tags appear in `--json` output for `revision show` (EX-06). Human-readable (prose) tag rendering in `revision show` is deferred to IMP-170 G2 — the scope's non-goal section already excludes G1-G7 show gaps from this slice. The JSON surface is the read-path for this slice; the prose surface follows in IMP-170.
 
 #### Tests
 
@@ -120,9 +156,12 @@ Dispatch: `RevisionCommand::List { list, path } => run_list(path, list.into_list
 | `list_rows_tag_filter_matches` | `--tag` filters by authored tags |
 | `list_rows_unknown_status_errors` | `--status bogus` → uniform error |
 | `list_rows_json_is_faithful_envelope` | JSON output has prefixed ids + tags array |
-| `list_rows_columns_selects_and_reveals_tags` | `--columns id,status,tags` shows tags column |
+| `list_rows_columns_selects_and_reveals_tags` | `--columns id,status,tags` reveals tags column (not default) |
 | `list_rows_unknown_column_is_the_uniform_error` | `--columns bogus` errors with available set (SL-037 uniform contract) |
 | `render_revision_toml_includes_tags` | Template renders `tags = []` |
+| `tagless_revision_round_trips` | A revision TOML without a `tags` field survives read→render→parse without corruption |
+
+All tests are `#[cfg(test)]` unit tests in `src/revision.rs`, following the existing revision test pattern (no CLI golden tests — the list verb's integration surface is small enough that unit tests covering all paths suffice; CLI golden pattern is reserved for higher-risk verb surfaces).
 
 ---
 
@@ -132,7 +171,7 @@ Dispatch: `RevisionCommand::List { list, path } => run_list(path, list.into_list
 |---|---|---|
 | EN-01 | `just gate` zero warnings | VT |
 | EN-02 | All existing revision tests stay green unchanged | VT |
-| EN-03 | New revision list tests pass (table + JSON + filtering + hide-set) | VT |
+| EN-03 | New revision list tests pass (table + JSON + filtering + hide-set + round-trip) | VT |
 | EX-01 | `doctrine revision list` shows only non-terminal revisions (none in current corpus → empty table header) | VT |
 | EX-02 | `doctrine revision list --all` shows all 10 revisions | VT |
 | EX-03 | `doctrine revision list --tag <t>` filters correctly after tagging a revision | VT |
