@@ -98,3 +98,21 @@ is clean for the `audit → reconcile` move.
 ### Governance/spec (REV)
 - **None.** No spec or governance finding. ADR-001's `install_config = "leaf"`
   annotation (F-3) was disposed `aligned` — routine registry upkeep, no REV.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- `plan.md` §PHASE-06: appended a correction note redirecting EX-4's stale
+  `[claude] plugin-marketplace` key reference to the shipped `[install] repo`
+  (default `davidlee/doctrine`); design D12 cited as canonical (RV-158 F-2).
+  EX-4's id is immutable — corrected by adjacent note, not in-place edit.
+
+### REVs completed
+- None — no governance/spec item in the brief.
+
+### Withdrawn / tolerated
+- F-1: tolerated — no `[[selector]]` on SL-152; manual full-diff conformance
+  performed; rationale in the finding disposition.
+- F-3: aligned — ADR-001 living-registry upkeep, no REV.
+
+Reconcile pass complete — handoff to /close.

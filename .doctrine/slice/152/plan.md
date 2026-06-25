@@ -66,6 +66,12 @@ parity), it migrates the hook into a plugin's `hooks/hooks.json` and removes the
 settings block in the same step (mutual exclusion — double-wiring would double
 creation). The primary is complete without it; drop it if it threatens the slice.
 
+> **Correction (RV-158 F-2, 2026-06-26).** plan.toml EX-4 (immutable id) names the
+> marketplace-repo doctrine.toml key as `[claude] plugin-marketplace`. The shipped
+> key and design D12 Δ4 are **`[install] repo`** (neutral section, default
+> `davidlee/doctrine`; `src/install_config.rs`). Read EX-4's key reference as
+> `[install] repo` — design D12 is canonical.
+
 ## Notes
 
 - **Behaviour-preservation gate** rides every phase touching shared machinery
