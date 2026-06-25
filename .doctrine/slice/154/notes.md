@@ -3,15 +3,19 @@
 Durable per-slice scratchpad — tracked in git. Lift anything from a disposable phase
 sheet that must survive `rm -rf` before close-out.
 
-## Status (2026-06-26)
+## Status (2026-06-26) — HANDOFF POINT
 
-Slice in `design`. `design.md` **written and revised** through one internal + one
-external (codex GPT-5.5) adversarial pass + a deep design conversation that reshaped
-the approach. **Next step: a SECOND codex pass on the revised design** (the guard
-change D3 + the unsound-capture model especially), then `/inquisition` or `/plan`.
-Design decisions are LOCKED with the User unless the second codex pass overturns one.
+Slice in `design`. `design.md` went through internal + TWO codex (GPT-5.5) adversarial
+passes + a deep design conversation. **Codex pass 2 found a governance BLOCKER (P2-3):
+the planned working-ledger read violates SPEC-022.** User DECIDED to **absorb ISS-039**
+(fork option 1) to fix it cleanly.
 
-Read in order: `slice-154.md` (scope) → `design.md` (full, current) → this.
+**The design.md §2/§5 body still describes the RETRACTED working-file read.** §10
+(pass-2 + the decision) SUPERSEDES the body. The next agent's first job is to **revise
+the design body to the committed-ref (ISS-039-absorbed) model**, then re-pass / plan.
+
+Read in order: `slice-154.md` (scope) → `design.md` §10 FIRST (latest truth) → §1–§9
+body (older, pending revision) → this → `handover.md`.
 
 ## What this slice is (one paragraph)
 
@@ -75,23 +79,58 @@ guarded by one gate.
 - **F5 MAJOR** dropping the registry half is a contract break (pinned test
   `e2e_dispatch_sync.rs:1132` + skill docs) → keep the double-write (D5).
 
-## FOR THE SECOND CODEX PASS — aim the hostility here
+## CODEX PASS 2 — outcome (durable; full record in design.md §10)
 
-- **D3 guard soundness.** Is "a live coord worktree exists for `dispatch/NNN`" the right
-  predicate? Failure modes: coord worktree exists but the phase is genuinely solo
-  (→ binding stands down → gate must catch; §5.4 crack); probe cost/error per flip (R5);
-  does `worktree_for_ref` reliably resolve from the session root AND a coord tree?
-- **D2 derive ordering vs the gate.** Derive then gate, same `run_prepare_review`. Any
-  path where the derive runs but the working ledger is already gone, or the gate reads a
-  different tree than the derive wrote? (Both must be `primary`.)
-- **Self-correction completeness.** Binding mis-captures a funnel phase **and** the ledger
-  has no row for it (inline write also failed) → derive can't overwrite → wrong row
-  survives the gate (completeness passes on a wrong row). Is that reachable? (Gate checks
-  *presence*, not *range correctness*.)
-- **Mixed-transition matrix (§5.4).** Dispatch→solo and interleaved especially — the gate
-  runs at dispatch conclude; solo phases after it rely on conformance only.
-- **Irreducible manual case** — agree it's physically unrecoverable, or is there a sound
-  retroactive source we missed?
+Pass-1 (F1/F2/F3/F5) confirmed resolved. Three new findings:
+
+- **P2-1 BLOCKER — reopen leaves a stale row the gate blesses.** Reopen clears
+  `completed` but NOT `code_start_oid` (state.rs:386–400), stamp kept on re-entry
+  (:503), gate checks presence not freshness. **Fix (in scope, solo-side):** on reopen
+  (completed→non-completed), EVICT the phase's registry row + clear its stamp.
+- **P2-2 MAJOR — `worktree_for_ref` ignores `prunable`/path-liveness** (git.rs:1163), so
+  a lingering coord entry suppresses solo capture forever (POL-002 footgun). **Fix:**
+  liveness-verified probe OR a doctrine-owned "dispatch-active" runtime marker.
+- **P2-3 BLOCKER (governance) — working-ledger read violates SPEC-022** (ledgers are
+  tree-read from the `dispatch/<N>` tip, NEVER the working FS; spec-022.md:180,
+  spec-022.toml responsibility). **RETRACTED.** ISS-052's clean fix is blocked on a
+  committed boundaries ledger = ISS-039.
+
+## DECISION (User) — absorb ISS-039; the committed-ref model
+
+Pull **ISS-039** into this slice: commit `boundaries.toml` to `dispatch/NNN` alongside
+`journal.toml`. Then derive + `plan_phases` both read the **committed ref** (SPEC-022-
+legal), F4 divergence gone, claude phase-cuts (now 0 from the bug) restored. Bounded to
+the claude arm; does NOT give codex/pi a ledger (that stays IMP-171). This SUPERSEDES
+the working-file-read approach in the design body.
+
+## NEXT AGENT — the work to land (revise design, then re-pass/plan)
+
+1. **Absorb ISS-039 into scope.** Update `slice-154.md` (Scope/Objectives: add "commit
+   the boundaries ledger to dispatch/NNN"; move ISS-039 out of Non-Goals; relate the
+   slice to ISS-039). Confirm with the storage rule — relations via `doctrine link`,
+   not hand-edits.
+2. **Revise design.md body (§2/§5/§7) to the committed-ref model:**
+   - ISS-039 fix: where/how `boundaries.toml` is committed to `dispatch/NNN`. Mirror
+     `journal.toml`'s path — `commit_journal` (dispatch.rs:2094) splices `journal.toml`
+     into the tip tree at prepare-review; do the same for `boundaries.toml` (or commit
+     at the funnel Record beat). Decide the seam: prepare-review splice (simplest, one
+     place) vs per-phase commit during the drive. SPEC-022 says identical stage-1/stage-2
+     object-db read — so the ledger must be on the ref BEFORE prepare-review reads it.
+   - Derive: read the **committed ref** via `read_ledger` (dispatch.rs:1991) — the same
+     call `plan_phases` uses (:1523) — NOT the working file. Retract `worktree_for_ref`
+     as the derive source (it stays only for the guard, P2-2 permitting).
+   - Check whether SPEC-022 needs a REV at all once boundaries is committed — likely NO
+     (the read becomes spec-compliant by construction). Confirm; if any spec text names
+     boundaries as uncommitted, route a REV.
+3. **Integrate P2-1 (reopen eviction) + P2-2 (liveness probe/marker)** into the design.
+4. **Re-run a 3rd codex pass** on the committed-ref revision (the ISS-039 commit seam +
+   P2-1/P2-2 fixes), then `/inquisition` or `/plan`.
+
+Open question for the ISS-039 seam: does committing `boundaries.toml` at prepare-review
+interact with the R-5 belt (which strips `.doctrine/` from PHASE commits)? The journal
+commit is a SEPARATE doctrine-mediated commit, not a phase commit — follow that pattern.
+Verify `plan_phases` reading the now-populated committed ledger doesn't break
+`e2e_dispatch_lifecycle` (it expects `phase/064-01`; phase-cuts will now actually fire).
 
 ## Evidence / forensics (don't re-derive)
 
