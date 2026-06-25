@@ -1,0 +1,142 @@
+# Implementation plan for SL-153 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-153"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "apply_scalar leaf core"
+objective = """
+Add the load-bearing pure seam `dep_seq::apply_scalar(doc, key, value: Option<&str>)
+-> bool` — set (Some) or clear (None) one top-level optional scalar, edit-preserving,
+with a no-op guard. Distinct contract from `apply_status`: an ABSENT key is CREATED
+(safe per CHR-019), not refused. Module doc carries the create-vs-refuse distinction.
+Leaf altitude only (imports toml_edit/anyhow/std); no spec.rs dependency."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §5.2 + §10 (E-pass) locked; CHR-019 evidence (toml_edit 0.22.27 root-insert above trailing AoT) holds." },
+  { id = "EN-2", text = "Existing dep_seq suite green on the base branch (behaviour-preservation baseline)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`apply_scalar` lands in dep_seq.rs as a pure core (`&mut DocumentMut`, no I/O); module doc distinguishes it from apply_status' absent-key refuse." },
+  { id = "EX-2", text = "Set creates an absent key landing ABOVE a trailing [[relation]] block and re-parses to the intended structure (CHR-019 worst-case)." },
+  { id = "EX-3", text = "No-op guard: re-set to the current value returns false (no mutation); clear-absent returns false; clear-present and value-change return true." },
+  { id = "EX-4", text = "Existing dep_seq + relation + spec suites green unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: set into a spec carrying a trailing [[relation]] AoT re-parses (not string-match) to the intended doc — key present, [[relation]] intact, comments survive." },
+  { id = "VT-2", expects = "Unit: set on a present key updates in place; comment / inert table / [[relation]] survive verbatim." },
+  { id = "VT-3", expects = "Unit no-op matrix: equal-value set -> false; clear-absent -> false; clear-present -> true; value-change -> true." },
+  { id = "VT-4", expects = "`cargo test` dep_seq/relation/spec suites pass unchanged (behaviour-preservation)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "spec edit (descends_from / parent)"
+objective = """
+Add `doctrine spec edit <ref>` with mutually-exclusive set/clear flags per field
+(--descends-from | --clear-descends-from; --parent | --clear-parent; ArgGroup
+required, multiple). Thin `run_edit` shell: read+parse once, forward-validate each
+field BEFORE any write, call apply_scalar per field on the held doc, write_atomic
+ONCE iff any field changed (batched, no-op holds mtime). Validation reuses
+relation::lookup + check_target_kind for the declared rows (E4) with a narrow
+product-parent branch; descends_from tech-only -> PRD; parent subtype-aware; target
+existence (is_dir); and the pre-write parent acyclicity gate (E1: reject self-parent
++ any cycle the new edge would close). Per-action confirmation + no-op notes."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: apply_scalar available and green." },
+  { id = "EN-2", text = "Clap dispatch seam in src/spec.rs (SpecCommand) confirmed; src/commands/spec.rs is empty (not the dispatch site)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SpecCommand::Edit clap shape: --descends-from/--clear-descends-from and --parent/--clear-parent mutually exclusive per field; ArgGroup rejects zero flags." },
+  { id = "EX-2", text = "descends_from set/clear tech-only (product -> error); parent subtype-aware (cross-subtype -> error); nonexistent target -> error; all gated before any write." },
+  { id = "EX-3", text = "Parent acyclicity gate (E1): self-parent and any closing cycle rejected pre-write, no mutation/mtime change." },
+  { id = "EX-4", text = "Multi-field one invocation -> single read/parse/write-once; all-no-op invocation holds content + mtime; non-canonical value re-set is normalized (a write)." },
+  { id = "EX-5", text = "Kind validation rides relation::lookup + check_target_kind for declared rows (no inline re-encode of RELATION_RULES) + narrow product-parent branch." },
+]
+verification = [
+  { id = "VT-1", expects = "CLI: edit --descends-from on tech -> spec show reflects it; on product -> error. --parent same-subtype OK; cross-subtype -> error; nonexistent target -> error." },
+  { id = "VT-2", expects = "CLI: self-parent (SPEC-005 --parent SPEC-005) -> error, no write; 2-node cycle (B parents A; A --parent B) -> error, no write." },
+  { id = "VT-3", expects = "CLI: --clear-parent removes; clear-absent no-op; `--descends-from X --clear-descends-from` -> clap rejects; no flags -> ArgGroup rejects." },
+  { id = "VT-4", expects = "CLI: multi-field (--parent X --clear-descends-from) -> single write-once; all-no-op holds mtime." },
+  { id = "VT-5", expects = "`spec validate` clean on a spec authored end-to-end via spec edit (no HARD findings)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "spec interactions add / remove"
+objective = """
+Add `doctrine spec interactions add <SPEC> <SPEC> --type <text> [--notes <text>]`
+and `... remove <SPEC> <SPEC>` (SpecInteractionsCommand group, mirroring
+SpecReqCommand). add rides append_member's AoT-push against interactions.toml's
+top-level edge AoT (tech-only; target validated SPEC kind + existence; target-as-PK
+canonical dup-check — informational no-op on existing target). remove calls a NEW
+pure helper remove_interaction_edges(doc, canonical_target) -> usize (E2: NOT
+dep_seq::remove_after, which is bound to [relationships].after/`to`); matches
+canonical-to-canonical, writes iff count > 0, no target validation. Both add and
+remove canonicalize the EXISTING on-disk row target before comparing (E3)."""
+entrance_criteria = [
+  { id = "EN-1", text = "Interaction struct + read_interactions + append_member shapes confirmed in src/spec.rs; interactions.toml is currently read-only." },
+  { id = "EN-2", text = "canonicalize_spec_ref + resolve_spec_ref available for target normalization + existence/kind gates." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SpecCommand::Interactions{Add,Remove} clap shapes; --type required free-text, --notes optional." },
+  { id = "EX-2", text = "add appends an [[edge]] {target,type,notes?} with canonical target; tech-only (product -> error); target validated SPEC + existence; idempotent on target with an informational no-op message (remove+add to re-type)." },
+  { id = "EX-3", text = "remove via NEW remove_interaction_edges over the edge AoT (not remove_after); removes all canonical-target matches, preserves comments/inert rows, writes iff count>0, prints count; remove-absent -> count 0 no-op; no target validation." },
+  { id = "EX-4", text = "Both add dup-check and remove canonicalize the existing on-disk row target (hand-authored target=\"SPEC-2\" matched by SPEC-002)." },
+]
+verification = [
+  { id = "VT-1", expects = "CLI: add appends (--notes optional); spec show reflects the edge; add on product -> error; nonexistent/non-SPEC target -> error." },
+  { id = "VT-2", expects = "CLI: add idempotent on target (no duplicate row; informational message); remove by target; remove-absent -> count 0 no-op." },
+  { id = "VT-3", expects = "CLI: with on-disk target=\"SPEC-2\", add SPEC-002 appends no duplicate AND remove SPEC-002 clears that row (canonical match)." },
+  { id = "VA-1", expects = "Agent: confirm remove_interaction_edges is the removal seam and dep_seq::remove_after is untouched by this slice." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "shipped-memory refresh + close-out"
+objective = """
+Update the shipped signpost memory mem.signpost.doctrine.relating-entities to
+replace the stale 'What still requires hand-editing' section: drop the now-covered
+examples, list the three new spec subcommands as the CLI surface for
+descends_from/parent/interactions. Re-embed + materialise per the shipped-memory
+authoring flow. Full-suite green; lint/format clean; ready for /audit."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01..03 complete: the three CLI verbs land and are green." },
+  { id = "EN-2", text = "mem.signpost.doctrine.relating-entities present at memory/<key>/memory.md (the authoring source, not the materialised copy)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "memory.md's hand-editing section replaced with the current inventory (three spec verbs; stale slice-to-ADR / product-to-product examples dropped)." },
+  { id = "EX-2", text = "Re-embed + sync run (touch src/corpus.rs && cargo build; doctrine memory sync) — materialised copy under .doctrine/memory/shipped/ matches the source." },
+  { id = "EX-3", text = "`just gate` clean (clippy zero-warning bins/lib; fmt); full spec/relation/dep_seq suites green." },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test` full suite green; `just gate` zero warnings + formatted." },
+  { id = "VA-1", expects = "Agent: the materialised shipped memory reflects the new CLI surface and carries no stale hand-edit guidance." },
+]
+specs        = []
+requirements = []
