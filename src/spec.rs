@@ -740,7 +740,7 @@ pub(crate) struct Spec {
     /// product or unfilled tech spec. Integrity is `validate`'s job (SL-022 §5.2).
     #[serde(default)]
     pub(crate) descends_from: Option<String>,
-    /// Single decomposition parent (`SPEC-NNN`). Tech-only, single-valued
+    /// Single decomposition parent (`SPEC-NNN` or `PRD-NNN`). Single-valued
     /// outbound; the reciprocal children view is derived, never stored (§5.2).
     #[serde(default)]
     pub(crate) parent: Option<String>,

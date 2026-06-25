@@ -16,7 +16,7 @@ responsibilities = []
 # descends_from — the product capability (PRD-NNN) this spec realises; tech-only,
 #   single-valued, validated against the product specs. Add as:
 #   descends_from = "PRD-001"
-# parent — single decomposition parent (SPEC-NNN); tech-only, single-valued, the
+# parent — single decomposition parent (SPEC-NNN or PRD-NNN); subtype-aware, single-valued, the
 #   tree must stay acyclic. Add as:
 #   parent = "SPEC-002"
 # [[source]] — code anchors this spec governs (tech-only, repeatable). Add as:

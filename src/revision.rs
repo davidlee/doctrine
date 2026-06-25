@@ -438,6 +438,8 @@ pub(crate) struct RevDoc {
     pub(crate) title: String,
     pub(crate) status: RevStatus,
     pub(crate) approval: Approval,
+    #[serde(default)]
+    pub(crate) tags: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1624,6 +1626,7 @@ primary = true
             title: "revise ADR-006".to_owned(),
             status: RevStatus::Started,
             approval: Approval::None,
+            tags: vec![],
         };
         let text = toml::to_string(&doc).unwrap();
         assert!(
@@ -1767,5 +1770,183 @@ primary = true
             rec.evidence_ref.is_empty(),
             "apply rests on the approved REV, not coverage — no evidence"
         );
+    }
+
+    // -- SL-155: revision list ---------------------------------------------
+
+    /// Seed a single revision TOML under the tempdir for list tests.
+    fn seed_rev(root: &Path, id: u32, status: &str, title: &str, tags: &[&str]) {
+        let name = format!("{id:03}");
+        let dir = root.join(name);
+        fs::create_dir_all(&dir).unwrap();
+        let tags_toml = if tags.is_empty() {
+            String::from("tags = []")
+        } else {
+            format!(
+                "tags = [{}]",
+                tags.iter()
+                    .map(|t| format!("\"{t}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        let toml = format!(
+            "id = {id}\nslug = \"s-{id}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\napproval = \"none\"\n{tags_toml}\n"
+        );
+        fs::write(dir.join(format!("revision-{name}.toml")), toml).unwrap();
+        fs::write(dir.join(format!("revision-{name}.md")), "# body\n").unwrap();
+    }
+
+    /// `REV_HIDDEN` covers exactly the two terminal statuses.
+    #[test]
+    fn rev_hidden_covers_terminal_statuses() {
+        assert_eq!(REV_HIDDEN, &["done", "abandoned"]);
+    }
+
+    /// `list_rows` with no revisions renders the header row only (empty tree).
+    #[test]
+    fn list_rows_empty_tree_is_header_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // No REV_DIR — empty tree.
+        let out = list_rows(root, ListArgs::default()).unwrap();
+        assert!(out.starts_with("id"), "header row present: {out:?}");
+        assert!(!out.contains("REV-"), "no revision rows: {out:?}");
+    }
+
+    /// Default list hides `done` and `abandoned` revisions.
+    #[test]
+    fn list_rows_hides_done_and_abandoned() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_rev(root, 1, "proposed", "Active rev", &[]);
+        seed_rev(root, 2, "done", "Done rev", &[]);
+        seed_rev(root, 3, "abandoned", "Abandoned rev", &[]);
+
+        let out = list_rows(root, ListArgs::default()).unwrap();
+        assert!(out.contains("REV-001"), "proposed visible: {out}");
+        assert!(!out.contains("REV-002"), "done hidden: {out}");
+        assert!(!out.contains("REV-003"), "abandoned hidden: {out}");
+    }
+
+    /// `--all` reveals hidden terminal revisions.
+    #[test]
+    fn list_rows_all_reveals_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_rev(root, 1, "done", "Done rev", &[]);
+
+        let mut args = ListArgs::default();
+        args.all = true;
+        let out = list_rows(root, args).unwrap();
+        assert!(out.contains("REV-001"), "--all reveals done: {out}");
+    }
+
+    /// `--status` with explicit hidden status reveals it.
+    #[test]
+    fn list_rows_explicit_status_reveals_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_rev(root, 1, "done", "Done rev", &[]);
+
+        let mut args = ListArgs::default();
+        args.status = vec!["done".to_owned()];
+        let out = list_rows(root, args).unwrap();
+        assert!(out.contains("REV-001"), "explicit --status done reveals: {out}");
+    }
+
+    /// Substring filter matches slug and title.
+    #[test]
+    fn list_rows_filter_matches_slug_and_title() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_rev(root, 1, "proposed", "Alpha", &[]);
+        seed_rev(root, 2, "proposed", "Beta", &[]);
+
+        let mut args = ListArgs::default();
+        args.substr = Some("Alpha".to_owned());
+        let out = list_rows(root, args).unwrap();
+        assert!(out.contains("REV-001"), "title match: {out}");
+        assert!(!out.contains("REV-002"), "no match: {out}");
+    }
+
+    /// `--tag` filter matches authored tags.
+    #[test]
+    fn list_rows_tag_filter_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_rev(root, 1, "proposed", "Tagged", &["cli"]);
+        seed_rev(root, 2, "proposed", "Untagged", &[]);
+
+        let mut args = ListArgs::default();
+        args.tags = vec!["cli".to_owned()];
+        let out = list_rows(root, args).unwrap();
+        assert!(out.contains("REV-001"), "tagged match: {out}");
+        assert!(!out.contains("REV-002"), "untagged excluded: {out}");
+    }
+
+    /// `--status bogus` errors with the known-set.
+    #[test]
+    fn list_rows_unknown_status_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut args = ListArgs::default();
+        args.status = vec!["bogus".to_owned()];
+        let err = list_rows(root, args).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("bogus"), "names the bad token: {msg}");
+        assert!(msg.contains("proposed"), "names known set: {msg}");
+    }
+
+    /// `--columns bogus` errors with the available-column set.
+    #[test]
+    fn list_rows_unknown_column_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut args = ListArgs::default();
+        args.columns = Some("bogus".to_owned());
+        let err = list_rows(root, args).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("bogus"), "names the bad column: {msg}");
+        assert!(msg.contains("id"), "names available set: {msg}");
+    }
+
+    /// JSON output carries prefixed ids and a tags array.
+    #[test]
+    fn list_rows_json_is_faithful_envelope() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_rev(root, 1, "proposed", "Test", &["cli"]);
+
+        let mut args = ListArgs::default();
+        args.format = Format::Json;
+        let out = list_rows(root, args).unwrap();
+        assert!(out.contains("\"id\": \"REV-001\""), "prefixed id: {out}");
+        assert!(out.contains("\"tags\": [\"cli\"]"), "tags array: {out}");
+        assert!(out.contains("\"revisions\""), "json envelope: {out}");
+    }
+
+    /// `--columns` selects and orders visible columns.
+    #[test]
+    fn list_rows_columns_selects_and_orders() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_rev(root, 1, "proposed", "Test", &["cli"]);
+
+        let mut args = ListArgs::default();
+        args.columns = Some("id,tags,status".to_owned());
+        let out = list_rows(root, args).unwrap();
+        let header = out.lines().next().unwrap();
+        assert!(header.contains("id"), "id column: {header}");
+        assert!(header.contains("tags"), "tags column: {header}");
+        assert!(header.contains("status"), "status column: {header}");
+        assert!(!header.contains("title"), "title excluded: {header}");
+    }
+
+    /// `render_revision_toml` includes `tags = []`.
+    #[test]
+    fn render_revision_toml_includes_tags() {
+        let text = render_revision_toml(1, "s", "T", "2026-06-14", None).unwrap();
+        assert!(text.contains("tags = []"), "tags scaffolded: {text}");
     }
 }

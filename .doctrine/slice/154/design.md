@@ -241,7 +241,23 @@ let trunk_base = merge_base(root, &tip, &trunk_tip)?;        // recomputed off t
 // (2) read the committed ledger (now populated) — the SINGLE source (INV-4).
 let boundaries = read_ledger::<Boundaries>(root, coord_ref, slice3, "boundaries.toml")?;
 
-// (3) DERIVE the registry + (4) GATE — BEFORE projection, so a halt leaves NO
+// (3) PROJECTION-SOURCE GUARD (codex pass-4 BLOCKER, D11). prepare-review only runs
+//     on dispatched slices; an EMPTY committed ledger while code landed means the
+//     ledger was never committed (coord worktree removed before prepare-review).
+//     plan_phases would then project 0 AND the derive would add nothing — yet the
+//     funnel double-write (run_record_boundary:614) may have already filled the
+//     registry, so registry_completeness would FALSELY pass. Catch it loudly.
+if boundaries.rows.is_empty() {
+    let code = git::code_delta_paths(root, &trunk_base, &tip, &orthogonal)?; // non-.doctrine, non-verified-orthogonal
+    if !code.is_empty() {
+        bail!("prepare-review: boundaries ledger is empty but {} code path(s) landed on \
+               dispatch/{slice3}; the coordination worktree was likely removed before \
+               prepare-review. Re-run with the coord worktree present (it persists until \
+               integrate), or record-delta + commit the ledger.", code.len());
+    }
+}
+
+// (4) DERIVE the registry + (5) GATE — BEFORE projection, so a halt leaves NO
 //     refs to collide with on the operator's record-delta → re-run (F1).
 let primary = git::primary_worktree(root)?;
 for row in &boundaries.rows { state::record_source_delta(&primary, slice, row.clone())?; }
@@ -250,9 +266,16 @@ if let Incomplete { gaps } = state::registry_completeness(&primary, &primary, sl
            record-delta the missing phase(s) before audit");   // halt: no refs created yet
 }
 
-// (5) existing projection — plan_review + plan_phases(boundaries) +
+// (6) existing projection — plan_review + plan_phases(boundaries) +
 //     with_journaled_projection (journal.toml splice, :2182). Unchanged.
 ```
+
+`orthogonal` is the orthogonal ledger already read at dispatch.rs:1522;
+`git::code_delta_paths` is a thin diff of `trunk_base..tip` (`--name-only`) minus
+`.doctrine/` and the verified-orthogonal paths — the same exclusion set `plan_review`
+applies (dispatch.rs:2015–2020), lifted to a path list. (If a leaner check reads better
+at /plan — e.g. comparing the `plan_review` review tree to the trunk-base tree — adopt
+it; the invariant is "code landed ⇒ a committed ledger row must exist".)
 
 New `commit_boundaries(root, parent, coord_ref, coord_worktree, slice) -> Result<String>`
 — the boundaries twin of `commit_journal`, with two hardenings over a naive splice:
@@ -260,11 +283,14 @@ New `commit_boundaries(root, parent, coord_ref, coord_worktree, slice) -> Result
    `ledger::read_boundaries_file` (below), `toml::from_str::<Boundaries>` it. A parse
    error is a clean `Err` (the working ledger is malformed) — never commit garbage onto
    the tip, unlike a verbatim-byte splice.
-2. **Content-idempotent (F1).** Re-serialize the parsed `Boundaries` to canonical TOML;
-   compare to the committed blob (`read_path_at(coord_ref, path)`). Equal → return
-   `parent` unchanged (no commit, no ref advance). Differ → `tree_with_file` →
-   `commit_tree(parent, "ledger: boundaries")` → `update_ref_cas(coord_ref, commit,
-   parent)` (a moved ref bails like `commit_journal`, R6). Returns the new tip.
+2. **Content-idempotent via TREE-oid compare (F1; pass-4 MINOR).** Re-serialize the
+   parsed `Boundaries` to canonical TOML and splice: `tree_with_file(tip_tree, path,
+   canonical)` → candidate tree oid. If it **equals the current `tip_tree`** → return
+   `parent` unchanged (no commit, no ref advance). This sidesteps any
+   committed-blob-canonicalization assumption (git dedups identical content to the same
+   blob, hence the same tree) — a raw-blob compare would falsely diff on formatting.
+   Differ → `commit_tree(parent, "ledger: boundaries")` → `update_ref_cas(coord_ref,
+   commit, parent)` (a moved ref bails like `commit_journal`, R6). Returns the new tip.
 
 (DRY — OQ-6: factor a shared `splice_ledger_file(...)` that `commit_journal` and
 `commit_boundaries` both call; decide at /plan if it reads cleanly.)
@@ -372,9 +398,14 @@ the accepted cost of never blessing a garbage row (R2).
   halted first pass, so the re-run reaches projection cleanly with the registry now
   complete. (Re-running a *successful* prepare-review still hits the pre-existing
   stale-ref bail — unchanged, out of scope.)
-- **Coord worktree absent / stale at prepare-review:** commit-boundaries no-ops (the
-  ledger committed by a prior run stays on the tip); the derive reads whatever is on the
-  committed ref; the gate halts on any resulting gap.
+- **Coord worktree absent / stale at prepare-review (pass-4 BLOCKER):** commit-boundaries
+  no-ops. If a prior run already committed the ledger, it stays on the tip — fine. But if
+  it was **never** committed (coord removed before the first prepare-review), the
+  committed ledger is empty while the funnel double-write (run_record_boundary:614) has
+  already filled the **registry** — so `registry_completeness` would FALSELY pass while
+  `plan_phases` projects nothing. The **projection-source guard (D11)** catches this:
+  empty committed ledger + landed code ⇒ halt. The registry gate alone is insufficient
+  here (it gates the conformance input, not the projection source).
 
 ## 6. Open Questions & Unknowns
 
@@ -449,9 +480,20 @@ the accepted cost of never blessing a garbage row (R2).
   a spec change — verified the spec text names `boundaries.toml` in the committed
   run-ledger set. (If any spec text had described it as uncommitted, a REV would route —
   it does not.)
+- **D11 — Projection-source guard (codex pass-4).** The registry gate (D4) proves the
+  conformance *input* is complete, but **not** that the projection *source* (the committed
+  boundaries ledger that feeds `plan_phases`) exists — and the funnel double-write (D5,
+  run_record_boundary:614) can fill the registry independently of the committed ledger.
+  So a coord worktree removed before the first prepare-review yields a green gate with
+  zero projection. Guard: at prepare-review, **empty committed ledger + non-orthogonal
+  code delta over `trunk_base` ⇒ halt** (sound because prepare-review only runs on
+  dispatched slices, so landed code without a committed ledger row is anomalous). Converts
+  a silent broken-projection into a loud, actionable halt. Cheap (one filtered diff).
 - **Alternatives rejected** — chain-fallback (B): unsound (D1). Working-file derive
   (the retracted pass-2 draft): SPEC-022 violation (P2-3). Read-time fallback in
-  conformance: scope-rejected; papers over the write gap.
+  conformance: scope-rejected; papers over the write gap. **Dropping the funnel
+  double-write to close the D11 gap:** rejected — it is a contract break (D5/F5); the D11
+  guard closes the hole without removing the double-write.
 
 ## 8. Risks & Mitigations
 
@@ -516,6 +558,11 @@ the accepted cost of never blessing a garbage row (R2).
 - **VT — gate-before-projection (F1):** an incomplete registry → `prepare-review` halts
   with **no `review/*` / `phase/*` refs created**; after `record-delta` fills the gap a
   re-run projects cleanly.
+- **VT — projection-source guard (D11, pass-4 BLOCKER):** a dispatched slice whose
+  `run_record_boundary` filled the **registry** but whose coord worktree was removed
+  **before** prepare-review (committed ledger empty) → prepare-review **halts** ("ledger
+  empty but code landed"), does NOT pass on the pre-filled registry, and creates no refs.
+  Contrast: an empty-code dispatched slice (no code delta) with empty ledger → no halt.
 - **VT — guard soundness (the unsound-capture fix):** a dispatched phase flipped from a
   session-root context with a live coord worktree → binding **stands down** (no garbage
   row); without a coord worktree → binding records.
@@ -618,6 +665,28 @@ refinements to the commit seam, the liveness probe, and the test plan.
   (lifecycle:174, sync:111), so they don't exercise the new splice; "0 phase-cuts" is
   production-only. **Fixed:** R4 corrected; §9 adds a no-pre-commit fixture VT.
 
-**Next:** `/inquisition` or `slice status 154 plan` → `/plan`. Open at design: OQ-6
-(shared `splice_ledger_file` — decide at /plan), OQ-7 (projection re-enable — a verify
-task), and the F4 ownership-signal hardening follow-up (file as backlog at /plan or close).
+### External pass 4 — codex (GPT-5.5), 2026-06-26 — confirmatory — dispositions
+
+Confirmed F1–F3, F5 integrations sound. Found one residual BLOCKER + one MINOR.
+
+- **Pass-4 BLOCKER — registry gate masks an absent committed ledger.** Verified against
+  source: `run_record_boundary` double-writes the **registry** (dispatch.rs:614) but only
+  the **working** ledger file (:606) — never the committed dispatch ref. So a coord
+  worktree removed before the first prepare-review ⇒ `commit_boundaries` no-ops ⇒ committed
+  ledger empty ⇒ `plan_phases` projects 0, yet `registry_completeness` passes on the
+  pre-filled registry ⇒ green gate, silent broken projection. **Fixed: D11 projection-
+  source guard** (empty committed ledger + landed code ⇒ halt), §5.2/§5.5/§9.
+- **Pass-4 MINOR — idempotency compared canonical-working vs raw-committed-blob.** Not
+  canonical-to-canonical unless the committed blob is known canonical. **Fixed:** D7b now
+  compares **tree oids** (`tree_with_file` result vs current `tip_tree`) — git dedups
+  identical content, so this is robust to formatting. §5.2.
+- **F4 re-confirmed insufficient-without-the-blocker → now covered:** the D11 guard closes
+  the path where the gate was satisfied by the double-write while projection was empty.
+
+### Revision status — 4 passes clean (2026-06-26)
+
+The committed-ref design has cleared 4 codex passes + an internal pass + the design
+conversation. No residual blockers. **Next:** `slice status 154 plan` → `/plan` (or
+`/inquisition`). Carry to /plan: OQ-6 (shared `splice_ledger_file`), OQ-7 (projection
+re-enable verify), `git::code_delta_paths` helper shape (D11), and the F4 ownership-signal
+hardening (file as backlog).
