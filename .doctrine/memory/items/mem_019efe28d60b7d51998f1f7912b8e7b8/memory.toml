@@ -1,0 +1,50 @@
+memory_uid = "mem_019efe28d60b7d51998f1f7912b8e7b8"
+memory_key = "mem.fact.dispatch.worktreecreate-cwd-channel"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "WorktreeCreate payload cwd is an orchestrator-controlled per-spawn channel"
+summary = "WorktreeCreate payload cwd follows the orchestrator's Bash cwd (a per-spawn channel); footer carries worktreePath. Proven 2.1.181."
+created = "2026-06-25"
+updated = "2026-06-25"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["harness", "area:dispatch", "area:worktree", "scope:claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "700d1dd63b5818ce07eeca1db314353acb5b1a8f"
+tree = "2e007212fb9d5a35e848235ce47a45944230f013"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "700d1dd63b5818ce07eeca1db314353acb5b1a8f"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "probe"
+ref = "wtc-cwd-2026-06-25"
+
+[[relation]]
+label = "related"
+target = "SL-152"
+
