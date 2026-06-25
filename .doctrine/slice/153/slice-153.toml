@@ -1,7 +1,7 @@
 id = 153
 slug = "spec-edge-cli"
 title = "CLI verbs for spec-internal edges (descends_from, parent, interactions)"
-status = "ready"
+status = "audit"
 created = "2026-06-25"
 updated = "2026-06-25"
 tags = []
@@ -18,6 +18,19 @@ target = "ADR-010"
 label = "references"
 role = "implements"
 target = "PRD-002"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dep_seq.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation.rs"
+intent = "scope-relevant"
+note = "reference APIs (lookup/check_target_kind); design declared no change"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
