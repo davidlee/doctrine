@@ -1,15 +1,10 @@
-#![expect(unused, reason = "extraction; PHASE-03 prunes")]
 // SPDX-License-Identifier: GPL-3.0-only
 //! provision machine — extracted from worktree/mod.rs (SL-116 PHASE-02).
 
 use super::allowlist::{
     Allowlist, allowlist_violations, is_withheld, parse_allowlist, select_copies,
 };
-use super::marker::{DISPATCH_WORKER_AGENT_TYPE, marker_present, write_marker};
-use super::shared::{
-    gather_fork_worktree, gather_tree_clean, is_linked_worktree, matches, resolve_commit,
-    resolve_common_dir, target_dir_for_branch,
-};
+use super::shared::resolve_common_dir;
 use crate::fsutil::{self, CopyOutcome};
 use crate::git;
 use crate::root;

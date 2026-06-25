@@ -223,6 +223,13 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.
             WorktreeCommand::Fork { .. } => Orchestrator("fork"),
+            // create-fork is the claude `WorktreeCreate` hook verb (SL-152) — it
+            // fires in the MARKERLESS parent coord tree (process cwd), so the
+            // worker_guard resolves non-worker mode and it is allowed; a spawn from
+            // inside a marked fork is refused fail-closed (acceptable — workers carry
+            // no Agent tool). Orchestrator and Hookmint are functionally identical
+            // under worker_guard; Orchestrator is the plan-locked class (G8).
+            WorktreeCommand::CreateFork => Orchestrator("create-fork"),
             // coordinate creates/resumes the orchestrator's OWN coordination
             // worktree (SL-064 §2) — markerless, but still an orchestrator funnel
             // operation; refused under worker-mode via the SAME guard as fork (EX-4).

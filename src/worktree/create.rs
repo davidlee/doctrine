@@ -1,20 +1,25 @@
-// The pure items here have NO non-test consumer until PHASE-02 wires the shell
-// (`run_create_fork`); under the gated bins/lib build they are genuinely unused, so
-// the repo's `unused`/`dead_code` denies would fire. The lid is `not(test)`-gated:
-// in the test cfg the in-file `tests` module consumes every item, so a plain
-// `#![expect(unused)]` would be UNFULFILLED there (workspace `warnings = "deny"`
-// captures `unfulfilled_lint_expectations`). PHASE-02 (EX-7) reconciles the lid.
-#![cfg_attr(not(test), expect(unused, reason = "PHASE-02 wires the shell"))]
 // SPDX-License-Identifier: GPL-3.0-only
-//! worktree create-fork — the PURE core of the `WorktreeCreate` hook verb.
+//! worktree create-fork — the claude `WorktreeCreate` hook verb (SL-152).
 //!
-//! Mirror of [`super::subagent::classify_stamp`]: the pure core decides, the shell
-//! (PHASE-02's `run_create_fork`) gathers the impure facts and acts. No git / disk /
-//! env / clock here (ADR-001 leaf, CLAUDE.md pure/imperative split) — every fact the
-//! decision needs is passed in as a flat value/bool. The realpath compare
-//! (`cwd IS the arming dir`) and the `base` file read are resolved by the shell and
-//! folded into the inputs below, exactly as `run_stamp_subagent` resolves facts for
-//! `classify_stamp`.
+//! Mirror of [`super::subagent`]: a PURE classifier ([`classify_create`] +
+//! [`sanitise_name`]) decides Fork-vs-Passthrough-vs-Refuse from already-resolved
+//! facts (no git / disk / env / clock in the classifier — ADR-001 leaf, CLAUDE.md
+//! pure/imperative split), and an in-file impure SHELL ([`run_create_fork`]) gathers
+//! those facts — the payload cwd realpath, the `git -C cwd --show-toplevel` coord-tree
+//! root (NOT `primary_worktree`: create-fork fires in the PARENT before the fork
+//! exists, G2/I5), the arming-dir realpath compare, the `base` file read — and ACTS
+//! ([`act_on_create`]), exactly as `run_stamp_subagent` resolves facts for
+//! `classify_stamp`. The shell reads `{cwd, name}` JSON on stdin, prints the created
+//! absolute path ALONE on stdout (D11/G1), routes everything else to stderr, and
+//! fails closed (non-zero exit, never a panic) on any malformed input or failure.
+
+use super::fork::{fork_core, remove_worktree_dir};
+use super::provision::run_provision;
+use crate::git;
+use anyhow::{Context, bail};
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
 
 /// Verdict of the PURE create classifier: positional arming says fork-or-passthrough.
 /// `Fork` when the payload cwd IS the arming dir and `base` parses to a plausible sha
@@ -179,6 +184,178 @@ pub(crate) fn classify_create(
         }
     } else {
         Ok(CreateAction::Passthrough { name: slug })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Imperative shell — gather → classify → act (impure: stdin, git, disk).
+// ---------------------------------------------------------------------------
+
+/// The arming dir, relative to the coord-tree root: the orchestrator `cd`s HERE
+/// before a dispatch-worker spawn, and writes `base` inside it (design §5.3). The
+/// payload cwd BEING this dir is the positional Fork discriminator (D3/D4).
+const ARMING_SUBPATH: &str = ".doctrine/state/dispatch/spawn";
+/// Where every created tree lives under the coord-tree root: `<root>/.worktrees/<name>`.
+const WORKTREES_SUBDIR: &str = ".worktrees";
+
+/// The `WorktreeCreate` payload subset we read (tolerate extra fields). JSON on
+/// stdin: `{ "cwd": "<orchestrator cwd at spawn>", "name": "<unique slug>" }`. The
+/// payload is THIN by construction (probe, design §10): no `agent_type`, no base, no
+/// target path — discrimination is positional (cwd) and the base rides the arming dir.
+#[derive(Debug, Default, serde::Deserialize)]
+struct CreatePayload {
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+/// Resolve the coord-tree root from the payload `cwd` via `git -C <cwd>
+/// --show-toplevel`, canonicalised (G2/I5). This is the source tree for provisioning
+/// AND the git `-C` root for creation — NOT `primary_worktree` (the stamp's
+/// inside-fork resolution) and NOT the process cwd. `None` ⇒ cwd is not inside a git
+/// worktree ⇒ the shell fails closed (no root to fork in). Impure (the git read).
+fn resolve_root(cwd: &Path) -> Option<PathBuf> {
+    git::git_text(cwd, &["rev-parse", "--show-toplevel"])
+        .ok()
+        .and_then(|top| fs::canonicalize(top.trim()).ok())
+}
+
+/// Act on the pure verdict — the only worktree-mutating step (design §5.2 step 4).
+/// Returns the CANONICALISED created dir (stable for the harness to adopt as the
+/// session cwd and for PHASE-05's `basename(worktreePath)` derivation).
+///
+/// * `Fork` — delegate the live-`dir`/`branch` collision refusal AND the
+///   add+provision+mark to [`fork_core`] (the byte-identical core, worker=true,
+///   provision source = `root`); no parallel pre-check.
+/// * `Passthrough` — a benign DETACHED tree at the coord tree's HEAD, provisioned by
+///   the SAME copier ([`run_provision`], source = `root` not the fresh tree — the
+///   ISS-011 trap), NOT worker-marked. Owns its own `dir`-collision refusal (no
+///   branch to check), and COMPENSATES (G3) — removes the half-created tree before
+///   the fail-closed bail so an abort leaks nothing.
+fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
+    match action {
+        CreateAction::Fork { base, name } => {
+            let dir = root.join(WORKTREES_SUBDIR).join(&name);
+            let branch = format!("dispatch/{name}");
+            // fork_core owns the dir/branch collision refusal (`fork-refused: …`) —
+            // do NOT re-check here (no parallel impl against shared machinery).
+            fork_core(root, &base, &branch, &dir, true)?;
+            fs::canonicalize(&dir)
+                .with_context(|| format!("canonicalize fork dir {}", dir.display()))
+        }
+        CreateAction::Passthrough { name } => {
+            let dir = root.join(WORKTREES_SUBDIR).join(&name);
+            if dir.exists() {
+                bail!(
+                    "create-refused: name-collision (dir {} already exists)",
+                    dir.display()
+                );
+            }
+            // Detached tree at the coord tree's HEAD (replicates `baseRef:"head"`).
+            git::git_text(
+                root,
+                &[
+                    "worktree",
+                    "add",
+                    "--detach",
+                    &dir.to_string_lossy(),
+                    "HEAD",
+                ],
+            )
+            .with_context(|| format!("git worktree add --detach {} HEAD", dir.display()))?;
+            // Provision from the coord tree; compensate on any failure (G3).
+            if let Err(cause) = run_provision(Some(root.to_path_buf()), &dir) {
+                let debris = remove_worktree_dir(root, &dir);
+                if debris.is_empty() {
+                    return Err(cause.context(format!(
+                        "passthrough provision failed; compensated cleanly (removed {})",
+                        dir.display()
+                    )));
+                }
+                bail!(
+                    "passthrough-rollback-debris: {} (original cause: {cause:#})",
+                    debris.join(", ")
+                );
+            }
+            fs::canonicalize(&dir)
+                .with_context(|| format!("canonicalize passthrough dir {}", dir.display()))
+        }
+    }
+}
+
+/// `doctrine worktree create-fork` — the claude `WorktreeCreate` hook verb. Reads the
+/// `{cwd, name}` payload on stdin, gathers the impure facts, [`classify_create`]s, and
+/// [`act_on_create`]s. stdout carries the created absolute path and NOTHING else
+/// (D11/G1); refusals and diagnostics go to stderr; any failure exits non-zero
+/// (fail-closed — a non-zero `WorktreeCreate` exit aborts the spawn, design §5).
+///
+/// No `-p` override: the root is ALWAYS the payload cwd's `--show-toplevel` (G2/I5),
+/// never the process cwd. Malformed/empty stdin folds to a named refusal, never a panic.
+pub(crate) fn run_create_fork() -> anyhow::Result<()> {
+    let mut raw = String::new();
+    io::stdin()
+        .read_to_string(&mut raw)
+        .context("read WorktreeCreate payload")?;
+    // Malformed JSON folds to an empty payload ⇒ `missing-cwd` (fail-closed).
+    let payload: CreatePayload = serde_json::from_str(&raw).unwrap_or_default();
+
+    let cwd_str = payload.cwd.unwrap_or_default();
+    let name = payload.name.unwrap_or_default();
+
+    // Resolve cwd on disk; absent/unresolvable ⇒ cwd_resolved=false ⇒ missing-cwd.
+    let cwd_canon = if cwd_str.is_empty() {
+        None
+    } else {
+        fs::canonicalize(&cwd_str).ok()
+    };
+    let cwd_resolved = cwd_canon.is_some();
+
+    // Root from the PAYLOAD cwd (G2/I5). None ⇒ cannot act (fail-closed below).
+    let root = cwd_canon.as_deref().and_then(resolve_root);
+
+    // cwd IS the arming dir? Both realpath'd; a MISSING arming dir (the usual benign
+    // case) canonicalises to Err ⇒ folds to false (Passthrough), never propagates.
+    let cwd_is_arming = match (root.as_deref(), cwd_canon.as_deref()) {
+        (Some(root), Some(cwd)) => {
+            fs::canonicalize(root.join(ARMING_SUBPATH)).is_ok_and(|arming| arming == cwd)
+        }
+        _ => false,
+    };
+
+    // The `base` file lives in the arming dir; read it ONLY when armed.
+    let base = if cwd_is_arming {
+        root.as_deref()
+            .and_then(|r| fs::read_to_string(r.join(ARMING_SUBPATH).join("base")).ok())
+    } else {
+        None
+    };
+
+    match classify_create(cwd_resolved, cwd_is_arming, base.as_deref(), &name) {
+        Err(refusal) => {
+            // Stable token (`bad-name`), plus the specific sanitiser reason in
+            // parens for hook debugging (e.g. `create-refused: bad-name (whitespace)`).
+            let line = match refusal {
+                CreateRefusal::BadName(reason) => {
+                    format!("create-refused: {} ({})", refusal.token(), reason.token())
+                }
+                _ => format!("create-refused: {}", refusal.token()),
+            };
+            writeln!(io::stderr(), "{line}")?;
+            bail!("{line}");
+        }
+        Ok(action) => {
+            // cwd resolved + classified, but not inside a git worktree ⇒ no root to
+            // fork in. Fail closed with a named token (never a panic on hook input).
+            let Some(root) = root else {
+                writeln!(io::stderr(), "create-refused: no-root")?;
+                bail!("create-refused: no-root");
+            };
+            let dir = act_on_create(&root, action)?;
+            // stdout = EXACTLY the created path, one line, nothing else (G1/D11).
+            writeln!(io::stdout(), "{}", dir.display())?;
+            Ok(())
+        }
     }
 }
 

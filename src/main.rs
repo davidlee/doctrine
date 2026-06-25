@@ -625,6 +625,24 @@ mod write_class_tests {
         );
     }
 
+    // SL-152 PHASE-02: `worktree create-fork` is Orchestrator-classed — it fires in
+    // the markerless parent coord tree, so worker_guard resolves non-worker and it
+    // is allowed; carries the "create-fork" verb label (G8).
+    #[test]
+    fn worktree_create_fork_is_orchestrator() {
+        let c = Cli::try_parse_from(["doctrine", "worktree", "create-fork"])
+            .unwrap()
+            .command;
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("create-fork")),
+            "create-fork must be Orchestrator(\"create-fork\")"
+        );
+        assert_eq!(
+            cls(&["doctrine", "worktree", "create-fork"]),
+            Some("create-fork")
+        );
+    }
+
     // SL-064 PHASE-04: `dispatch sync --prepare-review` is Orchestrator-classed —
     // refused under worker-mode, carries the "dispatch-sync" verb label (EX-1).
     #[test]

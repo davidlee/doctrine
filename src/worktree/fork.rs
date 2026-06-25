@@ -1,22 +1,14 @@
-#![expect(unused, reason = "extraction; PHASE-03 prunes")]
 // SPDX-License-Identifier: GPL-3.0-only
 //! fork machine — extracted from worktree/mod.rs (SL-116 PHASE-02).
 
-use super::allowlist::{
-    Allowlist, allowlist_violations, is_withheld, parse_allowlist, select_copies,
-};
-use super::marker::{DISPATCH_WORKER_AGENT_TYPE, marker_present, write_marker};
+use super::marker::write_marker;
 use super::provision::run_provision;
-use super::shared::{
-    gather_fork_worktree, gather_tree_clean, is_linked_worktree, matches, resolve_commit,
-    resolve_common_dir, target_dir_for_branch,
-};
-use crate::fsutil::{self, CopyOutcome};
+use super::shared::target_dir_for_branch;
 use crate::git;
 use crate::root;
 use anyhow::{Context, bail};
 use std::fs;
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 /// Pure branch→relative-path mapping for a per-worktree target dir: `wt/<branch>`.
@@ -48,8 +40,8 @@ pub(super) fn project_env_contract(fork: &Path, branch: &str) -> Vec<(String, St
 
 /// Best-effort compensating cleanup for a partially-created fork (design §5 — git
 /// mutations are NOT a transaction, so there is no rollback verb to lean on; we
-/// reverse each leg ourselves). SHARED by [`run_fork`] and PHASE-10's `create-fork`
-/// (one cleanup impl, two callers — a hard reuse requirement).
+/// reverse each leg ourselves). SHARED by [`run_fork`]/[`fork_core`] and SL-152's
+/// `create-fork` (one cleanup impl, several callers — a hard reuse requirement).
 ///
 /// Each leg is best-effort and independent: a failing leg must not mask the
 /// original cause or abort the others. Removing a never-added worktree / dir / a
@@ -120,30 +112,29 @@ pub(super) fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String
     debris
 }
 
-/// `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` —
-/// create an orchestrator-owned worktree fork off `B`, provision it, optionally
-/// stamp the worker marker, and emit the per-worktree env contract (design §5).
+/// The byte-identical creation CORE — *add + provision + mark* with compensating
+/// rollback, SHARED by [`run_fork`] (the CLI verb: emits the per-worktree env
+/// contract on stdout) and [`super::create::act_on_create`] (the `WorktreeCreate`
+/// hook: prints the created path alone). The D11 split: this core is SILENT — it
+/// writes NOTHING to stdout/stderr; refusals and rollback debris surface only as
+/// `Err`. The `repo` (provision source + git `-C` root) is passed in EXPLICITLY,
+/// never `root::find`-resolved here, so each caller controls the source tree (D1/D11).
 ///
 /// Atomic via COMPENSATING ROLLBACK (not a git transaction): any failure AFTER the
 /// `git worktree add` reverses every leg via [`rollback_fork`]. A pre-`add` refusal
 /// (dir/branch exists, `B` not a commit) leaves no fork.
-///
-/// - **stdout**: the env contract (`KEY=value`, one per line).
-/// - **stderr**: human status (what it did).
-pub(crate) fn run_fork(
-    path: Option<PathBuf>,
+pub(super) fn fork_core(
+    repo: &Path,
     base: &str,
     branch: &str,
     dir: &Path,
     worker: bool,
 ) -> anyhow::Result<()> {
-    let repo = root::find(path, &root::default_markers())?;
-
     // --- Step 1 refusals (pre-`add`: leave NO fork) ---
     if dir.exists() {
         bail!("fork-refused: dir {} already exists", dir.display());
     }
-    if git::git_opt(&repo, &["rev-parse", "--verify", "--quiet", branch])
+    if git::git_opt(repo, &["rev-parse", "--verify", "--quiet", branch])
         .ok()
         .flatten()
         .is_some()
@@ -151,7 +142,7 @@ pub(crate) fn run_fork(
         bail!("fork-refused: branch {branch} already exists");
     }
     if git::git_opt(
-        &repo,
+        repo,
         &[
             "rev-parse",
             "--verify",
@@ -166,7 +157,7 @@ pub(crate) fn run_fork(
 
     // --- Step 1: create the worktree on a NEW branch at B ---
     git::git_text(
-        &repo,
+        repo,
         &[
             "worktree",
             "add",
@@ -181,7 +172,7 @@ pub(crate) fn run_fork(
     // From here on, any failure compensates (rollback every leg).
     let finish = (|| -> anyhow::Result<()> {
         // --- Step 2: provision via the sole copier (do NOT reimplement copying) ---
-        run_provision(Some(repo.clone()), dir).context("provision fork")?;
+        run_provision(Some(repo.to_path_buf()), dir).context("provision fork")?;
 
         // --- Step 3: stamp the worker marker BEFORE returning / any spawn window ---
         if worker {
@@ -191,7 +182,7 @@ pub(crate) fn run_fork(
     })();
 
     if let Err(cause) = finish {
-        let debris = rollback_fork(&repo, branch, dir);
+        let debris = rollback_fork(repo, branch, dir);
         if debris.is_empty() {
             return Err(cause.context(format!(
                 "fork failed after add; rolled back cleanly (dir {} + branch {branch} removed)",
@@ -204,6 +195,26 @@ pub(crate) fn run_fork(
             debris.join(", ")
         );
     }
+
+    Ok(())
+}
+
+/// `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` —
+/// create an orchestrator-owned worktree fork off `B`, provision it, optionally
+/// stamp the worker marker, and emit the per-worktree env contract (design §5).
+/// The creation work is [`fork_core`]; this CLI shell adds only the emission (D11).
+///
+/// - **stdout**: the env contract (`KEY=value`, one per line).
+/// - **stderr**: human status (what it did).
+pub(crate) fn run_fork(
+    path: Option<PathBuf>,
+    base: &str,
+    branch: &str,
+    dir: &Path,
+    worker: bool,
+) -> anyhow::Result<()> {
+    let repo = root::find(path, &root::default_markers())?;
+    fork_core(&repo, base, branch, dir, worker)?;
 
     // --- Step 4: env contract on stdout; human status on stderr ---
     for (key, value) in project_env_contract(dir, branch) {
