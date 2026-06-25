@@ -25,11 +25,8 @@ mod allowlist;
 
 mod marker;
 #[cfg(test)]
-pub(crate) use marker::{Cause, describe_mode};
-pub(crate) use marker::{
-    DISPATCH_WORKER_AGENT_TYPE, DUAL_CAUSE, env_worker_set, resolve_mode, run_marker_clear,
-    run_status,
-};
+pub(crate) use marker::{Cause, DISPATCH_WORKER_AGENT_TYPE, describe_mode};
+pub(crate) use marker::{DUAL_CAUSE, env_worker_set, resolve_mode, run_marker_clear, run_status};
 
 mod coordinate;
 mod create;

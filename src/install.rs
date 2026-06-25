@@ -363,9 +363,10 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
                 continue;
             }
-            // SubagentStart hook (project-local only).
+            // WorktreeCreate hook (project-local only). SL-152 D2: replaces the
+            // retired SubagentStart stamp — create-fork provisions+marks inside.
             if !args.global {
-                let spec = crate::boot::HookSpec::stamp_subagent(exec);
+                let spec = crate::boot::HookSpec::create_fork(exec);
                 match crate::boot::install_claude_hook(root, &spec, false) {
                     Ok(outcome) => {
                         let label = match outcome {
@@ -376,10 +377,10 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                                 "could not merge (settings left untouched)"
                             }
                         };
-                        writeln!(io::stdout(), "  subagent hook: {label}")?;
+                        writeln!(io::stdout(), "  worktree hook: {label}")?;
                     }
                     Err(e) => {
-                        writeln!(io::stdout(), "  subagent hook failed: {e:#}")?;
+                        writeln!(io::stdout(), "  worktree hook failed: {e:#}")?;
                     }
                 }
             }

@@ -1062,18 +1062,20 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         crate::install::ensure_gitignored(&base, "!.doctrine/agents/AGENTS.md")?;
         install_agents_for(&root, "claude", None, args.global, args.dry_run, &mut out)?;
 
-        // Wire the dispatch-worker SubagentStart hook into the project's
+        // Wire the dispatch-worker WorktreeCreate hook into the project's
         // settings (project-local only — the hook command is an absolute exec
         // path that belongs out of git, like the boot/sync hooks; `--global`
         // skips it). Reuses the boot.rs HookSpec merge core — no parallel impl.
+        // SL-152 D2: this REPLACES the retired SubagentStart stamp hook;
+        // create-fork provisions+marks atomically inside WorktreeCreate.
         if !args.global {
             let exec = crate::boot::resolve_exec()?;
             let outcome = crate::boot::install_claude_hook(
                 &root,
-                &crate::boot::HookSpec::stamp_subagent(&exec),
+                &crate::boot::HookSpec::create_fork(&exec),
                 args.dry_run,
             )?;
-            writeln!(out, "subagent hook: {}", hook_outcome_label(&outcome))?;
+            writeln!(out, "worktree hook: {}", hook_outcome_label(&outcome))?;
         }
     }
 
