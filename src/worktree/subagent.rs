@@ -133,10 +133,14 @@ fn cwd_shares_repo(repo: &Path, cwd: &Path) -> bool {
 }
 
 /// `doctrine worktree marker --stamp-subagent` — the claude harness spawn path's
-/// mark step (SL-056 PHASE-10). Claude itself creates the worker's worktree (the
-/// `WorktreeCreate` payload carries no `agent_type`/path, so `create-fork` is
-/// DROPPED); this verb runs from the matcher-scoped `SubagentStart` hook to
-/// **provision + stamp** the already-created worktree named by the payload `cwd`.
+/// post-hoc mark step (SL-056 PHASE-10). Historically Claude created the worker's
+/// worktree and this verb stamped it afterwards from the matcher-scoped
+/// `SubagentStart` hook (discriminating by the payload `agent_type`). SL-152 REVIVES
+/// `create-fork` — the `WorktreeCreate` hook that create+provision+marks the worktree
+/// ATOMICALLY, discriminating POSITIONALLY by cwd (the thin payload carries no
+/// `agent_type`/path); SL-152 PHASE-04 retires THIS verb's install wiring. While both
+/// coexist, this verb still runs to **provision + stamp** the already-created worktree
+/// named by the payload `cwd`.
 ///
 /// `SubagentStart` is a READ-ONLY hook event — a non-zero exit does NOT abort the
 /// subagent. So this verb only stamps-or-refuses and exits honestly; it cannot and
@@ -154,8 +158,8 @@ fn cwd_shares_repo(repo: &Path, cwd: &Path) -> bool {
 /// M3 failure posture: if provision/mark fails, print a LOUD stderr diagnostic and
 /// exit non-zero — and do NOT `git worktree remove` (we added no worktree; Claude
 /// owns it, the worker is already cleared to run). There is NO compensating
-/// rollback here (that was the dropped create-fork's behaviour); the half-stamped
-/// fork is left for the orchestrator's post-spawn check.
+/// rollback here (unlike `create-fork`, which owns its creation and DOES compensate);
+/// the half-stamped fork is left for the orchestrator's post-spawn check.
 ///
 /// NOTE: the `SubagentStart`-matcher wiring and the `/dispatch-agent` skill leg are
 /// LATER phases (out of scope here).
