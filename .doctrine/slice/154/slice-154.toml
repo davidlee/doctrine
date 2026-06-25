@@ -12,12 +12,12 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/state.rs"
-intent = "scope-relevant"
+intent = "design-target"
 note = "conformance-registry capture seam (solo binding + funnel write)"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 note = "conformance-registry capture seam (solo binding + funnel write)"
 
 [[selector]]
@@ -29,6 +29,18 @@ note = "conformance-registry capture seam (solo binding + funnel write)"
 selector = "src/boundary.rs"
 intent = "scope-relevant"
 note = "conformance-registry capture seam (solo binding + funnel write)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-agent/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-subprocess/SKILL.md"
+intent = "design-target"
 
 [[relation]]
 label = "references"
