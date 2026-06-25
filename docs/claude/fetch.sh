@@ -15,7 +15,7 @@ curl $INDEX -sL | grep -oP "$MATCH" | sort | uniq >index.txt
 echo -e "Index of available docs written to index.txt\nDownloading ..."
 for file in $DOWNLOADS; do
   echo -e "  -> $file"
-  curl "${BASE}${file}" -sL >$file
+  curl "${BASE}en/${file}" -sL >$file
 done
 
 echo 'Done.'
