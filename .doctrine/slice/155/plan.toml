@@ -1,0 +1,44 @@
+# Implementation plan for SL-155 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-155"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Cluster A fixes + revision list with tag surfacing"
+objective = "Apply all one-liner fixes (C1-C3, G5, I1), build the revision list verb with tag column, add REV to TAGGABLE, author the ADR-012→ADR-004 supersede edge."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and approved" },
+  { id = "EN-2", text = "plan.md written" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "all 7 one-liner fixes applied and correct" },
+  { id = "EX-2", text = "revision list renders table with id/status/approval/tags/title columns" },
+  { id = "EX-3", text = "revision list supports --tag, --status, --columns, --all, --json" },
+  { id = "EX-4", text = "ADR-012 supersedes ADR-004 edge authored" },
+  { id = "EX-5", text = "REV in TAGGABLE; doctrine tag set REV-NNN works" },
+]
+verification = [
+  { id = "VT-1", expects = "just gate zero warnings" },
+  { id = "VT-2", expects = "all existing revision tests stay green unchanged" },
+  { id = "VT-3", expects = "new revision list tests pass (table, JSON, filtering, hide-set, columns, unknown-column error)" },
+  { id = "VT-4", expects = "rev_statuses_matches_the_variants drift canary passes" },
+  { id = "VT-5", expects = "render_revision_toml_includes_tags passes" },
+  { id = "VA-1", expects = "doctrine supersede ADR-012 ADR-004 succeeds, edge visible in inspect" },
+  { id = "VA-2", expects = "doctrine tag set REV-001 area:cli succeeds, visible in revision list --tag area:cli" },
+]
+specs        = []
+requirements = []
