@@ -103,3 +103,32 @@ Residual placement question (`apply_scalar` at the `dep_seq` leaf) was explicitl
 pressure-tested by the reviewer and not flagged → closed (§10).
 
 **Design ready to plan.** Next: `/plan`.
+
+## 2026-06-26 — Dispatch drive (all 4 phases)
+
+Dispatched via pi subprocess workers to dispatch/153 branch.
+
+| Phase | Commit | Description |
+|---|---|---|
+| PHASE-01 | d3947526 | apply_scalar pure core |
+| PHASE-02 | ab2c642f | SpecCommand::Edit (descends_from/parent) |
+| PHASE-03 | 71466d0d | SpecCommand::Interactions (Add/Remove) |
+| PHASE-04 | 0cc4800c | Shipped relating-entities memory refresh |
+
+just check green; 111 spec tests + 24 dep_seq tests green.
+
+## 2026-06-26 — Audit (RV-159)
+
+Audit opened against candidate/153/review-001 (admitted at 9c045f5c). 3 findings:
+
+- **F-1 (MAJOR → fix-now):** PHASE-02 spec edit integration tests missing. Design
+  VT-1–VT-5 specified but only PHASE-03 (interactions) had test coverage. Applied:
+  6 edit test functions (VT-1 through VT-5) + 1 canonical-storage test, all green.
+- **F-2 (MINOR → fix-now):** Non-canonical `target` stored in `run_interaction_add`
+  (design says "Target stored canonical"). Changed `toml_edit::value(target)` →
+  `toml_edit::value(&canonical_target)`.
+- **F-3 (NIT → tolerated):** Edit confirmation messages omit source spec ref.
+  Cosmetic drift from design examples.
+
+Both fix-now items applied on candidate branch (9c045f5c). Candidate admitted for
+close. RV-159 done — all 3 findings terminal.
