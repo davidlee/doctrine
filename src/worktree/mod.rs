@@ -41,7 +41,7 @@ mod provision;
 mod subagent;
 
 pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
-pub(crate) use create::run_create_fork;
+pub(crate) use create::{ARMING_SUBPATH, run_create_fork};
 pub(crate) use fork::run_fork;
 pub(crate) use gc::run_gc;
 pub(crate) use import::run_import;

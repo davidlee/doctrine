@@ -262,6 +262,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             DispatchCommand::RecordBoundary { .. } => Orchestrator("dispatch-record-boundary"),
             DispatchCommand::RefreshBase { .. } => Orchestrator("dispatch-refresh-base"),
             DispatchCommand::Setup { .. } => Orchestrator("dispatch-setup"),
+            // arm-spawn writes the coord tree's arming base file (SL-152 PHASE-03,
+            // sole-writer) — Orchestrator-classed; refused under worker-mode.
+            DispatchCommand::ArmSpawn { .. } => Orchestrator("dispatch-arm-spawn"),
             // candidate create publishes coordination refs + ledger rows (SL-068
             // §5.3) — Orchestrator-classed like sync/record-boundary; refused
             // under worker-mode.

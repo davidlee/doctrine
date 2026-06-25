@@ -274,6 +274,12 @@ mod tests {
             is_withheld(".doctrine/state/slice/029/phases/phase-01.md"),
             Some(Tier::State)
         );
+        // SL-152 PHASE-03 VT-2: the arm-spawn arming dir is withheld State tier, so
+        // the provision copier never copies it into a worker fork.
+        assert_eq!(
+            is_withheld(".doctrine/state/dispatch/spawn/base"),
+            Some(Tier::State)
+        );
         assert_eq!(
             is_withheld(".doctrine/slice/029/phases"),
             Some(Tier::PhaseLink)

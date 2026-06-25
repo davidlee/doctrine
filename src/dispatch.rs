@@ -182,6 +182,30 @@ pub(crate) enum DispatchCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Arm the next claude-arm worker spawn (SL-152 PHASE-03).
+    /// Writes the coord tree's arming dir `.doctrine/state/dispatch/spawn/base`
+    /// = `<sha>\n` (the ONLY thing it carries) and prints the dir's absolute path,
+    /// so the orchestrator `cd`s into it before the Agent spawn — the cwd, not the
+    /// file's existence, is the positional discriminator the `worktree create-fork`
+    /// hook reads (design §5.3). Idempotent (re-arm at B' overwrites base).
+    /// Sole-writer; orchestrator-classed — refused under worker-mode.
+    ArmSpawn {
+        /// The base commit B every spawn in this batch forks at — `dispatch setup`'s
+        /// stdout `base=<dispatch_tip>` (the same tip the subprocess arm feeds
+        /// `fork --base`). Must be a 4..=64-char hex oid (the reader's accepted form).
+        #[arg(long)]
+        base: String,
+
+        /// The slice being dispatched (bare number) — diagnostic only; the arming dir
+        /// is per-coord-tree, not per-slice (cross-slice partition is by coord tree).
+        #[arg(long)]
+        slice: Option<u32>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -366,7 +390,37 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
         DispatchCommand::PlanNext { slice, json, path } => run_plan_next(path, slice, json),
         DispatchCommand::Status { slice, json, path } => run_status(path, slice, json),
         DispatchCommand::DeliverTo { path } => run_deliver_to(path),
+        DispatchCommand::ArmSpawn { base, slice, path } => run_arm_spawn(path, &base, slice),
     }
+}
+
+/// `dispatch arm-spawn` — write the arming `base` file and print the spawn dir
+/// (SL-152 PHASE-03; design §5.2/§5.3). The arming dir is in the coord tree's own
+/// runtime state (gitignored, withheld `Tier::State` ⇒ never provisioned into a
+/// worker fork). The path const is SHARED with the `worktree create-fork` reader
+/// ([`crate::worktree::ARMING_SUBPATH`]) — one contract anchor, no re-spelling.
+fn run_arm_spawn(path: Option<PathBuf>, base: &str, slice: Option<u32>) -> anyhow::Result<()> {
+    // Fail closed on a base outside the reader's accepted envelope (4..=64 hex), so a
+    // bad base surfaces at arm time, not silently as a no-fork at spawn time.
+    let b = base.trim();
+    if !(4..=64).contains(&b.len()) || !b.bytes().all(|c| c.is_ascii_hexdigit()) {
+        bail!("bad-base: `{base}` is not a 4..=64-char hex oid");
+    }
+
+    let root = root::find(path, &root::default_markers())?;
+    let spawn = root.join(crate::worktree::ARMING_SUBPATH);
+    std::fs::create_dir_all(&spawn)
+        .with_context(|| format!("create arming dir {}", spawn.display()))?;
+    crate::fsutil::write_atomic(&spawn.join("base"), format!("{b}\n").as_bytes())
+        .with_context(|| format!("write arming base in {}", spawn.display()))?;
+
+    let spawn_canon = std::fs::canonicalize(&spawn)
+        .with_context(|| format!("canonicalize arming dir {}", spawn.display()))?;
+    if let Some(slice) = slice {
+        writeln!(io::stderr(), "armed SL-{slice:03} at base {b}")?;
+    }
+    writeln!(io::stdout(), "{}", spawn_canon.display())?;
+    Ok(())
 }
 
 /// PURE — coordination-worktree placement guard (no env/disk; CLAUDE.md split).
