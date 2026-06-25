@@ -52,6 +52,21 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
   bumped 82→100 (e2e_skills_dispatch_shrinkage.rs). VA-1 PASS (codex GPT-5.5: EX-1/
   EX-2/VA-1, no contradictions). Installer verb is now `doctrine install -s <skill>
   -y` (SL-088 consolidation; the skill-refresh memory is stale on the verb name).
+- **PHASE-06 plugin-form LIVE PASS** (2026-06-25, restart-test, real plugin not
+  P1 scratch-probe) — `plugins/doctrine/hooks/hooks.json` carries BOTH hooks, bare
+  `doctrine` (PATH form), project scope; `settings.local.json` hooks emptied (mutual
+  exclusion, D7). On `clear`-restart: SessionStart `doctrine boot` wrote `boot.md`,
+  BOOT-SENTINEL present ⇒ **SessionStart parity green**. One benign `isolation:worktree`
+  Agent spawn ⇒ WorktreeCreate `doctrine worktree create-fork` fired: footer
+  `worktreePath:…/.worktrees/agent-a1806b…`, tree `(detached HEAD)` at edge tip,
+  unmarked, `.doctrine/` fully provisioned ⇒ **benign-spawn discrimination + sole-copier
+  green** (correct per create-fork's positional contract — NOT a bug; native Claude would
+  land in `.claude/worktrees/` w/ a named branch). Probe worktree removed.
+  **Plugin form ≡ retired settings blocks.** STILL OUTSTANDING for PHASE-06 proper:
+  install wiring (plugin distribution via marketplace.json, keep `install_claude_hook`
+  as fallback), VT-1 install golden + RustEmbed re-embed, and a **scope amendment**
+  (boot-migration + SubagentStart-drop exceed authored EX-1/EX-2 WorktreeCreate-only —
+  append design/plan delta, do NOT expand silently).
 - **PHASE-04 `completed`** — VT-1..4 automated + green; **VA-1 PASS live** (2.1.181,
   jail binary): real `Agent isolation:worktree` from the armed cwd → hook created
   `.worktrees/agent-<hex>` at base B, `dispatch/<name>` branch, worker-marked (F7);
@@ -250,6 +265,18 @@ payload + hook-replaces-creation + matcher-doesn't-scope.**
 3. **P2** — the Agent return footer carries `worktreePath` through hook-creation;
    `worktreeBranch` came back `undefined` for a detached tree ⇒ `worktreePath` is the
    normative datum.
+4. **P1** (2.1.181, jail, 2026-06-25) — a `WorktreeCreate` hook declared in a **plugin**
+   `plugin.json` (command via `${CLAUDE_PLUGIN_ROOT}`) fires **identically** to the
+   settings-block form. Procedure: scratch marketplace+plugin `p1-probe@p1-probe`
+   (enabled, user scope) wrapping the SAME `doctrine worktree create-fork` binary the
+   settings form calls; settings WorktreeCreate block REMOVED (mutual exclusion, D7);
+   restart; one benign `isolation:worktree` spawn. All three PASS criteria met:
+   `/tmp/p1-probe.log` logged `P1-PROBE fired` + thin payload (`hook_event_name:
+   "WorktreeCreate"`, `cwd:/workspace/doctrine`, `name:agent-adfe…`) with
+   `${CLAUDE_PLUGIN_ROOT}` expanded; Agent footer carried `worktreePath:
+   …/.worktrees/agent-adfe250d14e1b246a`; the `.worktrees/<name>` tree existed.
+   ⇒ **P1 PASS** — declaration site is hook-firing-irrelevant; PHASE-06 migration
+   (settings→plugin) is parity-safe. Probe artifacts cleaned up.
 
 Recorded as memory **`mem.fact.dispatch.worktreecreate-cwd-channel`** (high trust),
 linked to **`mem.pattern.dispatch.worktreecreate-replace-base-control`** and SL-152.
@@ -319,7 +346,8 @@ Relevant memories to retrieve when cutting: `mem.pattern.lint.clippy-denies`,
 ## 9. Open / deferred
 
 - **P1** — plugin `hooks/hooks.json` parity vs settings-block. Gates only PHASE-06.
-  Expected yes; verify before relying.
+  ~~Expected yes; verify before relying.~~ **RESOLVED PASS 2026-06-25** (§6.4) —
+  PHASE-06 unblocked.
 - **worktreeBranch-when-named** — cheap confirming probe (does the footer populate
   `worktreeBranch` for a NAMED-branch hook fork?). Nice-to-have, not gating (D8).
 - **WorktreeRemove / branch GC (F5/D10)** — retried workers leak `dispatch/<name>`
