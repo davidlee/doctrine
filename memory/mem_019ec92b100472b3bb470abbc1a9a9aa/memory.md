@@ -26,12 +26,19 @@ Key verbs and their roles:
   derived inbound) for a single entity. Use it to understand what an entity
   connects to, not to judge from a raw file.
 
-## What still requires hand-editing
+## Spec-internal edges (CLI-writable)
 
-Not all relation classes are CLI-writable yet. Some edges (e.g. slice-to-ADR
-references, cross-corpus product-to-product links) are prose-only — author
-them in the source entity's `.toml` `[[relation]]` table, but prefer the CLI
-where a verb exists.
+Tech spec lineage and interaction edges are now CLI-writable via `spec`
+subcommands — no hand-editing required:
+
+- **`doctrine spec edit <TECH> --descends-from <PRD>`** — set the product a
+  tech spec descends from. `--clear-descends-from` removes it.
+- **`doctrine spec edit <TECH> --parent <TECH>`** — set a tech spec parent.
+  `--clear-parent` removes it. Acyclicity is validated before any write.
+- **`doctrine spec interactions add <TECH> <TECH> --type <text>`** — append
+  an interaction edge. Target-idempotent (remove + add to re-type).
+- **`doctrine spec interactions remove <TECH> <TECH>`** — remove all
+  interaction edges to the target spec.
 
 See [[concept.doctrine.entity-engine]] for the relation model,
 [[fact.doctrine.cli-source-of-truth]] for the CLI authority,
