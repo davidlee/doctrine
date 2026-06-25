@@ -1,0 +1,81 @@
+id    = 159
+slug  = "sl-153-audit-cli-verbs-for-spec-internal-edges"
+title = "SL-153 Audit: CLI verbs for spec-internal edges"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-153"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-02 spec edit integration tests missing — design VT-1–VT-5 unimplemented"
+detail = """
+Design §9 and plan PHASE-02 specify five verification criteria (VT-1 through VT-5) for `spec edit`:
+- VT-1: `edit --descends-from` on tech reflects in `spec show`; on product errors; `--parent` same-subtype OK, cross-subtype errors, nonexistent target errors
+- VT-2: self-parent and 2-node cycle acyclicity gate (E1) — error, no write
+- VT-3: `--clear-parent` removes; clear-absent no-op; clap rejects `--descends-from X --clear-descends-from`; ArgGroup rejects zero flags
+- VT-4: multi-field single read/parse/write-once; all-no-op holds mtime
+- VT-5: `spec validate` clean on a spec authored end-to-end via spec edit
+
+None of these have corresponding test functions. The 8 new `#[test]` annotations in the diff cover only PHASE-03 (interactions add/remove, VT-1–VT-8). PHASE-02's `run_edit` has zero direct test coverage — the acyclicity gate, multi-field batching, canonical normalization, and the single-write-once contract are exercised only by manual testing."""
+disposition = "fix-now"
+response = """
+The VT-1–VT-5 edit tests were specified but not implemented. They need to be added before close. Specifically:
+- VT-1: descends_from set on tech/product, parent same-subtype/cross-subtype/nonexistent
+- VT-2: self-parent + 2-node cycle acyclicity rejection
+- VT-3: clear-present/clear-absent, clap intra-field rejection, ArgGroup zero-flag rejection
+- VT-4: multi-field single-write + all-no-op mtime hold
+- VT-5: spec validate clean after edit
+
+These exercise the acyclicity gate, canonical normalization, and single-write-once contract — the three highest-risk code paths in run_edit. The 8 interaction tests in PHASE-03 demonstrate the pattern; edit tests should follow the same fixture-driven style."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = 'Non-canonical target stored in interactions add — violates design "Target stored canonical"'
+detail = """
+Design §5.3 states "Target stored canonical." for interactions. In `run_interaction_add` (line 2208 of the candidate), the row stores the raw `target` arg string:
+
+```rust
+row.insert("target", toml_edit::value(target));
+```
+
+The canonical form `canonical_target` is computed separately and used only for the dup-check and confirmation message. This means a user passing `SPEC-2` (non-canonical) gets it stored verbatim on disk.
+
+The dup-check and `remove_interaction_edges` both canonicalize existing rows before comparing, so the system is internally consistent — a subsequent `add SPEC-002` won't create a duplicate, and `remove SPEC-002` will clear the non-canonical row. But the stored value violates the design's "stored canonical" contract.
+
+Contrast with `run_edit`: it canonicalizes `descends_from` and `parent` values before passing them to `apply_scalar`, so those ARE stored canonical. This creates an internal inconsistency between the two code paths.
+
+Fix: replace `toml_edit::value(target)` with `toml_edit::value(canonical_target.as_str())` (or `&canonical_target`)."""
+disposition = "fix-now"
+response = "One-line fix: replace `toml_edit::value(target)` with `toml_edit::value(canonical_target.as_str())` at the row-insertion site in `run_interaction_add`. This brings the add path into parity with `run_edit` which already canonicalizes before storing. The existing VT-8 canonical-dup-match test exercises the comparison side but doesn't assert the stored form — worth adding a sub-assertion to that test verifying the on-disk target is canonical after add."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Edit confirmation messages omit source spec reference (design example drift)"
+detail = """
+Design §5.4 example confirmation messages include the source spec reference:
+- "Set SPEC-005 parent to SPEC-002"
+- "Cleared SPEC-005 descends_from"
+
+Implementation omits the source:
+- "Set parent = SPEC-002"
+- "Cleared parent"
+
+The interactions messages DO include the source ref ("Added interaction SPEC-001 → SPEC-002 (uses)"). The inconsistency is cosmetic but the design explicitly specified source-including messages for debugability. Adding `{canonical_source}` to the edit confirmation lines would bring them into parity."""
+disposition = "tolerated"
+response = 'Cosmetic only. The messages are unambiguous: the user typed `doctrine spec edit SPEC-005 --parent SPEC-002`, so "Set parent = SPEC-002" carries the same information. The interactions messages include the source because the user sees both source and target in the CLI invocation. While adding `{canonical_source}` would bring parity, the value is marginal — not worth a rebuild cycle for a two-word change in confirmation strings.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
