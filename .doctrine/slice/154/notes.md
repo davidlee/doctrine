@@ -3,17 +3,77 @@
 Durable per-slice scratchpad — tracked in git. Bootstrap for the next agent (plan +
 codex). `design.md` is the authority; this is the fast-ingest map.
 
-## Status (2026-06-26) — DESIGN LOCKED, 4 codex passes clean → ready for /plan
+## Status (2026-06-26) — NOT plan-ready: pass-5 reopened D11 + efficiency findings open
 
 Slice in `design`. `design.md` (§1–§9 body + §10 review ledger) is the committed-ref
-(ISS-039-absorbed) model — the earlier working-file-read draft is fully retracted. The
-design has cleared **4 codex (GPT-5.5) passes + internal + design conversation**, no
-residual blockers. Scope (`slice-154.md`) absorbs ISS-039. **No code yet.**
+(ISS-039-absorbed) model — committed-ref/ISS-039/P2-1/P2-2 are solid across 5 passes. BUT
+**pass-5 proved D11 (the projection-source guard) unsound**, and the User requested an
+efficiency/workflow review that surfaced a converging design refinement (provenance). Both
+finding-sets are in **⚠ OPEN FINDINGS** below — NOT yet integrated into design.md. Scope
+(`slice-154.md`) absorbs ISS-039. **No code yet.**
 
-**Next:** `slice status 154 plan` → `/plan` (or `/inquisition` first — optional, low ROI
-after 4 passes).
+**Next:** a fresh agent integrates both finding-sets (see "Integration plan"), re-passes,
+THEN `/plan`. Do NOT /plan with D11 as drafted.
 
 Read order: `slice-154.md` (scope) → `design.md` §1–§9 → §10 (full pass ledger) → this.
+
+## ⚠ OPEN FINDINGS — NEXT AGENT MUST INTEGRATE (not yet in design.md)
+
+Two finding-sets landed AFTER the §10 pass-4 record and are **not yet integrated** into
+the design body. D11 as written (§5.2 step 3 / §7 D11) is **unsound** — do not /plan until
+reshaped. Integrate both, then re-pass.
+
+### A. codex pass-5 — D11 is unsound (reshape required)
+
+- **BLOCKER — empty-only predicate too weak.** D11 fires only on
+  `boundaries.rows.is_empty()`. A **partial** committed ledger (some phases lost) slips
+  past D11 AND the registry gate (pre-filled by the double-write, dispatch.rs:614) →
+  `plan_phases` projects an incomplete chain silently. Need: guard the projected phase set
+  against the *expected* (completed, funnel-owned) set, not mere non-emptiness.
+- **BLOCKER — false-halts mixed solo→dispatch.** "prepare-review only runs on dispatched
+  slices, so landed code without a ledger row is anomalous" is too broad. Solo phases land
+  code on the dispatch branch with **no** committed-ledger row (by design). If dispatch
+  phases are empty-code/doc-only, `boundaries` is legitimately empty while
+  `code_delta_paths` is non-empty → D11 wrongly halts (walk the SL-153 shape). Need an
+  **ownership-aware** condition; don't equate "code on the branch" with "must have a
+  dispatch row".
+- **MAJOR — exclusion-set mismatch.** `plan_phases` filters only `.doctrine`
+  (dispatch.rs:2058); `plan_review` also strips verified-orthogonal (dispatch.rs:2015–2020).
+  D11 copies `plan_review`'s set → guards the wrong projection. Define the protected
+  invariant precisely (compare projected phase-source coverage to the code delta it must
+  cover) rather than duplicating `plan_review`'s filter.
+- ~~"D11 absent in checkout"~~ — **FALSE finding, discard.** Design stage; no code yet.
+
+### B. Efficiency / workflow lens (User-requested: ledger as agent file-finder)
+
+Review axis = value/ergonomics + token efficiency, not correctness.
+
+- **★ Provenance convergence (headline).** Neither ledger records the per-phase **landing
+  path** (solo vs funnel). That missing bit is *exactly* what **D11** and **F4** need to be
+  sound (distinguish "solo code, no ledger row = fine" from "funnel phase, ledger row lost
+  = broken"), AND a navigation win (route an agent: funnel phase → `dispatch/NNN` /
+  `review/NNN-NN`; solo → `edge`). **One per-phase provenance field → D11 soundness + F4
+  ownership signal + agent nav.** Strongly consider reshaping D11/F4 around provenance
+  instead of two patches. (Likely the right fix for the pass-5 blockers above.)
+- **Nav-coherence is a real SL-154 value (claim it).** Committed-ref derive-upsert makes
+  the registry and dispatch ledger consistent (pre-slice they diverged) → one authoritative
+  populated registry = one place an agent looks. Frame as ergonomic value, not just
+  correctness.
+- **Storage rule holds; defer a derived nav view.** Registry stores OIDs (source), so nav
+  consumers re-diff. Fine for one consumer; a derived per-phase file-set view (gitignored
+  cache or `slice show --phase-files`) is a **follow-up feature gated on SL-154's reliable
+  population** — backlog it, don't scope-creep.
+- **Halt-message ergonomics (minor).** Name the (bounded) changed paths in the D11/gate
+  bail, not just a count — saves the agent a re-diff.
+
+### Integration plan for the next agent
+1. Reshape D11 around **per-phase landing-path provenance** (resolves both pass-5 blockers
+   + the exclusion-set mismatch + F4 ownership). Decide: provenance field on the boundary
+   row (schema touch — `boundary.rs`, scope-relevant → may become design-target) vs derive
+   provenance from which writer recorded (cheaper, less durable).
+2. Integrate the efficiency findings: add a design §  on the registry's nav/value role;
+   claim nav-coherence; backlog the derived nav view + the F4 hardening.
+3. Re-pass (codex) on the provenance reshape, then /plan.
 
 ## What this slice is
 
