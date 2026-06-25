@@ -108,13 +108,16 @@ high trust) and `docs/claude/hooks.md` + `plugins-reference.md`:
 
 - **Collapse the arms literally.** Success = both arms call one byte-identical
   `fork --worker` core. They differ only in how its arguments arrive: subprocess
-  passes argv; the claude hook reads them from a marker + derives the rest from
-  the payload (the harness owns the spawn, so doctrine cannot pass argv).
+  passes argv; the claude hook reads base from the arming dir's `base` file +
+  derives the rest from the payload (the harness owns the spawn, so doctrine
+  cannot pass argv).
 - **Explicit intent over placement inference.** The orchestrator *arms* a spawn
-  (drops a marker); the hook does not infer "this is a dispatch worker" from
-  placement alone. This is the move away from the fragile placement-implicit base.
-- **Base is explicit, never inferred.** The marker carries B; the hook does not
-  read it from cwd HEAD. cwd only *addresses* the marker.
+  (cd's into the dedicated arming dir); the hook does not infer "this is a
+  dispatch worker" from coord-tree placement alone — it requires the orchestrator
+  to have stepped into the arming dir. Move away from the fragile
+  placement-implicit base.
+- **Base is explicit, never inferred.** The `base` file carries B; the hook does
+  not read it from cwd HEAD. cwd is the *discriminator*, not the base source.
 - **Fail-closed on the dispatch path; robust pass-through off it.**
 
 ## 5. Proposed Design
@@ -122,18 +125,21 @@ high trust) and `docs/claude/hooks.md` + `plugins-reference.md`:
 ### 5.1 System Model
 
 ```
-ORCHESTRATOR (claude session, sole writer, parked Bash cwd = coord tree)
-  │  dispatch arm-spawn --base B        ── writes the cwd-local base marker (§5.3)
+ORCHESTRATOR (claude session, sole writer; default cwd = coord tree root)
+  │  dispatch arm-spawn --base B    ── mkdir <coord>/.doctrine/state/dispatch/spawn/,
+  │                                    write base file there, then cd INTO it (§5.3)
   │  <Agent spawn, isolation:worktree>  ── harness fires WorktreeCreate synchronously
-  ▼
+  ▼                                       (payload cwd = the spawn dir — P3)
 WorktreeCreate HOOK  →  doctrine worktree create-fork           (the new verb, §5.2)
   │  read payload {cwd, name}
   │  resolve coord-tree root = git -C <cwd> --show-toplevel
-  │  marker present at <root>/.doctrine/state/dispatch/pending-spawn ?
-  │   ├─ YES (dispatch): base=marker.B; branch=dispatch/<name>; dir=<root>/.worktrees/<name>
+  │  is <cwd> the arming convention  <root>/.doctrine/state/dispatch/spawn ?
+  │   ├─ YES (dispatch): base=<spawn>/base; branch=dispatch/<name>; dir=<root>/.worktrees/<name>
   │   │        → fork --worker --base B --branch ... --dir ...   (IDENTICAL to subprocess arm)
   │   │        → print dir on stdout ; any failure → non-zero exit (fail-closed)
-  │   └─ NO  (benign):   git worktree add <root>/.worktrees/<name> HEAD → print dir
+  │   └─ NO  (benign, cwd = coord root or anywhere else):
+  │            git worktree add <root>/.worktrees/<name> HEAD + provision (I2) → print dir
+  │  (disarm = orchestrator cd's back to coord root; self-clearing, §5.4)
   ▼
 WORKER subagent runs in the created tree (base-guard, work, return footer)
   ▼
@@ -152,17 +158,23 @@ WorktreeCreate.
 Two thin verbs, both shells over existing pure logic:
 
 **`doctrine dispatch arm-spawn --base <B> [--slice <N>]`** (orchestrator side)
-- Writes / overwrites the cwd-local base marker (§5.3) in the current
-  coordination tree. Persistent; rewritten whenever B advances (per serial
-  phase / per parallel batch). **Not** a one-shot.
-- Sole-writer; serial within the orchestrator's own funnel. Idempotent.
+- Creates the arming dir `<coord>/.doctrine/state/dispatch/spawn/` and writes the
+  base file `<spawn>/base` (`<sha>`, one line). Prints the dir so the orchestrator
+  `cd`s into it before the Agent spawn(s) — **the cwd, not the file's existence,
+  is the discriminator** (§5.3). Idempotent; rewrites `base` when B advances.
+- Sole-writer; serial within the orchestrator's own funnel.
+- **disarm = `cd` back to the coord root** (self-clearing; §5.4). An optional
+  `dispatch disarm` may `rm` the dir, but it is **not** load-bearing: a lingering
+  dir cannot misfire because the trigger is cwd-position, not file-presence.
 
 **`doctrine worktree create-fork`** (hook side; reads stdin payload)
 - Gather → pure-classify → act, mirroring `run_stamp_subagent`:
   1. read stdin → `{cwd, name}` (malformed ⇒ empty ⇒ benign/refuse, never panic);
-  2. resolve coord-tree root from `cwd` (`--show-toplevel`); locate the marker;
+  2. resolve coord-tree root from `cwd` (`--show-toplevel`, canonicalised); test
+     whether `cwd` **is** the arming dir `<root>/.doctrine/state/dispatch/spawn`
+     (both sides realpath'd — symlink-safe); if so read `<cwd>/base`;
   3. **pure classifier** `classify_create(...)` → `Fork{base}` | `Passthrough`
-     (+ named refusals);
+     (+ named refusals) — `Fork` iff cwd is the arming dir **and** `base` parses;
   4. act: `Fork` → `run_fork(base, branch=dispatch/<name>,
      dir=<root>/.worktrees/<name>, worker=true)`; `Passthrough` →
      `git worktree add <root>/.worktrees/<name> HEAD` **then provision via the
@@ -191,22 +203,33 @@ function, exactly as the subprocess arm calls it.
 
 ### 5.3 Data, State & Ownership
 
-**The marker.** Path `<coord-tree>/.doctrine/state/dispatch/pending-spawn`.
-- **Per-coord-tree**, in the coord tree's own runtime state — already gitignored
-  (runtime tier) and already in the ADR-006 D9 **withheld** list, so it is never
-  copied into a worker fork. Cross-slice and parallel-across-slices partition
-  for free (different coord trees ⇒ different files).
-- **Carries only the shared `--base B`** (one minimal line / `base = "<sha>"`).
-  Because file-disjoint parallel phases share B, one persistent value serves a
-  whole parallel batch — **no consume, no rename, no serialization, no per-spawn
-  correlation key.** A parallel batch is N concurrent *reads* of one stable value.
+**The arming signal is the orchestrator's cwd, not a file.** Discrimination is
+**positional**: a spawn is a dispatch worker iff the payload `cwd` *is* the
+arming dir `<coord-tree>/.doctrine/state/dispatch/spawn/`. The orchestrator's
+default cwd is the coord root; it `cd`s into the spawn dir only to issue worker
+spawns. This is why I1 (the false-positive window) closes — see §5.5.
+
+**The arming dir + base file.** `<coord-tree>/.doctrine/state/dispatch/spawn/`,
+containing `base` (`<sha>`, one line — the **only** thing it must carry; no
+encoded branch/dir/correlation, no base64).
+- **Per-coord-tree**, in the coord tree's own runtime state — gitignored (runtime
+  tier) and in the ADR-006 D9 **withheld** list, so never copied into a worker
+  fork. Cross-slice / parallel-across-slices partition for free (different coord
+  trees ⇒ different dirs).
+- The `base` file carries only the **shared `--base B`**. File-disjoint parallel
+  phases share B, so one value serves a whole batch — **no consume, no rename, no
+  serialization, no per-spawn correlation key.** A parallel batch is N concurrent
+  *reads* of one stable value from one cwd.
+- The file's **presence is not the trigger** (cwd-position is), so a lingering
+  `base` from a prior phase is inert — it can only ever be read by a spawn the
+  orchestrator deliberately issued from inside the dir.
 - Owner: the orchestrator (sole writer). The hook only **reads** it.
 
 **Why base shared but branch/dir not** (the crux):
 
 | argv | parallel batch | source |
 |---|---|---|
-| `--base B` | **shared** (all fork the coord tip) | the marker |
+| `--base B` | **shared** (all fork the coord tip) | the `base` file in the arming dir |
 | `--branch` | **distinct** (git: one branch per worktree) | hook-derived `dispatch/<name>` |
 | `--dir` | **distinct** (one path per worktree) | hook-derived `<root>/.worktrees/<name>` |
 
@@ -221,47 +244,51 @@ detached tree); the dispatch-agent post-spawn contract is updated to bind
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-- **Serial drive (default).** arm-spawn at B → spawn → hook forks at B → worker
-  runs → funnel commit advances coord HEAD → arm-spawn at B′ → next spawn. The
-  marker is rewritten each phase; base is explicit so coord-HEAD drift between
-  arm and create is irrelevant.
-- **Parallel batch (file-disjoint).** arm-spawn at B once → issue N spawns; each
-  hook reads the same B, derives its own branch/dir from its own `name`. No
-  serialization of *runs*; creation is naturally independent (distinct
-  branch/dir per `name`).
-- **Benign isolated subagent (any repo).** No marker in the resolved root ⇒
-  pass-through ⇒ a working detached worktree, **not** stamped/forked as a worker.
+- **Serial drive (default).** arm-spawn at B (write `base`, cd into spawn dir) →
+  spawn → hook forks at B → orchestrator cd's back to coord root (disarm) → funnel
+  commit advances coord HEAD → arm-spawn at B′ → next spawn. `base` is rewritten
+  each phase; base is explicit so coord-HEAD drift between arm and create is
+  irrelevant.
+- **Parallel batch (file-disjoint).** arm-spawn at B once, cd into spawn dir →
+  issue N spawns (all carry the spawn-dir cwd) → each hook reads the same B,
+  derives its own branch/dir from its own `name` → cd back. No serialization of
+  *runs*; creation is naturally independent (distinct branch/dir per `name`).
+- **Benign isolated subagent (any repo).** Spawned from the orchestrator's normal
+  cwd (coord root, main, anywhere ≠ the arming dir) ⇒ cwd-position test fails ⇒
+  pass-through ⇒ a working worktree provisioned via the same copier (I2), **not**
+  stamped/forked as a worker.
 - **Cleanup.** Native `git worktree remove` handles teardown (real git
   worktree); the leftover branch is the funnel's import S (benign). No
   WorktreeRemove hook needed (D10).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1.** On the dispatch path the created worker forks **exactly B** (marker
-  value), or the spawn aborts. No silent fallback.
-- **INV-2.** A benign subagent is never stamped/forked as a worker.
+- **INV-1.** On the dispatch path the created worker forks **exactly B** (the
+  `base` file value), or the spawn aborts. No silent fallback.
+- **INV-2.** A benign subagent is never stamped/forked as a worker — held
+  *positionally*: a benign spawn's cwd is not the arming dir (§5.3).
 - **INV-3.** `fork --worker` semantics are identical on both arms (shared fn).
-- **ASM-1.** Payload `cwd` is the orchestrator's parked Bash cwd (the coord
-  tree) — **CONFIRMED, probe P3 (§10)**; the marker is located via it.
+- **ASM-1.** Payload `cwd` is the orchestrator's cwd at spawn time — **CONFIRMED,
+  probe P3 (§10)**; discrimination is positional via it.
 - **ASM-2.** The return footer survives hook-creation — **CONFIRMED, probe P2
-  (§10)**; selects the marker schema (§7 D8 primary).
-- **Edge — stale marker.** A marker left from a prior phase could in principle
-  greet an unrelated `isolation:worktree` subagent spawned from the same coord
-  tree. Mitigations: (a) the orchestrator does not spawn benign subagents from a
-  parked coord tree during a drive; (b) optional cwd cross-check; (c)
-  `verify-worker` is the post-spawn backstop. Residual is low given sole-writer +
-  serial arming.
+  (§10)**; `worktreePath` is the normative datum (I3).
+- **Edge — discrimination false-positive (I1, resolved).** The trigger is the
+  orchestrator's cwd being the arming dir, not a file existing. A benign
+  `isolation:worktree` spawn issued from the orchestrator's normal cwd (coord
+  root) → cwd-position test fails → passthrough. The only residual is a benign
+  spawn issued *while cwd is still the arming dir* — a narrow, self-clearing state
+  (cd-out is the natural next step), versus the old persistent-file window (F4)
+  which lingered for the coord-tree lifetime. `verify-worker` remains the
+  post-spawn backstop. The payload carries no class tag, so this residual is the
+  mechanical floor; positional arming sits at that floor.
 - **Edge — malformed/empty payload.** Fold to a named refusal; fail-closed;
   never panic on hook input (mirrors `run_stamp_subagent`).
 - **Edge — pass-through fail.** A non-zero exit aborts a *benign* subagent's
-  creation (RSK-1). The pass-through must be robust; `.worktreeinclude` fidelity
-  is the known gap (OQ-2).
-- **Edge — persistent-marker window (F4).** The bare-base marker is persistent
-  (rewritten per phase, not consumed), so it sits in the coord tree between
-  phases — a wider benign false-positive window than a consumed marker. Bounded
-  by coord-tree lifetime (removed at `dispatch sync`); an optional `dispatch
-  disarm` (clear the marker at drive end) tightens it. The no-consume win (no
-  serialization, parallel-clean) is judged worth this bounded window.
+  creation (RSK-1). The pass-through must be robust and provision via the same
+  copier (I2); `.worktreeinclude` parity is required, not deferred.
+- **Edge — F4 (persistent-marker window) — DISSOLVED.** Superseded by positional
+  arming: there is no persistent on-disk discriminator, so no lingering
+  false-positive window. A leftover `base` file is inert (§5.3).
 - **Edge — re-dispatch leak (F5).** A retried worker gets a fresh `name` ⇒ new
   `dispatch/<name>` branch + `.worktrees/<name>` dir; native remove drops the
   tree but leaves the branch (D10), so branches accumulate across retries. Prune
@@ -281,11 +308,11 @@ sequenced so these resolve **before** the dependent schema/emission locks.
 - **P3 — payload cwd identity (run FIRST; foundational, F1). RESOLVED ✓ (PASS,
   §10).** Payload `cwd` is the orchestrator's parked Bash cwd (the coord tree),
   not the session root — `cd` shifts it and the harness persists it across tool
-  calls. The marker-location seam (§5.3) holds; D3 stands.
+  calls. Positional arming (§5.3, D3) keys off it; D3 stands.
 - **P2 — footer survival. RESOLVED ✓ (PRESENT, §10).** The harness emits
   `worktreePath:` in the Agent return footer even when the hook created the
-  worktree. D8 **primary** selected (bare-base marker; orchestrator reads the
-  worker location from the footer; no serialization).
+  worktree. D8 **primary** selected (orchestrator reads the worker location from
+  the footer, derives branch from it (I3); no serialization).
 - **P1 (was OQ-5) — plugin-hook parity.** Does a `WorktreeCreate` hook in plugin
   `hooks/hooks.json` fire identically to the settings-block form? *Gates only
   the secondary plugin step.* Expected yes; verify before relying.
@@ -314,28 +341,37 @@ sequenced so these resolve **before** the dependent schema/emission locks.
     rejected — breaks the collapse hypothesis (arms no longer share `fork
     --worker`).
 
-- **D3 — Handshake: cwd-local marker carrying ONLY the shared base; branch/dir
-  hook-derived from `name`.** Rationale: base is the *only* shared argv across a
-  parallel batch; deriving the distinct argv from the harness-unique `name`
-  collapses the marker to one persistent value ⇒ no consume / serialization /
-  correlation key. The unobtainable per-spawn key is exactly what the hook
-  derives uniqueness from.
-  - *Alt — global `.doctrine/state/` marker:* rejected — cross-slice + parallel
-    contention on one shared path.
-  - *Alt — serialized single-entry triple (orchestrator pre-chooses branch/dir,
-    creation serializes):* the **P2-fails fallback** (D8), not primary.
-  - *Alt — pure cwd-discrimination, no marker (infer dispatch from "cwd is an
-    active coord tree"):* rejected — placement-implicit (regresses the slice
-    thesis) and risks a benign false-positive.
-  - *Alt — base derived by the hook from cwd HEAD:* rejected — fragile vs drift
-    and regresses toward implicit base; base stays explicit in the marker.
+- **D3 — Handshake: positional arming via a dedicated cwd; the arming dir carries
+  ONLY the shared base; branch/dir hook-derived from `name`.** The orchestrator
+  `cd`s into `<coord>/.doctrine/state/dispatch/spawn/` (holding `base`) before a
+  worker spawn; the hook keys off payload `cwd` *being* that dir. Rationale: P3
+  proved payload `cwd` is the orchestrator's cwd, so cwd is a per-spawn,
+  transient, orchestrator-controlled channel. Base is the only shared argv; the
+  distinct argv come from the harness-unique `name`. One stable `base` value
+  serves a whole batch ⇒ no consume / serialization / correlation key.
+  - *Alt — presence-marker (a `pending-spawn` file at the coord root triggers
+    dispatch):* rejected (was the prior D3) — a persistent file is a lingering
+    false-positive window (F4) and discriminates only by existence, the I1
+    blocker. Positional arming moves the trigger to transient cwd-position.
+  - *Alt — pure cwd-discrimination on "cwd is an active coord tree":* rejected —
+    placement-implicit (regresses the slice thesis) and benign-false-positive
+    prone. Here cwd is a *dedicated* dir the orchestrator only enters to dispatch,
+    not the coord tree at large.
+  - *Alt — encode base (and more) into the dir name / a base64 cwd blob:*
+    rejected — the dir carries only what it must; base lives in a `base` file,
+    nothing else encoded into the path.
+  - *Alt — base derived by the hook from cwd HEAD:* rejected — fragile vs drift;
+    base stays explicit in the `base` file.
 
-- **D4 — Discrimination = marker present (explicit intent) vs absent (benign
-  pass-through).** Keeps benign subagents safe and makes arming an explicit act.
+- **D4 — Discrimination = payload `cwd` IS the arming dir (positional) vs anything
+  else (benign pass-through).** The orchestrator's default cwd is the coord root;
+  it steps into the arming dir only to spawn workers, so arming is an explicit,
+  self-clearing act (cd-out disarms). Closes I1's false-positive window to the
+  mechanical floor (§5.5).
 
-- **D5 — Base explicit in the marker; cwd only addresses the marker.** Strictly
-  more robust than today's placement-implicit base (immune to coord-HEAD drift
-  between arm and create).
+- **D5 — Base explicit in the `base` file; cwd is the discriminator, not the base
+  source.** Strictly more robust than placement-implicit base (immune to
+  coord-HEAD drift between arm and create); the file carries base only.
 
 - **D6 — Two thin verbs (`dispatch arm-spawn`, `worktree create-fork`), pure
   classifier `classify_create` mirroring `classify_stamp`.** Honors the
@@ -349,13 +385,13 @@ sequenced so these resolve **before** the dependent schema/emission locks.
   settings block when it adds the plugin form (double-wiring ⇒ double creation).
   Droppable if it threatens the primary (RSK-2).
 
-- **D8 — P2 fork in the marker schema.** *P2 holds:* marker = bare base;
-  branch/dir from `name`; orchestrator reads them from the footer (primary,
-  parallel-clean, no serialization). *P2 fails:* orchestrator pre-chooses
-  branch/dir, marker carries the full triple, creation serializes (arm → spawn →
-  hook consumes synchronously → arm next; runs still parallel). Same
-  `create-fork` verb and `fork --worker` core; differ only in marker payload +
-  whether creation serializes.
+- **D8 — Footer-read worker location (P2 holds → primary selected).** The arming
+  dir carries only `base`; branch/dir derive from `name`; the orchestrator learns
+  the worker location from the return footer's **`worktreePath`** (P2 PASS),
+  deriving `name = basename` and `branch = dispatch/<name>` (I3) — parallel-clean,
+  no serialization. *Retired fallback (P2 had failed):* orchestrator pre-chooses
+  branch/dir, the arming dir carries the full triple, creation serializes. Moot —
+  P2 holds.
 
 - **D9 — Pass-through = `git worktree add <root>/.worktrees/<name> HEAD`
   (detached) + provision via the same copier (I2).** Because the hook *replaces*
@@ -380,11 +416,12 @@ sequenced so these resolve **before** the dependent schema/emission locks.
 - **RSK-2 (plugin-idiom scope creep).** The secondary can swallow the slice.
   *Mitigation:* primary is achievable with zero plugin work; the plugin step is
   additive, gated on P1, and droppable.
-- **RSK-3 (stale-marker hijack).** §5.5 edge — low residual under sole-writer +
-  serial arming; optional cwd cross-check; `verify-worker` backstop.
-- **RSK-4 (P2 fails).** Footer absent ⇒ orchestrator cannot learn hook-derived
-  branch/dir. *Mitigation:* D8 fallback (pre-chosen triple + serialized
-  creation) — designed, not improvised.
+- **RSK-3 (false-positive hijack) — largely retired by positional arming (I1).**
+  No persistent on-disk trigger; residual = a benign spawn issued while cwd is the
+  arming dir (mechanical floor). *Mitigations:* self-clearing cd-out; canonicalised
+  cwd-position test; `verify-worker` backstop.
+- **RSK-4 (P2 fails) — retired.** P2 holds (§10); `worktreePath` is present and
+  normative (I3). The serialized fallback is moot.
 
 ## 9. Quality Engineering & Validation
 
@@ -398,9 +435,9 @@ Verification / closure intent (TDD red/green/refactor; pure core + golden tokens
 - **VT — fail-closed.** Hook failure aborts the spawn (non-zero exit); no silent
   fallback.
 - **VT — pure classifier.** `classify_create` returns `Fork{base}` /
-  `Passthrough` / named refusals for the matrix (marker present/absent, cwd
-  resolves/not, name present/empty); goldens assert the distinct tokens, not a
-  proxy.
+  `Passthrough` / named refusals for the matrix (cwd is/isn't the arming dir,
+  `base` file present/parses/absent, cwd resolves/not, name valid/empty/unsafe);
+  goldens assert the distinct tokens, not a proxy.
 - **VT — behaviour preservation.** Existing dispatch suites + the subprocess arm
   stay green unchanged; `doctrine install` emits the hook.
 - **VT — stamp retirement (F7).** `doctrine install` (claude arm) **no longer
@@ -483,13 +520,16 @@ doctrinal defects, not polish. Both factual premises verified in-repo
 `verify-worker`/funnel). Dispositions:
 
 - **I1 (BLOCKER) — discrimination false-positive (D4/§5.5/INV-2/RSK-3).** The
-  persistent base-only marker makes any `isolation:worktree` spawn from the
-  parked coord tree indistinguishable from a worker ⇒ force-forked + marked.
-  "Orchestrator doesn't spawn benign subagents while parked" is *discipline, not
-  mechanism*; `dispatch disarm` is therefore load-bearing, not optional. INV-2 is
-  unproven. **ACCEPTED — needs a design decision** on the discrimination
-  mechanism (open; see below). The base-only-persistent schema (D3/D5/§5.3) is
-  NOT lockable until this resolves.
+  *persistent base-only marker* made any `isolation:worktree` spawn from the
+  parked coord tree indistinguishable from a worker. **RESOLVED — positional
+  arming (D3/D4 rewritten).** The discriminator is now payload `cwd` *being* the
+  dedicated arming dir, not a file existing: a benign spawn from the
+  orchestrator's normal cwd (coord root) passes through; arming is a transient,
+  self-clearing cd-in/cd-out act (no load-bearing `disarm`). F4 dissolves; INV-2
+  holds positionally. Residual = a benign spawn issued *while* cwd is the arming
+  dir — the mechanical floor (payload has no class tag), far narrower than the old
+  lingering-file window; `verify-worker` backstops. *(Origin: the cwd-as-channel
+  hack — a direct application of the P3 result.)*
 - **I2 (BLOCKER) — benign pass-through provisioning regression (D9/RSK-1).**
   `.worktreeinclude` carries `.doctrine/doctrine.just`, `web/map/dist/**`; the
   benign path `git worktree add … HEAD` skips it (hooks bypass `.worktreeinclude`
@@ -524,24 +564,15 @@ doctrinal defects, not polish. Both factual premises verified in-repo
   for subdir / sibling / nested / jail); ADR-006 "sole writer" (holds *iff* I1's
   window is closed).
 
-### Open decision (gates the lock) — I1 discrimination mechanism
+### I1 decision (RESOLVED 2026-06-25) — positional arming via cwd
 
-The base-only-persistent marker (D3/D5) is parallel-clean but discriminates only
-by presence, so it cannot mechanically distinguish a worker spawn from a benign
-`isolation:worktree` spawn issued while the coord tree is armed. Candidate fixes
-(decision pending):
-
-1. **Mandatory disarm bracket.** `arm-spawn` opens, `disarm` closes (mandatory,
-   not optional); the dispatch skill guarantees no benign isolated spawns inside
-   the bracket; VT + `verify-worker` backstop. Cheapest; keeps the schema; still
-   partly disciplinary (reviewer's core objection survives, mitigated).
-2. **Credit-token directory.** Marker is a dir of N single-use tokens (one per
-   expected spawn); each hook atomically claims one (`O_EXCL`/rename); empty ⇒
-   passthrough. Mechanical, race-free under parallel, parallel-clean; bounds the
-   window to exactly the armed batch. More machinery; hook consumes (still
-   orchestrator-owned set).
-3. **One-shot consume + serialize** = the old D8 fallback. Simplest discriminator
-   but serialises creation; loses the parallel-clean win.
+Decided with the User: **positional arming** (the cwd-as-channel hack), base-in-a
+`base`-file (the dir carries only base — nothing encoded into the path). Rejected
+alternatives considered: mandatory disarm bracket (still disciplinary), credit-
+token directory (machinery for a residual it can't fully close), one-shot
+serialize (loses parallel-clean). Positional arming sits at the mechanical floor
+with the simplest schema and a self-clearing disarm. Folded into §5.1–5.5,
+D3/D4/D5/D8; F4 dissolved.
 
 ### Pre-plan checks (carry into /plan)
 
@@ -552,9 +583,10 @@ by presence, so it cannot mechanically distinguish a worker spawn from a benign
 3. Confirm `.worktrees/` is (or will be) gitignored in the coord tree so the
    nested worker worktree does not pollute the coord working set.
 
-### Load-bearing risk
+### Lock status
 
-The design leaned on three live-harness probes; **P3 (the spine) and P2 are now
-resolved (above)** — payload `cwd` is the parked coord tree and the footer
-survives, so the marker schema (D8 primary) is committable. Only **P1**
-(plugin-hook parity) remains, and it gates the secondary plugin step alone.
+P3 + P2 resolved (probes); I1 resolved (positional arming); I2–I5 absorbed.
+The schema (positional arming, `base`-file, footer-read, D8 primary) is settled.
+Remaining before `/plan` leans on them: the three pre-plan checks above (F3/I5
+e2e, `arm-spawn` base-B source, `.worktrees/` gitignore). **P1** (plugin-hook
+parity) gates only the secondary plugin step. No open design forks.
