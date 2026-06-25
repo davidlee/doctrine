@@ -168,6 +168,8 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
                 // Read-only authored roster (design §5.3).
                 SpecReqCommand::List { .. } => Read,
             },
+            SpecCommand::Interactions { .. } => Write("spec interactions"),
+            SpecCommand::Edit { .. } => Write("spec edit"),
             SpecCommand::List { .. }
             | SpecCommand::Show { .. }
             | SpecCommand::Validate { .. }
