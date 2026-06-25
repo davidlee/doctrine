@@ -25,9 +25,10 @@ conformance = "leaf"        # out=0: path-conformance set algebra — pure (SL-1
 contentset = "leaf"         # out=0: content set wrapper — pure library
 dep_seq = "leaf"            # out=0: dependency-sequence data types — pure
 dispatch_config = "leaf"    # out=0: dispatch config defaults — pure
-dtoml = "leaf"              # → estimate, value, conduct, dispatch_config, verify; verify→coverage is engine but dtoml is a TOML wrapper (pure seam); baselined below
+dtoml = "leaf"              # → estimate, value, conduct, dispatch_config, install_config, verify; verify→coverage is engine but dtoml is a TOML wrapper (pure seam); baselined below
 estimate = "leaf"           # out=0: estimate facet types — pure
-facet = "leaf"              # → estimate, value, risk: EntityFacets aggregation — pure data, imports only leaf facet types
+install_config = "leaf"     # out=0: [install] config defaults — pure (SL-152 PHASE-06)
+facet = "leaf"   # → estimate, value, risk: EntityFacets aggregation — pure data, imports only leaf facet types
 facet_write = "leaf"        # → fsutil (SL-113): shared facet read→mutate→write core — std+leaf only
 fsutil = "leaf"             # out=0: filesystem utility — impure seam, no domain
 git = "leaf"                # out=0: git ops — impure seam, no domain

@@ -31,6 +31,7 @@ mod globmatch;
 mod governance;
 mod input;
 mod install;
+mod install_config;
 mod integrity;
 mod kinds;
 mod knowledge;

@@ -52,21 +52,45 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
   bumped 82→100 (e2e_skills_dispatch_shrinkage.rs). VA-1 PASS (codex GPT-5.5: EX-1/
   EX-2/VA-1, no contradictions). Installer verb is now `doctrine install -s <skill>
   -y` (SL-088 consolidation; the skill-refresh memory is stale on the verb name).
-- **PHASE-06 plugin-form LIVE PASS** (2026-06-25, restart-test, real plugin not
+- **PHASE-06 plugin-form LIVE PASS** (2026-06-25, real committed plugin, not the
   P1 scratch-probe) — `plugins/doctrine/hooks/hooks.json` carries BOTH hooks, bare
-  `doctrine` (PATH form), project scope; `settings.local.json` hooks emptied (mutual
-  exclusion, D7). On `clear`-restart: SessionStart `doctrine boot` wrote `boot.md`,
-  BOOT-SENTINEL present ⇒ **SessionStart parity green**. One benign `isolation:worktree`
-  Agent spawn ⇒ WorktreeCreate `doctrine worktree create-fork` fired: footer
-  `worktreePath:…/.worktrees/agent-a1806b…`, tree `(detached HEAD)` at edge tip,
-  unmarked, `.doctrine/` fully provisioned ⇒ **benign-spawn discrimination + sole-copier
-  green** (correct per create-fork's positional contract — NOT a bug; native Claude would
-  land in `.claude/worktrees/` w/ a named branch). Probe worktree removed.
-  **Plugin form ≡ retired settings blocks.** STILL OUTSTANDING for PHASE-06 proper:
-  install wiring (plugin distribution via marketplace.json, keep `install_claude_hook`
-  as fallback), VT-1 install golden + RustEmbed re-embed, and a **scope amendment**
-  (boot-migration + SubagentStart-drop exceed authored EX-1/EX-2 WorktreeCreate-only —
-  append design/plan delta, do NOT expand silently).
+  `doctrine` (PATH form), project scope; plugin `doctrine@doctrine-edge` enabled.
+  Plugin firing PROVEN: `~/.claude.json` `pluginUsage.doctrine@doctrine-edge`
+  `lastUsedNumStartups == numStartups == 495` (this session). On `clear`-restart:
+  SessionStart `doctrine boot` wrote `boot.md`, BOOT-SENTINEL present ⇒ **boot parity
+  green**. One benign `isolation:worktree` Agent spawn ⇒ WorktreeCreate `doctrine
+  worktree create-fork` fired: footer `worktreePath:…/.worktrees/agent-a1806b…`, tree
+  `(detached HEAD)` at edge tip, unmarked, `.doctrine/` fully provisioned ⇒
+  **benign-spawn discrimination + sole-copier green** (correct per create-fork's
+  positional contract — native Claude would land in `.claude/worktrees/` w/ a named
+  branch). Probe worktree removed. **Plugin form ≡ retired settings blocks.**
+  - **LIVE EX-4 BUG WITNESSED:** a mid-session `doctrine install` (run to refresh
+    skills for a background pi dispatch) re-added the absolute-path settings-block
+    hooks ON TOP of the plugin ⇒ momentary **double-wiring** of SessionStart+
+    WorktreeCreate. Removed the settings `hooks` block by hand (kept MCP/permissions/
+    baseRef). This is precisely the mutual-exclusion (EX-1/EX-3) that EX-4 must fix:
+    `run_install` (skills.rs:1071-1079) unconditionally re-wires create-fork into
+    settings even when the plugin already carries it.
+  - **EX-4 DONE** (2026-06-26): `doctrine install` (Claude) STOPS wiring boot +
+    create-fork into settings; instead PRINTS plugin-install instructions
+    (`/plugin marketplace add <repo>` + `/plugin install doctrine@doctrine`), repo from
+    new `[install] repo` doctrine.toml key (default `davidlee/doctrine`, leaf module
+    `src/install_config.rs` — ADR-001: dtoml is leaf, can't import command-tier install).
+    Non-Claude prints `npx skills add <repo> --agent universal -y`. `install_refresh`
+    Claude arm sets `hook = None` (boot no longer settings-wired — also affects `doctrine
+    boot install`, accepted); baseRef/mcp/skills/agent-def/boot-import UNCHANGED.
+    `HookSpec::boot`/`create_fork` + `install_claude_hook` retained as fallback
+    (`expect(dead_code)`, test-only callers). Pure `install::post_install_instructions`
+    builder (DRY — skills.rs reuses it). **VT-2 GREEN** (e2e_claude_install: settings has
+    NO SessionStart/WorktreeCreate/SubagentStart, instructions printed). Both marketplace
+    manifests retained (`.claude-plugin/` = Claude, `plugins/` = codex/universal).
+  - **Verification footgun (durable):** the shared `CARGO_TARGET_DIR` jail flip-flopped
+    the install BINARY stale↔fresh while the background pi dispatch built concurrently
+    → false-GREEN then false-RED on `e2e_claude_install`. Pure-fn unit tests stayed honest
+    (compiled in-suite). Definitive verification = isolated `CARGO_TARGET_DIR=/tmp/...`.
+    `just gate` flaked RED on this; isolated run + isolated `clippy --workspace` both clean.
+  - REMAINING follow-up (separate slice, RSK-2): marketplace auto-register /
+    `enabledPlugins` automation — NOT in SL-152.
 - **PHASE-04 `completed`** — VT-1..4 automated + green; **VA-1 PASS live** (2.1.181,
   jail binary): real `Agent isolation:worktree` from the armed cwd → hook created
   `.worktrees/agent-<hex>` at base B, `dispatch/<name>` branch, worker-marked (F7);
