@@ -403,11 +403,11 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::TypedVerbOnly,
     },
     RelationRule {
-        sources: &[SPEC],
+        sources: &[SPEC, PRD],
         label: RelationLabel::Parent,
         role: None,
         inbound_name: "parent",
-        target: TargetSpec::Kinds(&[SPEC]),
+        target: TargetSpec::Kinds(&[SPEC, PRD]),
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
     },

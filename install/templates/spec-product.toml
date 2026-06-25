@@ -7,3 +7,4 @@ title = {{title}}
 status = "draft"
 kind = "product"
 tags = []
+# parent = "PRD-NNN"   # decomposition parent (product→product)

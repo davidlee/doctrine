@@ -4,6 +4,7 @@ title   = {{title}}
 status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
 approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
 updated = "{{date}}"
+tags    = []
 
 # A Revision (REV, ADR-013) is a first-class change-axis entity: a pending
 # revise-intent against authored governance/spec truth plus a staged delta payload.
