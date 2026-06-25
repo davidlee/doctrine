@@ -42,12 +42,12 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "classify_create is a pure fn (no I/O, env, clock, rng): Fork{base} when cwd==arming dir and base parses; Passthrough when cwd != arming dir; distinct named refusal tokens for (cwd==arming dir but base absent/unparseable) and (name fails sanitise)." },
-  { id = "EX-2", text = "name sanitiser maps payload name -> canonical ref+path-safe slug; rejects empty / whitespace / '/' / '..' / ref-invalid chars with a named token; accepts the observed agent-<hex> shape." },
+  { id = "EX-2", text = "name sanitiser maps payload name -> canonical ref+path-safe slug; rejects empty / whitespace / '/' / '..' / ref-invalid chars with a named token; accepts BOTH observed forms — agent-<hex> (P3, tool spawns) and the moby word-word-hex slug (hooks.md:2419, user/--worktree spawns)." },
   { id = "EX-3", text = "just gate clean (clippy zero warnings); no new impurity introduced into the pure layer." },
 ]
 verification = [
   { id = "VT-1", expects = "classifier matrix goldens over (cwd is/isn't arming dir) x (base present/parses/absent) x (name valid/empty/unsafe) assert the DISTINCT refusal tokens, not a proxy boolean." },
-  { id = "VT-2", expects = "name-sanitiser accept/reject table: agent-<hex> accepted (round-trips to a stable slug); space, '/', '..', empty, ref-invalid each rejected with its named token." },
+  { id = "VT-2", expects = "name-sanitiser accept/reject table: agent-<hex> AND word-word-hex both accepted (round-trip to a stable slug); space, '/', '..', empty, ref-invalid each rejected with its named token." },
 ]
 specs        = []
 requirements = []
@@ -56,33 +56,50 @@ requirements = []
 id        = "PHASE-02"
 name      = "worktree create-fork — imperative shell + CLI wiring"
 objective = """
-The hook-side verb `doctrine worktree create-fork` (design §5.2, §5.1; D1/D9;
-I2/I5). Gather -> classify -> act, mirroring `run_stamp_subagent`
-(subagent.rs:162): read stdin payload `{cwd, name}` (malformed => empty => named
-refusal, never panic); resolve `root = git -C <payload.cwd> --show-toplevel`
-canonicalised and pass it EXPLICITLY into the core (I5 — never process cwd); test
-whether cwd IS `<root>/.doctrine/state/dispatch/spawn` (both realpath'd); call the
-PHASE-01 classifier; act — `Fork` => `run_fork(base, branch=dispatch/<name>,
-dir=<root>/.worktrees/<name>, worker=true)`; `Passthrough` =>
+The hook-side verb `doctrine worktree create-fork` (design §5.2, §5.1; D1/D9/D11;
+I2/I5). Gather -> classify -> act, mirroring the SHAPE of `run_stamp_subagent`
+(subagent.rs:162) but NOT its root resolution: read stdin payload `{cwd, name}`
+(serde Default + serde(default), malformed => empty => named refusal, never panic);
+resolve `root = git -C <payload.cwd> --show-toplevel` canonicalised and pass it
+EXPLICITLY into the core (I5). G2: this DIFFERS from run_stamp_subagent's
+`primary_worktree(cwd)` — the stamp fires inside the fork, create-fork fires in the
+parent (the arming dir) before the fork exists, so --show-toplevel of payload cwd
+is the coord tree (the correct source). Test whether cwd IS
+`<root>/.doctrine/state/dispatch/spawn` (both realpath'd); call the PHASE-01
+classifier; act — `Fork` => the add+provision+mark core at base, branch=dispatch/<name>,
+dir=<root>/.worktrees/<name>, worker=true; `Passthrough` =>
 `git worktree add <root>/.worktrees/<name> HEAD` (detached) THEN provision via the
-SAME copier `run_fork` uses (`run_provision`, replicating `.worktreeinclude` — I2);
-live-ref collision check on `name` (reject a name colliding with a live
-`dispatch/<name>` / `.worktrees/<name>`); print the created absolute path on
-stdout; ANY failure => non-zero exit (fail-closed). Wire `WorktreeCommand::CreateFork`
-in worktree/mod.rs and guard-class it Orchestrator. `fork --worker` is UNCHANGED —
-create-fork is a new caller. Removing the now-live `#![expect(unused)]` lids on
-fork.rs / provision.rs as their functions become consumed (no genuine-unused left).
+SAME copier (`run_provision`, replicating `.worktreeinclude` — I2). G3: the
+pass-through COMPENSATES on failure (reuse `remove_worktree_dir`) before the
+fail-closed exit, so an abort never leaks a half-created benign tree. Live-ref
+collision check on `name` (reject a name colliding with a live `dispatch/<name>` /
+`.worktrees/<name>`). G1/D11: print the created absolute path — and ONLY that — on
+stdout; route everything else to stderr; the core must NOT emit `run_fork`'s
+`CARGO_TARGET_DIR=` env contract to create-fork's stdout (split the add+provision+mark
+core from the CLI env-contract emission, OR subprocess `fork --worker` and discard
+its stdout — D11 prefers the split). ANY failure => non-zero exit (fail-closed).
+Wire `WorktreeCommand::CreateFork` in worktree/mod.rs and guard-class it Orchestrator
+(G8: safe — the hook fires with process cwd in the markerless coord tree, so the
+worker_guard resolves non-worker mode; a spawn from inside a marked fork is refused
+fail-closed, acceptable as dispatch-workers carry no Agent tool). The creation
+core's behaviour stays byte-identical (D1). Reconcile the now-stale create-fork
+comments (subagent.rs:137-139 "DROPPED"; fork.rs:51-52 cleanup-sharing) as the verb
+revives. Reconcile the `#![expect(unused)]` lids on fork.rs/provision.rs as their
+functions become consumed.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 classifier + sanitiser green." },
   { id = "EN-2", text = "fork --worker / run_provision confirmed live and CLI-wired (F3)." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "doctrine worktree create-fork reads stdin {cwd,name}; on an arming-dir cwd it forks at the base-file sha via run_fork (worker marker stamped inside the fork) and prints the created absolute path." },
+  { id = "EX-1", text = "doctrine worktree create-fork reads stdin {cwd,name}; on an arming-dir cwd it forks at the base-file sha via the add+provision+mark core (worker marker stamped inside the fork) and prints the created absolute path." },
   { id = "EX-2", text = "benign cwd => git worktree add <root>/.worktrees/<name> HEAD then provision via the same copier; the tree contains the .worktreeinclude files (.doctrine/doctrine.just, web/map/dist/**) and is NOT worker-marked (I2)." },
-  { id = "EX-3", text = "root is ALWAYS resolved from payload cwd via --show-toplevel and passed explicitly into run_fork/run_provision; provision source == coord tree, never the fresh fork (I5)." },
+  { id = "EX-3", text = "root is ALWAYS resolved from payload cwd via --show-toplevel and passed explicitly into the core (I5) — NOT primary_worktree(cwd) (G2); provision source == coord tree, never the fresh fork." },
   { id = "EX-4", text = "any failure => non-zero exit (fail-closed); malformed/empty payload => named refusal, no panic; live-ref name collision => named refusal." },
   { id = "EX-5", text = "the #![expect(unused)] lids on fork.rs/provision.rs are reconciled as their functions become live — removed if fully consumed, narrowed if any helper stays unused; NO unfulfilled-expectation warning; just gate clean (clippy zero warnings, bins/lib only)." },
+  { id = "EX-6", text = "stdout carries the created absolute path and NOTHING else (G1/D11) — run_fork's CARGO_TARGET_DIR= env contract does not reach create-fork's stdout (core split from CLI emission, or subprocess-and-discard); diagnostics on stderr." },
+  { id = "EX-7", text = "the benign pass-through compensates on failure (reuse remove_worktree_dir) before the fail-closed exit, leaving no half-created tree (G3)." },
+  { id = "EX-8", text = "stale create-fork comments reconciled (subagent.rs:137-139 DROPPED, fork.rs:51-52 cleanup-sharing); they no longer assert create-fork is dropped (G6)." },
 ]
 verification = [
   { id = "VT-1", expects = "base==B: create-fork on an arming-dir payload forks EXACTLY the base-file sha even with HEAD moved between arm and create (base explicit, drift-immune)." },
@@ -90,7 +107,9 @@ verification = [
   { id = "VT-3", expects = "benign pass-through + provisioning parity (I2): a benign payload yields a working tree containing the .worktreeinclude files and NO worker marker." },
   { id = "VT-4", expects = "fail-closed: unresolvable root / failed fork => non-zero exit; malformed/empty payload => named refusal token (no panic)." },
   { id = "VT-5", expects = "name collision: a payload name colliding with a live dispatch/<name> or .worktrees/<name> => named refusal." },
-  { id = "VT-6", expects = "behaviour preservation: existing fork / provision / subagent suites stay green unchanged (shared machinery)." },
+  { id = "VT-6", expects = "behaviour preservation: existing fork / provision / subagent suites stay green unchanged (shared machinery); the subprocess arm's fork stdout env contract is unchanged." },
+  { id = "VT-7", expects = "stdout discipline (G1): on a successful Fork AND a successful Passthrough, create-fork's stdout is EXACTLY the worktree path (one line, no KEY=value contract)." },
+  { id = "VT-8", expects = "pass-through compensation (G3): a forced provision failure on the benign path leaves NO worktree dir / registration behind, and exits non-zero." },
 ]
 specs        = []
 requirements = []
@@ -131,22 +150,27 @@ name      = "install emission + SubagentStart stamp retirement"
 objective = """
 Wire `doctrine install` (claude arm) to EMIT the WorktreeCreate hook invoking
 `doctrine worktree create-fork` into `.claude/settings.local.json` via the proven
-HookSpec / install_claude_hook machinery (boot.rs:938 / :1552 / :1197) — D7
-PRIMARY (settings-block form; no plugin work). In the same step RETIRE the
-SL-123 SubagentStart `dispatch-worker` stamp hook on the claude arm (D2/R1): once
-create-fork provisions+marks atomically inside WorktreeCreate, the stamp is
-redundant (would hit already-marked every dispatch) and fires too late to feed
-base selection. The `verify-worker` post-run belt STAYS as the backstop. This is
-the phase where the headline H1 path is exercised end-to-end at the CLI level
-(arm-spawn -> spawn payload -> create-fork) — the live-harness confirmation is a
-you-run-it agent/human check.
+HookSpec / install_claude_hook machinery — a new `HookSpec` constructor with
+`event: "WorktreeCreate"` (the event is a free &'static str, no enum to extend;
+G5). NB: WorktreeCreate has no matcher support (hooks.md:237), so the spec's
+matcher is cosmetic/ignored — set it for entry-identity in the merge core only.
+D7 PRIMARY (settings-block form; no plugin work). In the SAME step RETIRE the
+SL-123 SubagentStart `dispatch-worker` stamp hook on the claude arm (D2/R1) at BOTH
+emission sites — `src/skills.rs:1056-1077` and `src/install.rs:366-385` (gated
+!args.global + Claude target; G4) — since create-fork provisions+marks atomically
+inside WorktreeCreate (the stamp would hit already-marked every dispatch and fires
+too late to feed base selection). The `verify-worker` post-run belt STAYS as the
+backstop; the `worktree.baseRef="head"` baseref step (install_refresh / plan_baseref)
+is left as the belt it already is. Exercise the headline H1 path end-to-end at the
+CLI level (arm-spawn -> spawn payload -> create-fork); the live-harness confirmation
+is a you-run-it agent check.
 """
 entrance_criteria = [
   { id = "EN-1", text = "create-fork verb shipped and green (PHASE-02); arm-spawn shipped (PHASE-03)." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "doctrine install writes a WorktreeCreate hook entry invoking doctrine worktree create-fork into settings.local.json (D7 primary)." },
-  { id = "EX-2", text = "install no longer emits the SubagentStart matcher:dispatch-worker stamp hook on the claude arm (D2); verify-worker emission is retained." },
+  { id = "EX-1", text = "doctrine install writes a WorktreeCreate hook entry (new HookSpec ctor, event WorktreeCreate) invoking doctrine worktree create-fork into settings.local.json (D7 primary)." },
+  { id = "EX-2", text = "install no longer emits the SubagentStart matcher:dispatch-worker stamp hook on the claude arm at EITHER site (skills.rs:1056-1077, install.rs:366-385; G4); verify-worker emission and the baseRef belt are retained." },
   { id = "EX-3", text = "a worker created through create-fork is still marked (provision + write_marker ran inside the fork) — the worker-marker invariant holds via the new seam, not the retired one (F7)." },
 ]
 verification = [
@@ -177,8 +201,8 @@ entrance_criteria = [
   { id = "EN-1", text = "the mechanism (create-fork, arm-spawn, install) is shipped and green." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "SKILL.md instructs: arm-spawn + cd-in before spawn, cd-back after; post-spawn derive name/branch from worktreePath and bind verify-worker to the derived branch." },
-  { id = "EX-2", text = "no remaining instruction to rely on the cwd-placement-implicit base or on the footer's worktreeBranch field." },
+  { id = "EX-1", text = "BOTH SKILL copies (.agents/skills/dispatch-agent/SKILL.md AND plugins/doctrine/skills/dispatch-agent/SKILL.md — post-spawn block is byte-identical) instruct: arm-spawn + cd-in before spawn, cd-back after; post-spawn derive name/branch from worktreePath and bind verify-worker to the derived branch." },
+  { id = "EX-2", text = "neither copy retains an instruction to rely on the cwd-placement-implicit base or on the footer's worktreeBranch field." },
 ]
 verification = [
   { id = "VA-1", expects = "skill review confirms the post-spawn contract derives branch from worktreePath, documents the arm/cd-back bracket, and no longer reads worktreeBranch." },
