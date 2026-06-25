@@ -1,6 +1,6 @@
 ---
 name: dispatch-agent
-description: The claude arm of `/dispatch` — spawn a worker via the `Agent` tool using the dispatch-worker subagent type with worktree isolation. Base==B by placement (cd into the coordination tree before spawn). Reached only from the `/dispatch` router on a claude↔env-marker agreement; do not invoke directly.
+description: The claude arm of `/dispatch` — spawn a worker via the `Agent` tool using the dispatch-worker subagent type with worktree isolation. Base is explicit — `dispatch arm-spawn --base B` writes the base file, then cd into the spawn dir before the Agent spawn so the WorktreeCreate hook forks at B. Reached only from the `/dispatch` router on a claude↔env-marker agreement; do not invoke directly.
 ---
 
 # Dispatch — claude arm
@@ -9,31 +9,43 @@ Spawn a worker via the `Agent` tool. The harness-identical funnel and drive loop
 live in the [`/dispatch` router](../dispatch/SKILL.md) — this skill is only the
 spawn template.
 
-## Pre-spawn — cd into the coordination tree
+## Pre-spawn — arm the base, cd into the spawn dir
 
-The Agent tool's `isolation: worktree` forks off the **Bash tool's cwd HEAD**,
-not the session root (`mem_019ec65ecbc7`, controlled probe). With
-`worktree.baseRef='head'` in `.claude/settings.local.json`, the worker's
-worktree HEAD equals the Bash cwd's HEAD.
+The worker's worktree is created by doctrine's **WorktreeCreate hook**
+(`doctrine worktree create-fork`), not natively by the harness. The hook
+discriminates a dispatch worker **positionally**: a spawn is a dispatch worker iff
+the Agent payload cwd **is** the arming dir
+`<coord>/.doctrine/state/dispatch/spawn/`. The base it forks is **explicit** — the
+`base` file in that dir — never cwd HEAD. cwd is the *discriminator*, not the base
+source.
 
-**Before every spawn:** `cd` into the coordination worktree directory (emitted
-by `dispatch setup` as `coordination_dir=`). This makes `Bash cwd HEAD == B`,
-so the worker forks exactly the intended base.
+**Before every spawn (or parallel batch):**
+1. `doctrine dispatch arm-spawn --base <B> [--slice <N>]` — writes
+   `<coord>/.doctrine/state/dispatch/spawn/base = <B>` and prints the spawn dir's
+   absolute path. Idempotent: re-arming at B′ rewrites `base`.
+2. `cd` **into** that spawn dir. This is the arming signal — the hook forks at B
+   only when the payload cwd is the spawn dir.
+3. Issue the Agent spawn(s) (below). File-disjoint parallel batch: arm once, then
+   issue N spawns from the spawn dir — all read the same B; each hook derives its
+   own `branch`/`dir` from its own `name`.
+4. `cd` **back to the coord root** after the spawn(s) — positional disarm. A
+   benign `isolation:worktree` spawn issued from the coord root passes through
+   (provisioned, not worker-forked); only a spawn from inside the spawn dir is a
+   dispatch worker. A lingering `base` file is inert — the trigger is cwd-position,
+   not file-presence.
 
-**Placement precondition (ISS-031):** the coordination worktree MUST live inside
-the project root — convention `.dispatch/SL-<n>`. Under a cwd-confining jail
-(bubblewrap rooted at `/workspace/<repo>`), a `cd` to an outside sibling
-(`/workspace/<repo>-dispatch-N`) silently reverts to the project root on the next
-Bash call — the `cd` never sticks, the session stays on `main`, and the worker
-forks `main` instead of B. `dispatch setup` now fails closed on the claude arm
-when `--dir` resolves outside the root; pass `--dir .dispatch/SL-<n>`. Confirm
-placement with a bare `cd <coord> ; pwd` in a separate Bash call before trusting it.
+**Serial drive:** re-arm each phase — arm at B, cd in, spawn, cd back; the funnel
+commit advances coord HEAD; arm at B′ for the next phase. Base is explicit, so
+coord-HEAD drift between arm and create is irrelevant. Default cwd is the coord
+root; step into the spawn dir only to issue worker spawns.
 
-Keep the Bash cwd parked in the coord tree across the whole drive loop — serial
-dependent phases self-base: after a funnel commit advances the coord tree HEAD,
-the next spawn (still cd'd there) forks the new tip, carrying prior phases' code.
-Step out to the session root only for authored writes (slice status, audit,
-memory).
+**Placement precondition (ISS-031):** the coordination worktree (and so its arming
+dir) MUST live inside the project root — convention `.dispatch/SL-<n>` (`dispatch
+setup --dir .dispatch/SL-<n>`). Under a cwd-confining jail (bubblewrap rooted at
+`/workspace/<repo>`), a `cd` to an outside sibling silently reverts to the project
+root on the next Bash call. `dispatch setup` fails closed on the claude arm when
+`--dir` resolves outside the root. Confirm placement with a bare
+`cd <spawn-dir> ; pwd` in a separate Bash call before trusting it.
 
 ## Spawn
 
@@ -54,13 +66,18 @@ prompt: <pre-distilled worker prompt, including the base-guard block above>
 ```
 
 ## Post-spawn (pre-funnel gate, claude arm)
-1. Read the Agent return footer for `worktreePath:` / `worktreeBranch:`.
-   NO footer ⇒ no isolated tree was created (fallback-to-main under lock contention) ⇒
-   ABORT, do NOT enter the funnel. Re-dispatch, or switch to the subprocess arm if main churns.
-2. doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <worktreeBranch>
+1. Read the Agent return footer for `worktreePath:`.
+   NO footer / no `worktreePath:` ⇒ no isolated tree was created (hook abort or
+   fallback-to-main) ⇒ ABORT, do NOT enter the funnel. Re-dispatch, or switch to
+   the subprocess arm if the hook is failing.
+2. Derive the worker's identity from `worktreePath` (the normative datum; P2/I3):
+   `name = basename(worktreePath)`, `branch = dispatch/<name>`. Do NOT read the
+   footer's `worktreeBranch` field — it is `undefined` for the hook-created tree
+   (PHASE-04 VA-1, live 2.1.181).
+3. doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <derived branch>
    Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base / branch-mismatch.
    (`--branch` binds dir↔branch — both belts then verify ONE worker state.)
-3. Hand <worktreeBranch> to the funnel as S.
+4. Hand the derived <branch> to the funnel as S.
 
 ## Boundary recording
 After the batch's code commit and before the knowledge commit:
@@ -72,15 +89,16 @@ needs **no** separate `slice record-delta` — that funnel beat (router step 8) 
 the codex/pi path; `record-delta` also stays the manual escape hatch on any arm.
 
 ## Red Flags
-**Never:** point `dispatch setup --dir` at an outside-root sibling on the claude
-arm (the `cd` silently reverts under a jail → worker forks `main`; the CLI now
-refuses this, but use `.dispatch/SL-<n>`); spawn without cd'ing into the
-coordination tree first (a worker forked off `main` is a wrong-base verdict at
-`verify-worker`); funnel a worker that returned no `worktreePath:` footer;
-spawn with a
-`subagent_type` other than `dispatch-worker`; run `fork` or bwrap here (that's
-`/dispatch-subprocess`); claim parallel landing (v1 lands one per base).
-**Always:** cd into the coord tree before every spawn; pin `subagent_type` to
-`dispatch-worker`; embed the base-guard block in the distilled worker prompt;
-run `verify-worker` before `import`; return to the router for
-the funnel cadence.
+**Never:** spawn without first `arm-spawn`-ing and cd'ing INTO the spawn dir (a
+spawn from the coord root is a benign pass-through, never a dispatch worker); read
+the footer's `worktreeBranch` (undefined for the hook-created tree — derive
+`branch = dispatch/basename(worktreePath)` instead); funnel a worker that returned
+no `worktreePath:` footer; point `dispatch setup --dir` at an outside-root sibling
+on the claude arm (the `cd` silently reverts under a jail; use `.dispatch/SL-<n>`);
+spawn with a `subagent_type` other than `dispatch-worker`; run `fork` or bwrap here
+(that's `/dispatch-subprocess`); claim parallel landing (v1 lands one per base).
+**Always:** `arm-spawn --base B` then cd into the spawn dir before the spawn, cd
+back to the coord root after; pin `subagent_type` to `dispatch-worker`; embed the
+base-guard block in the distilled worker prompt; derive `branch` from
+`worktreePath`; run `verify-worker` before `import`; return to the router for the
+funnel cadence.

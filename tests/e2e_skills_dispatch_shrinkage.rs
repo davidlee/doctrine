@@ -90,9 +90,12 @@ fn dispatch_agent_skill_is_shrunk() {
     let body = body_lines(&full);
     // SL-147 PHASE-06: record-boundary now double-writes the conformance
     // registry — documenting that raised the budget from 78 to 82.
+    // SL-152 PHASE-05: the WorktreeCreate-hook contract replaced the
+    // placement-implicit base with the arm-spawn / cd-in-cd-back bracket and
+    // the worktreePath-derived branch (post-spawn), raising it from 82 to 100.
     assert!(
-        body.len() <= 82,
-        "dispatch-agent body lines: {} (target ≤82)",
+        body.len() <= 100,
+        "dispatch-agent body lines: {} (target ≤100)",
         body.len()
     );
 

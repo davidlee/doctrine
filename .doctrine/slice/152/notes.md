@@ -38,8 +38,19 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
 ## 1. State (2026-06-25)
 
 - Slice status: **`started`**. Design locked → plan authored. All 3 pre-plan checks
-  discharged (§5). **PHASE-01..04 `completed`**. Next: **`/phase-plan` PHASE-05**
-  (dispatch-agent SKILL post-spawn contract; PHASE-06 secondary/droppable).
+  discharged (§5). **PHASE-01..04 `completed`**. **PHASE-05 implemented + VA-1 PASS;
+  VH-1 (you-run-it live dry-run) OUTSTANDING** — phase held `in_progress` pending
+  the User's defer-vs-run call. PHASE-06 secondary/droppable.
+- **PHASE-05 `in_progress`** — both dispatch-agent SKILL copies rewritten to the
+  WorktreeCreate-hook contract: arm via `dispatch arm-spawn --base B` + cd into the
+  spawn dir / cd back (positional disarm); post-spawn derive `name=basename(
+  worktreePath)`, `branch=dispatch/<name>`, bind `verify-worker` to the DERIVED
+  branch (NOT footer `worktreeBranch`, undefined live per PHASE-04 VA-1). Scope was
+  larger than the post-spawn block — the whole Pre-spawn section encoded the retired
+  placement-implicit base, rewritten too. Body 82→100 lines ⇒ shrinkage-gate budget
+  bumped 82→100 (e2e_skills_dispatch_shrinkage.rs). VA-1 PASS (codex GPT-5.5: EX-1/
+  EX-2/VA-1, no contradictions). Installer verb is now `doctrine install -s <skill>
+  -y` (SL-088 consolidation; the skill-refresh memory is stale on the verb name).
 - **PHASE-04 `completed`** — VT-1..4 automated + green; **VA-1 PASS live** (2.1.181,
   jail binary): real `Agent isolation:worktree` from the armed cwd → hook created
   `.worktrees/agent-<hex>` at base B, `dispatch/<name>` branch, worker-marked (F7);
