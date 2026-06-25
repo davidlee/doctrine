@@ -41,7 +41,8 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
   discharged (§5). **PHASE-01..04 `completed`**. **PHASE-05 implemented + VA-1 PASS;
   VH-1 (you-run-it live dry-run) OUTSTANDING** — phase held `in_progress` pending
   the User's defer-vs-run call. PHASE-06 secondary/droppable.
-- **PHASE-05 `in_progress`** — both dispatch-agent SKILL copies rewritten to the
+- **PHASE-05 `completed`** (VH-1 DEFERRED to next real dispatch, User call
+  2026-06-25) — both dispatch-agent SKILL copies rewritten to the
   WorktreeCreate-hook contract: arm via `dispatch arm-spawn --base B` + cd into the
   spawn dir / cd back (positional disarm); post-spawn derive `name=basename(
   worktreePath)`, `branch=dispatch/<name>`, bind `verify-worker` to the DERIVED
