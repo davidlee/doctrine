@@ -7,352 +7,354 @@
 ## 1. Design Problem
 
 RFC-004 v0.1 (SL-147) shipped `slice conformance`, which diffs a slice's declared
-`design-target` selectors against its **actual** git delta. The actual-side input
-is the arm-neutral **conformance registry** —
-`.doctrine/state/slice/NNN/boundaries.toml` (runtime tier) — one `[[boundary]]`
-row per landed phase. The consumer fail-closes when the registry is incomplete, so
-an unpopulated registry makes conformance unavailable **at audit — exactly when it
-is wanted**.
+`design-target` selectors against its **actual** git delta. The actual-side input is
+the arm-neutral **conformance registry** — `.doctrine/state/slice/NNN/boundaries.toml`
+(runtime tier) — one `[[boundary]]` row per landed phase. The consumer fail-closes
+when the registry is incomplete, so an unpopulated registry makes conformance
+unavailable **at audit — exactly when it is wanted**.
 
-Two landing paths feed the registry and both leak in practice:
+Two landing paths feed the registry and both leak:
 
-- **ISS-051 (solo path):** the final phase of a slice can land no row.
+- **ISS-051 (solo path):** a phase (the final phase most often) can land no row.
 - **ISS-052 (funnel path):** a dispatched slice can reach audit with the registry
   empty (SL-153).
 
-This slice closes both leaks so every landed phase, by either path, deposits
-exactly one row — no manual `record-delta` bootstrap at audit. Registry-population
-only; the conformance consumer and its algebra are untouched.
+The deeper issue surfaced during design: the existing capture model is **unsound for
+dispatched and mixed solo↔dispatch slices** (§2). This slice closes both leaks and
+makes recording robust across landing-path transitions — registry-population only;
+the conformance consumer and its algebra are untouched.
 
 ## 2. Current State
 
-**Empirically root-caused (code is authority; the SL-147/SL-153 registries on disk
-were since hand-bootstrapped, so root-cause is from code + topology, not live
-forensics).**
+Empirically root-caused from code + topology (the SL-147/SL-153 registries on disk
+were since hand-bootstrapped, so the original failing state is gone — root-cause is
+from code, not live forensics).
 
-**Solo binding** (`state.rs::capture_phase_boundary`, bound to `set_phase_status`,
-slice.rs:723):
+### Solo binding (`state.rs::capture_phase_boundary`, bound to `set_phase_status`)
+
 - `in_progress` flip → stamps `code_start_oid = HEAD` into the **phase sheet**
-  (`.../NNN/phases/phase-NN.toml`, runtime tier) once.
-- `completed` flip → reads the stamp back, records `(start, HEAD)` via
-  `record_source_delta` (F-6 guard: `is_ancestor(start,end)` + non-merge `end`;
-  upsert by phase).
-- An **empty range** (`start == end`) **records fine** (boundary.rs:14; `is_ancestor`
-  admits equal). So the scope's hypothesis (a) — "end read early → start==end →
-  dropped row" — is **refuted**. A row is dropped **only when the start-stamp is
-  absent** (state.rs:524 named-warning degrade): the phase never entered
-  `in_progress` under the current binding (e.g. a stale PATH binary flipped it), or
-  the `.doctrine/state` tree was wiped between the two flips. The **final phase** is
-  the fragile case — it most often spans a handover / `/next` / audit-prep boundary.
-- `init_phases` is **per-file-skip** (writes only missing pairs, prunes only under
-  `--prune`), so re-running `slice phases` does **not** clobber the stamp; only a
-  full `.doctrine/state` wipe does — which takes `boundaries.toml` with it (same
-  tier). Relocating the stamp to be "durable" therefore buys nothing.
+  (runtime) once; `completed` flip → records `(stamp, HEAD)` via
+  `record_source_delta` (F-6 guard: `is_ancestor` + non-merge `end`; upsert by phase).
+- An **empty range** (`start == end`) records fine. So the scope's hypothesis (a)
+  ("end read early → start==end → dropped row") is **refuted**. A row is dropped
+  **only when the start-stamp is absent** (state.rs:524 swallowed-warning degrade):
+  the phase never entered `in_progress` under the current binding (a stale PATH
+  binary flipped it; or a bootstrap slice predating the binding — SL-147's own case),
+  or the runtime tier was wiped.
+- `init_phases` is **per-file-skip**, so re-running `slice phases` does not clobber
+  the stamp; only a full `.doctrine/state` wipe does — which takes `boundaries.toml`
+  with it (same tier). Relocating the stamp buys nothing.
 
-**Funnel** (`dispatch.rs::run_record_boundary`, the sole non-test caller of
-`ledger::record_boundary`):
-- Registry population rides a **skippable, per-arm hand-step at funnel Record beat
-  (router step 8)**:
-  - **claude** → `dispatch record-boundary` writes the dispatch **ledger**
-    (`.doctrine/dispatch/NNN/boundaries.toml`) **and** the registry (`:606` + `:614`).
-  - **codex/pi** → `slice record-delta` writes the **registry only**; this arm has
-    **no dispatch ledger**.
-- No machinery beat guarantees a landed phase deposits a row. SL-153 (claude arm,
-  mixed-mode) reached audit empty: the hand-step did not reliably populate the
-  registry. The coord worktree is a **linked** worktree (`git worktree add`,
-  dispatch.rs:3375), so `primary_worktree` resolves to the session main tree —
-  target divergence is **not** the cause; unreliable hand-discipline is.
+### The unsound-capture finding (dispatched + mixed slices)
 
-**Constraint discovered.** `slice conformance` runs at **audit**, and stage-2
-`dispatch sync --integrate` is `/close`'s job **post-audit** (dispatch router
-Conclude). So the registry must be complete by **`prepare-review`** (the mandatory
-pre-audit conclude beat), **not** integrate. `prepare-review` already reads the
-boundaries ledger (dispatch.rs:1523) to project per-phase refs.
+- **Phase status flips are authored writes run from the session root** (dispatch
+  skill:20: "Step out to the session root only for authored writes (slice status…)").
+  There, `HEAD` is `edge`/`main` — **not** a dispatched phase's code tip on
+  `dispatch/NNN`.
+- The arm-guard skips solo capture only when `current_branch(project_root) ==
+  dispatch/NNN` (state.rs:481). Flipped from the session root, that branch is `edge`,
+  so the guard **does not fire** — the solo binding would capture a *dispatched*
+  phase against the wrong tree, producing a **garbage range**. The branch-proxy guard
+  is unsound under the real flip-from-session-root workflow.
+- Net: for dispatched/mixed slices the solo binding can both *miss* real phases and
+  *manufacture wrong* ones. Objective 3 (mixed-mode coherence) is therefore a
+  first-class target, not a footnote.
 
-**ISS-039 (hard constraint on the derive source).** The dispatch ledger
-`boundaries.toml` is written to the **live coordination worktree** but is **never
-committed** to `dispatch/NNN` (only `journal.toml` is tracked there). `read_ledger`
-(dispatch.rs:1991) deliberately sources from the branch **object-db**
-(`git::read_path_at(coord_ref, …)`, so it works stage-1 *and* stage-2), so it reads
-`Boundaries::default()` (**empty**) — this is why `plan_phases` projects 0 phase
-cuts on the claude arm today. ISS-039 is **out of scope** (RFC-005 H3, own track),
-so the derive **must not** read the committed ref — it must read the **live coord
-worktree's working file** (located via `git::worktree_for_ref`), which prepare-review
-(stage-1) can still see because the worktree is removed only *after* this beat.
+### Funnel (`dispatch.rs::run_record_boundary`)
 
-**Pre-built machinery to reuse:** `state::check_completeness` (state.rs:654) — a
-pure F-2 cross-check (every completed phase has exactly one row; no extras /
-duplicates), already the gate `slice conformance` uses to refuse an unclean diff.
+- Registry population today rides a per-arm hand-step at funnel Record beat (router
+  step 8): claude `dispatch record-boundary` writes the dispatch **ledger** *and* the
+  registry (`:606` + `:614`); codex/pi `slice record-delta` writes the **registry
+  only** (no ledger). No machinery beat guarantees a landed phase deposits a row;
+  SL-153 reached audit empty.
+
+### Constraints discovered
+
+- **Audit precedes integrate.** `slice conformance` runs at audit; stage-2
+  `dispatch sync --integrate` is `/close`'s job *post-audit* (dispatch router
+  Conclude). So the registry must be complete by **`prepare-review`** (the mandatory
+  pre-audit conclude beat), not integrate.
+- **ISS-039 (out of scope).** The ledger `boundaries.toml` is written to the live
+  coord worktree but **never committed** to `dispatch/NNN`; `read_ledger`
+  (dispatch.rs:1991) sources from the committed ref, so it reads empty (this is why
+  `plan_phases` projects 0 phase-cuts on the claude arm). A derive **must not** read
+  the committed ref — it reads the **live coord worktree working file** (located via
+  `git::worktree_for_ref`), valid because `prepare-review` (stage-1) runs *before*
+  the worktree is removed.
+- **Conformance does not strip `.doctrine/`.** `conformance_outcome` builds `actual`
+  from `git diff --name-status start..end`, folding **every** path (slice.rs:1919–1928).
+  So any start that is not the phase's *exact* code start mis-attributes intervening
+  knowledge/notes commits → false `undeclared` edits. This kills naive chaining
+  (§7 D1).
+
+### Pre-built machinery to reuse
+
+- `state::check_completeness` / `registry_completeness` (state.rs:654, :765) — the
+  pure F-2 cross-check `slice conformance` already uses to fail closed. Note
+  `registry_completeness(cwd, project_root, id)`: `recorded` normalizes to the
+  primary tree (`primary_worktree`), but `completed` reads `phases_dir(project_root)`
+  — the *local* tree (state.rs:743). They coincide **only on the primary tree**.
+- `git::worktree_for_ref(root, refname) -> Option<PathBuf>` (git.rs:1189) — locates a
+  live worktree from any tree; the coord-worktree locator for both the derive source
+  and the sound guard.
 
 ## 3. Forces & Constraints
 
-- **ADR-001 (layering):** `boundary.rs` is a leaf; `state.rs` / `dispatch.rs` are
-  engine. New start-resolution logic must be **pure** (no clock/rng/git/disk) — the
-  reads stay in the shell, passed in (the date/uid pattern).
-- **POL-002 (platform independence):** recording rides doctrine-owned contracts
-  (recorded SHAs, the `dispatch/NNN` branch name), never host commit conventions.
-  The solo arm-guard keys on `dispatch/NNN` — keep it.
+- **ADR-001 (layering):** new logic stays pure where it can; git/disk in the shell.
+- **POL-002 (platform independence):** recording keys on doctrine-owned signals
+  (recorded SHAs, the live coord worktree, the `dispatch/NNN` ref) — never host commit
+  conventions.
 - **Behaviour-preservation gate:** existing `set_phase_status` and dispatch suites
-  must stay green unchanged.
-- **Audit-before-integrate** (§2): enforcement point is `prepare-review`.
-- **Arm asymmetry:** the dispatch ledger is **claude-only**. A clean *symmetric*
-  derive needs codex/pi to also write a ledger — but `plan_phases` (dispatch.rs:2049,
-  unconditional on the ledger) couples that to **codex/pi `phase/<N>` ref projection
-  turning on**, an untested behaviour change. Out of scope here → **IMP-171**.
-- **ISS-039 (out of scope):** the ledger is never committed to `dispatch/NNN`, so the
-  derive reads the **live coord worktree working file**, not the committed ref (§2).
-  This slice neither depends on nor fixes ISS-039.
-- `record-delta` stays the manual escape hatch; this slice removes the *need* for it
-  on a normal slice, not the verb.
+  must stay green; the solo *stamp-present* path stays byte-identical.
+- **Audit-before-integrate:** enforcement point is `prepare-review`.
+- **Conformance folds all paths** (no `.doctrine/` strip): only an *exact* phase
+  start is sound.
+- **ISS-039 (out):** derive reads the working ledger, never the committed ref.
+- **Arm asymmetry (IMP-171):** the dispatch ledger is claude-only; a symmetric
+  codex/pi ledger couples to `phase/<N>` projection turning on (dispatch.rs:2049,
+  unconditional) — deferred.
+- `record-delta` stays the manual escape hatch.
 
 ## 4. Guiding Principles
 
-- **One recording model end-to-end.** One engine writer, one start-resolution rule,
-  shared by solo and funnel. The `in_progress` stamp is not jank — it is the
-  *precision* input (it excludes inter-phase knowledge/notes commits); keep it,
-  fall back when it is absent.
-- **Enforce structurally, not by discipline.** A landed phase deposits its row as a
-  consequence of machinery (the binding; `prepare-review`), not an orchestrator
-  remembering a step.
-- **Reach audit complete or halt.** It must be impossible to reach audit with a
-  silently-incomplete registry.
-- **Build P as Q's foundation** (IMP-171): every seam this slice touches is where
-  the symmetric-derive follow-up extends — additive, not rework.
+- **Each phase is recorded by the writer that holds its exact range.** Funnel phases
+  → the ledger (and the derive that reads it); solo phases → the binding at the
+  `completed` flip, in a true solo context.
+- **One reconciliation point makes the authoritative source win.** `prepare-review`
+  derive-from-working-ledger **upserts**, so it both auto-heals missing funnel rows
+  *and overwrites* any garbage a mis-firing binding wrote for a dispatched phase.
+- **Auto-heal where it is sound; fail loud where the data is destroyed.** Funnel rows
+  are soundly recoverable retroactively (the ledger persists). A pure-solo phase's
+  range exists only at flip-time; if lost there it is physically unrecoverable —
+  fail closed + `record-delta`. Never manufacture a wrong row (a wrong conformance
+  verdict is worse than a flagged gap).
+- **Sound signals, not proxies.** The guard keys on "a live coord worktree exists for
+  this slice", not the ambient branch name.
+- **P as Q's foundation** (IMP-171): every seam touched is where the symmetric-derive
+  follow-up extends.
 
 ## 5. Proposed Design
 
 ### 5.1 System Model
 
-One registry (`state::record_source_delta`, the sole engine writer, unchanged) fed
-by three structural sources, cross-checked by one gate:
-
 ```
-solo completed-flip ─┐
-                     ├─> record_source_delta ─> .doctrine/state/slice/NNN/boundaries.toml
-prepare-review derive ┤        (upsert by phase)              │
-codex/pi record-delta ┘                                       │
-                                                              v
-prepare-review ──> check_completeness(completed, recorded) ──> Complete | HALT
+solo completed-flip ──(guard: no live coord worktree)──> record_source_delta ─┐
+prepare-review derive ──(live coord working ledger, UPSERT, authoritative)────┤
+codex/pi record-delta ────────────────────────────────────────────────────────┤
+manual record-delta (escape hatch) ───────────────────────────────────────────┤
+                                                                               v
+                                              .doctrine/state/slice/NNN/boundaries.toml
+                                                                               │
+                            prepare-review GATE: registry_completeness(primary,│primary,id)
+                                                                               v
+                                                              Complete | HALT (named gap)
 ```
 
-- **Solo:** the `completed` flip resolves start via **`stamp ?? prev_end ?? base`**
-  (A′) and records `(start, HEAD)`.
-- **Funnel (claude):** `prepare-review` **derives** registry rows from the ledger
-  it already reads — the enforced beat. `run_record_boundary` **sheds its registry
-  half** (ledger-only); the registry is no longer hand-written on the claude arm.
-- **Funnel (codex/pi):** keeps step-8 `record-delta` (no ledger to derive from).
-- **Gate (both arms):** `prepare-review` runs `check_completeness` over **all**
-  completed phases (solo + funnel) and **bails** on any gap.
+- **Solo binding (solo phases).** Keep the stamp; record `(stamp, HEAD)` at
+  `completed`. **Guard:** skip iff a live coord worktree exists for `dispatch/NNN`
+  (the slice is under active dispatch → the funnel/derive owns recording). Stamp
+  absent → no row + a surfaced warning; the gate / conformance fail-closed catches it.
+- **Derive-at-gate (funnel phases), authoritative + self-correcting.** At
+  `prepare-review`, read the live coord worktree working ledger and
+  `record_source_delta` each row (upsert) — overwrites any binding mis-capture, fills
+  any missing funnel row. ISS-039-independent (working file, stage-1 only).
+- **Gate (both arms).** `registry_completeness` resolved against the **primary** tree
+  for *both* the completed-set and the registry; `bail!` on any gap.
+- **Funnel inline double-write retained.** `run_record_boundary` is **unchanged**
+  (ledger + registry); the derive is a redundant-but-authoritative reconciler over it
+  (no contract break — codex F5). For a row the inline write missed/errored, the
+  derive recovers it; for a row it wrote, the derive upserts the identical value.
 
 ### 5.2 Interfaces & Contracts
 
-New pure leaf-level helper (lives with the registry logic in `state.rs`; pure,
-no IO):
+**Solo binding** (`capture_phase_boundary`, state.rs): two changes only.
+1. **Guard predicate** branch-proxy → coord-worktree presence:
+   ```rust
+   // was: current_branch(project_root) == format!("dispatch/{slice_id:03}")
+   // now: a live coordination worktree for this slice owns recording.
+   match crate::git::worktree_for_ref(project_root, &format!("refs/heads/dispatch/{slice_id:03}")) {
+       Ok(Some(_)) => return None,       // under active dispatch — funnel/derive owns it
+       Ok(None)    => {}                  // solo context — record
+       Err(e)      => { warn_capture(phase_id, &format!("coord probe failed: {e}")); return None; }
+   }
+   ```
+   Sound from any tree (works when the flip runs from the session root). No
+   `resolve_phase_start` / chain helper — chaining is unsound (D1), so the absent-stamp
+   branch records **nothing** (surfaced warning), unchanged in its non-blocking posture.
+2. Stamp-present path **unchanged** (precise `(stamp, HEAD)`).
 
-```rust
-/// Resolve a phase's code_start for the registry record (A'): the stamped HEAD
-/// (precise — excludes inter-phase knowledge commits) wins; else the previous
-/// phase's recorded code_end (the contiguous chain); else a known base; else
-/// None (no row can be recorded — caller degrades with a named warning).
-pub(crate) fn resolve_phase_start(
-    stamp: Option<&str>,      // code_start_oid stamped on in_progress (may be lost)
-    prev_end: Option<&str>,   // code_end_oid of the previous recorded phase
-    base: Option<&str>,       // slice base, when knowable (None for solo today)
-) -> Option<String>
-```
-
-Solo `completed` arm of `capture_phase_boundary` (rewired): instead of degrading
-when the stamp is absent, read `prev_end` from `read_source_deltas` (the immediately
-preceding recorded phase) and call `resolve_phase_start`. Stamp-present behaviour is
-**unchanged** (precision preserved).
-
-Funnel — `run_prepare_review` (dispatch.rs) gains, after phase planning:
-
+**Funnel** — `run_prepare_review` (dispatch.rs) gains, after phase planning:
 ```text
-1. derive (claude):  locate the live coord worktree via
-                     git::worktree_for_ref(root, "refs/heads/dispatch/NNN");
-                     read its WORKING ledger <coord>/.doctrine/dispatch/NNN/boundaries.toml
-                     (ISS-039-independent — NOT the committed ref, which is empty);
-                     for each boundary row -> record_source_delta(row).
-                     Worktree absent (already removed) or empty (codex/pi: no ledger)
-                     -> derive is a no-op; the gate then speaks.
-2. gate (both arms): completed = completed PHASE-NN set (phase rollup / read_phase_status)
-                     recorded  = read_source_deltas(...).map(|r| r.phase)
-                     match check_completeness(&completed, &recorded) {
-                       Complete            => continue,
-                       Incomplete { gaps } => bail!("prepare-review: conformance registry
-                                                     incomplete: <gaps>; record-delta the
-                                                     missing phase(s) before audit"),
-                     }
+let primary = git::primary_worktree(root)?;          // F1 fix: one canonical tree
+// derive (claude): locate live coord worktree, read its WORKING ledger, upsert each row
+if let Some(coord) = git::worktree_for_ref(root, "refs/heads/dispatch/NNN")? {
+    for row in ledger::read_boundaries_in_worktree(&coord, slice)? {   // NEW pub reader (OQ-4)
+        state::record_source_delta(&primary, slice, row)?;             // upsert; authoritative
+    }
+}
+// gate (both arms): primary-rooted completeness
+match state::registry_completeness(&primary, &primary, slice)? {
+    Complete            => {}
+    Incomplete { gaps } => bail!("prepare-review: conformance registry incomplete: {gaps};\
+                                  record-delta the missing phase(s) before audit"),
+}
 ```
 
-The derive reads the **working** ledger (which `record_boundary` writes) rather than
-the committed ref, so it is **strictly more robust than today's inline double-write**
-for the SL-153 failure shape: even when `record-boundary`'s inline registry write
-(`:614`) errored *after* its ledger write (`:606`) succeeded, the row is recovered
-here from the surviving working ledger.
-
-`run_record_boundary`: drop the `record_source_delta` call (`:614`); keep the
-`ledger::record_boundary` write. Now ledger-only.
-
-`record-delta` verb (`slice.rs::run_record_delta`): **unchanged** (escape hatch).
+`run_record_boundary`: **unchanged** (double-write retained). `record-delta` verb:
+**unchanged** (escape hatch). New: `ledger::read_boundaries_in_worktree(worktree_root,
+slice)` (a `pub(crate)` reader over the worktree-relative `dispatch_dir` path — OQ-4,
+DRY over rebuilding the string in `dispatch.rs`).
 
 ### 5.3 Data, State & Ownership
 
-- **Registry** `.doctrine/state/slice/NNN/boundaries.toml` (runtime, primary-tree
-  resolved): unchanged shape (`[[boundary]]` rows). Writers: solo binding,
-  `prepare-review` derive (new), codex/pi `record-delta`, manual `record-delta`.
-  All go through `record_source_delta` (upsert by phase → idempotent, no dupes).
-- **Ledger** `.doctrine/dispatch/NNN/boundaries.toml` (claude-only): now the **sole**
-  output of `run_record_boundary`; `prepare-review`'s derive source — read from the
-  **live coord worktree's working file** (`worktree_for_ref` → `dispatch_dir`), NOT
-  the committed ref (empty under ISS-039). Ownership unchanged (`ledger.rs`); ISS-039
-  itself (committing the ledger) stays out of scope.
-- **Phase sheet** `.../NNN/phases/phase-NN.toml`: still carries the `code_start_oid`
-  stamp (precision input). No relocation (§2: futile).
+- **Registry** `.doctrine/state/slice/NNN/boundaries.toml` (runtime, primary-resolved):
+  shape unchanged. Writers: solo binding, `prepare-review` derive (new), funnel inline
+  write, codex/pi + manual `record-delta`. All via `record_source_delta` (upsert by
+  phase → idempotent; the derive is the authoritative last writer for funnel phases).
+- **Ledger** `.doctrine/dispatch/NNN/boundaries.toml` (claude-only): unchanged writer
+  (`run_record_boundary`); now *also* the derive's read source — from the **live coord
+  worktree working file**, never the committed ref (empty under ISS-039).
+- **Phase sheet** `.../NNN/phases/phase-NN.toml`: still carries the stamp (precision
+  input). No relocation.
 
-### 5.4 Lifecycle, Operations & Dynamics
+### 5.4 Lifecycle, Operations & Dynamics — landing-path transitions
 
-**Solo slice.** Each phase: `in_progress` (stamp) → work+commits → `completed`
-(record via A′). Final phase with a lost stamp now self-heals from the prior row's
-`code_end`. Pure-solo slices never hit `prepare-review`; their safety net stays the
-existing conformance-time `check_completeness`.
+| Slice shape | Solo phases | Funnel phases | Reconciliation |
+|---|---|---|---|
+| Pure solo | binding records (no coord worktree → guard never fires) | — | conformance `check_completeness` (final net) |
+| Pure dispatch | binding stands down (coord worktree present) | inline write + derive (authoritative) | prepare-review gate |
+| **Solo→dispatch (SL-153)** | binding records **before** the drive (solo context) | inline + derive from ledger | gate checks the **union** |
+| Dispatch→solo | inline + derive | binding records **after** conclude (coord gone) | conformance final net (post-gate solo work) |
+| Interleaved | binding per solo phase; derive **upserts/corrects** any funnel phase the binding mis-grabbed | inline + derive | gate + conformance |
 
-**Dispatched slice (claude).** Per phase the funnel writes the **ledger** (step 8,
-`record-boundary`, ledger-only now). At Conclude, `prepare-review` **derives** all
-registry rows from the ledger, then **gates**. Registry complete before
-`slice status audit`.
-
-**Mixed-mode (SL-153).** Solo P01/P02 → A′ binding at their completed flips; funnel
-P03/P04 → `prepare-review` derive. The gate cross-checks **all four** → composition
-verified, not assumed. (obj 3)
-
-**Dispatched slice (codex/pi).** Step-8 `record-delta` writes the registry; the
-`prepare-review` gate halts on any miss → operator runs `record-delta` → re-run
-`prepare-review`. Symmetric auto-derive is IMP-171.
+Load-bearing mechanism: **derive-at-gate with upsert** is both the funnel auto-heal
+and the corrector for cross-context mis-captures — a transition cannot leave a wrong
+or missing *funnel* row. A solo phase completed *during* an active drive (coord
+worktree present) is the one crack: the binding stands down and the funnel does not
+own it → no row → the gate halts loudly → `record-delta`. Rare, loud, recoverable.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1:** every completed phase has exactly one registry row by the time audit
-  runs (binding for solo; derive+gate for funnel; gate enforces).
-- **INV-2:** `record_source_delta` upsert-by-phase ⇒ no duplicate rows even if a
-  phase is recorded by two sources (e.g. solo binding then a redundant derive).
-- **INV-3:** the stamp, when present, is authoritative for solo start (precision);
-  the chain is only a fallback.
-- **Edge — lost-stamp P01 (solo):** no prev row and no recorded base ⇒
-  `resolve_phase_start` returns `None` ⇒ named-warning degrade + escape hatch. The
-  residual hole; smallest (P01 flips early, in-session) and caught by the gate /
-  conformance. **Accepted** (no base source invented — D2/§7).
-- **Edge — empty-code phase:** `start == end` still records (unchanged); contributes
-  a row, satisfies the gate, emits no phase ref.
-- **Edge — derive idempotency:** `prepare-review` re-run re-derives the same rows
-  (upsert) — safe.
+- **INV-1:** by audit, every completed phase has exactly one registry row (binding for
+  solo; inline+derive for funnel; gate enforces; conformance is the pure-solo net).
+- **INV-2:** `record_source_delta` upsert ⇒ no duplicates across writers; the derive is
+  the authoritative last write for funnel phases.
+- **INV-3:** the stamp, when present, is authoritative for solo start (precision).
+- **Irreducible manual case:** a **pure-solo** phase whose flip-time capture was lost
+  (stale binary / wiped runtime tier) and that has **no ledger row** — its range is
+  physically destroyed; no sound retroactive reconstruction exists (chaining folds in
+  inter-phase commits — D1). Fails loud at the gate / conformance + `record-delta`.
+  **Accepted floor.**
+- **Empty-code phase:** `start == end` records (unchanged); satisfies the gate.
+- **Derive idempotency:** re-running `prepare-review` re-derives (upsert) — safe.
+- **Coord worktree absent at prepare-review** (removed early, against convention):
+  derive no-ops; the gate halts on any resulting gap.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 (resolved → D1):** drop `run_record_boundary`'s registry half vs keep the
-  double-write. **Resolved: drop** (one-writer-per-tier; registry sourced at
-  `prepare-review` derive).
-- **OQ-2 (resolved → D2):** solo P01 base source. **Resolved: none**; accept the
-  residual degrade.
-- **OQ-3:** does any other live caller of `record_source_delta` assume the funnel
-  also wrote it per-phase? (Audit at impl: only the three sources in §5.2; the
-  drive-time consumer was conformance, which runs post-`prepare-review`.)
-- **OQ-4:** `dispatch_dir` is private to `ledger.rs` (:375). The derive needs the
-  worktree-relative ledger path — expose a `pub(crate)` accessor (or a
-  `ledger::read_boundaries_at(worktree_root, slice)` reader) rather than rebuilding
-  the path string in `dispatch.rs` (DRY). Resolve at impl.
+- **OQ-1 (resolved → D1):** chain-fallback for a lost solo stamp? **No** — unsound
+  (conformance folds all paths). Drop; fail loud.
+- **OQ-2 (resolved → D5):** drop `run_record_boundary`'s registry half? **No, keep** —
+  the derive makes it redundant-but-harmless and the drop is a contract break (codex
+  F5). Keeping it is also more robust (two independent attempts).
+- **OQ-3:** any consumer that reads the registry *mid-drive*, before `prepare-review`?
+  (Audit at impl: conformance runs at audit, post-`prepare-review`; no mid-drive
+  reader found.)
+- **OQ-4:** expose `ledger::read_boundaries_in_worktree` (DRY) vs rebuild the path in
+  `dispatch.rs`. Lean: the reader. `dispatch_dir` is private to `ledger.rs` (:375).
+- **OQ-5:** does the guard's coord-worktree probe add meaningful cost to every status
+  flip? It is one `git worktree list`. Acceptable; only the dispatch case returns Some.
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D1 — A′ (stamp ?? chain ?? base), not pure-chain (B).** Pure-chain drops the
-  stamp and folds inter-phase knowledge/notes commits into the next phase's range →
-  spurious `undeclared` conformance noise. The stamp is the precision mechanism;
-  keep it, fall back only when absent. A′ is strictly more correct than B and
-  cohesive (one rule).
-- **D2 — `prepare-review` derive + gate (shape 3 + 1), not integrate, not a bare
-  hand-step.** Audit precedes integrate, so integrate is too late. The derive makes
-  claude-arm population structural; the gate (reusing `check_completeness`) makes
-  *reaching audit incomplete* impossible on both arms.
-- **D3 — Drop the claude registry hand-write (OQ-1).** Registry now sourced solely
-  at `prepare-review` derive on the claude arm — one writer per tier, no skippable
-  double-write.
-- **D4 — Defer codex/pi symmetric derive to IMP-171 (P-as-Q-foundation).** A
-  codex/pi ledger couples to `phase/<N>` projection (dispatch.rs:2049), an untested
-  behaviour change unrelated to registry population; the reproduction (SL-153) is
-  claude-arm. Ship the claude fix + arm-symmetric gate now; layer the symmetric
-  derive (and codex/pi phase-refs, tested) later.
-- **Alternative rejected — read-time fallback** (conformance reads the ledger when
-  the registry is absent): papers over the write gap; scope-rejected; and the ledger
-  is claude-only.
+- **D1 — Drop chaining; no `resolve_phase_start`.** Conformance folds every path with
+  no `.doctrine/` strip (slice.rs:1919), so `start = prev.end` mis-attributes
+  inter-phase commits → false `undeclared`. A wrong row is worse than a gap. The stamp
+  is the only sound exact start; absent it, record nothing and let the gate/conformance
+  fail closed.
+- **D2 — Derive-at-gate, authoritative + self-correcting (upsert).** The funnel
+  auto-heal *and* the corrector for the unsound-capture finding (§2). Reads the working
+  ledger (ISS-039-independent), stage-1 only.
+- **D3 — Sound guard: live coord worktree, not branch-proxy.** The branch-proxy fails
+  under flip-from-session-root (§2). "A live coord worktree exists for `dispatch/NNN`"
+  is a doctrine-owned, tree-independent signal for "the funnel owns recording".
+- **D4 — Primary-rooted gate.** `registry_completeness(primary, primary, id)` so the
+  completed-set and the registry are read from the same canonical tree (codex F1).
+- **D5 — Keep the funnel inline double-write** (reverses the earlier drop). Redundant
+  under the derive, but no contract break (codex F5) and more robust.
+- **D6 — Defer codex/pi symmetric derive (IMP-171) and ISS-039 (RFC-005 H3).** The
+  reproduction is claude-arm; codex/pi ledger couples to untested phase-ref projection.
+- **Alternative rejected — chain-fallback (B):** unsound (D1). **Read-time fallback in
+  conformance:** scope-rejected; papers over the write gap; ledger is claude-only.
 
 ## 8. Risks & Mitigations
 
-- **R1 — `prepare-review` derive reads a stale/partial/absent ledger.** The derive
-  reads the live coord worktree working ledger (ISS-039-independent). If a phase's
-  ledger row is missing, or the coord worktree was already removed (degenerate
-  ordering — convention is remove *after* prepare-review), the derive can't produce
-  that row → the **gate** catches it and halts with the named gap + `record-delta`
-  remedy. Net: fail-closed, never silent. (If ISS-039 is later fixed, the derive can
-  switch to the committed ref — additive, no rework.)
-- **R2 — gate false-positive blocks a legitimate Conclude.** `check_completeness`
-  keys on completed `PHASE-NN` vs recorded phase ids; a blocked-but-not-completed
-  phase is excluded. Mitigation: gate uses the **same** completed-set source as
-  conformance (parity), and the bail message names the exact gaps + the
-  `record-delta` remedy.
-- **R3 — behaviour regression in `set_phase_status`.** The rewire touches only the
-  `completed` arm's start resolution; stamp-present path byte-identical. Mitigation:
-  existing binding suite stays green; add the lost-stamp regression test.
-- **R4 — dropping the registry half breaks a non-dispatch caller.** Only
-  `run_record_boundary` (funnel) loses the call; solo + manual paths unaffected.
-  Mitigation: OQ-3 audit at impl.
+- **R1 — derive reads a stale/absent working ledger.** Coord worktree gone early, or a
+  funnel phase the inline write never recorded to the ledger → that row can't be
+  derived → the **gate** halts loudly with the named gap. Fail-closed, never silent.
+- **R2 — guard false-stand-down.** A genuinely-solo phase completed during an active
+  drive (coord worktree present) is skipped by the binding and not owned by the funnel
+  → the gate catches it (§5.4 crack). Loud + `record-delta`. The inverse (binding
+  mis-captures a funnel phase) is corrected by the derive upsert.
+- **R3 — gate false-halt.** `registry_completeness` keys on completed `PHASE-NN`; a
+  blocked/not-completed phase is excluded. Mitigation: same completed-set source as
+  conformance (parity); message names exact gaps + remedy.
+- **R4 — behaviour regression in the binding.** Only the guard predicate + the
+  absent-stamp branch change; stamp-present path byte-identical. Mitigation: existing
+  binding suite green; add the unsound-capture regression tests (below).
+- **R5 — guard probe cost / failure.** `worktree_for_ref` per flip; a probe *error*
+  stands the binding down with a surfaced warning (conservative — the gate still nets).
 
 ## 9. Quality Engineering & Validation
 
-Pure unit (no IO):
-- `resolve_phase_start`: stamp wins; stamp-absent→chain; both-absent→base;
-  all-absent→None.
-- `check_completeness`: already covered (reuse).
-
-Engine / integration:
-- **VT — solo lost-stamp final phase:** flip in_progress, **clear the stamp**, flip
-  completed → a row lands via chain-fallback (the ISS-051 regression).
-- **VT — solo stamp-present unchanged:** behaviour-preservation (precise start).
-- **VT — funnel derive:** ledger with N boundaries → `prepare-review` populates N
-  registry rows.
-- **VT — funnel gate halts:** completed phase with no row → `prepare-review` bails
-  with the named gap (the ISS-052 regression).
-- **VT — mixed-mode:** solo rows + derived funnel rows together pass the gate.
-- **VT — derive idempotent:** second `prepare-review` re-derives, no duplicates.
-- **Behaviour-preservation:** `e2e_dispatch_sync` + `set_phase_status` suites green
-  unchanged.
-
-`just check` green, clippy plain (no `--all-targets`), per commit.
+- **Pure unit:** `check_completeness` (reuse). (No `resolve_phase_start` to test — D1.)
+- **VT — guard soundness (the unsound-capture fix):** a dispatched phase flipped from a
+  session-root context with a live coord worktree → binding **stands down** (no garbage
+  row); without a coord worktree → binding records.
+- **VT — derive authoritative/self-correcting:** a binding-written garbage row for a
+  funnel phase is **overwritten** by the derive's ledger row (upsert).
+- **VT — derive fills missing:** ledger with N boundaries → `prepare-review` populates
+  N registry rows.
+- **VT — gate primary-rooted:** run `prepare-review` from a coord-tree cwd → the gate
+  reads the **primary** completed-set + registry (not the empty coord tree); a real gap
+  halts (the ISS-052 regression), a complete registry passes.
+- **VT — mixed-mode union:** solo rows (pre-drive) + derived funnel rows → gate passes;
+  a solo-during-drive phase → gate halts.
+- **VT — solo stamp-present unchanged:** behaviour-preservation.
+- **VT — irreducible case:** pure-solo lost stamp, no ledger → conformance `Incomplete`,
+  named, `record-delta` remedy.
+- **Behaviour-preservation:** `e2e_dispatch_sync` (incl. the :1132 double-write pin) +
+  `set_phase_status` suites green unchanged.
+- `just check` green, clippy plain (no `--all-targets`), per commit.
 
 ## 10. Review Notes
 
 ### Internal adversarial pass (2026-06-26)
 
-- **F-1 (design-sinking, fixed in-draft) — the derive read an empty source.** The
-  first draft derived the registry from the boundaries ledger via the committed coord
-  ref (`read_ledger`, dispatch.rs:1523). **ISS-039** means that ref is never written
-  (only `journal.toml` is committed), so the derive would have produced **0 rows and
-  halted every claude dispatch** — breaking the exact arm this slice targets, on an
-  out-of-scope bug. **Fix:** derive from the **live coord worktree working file**
-  (`worktree_for_ref` → working `boundaries.toml`), which stage-1 prepare-review can
-  still read (worktree removed only after). Bonus: strictly more robust than today's
-  inline double-write for the SL-153 shape (ledger written, inline registry write
-  errored). Folded into §2, §3, §5.2, §5.3, §8 R1.
-- **F-2 (accepted residual) — lost-stamp P01.** A solo first phase with no stamp and
-  no prev row and no recorded base cannot record (no base source exists). Smallest
-  case (P01 flips in-session), caught by the gate / conformance, escape hatch remains.
-  Accepted (D2); not engineered around.
-- **F-3 (DRY, deferred to impl) — `dispatch_dir` privacy.** Derive needs the
-  worktree-relative ledger path; expose a `ledger` accessor rather than rebuilding the
-  string (OQ-4).
-- **Checks that held:** `record_source_delta` upsert ⇒ no dupes across sources (INV-2);
-  arm-guard keys on `dispatch/NNN` (POL-002); `resolve_phase_start` is leaf-pure
-  (ADR-001); behaviour-preservation via unchanged stamp-present path + existing suites.
+- **F-1 (fixed in-draft):** the first draft derived from the committed coord ref, which
+  ISS-039 leaves empty → would have halted every claude dispatch. Fixed: derive from the
+  live coord worktree working file.
 
-<!-- Next: external adversarial pass — codex mcp (GPT-5.5). -->
+### External pass — codex (GPT-5.5), 2026-06-26 — findings + dispositions
 
+- **F1 (BLOCKER) root-mismatch gate → ACCEPTED.** Gate now primary-rooted (D4, §5.2).
+- **F2 (BLOCKER) chain-fallback pollutes the range → ACCEPTED.** Chaining dropped; no
+  `resolve_phase_start`; solo lost-stamp fails loud (D1). Verified conformance folds all
+  paths (slice.rs:1919).
+- **F3 (MAJOR) `read_source_deltas` order-unstable → MOOT under D1** (no prev lookup);
+  the gate is set-based, order-independent.
+- **F4 (MAJOR) derive vs `plan_phases` source divergence → ACCEPTED as justified.**
+  Derive is stage-1-only (working ledger sound); `plan_phases` spans stage-1+2 (needs
+  the committed ref). Proper unification = fix ISS-039 (out of scope); documented.
+- **F5 (MAJOR) dropping the registry half is a contract break → ACCEPTED.** Double-write
+  retained (D5); derive is the authoritative reconciler over it.
+
+### Design-conversation finding (beyond codex) — the unsound-capture model
+
+The arm-guard's branch-proxy is unsound under flip-from-session-root (§2): it can miss
+real phases and manufacture wrong ones for dispatched/mixed slices. Addressed by the
+sound coord-worktree guard (D3) + derive-upsert self-correction (D2). This is the
+objective-3 core, surfaced by the user's solo↔dispatch transition concern.
+
+<!-- Next: second external pass — codex (GPT-5.5) on this revision, the guard change
+     (D3) and the unsound-capture model especially. -->
