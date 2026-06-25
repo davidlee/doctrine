@@ -18,27 +18,54 @@ dependencies = []
 
 [[phase]]
 id        = "PHASE-01"
-name      = "Cluster A fixes + revision list with tag surfacing"
-objective = "Apply all one-liner fixes (C1-C3, G5, I1), build the revision list verb with tag column, add REV to TAGGABLE, author the ADR-012→ADR-004 supersede edge."
+name      = "Cluster A one-liners (template comments, doc fixes, const edit, supersede edge)"
+objective = "Apply seven targeted one-line edits across six files (C1, C2a-C2c, C3, G5a, I1) and author the ADR-012→ADR-004 supersede edge (G5b). No new functions or tests. Gate green."
 entrance_criteria = [
-  { id = "EN-1", text = "design.md locked and approved" },
-  { id = "EN-2", text = "plan.md written" },
+  { id = "EN-1", text = "RELATION_RULES parent row identified at src/relation.rs L408-415" },
+  { id = "EN-2", text = "TAGGABLE const location confirmed at src/tag.rs L16" },
+  { id = "EN-3", text = "All one-liner change sites identified and diffable: 6 files, 7 edits per design code-impact table" },
+  { id = "EN-4", text = "Existing tests green before any edits (baseline)" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "all 7 one-liner fixes applied and correct" },
-  { id = "EX-2", text = "revision list renders table with id/status/approval/tags/title columns" },
-  { id = "EX-3", text = "revision list supports --tag, --status, --columns, --all, --json" },
-  { id = "EX-4", text = "ADR-012 supersedes ADR-004 edge authored" },
-  { id = "EX-5", text = "REV in TAGGABLE; doctrine tag set REV-NNN works" },
+  { id = "EX-1", text = "All 7 one-liner fixes applied and correct per design code-impact table (C1, C2a/b/c, C3, G5a, I1)" },
+  { id = "EX-2", text = "doctrine supersede ADR-012 ADR-004 succeeds, authoring the edge" },
+  { id = "EX-3", text = "just gate zero warnings; all existing tests stay green unchanged" },
 ]
 verification = [
-  { id = "VT-1", expects = "just gate zero warnings" },
-  { id = "VT-2", expects = "all existing revision tests stay green unchanged" },
-  { id = "VT-3", expects = "new revision list tests pass (table, JSON, filtering, hide-set, columns, unknown-column error)" },
-  { id = "VT-4", expects = "rev_statuses_matches_the_variants drift canary passes" },
-  { id = "VT-5", expects = "render_revision_toml_includes_tags passes" },
-  { id = "VA-1", expects = "doctrine supersede ADR-012 ADR-004 succeeds, edge visible in inspect" },
-  { id = "VA-2", expects = "doctrine tag set REV-001 area:cli succeeds, visible in revision list --tag area:cli" },
+  { id = "VT-1", expects = "just gate zero warnings after all edits applied" },
+  { id = "VT-2", expects = "cargo test --lib -- revision passes (no test file changes needed)" },
+  { id = "VA-1", expects = "doctrine supersede ADR-012 ADR-004 succeeds; edge visible via doctrine inspect ADR-012" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Revision list verb with tag surfacing"
+objective = "Build the revision list CLI surface: constants, read_revs, key, list_rows, run_list, ListRow, json_rows, RevisionCommand::List variant + dispatch, 12 unit tests, template tags. Tags are opt-in via --columns per D2."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and gate green" },
+  { id = "EN-2", text = "RevisionCommand enum and dispatch match block identified in src/revision.rs" },
+  { id = "EN-3", text = "RevDoc struct location confirmed; tags field design locked (Vec<String>, serde(default))" },
+  { id = "EN-4", text = "listing module API confirmed: Column<RevDoc>, ListArgs, CommonListArgs, select_columns, render_columns, json_envelope" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "REV_STATUSES, REV_HIDDEN, REV_COLUMNS (5 cols, no slug), REV_DEFAULT (id/status/approval/title) constants defined per D1/D2/D5" },
+  { id = "EX-2", text = "All 12 unit tests pass: drift canary, empty-tree, hide-set, --all, --status, filter, --tag, JSON envelope, --columns reveals tags, --columns selects/orders, unknown-status error, unknown-column error, tagless round-trip" },
+  { id = "EX-3", text = "RevisionCommand::List variant added and wired in CLI dispatch match arm" },
+  { id = "EX-4", text = "doctrine revision list renders empty header (no non-terminal revisions in corpus); doctrine revision list --all shows all 10 revisions" },
+  { id = "EX-5", text = "doctrine revision list --columns tags shows tags column (opt-in per D2)" },
+  { id = "EX-6", text = "All existing revision tests stay green unchanged (behaviour-preservation gate)" },
+  { id = "EX-7", text = "doctrine revision show REV-001 --json includes \"tags\" in output" },
+  { id = "EX-8", text = "doctrine tag set REV-001 test-tag succeeds; revision list --tag test-tag finds it" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test --lib -- revision passes (12 new tests + all existing)" },
+  { id = "VT-2", expects = "just gate zero warnings" },
+  { id = "VA-1", expects = "doctrine revision list --all outputs table with id/status/approval/title columns, no tags column (D2 opt-in)" },
+  { id = "VA-2", expects = "doctrine revision list --columns id,status,tags outputs table with tags column visible" },
+  { id = "VA-3", expects = "doctrine revision show REV-001 --json | grep -q tags; returns 0" },
+  { id = "VA-4", expects = "doctrine tag set REV-001 area:cli succeeds (REV now in TAGGABLE)" },
 ]
 specs        = []
 requirements = []
