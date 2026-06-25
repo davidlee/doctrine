@@ -7,7 +7,8 @@ CLI verb coverage except three spec-internal edges:
 
 - **`descends_from`** (SPEC→PRD) — scalar `descends_from = "PRD-NNN"` in spec TOML.
   No CLI subcommand; hand-edited today.
-- **`parent`** (SPEC→SPEC) — scalar `parent = "SPEC-NNN"` in spec TOML. Same gap.
+- **`parent`** (SPEC→SPEC, and PRD→PRD per SL-065) — scalar `parent = "<ref>"` in
+  spec TOML. Same gap. Subtype-aware: target must equal the source subtype.
 - **`interactions`** (SPEC→SPEC) — `interactions.toml` `[[edge]]` array. No CLI
   subcommand to add/remove edges; hand-edited today.
 
@@ -26,26 +27,34 @@ Add CLI subcommands to `doctrine spec` so that a spec's `descends_from`, `parent
 and `interactions` edges can be authored and removed without hand-editing TOML:
 
 1. **`doctrine spec edit`** — set or clear the `descends_from` and `parent` scalar
-   fields on a spec. Edit-preserving (the `toml_edit`/`DocumentMut` idiom from
-   `relation::append_edge`/`mem.pattern.entity.edit-preserving-status-transition`).
-   Forward-validate target refs against the kind registry (SPEC→PRD for
-   descends_from, SPEC→SPEC for parent). Idempotent on re-set to same value.
+   fields via flags: `--descends-from PRD-NNN | --clear-descends-from` and
+   `--parent <ref> | --clear-parent` (≥1 required; set/clear per field mutually
+   exclusive). Edit-preserving (a new `dep_seq::apply_scalar` core mirroring
+   `apply_status`; CHR-019 proved root insert is safe above trailing `[[relation]]`).
+   `descends_from` is tech-only (target → PRD); `parent` is subtype-aware (target
+   subtype == source subtype). Forward-validate kind-shape AND target existence.
+   Idempotent (re-set same value / clear-absent → no-op, mtime holds).
 
 2. **`doctrine spec interactions add`** — append an `[[edge]]` row to a tech
-   spec's `interactions.toml`. Each edge carries `target = "SPEC-NNN"` and
-   `type = "free-text"` (the free-text interaction type, per the existing
-   `Interaction` struct in `src/spec.rs`). Forward-validate the target as a
-   SPEC kind. Idempotent on duplicate.
+   spec's `interactions.toml` (`spec.rs::append_member` shape). Each edge carries
+   `target = "SPEC-NNN"`, `--type <text>` (required free-text), `--notes <text>`
+   (optional), per the `Interaction` struct. Forward-validate the target as a SPEC
+   kind + existence. Idempotent on **target** (target-as-PK: one edge per target).
 
-3. **`doctrine spec interactions remove`** — remove a matching `[[edge]]` row
-   from `interactions.toml`. Idempotent (absent edge is a no-op).
+3. **`doctrine spec interactions remove`** — remove the `[[edge]]` row(s) to a
+   target (`dep_seq::remove_after` shape). Idempotent (absent → no-op, count 0); no
+   target validation (removing a dangling edge is valid).
 
 Affected surface:
-- `src/commands/spec.rs` — new subcommand handlers and CLI args
-- `src/spec.rs` — may need a write seam for `interactions.toml` (currently only
-  reads); edit-preserving scalar write for `descends_from`/`parent`
-- `src/relation.rs` — no changes needed; these are typed-tier edges, the
-  `RELATION_RULES` table already declares them `TypedVerbOnly`
+- `src/spec.rs` — `SpecCommand::Edit` + `SpecCommand::Interactions{Add,Remove}`
+  clap shapes and thin `run_*` shells; the `interactions.toml` write/remove
+  (currently read-only). (NB: the dispatch lives in `src/spec.rs`, not the empty
+  `src/commands/spec.rs`.)
+- `src/dep_seq.rs` — new `apply_scalar` pure core (set/clear one top-level optional
+  scalar, edit-preserving) for `descends_from`/`parent`.
+- `src/relation.rs` — no changes; these are typed-tier edges already declared
+  `TypedVerbOnly`. (Product `parent` (PRD→PRD) is authorable but undeclared in
+  `RELATION_RULES` — left for the follow-up, validated inline here.)
 
 ## Non-Goals
 
@@ -83,4 +92,10 @@ Shipped-memory authoring flow (`mem.pattern.distribution.shipped-memory-authorin
 
 ## Follow-Ups
 
-(none identified)
+- **UX review of all relation-authoring CLI surfaces** (consistency + coverage) —
+  absorbs the `RELATION_RULES` product-`parent` (PRD→PRD) under-declaration: SL-065
+  added the field + render + registry validation but no table row and no template
+  example. This slice validates product `parent` inline and leaves the table
+  untouched (Non-Goal). The review closes the whole gap (table honesty + the
+  PRD-parent row + VT-1 golden, and any other surface where a relation verb is
+  missing or inconsistent). Captured as a backlog item.
