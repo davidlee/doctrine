@@ -127,19 +127,26 @@ the working-file-read approach in the design body.
      derive has no row to overwrite → gate passes with garbage. Guard → halt loudly.
 3. ✅ Selectors: `ledger.rs`, `git.rs` promoted to design-target (+ notes).
 
-## NEXT AGENT — 3rd codex pass, then inquisition/plan
+## codex PASS 3 — done; all 5 integrated (design §10)
 
-1. **3rd codex (GPT-5.5) pass** on the committed-ref revision. Focus the reviewer on:
-   the `commit_boundaries` splice seam (CAS ordering vs the existing journal commit;
-   tip/tip_tree/trunk_base recompute after the splice — design §5.2); P2-1 reopen
-   eviction (does clearing the stamp + evicting compose with the stamp-once logic at
-   state.rs:503?); P2-2 liveness probe correctness; and **R4/OQ-7** — committing the
-   ledger re-enables `plan_phases` projection (0 today) → verify `e2e_dispatch_lifecycle`
-   (`phase/064-01`) + `e2e_dispatch_sync` still hold.
-2. Then `/inquisition` or `slice status 154 plan` → `/plan`.
+All verified against source, all ACCEPTED; none broke the committed-ref approach.
+- **F1 BLOCKER** re-run journal poison → `commit_boundaries` content-idempotent + derive/gate
+  BEFORE projection (a halt creates no refs). D7b + ordering.
+- **F2 MAJOR** prunable unreachable by wrapping → D9 **extends** `parse_worktree_for_ref`
+  to surface `{path,branch,prunable}`, not a wrapper.
+- **F3 MAJOR** raw bytes committed unvalidated → parse+validate before commit (D7a).
+- **F4 MAJOR** liveness≠ownership (audit-window false stand-down) → accepted w/ mitigation;
+  precise dispatch-run ownership signal = hardening follow-up (file at /plan or close).
+- **F5 MINOR** R4 stale — existing e2e pre-commit the ledger → add a no-pre-commit VT.
 
-Still-open at design: OQ-6 (factor shared `splice_ledger_file`? decide at /plan),
-OQ-7 (projection re-enable — a verify task, not a design blocker).
+## NEXT — inquisition or plan
+
+Design is now 3-passes-clean on the committed-ref model. Next: `/inquisition` (formal
+hostile pass) OR `slice status 154 plan` → `/plan`.
+
+Still-open at design (carry to /plan, not blockers): OQ-6 (factor shared
+`splice_ledger_file`?), OQ-7 (projection re-enable — a verify task), F4 ownership-signal
+hardening follow-up (file as backlog).
 
 ## Evidence / forensics (don't re-derive)
 

@@ -219,52 +219,60 @@ stamp (P2-1), so a redo re-captures fresh or fails loud — never a stale blesse
 
 ### 5.2 Interfaces & Contracts
 
-**`prepare_review` (dispatch.rs:1497)** — new steps bracket the existing projection:
+**`prepare_review` (dispatch.rs:1497)** — the commit + derive + gate run **BEFORE the
+ref projection** (the ordering is load-bearing — codex pass-3 F1; see below):
 
 ```text
 let coord_ref = "refs/heads/dispatch/NNN";
 let tip0 = resolve_commit(root, coord_ref)?;                 // existing
 
 // (1) ISS-039 commit — land the working boundaries ledger onto the tip (D7).
-//     No-op when no live coord worktree / no working file (re-run, early removal).
+//     CONTENT-IDEMPOTENT: parse+validate working bytes, re-serialize canonical,
+//     and commit ONLY when it differs from the committed blob — a re-run with
+//     identical content does NOT advance the ref (F1). No-op when no live coord
+//     worktree / no working file (re-run after removal, early removal).
 let tip = match git::live_worktree_for_ref(root, coord_ref)? {        // D9 liveness wrapper
-    Some(coord) => match ledger::read_boundaries_file(&coord, slice)? {  // NEW reader (OQ-4)
-        Some(body) => commit_boundaries(root, &tree_of(root,&tip0)?, &tip0,
-                                        coord_ref, &body)?,  // splice; CAS; returns new tip
-        None => tip0,
-    },
+    Some(coord) => commit_boundaries(root, &tip0, coord_ref, &coord, slice)?,  // tip0 or new tip
     None => tip0,
 };
 let tip_tree = tree_of(root, &tip)?;
-let trunk_base = merge_base(root, &tip, &trunk_tip)?;        // recomputed off the new tip
+let trunk_base = merge_base(root, &tip, &trunk_tip)?;        // recomputed off the (maybe new) tip
 
-// existing: read committed ledgers (now boundaries is populated), project refs
+// (2) read the committed ledger (now populated) — the SINGLE source (INV-4).
 let boundaries = read_ledger::<Boundaries>(root, coord_ref, slice3, "boundaries.toml")?;
-// ... plan_review + plan_phases + with_journaled_projection (journal.toml splice) ...
 
-// (2) derive registry from the SAME committed boundaries + (3) gate (D2/D4).
+// (3) DERIVE the registry + (4) GATE — BEFORE projection, so a halt leaves NO
+//     refs to collide with on the operator's record-delta → re-run (F1).
 let primary = git::primary_worktree(root)?;
 for row in &boundaries.rows { state::record_source_delta(&primary, slice, row.clone())?; }
-match state::registry_completeness(&primary, &primary, slice)? {
-    Complete            => {}
-    Incomplete { gaps } => bail!("prepare-review: conformance registry incomplete: {gaps}; \
-                                  record-delta the missing phase(s) before audit"),
+if let Incomplete { gaps } = state::registry_completeness(&primary, &primary, slice)? {
+    bail!("prepare-review: conformance registry incomplete: {gaps}; \
+           record-delta the missing phase(s) before audit");   // halt: no refs created yet
 }
+
+// (5) existing projection — plan_review + plan_phases(boundaries) +
+//     with_journaled_projection (journal.toml splice, :2182). Unchanged.
 ```
 
-New `commit_boundaries(root, base_tree, parent, coord_ref, body) -> Result<String>`:
-the boundaries twin of `commit_journal` — `tree_with_file(base_tree,
-".doctrine/dispatch/NNN/boundaries.toml", body)` → `commit_tree(parent,
-"ledger: boundaries")` → `update_ref_cas(coord_ref, commit, parent)`. (DRY note — OQ-6:
-factor a shared `splice_ledger_file(...)` that both `commit_journal` and
-`commit_boundaries` call; deferred to /plan if it reads cleanly.) The working ledger is
-spliced **verbatim** (the bytes the worker wrote), not re-serialized — fidelity, and
-`read_ledger` parses it back unchanged.
+New `commit_boundaries(root, parent, coord_ref, coord_worktree, slice) -> Result<String>`
+— the boundaries twin of `commit_journal`, with two hardenings over a naive splice:
+1. **Validate before commit (F3).** Read the working file via
+   `ledger::read_boundaries_file` (below), `toml::from_str::<Boundaries>` it. A parse
+   error is a clean `Err` (the working ledger is malformed) — never commit garbage onto
+   the tip, unlike a verbatim-byte splice.
+2. **Content-idempotent (F1).** Re-serialize the parsed `Boundaries` to canonical TOML;
+   compare to the committed blob (`read_path_at(coord_ref, path)`). Equal → return
+   `parent` unchanged (no commit, no ref advance). Differ → `tree_with_file` →
+   `commit_tree(parent, "ledger: boundaries")` → `update_ref_cas(coord_ref, commit,
+   parent)` (a moved ref bails like `commit_journal`, R6). Returns the new tip.
+
+(DRY — OQ-6: factor a shared `splice_ledger_file(...)` that `commit_journal` and
+`commit_boundaries` both call; decide at /plan if it reads cleanly.)
 
 New `ledger::read_boundaries_file(worktree_root, slice) -> Result<Option<String>>`: the
 raw working-file reader over the worktree-relative `dispatch_dir` path (`dispatch_dir`
 is private to ledger.rs, :375 — expose this reader rather than rebuild the string in
-dispatch.rs; OQ-4).
+dispatch.rs; OQ-4). `None` when the file is absent (→ `commit_boundaries` no-ops).
 
 **Solo binding** (`capture_phase_boundary`, state.rs): two changes only.
 1. **Guard predicate** branch-proxy → *live* coord-worktree presence (D3 + D9):
@@ -281,6 +289,14 @@ dispatch.rs; OQ-4).
    pruned/stale coord entry (D9). No chaining — the absent-stamp branch records
    **nothing** (surfaced warning), unchanged in its non-blocking posture.
 2. Stamp-present path **unchanged** (precise `(stamp, HEAD)`).
+
+`git::live_worktree_for_ref` is **not** a wrapper over `worktree_for_ref` — the existing
+`parse_worktree_for_ref` (git.rs:1163) returns the path on the matching `branch` line and
+**discards the block's `prunable` marker**, so liveness is unreachable from the outside
+(F2). D9 therefore **extends the parser** to surface the full block
+(`{ path, branch, prunable }`) and the liveness helper applies `!prunable &&
+path.exists()`. `worktree_for_ref` keeps its current signature for its existing callers
+(behaviour-preservation); the new helper is the liveness-aware sibling.
 
 **Reopen eviction** (`set_phase_status`, state.rs:386–401) — P2-1, D8. On a
 completed→non-completed transition (detected from the pre-write status):
@@ -345,9 +361,17 @@ the accepted cost of never blessing a garbage row (R2).
   **Accepted floor.**
 - **Empty-code phase:** `start == end` records a present row (unchanged); satisfies the
   gate; `plan_phases` emits no ref for it (dispatch.rs:2050).
-- **Commit-boundaries idempotency:** re-running `prepare-review` re-splices the working
-  ledger (identical bytes → identical tree → CAS no-op or a same-content commit) and
-  re-derives (upsert) — safe.
+- **Re-run semantics (F1, sharpened).** `prepare-review` is **not** freely re-runnable
+  for *projection* — once `review/*`/`phase/*` refs exist, the existing zero-oid CAS
+  reports them stale and bails (dispatch.rs:1564/1592), and the recovery `commit_journal`
+  records Failed rows (e2e_dispatch_sync.rs:435). This slice must not **worsen** that:
+  `commit_boundaries` is content-idempotent (identical ledger → no commit, no ref
+  advance), so a re-run does not poison the journal via a fresh boundaries commit. And
+  because the **derive + gate run before projection**, the operator's intended re-run —
+  *gate halts → `record-delta` the gap → re-run* — creates no projection refs on the
+  halted first pass, so the re-run reaches projection cleanly with the registry now
+  complete. (Re-running a *successful* prepare-review still hits the pre-existing
+  stale-ref bail — unchanged, out of scope.)
 - **Coord worktree absent / stale at prepare-review:** commit-boundaries no-ops (the
   ledger committed by a prior run stays on the tip); the derive reads whatever is on the
   committed ref; the gate halts on any resulting gap.
@@ -399,14 +423,27 @@ the accepted cost of never blessing a garbage row (R2).
   per-phase commit during the drive (N commits, a new pattern journal.toml doesn't use,
   earlier availability not needed since `prepare-review` is the read point). Separate
   from phase commits (R-5 belt strips `.doctrine/` — this is the journal's pattern).
+  **Two hardenings (codex pass-3): (a)** parse+validate the working ledger before the
+  commit — never land malformed TOML on the tip (F3); **(b)** content-idempotent — commit
+  only when the canonical re-serialization differs from the committed blob, so a re-run
+  doesn't advance the ref and poison the journal (F1). **Ordering:** derive + gate run
+  **before** the ref projection, so a gate-halt creates no refs (clean record-delta →
+  re-run; F1).
 - **D8 — Reopen evicts the row + clears the stamp (P2-1).** A completed→non-completed
   transition removes the phase's registry row (`forget_source_delta`) and clears
   `code_start_oid`, so a redo re-captures fresh or fails loud — never a stale blessed row.
-- **D9 — Liveness-verified coord probe (P2-2).** New `git::live_worktree_for_ref`
-  wrapper: reject `prunable`, stat the path. Used by the guard **and** the
-  commit-boundaries locator. Shared `worktree_for_ref` callers untouched
-  (behaviour-preservation). Chosen over a new dispatch-active runtime marker
-  (`worktree/marker.rs` is per-worker, not a coord-root signal — more moving parts).
+- **D9 — Liveness-verified coord probe (P2-2).** New `git::live_worktree_for_ref`. **Not a
+  wrapper** — `parse_worktree_for_ref` (git.rs:1163) discards the block's `prunable`
+  marker, so liveness is unreachable from outside (F2). D9 **extends the parser** to
+  surface `{ path, branch, prunable }`; the helper applies `!prunable && path.exists()`.
+  Used by the guard **and** the commit-boundaries locator. `worktree_for_ref` keeps its
+  signature for existing callers (behaviour-preservation). Chosen over a new
+  dispatch-active runtime marker (`worktree/marker.rs` is per-worker, not a coord-root
+  signal — more moving parts). **Limitation (F4):** a live coord worktree means
+  "liveness", not strictly "the funnel still owns these phases" — a coord worktree left
+  un-pruned through the pre-integrate audit window false-stands-down a post-drive solo
+  phase. Caught loudly by the gate/conformance + `record-delta`; a precise dispatch-run
+  ownership signal is a hardening follow-up (BL-ISS, §8 R2), not in this slice.
 - **D10 — No REV for SPEC-022.** SPEC-022:180 *already* mandates the committed
   boundaries ledger; ISS-039 is the impl in violation. Committing it is conformance, not
   a spec change — verified the spec text names `boundaries.toml` in the committed
@@ -421,36 +458,64 @@ the accepted cost of never blessing a garbage row (R2).
 - **R1 — derive reads a stale/incomplete committed ledger.** A funnel phase the inline
   write never recorded to the working ledger never gets committed/derived → that row is
   missing → the **gate** halts loudly with the named gap. Fail-closed, never silent.
-- **R2 — guard false-stand-down (the §5.4 crack).** A genuinely-solo phase completed
-  during an active drive (live coord worktree present) is skipped by the binding and not
-  owned by the funnel → the gate catches it. Loud + `record-delta`. Accepted as the cost
-  of never blessing a garbage row (the inverse — binding mis-captures a funnel phase — is
-  corrected by the derive upsert; an *unrecorded* dispatched phase is the case the guard
-  must protect, hence D3-kept).
+- **R2 — guard false-stand-down (F4-sharpened).** "A live coord worktree exists" is a
+  *liveness* signal, not strictly "the funnel still owns these phases". A solo phase
+  completed while a coord worktree is live — **not only during the active drive but
+  through the pre-integrate audit window** (the coord tree is removed at integrate, after
+  prepare-review) — stands the binding down though the funnel doesn't own it. Caught by
+  the gate (at prepare-review) / conformance (at audit) → loud + `record-delta`. Accepted
+  as the cost of never blessing a garbage row (the inverse — binding mis-captures a funnel
+  phase — is corrected by the derive upsert; an *unrecorded* dispatched phase is the case
+  the guard must protect, hence D3-kept). **Hardening follow-up:** a precise dispatch-run
+  ownership signal (run-state, not worktree presence) would close the window — logged as a
+  follow-up, not this slice's scope.
 - **R3 — gate false-halt.** `registry_completeness` keys on completed `PHASE-NN`; a
   blocked/not-completed phase is excluded. Mitigation: same completed-set source as
   conformance (parity); message names exact gaps + remedy.
-- **R4 — ISS-039 commit perturbs projection / sync.** Committing the boundaries ledger
-  re-enables claude per-phase projection (`plan_phases` now sees rows; 0 today). Risk: a
-  suite pinned to 0 phase-cuts, or the extra commit shifting a tip a test asserts.
-  Mitigation: §9 — run `e2e_dispatch_lifecycle` (expects `phase/064-01`) +
-  `e2e_dispatch_sync`; the ledger commit excludes from `review/<slice>` already
-  (`plan_review` drops `.doctrine/dispatch/NNN`, dispatch.rs:2015).
+- **R4 — ISS-039 commit perturbs projection / sync (F5-corrected).** Committing the
+  boundaries ledger re-enables claude per-phase projection. The "0 phase-cuts" symptom is
+  **production-only** (real claude drives leave the ledger uncommitted — ISS-039); the
+  existing e2e fixtures **manually `git commit` the ledger** (e2e_dispatch_lifecycle.rs:174,
+  e2e_dispatch_sync.rs:111) and already assert `phase/064-01`, so they exercise projection
+  but **not** the new splice-from-uncommitted-working-file path. Risk: a suite pinned to
+  the old shape, or the extra commit shifting an asserted tip. Mitigation: §9 — keep
+  `e2e_dispatch_lifecycle` / `e2e_dispatch_sync` green **and add a fixture that does NOT
+  pre-commit the ledger** (the actual new path); the ledger commit is excluded from
+  `review/<slice>` already (`plan_review` drops `.doctrine/dispatch/NNN`, dispatch.rs:2015).
 - **R5 — behaviour regression in the binding / shared locators.** Only the guard
   predicate, the absent-stamp branch, and the reopen branch change in state.rs; the
-  stamp-present path is byte-identical; `worktree_for_ref` is wrapped, not modified.
+  stamp-present path is byte-identical; `worktree_for_ref` keeps its signature (the
+  parser gains a field; the new liveness helper is additive).
   Mitigation: existing binding + dispatch suites green; add the regression tests (§9).
 - **R6 — commit-boundaries CAS race.** Another writer advances `dispatch/NNN` between
   the tip read and the CAS. Mirrors `commit_journal`'s `RefCas::Moved` bail — report,
   never clobber.
+- **R7 — prepare-review re-run journal poisoning (F1).** A boundaries commit that advanced
+  the ref every run would, on the next run, make the existing `review/*`/`phase/*` refs
+  read as stale → the recovery `commit_journal` persists Failed rows over the verified
+  journal (e2e_dispatch_sync.rs:435) → a later integrate refuses. Mitigation:
+  `commit_boundaries` is content-idempotent (D7b — no commit on identical content) and the
+  gate runs before projection (D7 ordering — a halt creates no refs). The pre-existing
+  "re-running a *successful* prepare-review bails stale" is unchanged and out of scope.
 
 ## 9. Quality Engineering & Validation
 
 - **Pure unit:** `check_completeness` (reuse). `forget_source_delta` round-trip
   (record → forget → absent). (No `resolve_phase_start` — D1.)
-- **VT — ISS-039 commit:** a claude drive with N working-ledger boundaries →
-  `prepare-review` commits `boundaries.toml` onto `dispatch/NNN` (`git ls-tree` shows it
-  alongside `journal.toml`) and `read_ledger` reads N rows from the committed tip.
+- **VT — ISS-039 commit (the NEW splice path, F5):** `record-boundary` writes the working
+  ledger with N boundaries and **no manual `git add/commit`** (unlike the existing
+  fixtures) → `prepare-review` itself commits `boundaries.toml` onto `dispatch/NNN`
+  (`git ls-tree` shows it alongside `journal.toml`), `read_ledger` reads N rows, and
+  `phase/<slice>-NN` refs project. This is the case the current e2e do not cover.
+- **VT — commit-boundaries idempotent / no journal poison (F1):** run `prepare-review`
+  twice on an unchanged working ledger → the second run does **not** advance
+  `dispatch/NNN` (same tip oid) and does not rewrite verified journal rows as Failed.
+- **VT — malformed ledger rejected (F3):** a working `boundaries.toml` that is invalid
+  TOML → `commit_boundaries` returns `Err` and the dispatch tip is **unchanged** (no
+  garbage committed).
+- **VT — gate-before-projection (F1):** an incomplete registry → `prepare-review` halts
+  with **no `review/*` / `phase/*` refs created**; after `record-delta` fills the gap a
+  re-run projects cleanly.
 - **VT — guard soundness (the unsound-capture fix):** a dispatched phase flipped from a
   session-root context with a live coord worktree → binding **stands down** (no garbage
   row); without a coord worktree → binding records.
@@ -524,6 +589,35 @@ The §1–§9 body is **revised to the committed-ref model** (this body is now t
 source of truth — the working-file-read draft is fully retracted). Integrated: ISS-039
 absorption (D7 splice-commit), the committed-ref derive (D2), P2-1 reopen eviction (D8),
 P2-2 liveness probe (D9), SPEC-022-conformance-no-REV (D10). Seam decisions confirmed
-with the User (prepare-review splice; liveness-verified probe). **Pending:** a 3rd codex
-pass on this revision (the ISS-039 commit seam + P2-1/P2-2 + the derive's committed-ref
-re-read), then `/inquisition` or `/plan`.
+with the User (prepare-review splice; liveness-verified probe).
+
+### External pass 3 — codex (GPT-5.5), 2026-06-26 — committed-ref revision — dispositions
+
+All 5 verified against source; all ACCEPTED. None broke the committed-ref approach —
+refinements to the commit seam, the liveness probe, and the test plan.
+
+- **F1 (BLOCKER) re-run journal poisoning.** A boundaries commit that advances the ref
+  every run makes the next run read existing projection refs as stale → recovery
+  `commit_journal` persists Failed rows over the verified journal (e2e_dispatch_sync.rs:435)
+  → integrate refuses. **Fixed:** `commit_boundaries` is **content-idempotent** (no commit
+  on identical content) **and** the derive + gate run **before** projection, so a
+  gate-halt creates no refs (clean `record-delta` → re-run). D7b + D7 ordering, §5.2,
+  §5.5 re-run bullet, R7.
+- **F2 (MAJOR) prunable unreachable by wrapping.** `parse_worktree_for_ref` (git.rs:1163)
+  discards the `prunable` marker. **Fixed:** D9 **extends the parser** to surface
+  `{ path, branch, prunable }`; not a wrapper. §5.2, D9.
+- **F3 (MAJOR) raw bytes committed before validation.** **Fixed:** `commit_boundaries`
+  parses+validates the working ledger before the commit; malformed → `Err`, tip unchanged.
+  D7a, §5.2, R-VT.
+- **F4 (MAJOR) liveness ≠ ownership.** A coord worktree un-pruned through the
+  pre-integrate audit window false-stands-down a post-drive solo phase (wider than the
+  admitted during-drive crack). **Accepted with mitigation** (gate/conformance loud +
+  `record-delta`); a precise dispatch-run ownership signal is a **hardening follow-up**,
+  not this slice. R2-sharpened, D9-limitation.
+- **F5 (MINOR) R4 test rationale stale.** Existing e2e **pre-commit** the ledger
+  (lifecycle:174, sync:111), so they don't exercise the new splice; "0 phase-cuts" is
+  production-only. **Fixed:** R4 corrected; §9 adds a no-pre-commit fixture VT.
+
+**Next:** `/inquisition` or `slice status 154 plan` → `/plan`. Open at design: OQ-6
+(shared `splice_ledger_file` — decide at /plan), OQ-7 (projection re-enable — a verify
+task), and the F4 ownership-signal hardening follow-up (file as backlog at /plan or close).
