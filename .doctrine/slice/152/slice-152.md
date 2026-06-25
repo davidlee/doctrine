@@ -90,6 +90,14 @@ pinned to claude-code **2.1.181**).
 
 ## Affected surface (provisional)
 
+> **Design resolved (see `design.md`).** Handshake (OQ-1) → D3: a **cwd-local
+> bare-base marker**; branch/dir hook-derived from the payload `name`; no
+> consume/serialization/correlation key. The **SubagentStart stamp hook is
+> retired** on the claude arm (D2/R1) — `WorktreeCreate → fork --worker` becomes
+> the single creation+provision+mark seam. Hook-failure UX (OQ-3) → fail-closed
+> non-zero exit (legible by the harness abort). Two new verbs: `dispatch
+> arm-spawn`, `worktree create-fork`. Probes P3→P2→P1 gate the locks.
+
 - `doctrine install` hook-emission: emit the hook via an idiomatic plugin
   (`.claude-plugin/plugin.json` + `hooks/hooks.json`) rather than a bespoke
   `settings.local.json` `WorktreeCreate` block — plus the hook script/seam it
