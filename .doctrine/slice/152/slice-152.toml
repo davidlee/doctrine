@@ -1,7 +1,7 @@
 id = 152
 slug = "wtc-worker-creation"
 title = "Claude-arm WorktreeCreate worker creation"
-status = "ready"
+status = "started"
 created = "2026-06-24"
 updated = "2026-06-25"
 tags = []
