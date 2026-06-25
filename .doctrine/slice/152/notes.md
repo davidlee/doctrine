@@ -377,3 +377,27 @@ Relevant memories to retrieve when cutting: `mem.pattern.lint.clippy-denies`,
 - **WorktreeRemove / branch GC (F5/D10)** — retried workers leak `dispatch/<name>`
   branches; prune in a WorktreeRemove follow-up or `dispatch gc`. Follow-up slice
   (capture via `backlog new` if not already tracked).
+
+---
+
+## 10. PHASE-06 audit (RV-158, 2026-06-26)
+
+Reconciliation audit of the plugin-hook migration. Reviewed edge HEAD
+(`c371b839` 6a + `341867bd` EX-4); authored arm, no candidate branch. Full suite
++ clippy green **in an isolated target** (shared jail target gave a false RED —
+stale binary, `mem.pattern.testing.shared-cargo-target-false-red`).
+
+EX-3/EX-4/VT-1/VT-2/VA-1/VA-2 all confirmed. Three findings, all terminal:
+- **F-1** (minor, *tolerated*) — SL-152 declares no `[[selector]]`, so `slice
+  conformance` + `review prime` have no path-set (both report unavailable).
+  Compensated with manual full-diff; selector retrofit low-value on a closing
+  slice.
+- **F-2** (minor, *verified* → reconcile per-slice edit) — plan EX-4 prose cites
+  `[claude] plugin-marketplace`; shipped + design D12 use `[install] repo`
+  (default `davidlee/doctrine`, User-confirmed). EX-4 id immutable → append a
+  correction note to `plan.md` in reconcile.
+- **F-3** (nit, *aligned*) — ADR-001 `install_config="leaf"` registered in-commit;
+  routine living-registry upkeep, no REV.
+
+No blocker. Reconciliation brief: one per-slice edit (F-2), zero governance/REV.
+Handing to `/reconcile`.

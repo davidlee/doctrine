@@ -1,0 +1,43 @@
+id    = 158
+slug  = "sl-152-phase-06-reconciliation-plugin-delegated-claude-hook-wiring-ex-3ex-4"
+title = "SL-152 PHASE-06 reconciliation: plugin-delegated Claude hook wiring (EX-3/EX-4)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-152"
+phase = "PHASE-06"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "SL-152 declares no selectors → conformance + prime have no path-set (expected: mechanical drift signal; observed: unavailable)"
+detail = "doctrine slice conformance 152 → 'unavailable — no recorded source deltas'; review prime RV-158 → 'slice SL-152 declares no selectors'. Both stem from one gap: SL-152 carries no [[selector]] entries (scope-relevant/design-target), so neither the mechanical path-conformance algebra nor the staleness cache can run. Per audit skill, an unavailable registry is itself a finding — the F-2 backstop. Compensated this audit with a full manual git diff of both phase-6 commits (c371b839, 341867bd); every touched path maps to EX-4 intent (install delegation surface), no undeclared scope creep observed."
+disposition = "tolerated"
+response = "Tolerated. Full manual git-diff conformance performed over both phase-6 commits; all touched paths map to the EX-4 install-delegation surface, no undeclared creep. Retrofitting [[selector]] entries to a slice entering close is low-value (the mechanical signal would only confirm what the manual diff already established). Captured as a standing slice-hygiene gap, not a remediation blocker."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Plan EX-4 prose cites '[claude] plugin-marketplace' key; shipped + design D12 use '[install] repo' (default davidlee/doctrine)"
+detail = """plan.toml EX-4 text: '...the [claude] plugin-marketplace doctrine.toml key (default davidlee/doctrine)'. Implementation (src/install_config.rs: InstallConfig.repo, const DEFAULT_REPO="davidlee/doctrine", [install] table) and design D12 Δ4 both use the neutral '[install] repo' key. User confirmed 'install repo' is the correct term. Plan EX text is immutable (append-only ids) so cannot be edited in place; the drift is plan-prose-vs-implementation. Design D12 is the settled canon and is already correct; only the EX-4 parenthetical is stale."""
+disposition = "verified"
+response = "Observation confirmed; design D12 + src/install_config.rs are correct ([install] repo / davidlee/doctrine), only the immutable plan EX-4 parenthetical is stale. Remediation = per-slice direct edit (append a correction note to plan.md pointing EX-4's key reference at [install] repo). Routed to /reconcile via the reconciliation brief; no governance/REV change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "ADR-001 layering.toml registered install_config='leaf' inside the phase-6 commit (governance file touched in implementation)"
+detail = """341867bd edits .doctrine/adr/001/layering.toml to add 'install_config = "leaf"'. A governance artifact was touched within an implementation commit rather than via a REV. Assessed routine: ADR-001's layering registry is a living module-tier index the decision is designed to carry; classifying a new leaf module is accurate-keeping consistent with the ADR (install_config is serde-defaults-only, no IO — genuinely leaf), not a decision change. Flagged for conscious disposition, not as a defect."""
+disposition = "aligned"
+response = "Aligned, no action. ADR-001's layering registry is a living module-tier index the decision exists to carry; adding install_config='leaf' is accurate-keeping consistent with the ADR (the module is serde-defaults-only, no IO — genuinely leaf), not a decision change requiring a REV."
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
