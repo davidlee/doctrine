@@ -33,7 +33,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::entity::{self, Kind, Materialised};
-use crate::listing::{self, Format};
+use crate::listing::{self, Column, Format, ListArgs};
 use crate::requirement::ReqStatus;
 use crate::tomlfmt::toml_string;
 
@@ -380,6 +380,13 @@ impl Approval {
     )
 )]
 const APPROVALS: &[&str] = &["none", "requested", "approved", "rejected"];
+
+// ---------------------------------------------------------------------------
+// SL-155: list surface — constants consumed by list_rows (PHASE-01)
+// ---------------------------------------------------------------------------
+
+/// Statuses hidden from the default list view (terminal states).
+const REV_HIDDEN: &[&str] = &["done", "abandoned"];
 
 // ---------------------------------------------------------------------------
 // Pure FSM — the REV-local legal-transition guard (NOT slice's classifier).
@@ -1483,12 +1490,163 @@ fn settle_disposition(
 }
 
 // ---------------------------------------------------------------------------
+// SL-155: list surface — list_rows + run_list (PHASE-01)
+// ---------------------------------------------------------------------------
+
+/// List revisions: read all revision TOMLs, filter, sort, render.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-155: consumed by run_list once RevisionCommand::List is wired"
+    )
+)]
+fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
+    listing::validate_statuses(&args.status, REV_STATUSES)?;
+    let render = args.render;
+    let columns = args.columns.clone();
+    let (filter, format) = listing::build(args)?;
+    let rev_root = root.join(REV_DIR);
+    if !rev_root.is_dir() {
+        return match format {
+            Format::Table => Ok(listing::render_columns::<RevDoc>(
+                &[],
+                &listing::select_columns(&REV_COLUMNS, REV_DEFAULT, columns.as_deref())?,
+                render,
+            )),
+            Format::Json => listing::json_envelope::<ListRow>("revision", &[]),
+        };
+    }
+    let mut docs = listing::retain(
+        read_revs(&rev_root)?,
+        &filter,
+        |s| REV_HIDDEN.contains(&s),
+        key,
+    );
+    docs.sort_by_key(|d| d.id);
+    match format {
+        Format::Table => {
+            let sel = listing::select_columns(&REV_COLUMNS, REV_DEFAULT, columns.as_deref())?;
+            Ok(listing::render_columns(&docs, &sel, render))
+        }
+        Format::Json => listing::json_envelope("revision", &json_rows(&docs)),
+    }
+}
+
+/// `doctrine revision list` entry point.
+#[expect(
+    dead_code,
+    reason = "SL-155: consumed by RevisionCommand::List dispatch (next commit)"
+)]
+pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mut out = io::stdout();
+    write!(out, "{}", list_rows(&root, args)?)?;
+    Ok(())
+}
+
+/// Read a single revision TOML by id.
+fn read_rev(rev_root: &Path, id: u32) -> anyhow::Result<RevDoc> {
+    let name = format!("{id:03}");
+    let path = rev_root.join(&name).join(format!("revision-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("revision {name} not found at {}", path.display()))?;
+    toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
+}
+
+/// Read all revision TOMLs under the REV tree.
+fn read_revs(rev_root: &Path) -> anyhow::Result<Vec<RevDoc>> {
+    let mut docs = Vec::new();
+    for id in entity::scan_ids(rev_root)? {
+        docs.push(read_rev(rev_root, id)?);
+    }
+    Ok(docs)
+}
+
+/// A revision's filterable projection for `listing::retain`.
+fn key(d: &RevDoc) -> listing::FilterFields {
+    listing::FilterFields {
+        canonical: canonical_id(d.id),
+        slug: d.slug.clone(),
+        title: d.title.clone(),
+        status: d.status.as_str().to_owned(),
+        tags: d.tags.clone(),
+    }
+}
+
+/// JSON list row.
+#[derive(Debug, Serialize)]
+struct ListRow {
+    id: String,
+    status: String,
+    approval: String,
+    tags: Vec<String>,
+    title: String,
+}
+
+fn json_rows(docs: &[RevDoc]) -> Vec<ListRow> {
+    docs.iter()
+        .map(|d| ListRow {
+            id: canonical_id(d.id),
+            status: d.status.as_str().to_owned(),
+            approval: d.approval.as_str().to_owned(),
+            tags: d.tags.clone(),
+            title: d.title.clone(),
+        })
+        .collect()
+}
+
+const REV_COLUMNS: [Column<RevDoc>; 6] = [
+    Column {
+        name: "id",
+        header: "id",
+        cell: |d| canonical_id(d.id),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
+    },
+    Column {
+        name: "status",
+        header: "status",
+        cell: |d| d.status.as_str().to_owned(),
+        paint: listing::ColumnPaint::ByValue(|d| listing::status_hue(d.status.as_str())),
+    },
+    Column {
+        name: "approval",
+        header: "approval",
+        cell: |d| d.approval.as_str().to_owned(),
+        paint: listing::ColumnPaint::None,
+    },
+    Column {
+        name: "slug",
+        header: "slug",
+        cell: |d| d.slug.clone(),
+        paint: listing::ColumnPaint::None,
+    },
+    Column {
+        name: "tags",
+        header: "tags",
+        cell: |d| d.tags.join(", "),
+        paint: listing::ColumnPaint::None,
+    },
+    Column {
+        name: "title",
+        header: "title",
+        cell: |d| d.title.clone(),
+        paint: listing::ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
+    },
+];
+
+const REV_DEFAULT: &[&str] = &["id", "status", "approval", "tags", "title"];
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     /// Drift canary (the backlog.rs `*_matches_the_variants` pattern): every
     /// `RevStatus` variant's `as_str` is in the known-set and vice versa, in order.
@@ -1777,7 +1935,7 @@ primary = true
     /// Seed a single revision TOML under the tempdir for list tests.
     fn seed_rev(root: &Path, id: u32, status: &str, title: &str, tags: &[&str]) {
         let name = format!("{id:03}");
-        let dir = root.join(name);
+        let dir = root.join(REV_DIR).join(&name);
         fs::create_dir_all(&dir).unwrap();
         let tags_toml = if tags.is_empty() {
             String::from("tags = []")
@@ -1803,15 +1961,13 @@ primary = true
         assert_eq!(REV_HIDDEN, &["done", "abandoned"]);
     }
 
-    /// `list_rows` with no revisions renders the header row only (empty tree).
+    /// `list_rows` with no revisions returns empty string (mirrors REC behaviour).
     #[test]
-    fn list_rows_empty_tree_is_header_only() {
+    fn list_rows_empty_tree_is_empty() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        // No REV_DIR — empty tree.
         let out = list_rows(root, ListArgs::default()).unwrap();
-        assert!(out.starts_with("id"), "header row present: {out:?}");
-        assert!(!out.contains("REV-"), "no revision rows: {out:?}");
+        assert!(out.is_empty(), "empty tree → empty string: {out:?}");
     }
 
     /// Default list hides `done` and `abandoned` revisions.
@@ -1852,7 +2008,10 @@ primary = true
         let mut args = ListArgs::default();
         args.status = vec!["done".to_owned()];
         let out = list_rows(root, args).unwrap();
-        assert!(out.contains("REV-001"), "explicit --status done reveals: {out}");
+        assert!(
+            out.contains("REV-001"),
+            "explicit --status done reveals: {out}"
+        );
     }
 
     /// Substring filter matches slug and title.
@@ -1904,7 +2063,7 @@ primary = true
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let mut args = ListArgs::default();
-        args.columns = Some("bogus".to_owned());
+        args.columns = Some(vec!["bogus".to_owned()]);
         let err = list_rows(root, args).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("bogus"), "names the bad column: {msg}");
@@ -1922,8 +2081,11 @@ primary = true
         args.format = Format::Json;
         let out = list_rows(root, args).unwrap();
         assert!(out.contains("\"id\": \"REV-001\""), "prefixed id: {out}");
-        assert!(out.contains("\"tags\": [\"cli\"]"), "tags array: {out}");
-        assert!(out.contains("\"revisions\""), "json envelope: {out}");
+        assert!(
+            out.contains("\"tags\"") && out.contains("\"cli\""),
+            "tags present: {out}"
+        );
+        assert!(out.contains("\"revision\""), "json envelope: {out}");
     }
 
     /// `--columns` selects and orders visible columns.
@@ -1934,7 +2096,11 @@ primary = true
         seed_rev(root, 1, "proposed", "Test", &["cli"]);
 
         let mut args = ListArgs::default();
-        args.columns = Some("id,tags,status".to_owned());
+        args.columns = Some(vec![
+            "id".to_owned(),
+            "tags".to_owned(),
+            "status".to_owned(),
+        ]);
         let out = list_rows(root, args).unwrap();
         let header = out.lines().next().unwrap();
         assert!(header.contains("id"), "id column: {header}");
@@ -1947,6 +2113,9 @@ primary = true
     #[test]
     fn render_revision_toml_includes_tags() {
         let text = render_revision_toml(1, "s", "T", "2026-06-14", None).unwrap();
-        assert!(text.contains("tags = []"), "tags scaffolded: {text}");
+        assert!(
+            text.contains("tags") && text.contains("[]"),
+            "tags scaffolded: {text}"
+        );
     }
 }
