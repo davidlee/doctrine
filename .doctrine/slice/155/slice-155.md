@@ -91,9 +91,6 @@ slice adds the `tags` axis to revision's read surfaces:
 - `src/revision.rs` — new `RevisionCommand::List` + `run_list` + `RevDoc` tags
   field + `render_revision_toml` template tags
 - `install/templates/adr.toml` — G5 (one comment fix)
-- `install/templates/spec-tech.toml` — C2 (one comment fix)
-- `install/templates/spec-product.toml` — C2 (one example add)
-- `install/templates/interactions.toml` — C2 (one comment fix)
 - `install/templates/revision.toml` — add `tags = []` line
 - `.doctrine/revision/` — run `doctrine supersede ADR-012 ADR-004` (G5 edge
   authoring)
