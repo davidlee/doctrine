@@ -1,0 +1,61 @@
+id = 155
+slug = "rel-ux-revision-list"
+title = "Relation CLI UX fixes + revision list with tag surfacing"
+status = "ready"
+created = "2026-06-25"
+updated = "2026-06-25"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/relation.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/revision.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/templates/adr.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/templates/spec-tech.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/templates/spec-product.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/templates/interactions.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/templates/revision.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/tag.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-170"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
