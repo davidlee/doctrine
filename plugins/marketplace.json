@@ -1,0 +1,21 @@
+{
+  "name": "doctrine",
+  "owner": { "name": "doctrine" },
+  "plugins": [
+    {
+      "name": "doctrine",
+      "source": "./plugins/doctrine",
+      "description": "Doctrine's process skills — routing, slicing, design, planning, phase execution, audit and close, governance (canon/inquisition), backlog triage, handover, and memory capture/retrieval."
+    },
+    {
+      "name": "doctrine-memory",
+      "source": "./plugins/doctrine-memory",
+      "description": "Doctrine's memory skills alone (record/retrieve) — a standalone subset of the doctrine plugin. Install one or the other, not both."
+    },
+    {
+      "name": "doctrine-partner",
+      "source": "./plugins/doctrine-partner",
+      "description": "Doctrine's collaboration skills alone (pair/walkthrough) — a standalone subset of the doctrine plugin. Install one or the other, not both."
+    }
+  ]
+}

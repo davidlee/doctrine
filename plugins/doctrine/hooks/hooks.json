@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "doctrine boot"
+          }
+        ],
+        "matcher": "startup|clear"
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "doctrine worktree create-fork"
+          }
+        ]
+      }
+    ]
+  }
+}
