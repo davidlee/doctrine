@@ -1,7 +1,7 @@
 id = 147
 slug = "audit-path-conformance-delta"
 title = "Audit path-conformance delta"
-status = "reconcile"
+status = "done" # hand edited - tooling rejected
 created = "2026-06-23"
 updated = "2026-06-24"
 tags = []
