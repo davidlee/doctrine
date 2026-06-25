@@ -22,8 +22,8 @@ note = "conformance-registry capture seam (solo binding + funnel write)"
 
 [[selector]]
 selector = "src/ledger.rs"
-intent = "scope-relevant"
-note = "conformance-registry capture seam (solo binding + funnel write)"
+intent = "design-target"
+note = "read_boundaries_file working-ledger reader for the commit splice (OQ-4)"
 
 [[selector]]
 selector = "src/boundary.rs"
@@ -42,6 +42,11 @@ intent = "design-target"
 selector = "plugins/doctrine/skills/dispatch-subprocess/SKILL.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+note = "live_worktree_for_ref liveness wrapper (P2-2/D9)"
+
 [[relation]]
 label = "references"
 role = "concerns"
@@ -54,6 +59,10 @@ target = "ISS-051"
 [[relation]]
 label = "related"
 target = "ISS-052"
+
+[[relation]]
+label = "related"
+target = "ISS-039"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
