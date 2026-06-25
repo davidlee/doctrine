@@ -8,6 +8,7 @@
 .dirge
 .mcp.json
 
+
 *.tmp
 *.temp
 *.local.*
@@ -15,6 +16,9 @@
 .dispatch
 
 node_modules
+
+docs/claude/*.md
+docs/claude/*.txt
 
 # for oops
 .spec-driver
