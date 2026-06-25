@@ -49,11 +49,11 @@ conformance-registry row — no missed final phase, no missed funnel write —**
 
 2. **Funnel conformance-registry write (ISS-052).** Make the dispatch funnel
    populate the conformance registry — one row per landed phase — as an
-   **enforced beat**, not an orchestrator-issued `slice record-delta` step that
-   is documented yet skippable. The SHAs already exist at the funnel's
-   integrate/land beat (and in the dispatch ledger); the gap is mirroring them
-   into `state/slice/NNN/boundaries.toml`. Prefer closing this at the funnel
-   write seam over a read-time fallback.
+   **enforced beat** at `prepare-review` (the pre-audit conclude beat), not an
+   orchestrator-issued `slice record-delta` step that is documented yet
+   skippable. A derive reads the dispatch boundaries ledger and upserts each row
+   into `state/slice/NNN/boundaries.toml`; a primary-rooted completeness gate
+   `bail!`s on any gap so a slice cannot reach audit incomplete.
 
 3. **Mixed-mode coherence.** A slice whose phases land by different paths (some
    solo, some funnel — SL-153) must still end with a complete registry. The two
@@ -64,13 +64,27 @@ conformance-registry row — no missed final phase, no missed funnel write —**
    bootstrap; this slice removes the *need* to use it on a normal slice, it does
    not remove the verb.
 
+5. **Commit the dispatch boundaries ledger (absorbs ISS-039).** ISS-052's
+   spec-legal fix is blocked on ISS-039: SPEC-022 §"Run-ledger object-db
+   sourcing" mandates the run ledger — *including* `boundaries.toml` — be
+   tree-read from the `dispatch/NNN` tip, never the working filesystem,
+   identically stage-1/stage-2. Today the claude arm never commits
+   `boundaries.toml` to the branch, so `read_ledger` reads empty (this is why
+   `plan_phases` projects 0 phase-cuts). This slice commits the ledger onto
+   `dispatch/NNN` alongside `journal.toml` (a `prepare-review` splice mirroring
+   `commit_journal`), bringing the impl into SPEC-022 conformance. Then the
+   derive *and* `plan_phases` read the same committed source — no working-file
+   read, no F4 divergence, and claude per-phase review cuts are restored.
+   Bounded to the **claude arm**; the codex/pi phase-ref coupling stays IMP-171.
+
 Affected surface (coarse — `/design` refines):
 - `src/state.rs` — `capture_phase_boundary`, `record_source_delta`, the
   `set_phase_status` binding (solo path; ISS-051).
-- `src/dispatch.rs` — the integrate/land beat where the funnel must write the
-  conformance registry (ISS-052).
+- `src/dispatch.rs` — `prepare_review`: splice-commit the boundaries ledger onto
+  `dispatch/NNN` (absorbs ISS-039), then derive the registry from the committed
+  ledger + primary-rooted completeness gate (ISS-052).
 - `src/ledger.rs` — dispatch-ledger reader/writer; the source of the SHAs the
-  funnel should mirror (read-side reuse, not the ISS-039 commit seam).
+  derive mirrors, and the working-file reader for the splice-commit.
 - `src/boundary.rs` — `BoundaryRow` (shared row type; reference, likely
   unchanged).
 - Dispatch skills (`dispatch`, `dispatch-subprocess`) — drop the skippable
@@ -78,9 +92,10 @@ Affected surface (coarse — `/design` refines):
 
 ## Non-Goals
 
-- **ISS-039** (dispatch *ledger* `boundaries.toml` never committed to the
-  dispatch branch — RFC-005 H3 residual). Different file
-  (`.doctrine/dispatch/NNN/`), different seam (ledger commit), own track. Out.
+- **codex/pi symmetric ledger + derive (IMP-171).** The dispatch boundaries
+  ledger is claude-arm-only; a symmetric codex/pi ledger couples to `phase/<N>`
+  projection turning on unconditionally — deferred. The ISS-039 commit absorbed
+  here is bounded to the claude arm.
 - **Worker creation / base integrity** (RFC-005 H1, SL-152) — converged already;
   not touched here.
 - **Selector authoring adoption** — that design-time `design-target` selectors
@@ -102,4 +117,4 @@ without a manual bootstrap. Stands alone as an RFC-004 follow-up.
 
 - Selector-authoring adoption: wire `/slice` + `/design` to seed `design-target`
   selectors so the declared side is populated too (SL-153 had none).
-- ISS-039 (dispatch-ledger commit) — separate track under RFC-005 H3.
+- IMP-171: codex/pi symmetric ledger + derive (couples to phase-ref projection).

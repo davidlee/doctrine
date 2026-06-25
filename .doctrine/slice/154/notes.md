@@ -3,19 +3,20 @@
 Durable per-slice scratchpad — tracked in git. Lift anything from a disposable phase
 sheet that must survive `rm -rf` before close-out.
 
-## Status (2026-06-26) — HANDOFF POINT
+## Status (2026-06-26) — COMMITTED-REF REVISION LANDED
 
-Slice in `design`. `design.md` went through internal + TWO codex (GPT-5.5) adversarial
-passes + a deep design conversation. **Codex pass 2 found a governance BLOCKER (P2-3):
-the planned working-ledger read violates SPEC-022.** User DECIDED to **absorb ISS-039**
-(fork option 1) to fix it cleanly.
+Slice in `design`. `design.md` body (§1–§9) is **now revised to the committed-ref
+(ISS-039-absorbed) model** — the working-file-read draft is fully retracted; the body
+is the single source of truth. §10 carries the full review ledger + Revision-3 note.
+Scope (`slice-154.md`) absorbs ISS-039 (objective 5, surface, non-goals, follow-ups);
+SL-154 linked `related` ISS-039/051/052; selectors promoted (ledger.rs, git.rs →
+design-target).
 
-**The design.md §2/§5 body still describes the RETRACTED working-file read.** §10
-(pass-2 + the decision) SUPERSEDES the body. The next agent's first job is to **revise
-the design body to the committed-ref (ISS-039-absorbed) model**, then re-pass / plan.
+**Remaining:** a **3rd codex pass** on this revision (ISS-039 commit seam + P2-1/P2-2 +
+committed-ref derive), then `/inquisition` or `/plan`. No code yet.
 
-Read in order: `slice-154.md` (scope) → `design.md` §10 FIRST (latest truth) → §1–§9
-body (older, pending revision) → this → `handover.md`.
+Read in order: `slice-154.md` (scope) → `design.md` §1–§9 (now current) → §10 (review
+ledger) → this.
 
 ## What this slice is (one paragraph)
 
@@ -103,34 +104,42 @@ legal), F4 divergence gone, claude phase-cuts (now 0 from the bug) restored. Bou
 the claude arm; does NOT give codex/pi a ledger (that stays IMP-171). This SUPERSEDES
 the working-file-read approach in the design body.
 
-## NEXT AGENT — the work to land (revise design, then re-pass/plan)
+## DONE this session — committed-ref revision (commit pending)
 
-1. **Absorb ISS-039 into scope.** Update `slice-154.md` (Scope/Objectives: add "commit
-   the boundaries ledger to dispatch/NNN"; move ISS-039 out of Non-Goals; relate the
-   slice to ISS-039). Confirm with the storage rule — relations via `doctrine link`,
-   not hand-edits.
-2. **Revise design.md body (§2/§5/§7) to the committed-ref model:**
-   - ISS-039 fix: where/how `boundaries.toml` is committed to `dispatch/NNN`. Mirror
-     `journal.toml`'s path — `commit_journal` (dispatch.rs:2094) splices `journal.toml`
-     into the tip tree at prepare-review; do the same for `boundaries.toml` (or commit
-     at the funnel Record beat). Decide the seam: prepare-review splice (simplest, one
-     place) vs per-phase commit during the drive. SPEC-022 says identical stage-1/stage-2
-     object-db read — so the ledger must be on the ref BEFORE prepare-review reads it.
-   - Derive: read the **committed ref** via `read_ledger` (dispatch.rs:1991) — the same
-     call `plan_phases` uses (:1523) — NOT the working file. Retract `worktree_for_ref`
-     as the derive source (it stays only for the guard, P2-2 permitting).
-   - Check whether SPEC-022 needs a REV at all once boundaries is committed — likely NO
-     (the read becomes spec-compliant by construction). Confirm; if any spec text names
-     boundaries as uncommitted, route a REV.
-3. **Integrate P2-1 (reopen eviction) + P2-2 (liveness probe/marker)** into the design.
-4. **Re-run a 3rd codex pass** on the committed-ref revision (the ISS-039 commit seam +
-   P2-1/P2-2 fixes), then `/inquisition` or `/plan`.
+1. ✅ Absorbed ISS-039 into scope (`slice-154.md` obj 5 + surface + non-goals +
+   follow-ups); `doctrine link SL-154 related ISS-039` (051/052 already linked).
+2. ✅ Revised `design.md` §1–§9 to the committed-ref model:
+   - **D7** ISS-039 fix: `prepare_review` splices the working `boundaries.toml` onto
+     `dispatch/NNN` via a new `commit_boundaries` (mirrors `commit_journal`,
+     dispatch.rs:2094) — one place, before any read. Chosen over per-phase commit.
+   - **D2/INV-4** derive reads the **committed** ledger via `read_ledger` — same source
+     `plan_phases` uses; F4 divergence eliminated. New `ledger::read_boundaries_file`
+     (working-file reader for the splice; OQ-4).
+   - **D10** no SPEC-022 REV — the spec already mandates the committed boundaries ledger
+     (spec-022.md:180); ISS-039 is the impl in violation, so the commit is conformance.
+   - **D8** P2-1 reopen eviction: new `state::forget_source_delta` + clear stamp on
+     completed→non-completed.
+   - **D9** P2-2 liveness probe: new `git::live_worktree_for_ref` (reject prunable, stat
+     path); used by the guard + the commit-boundaries locator; shared callers untouched.
+   - **D3-kept rationale (load-bearing):** the guard stays even with the authoritative
+     derive — without it a dispatched phase flipped from session root writes an
+     empty-range row the presence-only gate blesses, and if the funnel also missed it the
+     derive has no row to overwrite → gate passes with garbage. Guard → halt loudly.
+3. ✅ Selectors: `ledger.rs`, `git.rs` promoted to design-target (+ notes).
 
-Open question for the ISS-039 seam: does committing `boundaries.toml` at prepare-review
-interact with the R-5 belt (which strips `.doctrine/` from PHASE commits)? The journal
-commit is a SEPARATE doctrine-mediated commit, not a phase commit — follow that pattern.
-Verify `plan_phases` reading the now-populated committed ledger doesn't break
-`e2e_dispatch_lifecycle` (it expects `phase/064-01`; phase-cuts will now actually fire).
+## NEXT AGENT — 3rd codex pass, then inquisition/plan
+
+1. **3rd codex (GPT-5.5) pass** on the committed-ref revision. Focus the reviewer on:
+   the `commit_boundaries` splice seam (CAS ordering vs the existing journal commit;
+   tip/tip_tree/trunk_base recompute after the splice — design §5.2); P2-1 reopen
+   eviction (does clearing the stamp + evicting compose with the stamp-once logic at
+   state.rs:503?); P2-2 liveness probe correctness; and **R4/OQ-7** — committing the
+   ledger re-enables `plan_phases` projection (0 today) → verify `e2e_dispatch_lifecycle`
+   (`phase/064-01`) + `e2e_dispatch_sync` still hold.
+2. Then `/inquisition` or `slice status 154 plan` → `/plan`.
+
+Still-open at design: OQ-6 (factor shared `splice_ledger_file`? decide at /plan),
+OQ-7 (projection re-enable — a verify task, not a design blocker).
 
 ## Evidence / forensics (don't re-derive)
 
@@ -148,7 +157,8 @@ Verify `plan_phases` reading the now-populated committed ledger doesn't break
   `:765` `registry_completeness` (two roots — F1), `:743` `completed_phase_ids`.
 - `src/dispatch.rs:1497` `run_prepare_review` (derive + gate go here, after phase
   planning ~:1536); `:587` `run_record_boundary` (UNCHANGED — double-write); `:1991`
-  `read_ledger` (committed-ref reader — do NOT use for derive); `:2041` `plan_phases`.
+  `read_ledger` (committed-ref reader — NOW the derive source too); `:2094`
+  `commit_journal` (mirror for `commit_boundaries`, D7); `:2041` `plan_phases`.
 - `src/ledger.rs:541` `record_boundary`, `:375` `dispatch_dir` (private — OQ-4: expose a
   worktree reader).
 - `src/git.rs:1189` `worktree_for_ref` (locator for derive + guard), `:554`
@@ -164,8 +174,11 @@ Verify `plan_phases` reading the now-populated committed ledger doesn't break
   `dispatch/NNN` ref) — never host commit conventions.
 - **ADR-001:** git/disk in the shell; pure cross-checks (`check_completeness`) in the
   leaf.
-- **ISS-039 out** (RFC-005 H3): derive reads the working file, never the committed ref;
-  this slice neither depends on nor fixes it.
+- **ISS-039 ABSORBED** (D7): commit `boundaries.toml` to `dispatch/NNN` (spec-022.md:180
+  already mandates it); derive + `plan_phases` read the committed ref via `read_ledger`.
+- **SPEC-022 §run-ledger sourcing:** ledger tree-read from the dispatch tip, never the
+  working FS, identical stage-1/stage-2. The constraint that forced the committed-ref
+  model (codex P2-3).
 - **IMP-171:** codex/pi symmetric ledger+derive (couples to phase-ref projection) —
   deferred follow-up.
 - `just check` green; clippy plain (no `--all-targets`).
