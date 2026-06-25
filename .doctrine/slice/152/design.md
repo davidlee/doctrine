@@ -228,9 +228,9 @@ branch/dir from the **return footer** (it already reads `worktreePath:`/
 - **INV-2.** A benign subagent is never stamped/forked as a worker.
 - **INV-3.** `fork --worker` semantics are identical on both arms (shared fn).
 - **ASM-1.** Payload `cwd` is the orchestrator's parked Bash cwd (the coord
-  tree) — **gating probe P3**; the marker is located via it.
-- **ASM-2.** The return footer survives hook-creation — **gating probe P2**;
-  selects the marker schema (§7 D8).
+  tree) — **CONFIRMED, probe P3 (§10)**; the marker is located via it.
+- **ASM-2.** The return footer survives hook-creation — **CONFIRMED, probe P2
+  (§10)**; selects the marker schema (§7 D8 primary).
 - **Edge — stale marker.** A marker left from a prior phase could in principle
   greet an unrelated `isolation:worktree` subagent spawned from the same coord
   tree. Mitigations: (a) the orchestrator does not spawn benign subagents from a
@@ -263,16 +263,14 @@ Probes (need a live 2.1.181 dispatch; likely a you-run-it step). The design is
 sequenced so these resolve **before** the dependent schema/emission locks.
 **Run order: P3 → P2 → P1.**
 
-- **P3 — payload cwd identity (run FIRST; foundational, F1).** Is payload `cwd`
-  the parked Bash cwd (coord tree) or the session root? The entire
-  marker-location seam (§5.3) addresses the marker via `cwd`. A session-root
-  result means the hook cannot identify *which* coord tree armed the spawn
-  (`${CLAUDE_PROJECT_DIR}` gives only main), and single-active-in-main
-  reintroduces the cross-slice/parallel contention D3 rejected — so a negative
-  result **re-opens D3**, it does not merely tune it.
-- **P2 — footer survival.** Does the harness still emit `worktreePath:`/
-  `worktreeBranch:` when the hook created the worktree? *Selects the marker
-  schema (D8).*
+- **P3 — payload cwd identity (run FIRST; foundational, F1). RESOLVED ✓ (PASS,
+  §10).** Payload `cwd` is the orchestrator's parked Bash cwd (the coord tree),
+  not the session root — `cd` shifts it and the harness persists it across tool
+  calls. The marker-location seam (§5.3) holds; D3 stands.
+- **P2 — footer survival. RESOLVED ✓ (PRESENT, §10).** The harness emits
+  `worktreePath:` in the Agent return footer even when the hook created the
+  worktree. D8 **primary** selected (bare-base marker; orchestrator reads the
+  worker location from the footer; no serialization).
 - **P1 (was OQ-5) — plugin-hook parity.** Does a `WorktreeCreate` hook in plugin
   `hooks/hooks.json` fire identically to the settings-block form? *Gates only
   the secondary plugin step.* Expected yes; verify before relying.
@@ -415,7 +413,36 @@ Findings raised and dispositioned:
 - **F7 — stamp-retirement verification gap.** Integrated: §9 VT added.
 - **D8 divergence note:** the P2-fails fallback changes marker lifecycle
   (persistent-shared → one-shot-consumed/serialized), a larger fork than
-  "payload + serialization" alone — flagged for the plan if P2 fails.
+  "payload + serialization" alone — flagged for the plan if P2 fails. **Moot —
+  P2 holds (below); primary path selected.**
+
+### Probe results (live claude-code 2.1.181, 2026-06-25)
+
+Run in this session via a scratch `WorktreeCreate` hook (logged payload, created
+the tree at `$cwd/.worktrees/$name` detached, echoed the path); two trivial
+`isolation:worktree` general-purpose spawns; artifacts cleaned up after.
+
+- **P3 — PASS (the spine).** Payload `cwd` follows the orchestrator's working
+  directory, not the session launch root. Spawn #1 (cwd `/workspace/doctrine`) →
+  payload `cwd=/workspace/doctrine`. After a Bash `cd .dispatch/SL-123` (the
+  harness persists Bash cwd across tool calls), spawn #2 → payload
+  `cwd=/workspace/doctrine/.dispatch/SL-123`. So the orchestrator parks in the
+  coord tree and the hook reads that path from the payload. Each coord tree is
+  its own git worktree, so `git -C "$cwd" rev-parse --show-toplevel` resolves to
+  the coord-tree root even from a subdir — marker addressing is sound. **D3 holds
+  (does not re-open); ASM-1 confirmed.** Full payload still thin:
+  `{session_id, transcript_path, cwd, hook_event_name, name:"agent-<hex>"}` —
+  no `agent_type`/base/path (matches `mem.pattern.dispatch.worktreecreate-replace-base-control`).
+- **P2 — PRESENT.** Both Agent return footers carried
+  `worktreePath: <created path>` (plus `agentId:`). **ASM-2 confirmed; D8 primary
+  selected.** Caveat: `worktreeBranch:` came back `undefined` — but only because
+  the scratch hook created a **detached** worktree (`git worktree add … HEAD`,
+  no branch). Residual to settle in the plan, not a blocker: confirm
+  `worktreeBranch` populates when the hook creates the named `dispatch/<name>`
+  branch (`fork --worker` does). Independent of that, the orchestrator can derive
+  branch from the footer's worktree path (`basename` = `name` ⇒ `dispatch/<name>`),
+  so D8 primary stands on `worktreePath` alone.
+- **P1 — not yet run** (gates only the secondary plugin step; expected yes).
 
 ### Pre-plan checks (carry into /plan)
 
@@ -427,7 +454,7 @@ Findings raised and dispositioned:
 
 ### Load-bearing risk
 
-The design leans on three live-harness probes; **P3 is the spine** — if payload
-`cwd` is the session root rather than the parked coord tree, the
-marker-location seam needs an alternate address and D3 re-opens. Resolve P3
-before committing the marker schema.
+The design leaned on three live-harness probes; **P3 (the spine) and P2 are now
+resolved (above)** — payload `cwd` is the parked coord tree and the footer
+survives, so the marker schema (D8 primary) is committable. Only **P1**
+(plugin-hook parity) remains, and it gates the secondary plugin step alone.
