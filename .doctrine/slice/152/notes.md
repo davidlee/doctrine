@@ -6,10 +6,10 @@ points at it, it does not duplicate it.
 
 ## State (2026-06-25)
 
-Slice status: **`design`** (not flipped to `plan`). Design schema is **settled —
-no open design forks.** Gate to `/plan` (handover's rule: inquisition
-dispositioned ∧ P3/P2 resolved) is **met**. Remaining work is the three pre-plan
-checks + planning. P1 (plugin parity) gates only the secondary plugin step.
+Slice status: **`design`** → flipping to **`plan`** (all three pre-plan checks
+discharged 2026-06-25, see below; F3 e2e confirmed the design, no change). Design
+schema is **settled — no open design forks.** P1 (plugin parity) gates only the
+secondary plugin step, carried into /plan.
 
 Commits (edge): `9685a695` probes → `7b76de34` inquisition I2–I5 →
 `700d1dd6` I1 positional arming → `d830e3f1` memory.
@@ -78,19 +78,29 @@ I3/I4/I5 (majors) → worktreePath normative / name sanitiser / locked root-forc
 Both factual premises verified in-repo. Reviewer dismissed: `--show-toplevel`
 addressing (sound); ADR-006 sole-writer (holds iff I1 window closed — it is).
 
-## Pre-plan checks (open — carry into /plan; design.md §10)
+## Pre-plan checks (ALL DISCHARGED 2026-06-25 — design confirmed, not changed)
 
-1. **F3 — the spike.** Is `worktree fork --worker` actually CLI-wired and green,
-   or extracted-but-dead? `fork.rs:1` carries `expect(unused … PHASE-03 prunes)`.
-   The whole "byte-identical core" thesis (D1) leans on it being live. **Discharge
-   with an e2e proving provisioned files come from the COORD TREE, not the fresh
-   fork** (the ISS-011 Defect C trap, cf. `subagent.rs`). Highest-value next
-   action — if `--worker` isn't live, planning must include reviving it.
-2. **arm-spawn base-B source.** Confirm `dispatch setup` already persists / can
-   surface base B for `arm-spawn` to write into the `base` file (vs only emitting
-   it to stdout). `src/dispatch.rs:407` (setup, emits `base=`/`coordination_dir=`).
-3. **`.worktrees/` gitignored in the coord tree** — so the nested worker worktree
-   doesn't pollute the coord working set.
+1. **F3 — the spike. ✓ DISCHARGED (e2e green).** `worktree fork --worker` is
+   CLI-wired and live: `mod.rs:288` `WorktreeCommand::Fork → run_fork`, guarded
+   Orchestrator (`guard.rs:225`). The module `expect(unused)` covers sibling
+   extracted helpers, NOT `run_fork`. Provision source is the COORD TREE — `run_fork`
+   passes `run_provision(Some(repo), dir)` with `repo = root::find(--path|cwd)`;
+   `run_provision` enumerates candidates from `source=root::find(path)`, and
+   `verify_sibling_worktree` BAILS if `source==fork`. ⇒ the ISS-011 Defect C trap
+   is structurally impossible. **E2E proof:** a gitignored sentinel
+   (`web/map/dist/F3-SENTINEL.txt`, ABSENT from commit B) was provisioned into the
+   fork → its bytes could only originate in the coord working tree. Worker marker
+   landed at `.doctrine/state/dispatch/worker`; orchestrator `fork` refused under
+   worker-mode (rollback clean). D1 "byte-identical core" thesis holds.
+2. **arm-spawn base-B source. ✓ DISCHARGED.** `run_setup` (`dispatch.rs:446`) emits
+   `base={outcome.dispatch_tip}` on stdout — the SAME coordination-tip B the
+   subprocess arm already consumes for `fork --base`. The orchestrator captures that
+   value (it already reads setup's stdout contract) and writes it into the arming
+   `base` file; per-phase tip tracking is existing funnel behaviour. No new
+   persistence on the SOURCE side — writing-into-base-file is orchestrator/skill
+   (plan) work.
+3. **`.worktrees/` gitignored. ✓ CONFIRMED** — `git check-ignore .worktrees/<x>`
+   resolves (side-effect of the F3 e2e).
 
 ## Code seams (for implementation/planning)
 
