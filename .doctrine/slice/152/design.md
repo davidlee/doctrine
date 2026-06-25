@@ -181,8 +181,14 @@ Two thin verbs, both shells over existing pure logic:
      same copier `run_fork` uses** (replicate `.worktreeinclude` — I2; hooks
      bypass the harness's native `.worktreeinclude`, so the hook must restore
      fidelity itself);
-  5. **print the created absolute path on stdout** (the harness path protocol);
-  6. **any failure ⇒ non-zero exit** (fail-closed creation).
+  5. **print the created absolute path — and ONLY that — on stdout** (the harness
+     path protocol; all diagnostics to stderr). NB: `run_fork` emits the
+     per-worktree env contract (`CARGO_TARGET_DIR=…`) on *its* stdout; that would
+     corrupt the path protocol, so `create-fork` calls the add+provision+mark
+     CORE without the env-contract emission and prints the path itself (D11);
+  6. **any failure ⇒ non-zero exit** (fail-closed creation); the benign
+     pass-through compensates (removes the tree it added) before exiting so a
+     fail-closed abort does not leak a half-created worktree.
 - **Root / provision-source resolution (F2/I5 — locked contract).**
   `create-fork` **always** resolves `root = git -C <payload.cwd> --show-toplevel`
   and passes it **explicitly** into `run_fork` / `run_provision` — it never
@@ -190,7 +196,12 @@ Two thin verbs, both shells over existing pure logic:
   the provision source identical to the subprocess arm's; a divergent root would
   silently break the "byte-identical core" claim (provisioning copies from the
   wrong tree — the ISS-011 trap). Discharged by an e2e proving provisioned files
-  come from the coord tree, not the fresh fork (F3, §10 pre-plan).
+  come from the coord tree, not the fresh fork (F3, §10 pre-plan). **This resolution
+  deliberately DIFFERS from `run_stamp_subagent`**, which uses
+  `git::primary_worktree(<cwd>)` because the *stamp* fires INSIDE the fork (process
+  cwd == fork). `create-fork` fires in the PARENT (the arming dir, before the fork
+  exists), so `--show-toplevel` of the payload cwd is the coord tree — the correct
+  source. Mirror the stamp's gather→classify→act *shape*, not its root resolution.
 - Branch / dir derived from a **sanitised** payload `name` (I4): a canonical
   validator maps `name` → a ref- and path-safe slug and **rejects** anything
   outside the envelope (empty, whitespace, `/`, `..`, ref-invalid chars, or a
@@ -198,8 +209,12 @@ Two thin verbs, both shells over existing pure logic:
   tree). Inside the envelope, `name` gives the per-spawn uniqueness git requires
   (§5.5) without the orchestrator pre-choosing branch/dir.
 
-`fork --worker` is **unchanged** — `create-fork` is a new caller of the existing
-function, exactly as the subprocess arm calls it.
+`fork --worker`'s **creation semantics are unchanged** — `create-fork` is a new
+caller of the same add+provision+mark core, exactly as the subprocess arm calls
+it. The only refactor permitted is separating that core from the CLI's stdout
+env-contract emission so `create-fork` can print the path alone (D11); the
+creation behaviour and the subprocess arm stay byte-identical (behaviour-
+preservation gate).
 
 ### 5.3 Data, State & Ownership
 
@@ -406,6 +421,26 @@ sequenced so these resolve **before** the dependent schema/emission locks.
   real git worktree; the leftover branch is the funnel import S. Full
   WorktreeRemove ownership is a follow-up.
 
+- **D11 — The byte-identical core is *add+provision+mark*; the env-contract stdout
+  emission is arm-specific (surfaced in /plan review, 2026-06-25).** `run_fork`
+  today writes the per-worktree env contract (`CARGO_TARGET_DIR=…`) to **stdout**
+  (`fork.rs:209-211`) — consumed by the subprocess arm via `env $(fork …)`. The
+  WorktreeCreate hook protocol requires **only the worktree path** on stdout, so
+  `create-fork` must NOT let that emission reach its stdout. Rationale: the claude
+  arm never consumed the env contract anyway — today's stamp flow
+  (`run_stamp_subagent`) runs `run_provision`+`write_marker` and emits **no** env
+  contract, so the claude worker inherits the orchestrator's `CARGO_TARGET_DIR`.
+  Suppressing it in `create-fork` is therefore behaviour-preserving for the claude
+  arm (per-worktree target isolation on the claude arm stays a non-goal, as today —
+  a possible follow-up). Implementation: split `run_fork`'s add+provision+mark
+  core (returns the created dir) from the CLI-layer env-contract emission, so both
+  arms share the core and only the subprocess CLI prints the env contract; OR
+  `create-fork` invokes `fork --worker` as a subprocess and discards its stdout.
+  Either keeps the *creation* core byte-identical (D1 preserved); the "unchanged
+  `fork --worker`" wording in §5.2 means the creation semantics, not the CLI's
+  stdout side-effect. Decision deferred to PHASE-02 (prefer the core/emission
+  split — cleaner cohesion, no extra process).
+
 ## 8. Risks & Mitigations
 
 - **RSK-1 (repo-global blast radius, ADR-011 D7 σ).** Every
@@ -582,6 +617,34 @@ D3/D4/D5/D8; F4 dissolved.
    `arm-spawn` to write (vs only emitting it to stdout).
 3. Confirm `.worktrees/` is (or will be) gitignored in the coord tree so the
    nested worker worktree does not pollute the coord working set.
+
+### /plan critical review (2026-06-25) — four-agent code+docs grounding
+
+Findings from grounding the plan against `src/` and `docs/claude/`. Design-affecting
+ones folded above; plan-level ones live in `plan.toml` / `notes.md`.
+
+- **G1 (design) → D11.** `run_fork` emits the env contract on stdout; the
+  WorktreeCreate protocol wants the path alone. Resolved: split core from emission;
+  claude arm never consumed the contract, so it is behaviour-preserving.
+- **G2 → §5.2.** create-fork root resolution deliberately DIFFERS from the stamp's
+  `primary_worktree(cwd)` (stamp fires inside the fork; create-fork in the parent).
+  Mirror the *shape*, not the resolution.
+- **G3 → §5.2 step 6.** The benign pass-through must compensate (remove the tree it
+  added) on failure before the fail-closed exit, or it leaks a half-created tree.
+- **Stamp emission is install-driven at TWO sites** (`skills.rs:1056-1077`,
+  `install.rs:366-385`), gated `!global` + Claude target — both retired by D2.
+- **Stale comments to reconcile when create-fork revives:** `subagent.rs:137-139`
+  ("`create-fork` is DROPPED") and `fork.rs:51-52` (cleanup "shared by … PHASE-10's
+  create-fork"). The drop rationale (thin payload) is obsoleted by positional arming.
+- **Payload `agent_type`:** docs' common-fields rule (`hooks.md:591-596`) adds
+  `agent_id`/`agent_type` for in-subagent hooks, but P3 logged a thin WorktreeCreate
+  payload on 2.1.181 — WorktreeCreate fires in the *parent* (creating the tree
+  before the child runs), so the in-subagent fields don't apply. Either way the
+  design is agent_type-agnostic (positional arming); non-issue.
+- **Footer `worktreePath`:** empirically confirmed (P2) though undocumented; the
+  docs' `worktreePath` is the unrelated HTTP-hook output field — do not conflate.
+- **`name` shape:** sanitiser must accept BOTH `agent-<hex>` (P3, tool spawns) and
+  the moby `word-word-hex` form (`hooks.md:2419`, user/`--worktree` spawns).
 
 ### Lock status
 

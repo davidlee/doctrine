@@ -102,6 +102,43 @@ addressing (sound); ADR-006 sole-writer (holds iff I1 window closed — it is).
 3. **`.worktrees/` gitignored. ✓ CONFIRMED** — `git check-ignore .worktrees/<x>`
    resolves (side-effect of the F3 e2e).
 
+## /plan critical review (2026-06-25) — code+docs grounding (durable)
+
+Four-agent grounding of the plan against `src/` and `docs/claude/`. Design-affecting
+findings reconciled into design.md (D11, §5.2, §10); plan findings folded into
+plan.toml. The load-bearing ones to remember:
+
+- **G1 (→ D11).** `run_fork` emits its env contract (`CARGO_TARGET_DIR=`) on
+  **stdout** (`fork.rs:209-211`); the WorktreeCreate protocol wants the path ALONE.
+  create-fork must split the add+provision+mark core from the CLI env-contract
+  emission (or subprocess-and-discard). Behaviour-preserving: the claude arm never
+  consumed the env contract (`run_stamp_subagent` emits none), so the claude worker
+  keeps inheriting the orchestrator `CARGO_TARGET_DIR`. Per-worktree target
+  isolation on the claude arm stays a non-goal.
+- **G2.** create-fork root resolution = `git -C payload.cwd --show-toplevel`
+  (coord tree, parent context) — deliberately NOT `primary_worktree(cwd)`, which is
+  the stamp's inside-fork resolution. Mirror run_stamp_subagent's gather→classify→act
+  SHAPE, not its root resolution.
+- **G3.** The benign pass-through (`git worktree add … HEAD` + provision) has no
+  built-in rollback (run_fork does); add compensation (`remove_worktree_dir`) before
+  the fail-closed exit or it leaks a half-created tree.
+- **G4.** The SubagentStart stamp is install-emitted at TWO sites
+  (`skills.rs:1056-1077`, `install.rs:366-385`), gated `!global`+Claude — D2 retires
+  both. The WorktreeCreate hook is a NEW `HookSpec` ctor (event = free `&str`;
+  matcher cosmetic/ignored for WorktreeCreate).
+- **Stale comments** to fix when create-fork revives: `subagent.rs:137-139`
+  ("DROPPED"), `fork.rs:51-52` (cleanup-sharing). Drop rationale obsoleted by
+  positional arming.
+- **`name` forms.** Sanitiser accepts BOTH `agent-<hex>` (P3) and moby
+  `word-word-hex` (hooks.md:2419). Payload `agent_type` may appear per docs but P3
+  saw thin (WorktreeCreate fires in parent) — design is agent_type-agnostic anyway.
+- **Guard (G8).** Orchestrator-classing create-fork is safe: worker_guard keys off
+  PROCESS cwd via `root::find(None)`; the hook fires in the markerless coord tree
+  ⇒ non-worker ⇒ allowed. A spawn from inside a marked fork is refused fail-closed
+  (acceptable — dispatch-workers carry no Agent tool, can't nest isolation spawns).
+- **dispatch-agent SKILL** exists in TWO copies (`.agents/skills/…` and
+  `plugins/doctrine/skills/…`, post-spawn block byte-identical) — PHASE-05 edits both.
+
 ## Code seams (for implementation/planning)
 
 - `src/worktree/fork.rs:133` `run_fork` (the shared core; `fork.rs:1` unused-expect).
