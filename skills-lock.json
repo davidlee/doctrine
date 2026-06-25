@@ -4,7 +4,7 @@
     "audit": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "a9c6725cce072c3e92bab1cc826d38422151124a87b583fbeb7895925ac71a04"
+      "computedHash": "c57c3036362846819536543e598126a25e3433484f6c3282aae0a1bb3fe89a66"
     },
     "backlog": {
       "source": "/home/david/dev/doctrine",
@@ -24,7 +24,7 @@
     "code-review": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "a3b9b781985e4aa68d7aee366df105dc6e085bc85910c84b8ec77efede149c5d"
+      "computedHash": "851e3e736eea7b8f9afa89862884e9cc1a25cf22944afb635709cdb398d2923e"
     },
     "consult": {
       "source": "/home/david/dev/doctrine",
@@ -34,22 +34,22 @@
     "design": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "94875a9678c6f8fd4b1b9dc6a0b384c1c85e2f38a7695f2e6f43f70b9834bc24"
+      "computedHash": "20e671f68633fbc4e012fe33016012980a884ceaf912e7b6f332ddedc1840f5e"
     },
     "dispatch": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "de93a1b5848c609831a2849d3446ba29cc8c592ae62fc7f4584fa548a0f6f2e6"
+      "computedHash": "18fa0b618dc9e2c224f0c7b13f9daf2d57c3c7a23847b7a7534a25dd9d24c73f"
     },
     "dispatch-agent": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "b64f9f11d70552e49df7ba83c81e42dd78e9ea6cfeeadd993f1e0b68207c7a14"
+      "computedHash": "82b3ba9463ae28b26de6367c603a8826debaebfbe2e7ae9ecdb83031a1dddf25"
     },
     "dispatch-subprocess": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "567c22b00098784cb0eef9fac1222599bc291986570caac8c261b505a3e18226"
+      "computedHash": "664224c474a05c8dc0f4ab5fe34cf7f987838216b0ef83b5c32a81685c5e8a89"
     },
     "dreaming": {
       "source": "/home/david/dev/doctrine",
@@ -59,7 +59,7 @@
     "execute": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "83c9b775a524e68388b315b28e05d01591824a863467c2c2f1039fdf32548f25"
+      "computedHash": "d1ac9c13fab80fe76e1cc7b52588187c214d6575a736a047f71ba0c0fff1d643"
     },
     "handover": {
       "source": "/home/david/dev/doctrine",
@@ -69,7 +69,7 @@
     "inquisition": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "f1893db7c011c85e0f5ca172ffe718d032ffbccccbd5aa3c66bff274206196e1"
+      "computedHash": "c978865b24b43ef04be5d60915387bb0ba99c9c8c452797b813cd21ed9735904"
     },
     "next": {
       "source": "/home/david/dev/doctrine",
@@ -129,7 +129,7 @@
     "slice": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "ca17f8def028295b492346d97975f6db190de2a7c031b35445a4da505fb5bc2e"
+      "computedHash": "37795c3253b317fd67dfd33aee00722ac08e98576f1c9ec03255d0990d2eaffd"
     },
     "spec-product": {
       "source": "/home/david/dev/doctrine",
