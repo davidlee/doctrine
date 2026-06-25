@@ -11,8 +11,12 @@
 //!   edit-preserving write-core for the four status setters (governance, slice,
 //!   backlog, requirement). Each kind keeps its own gate/coupling in its shell and
 //!   delegates only the WRITE here, eliminating the byte-duplicated write body.
+//! - **top-level optional scalar** ([`apply_scalar`]): set or clear one
+//!   top-level optional scalar, edit-preserving. `apply_scalar` creates absent
+//!   top-level optional scalars (safe per CHR-019) and returns `bool`;
+//!   [`apply_status`] refuses absent seeded keys and returns `Result<bool>`.
 //!
-//! Both families share the same invariants — the no-op guard (an unchanged value
+//! These families share the same invariants — the no-op guard (an unchanged value
 //! writes nothing, mtime holds), the F-1 strict refuse (a missing scaffold-seeded
 //! key is malformed; a tail `insert` would land it inside a trailing subtable =
 //! silent corruption, so refuse non-destructively, NEVER recreate), and write-once.
@@ -311,6 +315,33 @@ pub(crate) fn apply_status(
         table.insert(k, toml_edit::value(*v));
     }
     Ok(true)
+}
+
+/// Set (Some) or clear (None) one top-level optional scalar, edit-preserving.
+/// Unlike [`apply_status`]'s F-1 refuse, an ABSENT key is CREATED — these
+/// fields are legitimately absent (commented in the scaffold). CHR-019 proved
+/// root `insert` lands above trailing `[[relation]]`/subtables on
+/// `toml_edit` 0.22.27.
+/// Returns whether the document changed (no-op guard: equal value / already-absent
+/// → false, no mutation).
+pub(crate) fn apply_scalar(
+    doc: &mut toml_edit::DocumentMut,
+    key: &str,
+    value: Option<&str>,
+) -> bool {
+    if let Some(v) = value {
+        if doc.get(key).and_then(toml_edit::Item::as_str) == Some(v) {
+            return false;
+        }
+        doc.as_table_mut().insert(key, toml_edit::value(v));
+        true
+    } else {
+        if doc.get(key).is_none() {
+            return false;
+        }
+        doc.as_table_mut().remove(key);
+        true
+    }
 }
 
 /// Pure core: idempotent string-append into `[relationships].<field>` on a held
@@ -858,5 +889,109 @@ after = [
             "Y edge survives"
         );
         assert!(!written.contains("{ to = \"X\""), "X edge removed");
+    }
+
+    // --- apply_scalar — SL-153 PHASE-01 ---------------------------------------
+
+    #[test]
+    fn apply_scalar_set_creates_absent_key_above_trailing_relation() {
+        // VT-1: setting an absent key on a doc with trailing [[relation]]
+        // must place the key at the top level, above the [[relation]] block.
+        let body = "id = 1\nslug = \"a\"\ntitle = \"A\"\n\n[[relation]]\nkind = \"refines\"\nto = \"SL-001\"\n";
+        let mut doc = body.parse::<toml_edit::DocumentMut>().unwrap();
+        let changed = apply_scalar(&mut doc, "descends_from", Some("PRD-001"));
+        assert!(changed, "setting absent key reports change");
+        let output = doc.to_string();
+        // Key appears at the top level.
+        assert!(output.contains("descends_from = \"PRD-001\""));
+        // [[relation]] block is intact.
+        assert!(output.contains("[[relation]]"));
+        assert!(output.contains("kind = \"refines\""));
+        // Key appears before [[relation]].
+        let key_pos = output.find("descends_from").unwrap();
+        let rel_pos = output.find("[[relation]]").unwrap();
+        assert!(
+            key_pos < rel_pos,
+            "descends_from must be above [[relation]]"
+        );
+    }
+
+    #[test]
+    fn apply_scalar_set_present_key_updates_in_place_preserves_structure() {
+        // VT-2: doc with comments, inert table, and [[relation]].
+        // Set a present key to a new value; comment, table, [[relation]] survive.
+        let body = "\
+# top comment\n\
+id = 1\n\
+slug = \"a\"\n\
+title = \"A\"\n\
+status = \"pending\"\n\
+\n\
+[custom]\n\
+note = \"keep\"\n\
+\n\
+[[relation]]\n\
+kind = \"refines\"\n\
+to = \"SL-001\"\n";
+        let mut doc = body.parse::<toml_edit::DocumentMut>().unwrap();
+        let changed = apply_scalar(&mut doc, "status", Some("active"));
+        assert!(changed, "changing existing key reports change");
+        let output = doc.to_string();
+        assert!(output.contains("# top comment"), "comment survives");
+        assert!(output.contains("[custom]"), "inert table survives");
+        assert!(
+            output.contains("note = \"keep\""),
+            "inert table content survives"
+        );
+        assert!(output.contains("[[relation]]"), "relation survives");
+        assert!(output.contains("status = \"active\""), "status updated");
+    }
+
+    #[test]
+    fn apply_scalar_noop_matrix() {
+        // VT-3: no-op guard matrix.
+
+        // Same value already present → false.
+        let mut doc = "status = \"pending\"\n"
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
+        assert!(
+            !apply_scalar(&mut doc, "status", Some("pending")),
+            "same value no-op"
+        );
+        assert_eq!(doc.to_string(), "status = \"pending\"\n");
+
+        // Clear absent key → false.
+        let mut doc = "status = \"pending\"\n"
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
+        assert!(
+            !apply_scalar(&mut doc, "absent", None),
+            "clear absent no-op"
+        );
+        assert_eq!(doc.to_string(), "status = \"pending\"\n");
+
+        // Clear present key → true, key removed.
+        let mut doc = "status = \"pending\"\n"
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
+        assert!(
+            apply_scalar(&mut doc, "status", None),
+            "clear present reports change"
+        );
+        assert!(!doc.to_string().contains("status"), "key removed");
+
+        // Set new value on existing key → true.
+        let mut doc = "status = \"old\"\n"
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
+        assert!(
+            apply_scalar(&mut doc, "status", Some("new")),
+            "set new value reports change"
+        );
+        assert!(
+            doc.to_string().contains("status = \"new\""),
+            "value changed"
+        );
     }
 }
