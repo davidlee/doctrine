@@ -194,7 +194,7 @@ pub(crate) fn classify_create(
 /// The arming dir, relative to the coord-tree root: the orchestrator `cd`s HERE
 /// before a dispatch-worker spawn, and writes `base` inside it (design §5.3). The
 /// payload cwd BEING this dir is the positional Fork discriminator (D3/D4).
-const ARMING_SUBPATH: &str = ".doctrine/state/dispatch/spawn";
+pub(crate) const ARMING_SUBPATH: &str = ".doctrine/state/dispatch/spawn";
 /// Where every created tree lives under the coord-tree root: `<root>/.worktrees/<name>`.
 const WORKTREES_SUBDIR: &str = ".worktrees";
 

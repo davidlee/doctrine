@@ -38,8 +38,8 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
 ## 1. State (2026-06-25)
 
 - Slice status: **`started`**. Design locked → plan authored. All 3 pre-plan checks
-  discharged (§5). **PHASE-01 + PHASE-02 `completed`**; next is **`/phase-plan` PHASE-03**
-  (`dispatch arm-spawn`).
+  discharged (§5). **PHASE-01 + PHASE-02 + PHASE-03 `completed`**; next is
+  **`/phase-plan` PHASE-04** (install emission + SubagentStart stamp retirement).
 - **PHASE-01 `completed`** — pure `classify_create` + `sanitise_name` in
   `src/worktree/create.rs` (VT-1 matrix + VT-2 sanitiser table).
 - **PHASE-02 `completed`** — `doctrine worktree create-fork` shipped (the heart). The
@@ -52,6 +52,18 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
   create.rs lid removed + module doc corrected (no longer claims "no git/disk"). New
   imperative refusal token **`no-root`** (cwd resolves but outside any git worktree —
   F-P2-2). Full findings: `phase-02.md` §Findings.
+- **PHASE-03 `completed`** — `doctrine dispatch arm-spawn --base <B> [--slice <N>]` shipped
+  (`dispatch.rs::run_arm_spawn`, `DispatchCommand::ArmSpawn`, guard-classed
+  `Orchestrator("dispatch-arm-spawn")`). Writes `<coord>/.doctrine/state/dispatch/spawn/base`
+  = `"<sha>\n"` via `fsutil::write_atomic` (the `fs::write` clippy seam — runtime write),
+  prints the canonical spawn dir on stdout. **3 e2e green** (`tests/e2e_dispatch_arm_spawn.rs`:
+  exact-sha + idempotent overwrite + fail-closed bad-base) + the withheld unit case
+  (`allowlist.rs::is_withheld_classifies_each_tier` now pins `spawn/base → Tier::State`).
+  Decisions: D-P3-1 base validated to create-fork's 4..=64-hex envelope (fail-closed `bad-base`
+  at arm time); D-P3-2 NO `disarm` verb (positional cd-back, design §5.4); D-P3-3 `ARMING_SUBPATH`
+  re-exported from `create.rs` (one contract anchor, no re-spelling); D-P3-4 root via `root::find`
+  (sibling dispatch idiom = create-fork's `--show-toplevel` in a coord tree). `--slice` is
+  diagnostic-only (stderr), arming dir is per-coord-tree not per-slice. `just gate` clean.
 - **For PHASE-03 — the file contract create-fork now reads is LOCKED:** arming dir =
   `<root>/.doctrine/state/dispatch/spawn` (const `ARMING_SUBPATH` in create.rs); base
   file = `<arming_dir>/base`, contents a plausible sha (create-fork TRIMS it, accepts
@@ -87,14 +99,12 @@ land on that phase** — read those before coding the phase.
   markerless coord tree). Reconcile the `#![expect(unused)]` lids on fork.rs/
   provision.rs as functions go live.
 
-- **PHASE-03 — `dispatch arm-spawn`** (`dispatch.rs` `DispatchCommand::ArmSpawn`).
-  Writes `<coord>/.doctrine/state/dispatch/spawn/base = <sha>\n`, prints the dir.
-  base-B source = `run_setup` stdout `base=` (dispatch.rs:446) — already surfaced.
-  Idempotent; arming dir is runtime-tier + D9-withheld (never provisioned).
-  **The READER (create-fork, PHASE-02) is shipped** — the contract is fixed (§1): write
-  exactly `<sha>\n` to `<spawn>/base`; the path const lives in `create.rs::ARMING_SUBPATH`
-  (keep arm-spawn's path in sync — consider sharing the const). create-fork trims, so a
-  trailing newline is fine. arm-spawn does NOT create `.worktrees/` (create-fork does).
+- **PHASE-03 — `dispatch arm-spawn`** (`dispatch.rs` `DispatchCommand::ArmSpawn`). **DONE.**
+  Writes `<coord>/.doctrine/state/dispatch/spawn/base = <sha>\n` (atomic), prints the dir.
+  base-B source = `run_setup` stdout `base=` (dispatch.rs:446). Idempotent; arming dir is
+  runtime-tier + D9-withheld (`Tier::State`, never provisioned — pinned in the allowlist test).
+  Shared the `ARMING_SUBPATH` const from `create.rs` (D-P3-3); fail-closed base validation
+  (D-P3-1); no `disarm` (D-P3-2). arm-spawn does NOT create `.worktrees/` (create-fork does).
 
 - **PHASE-04 — install emission + stamp retirement** (`boot.rs` new `HookSpec` ctor
   event `WorktreeCreate`; retire stamp). **Bites:** G4 — the stamp is emitted at
