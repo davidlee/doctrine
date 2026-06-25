@@ -39,9 +39,12 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
 
 - Slice status: **`ready`** (design locked → plan authored → ready). Design schema
   settled, **no open forks**. All 3 pre-plan checks discharged (§5).
-- **PHASE-01 `in_progress`** — pure `classify_create` + `sanitise_name` in a new
-  `src/worktree/create.rs`. Sheet filled (`phases/phase-01.md`); next is `/execute`
-  (TDD T1–T6).
+- **PHASE-01 `completed`** — pure `classify_create` + `sanitise_name` shipped in
+  `src/worktree/create.rs` (9 tests green, VT-1 matrix + VT-2 sanitiser table; full
+  `just check` clean). **Lid gotcha:** items are test-only-consumed until PHASE-02, so
+  the module lid is `#![cfg_attr(not(test), expect(unused, …))]` NOT a plain
+  `#![expect(unused)]` (the latter is unfulfilled under `cargo test` ⇒ deny). PHASE-02
+  EX-7 reconciles it. Next is `/phase-plan` PHASE-02 (shell + CLI wiring).
 - Commits (edge): `9685a695` probes → `7b76de34` inquisition → `700d1dd6` positional
   arming → `d830e3f1` memory → `f3fa6187` pre-plan-discharge+flip → `9f119375` plan →
   `74411a43` /plan review (D11 + plan tighten). Runtime phase sheets are gitignored
