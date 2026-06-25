@@ -1239,7 +1239,7 @@ mod tests {
         assert!(!body.contains("created = \"2099-01-01\""));
         // toml_edit preserved the inert table and its hand-authored comments.
         assert!(body.contains("[relationships]"));
-        assert!(body.contains("# The `supersedes` and `related` axes are uniform"));
+        assert!(body.contains("`doctrine supersede") || body.contains("doctrine link ADR"));
         assert!(!body.contains("supersedes    = []"));
     }
 

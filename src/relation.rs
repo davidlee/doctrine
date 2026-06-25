@@ -1425,7 +1425,7 @@ mod tests {
                 &["SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON"],
             ),
             (RelationLabel::DescendsFrom, &["SPEC"]),
-            (RelationLabel::Parent, &["SPEC"]),
+            (RelationLabel::Parent, &["PRD", "SPEC"]),
             (RelationLabel::Members, &["PRD", "SPEC"]),
             (RelationLabel::Interactions, &["SPEC"]),
             (RelationLabel::Slices, &["ISS", "IMP", "CHR", "RSK", "IDE"]),

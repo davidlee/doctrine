@@ -1862,6 +1862,7 @@ mod tests {
             &root,
             ".doctrine/spec/product/001/spec-001.toml",
             "id = 1\nslug = \"pr\"\ntitle = \"PR\"\nstatus = \"draft\"\nkind = \"product\"\n\
+             parent = \"PRD-002\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
              [[relation]]\nlabel = \"consumes\"\ntarget = \"PRD-002\"\n",
         );
