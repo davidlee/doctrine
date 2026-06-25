@@ -137,9 +137,10 @@ WorktreeCreate HOOK  →  doctrine worktree create-fork           (the new verb,
   ▼
 WORKER subagent runs in the created tree (base-guard, work, return footer)
   ▼
-ORCHESTRATOR post-spawn (unchanged belt):
-  read worktreePath:/worktreeBranch: from footer
-  doctrine worktree verify-worker --base B --dir <path> --branch <branch>
+ORCHESTRATOR post-spawn:
+  read worktreePath: from footer (normative; I3)
+  name = basename(worktreePath); branch = dispatch/<name>   (derived, not footer-read)
+  doctrine worktree verify-worker --base B --dir <worktreePath> --branch <branch>
 ```
 
 The SL-123 `SubagentStart` stamp hook is **no longer wired on the claude arm**
@@ -164,17 +165,26 @@ Two thin verbs, both shells over existing pure logic:
      (+ named refusals);
   4. act: `Fork` → `run_fork(base, branch=dispatch/<name>,
      dir=<root>/.worktrees/<name>, worker=true)`; `Passthrough` →
-     `git worktree add <root>/.worktrees/<name> HEAD`;
+     `git worktree add <root>/.worktrees/<name> HEAD` **then provision via the
+     same copier `run_fork` uses** (replicate `.worktreeinclude` — I2; hooks
+     bypass the harness's native `.worktreeinclude`, so the hook must restore
+     fidelity itself);
   5. **print the created absolute path on stdout** (the harness path protocol);
   6. **any failure ⇒ non-zero exit** (fail-closed creation).
-- **Root / provision-source resolution (F2).** `create-fork` must resolve its
-  doctrine root to the **coord tree** (the hook runs with cwd there under P3, or
-  pass `-p <root>`), so `run_fork`'s provision source is identical to the
-  subprocess arm's. A divergent root would silently break the "byte-identical
-  core" claim — provisioning would copy from the wrong tree.
-- Branch / dir derived from the payload `name` (harness-unique per spawn) — the
-  per-spawn uniqueness git requires (§5.5), without the orchestrator
-  pre-choosing them.
+- **Root / provision-source resolution (F2/I5 — locked contract).**
+  `create-fork` **always** resolves `root = git -C <payload.cwd> --show-toplevel`
+  and passes it **explicitly** into `run_fork` / `run_provision` — it never
+  relies on process cwd (P3 proves *payload* cwd, not *process* cwd). This makes
+  the provision source identical to the subprocess arm's; a divergent root would
+  silently break the "byte-identical core" claim (provisioning copies from the
+  wrong tree — the ISS-011 trap). Discharged by an e2e proving provisioned files
+  come from the coord tree, not the fresh fork (F3, §10 pre-plan).
+- Branch / dir derived from a **sanitised** payload `name` (I4): a canonical
+  validator maps `name` → a ref- and path-safe slug and **rejects** anything
+  outside the envelope (empty, whitespace, `/`, `..`, ref-invalid chars, or a
+  name colliding with a live `dispatch/<name>` / `.worktrees/<name>` in the coord
+  tree). Inside the envelope, `name` gives the per-spawn uniqueness git requires
+  (§5.5) without the orchestrator pre-choosing branch/dir.
 
 `fork --worker` is **unchanged** — `create-fork` is a new caller of the existing
 function, exactly as the subprocess arm calls it.
@@ -201,9 +211,13 @@ function, exactly as the subprocess arm calls it.
 | `--dir` | **distinct** (one path per worktree) | hook-derived `<root>/.worktrees/<name>` |
 
 The thing we could not get pre-spawn (`name`) is exactly the thing the hook
-derives uniqueness from, locally. The orchestrator learns each worker's
-branch/dir from the **return footer** (it already reads `worktreePath:`/
-`worktreeBranch:` today) — free **iff the footer survives hook-creation (P2)**.
+derives uniqueness from, locally. The orchestrator learns each worker's location
+from the **return footer**, which survives hook-creation (P2 PASS). **The
+normative datum is `worktreePath`** (proven present); the orchestrator derives
+`name = basename(worktreePath)` and `branch = dispatch/<name>` from it (I3).
+`worktreeBranch` is **not** relied on (the probe saw it `undefined` for a
+detached tree); the dispatch-agent post-spawn contract is updated to bind
+`verify-worker`/funnel to the derived branch, not the footer field.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -252,10 +266,11 @@ branch/dir from the **return footer** (it already reads `worktreePath:`/
   `dispatch/<name>` branch + `.worktrees/<name>` dir; native remove drops the
   tree but leaves the branch (D10), so branches accumulate across retries. Prune
   in the WorktreeRemove follow-up or a `dispatch gc`.
-- **Edge — `name` shape.** Assumed `agent-<hex>` (harness auto-generated for
-  Agent-tool spawns; the orchestrator does not pass a custom name). A
-  user-specified name would still yield a unique branch/dir but is out of the
-  dispatch path.
+- **Edge — `name` shape (I4).** Observed `agent-<hex>` (harness auto-generated
+  for Agent-tool spawns). Not *assumed* safe: the harness owns the field and docs
+  admit human-style names, so `create-fork` runs a canonical sanitiser/validator
+  (§5.2) and fail-closed rejects anything outside the ref+path-safe envelope
+  rather than feeding it raw into `dispatch/<name>` / `.worktrees/<name>`.
 
 ## 6. Open Questions & Unknowns
 
@@ -274,9 +289,9 @@ sequenced so these resolve **before** the dependent schema/emission locks.
 - **P1 (was OQ-5) — plugin-hook parity.** Does a `WorktreeCreate` hook in plugin
   `hooks/hooks.json` fire identically to the settings-block form? *Gates only
   the secondary plugin step.* Expected yes; verify before relying.
-- **OQ-2 (residual) — pass-through `.worktreeinclude` fidelity.** What does a
-  non-dispatch subagent that relied on `.worktreeinclude` lose? Decide:
-  replicate vs accept-the-gap-and-document.
+- **OQ-2 — CLOSED (I2).** Pass-through replicates `.worktreeinclude` through the
+  same provision copier (D9). Accept-the-gap rejected — the allowlist is
+  non-empty in doctrine's own repo.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -343,8 +358,13 @@ sequenced so these resolve **before** the dependent schema/emission locks.
   whether creation serializes.
 
 - **D9 — Pass-through = `git worktree add <root>/.worktrees/<name> HEAD`
-  (detached).** `.worktreeinclude` gap accepted pending OQ-2; the hook must be
-  robust because it is repo-global (RSK-1).
+  (detached) + provision via the same copier (I2).** Because the hook *replaces*
+  native creation, the harness skips `.worktreeinclude`; the benign path must
+  replicate it through the same provision copier `run_fork` uses, or it silently
+  regresses provisioned files (`.doctrine/doctrine.just`, `web/map/dist/**`) for
+  every benign `isolation:worktree` subagent in any installing repo. OQ-2 closed:
+  **replicate**, do not accept-the-gap. The hook must be robust because it is
+  repo-global (RSK-1).
 
 - **D10 — No WorktreeRemove hook.** Native `git worktree remove` cleans the
   real git worktree; the leftover branch is the funnel import S. Full
@@ -390,7 +410,18 @@ Verification / closure intent (TDD red/green/refactor; pure core + golden tokens
 - **VT (secondary) — plugin parity.** The hook in `hooks/hooks.json` fires
   identically to the settings-block form (P1 resolved); the settings block is
   removed in the same step (no double-wiring).
-- **VA/VH — probes P1/P2/P3** run on live 2.1.181 before the dependent locks.
+- **VT — benign provisioning parity (I2).** A benign `isolation:worktree`
+  subagent's tree contains the `.worktreeinclude` files
+  (`.doctrine/doctrine.just`, `web/map/dist/**`) — pass-through provisions
+  through the same copier, no regression vs native creation.
+- **VT — footer datum is `worktreePath` (I3).** Orchestrator derives
+  `name`/`branch` from `worktreePath`; `verify-worker` passes even when the
+  footer's `worktreeBranch` is absent/undefined.
+- **VT — name sanitiser (I4).** `classify_create` rejects empty / whitespace /
+  `/` / `..` / ref-invalid / colliding `name` with a named refusal (fail-closed),
+  and accepts the canonical `agent-<hex>` shape.
+- **VA/VH — probes P1/P2/P3** run on live 2.1.181 before the dependent locks
+  (P2/P3 done — §10; P1 gates the secondary plugin step).
 
 ## 10. Review Notes
 
@@ -444,9 +475,78 @@ the tree at `$cwd/.worktrees/$name` detached, echoed the path); two trivial
   so D8 primary stands on `worktreePath` alone.
 - **P1 — not yet run** (gates only the secondary plugin step; expected yes).
 
+### External inquisition (codex / GPT-5.5, 2026-06-25)
+
+Verdict: **needs rework** — discriminator and benign-path blast radius are
+doctrinal defects, not polish. Both factual premises verified in-repo
+(`.worktreeinclude` non-empty; dispatch-agent contract hands `worktreeBranch` to
+`verify-worker`/funnel). Dispositions:
+
+- **I1 (BLOCKER) — discrimination false-positive (D4/§5.5/INV-2/RSK-3).** The
+  persistent base-only marker makes any `isolation:worktree` spawn from the
+  parked coord tree indistinguishable from a worker ⇒ force-forked + marked.
+  "Orchestrator doesn't spawn benign subagents while parked" is *discipline, not
+  mechanism*; `dispatch disarm` is therefore load-bearing, not optional. INV-2 is
+  unproven. **ACCEPTED — needs a design decision** on the discrimination
+  mechanism (open; see below). The base-only-persistent schema (D3/D5/§5.3) is
+  NOT lockable until this resolves.
+- **I2 (BLOCKER) — benign pass-through provisioning regression (D9/RSK-1).**
+  `.worktreeinclude` carries `.doctrine/doctrine.just`, `web/map/dist/**`; the
+  benign path `git worktree add … HEAD` skips it (hooks bypass `.worktreeinclude`
+  by design). Repo-global ⇒ doctrine's own benign `isolation:worktree` subagents
+  silently lose provisioned files, fail-closed blast radius. **ACCEPTED — fix:**
+  the benign path provisions through the **same copier** as the dispatch path
+  (replicate `.worktreeinclude`); D9 upgraded; OQ-2 closed (replicate, not
+  accept-the-gap); VT added (§9).
+- **I3 (MAJOR) — D8 primary leaned on the unproven `worktreeBranch` field.**
+  Probe proved `worktreePath`, not `worktreeBranch` (came back `undefined` for the
+  detached scratch tree); the live dispatch-agent contract still hands
+  `worktreeBranch` to `verify-worker` and the funnel. **ACCEPTED — fix:**
+  `worktreePath` is the **normative** datum; orchestrator derives
+  `name = basename(worktreePath)`, `branch = dispatch/<name>`. `worktreeBranch`
+  is no longer load-bearing. dispatch-agent SKILL post-spawn contract updates in
+  the plan; VT added (worktreeBranch absent). (Cheap confirming probe — does
+  `worktreeBranch` populate for a *named*-branch hook fork — is now nice-to-have,
+  not gating.)
+- **I4 (MAJOR) — payload `name` treated as ref/path-safe without a contract
+  (D3/§5.2/§5.5).** Harness owns `name`; docs admit human-style names; it flows
+  unsanitised into `dispatch/<name>` and `.worktrees/<name>`. **ACCEPTED — fix:**
+  canonical sanitiser/validator payload `name` → ref+path-safe slug; reject
+  outside the envelope (spaces, `/`, `..`, dupes, empty); VTs added (§9).
+- **I5 (MAJOR) — "byte-identical core" root-forcing not a locked contract
+  (D1/F2/§5.2).** P3 proves *payload* cwd, not *process* cwd; "runs with cwd
+  there, or pass `-p`" is not a guarantee. **ACCEPTED — fix:** `create-fork`
+  **always** resolves `root = git -C <payload.cwd> --show-toplevel` and passes it
+  explicitly into `run_fork`/`run_provision` (never relies on process cwd); F3
+  discharged by an e2e proving provisioned files come from the coord tree, not
+  the fresh fork. §5.2 tightened.
+- **Dismissed by the reviewer:** marker addressing via `--show-toplevel` (sound
+  for subdir / sibling / nested / jail); ADR-006 "sole writer" (holds *iff* I1's
+  window is closed).
+
+### Open decision (gates the lock) — I1 discrimination mechanism
+
+The base-only-persistent marker (D3/D5) is parallel-clean but discriminates only
+by presence, so it cannot mechanically distinguish a worker spawn from a benign
+`isolation:worktree` spawn issued while the coord tree is armed. Candidate fixes
+(decision pending):
+
+1. **Mandatory disarm bracket.** `arm-spawn` opens, `disarm` closes (mandatory,
+   not optional); the dispatch skill guarantees no benign isolated spawns inside
+   the bracket; VT + `verify-worker` backstop. Cheapest; keeps the schema; still
+   partly disciplinary (reviewer's core objection survives, mitigated).
+2. **Credit-token directory.** Marker is a dir of N single-use tokens (one per
+   expected spawn); each hook atomically claims one (`O_EXCL`/rename); empty ⇒
+   passthrough. Mechanical, race-free under parallel, parallel-clean; bounds the
+   window to exactly the armed batch. More machinery; hook consumes (still
+   orchestrator-owned set).
+3. **One-shot consume + serialize** = the old D8 fallback. Simplest discriminator
+   but serialises creation; loses the parallel-clean win.
+
 ### Pre-plan checks (carry into /plan)
 
-1. **F3** — verify `run_fork` / `--worker` is live (not dead extraction).
+1. **F3** — verify `run_fork` / `--worker` is live (not dead extraction);
+   discharge per I5 with an e2e proving provision source = coord tree.
 2. Confirm `dispatch setup` already persists / can surface base B for
    `arm-spawn` to write (vs only emitting it to stdout).
 3. Confirm `.worktrees/` is (or will be) gitignored in the coord tree so the
