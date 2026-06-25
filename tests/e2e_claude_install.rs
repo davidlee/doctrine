@@ -4,10 +4,11 @@
 //! Drives the consolidated `doctrine install` handler against a temp project and
 //! proves the Claude-surface install does three things in one verb (design §9):
 //!   * VT-1: `install --agent claude --skill code-review` wires skills, agent def,
-//!     and the SubagentStart hook into `.claude/`.
+//!     and the `WorktreeCreate` hook into `.claude/`.
 //!   * VT-2: the dispatch-worker agent def resolves at `.claude/agents/`.
-//!   * the `SubagentStart` hook is merged into `.claude/settings.local.json`,
-//!     matcher-scoped to the dispatch-worker agent type, idempotent on reinstall.
+//!   * the `WorktreeCreate` hook (`worktree create-fork`) is merged into
+//!     `.claude/settings.local.json`, idempotent on reinstall — and the retired
+//!     SL-123 `SubagentStart` stamp hook is NEVER emitted (SL-152 D2).
 
 #![allow(
     clippy::expect_used,
@@ -49,20 +50,21 @@ fn install(dir: &Path) -> String {
     String::from_utf8(out.stdout).expect("utf8 stdout")
 }
 
-/// The `hooks.SubagentStart` array of a settings file (empty if absent).
-fn subagent_entries(settings: &Path) -> Vec<Value> {
+/// The `hooks.<event>` array of a settings file (empty if absent).
+fn event_entries(settings: &Path, event: &str) -> Vec<Value> {
     let json = fs::read_to_string(settings).expect("settings readable");
     let value: Value = serde_json::from_str(&json).expect("valid settings JSON");
     value
         .get("hooks")
-        .and_then(|h| h.get("SubagentStart"))
+        .and_then(|h| h.get(event))
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default()
 }
 
 /// Assert the post-install state holds for a project at `dir`: the agent def
-/// resolves, and the SubagentStart hook is wired matcher-scoped exactly once.
+/// resolves, and the WorktreeCreate hook is wired exactly once (with the retired
+/// SubagentStart stamp absent).
 fn assert_installed(dir: &Path) {
     // VT-2: the agent def is a link resolving to materialised content.
     let agent_link = dir.join(".claude/agents/dispatch-worker.md");
@@ -83,26 +85,26 @@ fn assert_installed(dir: &Path) {
         "canonical agent def materialised"
     );
 
-    // The SubagentStart hook: exactly one entry, matcher-scoped to dispatch-worker,
-    // command is `<exec> worktree marker --stamp-subagent`.
+    // The WorktreeCreate hook: exactly one entry, command `<exec> worktree create-fork`.
     let settings = dir.join(".claude/settings.local.json");
-    let subs = subagent_entries(&settings);
-    assert_eq!(subs.len(), 1, "exactly one SubagentStart entry");
-    assert_eq!(
-        subs[0].get("matcher").and_then(Value::as_str),
-        Some("dispatch-worker"),
-        "matcher-scoped to the dispatch-worker agent type"
-    );
-    let cmd = subs[0]
+    let wc = event_entries(&settings, "WorktreeCreate");
+    assert_eq!(wc.len(), 1, "exactly one WorktreeCreate entry");
+    let cmd = wc[0]
         .get("hooks")
         .and_then(Value::as_array)
         .and_then(|a| a.first())
         .and_then(|h| h.get("command"))
         .and_then(Value::as_str)
-        .expect("SubagentStart command");
+        .expect("WorktreeCreate command");
     assert!(
-        cmd.ends_with(" worktree marker --stamp-subagent"),
-        "stamp hook command: {cmd}"
+        cmd.ends_with(" worktree create-fork"),
+        "create-fork hook command: {cmd}"
+    );
+
+    // VT-1 (negative, D2): the retired SubagentStart stamp hook is never emitted.
+    assert!(
+        event_entries(&settings, "SubagentStart").is_empty(),
+        "no SubagentStart stamp hook after retirement"
     );
 }
 
@@ -117,13 +119,13 @@ fn install_wires_skills_agent_and_hook_idempotently() {
         out.contains("linked    dispatch-worker.md"),
         "agents leg: {out}"
     );
-    assert!(out.contains("subagent hook: wired"), "hook leg: {out}");
+    assert!(out.contains("worktree hook: wired"), "hook leg: {out}");
     assert_installed(dir);
 
-    // Reinstall is idempotent: no duplicate SubagentStart entry, hook now current.
+    // Reinstall is idempotent: no duplicate WorktreeCreate entry, hook now current.
     let out = install(dir);
     assert!(
-        out.contains("subagent hook: already current"),
+        out.contains("worktree hook: already current"),
         "reinstall hook no-op: {out}"
     );
     assert_installed(dir);

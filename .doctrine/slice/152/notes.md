@@ -38,8 +38,21 @@ provisioning + marking inside the fork. A spawn from anywhere else passes throug
 ## 1. State (2026-06-25)
 
 - Slice status: **`started`**. Design locked → plan authored. All 3 pre-plan checks
-  discharged (§5). **PHASE-01 + PHASE-02 + PHASE-03 `completed`**; next is
-  **`/phase-plan` PHASE-04** (install emission + SubagentStart stamp retirement).
+  discharged (§5). **PHASE-01 + PHASE-02 + PHASE-03 `completed`**. **PHASE-04
+  automatable scope GREEN** (`in_progress`; install emits WorktreeCreate →
+  create-fork, stamp retired at both sites; VT-1..4 automated, `just gate` clean) —
+  **VA-1 (you-run-it live dispatch dry-run) is the sole outstanding gate before
+  flipping PHASE-04 completed.** Next after VA-1: PHASE-05 (dispatch-agent SKILL).
+- **PHASE-04 `in_progress` (auto scope done)** — `HookSpec::create_fork` (event
+  `WorktreeCreate`, cosmetic matcher `"*"`) emitted at BOTH install sites
+  (`skills.rs` run_install + `install.rs`), REPLACING the retired SL-123
+  `stamp_subagent` ctor/command/predicate (removed; the `worktree marker
+  --stamp-subagent` VERB + `classify_stamp` retained — D-P4-2). SL-124 merge-core
+  normalize tests re-pointed stamp→create_fork (F-P4-1). New e2e
+  `tests/e2e_dispatch_h1_integration.rs` (VT-4: arm-spawn→create-fork lands at B
+  under moving main + verify-worker passes, F7). `e2e_claude_install` updated to the
+  WorktreeCreate contract (VT-1 negative golden, F-P4-3). baseRef belt + verify-worker
+  verb untouched (separate code paths — A1/A2). Full detail: `phase-04.md`.
 - **PHASE-01 `completed`** — pure `classify_create` + `sanitise_name` in
   `src/worktree/create.rs` (VT-1 matrix + VT-2 sanitiser table).
 - **PHASE-02 `completed`** — `doctrine worktree create-fork` shipped (the heart). The

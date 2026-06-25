@@ -537,6 +537,11 @@ const SESSION_MATCHER: &str = "startup|clear";
 /// and compact events.
 const SESSION_MATCHER_CODEX: &str = "startup|resume|clear|compact";
 
+/// Cosmetic matcher for the `WorktreeCreate` hook entry (SL-152).
+/// `WorktreeCreate` has no matcher support (hooks.md:237), so this never scopes at
+/// runtime — it only gives the merge core a stable canonical-entry identity.
+const WORKTREE_CREATE_MATCHER: &str = "*";
+
 // ---------------------------------------------------------------------------
 // The harness seam (R2) — enum + match, one local id per wired harness.
 // ---------------------------------------------------------------------------
@@ -900,20 +905,19 @@ fn is_doctrine_emit_command(cmd: &str) -> bool {
     is_doctrine_program(program)
 }
 
-/// The `SubagentStart` stamp hook command for `exec`:
-/// `<exec> worktree marker --stamp-subagent` (SL-056 PHASE-10). Multi-arg, so
-/// ownership matches by suffix-strip (see `is_doctrine_stamp_command`).
-fn stamp_subagent_command(exec: &Path) -> String {
-    format!("{} worktree marker --stamp-subagent", exec.display())
+/// The `WorktreeCreate` hook command for `exec`:
+/// `<exec> worktree create-fork` (SL-152 PHASE-04). Multi-arg, so ownership
+/// matches by suffix-strip (see `is_doctrine_create_fork_command`).
+fn create_fork_command(exec: &Path) -> String {
+    format!("{} worktree create-fork", exec.display())
 }
 
-/// Whether `cmd` is doctrine's own `worktree marker --stamp-subagent` hook.
-/// Strip the fixed ` worktree marker --stamp-subagent` suffix and check the
-/// remaining program's file name is `doctrine`. Disjoint from the boot/sync
-/// predicates (neither owns the other's command), so the `SubagentStart` entry
-/// never clobbers the `SessionStart` ones.
-fn is_doctrine_stamp_command(cmd: &str) -> bool {
-    let Some(program) = cmd.trim().strip_suffix(" worktree marker --stamp-subagent") else {
+/// Whether `cmd` is doctrine's own `worktree create-fork` hook. Strip the fixed
+/// ` worktree create-fork` suffix and check the remaining program's file name is
+/// `doctrine`. Disjoint from the boot/sync predicates (neither owns the other's
+/// command), so the `WorktreeCreate` entry never clobbers the `SessionStart` ones.
+fn is_doctrine_create_fork_command(cmd: &str) -> bool {
+    let Some(program) = cmd.trim().strip_suffix(" worktree create-fork") else {
         return false;
     };
     is_doctrine_program(program)
@@ -964,16 +968,16 @@ impl HookSpec {
         }
     }
 
-    /// The `<exec> worktree marker --stamp-subagent` hook (SL-056 PHASE-11) — a
-    /// `SubagentStart` entry, matcher-scoped to the dispatch-worker agent type.
-    /// The matcher is sourced from `crate::worktree::DISPATCH_WORKER_AGENT_TYPE`,
-    /// never re-spelled (a drift test pins the equality).
-    pub(crate) fn stamp_subagent(exec: &Path) -> Self {
+    /// The `<exec> worktree create-fork` hook (SL-152 PHASE-04) — a
+    /// `WorktreeCreate` entry. `WorktreeCreate` has no matcher support
+    /// (hooks.md:237), so `WORKTREE_CREATE_MATCHER` is cosmetic — it only feeds the
+    /// merge core's canonical-entry identity, never runtime scoping.
+    pub(crate) fn create_fork(exec: &Path) -> Self {
         Self {
-            command: stamp_subagent_command(exec),
-            is_ours: is_doctrine_stamp_command,
-            event: "SubagentStart",
-            matcher: crate::worktree::DISPATCH_WORKER_AGENT_TYPE,
+            command: create_fork_command(exec),
+            is_ours: is_doctrine_create_fork_command,
+            event: "WorktreeCreate",
+            matcher: WORKTREE_CREATE_MATCHER,
         }
     }
 }
@@ -3716,15 +3720,15 @@ world";
 
     #[test]
     fn plan_baseref_preserves_hooks_and_other_worktree_keys() {
-        // A realistic settings file: boot+stamp hooks plus an unrelated worktree
-        // key. The baseRef set must leave ALL of them intact.
+        // A realistic settings file: boot + create-fork hooks plus an unrelated
+        // worktree key. The baseRef set must leave ALL of them intact.
         let existing = r#"{
           "hooks": {
             "SessionStart": [
               {"matcher":"startup|clear","hooks":[{"type":"command","command":"/abs/doctrine boot"}]}
             ],
-            "SubagentStart": [
-              {"matcher":"dispatch-worker","hooks":[{"type":"command","command":"/abs/doctrine worktree marker --stamp-subagent"}]}
+            "WorktreeCreate": [
+              {"matcher":"*","hooks":[{"type":"command","command":"/abs/doctrine worktree create-fork"}]}
             ]
           },
           "worktree": {"autoFetch": true}
@@ -3742,8 +3746,8 @@ world";
             Value::String("/abs/doctrine boot".into())
         );
         assert_eq!(
-            parsed["hooks"]["SubagentStart"][0]["hooks"][0]["command"],
-            Value::String("/abs/doctrine worktree marker --stamp-subagent".into())
+            parsed["hooks"]["WorktreeCreate"][0]["hooks"][0]["command"],
+            Value::String("/abs/doctrine worktree create-fork".into())
         );
     }
 
@@ -3952,12 +3956,13 @@ world";
             .cloned()
     }
 
-    // VT-3: the stamp hook merges into a settings file that already carries
-    // unrelated SessionStart hooks — the SessionStart entries are untouched and a
-    // NEW SubagentStart array with the matcher-scoped entry is appended.
-    // Reinstall is idempotent (no dup).
+    // SL-152 VT-1: the create-fork hook merges into a settings file that already
+    // carries unrelated SessionStart hooks — the SessionStart entries are
+    // untouched and a NEW WorktreeCreate array with the cosmetic-matcher entry is
+    // appended. The retired SubagentStart stamp hook is NEVER written. Reinstall
+    // is idempotent (no dup).
     #[test]
-    fn install_claude_stamp_hook_appends_subagentstart_leaves_sessionstart_intact() {
+    fn install_claude_create_fork_hook_appends_worktreecreate_leaves_sessionstart_intact() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
@@ -3979,9 +3984,9 @@ world";
         )
         .unwrap();
 
-        // Wire the stamp hook.
-        let out = install_claude_hook(root, &HookSpec::stamp_subagent(exec), false).unwrap();
-        assert!(matches!(out, RefreshOutcome::Wired(_)), "stamp wired");
+        // Wire the create-fork hook.
+        let out = install_claude_hook(root, &HookSpec::create_fork(exec), false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)), "create-fork wired");
 
         let json = fs::read_to_string(&settings_path).unwrap();
 
@@ -4003,63 +4008,69 @@ world";
             "SessionStart untouched"
         );
 
-        // A new SubagentStart array carries the matcher-scoped stamp entry.
-        let sub = event_entries(&json, "SubagentStart").expect("SubagentStart created");
-        assert_eq!(sub.len(), 1, "one SubagentStart entry");
+        // A new WorktreeCreate array carries the cosmetic-matcher create-fork entry.
+        let wc = event_entries(&json, "WorktreeCreate").expect("WorktreeCreate created");
+        assert_eq!(wc.len(), 1, "one WorktreeCreate entry");
         assert_eq!(
-            sub[0].get("matcher").and_then(Value::as_str),
-            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
-            "matcher-scoped to the dispatch-worker agent type"
+            wc[0].get("matcher").and_then(Value::as_str),
+            Some(WORKTREE_CREATE_MATCHER),
+            "cosmetic matcher pinned"
         );
-        let sub_cmd = sub[0]
+        let wc_cmd = wc[0]
             .get("hooks")
             .and_then(Value::as_array)
             .and_then(|a| a.first())
             .and_then(|h| h.get("command"))
             .and_then(Value::as_str);
-        assert_eq!(
-            sub_cmd,
-            Some("/abs/doctrine worktree marker --stamp-subagent")
+        assert_eq!(wc_cmd, Some("/abs/doctrine worktree create-fork"));
+
+        // VT-1 (negative): the retired SubagentStart stamp hook is never emitted.
+        assert!(
+            event_entries(&json, "SubagentStart").is_none(),
+            "no SubagentStart stamp hook (D2 retirement)"
         );
 
-        // Reinstall is idempotent — no duplicate SubagentStart entry.
-        let again = install_claude_hook(root, &HookSpec::stamp_subagent(exec), false).unwrap();
+        // Reinstall is idempotent — no duplicate WorktreeCreate entry.
+        let again = install_claude_hook(root, &HookSpec::create_fork(exec), false).unwrap();
         assert!(matches!(again, RefreshOutcome::None), "reinstall no-op");
         let json = fs::read_to_string(&settings_path).unwrap();
         assert_eq!(
-            event_entries(&json, "SubagentStart").unwrap().len(),
+            event_entries(&json, "WorktreeCreate").unwrap().len(),
             1,
             "no duplicate on reinstall"
         );
     }
 
-    // Drift pin: the stamp matcher is the worktree dispatch-worker agent type,
-    // not a re-spelled literal — if the const moves, this fails loudly.
+    // Drift pin: the create-fork spec wires WorktreeCreate with the cosmetic
+    // matcher and the canonical `worktree create-fork` command.
     #[test]
-    fn stamp_subagent_matcher_tracks_worktree_const() {
-        let spec = HookSpec::stamp_subagent(Path::new("/abs/doctrine"));
-        assert_eq!(spec.matcher, crate::worktree::DISPATCH_WORKER_AGENT_TYPE);
-        assert_eq!(spec.event, "SubagentStart");
+    fn create_fork_spec_shape() {
+        let spec = HookSpec::create_fork(Path::new("/abs/doctrine"));
+        assert_eq!(spec.matcher, WORKTREE_CREATE_MATCHER);
+        assert_eq!(spec.event, "WorktreeCreate");
+        assert_eq!(spec.command, "/abs/doctrine worktree create-fork");
     }
 
-    // The three ownership predicates are mutually disjoint — none owns another's
-    // command, so the three entries never clobber one another.
+    // The ownership predicates are mutually disjoint — none owns another's
+    // command, so the entries never clobber one another.
     #[test]
-    fn stamp_ownership_is_disjoint_from_boot_and_sync() {
-        assert!(is_doctrine_stamp_command(
-            "/abs/doctrine worktree marker --stamp-subagent"
+    fn create_fork_ownership_is_disjoint_from_boot_and_sync() {
+        assert!(is_doctrine_create_fork_command(
+            "/abs/doctrine worktree create-fork"
         ));
-        assert!(!is_doctrine_stamp_command("/abs/doctrine boot"));
-        assert!(!is_doctrine_stamp_command("/abs/doctrine memory sync"));
+        assert!(!is_doctrine_create_fork_command("/abs/doctrine boot"));
+        assert!(!is_doctrine_create_fork_command(
+            "/abs/doctrine memory sync"
+        ));
         assert!(!is_doctrine_boot_command(
-            "/abs/doctrine worktree marker --stamp-subagent"
+            "/abs/doctrine worktree create-fork"
         ));
         assert!(!is_doctrine_sync_command(
-            "/abs/doctrine worktree marker --stamp-subagent"
+            "/abs/doctrine worktree create-fork"
         ));
-        // a foreign stamp-shaped command is not ours.
-        assert!(!is_doctrine_stamp_command(
-            "/usr/bin/tool worktree marker --stamp-subagent"
+        // a foreign create-fork-shaped command is not ours.
+        assert!(!is_doctrine_create_fork_command(
+            "/usr/bin/tool worktree create-fork"
         ));
     }
 
@@ -4077,19 +4088,19 @@ world";
             .collect()
     }
 
-    const POISON_STAMP: &str = "/abs/doctrine (deleted) worktree marker --stamp-subagent";
+    const POISON_CREATE_FORK: &str = "/abs/doctrine (deleted) worktree create-fork";
 
-    // VT-1 (Defect A): a clean stamp command under the WRONG matcher is healed —
-    // the surviving entry's matcher becomes the dispatch-worker agent type, the
-    // command is preserved. Reinstall is a no-op.
+    // VT-1 (Defect A): a clean create-fork command under the WRONG matcher is
+    // healed — the surviving entry's matcher becomes the cosmetic WorktreeCreate
+    // matcher, the command is preserved. Reinstall is a no-op.
     #[test]
     fn vt1_stale_matcher_is_healed() {
         let exec = Path::new("/abs/doctrine");
-        let spec = HookSpec::stamp_subagent(exec);
+        let spec = HookSpec::create_fork(exec);
         let seed = serde_json::to_string(&serde_json::json!({
-            "hooks": { "SubagentStart": [
-                { "matcher": "old-agent-type",
-                  "hooks": [ { "type": "command", "command": stamp_subagent_command(exec) } ] }
+            "hooks": { "WorktreeCreate": [
+                { "matcher": "old-matcher",
+                  "hooks": [ { "type": "command", "command": create_fork_command(exec) } ] }
             ]}
         }))
         .unwrap();
@@ -4097,16 +4108,16 @@ world";
         let plan = plan_hook(Some(&seed), &spec);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
-        let sub = event_entries(&json, "SubagentStart").unwrap();
-        assert_eq!(sub.len(), 1, "one canonical entry");
+        let wc = event_entries(&json, "WorktreeCreate").unwrap();
+        assert_eq!(wc.len(), 1, "one canonical entry");
         assert_eq!(
-            sub[0].get("matcher").and_then(Value::as_str),
-            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
-            "matcher healed to the dispatch-worker agent type"
+            wc[0].get("matcher").and_then(Value::as_str),
+            Some(WORKTREE_CREATE_MATCHER),
+            "matcher healed to the cosmetic WorktreeCreate matcher"
         );
         assert_eq!(
-            event_commands(&json, "SubagentStart"),
-            vec![stamp_subagent_command(exec)],
+            event_commands(&json, "WorktreeCreate"),
+            vec![create_fork_command(exec)],
             "command preserved"
         );
         assert!(matches!(
@@ -4115,17 +4126,17 @@ world";
         ));
     }
 
-    // VT-2: three owned stamp entries (two `(deleted)`-poisoned, one clean) under
-    // assorted matchers converge to one canonical entry; the rest are gone.
+    // VT-2: three owned create-fork entries (two `(deleted)`-poisoned, one clean)
+    // under assorted matchers converge to one canonical entry; the rest are gone.
     #[test]
     fn vt2_three_owned_entries_converge_to_one() {
         let exec = Path::new("/abs/doctrine");
-        let spec = HookSpec::stamp_subagent(exec);
+        let spec = HookSpec::create_fork(exec);
         let seed = serde_json::to_string(&serde_json::json!({
-            "hooks": { "SubagentStart": [
-                { "matcher": "m0", "hooks": [ { "type": "command", "command": POISON_STAMP } ] },
-                { "matcher": "m1", "hooks": [ { "type": "command", "command": stamp_subagent_command(exec) } ] },
-                { "matcher": "m2", "hooks": [ { "type": "command", "command": POISON_STAMP } ] }
+            "hooks": { "WorktreeCreate": [
+                { "matcher": "m0", "hooks": [ { "type": "command", "command": POISON_CREATE_FORK } ] },
+                { "matcher": "m1", "hooks": [ { "type": "command", "command": create_fork_command(exec) } ] },
+                { "matcher": "m2", "hooks": [ { "type": "command", "command": POISON_CREATE_FORK } ] }
             ]}
         }))
         .unwrap();
@@ -4134,15 +4145,15 @@ world";
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
-            event_commands(&json, "SubagentStart"),
-            vec![stamp_subagent_command(exec)],
+            event_commands(&json, "WorktreeCreate"),
+            vec![create_fork_command(exec)],
             "collapsed to one clean canonical entry"
         );
         assert_eq!(
-            event_entries(&json, "SubagentStart").unwrap()[0]
+            event_entries(&json, "WorktreeCreate").unwrap()[0]
                 .get("matcher")
                 .and_then(Value::as_str),
-            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE)
+            Some(WORKTREE_CREATE_MATCHER)
         );
         assert!(matches!(
             plan_hook(Some(&json), &spec).outcome,
@@ -4150,15 +4161,15 @@ world";
         ));
     }
 
-    // VT-3: a single poisoned stamp entry is normalized to one clean canonical entry.
+    // VT-3: a single poisoned create-fork entry is normalized to one clean canonical entry.
     #[test]
     fn vt3_single_poisoned_entry_normalized() {
         let exec = Path::new("/abs/doctrine");
-        let spec = HookSpec::stamp_subagent(exec);
+        let spec = HookSpec::create_fork(exec);
         let seed = serde_json::to_string(&serde_json::json!({
-            "hooks": { "SubagentStart": [
-                { "matcher": crate::worktree::DISPATCH_WORKER_AGENT_TYPE,
-                  "hooks": [ { "type": "command", "command": POISON_STAMP } ] }
+            "hooks": { "WorktreeCreate": [
+                { "matcher": WORKTREE_CREATE_MATCHER,
+                  "hooks": [ { "type": "command", "command": POISON_CREATE_FORK } ] }
             ]}
         }))
         .unwrap();
@@ -4167,8 +4178,8 @@ world";
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
-            event_commands(&json, "SubagentStart"),
-            vec![stamp_subagent_command(exec)],
+            event_commands(&json, "WorktreeCreate"),
+            vec![create_fork_command(exec)],
             "poison stripped to clean canonical command"
         );
         assert!(matches!(
@@ -4177,21 +4188,21 @@ world";
         ));
     }
 
-    // VT-4 (codex round-4 shape d): two owned stamp hooks in ONE entry, followed
-    // by a separate foreign entry → the all-owned entry is removed and the fresh
-    // canonical entry inserts at `first` (NOT first+1); the foreign entry keeps its
-    // position. Survival is `entry_has_foreign_hook`, not hook count.
+    // VT-4 (codex round-4 shape d): two owned create-fork hooks in ONE entry,
+    // followed by a separate foreign entry → the all-owned entry is removed and the
+    // fresh canonical entry inserts at `first` (NOT first+1); the foreign entry
+    // keeps its position. Survival is `entry_has_foreign_hook`, not hook count.
     #[test]
     fn vt4_all_owned_entry_removed_inserts_at_first() {
         let exec = Path::new("/abs/doctrine");
-        let spec = HookSpec::stamp_subagent(exec);
+        let spec = HookSpec::create_fork(exec);
         let seed = serde_json::to_string(&serde_json::json!({
-            "hooks": { "SubagentStart": [
+            "hooks": { "WorktreeCreate": [
                 { "matcher": "m", "hooks": [
-                    { "type": "command", "command": stamp_subagent_command(exec) },
-                    { "type": "command", "command": POISON_STAMP }
+                    { "type": "command", "command": create_fork_command(exec) },
+                    { "type": "command", "command": POISON_CREATE_FORK }
                 ] },
-                { "matcher": "fm", "hooks": [ { "type": "command", "command": "/usr/bin/foreign sub" } ] }
+                { "matcher": "fm", "hooks": [ { "type": "command", "command": "/usr/bin/foreign wc" } ] }
             ]}
         }))
         .unwrap();
@@ -4200,22 +4211,19 @@ world";
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
-            event_commands(&json, "SubagentStart"),
-            vec![
-                stamp_subagent_command(exec),
-                "/usr/bin/foreign sub".to_string()
-            ],
+            event_commands(&json, "WorktreeCreate"),
+            vec![create_fork_command(exec), "/usr/bin/foreign wc".to_string()],
             "fresh canonical at first, foreign entry after"
         );
-        let sub = event_entries(&json, "SubagentStart").unwrap();
-        assert_eq!(sub.len(), 2);
+        let wc = event_entries(&json, "WorktreeCreate").unwrap();
+        assert_eq!(wc.len(), 2);
         assert_eq!(
-            sub[0].get("matcher").and_then(Value::as_str),
-            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
+            wc[0].get("matcher").and_then(Value::as_str),
+            Some(WORKTREE_CREATE_MATCHER),
             "canonical inserted at first"
         );
         assert_eq!(
-            sub[1].get("matcher").and_then(Value::as_str),
+            wc[1].get("matcher").and_then(Value::as_str),
             Some("fm"),
             "foreign entry keeps its position"
         );
@@ -4225,20 +4233,20 @@ world";
         ));
     }
 
-    // VT-5 / VT-6 (D4 non-clobber + order): an owned stamp hook sharing an entry
-    // with a foreign sibling → the owned hook is extracted into a fresh entry
+    // VT-5 / VT-6 (D4 non-clobber + order): an owned create-fork hook sharing an
+    // entry with a foreign sibling → the owned hook is extracted into a fresh entry
     // inserted AFTER the retained remnant; the foreign hook, the entry-level
     // matcher, and unknown keys all survive. A foreign hook listed BEFORE the
     // doctrine hook still executes before the doctrine entry (ordered assertion).
     #[test]
     fn vt5_foreign_sibling_preserved_doctrine_extracted_after() {
         let exec = Path::new("/abs/doctrine");
-        let spec = HookSpec::stamp_subagent(exec);
+        let spec = HookSpec::create_fork(exec);
         let seed = serde_json::to_string(&serde_json::json!({
-            "hooks": { "SubagentStart": [
+            "hooks": { "WorktreeCreate": [
                 { "matcher": "shared", "customKey": "keep-me", "hooks": [
-                    { "type": "command", "command": "/usr/bin/foreign sub" },
-                    { "type": "command", "command": stamp_subagent_command(exec) }
+                    { "type": "command", "command": "/usr/bin/foreign wc" },
+                    { "type": "command", "command": create_fork_command(exec) }
                 ] }
             ]}
         }))
@@ -4247,29 +4255,26 @@ world";
         let plan = plan_hook(Some(&seed), &spec);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
-        let sub = event_entries(&json, "SubagentStart").unwrap();
-        assert_eq!(sub.len(), 2, "remnant + fresh doctrine entry");
+        let wc = event_entries(&json, "WorktreeCreate").unwrap();
+        assert_eq!(wc.len(), 2, "remnant + fresh doctrine entry");
         assert_eq!(
-            sub[0].get("matcher").and_then(Value::as_str),
+            wc[0].get("matcher").and_then(Value::as_str),
             Some("shared"),
             "foreign entry-level matcher preserved"
         );
         assert_eq!(
-            sub[0].get("customKey").and_then(Value::as_str),
+            wc[0].get("customKey").and_then(Value::as_str),
             Some("keep-me"),
             "unknown entry-level key preserved"
         );
         assert_eq!(
-            event_commands(&json, "SubagentStart"),
-            vec![
-                "/usr/bin/foreign sub".to_string(),
-                stamp_subagent_command(exec)
-            ],
+            event_commands(&json, "WorktreeCreate"),
+            vec!["/usr/bin/foreign wc".to_string(), create_fork_command(exec)],
             "foreign executes before the extracted doctrine entry (order)"
         );
         assert_eq!(
-            sub[1].get("matcher").and_then(Value::as_str),
-            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
+            wc[1].get("matcher").and_then(Value::as_str),
+            Some(WORKTREE_CREATE_MATCHER),
             "doctrine survivor is canonical + sole"
         );
         assert!(matches!(
