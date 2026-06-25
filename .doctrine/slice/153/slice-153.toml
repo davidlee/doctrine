@@ -1,7 +1,7 @@
 id = 153
 slug = "spec-edge-cli"
 title = "CLI verbs for spec-internal edges (descends_from, parent, interactions)"
-status = "proposed"
+status = "design"
 created = "2026-06-25"
 updated = "2026-06-25"
 tags = []
