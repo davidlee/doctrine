@@ -227,10 +227,12 @@ platform) and D-B5 ("justfile unchanged; per-worktree env set at spawn") are
 **superseded in mechanism** by this slice: isolation now comes from the *absence*
 of a shared export (project/flake), not platform env injection. The *intent* of
 D-B1 (per-worktree isolation, correct `CARGO_BIN_EXE`) is **preserved and better
-served**. Route the change through a **Revision** to ADR-008 (ADR-013), recording:
-D-B1 mechanism change, D-B5 (flake loses the export; the removal *is* the
-mechanism), and POL-002 as the forcing function. D-B2/D-B3/D-B4 unchanged
-(D-B4 gains relevance as the warm-fork-cache lever).
+served**. Routed through **REV-011** (ADR-013) — `revises` ADR-008, recording:
+D-B1 mechanism change (Amendment 1), D-B5 (flake loses the export; the removal
+*is* the mechanism — Amendment 2), and POL-002 as the forcing function.
+D-B2/D-B3 unchanged; D-B4 gains relevance as the warm-fork-cache lever. REV-011
+is **proposed**; approved+applied at SL-156 reconcile (the ADR edit is real only
+once the code lands).
 
 ## 8. Risks & Mitigations
 
