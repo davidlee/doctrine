@@ -100,7 +100,7 @@ inspect ADR-005 --transitive --json
 | File | Change |
 |------|--------|
 | `crates/cordage/src/query.rs` | **new** `reachable_bounded(out, incoming, overlay, start, direction, max_depth) -> Reach`; depth+cap threaded through `walk_bfs`; `reachable` re-expressed as `reachable_bounded(.., None)` (behaviour-identical). |
-| `crates/cordage/src/lib.rs` | re-export `Reach`, `reachable_bounded`. |
+| `crates/cordage/src/lib.rs` | declare `Reach` at crate root; add public `Graph::reachable_bounded` method (cordage's API is flat/re-export-free — C5); re-express `Graph::reachable` over it. |
 | `src/relation_graph.rs` | **new** `TransitiveView` / `TransitiveGroup` + `transitive_from(scanned, root, id, dirs, labels, max_depth)`; reuses `build_relation_graph_from` + the `require_minted` existence gate; per-overlay × per-direction `reachable_bounded`, NodeId→EntityKey→canonical. **new** `render_transitive_human` / `render_transitive_json`. |
 | `src/commands/inspect.rs` | `run_inspect` branches on `transitive`: route to the transitive view (relation-only — no actionability/priority call). |
 | `src/commands/cli.rs` | `Inspect` gains `--transitive`, `--direction`, `--labels` (+`--label` alias), `--max-depth`; new `Dir` `ValueEnum`; dispatch threads them. |
@@ -282,6 +282,13 @@ The original scope is **amended** (done after this doc locks):
 Verdict was "not safe to plan against yet; must change first (C1, C2)." All four
 integrated above; re-verified C1/C2 against the code (`lib.rs:807`, `relation.rs:434`,
 `relation_graph.rs:163/1690`).
+
+**Confirm pass (codex, same thread):** C1–C4 all **PASS** (re-checked against code);
+clap `requires`/`default_value_t` claim verified sound (defaulted args aren't
+"explicit", so bare inspect doesn't trip `requires`). One new **minor (C5)**: §5
+file-table said lib.rs would "re-export" — wrong after the Graph-method reshape and
+against cordage's re-export-free posture (`lib.rs:9`). Corrected. **Final verdict:
+safe to plan against.**
 
 ## 9. design-target selectors
 
