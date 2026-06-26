@@ -36,6 +36,13 @@ pub(crate) const BACKLOG: &[&str] = &[ISS, IMP, CHR, RSK, IDE];
 /// Every knowledge-record kind.
 pub(crate) const RECORD: &[&str] = &[ASM, DEC, QUE, CON];
 
+/// Membership predicate over [`RECORD`] — the single source for "is this a
+/// knowledge-record kind?" so adding/renaming a record kind edits RECORD,
+/// not every call site.
+pub(crate) fn is_record(prefix: &str) -> bool {
+    RECORD.contains(&prefix)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
