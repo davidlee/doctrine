@@ -186,3 +186,79 @@ fn record_from_a_linked_worktree_resolves_the_primary_tree_registry() {
     );
     assert!(!deltas_path(&fork).exists(), "not in the linked worktree");
 }
+
+/// EX-1 — a fresh `record-delta` row stamps `provenance = "manual"` (the escape
+/// hatch's incoming value). Pins slice.rs:`run_record_delta`'s construction.
+#[test]
+fn record_delta_stamps_manual_on_a_fresh_row() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = init_repo(&tmp.path().join("repo"));
+    let start = git(&repo, &["rev-parse", "HEAD"]);
+    git(&repo, &["commit", "-q", "--allow-empty", "-m", "code"]);
+    let end = git(&repo, &["rev-parse", "HEAD"]);
+
+    let out = record_delta(&repo, &repo, "147", "PHASE-01", &start, &end);
+    assert!(
+        out.status.success(),
+        "record-delta ok; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let body = std::fs::read_to_string(deltas_path(&repo)).unwrap();
+    assert!(
+        body.contains("provenance = \"manual\""),
+        "fresh record-delta stamps Manual: {body}"
+    );
+}
+
+/// VT-1 — `record-delta` cannot clear a funnel/legacy halt: its incoming `Manual`
+/// never reclassifies an existing `Funnel` (or legacy `Unknown`) registry row, so
+/// the row stays in D11's expected-in-ledger set and the prepare-review guard keeps
+/// halting until the ledger is committed / the row reclassified. The range is still
+/// corrected (oids advance) — only the landing-path stamp is sticky.
+#[test]
+fn record_delta_preserves_existing_funnel_and_legacy_unknown() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = init_repo(&tmp.path().join("repo"));
+    let start = git(&repo, &["rev-parse", "HEAD"]);
+    git(&repo, &["commit", "-q", "--allow-empty", "-m", "code"]);
+    let end = git(&repo, &["rev-parse", "HEAD"]);
+
+    // Seed a FUNNEL row (PHASE-01) and a LEGACY row with no provenance key
+    // (PHASE-02 ⇒ reads back as Unknown). Placeholder oids: record-delta replaces
+    // the range; the sticky merge governs only the provenance stamp.
+    let path = deltas_path(&repo);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"s\"\ncode_end_oid = \"e\"\nprovenance = \"funnel\"\n\n\
+         [[boundary]]\nphase = \"PHASE-02\"\ncode_start_oid = \"s\"\ncode_end_oid = \"e\"\n",
+    )
+    .unwrap();
+
+    // Incoming Manual over the FUNNEL row, then over the LEGACY (Unknown) row.
+    for phase in ["PHASE-01", "PHASE-02"] {
+        let out = record_delta(&repo, &repo, "147", phase, &start, &end);
+        assert!(
+            out.status.success(),
+            "record-delta {phase} ok; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    let body = std::fs::read_to_string(&path).unwrap();
+    // PHASE-01 stays funnel; NEITHER row is reclassified to manual → the funnel /
+    // legacy halt is not cleared by a bare record-delta.
+    assert!(
+        body.contains("provenance = \"funnel\""),
+        "funnel preserved: {body}"
+    );
+    assert!(
+        !body.contains("provenance = \"manual\""),
+        "neither row reclassified to manual (funnel/legacy halt stands): {body}"
+    );
+    assert!(
+        body.contains(&end),
+        "range corrected to the resolved end: {body}"
+    );
+}
