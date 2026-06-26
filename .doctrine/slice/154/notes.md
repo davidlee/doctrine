@@ -419,6 +419,48 @@ the registry under runtime state, which otherwise shows untracked and dirties th
   files), ff-landed `d9892674`, then `record-delta --start 0c53d483 --end d9892674` corrected the
   stale in_progress `code_start` (`176d46eb`) to my true single-commit range (Manual preserved `solo`).
 
+## PHASE-06 — record-delta provenance pin + dispatch skill docs (in_progress)
+
+Final phase. Closes the slice surface → audit. EX-1 was **pre-landed in code**
+(`run_record_delta` already stamps `Provenance::Manual`, slice.rs:1990, since
+PHASE-01's reshape) — this phase PINS it with tests and reconciles the three
+dispatch SKILL.md to the PHASE-05 enforced beat.
+
+- **Decision A (User, phase-plan consult — durable).** Plan EX-2/VA-1 originally
+  said "codex/pi record-delta survives only as the escape hatch." That contradicts
+  design **D6/IMP-171/§5.1** + notes L118 ("codex/pi keeps record-delta"): the
+  codex/pi symmetric derive is DEFERRED, so `record-delta` (incoming `Manual`) IS
+  that arm's only registry write — removing it reintroduces ISS-052 on codex/pi.
+  Resolution: **codex/pi record-delta is a RETAINED, now gate-enforced funnel beat
+  (+ escape hatch); the claude arm is escape-hatch-only.** The PHASE-05 completeness
+  GATE is the enforcement for both arms (claude also auto-heals via the derive).
+  Corroborated 3 ways (design RVs P6-1/P7-1, design D6, notes L118). plan.toml
+  EX-2/VA-1 prose amended (ids unchanged — immutability is on ids, with a dated
+  rationale comment).
+- **EX-1 / VT-1 (tests).** `tests/e2e_slice_record_delta.rs` +2:
+  `record_delta_stamps_manual_on_a_fresh_row` (fresh row → `provenance = "manual"`)
+  and `record_delta_preserves_existing_funnel_and_legacy_unknown` (seed Funnel +
+  legacy-Unknown rows → record-delta corrects the range but the sticky merge keeps
+  the landing stamp → neither reclassifies to `manual` → the funnel/legacy D11 halt
+  stands). Green on first run (pins shipped behaviour). The state.rs merge unit +
+  dispatch guard units already cover the seams; this ties the CLI verb to them.
+- **EX-2 / VA-1 (docs).** Three authored SKILL.md (`plugins/doctrine/skills/`):
+  - `dispatch-agent` — record-boundary double-write + prepare-review derive is
+    enforced machinery; record-delta escape-hatch-only on this arm.
+  - `dispatch-subprocess` — record-delta RETAINED as the codex/pi registry write
+    (symmetric derive deferred, D6/IMP-171), now gate-enforced/non-skippable, also
+    escape hatch; incoming `Manual` is provenance-preserving (D12).
+  - `dispatch` router — step 8 keeps both arm bullets + an enforcement note;
+    Conclude paragraph names the derive+completeness-gate as the enforced pre-audit
+    beat. VA-1 agent review: PASS on all 4 checklist items.
+- **Shrinkage ratchet bumped** (`e2e_skills_dispatch_shrinkage.rs`): router 80→90,
+  agent 100→104, subprocess 48→55 (User: bump rather than compress + lose
+  intelligibility; documented in the per-skill comment trail).
+- **Gate:** `just check` exit 0; e2e_slice_record_delta 6, shrinkage 3 — green;
+  clippy plain zero-warn; fmt clean.
+- Derived skill copies (`.agents/skills/`, `.doctrine/skills/`) are gitignored,
+  RustEmbed-regenerated — not the deliverable; authored `plugins/` source is.
+
 ## Relations & selectors
 
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171
