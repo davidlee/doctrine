@@ -160,3 +160,26 @@ green: existing `e2e_inspect_golden` 16/16 (bare inspect byte-unchanged — EX-4
 transitive 18/18, clippy `--workspace` zero warnings, fmt clean.
 
 **Commit:** `feat(SL-138): PHASE-03` (code + tests + notes, SL-138 paths only).
+
+## Audit (RV-165, 2026-06-26) — done, no blocker
+
+Reconciliation ledger RV-165: 5 findings, all verified terminal, no blocker.
+Verdict: design lands cleanly; all invariants confirmed against landed code.
+
+- **F-1 (major, fix-now).** Conformance registry was polluted — P1/P2
+  `code_start_oid` (stamped at in_progress) predated the rebased land, so the
+  ranges swept ~30 foreign commits (SL-154/156, IMP-174, RFC-005); 49 undeclared.
+  Corrected in-audit via `slice record-delta`: P1 `5cb84f3a..f4104f55`, P2
+  `83b9cea2..42de85c4` (each the phase's single non-merge feat commit). Conformance
+  now **5 conformant / 0 undelivered / 4 undeclared** (notes.md + slice-138.toml +
+  2 test files — all legitimate, outside the §9 source-selector set).
+- **F-2 (minor, follow-up).** Root cause is the SL-147 solo binding stamping a
+  stale start-oid when edge advances before land → **IMP-175**.
+- **F-3/F-4/F-5 (aligned).** Residual undeclared is selector-by-design;
+  `transitive_from(_root)` is benign signature symmetry; behaviour-preservation +
+  layering + polarity + F2 gate + dead-code retirement all verified.
+
+**Evidence.** `just check` green; cordage reachability 15/15; transitive golden
+18/18; relation_graph transitive unit 6/6; bare `inspect` golden 16/16
+byte-unchanged (EX-4). No per-slice or governance write surface → `/reconcile` is
+a pass-through to `/close`.
