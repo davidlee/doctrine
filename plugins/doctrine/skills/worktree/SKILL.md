@@ -7,9 +7,9 @@ description: Use when work needs isolation from the current workspace — when /
 
 Drive the lifecycle of an isolated git worktree: detect existing isolation,
 create a fork through **`doctrine worktree fork`** (the verb that adds the
-worktree, provisions it, optionally stamps the worker marker, and emits the
-per-worktree env contract — all with compensating rollback), run the spawn
-guards, and verify a green baseline before handing off.
+worktree, provisions it, and optionally stamps the worker marker — all with
+compensating rollback; the fork builds into its own in-tree `target/`), run the
+spawn guards, and verify a green baseline before handing off.
 
 **Announce at start:** "Using the worktree skill to set up an isolated workspace."
 
@@ -118,9 +118,9 @@ compensating rollback (any failure after `git worktree add` triggers a best-effo
    at the copy seam, D9; see [Provisioning](#provisioning-d9)).
 3. with `--worker`, **stamps the worker marker** before any spawn window (solo
    omits `--worker`).
-4. emits the **per-worktree env contract** on stdout (`KEY=value` per line;
-   human status to stderr) — the project declares its per-wt env (doctrine-the-repo
-   declares `CARGO_TARGET_DIR`, §8); generalisable, not a framework primitive.
+4. reports **human status to stderr**; stdout stays empty (machine-clean). The fork
+   builds into its own in-tree `<dir>/target` — no env contract is emitted (SL-156:
+   the platform exited the build-env business).
 
 `fork` is **Orchestrator-classed — refused under worker-mode** (a worker never
 forks; the orchestrator/solo, worker-mode OFF, calls it).

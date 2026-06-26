@@ -3,40 +3,12 @@
 
 use super::marker::write_marker;
 use super::provision::run_provision;
-use super::shared::target_dir_for_branch;
 use crate::git;
 use crate::root;
 use anyhow::{Context, bail};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-
-/// Pure branch→relative-path mapping for a per-worktree target dir: `wt/<branch>`.
-/// PURE — no I/O, env, clock, or rng (CLAUDE.md pure/imperative split). This is the
-/// GENERALISABLE primitive; doctrine-the-repo's project-local consumer
-/// ([`project_env_contract`]) joins it under the jail target base to build
-/// doctrine-the-repo's PROJECT-LOCAL per-worktree env contract — the one consumer
-/// of the generalisable mechanism (design §5 / ADR-008 D-B5). It declares a single
-/// pair: `CARGO_TARGET_DIR=<jail-target-base>/wt/<branch>`, so each fork compiles
-/// into its own target dir and parallel builds don't collide on a shared jail
-/// target. The jail target base is read from the inherited `CARGO_TARGET_DIR` (the
-/// existing jail redirect); absent, it degrades to `<fork>/target`. The env read is
-/// the ONLY impurity — the path shape comes from the pure [`target_dir_for_branch`].
-///
-/// Kept deliberately separate from [`run_fork`]: the framework primitive emits
-/// whatever `(key, value)` pairs THIS function returns and never names
-/// `CARGO_TARGET_DIR` itself.
-pub(super) fn project_env_contract(fork: &Path, branch: &str) -> Vec<(String, String)> {
-    let base = match std::env::var_os("CARGO_TARGET_DIR") {
-        Some(v) => PathBuf::from(v),
-        None => fork.join("target"),
-    };
-    let target = base.join(target_dir_for_branch(branch));
-    vec![(
-        "CARGO_TARGET_DIR".to_owned(),
-        target.to_string_lossy().into_owned(),
-    )]
-}
 
 /// Best-effort compensating cleanup for a partially-created fork (design §5 — git
 /// mutations are NOT a transaction, so there is no rollback verb to lean on; we
@@ -113,8 +85,8 @@ pub(super) fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String
 }
 
 /// The byte-identical creation CORE — *add + provision + mark* with compensating
-/// rollback, SHARED by [`run_fork`] (the CLI verb: emits the per-worktree env
-/// contract on stdout) and [`super::create::act_on_create`] (the `WorktreeCreate`
+/// rollback, SHARED by [`run_fork`] (the CLI verb: status to stderr, empty stdout)
+/// and [`super::create::act_on_create`] (the `WorktreeCreate`
 /// hook: prints the created path alone). The D11 split: this core is SILENT — it
 /// writes NOTHING to stdout/stderr; refusals and rollback debris surface only as
 /// `Err`. The `repo` (provision source + git `-C` root) is passed in EXPLICITLY,
@@ -200,11 +172,13 @@ pub(super) fn fork_core(
 }
 
 /// `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` —
-/// create an orchestrator-owned worktree fork off `B`, provision it, optionally
-/// stamp the worker marker, and emit the per-worktree env contract (design §5).
-/// The creation work is [`fork_core`]; this CLI shell adds only the emission (D11).
+/// create an orchestrator-owned worktree fork off `B`, provision it, and optionally
+/// stamp the worker marker (design §5). The creation work is [`fork_core`]; this CLI
+/// shell adds only the human status line. The fork compiles into its own in-tree
+/// `<dir>/target` — no env contract is emitted (SL-156: platform exited the
+/// build-env business).
 ///
-/// - **stdout**: the env contract (`KEY=value`, one per line).
+/// - **stdout**: empty (machine-clean).
 /// - **stderr**: human status (what it did).
 pub(crate) fn run_fork(
     path: Option<PathBuf>,
@@ -216,10 +190,7 @@ pub(crate) fn run_fork(
     let repo = root::find(path, &root::default_markers())?;
     fork_core(&repo, base, branch, dir, worker)?;
 
-    // --- Step 4: env contract on stdout; human status on stderr ---
-    for (key, value) in project_env_contract(dir, branch) {
-        writeln!(io::stdout(), "{key}={value}")?;
-    }
+    // --- human status on stderr; stdout stays empty (machine-clean) ---
     writeln!(
         io::stderr(),
         "forked {branch} at {base} → {}{}",

@@ -8,7 +8,7 @@ use super::allowlist::{
 use super::marker::{DISPATCH_WORKER_AGENT_TYPE, marker_present, write_marker};
 use super::shared::{
     gather_fork_worktree, gather_tree_clean, is_linked_worktree, matches, resolve_commit,
-    resolve_common_dir, target_dir_for_branch,
+    resolve_common_dir,
 };
 use crate::fsutil::{self, CopyOutcome};
 use crate::git;
@@ -27,8 +27,6 @@ pub(crate) struct GcState {
     pub(crate) branch_exists: bool,
     /// `<fork>` has a live linked worktree checked out.
     pub(crate) worktree_present: bool,
-    /// The `wt/<branch>` target dir exists on disk.
-    pub(crate) target_present: bool,
     /// The landed-oracle verdict, computed in the shell ONLY while the branch
     /// lives (`None` when the branch is gone — the gate is skipped because the
     /// deletion of a fork branch IS the landing certificate, design §8.2).
@@ -46,8 +44,6 @@ pub(crate) struct GcPlan {
     pub(crate) remove_worktree: bool,
     /// `git branch -D` the fork branch (never a git-ancestor on the import route).
     pub(crate) delete_branch: bool,
-    /// Reap the `wt/<branch>` target dir (closes the disk loop).
-    pub(crate) reap_target: bool,
 }
 
 /// Why a gc refuses to reap (design §8.1). Fails closed with a named token.
@@ -107,8 +103,9 @@ pub(crate) enum GcVerdict {
 ///   head: a TOCTOU movement-guard, not a landing proof),
 /// * OR `force` (the operator knowingly bypassed the oracle),
 /// * OR **branch-gone**: a fork branch is deleted only via `branch -D` AFTER the
-///   gate passed, so a gone branch is ALREADY certified — the only residue is the
-///   `wt/<branch>` target dir, reaped from the branch NAME alone (design §8.2).
+///   gate passed, so a gone branch is ALREADY certified — and its worktree (with the
+///   in-tree `target/` that lived inside it) is already gone too, so there is nothing
+///   left to reap (an idempotent no-op, design §8.2).
 ///
 /// `force`/`superseded_match` authorise the reap and skip the refusal (the operator
 /// chose to). `dry_run` does NOT change the verdict — it is honoured in the shell
@@ -127,7 +124,6 @@ pub(crate) fn classify_gc(
         return GcVerdict::Reap(GcPlan {
             remove_worktree: false,
             delete_branch: false,
-            reap_target: state.target_present,
         });
     }
 
@@ -144,26 +140,12 @@ pub(crate) fn classify_gc(
     GcVerdict::Reap(GcPlan {
         remove_worktree: state.worktree_present,
         delete_branch: true,
-        reap_target: state.target_present,
     })
 }
 
-/// Resolve the same target base [`project_env_contract`] computes, joined with the
-/// pure `wt/<branch>` shape — the path the T-reap closes (design §8). Mirrors the
-/// fork-creation base resolution EXACTLY (`CARGO_TARGET_DIR` env base, else
-/// `<fork>/target`); do NOT diverge. `fork` is the fork worktree dir (used only for
-/// the env-absent `<fork>/target` fallback). Impure (the env read).
-fn gc_target_dir(fork: &Path, branch: &str) -> PathBuf {
-    let base = match std::env::var_os("CARGO_TARGET_DIR") {
-        Some(v) => PathBuf::from(v),
-        None => fork.join("target"),
-    };
-    base.join(target_dir_for_branch(branch))
-}
-
 /// The reap set a [`GcPlan`] would act on, as a `/`-joined token list for the
-/// dry-run print — the ACTUAL legs, never a blanket `worktree/branch/target`
-/// (a branch-gone plan reaps the target only, F-5).
+/// dry-run print — the ACTUAL legs, never a blanket `worktree/branch` (a branch-gone
+/// plan reaps nothing — the in-tree `target/` died with the worktree dir, F-5).
 fn reap_targets(plan: GcPlan) -> String {
     let mut parts: Vec<&str> = Vec::new();
     if plan.remove_worktree {
@@ -171,9 +153,6 @@ fn reap_targets(plan: GcPlan) -> String {
     }
     if plan.delete_branch {
         parts.push("branch");
-    }
-    if plan.reap_target {
-        parts.push("target");
     }
     if parts.is_empty() {
         "nothing".to_owned()
@@ -224,14 +203,15 @@ fn gather_landed(root: &Path, fork: &str) -> anyhow::Result<bool> {
 ///
 /// Gather → pure-classify → act, patterned after [`run_land`]:
 /// 1. gather the FACTS — `<fork>` existence; its live linked worktree (via the
-///    SHARED [`gather_fork_worktree`]); the `wt/<branch>` target dir presence; the
-///    landed oracle (via [`gather_landed`], ONLY while the branch lives); and the
-///    `--superseded-head == current-head` movement-guard match,
+///    SHARED [`gather_fork_worktree`]); the landed oracle (via [`gather_landed`],
+///    ONLY while the branch lives); and the `--superseded-head == current-head`
+///    movement-guard match,
 /// 2. [`classify_gc`] returns `Reap(plan)` or `Refuse(token)`,
 /// 3. on `--dry-run`, PRINT the verdict and destroy NOTHING; otherwise execute the
-///    plan in the forced order (worktree → branch → target), each destructive step
-///    honest on failure (names its leftover, exits non-zero), folding a stale admin
-///    worktree entry via `git worktree prune`. Finally stderr-WARN the
+///    plan in the forced order (worktree → branch), each destructive step honest on
+///    failure (names its leftover, exits non-zero), folding a stale admin worktree
+///    entry via `git worktree prune`. The fork's in-tree `target/` dies with the
+///    worktree dir (SL-156 — no separate reap). Finally stderr-WARN the
 ///    `CARGO_MANIFEST_DIR`-baked-test-binary recompile.
 pub(crate) fn run_gc(
     path: Option<PathBuf>,
@@ -258,18 +238,10 @@ pub(crate) fn run_gc(
     let branch_exists = branch_head.is_some();
 
     // --- gather: the fork's live linked worktree (shared gather) ---
+    // The fork's in-tree `target/` lives INSIDE this worktree dir (SL-156), so
+    // removing the worktree reaps the target with it — no separate target gather.
     let fork_wt = gather_fork_worktree(&root, fork)?;
     let worktree_present = fork_wt.is_some();
-
-    // --- gather: the wt/<branch> target dir (mirrors fork-creation base) ---
-    // Under the env-absent fallback the base is `<fork-dir>/target` (NOT
-    // `<root>/target`) — fork creation derives the per-wt target from the FORK
-    // dir, so gc must too or it reaps the wrong path (F-7). Use the live linked
-    // worktree dir when present; a gone worktree took its in-tree target with it
-    // (target_present would be false), so &root is a harmless last resort there.
-    let fork_dir = fork_wt.as_deref().unwrap_or(&root);
-    let target = gc_target_dir(fork_dir, fork);
-    let target_present = target.exists();
 
     // --- gather: the landed oracle (ONLY while the branch lives — design §8.2) ---
     let landed_verdict = if branch_exists {
@@ -304,7 +276,6 @@ pub(crate) fn run_gc(
     let state = GcState {
         branch_exists,
         worktree_present,
-        target_present,
         landed_verdict,
     };
 
@@ -318,7 +289,7 @@ pub(crate) fn run_gc(
                 // Report the TRUTH the operator needs before a real run: the actual
                 // landed verdict + whether the reap is oracle- or override-authorised,
                 // and the ACTUAL reap set — never a blanket `landed ✓ (worktree/
-                // branch/target)` that lies on a forced or branch-gone reap (F-5).
+                // branch)` that lies on a forced or branch-gone reap (F-5).
                 let basis = if !branch_exists {
                     "already-certified (branch gone)".to_owned()
                 } else if landed_verdict == Some(true) {
@@ -388,14 +359,8 @@ pub(crate) fn run_gc(
         }
     }
 
-    // Step 3: reap the wt/<branch> target dir (closes the disk loop, derived cache).
-    if plan.reap_target
-        && target.exists()
-        && let Err(e) = fs::remove_dir_all(&target)
-        && target.exists()
-    {
-        leftovers.push(format!("target {} ({e})", target.display()));
-    }
+    // The fork's in-tree `target/` needs no separate reap step — it lived inside the
+    // worktree dir and died with the `git worktree remove` above (SL-156).
 
     if !leftovers.is_empty() {
         bail!(
@@ -404,7 +369,7 @@ pub(crate) fn run_gc(
         );
     }
 
-    // Step 4: WARN that env!(CARGO_MANIFEST_DIR)-baked test binaries now point at a
+    // Step 3: WARN that env!(CARGO_MANIFEST_DIR)-baked test binaries now point at a
     // deleted fork path and must be recompiled (mem.pattern.dispatch.worktree-
     // removal-stale-manifest-dir-false-red).
     writeln!(
@@ -413,7 +378,7 @@ pub(crate) fn run_gc(
     )?;
     writeln!(
         io::stdout(),
-        "gc {fork}: reaped (worktree/branch/target as present)"
+        "gc {fork}: reaped (worktree/branch as present)"
     )?;
     Ok(())
 }
