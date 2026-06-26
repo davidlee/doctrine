@@ -14,6 +14,10 @@ updated = "2026-06-15"
 # `doctrine inspect ADR-012` renders them. `superseded_by` (ADR-004) and `tags` stay typed.
 superseded_by = []   # set on the old ADR by F1; reverse link is derived
 
+[[relation]]
+label = "supersedes"
+target = "ADR-004"
+
 
 # `related` cross-references are uniform `[[relation]]` rows now (SL-048 "the cut"),
 # never a typed key here. Author one with `doctrine link ADR-NNN related <target>`;
