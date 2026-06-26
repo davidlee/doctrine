@@ -1,4 +1,4 @@
-# SL-157 Design — Checkout-independent integrate (strip the speculative None-leg resync)
+# SL-157 Design — Checkout-independent trunk advance: strip the speculative None-leg resync
 
 > Governed by ADR-012 (dispatch integration topology). Mechanism-only Revision
 > (no governance reversal — see §5). Successor to SL-121 (leg-aware advance):
@@ -40,6 +40,13 @@ So the re-probe at 1842 can only return `None` (for `main`) — the `Some` arms
 (1844-1848) are reachable **only if someone checks out `main`**, which AGENTS.md
 forbids. The guard adds no safety; it *is* the R1/R3/R4 hazard. **Delete the
 condition, don't harden the window** (RFC-005 OQ-5 steer).
+
+**This is an operating-model invariant, not a Git impossibility.** Git itself
+permits the state — manually checking out the delivery ref in another worktree is
+mechanically possible. Doctrine's dispatch posture forbids it (AGENTS.md line 24),
+so it is **outside SL-157's supported behaviour**. The slice removes a guard
+against a transition the operating contract excludes; it does not claim the
+transition is physically unrepresentable.
 
 The earlier ISS-038 phantom was the *pre-SL-121* pure-CAS-on-a-checked-out-ref
 path — already retired by SL-121's leg-aware advance + the M4 dirty pre-gate. It
@@ -85,6 +92,10 @@ RefCas::Updated => {
 Target:
 ```rust
 RefCas::Updated => {
+    // Not-checked-out advances are pure ref CAS only. Do NOT re-probe and
+    // resync a worktree after CAS: under Doctrine's dispatch posture the
+    // delivery ref is never checked out, and the post-CAS resync was the
+    // RacedDesync / IMP-122 hazard (SL-157).
     row.status = LedgerStatus::Verified;
     planned.clone_into(&mut row.applied_new_oid);
     Ok(RowOutcome::Done { disposition: Disposition::AdvancedPureRef })
@@ -93,12 +104,18 @@ RefCas::Updated => {
 
 CAS-and-done. The `Moved` arm (refusal), the `advance_row` classification
 (no-op / moved / advance), and the whole Some leg are untouched. The fn doc
-(`1818-1821`) loses its "then the §2.2 None-leg post-CAS re-probe…" clause.
+(`1818-1821`) loses its "then the §2.2 None-leg post-CAS re-probe…" clause. The
+comment above is **required** — it prevents a future reader from re-adding the
+"defensive" resync without the operating-model context.
 
-**Observable behaviour delta: none on the live paths.** Before: CAS succeeds →
-probe → (for `main`, always `None`) → `AdvancedPureRef`. After: CAS succeeds →
-`AdvancedPureRef`. Identical post-state on every reachable input; one fewer probe,
-two dead arms removed (`research.md` §6).
+**Observable behaviour delta: none under the supported Doctrine worktree posture.**
+Before: CAS succeeds → probe → (for `main`, always `None`) → `AdvancedPureRef`.
+After: CAS succeeds → `AdvancedPureRef`. Identical post-state on every reachable
+input; one fewer probe, two dead arms removed (`research.md` §6). (In the
+*unsupported* state where `main` is checked out during the old CAS→re-probe
+window, behaviour does change — old code resynced or reported `RacedDesync`, new
+code reports `AdvancedPureRef`. That state is excluded by the operating contract
+(§1); preserving its behaviour would preserve the hazard.)
 
 ## 4. Code-impact map (A's whole footprint)
 
@@ -177,6 +194,12 @@ ref mid-run, which a fixture cannot orchestrate honestly.)
 `main_at_c1_with_descendant_c2` has 3 other callers (`git.rs:3960/3987/4009`) →
 **not orphaned**, stays live. **No new test needed** — no surviving behaviour is
 added; the removed arms were unreachable under the invariants.
+
+**We intentionally do not add a regression test for the unsupported
+`main`-checked-out race.** Those Some-arms handled a delivery-ref checkout
+transition the operating contract excludes (§1); a test pinning their behaviour
+would pin the hazard SL-157 removes. The absence of such a test is deliberate, not
+a coverage gap.
 
 **Gate:** `just check` (fast inner loop) → `just gate` before commit. Plain
 `cargo clippy` (no `--all-targets`), zero warnings.
