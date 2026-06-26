@@ -1,0 +1,42 @@
+memory_uid = "mem_019f0617181d7522ba51613084359890"
+memory_key = "mem.pattern.doctrine.plan-va-scoping"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Plan VA criteria scoping: verify what the phase touches, not the final end-state"
+summary = ""
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/commands/dep_seq.rs", "src/catalog/scan.rs"]
+globs = []
+commands = ["doctrine slice plan"]
+tags = ["plan-authoring", "review-driven"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6993e16d90605e388fc4b06cd9462cc0c80fb02a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "841f9d142b50621f04ac5b9e0ab7e0ba8d85326e1e73e760ced0a38b38e9c9fc"
+base_commit = "1a173fda1b952bb7e538dcdc5e60840f1d4ece42"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
