@@ -1,0 +1,97 @@
+# Implementation plan for SL-156 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-156"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Phasing follows the design's migration order (design §8 R2): project-side
+# mechanism first, codex-skill migration next, platform removal last, doc/memory
+# cleanup after. Order is for reviewability + final-semantics validation, not
+# regression avoidance — project_env_contract fails closed to isolation, so no
+# ordering strands a codex worker (design §8 R2 / EAP-2). REV-011 (revises
+# ADR-008) is approved+applied at reconcile, not in a phase.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Retire the shared flake export — in-tree isolation"
+objective = "Delete the jail-wide CARGO_TARGET_DIR set-env (flake.nix:80) so every worktree defaults to its own in-tree gitignored target/. This is the correctness mechanism — isolation by construction, both arms, no env channel (design §5.1, D3)."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; REV-011 (revises ADR-008) authored and proposed" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "flake.nix no longer exports CARGO_TARGET_DIR; comment rewritten to the in-tree-per-worktree rationale (cross-mount safety via distinct mount paths, design §5.5)" },
+  { id = "EX-2", text = "host path unaffected (it never carried the jail export); the existing .env_remove(\"CARGO_TARGET_DIR\") e2e neutraliser now matches production" },
+]
+verification = [
+  { id = "VT-1", expects = "isolation by construction: two worktrees on different branches each build a binary their own e2e tests spawn; target paths distinct (<wt>/target), no cross-thrash — simulated in-session via .env_remove(\"CARGO_TARGET_DIR\") (design VT-1, R5)" },
+  { id = "VH-1", expects = "true end-to-end check after a jail relaunch (flake set-env is launch-time, inert in the authoring session — design R5): first build is cold for every tree; old ~/.cargo/doctrine-target-jail abandoned out-of-band" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Migrate dispatch-subprocess off $fork_env"
+objective = "Stop the codex/pi arm capturing and re-injecting the per-worktree CARGO_TARGET_DIR from run_fork stdout; the worker inherits the (now unset) env and defaults in-tree. Removes the codex worker's wt/<branch> re-derivation before the platform emission is deleted (design §5.2, §8 R2)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — in-tree isolation is the mechanism" },
+]
+exit_criteria = [
+  { id = "EX-1", text = ".agents/skills/dispatch-subprocess/SKILL.md no longer captures/passes $fork_env; the worker spawn line relies on the in-tree default" },
+]
+verification = [
+  { id = "VA-1", expects = "agent read of dispatch-subprocess SKILL.md confirms no $fork_env capture remains and the codex worker resolves its own in-tree target/ (design §5.2)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Remove platform cargo coupling (POL-002)"
+objective = "Make the shipped platform build-tool-agnostic: remove project_env_contract + its run_fork stdout emission, coordinate.rs:255 emission, and gc.rs:151-157 target-base reaping; refresh the stale stdout-contract doc surfaces; excise the entangled env-contract test assertions. Platform exits the build-env business (design §5.2, D2)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — no consumer depends on the stdout env contract" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "project_env_contract removed; run_fork emits nothing on stdout (the created path was always stderr — fork.rs:223-233, EAP-5); coordinate.rs:255 emission dropped; gc.rs target-base reaping removed (GC reaps the worktree, in-tree target/ dies with it)" },
+  { id = "EX-2", text = "stale stdout-contract surfaces refreshed (EAP-4): worktree/mod.rs:111-113 fork help, provision.rs:134-137 stdout-discipline comment, .agents/skills/worktree/SKILL.md:118-123 fork step 4" },
+  { id = "EX-3", text = "env-contract test assertions excised surgically (EAP-1): the CARGO_TARGET_DIR/wt-branch and stdout-purity blocks in fork_happy_path_solo_and_worker (e2e_worktree_fork.rs) and coordinate_create_is_markerless_at_trunk_with_sheets (e2e_worktree_coordinate.rs); gc target-base scaffold (e2e_worktree_gc.rs run_pinned/target_base) deleted whole" },
+]
+verification = [
+  { id = "VT-1", expects = "behaviour-preservation: every worktree creation/provision/marking assertion stays green unchanged; only env-contract assertion blocks are removed (design §9, EAP-1) — a creation/marking assertion going red is a regression" },
+  { id = "VT-2", expects = "gc reaps a worktree and its in-tree target/ with no wt/<branch> base logic (design VT-3)" },
+  { id = "VA-1", expects = "POL-002 conformance (scoped, EAP-3): grep confirms no CARGO_TARGET_DIR / cargo target literal remains in src/worktree/{fork,coordinate,gc,mod}.rs or the affected skills/docs — NOT a whole-src grep (root.rs Cargo.toml marker is legitimate, out of scope)" },
+  { id = "VH-1", expects = "both arms honest verify: a claude-arm and a codex-arm worker each run just check reporting correct pass/fail with no touch+re-run ritual (design VT-2) — true check post jail-relaunch" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Retire stale-target rituals + memory cluster"
+objective = "Remove the workarounds the shared target made necessary: just rebuild-stale, the justfile staleness comment, AGENTS.md §95 guidance + touch rituals; mark the superseded shared-target memory cluster. Re-evaluate each against the host/non-jail flows before removing (design §5.2 scope item 2, R3, OQ-3)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — the in-tree model is the production reality" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "just rebuild-stale recipe + justfile staleness comment removed; ./target/debug/doctrine is the live binary again" },
+  { id = "EX-2", text = "AGENTS.md §95 shared-target warning + rebuild ritual rewritten to the in-tree model" },
+  { id = "EX-3", text = "shared-target memory cluster triaged (R3/OQ-3): each memory marked superseded only when confirmed no longer true for host or non-jail flows" },
+]
+verification = [
+  { id = "VA-1", expects = "agent sweep confirms no stale rebuild-stale/touch ritual remains in justfile/AGENTS.md and the superseded memories are marked (design R3); host-still-relevant items explicitly retained, not blanket-deleted" },
+]
+specs        = []
+requirements = []
