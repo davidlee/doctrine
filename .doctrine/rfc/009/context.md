@@ -21,9 +21,9 @@ need. The RFC is **open**, organised in two fenced tiers:
 | id | decision | status |
 |---|---|---|
 | D1 | memory↔record boundary — ownership/legibility test | **settled in draft** (records = graph-resident + human-facing; memory = agent cache; crisp edges over coverage; crystallise out of prose). Open thread: is memory's 2nd-class linkage endemic? |
-| D2 | which kinds — survey design docs for the latent taxonomy (risk, mitigation, invariant, principle, procedure, interaction, responsibility, edge case, candidate solution, …); decide kind-by-kind vs prose vs facet/edge. OBS/HYP = nearest-at-hand pair (both-or-neither), not the whole answer; **risk not subsumed** | open |
-| D3 | record/entity edges — typed lifecycle edges (`confirmed_by`/`refuted_by`), `shapes` epistemic-vs-affects split, which CM relationship types are real edges vs derivable | open — **bulk of near-term work** |
-| D4 | concept maps — retire-as-is vs reify-as-view-over-concept-nodes; CON naming collision | open — modest/low-risk |
+| D2 | which kinds — survey design docs for the latent taxonomy (risk, mitigation, invariant, principle, procedure, interaction, responsibility, edge case, candidate solution, …); decide kind-by-kind vs prose vs facet/edge. **EVD** (evidence; `captured → confirmed \| disputed \| retracted`, terminal `{confirmed, retracted}`; a supports/disputes *role* replacing the OBS catch-all) + **HYP** = nearest-at-hand pair, now *decoupled*; **risk not subsumed**. Also **INV (invariant)** as replace/sibling/status-quo for CON | open |
+| D3 | record/entity edges — `supports`/`disputes` (EVD → record, EVD-disputes-INV, HYP confirm/refute), `shapes` epistemic-vs-affects split, which CM relationship types are real edges vs derivable | open — **bulk of near-term work** |
+| D4 | concept maps — retire-as-is vs reify-as-view-over-concept-nodes; DEF/CPT naming (CON taken) | open — modest/low-risk |
 | D5 | uptake — how far skill-anchoring must go | open — the real failure mode |
 | Tier 2 | spec-as-graph hypothesis | labelled bet, not for convergence here |
 
@@ -41,7 +41,7 @@ need. The RFC is **open**, organised in two fenced tiers:
 
 | line(s) | what | change |
 |---|---|---|
-| `170-194` | per-kind status arrays | new kind's statuses (OBS: `observed`→`confirmed`/`retracted`; HYP: `proposed`→`confirmed`/`refuted`) — non-terminal statuses are exactly what makes a kind gate under ADR-017 |
+| `170-194` | per-kind status arrays | new kind's statuses (EVD: `captured`→`confirmed`/`disputed`/`retracted`, terminal `{confirmed,retracted}`; HYP: `proposed`→`confirmed`/`refuted`) — non-terminal statuses (EVD `captured`/`disputed`, HYP `proposed`) are exactly what makes a kind gate under ADR-017 |
 | `197-203` | per-kind hide-sets | new hidden-sets |
 | `206-209` | per-kind terminal sets | new terminal-sets (drives the trinary partition) |
 | `212-220` | `statuses()` match arms | new arms |
@@ -51,7 +51,7 @@ need. The RFC is **open**, organised in two fenced tiers:
 
 | line(s) | what | change |
 |---|---|---|
-| `RELATION_RULES` table | edge-validity spine | existing `RECORD`-sourced rows (shapes, spawns, supersedes) inherit new kinds **for free** via the `RECORD` grouping — **no table change** for existing labels. D3's new edges (e.g. `confirmed_by` HYP→OBS, modelled `LifecycleOnly` like `supersedes`) would add rows |
+| `RELATION_RULES` table | edge-validity spine | existing `RECORD`-sourced rows (shapes, spawns, supersedes) inherit new kinds **for free** via the `RECORD` grouping — **no table change** for existing labels. D3's new edges (e.g. `supports`/`disputes` EVD→record, modelled `LifecycleOnly` like `supersedes` where they drive a status change) would add rows |
 | `src/kinds.rs:37` | `RECORD` grouping | extending it is the single lever that propagates existing record edges to new kinds |
 
 See `edge-validation.md` for the full `RELATION_RULES` snapshot (which labels each source
