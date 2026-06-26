@@ -1,9 +1,20 @@
 # SL-157 notes — Checkout-independent integrate
 
-Status: **in `/design`.** Scope (`slice-157.md`) re-baselined + premise-corrected
-and committed. Code-impact is precisely mapped (below). **Remaining design work:**
-write `design.md`, record `design-target` selectors, adversarial review, then
-`/plan`. No code yet.
+Status: **design LOCKED — ready for `/plan`.** Scope re-baselined + premise-corrected.
+`design.md` authored (`31be77aa`), self-review patch (`e53642e5`), GPT external
+round + hardening (`26a867bc`). `design-target` selectors recorded
+(`src/dispatch.rs`, `src/git.rs`). No code yet.
+
+**Remaining:** (1) author ADR-012 mechanism Revision per ADR-013 (scope = design
+§5); (2) `/plan`. GPT verdict: no architecture block; the two hardened risks were
+the "cannot occur" framing (now: operating-model invariant, not Git impossibility)
+and the behaviour-delta claim (now: scoped to supported posture).
+
+**Self-review catch (folded into design §6):** `integrate_report_emits_disposition`
+(e2e:1121) asserts `(advanced+resynced)` but via the CHECKED-OUT leg (fixture
+checks `main` out) → survives. `AdvancedResynced` variant KEPT (D4, dispatch.rs:1872);
+only its doc trims. Removed unit test's helper `main_at_c1_with_descendant_c2` has
+3 other callers → not orphaned.
 
 ---
 
