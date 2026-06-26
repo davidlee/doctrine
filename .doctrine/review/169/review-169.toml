@@ -1,0 +1,34 @@
+id    = 169
+slug  = "inquisition-sl-162-design-runtime-resolve-test-binary-path"
+title = "Inquisition: SL-162 design — Runtime-resolve test binary path"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-162"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: targeted dead-code suppression; Observed: blanket #![allow(dead_code)] on shared test helper module"
+detail = "The design's D5/R4 adopts #![allow(dead_code)] as an inner attribute on tests/common/mod.rs to solve the subset-use case (a test crate imports common but only uses one of the two re-exported helpers). This blanket suppression mutes ALL dead_code warnings in the module for every includer — a future genuinely-dead item added to common/mod.rs would be silenced. The zero-warning gate (just gate, AGENTS.md) is a project-level invariant; a blanket allow on a shared module erodes its precision. A more targeted alternative exists: per-item #[allow(dead_code)] on the specific re-export that a given crate doesn't use, or an allow on the narrower unused_imports lint. The design acknowledges this tradeoff (R4) but does not explain why targeted suppression was rejected in favour of the blanket."
+disposition = "tolerated"
+response = "The design consciously chooses the blanket #![allow(dead_code)] as the standard shared-helper idiom (D5/R4). tests/common/mod.rs is trivially small — two re-exports over a #[path]-included module — and manually curated. A per-item #[allow(dead_code)] would require conditional compilation or per-crate knowledge that doesn't exist at the module level (each integration test is a separate crate, and common/mod.rs doesn't know which helper each includer uses). The blanket allow is the pragmatic standard idiom for exactly this pattern in Rust test suites. The risk of masking genuine dead code in a two-line module is negligible. The tradeoff is documented and accepted."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: CI-verifiable cross-namespace regression guard; Observed: only VH-1 human gate, no constructor-level verification test"
+detail = "The entire justification for SL-162 is cross-namespace reliability (jail vs host). Yet the only verification that directly proves the fix works across namespaces is VH-1 — a human-only step that 'cannot be exercised from a single namespace in CI.' The design accepts this (review note F4: 'Not a blocker'). However, a constructor-level test could verify that doctrine_bin() returns a path that actually exists and is executable within whichever namespace the test runs — proving the resolver works by construction without requiring dual-namespace orchestration. Such a test would run in CI under 'cargo test' and fail if the layout assumption (A1) breaks. The absence of this test means cross-namespace correctness rests entirely on the human gate and the A1 layout invariant, with no automated tripwire."
+disposition = "follow-up"
+response = "The design correctly identifies this as VH (human-verifiable only) and does not claim CI coverage for cross-namespace testing. A constructor test (verify doctrine_bin() returns an existing executable path) would add defence-in-depth against the A1 layout assumption breaking, and would run in CI. This is genuine follow-up work — backlogging it as an improvement is appropriate. The design does not need to change; the VH-1 gate is sufficient for closure."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
