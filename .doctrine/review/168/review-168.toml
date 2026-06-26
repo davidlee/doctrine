@@ -1,0 +1,89 @@
+id    = 168
+slug  = "inquisition-sl-161-design-does-the-plan-faithfully-express-the-design-and-does-the-design-survive"
+title = "Inquisition: SL-161 design — does the plan faithfully express the design, and does the design survive adversarial scrutiny?"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-161"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-01 VA-1 is unattainable — the grep-zero-elsewhere invariant can't hold before PHASE-02 lands"
+detail = '''
+PHASE-01 VA-1 asserts: "Grep `\"ASM\".*\"DEC\".*\"QUE\".*\"CON\"` in `src/` returns zero literal clusters outside `kinds.rs`."
+
+After PHASE-01 completes, TWO non-`kinds.rs` sites still contain literal record-prefix clusters that this grep would match:
+
+1. `src/catalog/scan.rs:62` — the `"ASM" | "DEC" | "QUE" | "CON"` match arm. The design DEFERS this to PHASE-02 (§5.2, plan §Sequencing & Rationale: "Why scan.rs is last").
+
+2. `src/commands/dep_seq.rs:285` — the `is_admissible_dep_target_is_work_like_plus_records` test's admissible vector `["SL", ..., "ASM", "DEC", "QUE", "CON"]`. The design's internal adversarial pass F2 explicitly says "Accepted as-is" — the record subset could be derived but the resulting code would be less readable for what it tests (the full admissible census).
+
+VA-1 therefore promises a state that the plan itself cannot deliver in PHASE-01. The grep pattern `"ASM".*"DEC".*"QUE".*"CON"` is a regex that WILL match both `:62` (pipe-separated) and `:285` (comma-separated).
+
+Expected: VA-1 should either (a) be scoped to exclude sites deferred/accepted, e.g., "zero literal record-prefix clusters in PHASE-01 design-target sites except scan.rs and dep_seq.rs:285", or (b) be moved to PHASE-02 where it can hold after the scan.rs restructure lands (and dep_seq.rs:285 is explicitly exempted as a mixed superset, not a record-only cluster).'''
+disposition = "fix-now"
+response = """
+The VA-1 grep criterion is unattainable in PHASE-01 because scan.rs:62 (deferred to PHASE-02) and dep_seq.rs:285 (accepted as-is per design F2) both survive PHASE-01. The penance:
+
+1. Remove VA-1 from PHASE-01.
+2. Add to PHASE-02 a VA: "Grep `"ASM".*"DEC".*"QUE".*"CON"` in `src/` returns zero literal clusters outside `kinds.rs`, `dep_seq.rs:285` (admissible vector — mixed superset, accepted as-is per design F2), and `integrity.rs` (full-corpus KINDS prefixes pin — not a record-only cluster)."
+3. Or, simpler: scope PHASE-01's VA-1 to only the files PHASE-01 touches: "Grep `"ASM".*"DEC".*"QUE".*"CON"` in PHASE-01 design-target files (dep_seq.rs excluding :285, partition.rs, search.rs, tag.rs, relation.rs, catalog/test_helpers.rs) returns zero literal clusters."
+
+This preserves the drift-canary intent while respecting the plan's own sequencing."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Plan EX-8 underspecified — doesn't name the test function being replaced, risking duplicate or wrong replacement"
+detail = """
+PHASE-01 EX-8 states: "`dep_seq` pin test rewritten: predicate over KINDS == `kinds::RECORD` sorted."
+
+The design §5.2 names the specific test function to be replaced: `is_record_is_exactly_knowledge_records` at `dep_seq.rs:264-275`, replaced with a new function `is_record_predicate_matches_kinds_record`. The plan's EX-8 says only "pin test rewritten" without naming which function is being replaced.
+
+The implementer could interpret "rewritten" as "add a new test alongside the old one" — leaving the old literal-prefix test in place defeats the DRY purpose (the literal cluster persists). Or they could delete the wrong test. Naming the function in the EX criterion makes the intent unambiguous and testable.
+
+Expected: EX-8 should name the function being replaced, e.g., "`is_record_is_exactly_knowledge_records` test replaced with `is_record_predicate_matches_kinds_record` that asserts predicate over KINDS == `kinds::RECORD` sorted.""""
+disposition = "fix-now"
+response = """
+The plan's PHASE-01 EX-8 should name the specific test function being replaced. The penance:
+
+Change EX-8 from:
+  "`dep_seq` pin test rewritten: predicate over KINDS == `kinds::RECORD` sorted"
+to:
+  "`is_record_is_exactly_knowledge_records` test replaced with `is_record_predicate_matches_kinds_record`: asserts predicate over KINDS == `kinds::RECORD` sorted (design §5.2, the two-loop literal match → set equality)"
+
+This gives the implementer a single, unambiguous target — they know which function to delete and what to name the replacement."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-02 VA-3 is a no-op check — verifies files untouched by the slice, not slice output"
+detail = """
+The design §5.2 proposes converting 7 sites. The plan allocates 6 to PHASE-01 and 1 (scan.rs) to PHASE-02. But there is NO phase that explicitly verifies the supersede/superserde "no change needed" sites.
+
+The design's OQ-3 and Verification section says: "supersede/superserde `is_record` calls — already use `RecordKind::from_prefix(prefix).is_some()`. No change. Verified."
+
+The plan has PHASE-02 VA-3: "`supersede.rs` + `superserde.rs` `RecordKind::from_prefix` calls unchanged (verification-only step)." This is placed in PHASE-02 but these files are not touched in any phase. A verification-only check should be scoped differently — it's not an exit criterion (nothing exits), it's a pre-existing condition check.
+
+Expected: VA-3 should be either (a) elevated to a pre-condition (EN criterion) or (b) noted as a design verification in the plan.md prose rather than a VA in a phase that doesn't touch those files. A VA that checks "X is unchanged" when nothing in the slice touches X is noise — it verifies the working tree, not the slice's work."""
+disposition = "fix-now"
+response = """
+VA-3 is a verification-only step on files the slice doesn't touch — it checks the working tree, not the slice's output. It belongs in plan.md prose, not as a phase criterion.
+
+Penance: Move VA-3 from PHASE-02's verification list to plan.md's §Notes as:
+  "Pre-existing condition verified at plan time: `supersede.rs` and `superserde.rs` already use `RecordKind::from_prefix(prefix).is_some()` — no literal record-prefix clusters, no change needed (design OQ-3)."
+
+This keeps the verification recorded without polluting the phase's exit criteria with a no-op check. If supersede/superserde drift before implementation, the `cargo test` and `just gate` criteria catch it."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

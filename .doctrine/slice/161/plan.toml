@@ -1,0 +1,60 @@
+# Implementation plan for SL-161 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-161"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Predicate + straightforward conversions"
+objective = "Add `kinds::is_record()` and convert all literal record-prefix sites except `scan.rs` to read `kinds::RECORD` or `RecordKind::from_prefix`."
+entrance_criteria = [
+  { id = "EN-1", text = "`just check` green on clean working tree" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`kinds::is_record()` added and compiles" },
+  { id = "EX-2", text = "`dep_seq::is_record()` delegates to `kinds::is_record()`" },
+  { id = "EX-3", text = "`partition.rs:609` guard reads `kinds::is_record()`" },
+  { id = "EX-4", text = "`search.rs:33` knowledge group alias reads `kinds::RECORD`" },
+  { id = "EX-5", text = "`tag.rs` has `record_kinds_are_taggable` subset test" },
+  { id = "EX-6", text = "`relation.rs:1444-1445` Shapes/Spawns census rows read `kinds::RECORD`" },
+  { id = "EX-7", text = "`catalog/test_helpers.rs` `seed_knowledge` uses `RecordKind::from_prefix`" },
+  { id = "EX-8", text = "`is_record_is_exactly_knowledge_records` test replaced with `is_record_predicate_matches_kinds_record`: asserts predicate over KINDS == `kinds::RECORD` sorted (design §5.2)" },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test` — affected test files green" },
+  { id = "VT-2", expects = "`just check` green (fast inner-loop gate)" },
+]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "scan.rs restructure + KINDS count + final gate"
+objective = "Restructure `scan.rs` dispatch, add KINDS count assertion, and verify full gate green with zero remaining record-literal clusters."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exits green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`scan.rs` record arm removed; `RecordKind::from_prefix` guard in `other` arm" },
+  { id = "EX-2", text = "`integrity::KINDS` carries doc comment about bumping the count" },
+  { id = "EX-3", text = "`kinds_table_covers_the_numbered_kinds` has `KINDS.len()` count assertion" },
+  { id = "EX-4", text = "`just gate --workspace` zero warnings" },
+  { id = "EX-5", text = "All existing test suites green (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test` — full suite green" },
+  { id = "VT-2", expects = "`just gate` zero warnings" },
+  { id = "VA-1", expects = "Grep `\"ASM\".*\"DEC\".*\"QUE\".*\"CON\"` in `src/` → zero outside `kinds.rs` and `dep_seq.rs:285` (admissible vector — mixed superset, accepted as-is per design F2)" },
+  { id = "VA-2", expects = "`catalog/scan.rs` `outbound_for` has no literal record-prefix match arm" },
+]
