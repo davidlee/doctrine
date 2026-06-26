@@ -3,7 +3,8 @@ slug    = "reconcile-sl-101"
 title   = "reconcile SL-101"
 status = "done"
 approval = "approved"
-updated = "2026-06-18"
+updated = "2026-06-26"
+tags = ["area:cli"]
 
 # A Revision (REV, ADR-013) is a first-class change-axis entity: a pending
 # revise-intent against authored governance/spec truth plus a staged delta payload.
