@@ -10,7 +10,7 @@ Record implementation notes as you go.
 During execution, notes belong in the **active runtime phase sheet**
 (`state/.../phases/phase-NN.md`) — disposable working context. At phase or slice
 wrap-up, durable items are harvested into `notes.md`
-(`doctrine slice notes <ID>` scaffolds it on demand) and `audit.md`. Honour the
+(`doctrine slice notes <ID>` scaffolds it on demand). Honour the
 storage rule: live progress lives in the state tree, never in authored files.
 
 If you don't know which slice owns the work, find it with `doctrine slice list`.
