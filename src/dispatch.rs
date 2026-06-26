@@ -1815,10 +1815,9 @@ fn advance_row(root: &Path, row: &mut JournalRow) -> anyhow::Result<RowOutcome> 
     }
 }
 
-/// The not-checked-out leg: pure `update_ref_cas`, then the §2.2 None-leg post-CAS
-/// re-probe (R2 gap) — a ref checked out in the probe→CAS window is now desynced;
-/// resync a clean worktree (`reset --hard`) or warn `raced-checkout-desync` on a
-/// dirty one (the advance already happened; it cannot be un-done).
+/// The not-checked-out leg: pure `update_ref_cas`, CAS-and-done. Under Doctrine's
+/// dispatch posture the delivery ref is never checked out, so a successful CAS
+/// needs no worktree resync (SL-157, superseding SL-121 §2.2).
 fn advance_pure_ref(
     root: &Path,
     row: &mut JournalRow,
@@ -1837,17 +1836,15 @@ fn advance_pure_ref(
             })
         }
         RefCas::Updated => {
+            // Not-checked-out advances are pure ref CAS only. Do NOT re-probe and
+            // resync a worktree after CAS: under Doctrine's dispatch posture the
+            // delivery ref is never checked out, and the post-CAS resync was the
+            // RacedDesync / IMP-122 hazard (SL-157).
             row.status = LedgerStatus::Verified;
             planned.clone_into(&mut row.applied_new_oid);
-            let disposition = match git::worktree_for_ref(root, &row.target_ref)? {
-                None => Disposition::AdvancedPureRef,
-                Some(wt) if git::tree_clean(&wt)? => {
-                    git::resync_worktree_hard(&wt, planned)?;
-                    Disposition::AdvancedResynced
-                }
-                Some(_dirty) => Disposition::RacedDesync,
-            };
-            Ok(RowOutcome::Done { disposition })
+            Ok(RowOutcome::Done {
+                disposition: Disposition::AdvancedPureRef,
+            })
         }
     }
 }
@@ -1890,8 +1887,7 @@ fn advance_checked_out(
 /// Render the integrate outcome (design §4 / IMP-078): the existing machine-readable
 /// stdout ref-list (every applied row, byte-for-byte as before) PLUS a per-row
 /// stderr disposition line. A refusal bails (moved/raced targets reported, never
-/// clobbered); a `raced-checkout-desync` is a non-fatal warning line (the ref did
-/// advance). Reads `(row, outcome)` pairs in row order.
+/// clobbered). Reads `(row, outcome)` pairs in row order.
 fn report_integrate(journal: &Journal, outcomes: &[RowOutcome]) -> anyhow::Result<()> {
     let mut applied_refs: Vec<String> = Vec::new();
     let mut detail: Vec<String> = Vec::new();
@@ -2258,18 +2254,12 @@ enum Disposition {
     /// A replay found the target already at the planned oid (integrate).
     NoOp,
     /// A checked-out target fast-forwarded in its live worktree via
-    /// `merge --ff-only`, or a None-leg advance whose post-CAS re-probe found the
-    /// ref freshly checked out and clean (resynced via `reset --hard`) — ref +
-    /// index + worktree all at the planned oid (integrate, §2.2).
+    /// `merge --ff-only` — ref + index + worktree all at the planned oid
+    /// (integrate, §2.2 checked-out leg).
     AdvancedResynced,
     /// A not-checked-out target advanced by pure `update_ref_cas`; no worktree to
     /// sync (integrate, §2.2 None leg).
     AdvancedPureRef,
-    /// A None-leg advance whose post-CAS re-probe found the ref checked out **and
-    /// dirty** — the ref already moved (content is the planned oid) but the live
-    /// worktree's stale tree could not be safely resynced. A WARNING, not a
-    /// refusal: the advance cannot be un-done (§2.2 / §7 boundary #3).
-    RacedDesync,
 }
 
 impl Disposition {
@@ -2281,7 +2271,6 @@ impl Disposition {
             Self::NoOp => "no-op",
             Self::AdvancedResynced => "advanced+resynced",
             Self::AdvancedPureRef => "advanced+pure-ref",
-            Self::RacedDesync => "raced-checkout-desync",
         }
     }
 }
