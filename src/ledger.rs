@@ -315,25 +315,11 @@ impl Journal {
 
 impl Boundaries {
     /// Parse a `boundaries.toml` body.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "stage-2 integrate / funnel are the first non-test callers"
-        )
-    )]
     pub(crate) fn parse(text: &str) -> anyhow::Result<Boundaries> {
         Ok(toml::from_str(text)?)
     }
 
     /// Serialize to a `boundaries.toml` body.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "funnel-time recording is the first non-test writer (PHASE-06)"
-        )
-    )]
     pub(crate) fn to_toml(&self) -> anyhow::Result<String> {
         Ok(toml::to_string(self)?)
     }
@@ -523,6 +509,28 @@ pub(crate) fn read_boundaries(root: &Path, slice: u32) -> anyhow::Result<Boundar
     load(&dispatch_dir(root, slice).join("boundaries.toml"))
 }
 
+/// Raw working-file read of `boundaries.toml` for `slice` — the verbatim bytes,
+/// `None` when the file is absent. Unlike [`read_boundaries`] (which parses to
+/// [`Boundaries`] and defaults an absent file to empty), this returns the
+/// **unparsed** text so the caller (`dispatch::commit_boundaries`, PHASE-04) can
+/// validate it before committing and distinguish *absent* (no-op) from
+/// *present-but-malformed* (a hard error — never committed). Reads the working
+/// filesystem under the private [`dispatch_dir`] path: the funnel's coordination
+/// worktree is the only place an *uncommitted* ledger lives (design §5.2 / OQ-4),
+/// so this raw reader stays here rather than rebuilt in `dispatch.rs`. The sync
+/// verb tree-reads the committed tip instead ([`crate::dispatch`] `read_ledger`).
+pub(crate) fn read_boundaries_file(
+    worktree_root: &Path,
+    slice: u32,
+) -> anyhow::Result<Option<String>> {
+    let path = dispatch_dir(worktree_root, slice).join("boundaries.toml");
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Read `orthogonal.toml` for `slice` (empty when absent).
 #[cfg_attr(
     not(test),
@@ -667,6 +675,26 @@ mod tests {
         assert_eq!(Journal::parse("").unwrap(), Journal::default());
         assert_eq!(Boundaries::parse("").unwrap(), Boundaries::default());
         assert_eq!(Orthogonal::parse("").unwrap(), Orthogonal::default());
+    }
+
+    // --- PHASE-04 EX-1: raw working-file reader (verbatim bytes / None) -----
+
+    #[test]
+    fn read_boundaries_file_returns_verbatim_some_or_none() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let slice = 64;
+
+        // Absent file ⇒ None (distinct from read_boundaries, which defaults to
+        // empty — commit_boundaries needs absent↔present to drive its no-op).
+        assert_eq!(read_boundaries_file(root, slice).unwrap(), None);
+
+        // Present ⇒ the EXACT bytes, unparsed and un-normalised: the reader does
+        // no toml round-trip, so commit_boundaries owns validation.
+        let raw = "  [[boundary]]\nphase=\"PHASE-01\"\ncode_start_oid = \"s\"\ncode_end_oid=\"e\"\n";
+        std::fs::create_dir_all(root.join(".doctrine/dispatch/064")).unwrap();
+        std::fs::write(root.join(".doctrine/dispatch/064/boundaries.toml"), raw).unwrap();
+        assert_eq!(read_boundaries_file(root, slice).unwrap().as_deref(), Some(raw));
     }
 
     // --- VT-5: recording surface writes rows prepare-review reads back ------
