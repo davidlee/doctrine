@@ -182,3 +182,22 @@ NO edits to them:
 - Pure one-leg integrate (alt ii) → rejected (fights AGENTS.md primary-on-edge).
 - R2 `/close` ISS-030 recovery → independent skill fix.
 - Candidate-flow rewrite; ADR-012 D1/D5; IMP-174 split-brain.
+
+## Audit (RV-166, reconciliation facet, self-audit) — 2026-06-26
+
+Surface: solo fork `sl-157-phase-01`, delta `da243b3d` (baseline `42c55624`).
+Reviewed from primary tree; gate run in fork worktree.
+
+- **Conformance**: clean (2 conformant / 0 undeclared / 0 undelivered) after
+  bootstrapping the registry — fork-land did not auto-bind the source-delta
+  (F-1, repaired; durable note `mem.pattern.audit.fork-land-unbound-source-delta`).
+- **Gate**: `just check` + `just gate` rc=0 (clippy zero warnings); integrate
+  e2e 38 passed / 0 failed — all VT-1 named tests green incl. both
+  checked-out-FF and pure-ref regressions. VT-2 (no dead_code) ✓. VA-1 ✓.
+- **Findings** (all minor, terminal): F-1 fix-now (registry repaired); F-2
+  verified → SPEC-022 prose strike (REV at reconcile); F-3 verified → close
+  IMP-122 (resolved-by-deletion at reconcile); F-4 aligned (scope/behaviour
+  conformance). No blocker; close-gate clear.
+- **Reconcile obligations** (see RV-166 brief): (1) modify REV SPEC-022 strike
+  the post-CAS-resync parenthetical; (2) close IMP-122 citing SL-157. No
+  ADR-012 Revision (D4 CAS contract preserved verbatim).

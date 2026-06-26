@@ -1,0 +1,42 @@
+memory_uid = "mem_019f0342741174e3b0b5c293b181fac1"
+memory_key = "mem.pattern.audit.fork-land-unbound-source-delta"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Fork-landed phase leaves an unbound source-delta (conformance undelivered)"
+summary = "Solo /execute on a fork never stamps capture_phase_boundary on the primary tree → conformance reports the phase's paths UNDELIVERED (empty registry). Bootstrap with record-delta(baseline..forktip)."
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/state.rs"]
+globs = []
+commands = ["slice conformance", "slice record-delta"]
+tags = ["audit", "conformance", "registry"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f6a4ee4c672de4aa2c3ddb019b00ba9e78c0e56a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "4c1944968307fea6d3ec311e8e33e6f3e577fe61c35cefb51b6450fe97af379a"
+base_commit = "e0f9a9a1141897b4a9c288ae252d2f88e66b7cca"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
