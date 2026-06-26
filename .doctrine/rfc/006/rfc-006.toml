@@ -1,0 +1,33 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 6
+slug = "non-ff-trunk-automerge"
+title = "Auto-merge non-FF trunk at integrate: reversing the FF-only posture"
+status = "open"
+created = "2026-06-26"
+updated = "2026-06-26"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "SL-157"
+
+[[relation]]
+label = "related"
+target = "ADR-012"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-127"
+
