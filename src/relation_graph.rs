@@ -17,7 +17,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use cordage::{Arity, CyclePolicy, EdgeAttrs, Graph, GraphBuilder, OverlayConfig, OverlayId};
+use cordage::{
+    Arity, CyclePolicy, Direction, EdgeAttrs, Graph, GraphBuilder, OverlayConfig, OverlayId,
+};
 
 use crate::catalog::hydrate::{CatalogEdgeLabel, CatalogKey, EdgeTarget};
 use crate::dep_seq;
@@ -876,6 +878,381 @@ pub(crate) fn inspect_value(view: &InspectView) -> serde_json::Value {
         "inbound": inbound,
         "danglers": danglers,
     })
+}
+
+// ---------------------------------------------------------------------------
+// SL-138 — the relation-transitive walk (design §5). The engine-layer transitive
+// query over the cordage depth-bounded primitive (`Graph::reachable_bounded`),
+// plus its human + JSON renders. Relation-only — it never calls `priority`
+// (ADR-001): no actionability block, no up-call. A SEPARATE entry point from
+// `inspect_from` (1-hop), not a flag on it: the two render contracts differ.
+// ---------------------------------------------------------------------------
+
+/// Walk direction for [`transitive_from`], defined HERE in the engine layer
+/// (ADR-001): the command layer maps its clap flag DOWN to this, so the engine
+/// never depends on a command-layer type (the `Format`/`listing.rs` precedent).
+/// `Inbound` walks in-edges (`Against` — blast radius: what transitively depends on
+/// the entity); `Outbound` walks out-edges (`Along` — derivation / governance
+/// ancestry); `Both` emits the two as separate sections (the awareness view, D3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+pub(crate) enum TransitiveDir {
+    Inbound,
+    Outbound,
+    Both,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+impl TransitiveDir {
+    fn has_inbound(self) -> bool {
+        matches!(self, Self::Inbound | Self::Both)
+    }
+    fn has_outbound(self) -> bool {
+        matches!(self, Self::Outbound | Self::Both)
+    }
+}
+
+/// One label's transitively-reachable target set in a single direction. `targets`
+/// are canonical ids, id-ascending (REQ-077 determinism); `truncated` is the OR of
+/// the depth cap biting across that label's walk.
+#[derive(Debug)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+pub(crate) struct TransitiveGroup {
+    pub label: RelationLabel,
+    pub targets: Vec<String>,
+    pub truncated: bool,
+}
+
+/// The transitive view of one entity (design §5 output contract, C4). `inbound` is
+/// `Some` iff the requested direction includes inbound (emitted FIRST — the
+/// blast-radius framing), `outbound` likewise. A requested direction with no
+/// reachable edges is `Some(vec![])` (renders `(none)` / `[]`); a NON-requested
+/// direction is `None` — omitted entirely (the table emits no section, the JSON no
+/// key). `max_depth` is `None` when unbounded; view-level `truncated` is the OR
+/// across every emitted group (the table's "… some chains truncated" line reads it).
+#[derive(Debug)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+pub(crate) struct TransitiveView {
+    pub id: String,
+    pub max_depth: Option<usize>,
+    pub truncated: bool,
+    pub inbound: Option<Vec<TransitiveGroup>>,
+    pub outbound: Option<Vec<TransitiveGroup>>,
+}
+
+/// The overlay-backed labels to walk, sorted by `name()` ascending (the §5 group
+/// order). `None` → every label the graph allocates an overlay for, read off the
+/// live [`OverlayMap`] (table-derived from [`RELATION_RULES`] via [`OverlayMap::build`],
+/// so the no-overlay set `{contextualizes, drift, decision_ref}` is excluded by
+/// construction — NO hardcoded list, C2). `Some(ls)` → `ls` after rejecting any label
+/// with no overlay: those are 1-hop-only by nature (`TargetSpec::Unvalidated` — their
+/// targets never resolve to a node) and not transitively walkable (EX-3).
+///
+/// # Errors
+///
+/// A requested label lacking an overlay (`contextualizes` / `drift` / `decision_ref`)
+/// yields a "not transitively walkable" error listing the overlay-backed set.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+fn transitive_labels(
+    overlays: &OverlayMap,
+    labels: Option<&[RelationLabel]>,
+) -> anyhow::Result<Vec<RelationLabel>> {
+    let mut selected: Vec<RelationLabel> = match labels {
+        None => overlays.by_label.keys().copied().collect(),
+        Some(requested) => {
+            let bad: Vec<&str> = requested
+                .iter()
+                .filter(|label| overlays.overlay_for(**label).is_none())
+                .map(|label| label.name())
+                .collect();
+            if !bad.is_empty() {
+                let mut walkable: Vec<&str> =
+                    overlays.by_label.keys().map(|label| label.name()).collect();
+                walkable.sort_unstable();
+                anyhow::bail!(
+                    "not transitively walkable: {}; overlay-backed labels are: {}",
+                    bad.join(", "),
+                    walkable.join(", ")
+                );
+            }
+            requested.to_vec()
+        }
+    };
+    selected.sort_by_key(|label| label.name());
+    Ok(selected)
+}
+
+/// Walk one direction over the selected overlays, one `reachable_bounded` per label,
+/// returning the NON-EMPTY groups (a label with zero reachable targets is omitted —
+/// design §4/§5: an empty direction renders a single `(none)`, never one `(none)` per
+/// label). A truncated walk always has ≥1 target (the node at the cap is in `depths`),
+/// so suppressing empty groups never drops a truncation signal. `targets` are mapped
+/// `NodeId`→`EntityKey`→canonical and sorted id-ascending (REQ-077).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+fn walk_transitive(
+    rg: &RelationGraph,
+    node: cordage::NodeId,
+    direction: Direction,
+    labels: &[RelationLabel],
+    max_depth: Option<usize>,
+) -> Vec<TransitiveGroup> {
+    let mut groups = Vec::new();
+    for &label in labels {
+        // Present by construction: `transitive_labels` rejected every no-overlay label.
+        let Some(overlay) = rg.overlays.overlay_for(label) else {
+            continue;
+        };
+        let reach = rg
+            .graph
+            .reachable_bounded(overlay, node, direction, max_depth);
+        let mut targets: Vec<EntityKey> = reach
+            .depths
+            .keys()
+            .filter_map(|reached| rg.projection.key_of(*reached))
+            .collect();
+        if targets.is_empty() {
+            continue;
+        }
+        targets.sort();
+        groups.push(TransitiveGroup {
+            label,
+            targets: targets.into_iter().map(EntityKey::canonical).collect(),
+            truncated: reach.truncated,
+        });
+    }
+    groups
+}
+
+/// The transitive relation query (design §5): walk the cross-kind relation graph
+/// from `id`, per selected overlay × per selected direction, via the cordage
+/// depth-bounded primitive. Rides the same seams as [`inspect_from`] —
+/// [`build_relation_graph_from`] for the graph and [`require_minted`] for the
+/// existence gate — so a never-minted id errors identically (EX-4). Relation-only:
+/// no `priority` up-call (ADR-001).
+///
+/// `_root` is retained for call-site symmetry with [`inspect_from`] / [`render_from`]
+/// (the PHASE-03 command layer threads the same `(scanned, root, id, …)` tuple), per
+/// the §5 signature; the relation-only walk reads nothing per-entity from disk, so it
+/// is currently unused here.
+///
+/// # Errors
+///
+/// A malformed / unknown-prefix `id` (parse), a never-minted id (the existence gate),
+/// or a `labels` entry that is not overlay-backed ([`transitive_labels`]).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+pub(crate) fn transitive_from(
+    scanned: &[ScannedEntity],
+    _root: &Path,
+    id: &str,
+    dir: TransitiveDir,
+    labels: Option<&[RelationLabel]>,
+    max_depth: Option<usize>,
+) -> anyhow::Result<TransitiveView> {
+    let (kref, qid) = integrity::parse_canonical_ref(id)?;
+    let query_key = EntityKey {
+        prefix: kref.kind.prefix,
+        id: qid,
+    };
+
+    let rg = build_relation_graph_from(scanned)?;
+
+    // Existence gate (F6, shared with `inspect_from`): a well-formed ref to a
+    // never-minted id is an error, not an empty-section view.
+    require_minted(&rg.projection, query_key)?;
+    let Some(node) = rg.projection.resolve(query_key) else {
+        debug_assert!(false, "transitive_from: gate passed but key not resolvable");
+        anyhow::bail!("{}: no such entity", query_key.canonical());
+    };
+
+    // Validate + order the label set ONCE (rejects no-overlay labels up front), then
+    // reuse it for each requested direction.
+    let selected = transitive_labels(&rg.overlays, labels)?;
+
+    let inbound = dir
+        .has_inbound()
+        .then(|| walk_transitive(&rg, node, Direction::Against, &selected, max_depth));
+    let outbound = dir
+        .has_outbound()
+        .then(|| walk_transitive(&rg, node, Direction::Along, &selected, max_depth));
+
+    // View-level truncation: OR across every emitted group in either direction (C4).
+    let truncated = inbound
+        .iter()
+        .chain(outbound.iter())
+        .flatten()
+        .any(|group| group.truncated);
+
+    Ok(TransitiveView {
+        id: query_key.canonical(),
+        max_depth,
+        truncated,
+        inbound,
+        outbound,
+    })
+}
+
+/// Render the transitive view for human reading (design §4/§5). Header carries the
+/// depth (`depth 5`, or `depth all` when unbounded); sections are **inbound then
+/// outbound** (blast-radius first), each omitted when the direction was not requested
+/// (`None`) and rendered as a single `(none)` when requested-but-empty. A trailing
+/// truncation line appears iff the view truncated. House style: `Vec<String>` parts
+/// joined by `concat` (the `render_human` precedent — avoids the `push_str(&format!)`
+/// lint).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+fn render_transitive_human(view: &TransitiveView) -> String {
+    let depth = view
+        .max_depth
+        .map_or_else(|| "all".to_string(), |d| d.to_string());
+    let mut parts: Vec<String> = vec![format!("{} — transitive (depth {depth})\n", view.id)];
+
+    if let Some(groups) = &view.inbound {
+        parts.push("\ndepends on this (inbound):\n".to_string());
+        push_transitive_groups(&mut parts, groups);
+    }
+    if let Some(groups) = &view.outbound {
+        parts.push("\nthis depends on (outbound):\n".to_string());
+        push_transitive_groups(&mut parts, groups);
+    }
+    if view.truncated {
+        // `truncated` implies a finite cap bit, so `max_depth` is `Some` here; `depth`
+        // already holds its string form (`all` is unreachable when truncated).
+        parts.push(format!(
+            "\n… some chains truncated at depth {depth} — re-run with --max-depth all\n"
+        ));
+    }
+    parts.concat()
+}
+
+/// Append one direction's group lines (`  label: a, b, c`), or a single `  (none)`
+/// when the requested direction reached nothing.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+fn push_transitive_groups(parts: &mut Vec<String>, groups: &[TransitiveGroup]) {
+    if groups.is_empty() {
+        parts.push("  (none)\n".to_string());
+        return;
+    }
+    for group in groups {
+        parts.push(format!(
+            "  {}: {}\n",
+            group.label.name(),
+            group.targets.join(", ")
+        ));
+    }
+}
+
+/// Render the transitive `--json` view (no trailing newline — the golden contract).
+///
+/// # Errors
+///
+/// Propagates a `serde_json` serialization failure (not expected for this shape).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+fn render_transitive_json(view: &TransitiveView) -> anyhow::Result<String> {
+    serde_json::to_string_pretty(&transitive_value(view))
+        .map_err(|e| anyhow::anyhow!("failed to serialize transitive JSON: {e}"))
+}
+
+/// The transitive `--json` envelope as a [`serde_json::Value`] (design §5 C4),
+/// discriminated `"kind": "inspect-transitive"`. A non-requested direction key is
+/// OMITTED (not null/empty); `max_depth` is JSON `null` when unbounded. Each group is
+/// `{ "label", "truncated", "targets" }` — NO `role` key (transitive `references` is
+/// role-collapsed, F3). Keys serialize alphabetically (no `preserve_order`), so
+/// `inbound` precedes `outbound` and `kind` falls mid-object — the order the C4 golden
+/// pins. Built MANUALLY (the `inspect_value` precedent — the repo derives no
+/// `Serialize` on domain enums; `RelationLabel` renders via `.name()`).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+    )
+)]
+pub(crate) fn transitive_value(view: &TransitiveView) -> serde_json::Value {
+    let group = |group: &TransitiveGroup| {
+        serde_json::json!({
+            "label": group.label.name(),
+            "truncated": group.truncated,
+            "targets": group.targets,
+        })
+    };
+    let direction =
+        |groups: &[TransitiveGroup]| serde_json::Value::Array(groups.iter().map(&group).collect());
+
+    let mut obj = serde_json::Map::new();
+    obj.insert("kind".to_string(), serde_json::json!("inspect-transitive"));
+    obj.insert("id".to_string(), serde_json::json!(view.id));
+    obj.insert(
+        "max_depth".to_string(),
+        view.max_depth
+            .map_or(serde_json::Value::Null, |d| serde_json::json!(d)),
+    );
+    obj.insert("truncated".to_string(), serde_json::json!(view.truncated));
+    if let Some(groups) = &view.inbound {
+        obj.insert("inbound".to_string(), direction(groups));
+    }
+    if let Some(groups) = &view.outbound {
+        obj.insert("outbound".to_string(), direction(groups));
+    }
+    serde_json::Value::Object(obj)
 }
 
 #[cfg(test)]
@@ -2228,6 +2605,378 @@ mod tests {
         assert!(
             validate_supersession(root).unwrap().is_empty(),
             "a consistent supersedes/superseded_by pair is clean"
+        );
+    }
+
+    // -- SL-138 PHASE-02: the relation-transitive walk (design §5) ------------
+
+    /// Scan a seeded corpus the way the command layer does (the F2 single scan).
+    fn scan(root: &Path) -> Vec<ScannedEntity> {
+        scan_entities(root, &mut vec![], ScanMode::default()).unwrap()
+    }
+
+    /// The (label, targets) of a direction's groups, for ergonomic assertions.
+    fn groups(dir: &Option<Vec<TransitiveGroup>>) -> Vec<(RelationLabel, Vec<String>)> {
+        dir.as_ref()
+            .map(|gs| gs.iter().map(|g| (g.label, g.targets.clone())).collect())
+            .unwrap_or_default()
+    }
+
+    // VT-1 — inbound vs outbound differ correctly on a directed fixture.
+    // SL-001 --governed_by--> ADR-005: inbound from ADR reaches SL (blast radius);
+    // outbound from ADR on that label is empty; outbound from SL reaches ADR.
+    #[test]
+    fn transitive_inbound_outbound_directional() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[("governed_by", &["ADR-005"])]);
+        seed_adr(root, 5, &[]);
+        let scanned = scan(root);
+
+        // Inbound from ADR-005: SL-001 governs-points at it → reachable Against.
+        let view = transitive_from(
+            &scanned,
+            root,
+            "ADR-005",
+            TransitiveDir::Inbound,
+            None,
+            Some(5),
+        )
+        .unwrap();
+        assert_eq!(
+            groups(&view.inbound),
+            vec![(RelationLabel::GovernedBy, vec!["SL-001".to_string()])],
+            "inbound governed_by from ADR-005 reaches SL-001"
+        );
+        assert!(view.outbound.is_none(), "outbound not requested → omitted");
+
+        // Outbound from ADR-005: ADR authors no governed_by → empty (but Some, requested).
+        let view = transitive_from(
+            &scanned,
+            root,
+            "ADR-005",
+            TransitiveDir::Outbound,
+            None,
+            Some(5),
+        )
+        .unwrap();
+        assert!(view.inbound.is_none(), "inbound not requested → omitted");
+        assert_eq!(
+            groups(&view.outbound),
+            vec![],
+            "outbound from ADR-005 on governed_by is empty"
+        );
+
+        // Outbound from SL-001 reaches its governor ADR-005.
+        let view = transitive_from(
+            &scanned,
+            root,
+            "SL-001",
+            TransitiveDir::Outbound,
+            None,
+            Some(5),
+        )
+        .unwrap();
+        assert_eq!(
+            groups(&view.outbound),
+            vec![(RelationLabel::GovernedBy, vec!["ADR-005".to_string()])],
+            "outbound governed_by from SL-001 reaches ADR-005"
+        );
+    }
+
+    // VT-2 — per-label sectioning, `labels` narrowing, and the F3 role collapse:
+    // a slice with mixed-role `references` outbound renders ONE `references` group.
+    #[test]
+    fn transitive_per_label_sections_narrowing_and_role_collapse() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 outbound across two DISTINCT references roles (implements→REQ-001,
+        // concerns→ADR-005) plus governed_by→ADR-005. The two references roles ride
+        // ONE label-keyed overlay (R5), so a transitive walk collapses them into a
+        // single `references` section (F3). All targets must MINT to form graph edges.
+        seed_slice(
+            root,
+            1,
+            &[
+                ("references(implements)", &["REQ-001"]),
+                ("references(concerns)", &["ADR-005"]),
+                ("governed_by", &["ADR-005"]),
+            ],
+        );
+        seed_adr(root, 5, &[]);
+        write(
+            root,
+            ".doctrine/requirement/001/requirement-001.toml",
+            "id = 1\nslug = \"r\"\ntitle = \"R\"\nstatus = \"active\"\n",
+        );
+        write(root, ".doctrine/requirement/001/requirement-001.md", "b\n");
+        let scanned = scan(root);
+
+        // Default labels (None): both overlay-backed sections present, sorted by name.
+        let view = transitive_from(
+            &scanned,
+            root,
+            "SL-001",
+            TransitiveDir::Outbound,
+            None,
+            Some(5),
+        )
+        .unwrap();
+        assert_eq!(
+            groups(&view.outbound),
+            vec![
+                (RelationLabel::GovernedBy, vec!["ADR-005".to_string()]),
+                // ONE references group, two roles collapsed (F3), targets id-ascending.
+                (
+                    RelationLabel::References,
+                    vec!["ADR-005".to_string(), "REQ-001".to_string()]
+                ),
+            ],
+            "per-label sections, references roles collapsed to one section"
+        );
+
+        // Narrow to `references` only — the governed_by section drops out.
+        let view = transitive_from(
+            &scanned,
+            root,
+            "SL-001",
+            TransitiveDir::Outbound,
+            Some(&[RelationLabel::References]),
+            Some(5),
+        )
+        .unwrap();
+        assert_eq!(
+            groups(&view.outbound),
+            vec![(
+                RelationLabel::References,
+                vec!["ADR-005".to_string(), "REQ-001".to_string()]
+            )],
+            "labels narrowing to a subset"
+        );
+    }
+
+    // VT-3 — no-overlay labels are rejected from an explicit `labels` arg, absent
+    // from the default set, and the overlay-backed predicate is table-derived.
+    #[test]
+    fn transitive_rejects_no_overlay_labels_and_predicate_is_table_derived() {
+        use crate::relation::{RELATION_RULES, TargetSpec};
+        use std::collections::BTreeSet;
+
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[("governed_by", &["ADR-005"])]);
+        seed_adr(root, 5, &[]);
+        let scanned = scan(root);
+
+        // Each no-overlay (TargetSpec::Unvalidated) label → "not transitively walkable".
+        for label in [
+            RelationLabel::Contextualizes,
+            RelationLabel::Drift,
+            RelationLabel::DecisionRef,
+        ] {
+            let err = transitive_from(
+                &scanned,
+                root,
+                "SL-001",
+                TransitiveDir::Both,
+                Some(&[label]),
+                Some(5),
+            )
+            .unwrap_err();
+            assert!(
+                err.to_string().contains("not transitively walkable")
+                    && err.to_string().contains(label.name()),
+                "{label:?} rejected with a clear message: {err}"
+            );
+        }
+
+        // The default (None) section set excludes every no-overlay label — proven by
+        // building the full corpus reachable set and asserting none appear. Here SL-001
+        // only authors governed_by, so we assert the absence structurally via the label
+        // selector the engine uses: the default set == the table's resolvable labels.
+        let rg = build_relation_graph_from(&scanned).unwrap();
+        let default_set: BTreeSet<RelationLabel> = transitive_labels(&rg.overlays, None)
+            .unwrap()
+            .into_iter()
+            .collect();
+        let resolvable_from_table: BTreeSet<RelationLabel> = RELATION_RULES
+            .iter()
+            .filter(|r| !matches!(r.target, TargetSpec::Unvalidated))
+            .map(|r| r.label)
+            .collect();
+        assert_eq!(
+            default_set, resolvable_from_table,
+            "default transitive label set is table-derived (== resolvable labels), no hardcoded list"
+        );
+        for label in [
+            RelationLabel::Contextualizes,
+            RelationLabel::Drift,
+            RelationLabel::DecisionRef,
+        ] {
+            assert!(
+                !default_set.contains(&label),
+                "{label:?} (no overlay) absent from the default transitive set"
+            );
+        }
+    }
+
+    // VT-4 — depth cap truncates + sets group & view `truncated`; unbounded reaches
+    // the deepest leaf; a never-minted id errors via the existence gate.
+    #[test]
+    fn transitive_depth_cap_truncation_and_existence_gate() {
+        let dir = tmp();
+        let root = dir.path();
+        // A supersedes chain SL-004 -> SL-003 -> SL-002 -> SL-001 (outbound Along).
+        seed_slice(root, 1, &[]);
+        seed_slice(root, 2, &[("supersedes", &["SL-001"])]);
+        seed_slice(root, 3, &[("supersedes", &["SL-002"])]);
+        seed_slice(root, 4, &[("supersedes", &["SL-003"])]);
+        let scanned = scan(root);
+
+        // Unbounded: outbound from SL-004 reaches all three, no truncation.
+        let view = transitive_from(
+            &scanned,
+            root,
+            "SL-004",
+            TransitiveDir::Outbound,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            groups(&view.outbound),
+            vec![(
+                RelationLabel::Supersedes,
+                vec![
+                    "SL-001".to_string(),
+                    "SL-002".to_string(),
+                    "SL-003".to_string()
+                ]
+            )],
+            "unbounded supersedes walk reaches the deepest leaf"
+        );
+        assert!(!view.truncated, "no cap → not truncated");
+
+        // Depth 2: reaches SL-003 (1) + SL-002 (2); SL-001 (3) is cut → truncated.
+        let view = transitive_from(
+            &scanned,
+            root,
+            "SL-004",
+            TransitiveDir::Outbound,
+            None,
+            Some(2),
+        )
+        .unwrap();
+        let outbound = view.outbound.as_ref().unwrap();
+        assert_eq!(
+            outbound[0].targets,
+            vec!["SL-002".to_string(), "SL-003".to_string()],
+            "depth 2 excludes the depth-3 node"
+        );
+        assert!(outbound[0].truncated, "group truncated at the cap");
+        assert!(view.truncated, "view-level truncated ORs the group flag");
+
+        // Never-minted id → the existence gate errors (not an empty view).
+        let err = transitive_from(&scanned, root, "SL-999", TransitiveDir::Both, None, Some(5))
+            .unwrap_err();
+        assert_eq!(err.to_string(), "SL-999: no such entity");
+    }
+
+    // VT-5 — JSON golden: kind=inspect-transitive, inbound before outbound,
+    // max_depth null when unbounded, a non-requested direction key absent.
+    #[test]
+    fn transitive_json_envelope_golden() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[("governed_by", &["ADR-005"])]);
+        seed_adr(root, 5, &[]);
+        let scanned = scan(root);
+
+        // Both directions, unbounded → max_depth null, both keys present, inbound first.
+        let view =
+            transitive_from(&scanned, root, "ADR-005", TransitiveDir::Both, None, None).unwrap();
+        let json = render_transitive_json(&view).unwrap();
+        let expected = "\
+{
+  \"id\": \"ADR-005\",
+  \"inbound\": [
+    {
+      \"label\": \"governed_by\",
+      \"targets\": [
+        \"SL-001\"
+      ],
+      \"truncated\": false
+    }
+  ],
+  \"kind\": \"inspect-transitive\",
+  \"max_depth\": null,
+  \"outbound\": [],
+  \"truncated\": false
+}";
+        assert_eq!(json, expected, "the C4 JSON envelope golden");
+
+        // A single requested direction omits the other key entirely.
+        let view = transitive_from(
+            &scanned,
+            root,
+            "ADR-005",
+            TransitiveDir::Inbound,
+            None,
+            Some(5),
+        )
+        .unwrap();
+        let value = transitive_value(&view);
+        assert!(
+            value.get("inbound").is_some(),
+            "requested direction present"
+        );
+        assert!(
+            value.get("outbound").is_none(),
+            "non-requested direction key absent (not null/empty)"
+        );
+        assert_eq!(value.get("max_depth").and_then(|v| v.as_u64()), Some(5));
+    }
+
+    // Human render: header depth, inbound-before-outbound, (none) for empty, and the
+    // truncation line gated on the view flag.
+    #[test]
+    fn transitive_human_render_shape() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[("governed_by", &["ADR-005"])]);
+        seed_adr(root, 5, &[]);
+        let scanned = scan(root);
+
+        let view = transitive_from(
+            &scanned,
+            root,
+            "ADR-005",
+            TransitiveDir::Both,
+            None,
+            Some(5),
+        )
+        .unwrap();
+        let text = render_transitive_human(&view);
+        assert_eq!(
+            text,
+            "ADR-005 — transitive (depth 5)\n\
+             \ndepends on this (inbound):\n  governed_by: SL-001\n\
+             \nthis depends on (outbound):\n  (none)\n"
+        );
+
+        // Unbounded → header reads "depth all".
+        let view = transitive_from(
+            &scanned,
+            root,
+            "ADR-005",
+            TransitiveDir::Inbound,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(
+            render_transitive_human(&view).starts_with("ADR-005 — transitive (depth all)\n"),
+            "unbounded header reads depth all"
         );
     }
 }
