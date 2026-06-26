@@ -92,9 +92,9 @@ including some additional readonly repos mounted ro at `/workspace` plus READONL
 
 If you need something else that's missing, STOP and ask the User.
 
-Shared `CARGO_TARGET_DIR` (`/home/david/.cargo/doctrine-target-jail`) 
--> silently stale binary 
--> run `just rebuild-stale` -- NOT debugging the CLI
+Each worktree builds into its own gitignored in-tree `target/` (cargo's default —
+no shared `CARGO_TARGET_DIR` redirect). So `./target/debug/doctrine` is the live
+binary after `cargo build`, and no two worktrees thrash a shared cache.
 
 - Always use READ tool *before* writing any substantial edit (e.g.
   filling a template, writing `handover.md`) to avoid expensive write
