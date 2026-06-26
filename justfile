@@ -2,6 +2,7 @@ mod? doctrine '.doctrine/doctrine.just'
 
 default: lint test install
 
+# doctrine + skills reinstall; idempotent
 reinstall:
   doctrine install -y
   npx skills add . --agent universal -y
@@ -12,19 +13,23 @@ check: fmt lint lint-js test build
 # Full gate for end-of-phase / CI — includes the cordage workspace crate.
 gate: fmt lint lint-js test-all build
 
-list-memories:
-  @cargo run -q -- memory list
+# # list memories
+# list-memories:
+#   @cargo run -q -- memory list
 
 # Refresh the spec index in README.md from .doctrine/spec/.
 readme-index:
   @scripts/refresh-readme-index.sh
 
+# format rust code
 fmt:
   cargo fmt
 
+# lint rust (aggressive)
 lint:
   cargo clippy
 
+# lint js (web/map)
 lint-js:
   @if [ -d web/map/node_modules ]; then cd web/map && bun run lint; else echo "lint-js: node_modules not found, skipping (restore with: cd web/map && bun install)"; fi
 
@@ -44,6 +49,7 @@ web-dev:
 web-check:
   cd web/map && bun run typecheck && bun run lint && bun run test
 
+# cargo build
 build:
   cargo build
 
@@ -69,20 +75,24 @@ test:
 test-all:
   cargo test --workspace
 
+# install with vite stage
 install: web-build
   cargo install --path .
 
+# integrate main into edge
 ff:
   git fetch . edge:main
 
 promote:
   git fetch . edge:main
 
-force-push-main:
+# integrate edge into main
+push-main:
   git push . edge:main
 
-commit-doctrine:
-  git reset && git add .doctrine && git add .doctrine/ && git ci -m doctrine
+# lazy .doctrine commit to clear the decks
+commit-doctrine: readme-index
+  git reset && git add README.md .doctrine && git add .doctrine/ && git ci -m doctrine
 
 # Push local edge and main to origin — works from any branch
 push-upstream:
@@ -97,7 +107,7 @@ release-check: gate nix-build
 # Refuses a dirty Cargo.toml/Cargo.lock so the commit is the bump alone. Tags
 # locally; push and `just publish` stay manual.
 # Cut a release: bump version, run the pre-release gate, commit + tag the chore.
-release bump:
+release bump: readme-index
   #!/usr/bin/env bash
   set -euo pipefail
   git diff --quiet -- Cargo.toml Cargo.lock || { echo "release: Cargo.toml/Cargo.lock already modified — commit or revert first" >&2; exit 1; }
@@ -113,5 +123,6 @@ release bump:
   git tag "v${version}"
   echo "released v${version} (committed + tagged) — push with: git push && git push --tags"
 
+# crates.io release; requires token in ENV
 publish: web-build release-check
   cargo publish
