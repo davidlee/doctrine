@@ -10,14 +10,15 @@ Drive loop lives in the [`/dispatch` router](../dispatch/SKILL.md).
 
 ## Spawn — codex arm
 ```sh
-fork_env="$(doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker)" \
+doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker \
   || { echo "fork failed: $?" >&2; exit 1; }
-env -C "$D" DOCTRINE_WORKER=1 $fork_env codex exec "<pre-distilled prompt>"
+env -C "$D" DOCTRINE_WORKER=1 codex exec "<pre-distilled prompt>"
 ```
-Confined (bwrap); **Never `eval`** — capture `$fork_env`, check `$?`, then spawn.
+Confined (bwrap); run the fork, check `$?`, then spawn. The worker inherits the
+ambient env and defaults `CARGO_TARGET_DIR` to its own in-tree `$D/target`.
 ## Spawn — pi arm (RPC mode)
 ```sh
-fork_env="$(doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker)" \
+doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker \
   || { echo "fork failed: $?" >&2; exit 1; }
 cp AGENTS.md "$D/" \
   || { echo "AGENTS.md copy failed: $?" >&2; exit 1; }
@@ -27,7 +28,7 @@ PI_FIFO=$(mktemp -u) && mkfifo "$PI_FIFO"
     '{"type":"prompt","message":"<pre-distilled prompt>"}'
   sleep 300
 } > "$PI_FIFO" &
-timeout 300 env -C "$D" DOCTRINE_WORKER=1 $fork_env \
+timeout 300 env -C "$D" DOCTRINE_WORKER=1 \
   pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
      --no-extensions --no-skills --no-themes \
      --offline --approve --tools read,bash,edit,write,grep,find,ls \
