@@ -1516,7 +1516,8 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
         );
         write(
             &root,
@@ -1524,7 +1525,7 @@ mod tests {
             "body\n",
         );
         let edges = outbound_for(&root, kind_for("ASM"), 1).unwrap();
-        assert_eq!(edges.len(), 3);
+        assert_eq!(edges.len(), 4);
         // Verify each edge exists with correct target
         assert!(
             edges
@@ -1541,6 +1542,9 @@ mod tests {
                 .iter()
                 .any(|e| e.label == RelationLabel::GovernedBy && e.target == "ADR-001")
         );
+        assert!(edges.iter().any(|e| e.label == RelationLabel::References
+            && e.role == Some(crate::relation::Role::Concerns)
+            && e.target == "SL-001"));
     }
 
     // -- SL-059 VT-2: scan-side totality (F-A7, the L7 partner) ---------------
@@ -2263,14 +2267,15 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
         );
         write(
             &root,
             ".doctrine/knowledge/assumption/001/record-001.md",
             "body\n",
         );
-        // RECORD kinds emit shapes + spawns + governed_by via [[relation]] rows;
+        // RECORD kinds emit shapes + spawns + governed_by + references(concerns) via
         // Supersedes is LifecycleOnly (verb-writes to typed [relationships], not
         // authored in [[relation]]) — the typed parse lands in PHASE-03.
         // table_labels_for now includes Supersedes from RELATION_RULES, but
@@ -2282,7 +2287,7 @@ mod tests {
             assert_eq!(
                 emitted_labels(root, "ASM", 1),
                 expected,
-                "ASM: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+                "ASM: shapes + spawns + governed_by + references(concerns) (supersedes is LifecycleOnly — typed parse in PHASE-03)"
             );
         }
 
@@ -2303,7 +2308,8 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
         );
         write(
             &root,
@@ -2316,7 +2322,7 @@ mod tests {
             assert_eq!(
                 emitted_labels(root, "DEC", 1),
                 expected,
-                "DEC: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+                "DEC: shapes + spawns + governed_by + references(concerns) (supersedes is LifecycleOnly — typed parse in PHASE-03)"
             );
         }
 
@@ -2336,7 +2342,8 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
         );
         write(
             &root,
@@ -2349,7 +2356,7 @@ mod tests {
             assert_eq!(
                 emitted_labels(root, "QUE", 1),
                 expected,
-                "QUE: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+                "QUE: shapes + spawns + governed_by + references(concerns) (supersedes is LifecycleOnly — typed parse in PHASE-03)"
             );
         }
 
@@ -2369,7 +2376,8 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
         );
         write(
             &root,
@@ -2382,7 +2390,7 @@ mod tests {
             assert_eq!(
                 emitted_labels(root, "CON", 1),
                 expected,
-                "CON: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+                "CON: shapes + spawns + governed_by + references(concerns) (supersedes is LifecycleOnly — typed parse in PHASE-03)"
             );
         }
     }

@@ -355,8 +355,8 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
     RelationRule {
         // concerns — work → any numbered entity (aboutness/relevance). One wide
         // source-set row pinned from the live census: SL + RFC + the backlog kinds
-        // (RFC-002 alone authors related→IMP/SL/RFC). Target AnyNumbered.
-        sources: &[SL, RFC, ISS, IMP, CHR, RSK, IDE],
+        // + RECORD (ASM/DEC/QUE/CON — D6). Target AnyNumbered.
+        sources: &[SL, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON],
         label: RelationLabel::References,
         role: Some(Role::Concerns),
         inbound_name: "concerned by",
@@ -1418,7 +1418,9 @@ mod tests {
             // its three rows' source-sets is the pinned census set.
             (
                 RelationLabel::References,
-                &["SL", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE"],
+                &[
+                    "SL", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE", "CON",
+                ],
             ),
             (
                 RelationLabel::Supersedes,
@@ -2680,6 +2682,70 @@ mod tests {
         assert!(
             check_target_kind(scoped_rule, &SLICE_KIND, "SPEC").is_err(),
             "scoped_from refuses a non-backlog target"
+        );
+    }
+
+    /// VT-9 (SL-158 D6): a record (ASM/DEC/QUE/CON) may author `references` with
+    /// role `concerns` — `lookup` resolves, `read_block` legalizes, `legal_roles`
+    /// lists `Concerns`. Target is `AnyNumbered` so any numbered entity is accepted.
+    #[test]
+    fn record_authors_references_concerns() {
+        // lookup resolves for a record source.
+        let rule = lookup(
+            &ASSUMPTION_KIND,
+            RelationLabel::References,
+            Some(Role::Concerns),
+        )
+        .expect("ASM must be able to author references(concerns)");
+        assert_eq!(rule.label, RelationLabel::References);
+        assert_eq!(rule.role, Some(Role::Concerns));
+        assert_eq!(rule.inbound_name, "concerned by");
+        assert!(
+            matches!(rule.target, TargetSpec::AnyNumbered),
+            "concerns target is AnyNumbered"
+        );
+        assert_eq!(rule.tier, Tier::One);
+        assert_eq!(rule.link, LinkPolicy::Writable);
+
+        // legal_roles includes Concerns for a record source.
+        let roles: Vec<Role> = legal_roles(&ASSUMPTION_KIND, RelationLabel::References).collect();
+        assert!(
+            roles.contains(&Role::Concerns),
+            "legal_roles for ASM must contain Concerns"
+        );
+
+        // read_block legalizes a record's references(concerns) row.
+        let doc = RelationDoc::parse(
+            "[[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
+        )
+        .unwrap();
+        let (edges, illegal) = read_block(&ASSUMPTION_KIND, &doc);
+        assert_eq!(
+            edge_pairs(&edges),
+            vec![(RelationLabel::References, "SL-001")],
+            "record references(concerns) emits a legal edge"
+        );
+        assert!(illegal.is_empty(), "no illegal rows expected");
+
+        // concerns is the only references role a record can author (implements/scoped_from
+        // are SL-only).
+        assert!(
+            lookup(
+                &ASSUMPTION_KIND,
+                RelationLabel::References,
+                Some(Role::Implements)
+            )
+            .is_none(),
+            "records cannot author implements"
+        );
+        assert!(
+            lookup(
+                &ASSUMPTION_KIND,
+                RelationLabel::References,
+                Some(Role::ScopedFrom)
+            )
+            .is_none(),
+            "records cannot author scoped_from"
         );
     }
 }
