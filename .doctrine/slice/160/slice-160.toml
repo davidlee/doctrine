@@ -1,14 +1,14 @@
-id = 159
-slug = "epistemic-kinds-evd-hyp-inv"
-title = "Epistemic kind catalog: add EVD + HYP"
-status = "design"
+id = 160
+slug = "con-to-inv"
+title = "Replace CON (constraint) with INV (invariant): rename + waived→relaxed semantics"
+status = "proposed"
 created = "2026-06-26"
 updated = "2026-06-26"
 tags = []
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = []                      # slice→work soft sequence: { to, rank }
+after = [{ to = "SL-159", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/knowledge.rs"
@@ -16,14 +16,6 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/kinds.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "install/templates/knowledge-*.toml"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "install/using-doctrine.md"
 intent = "design-target"
 
 [[selector]]
@@ -43,23 +35,23 @@ selector = "src/relation_graph.rs"
 intent = "design-target"
 
 [[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/test_helpers.rs"
+intent = "design-target"
+
+[[selector]]
 selector = "src/supersede.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "install/templates/knowledge-evidence.toml"
+selector = "src/commands/supersede.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "install/templates/knowledge-hypothesis.toml"
-intent = "design-target"
-
-[[selector]]
-selector = "install/glossary.md"
-intent = "design-target"
-
-[[selector]]
-selector = "memory/mem.signpost.doctrine.knowledge"
+selector = "src/commands/dep_seq.rs"
 intent = "design-target"
 
 [[selector]]
@@ -71,7 +63,19 @@ selector = "src/tag.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/commands/supersede.rs"
+selector = "install/templates/knowledge-constraint.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/glossary.md"
+intent = "design-target"
+
+[[selector]]
+selector = "memory/mem.signpost.doctrine.knowledge"
 intent = "design-target"
 
 [[selector]]
@@ -81,27 +85,6 @@ intent = "design-target"
 [[selector]]
 selector = "tests/e2e_memory_anchoring.rs"
 intent = "design-target"
-
-[[selector]]
-selector = "src/commands/dep_seq.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/catalog/scan.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/catalog/test_helpers.rs"
-intent = "design-target"
-
-[[relation]]
-label = "references"
-role = "concerns"
-target = "SL-059"
-
-[[relation]]
-label = "related"
-target = "RFC-009"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
