@@ -103,8 +103,8 @@ CON-001 → INV-001 data migration.
 - **OQ2 (prefixes)** — **resolved:** `EVD` / `HYP` / `INV`; CON prefix removed, not
   recycled.
 - **OQ3 (seed migration)** — **resolved:** in-place rewrite (D6).
-- **OQ4** — does SL-158's `is_record` read `kinds::RECORD` (auto) or hardcode?
-  Resolve at execution against merged SL-158 (design OQ-1).
+- **OQ4** — **resolved** (SL-158 merged): `is_record` (`dep_seq.rs:29`) hardcodes
+  the prefix list + a twin pin test — both edited by this slice.
 
 ## Verification / Closure Intent
 

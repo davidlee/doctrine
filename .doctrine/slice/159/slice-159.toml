@@ -86,6 +86,10 @@ intent = "design-target"
 selector = "tests/e2e_memory_anchoring.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/dep_seq.rs"
+intent = "design-target"
+
 [[relation]]
 label = "references"
 role = "concerns"

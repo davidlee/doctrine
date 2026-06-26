@@ -55,6 +55,8 @@ and scaffold template. The "add a kind" surface is a checklist threaded through
   `GovernedBy` **source** set **hardcode** `ASM, DEC, QUE, CON`.
 - **`src/supersede.rs`** — `supersede_policy` + `validate_matrix` record arms;
   **and `src/commands/supersede.rs`** — the command shell + CON-001 fixtures.
+- **`src/commands/dep_seq.rs`** — `is_record` (`:29`) hardcodes the record prefix
+  match + its pin test (`:264-273`); add EVD/HYP, CON→INV (SL-158 dependency).
 - **`src/relation_graph.rs`** — CON-keyed edge-emission tests.
 - **`src/search.rs`** — hardcodes the knowledge prefix group
   `("knowledge", &["ASM","DEC","QUE","CON"])` + two flat prefix lists; EVD/HYP/INV
@@ -77,10 +79,19 @@ this slice extends; **SL-159 rebases on the landed SL-158**:
   `workable` and `terminal` (unsettled record → non-`Workable`, non-`Terminal`
   `Gating` class). The records move their unsettled states into `gating`. The VT
   canary generalises to `workable ∪ gating ∪ terminal == <KIND>_STATUSES`.
-- `commands/dep_seq.rs` grows `is_admissible_dep_target = is_work_like ∨ is_record`
-  — a work item may `needs`/`after` a record. **SL-159 must confirm `is_record`
-  reads `kinds::RECORD`** (auto-inherits EVD/HYP/INV) rather than a hardcoded list.
+- `commands/dep_seq.rs` grew `is_admissible_dep_target = is_work_like ∨ is_record`
+  — a work item may `needs`/`after` a record. **OQ-1 resolved against merged code:
+  `is_record` (dep_seq.rs:29) HARDCODES `matches!(prefix, "ASM"|"DEC"|"QUE"|"CON")`**
+  with a twin pin test (`:264-273`). SL-159 must edit both (add EVD/HYP, CON→INV) —
+  `dep_seq.rs` is a touch-site.
 - `RECORD` gains `references` (concerns-role) authoring.
+
+**SL-158 has landed** (commit `5dd1715c`, merged to edge/main). The merged
+`KindPartition` carries the `gating` field and the record rows match this design's
+§5.3 table exactly (ASM `gating:[held,testing]`; CON `gating:[active],
+terminal:[waived,superseded,retired]` → INV becomes `gating:[active],
+terminal:[relaxed,superseded,retired]`). Partition design verified against real
+code, not just SL-158's design doc.
 
 Consequence: EVD/HYP gate **correctly on arrival** — a work item can
 `needs → EVD-captured` and stay blocked until the EVD is `confirmed`. The kinds
@@ -238,9 +249,10 @@ the CON kind ceases to exist, so there is nothing to supersede *into*):
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1** — Does SL-158's `is_record` predicate read `kinds::RECORD` (auto) or a
-  hardcoded list? Resolve at execution against the merged SL-158. If hardcoded,
-  add a one-line update; the slice's selectors fence it.
+- **OQ-1** — ~~Does SL-158's `is_record` read `kinds::RECORD` or hardcode?~~
+  **RESOLVED** (SL-158 merged): hardcoded (`dep_seq.rs:29` + pin test `:264-273`).
+  Both edited by this slice. *(A latent cleanup — `is_record` and the partition
+  rows could read `kinds::RECORD` — is noted as a follow-up, not in scope.)*
 - **OQ-2** — Should `Provenance` carry a free-text escape (e.g. an `other` +
   detail) or stay a closed 4-set? Default closed (crisp-edge bar); `datum` holds
   detail. Revisit if it feels narrow in use.
