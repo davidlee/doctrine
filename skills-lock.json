@@ -39,17 +39,17 @@
     "dispatch": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "18fa0b618dc9e2c224f0c7b13f9daf2d57c3c7a23847b7a7534a25dd9d24c73f"
+      "computedHash": "6b3721fe6c482711155588c7c8707ffd90de0b270e3ab23c49c48afeeed14a0a"
     },
     "dispatch-agent": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "82b3ba9463ae28b26de6367c603a8826debaebfbe2e7ae9ecdb83031a1dddf25"
+      "computedHash": "f30582ae87f6ce82c6585f7a1f1e7aa0b3dc286ea9dafd9e5ad90838e3d80994"
     },
     "dispatch-subprocess": {
       "source": "/home/david/dev/doctrine",
       "sourceType": "local",
-      "computedHash": "664224c474a05c8dc0f4ab5fe34cf7f987838216b0ef83b5c32a81685c5e8a89"
+      "computedHash": "0d5b3a4214654a3f29b15d97521317491d396972b38d5adb1278cc2079f7acff"
     },
     "dreaming": {
       "source": "/home/david/dev/doctrine",
