@@ -1,8 +1,8 @@
 id      = 11
 slug    = "adr-008-d-b1d-b5-platform-exits-build-env"
 title   = "ADR-008 D-B1/D-B5: platform exits build-env"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-06-26"
 tags    = []
 
