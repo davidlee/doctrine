@@ -307,21 +307,23 @@ Cheap fixes integrated: narrowed the `memory/**` selector to the one shipped fil
 gating VT + the `supersede → None` clean-refusal VT to §9 (F6); added R5 (orphaned
 CON reservation ref).
 
-Three substantive findings **surfaced to the user, awaiting decision** before lock:
+Three substantive findings surfaced to the user; **all resolved 2026-06-27**:
 
 - **F1 — `supports` edge-label collides with the `[evidence].supports` facet
-  field.** Both spellings now exist with different meanings (relation label vs
-  free-text citation list). RFC-009 uses `supports`/`disputes`; D1 names the
-  evidence-block-vs-EVD tension. *Options:* keep RFC names (collision tolerated —
-  distinct namespaces) | rename edges (`attests`/`refutes`). **Pending.**
-- **F2 — EVD's 5th status `superseded` is not in RFC's enumerated 4-state
-  lifecycle.** Added so the supersede verb has a landing state (RFC text implies
-  it: confirmed "may be superseded"). *Options:* keep 5 states (EVD supersedable) |
-  4 states (EVD not supersedable, like HYP). **Pending.**
-- **F3 — `supports`/`disputes` is adjacent to the open D3 `shapes`-split.** Adding
-  record→record evidentiary edges front-runs (without resolving) the shapes
-  epistemic-vs-affects question scoped out of this slice. They coexist cleanly.
-  *Options:* proceed (front-run accepted) | hold edges until D3 settles. **Pending.**
+  field.** *Resolved: keep RFC's `supports`/`disputes`.* Cross-namespace clash
+  (relation label vs free-text field), not a real ambiguity; doctrine reuses
+  spellings across tiers and users expect the RFC vocabulary. Aside: the typed EVD
+  edges may make the free-text `[evidence]` block redundant — a later deprecation
+  question, out of scope here.
+- **F2 — EVD's 5th status `superseded`.** *Resolved: keep 5 states, EVD
+  supersedable.* RFC implies it ("confirmed may be superseded by new contrary
+  evidence"); evidence-superseded-by-better-evidence is a real path.
+- **F3 — `supports`/`disputes` adjacent to the open D3 `shapes`-split.**
+  *Resolved: proceed.* D3's open question is the `shapes` *role* split
+  (epistemic-vs-affects), not whether `supports`/`disputes` exist; EVD-authored
+  evidentiary edges are distinct and do not preempt that resolution.
 
-<!-- external review (codex / opus sub-agent) lands here after F1–F3 resolved -->
+### External adversarial pass (codex, 2026-06-27)
+
+<!-- codex inquisition findings land here -->
 
