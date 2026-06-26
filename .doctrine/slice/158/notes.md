@@ -120,6 +120,38 @@ references authoring + optionality.
 - Shared index: path-limit `git add`/`commit`; watch `.git/index.lock` (other agents).
 
 ---
+*## Dispatch spawning issues (2026-06-26)
+
+**Claude-arm agent dispatch broken — WorktreeCreate hook does NOT fire.**
+
+1. `isolation: worktree` on `subagent(agent: "dispatch-worker")` lands the worker in
+   the **main worktree** (`edge` branch), not an isolated linked worktree. The
+   `base` file in the arming dir (`<coord>/.doctrine/state/dispatch/spawn/base`) is
+   correctly written by `arm-spawn`, but the hook that should read it and create a
+   fresh worktree fork never executes.
+2. This was confirmed across 3+ spawn attempts from the correct cwd
+   (`<coord>/.doctrine/state/dispatch/spawn/`). Every time:
+   - git-dir == git-common-dir == `.git` (main tree)
+   - HEAD == `edge` branch tip (not a new dispatch branch)
+   - The dirty files from the main tree are visible to the worker
+3. **Workaround:** manually `worktree fork --worker` to create the isolated fork,
+   then spawn the dispatch-worker agent with `cwd` pointing to the fork directory
+   (no `isolation: worktree`). This works correctly — the agent runs in the
+   isolated worktree, commits there, and returns.
+4. This means the orchestrator must do both the fork AND the agent spawn (two-step
+   instead of the designed one-step `arm-spawn + agent`). The `arm-spawn` step is
+   unnecessary with this workaround since the fork creates its own base.
+
+**Root cause hypothesis:** the WorktreeCreate hook is a doctrine feature that
+requires integration with the harness's agent spawning machinery. In this
+environment (pi harness), the hook is either not installed, not discoverable,
+or not compatible with the agent spawning path.
+
+**Impact on this dispatch:** PHASE-01 was completed via the workaround
+(manual fork → cwd-spawn). All three phases will follow the same pattern.
+
+---
+
 *Superseded (pre-ADR-017): the "shapes-projection (P) vs gates-axis (E) vs Gates-label
 (L)" fork, OQ-1 (name → `Gating`), OQ-2 (edge direction), OQ-3 (mechanism), and the
 "graph.rs gating edge is the real second change" framing. ADR-017 closed all of them:
