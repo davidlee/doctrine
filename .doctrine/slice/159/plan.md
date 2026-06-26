@@ -23,9 +23,10 @@ cut after design and settled in reconciliation — it does not gate implementati
 **PHASE-01 — kinds first.** The irreducible catalog work concentrates in
 `knowledge.rs` (enum, per-kind consts, status/facet match arms, `ALL` arity) with
 satellite edits in `kinds.rs` (prefixes + RECORD), `integrity.rs` (KINDS rows +
-count pin), `partition.rs` (per-kind rows), `supersede.rs`/`commands/supersede.rs`
-(EVD arm), and the literal mixed-superset lists (`search.rs`, `tag.rs`,
-`dep_seq.rs`). SL-161 already DRY'd the predicate-bearing sites (`scan.rs`,
+count pin + stale "four knowledge kinds" comments → six), `partition.rs` (per-kind
+rows), `supersede.rs`/`commands/supersede.rs` (EVD arm + stale "four record kinds"
+comment), and the literal mixed-superset lists (`search.rs`, `tag.rs`,
+`dep_seq.rs` — `dep_seq.rs` also updates two doc comments). SL-161 already DRY'd the predicate-bearing sites (`scan.rs`,
 partition guard, `test_helpers.rs`, `dep_seq` predicate, `search` alias) — they
 read RECORD and need no edit (design §2 zero-diff list). The drift canaries
 (prefix-count 4→6, `KINDS.len()` 21→23, partition-cover over 6, the facet/status
@@ -44,7 +45,11 @@ split. Flag at `/consult` rather than improvising a renumber.
 plumbing (codex F5), not two table rows: enum variants at the order-pin slot,
 parser, inbound reciprocals, and the source/target/tier/coverage canaries. The
 sole author is EVD; the target is the RECORD family (incl CON in the interim —
-carries through SL-160's rename unchanged). The trap is **render**: the knowledge
+carries through SL-160's rename unchanged). Three pre-existing RELATION_RULES
+source/target sets are hardcoded (not RECORD) and must also gain EVD/HYP:
+`References(Concerns)` sources, `Shapes` target, `GovernedBy` sources. The test
+canary vectors at `relation.rs:1422,1427` and the `relation_graph.rs` edge-emission
+test must be updated as consumer revisions. The trap is **render**: the knowledge
 display renderers hardcode `[Shapes, Spawns, GovernedBy]` (codex F4), so the edges
 would be authorable-but-invisible without the `format_metadata`/`show_json` edit —
 VT-3 guards exactly that. Transitions stay manual (D2): no evidence→status

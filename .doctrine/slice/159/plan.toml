@@ -30,7 +30,9 @@ Add Evidence (EVD) and Hypothesis (HYP) as RecordKind variants end to end:
 prefixes + engine Kind consts, status vocabularies, typed facets (new closed
 Provenance enum; Confidence reused), partition rows, integrity table + pins,
 supersede arms (EVD supersedable; HYP None), the remaining literal mixed-superset
-lists (search/tag/dep_seq), and the two seed templates. SL-161's DRY'd sites
+lists (search/tag/dep_seq), and the two seed templates. Update stale "four
+record/knowledge kinds" comments in integrity.rs, dep_seq.rs, and
+commands/supersede.rs to reflect the 6-kind catalog. SL-161's DRY'd sites
 (scan.rs, partition guard, test_helpers, dep_seq predicate, search alias) pick the
 kinds up via RECORD with no edit. Outcome: both kinds creatable, transition per
 their vocab, gate via SL-158 trinary, end green incl the catalog e2e goldens.
@@ -43,7 +45,7 @@ exit_criteria = [
   { id = "EX-1", text = "RecordKind gains Evidence + Hypothesis (append); RECORD = [ASM,DEC,QUE,CON,EVD,HYP]; RecordKind::ALL arity 6; EVD/HYP prefix consts in kinds.rs." },
   { id = "EX-2", text = "Status vocabularies per §5.3: EVD captured(seed)/disputed/confirmed/retracted/superseded; HYP proposed(seed)/confirmed/refuted — with the gating/terminal/is_terminal/hidden subsets each as their own row (EVD confirmed deliberately NOT is_terminal)." },
   { id = "EX-3", text = "EvidenceFacet{datum,provenance,confidence} with new closed Provenance{Inspection,Experiment,Reproduction,Citation} (kebab serde + as_str + KNOWN canary); HypothesisFacet{proposition,predicts} (tested_by dropped); RawFacet superset + validate/render/format/json arms extended." },
-  { id = "EX-4", text = "integrity KINDS +2 rows with count pin 21→23 and collision list (:817) +EVD/HYP; prefix-count pin 4→6; partition +2 rows; supersede EVD arm (HYP None); literal lists in search.rs/tag.rs/dep_seq.rs gain EVD/HYP; install/templates/knowledge-evidence.toml + …-hypothesis.toml added." },
+  { id = "EX-4", text = "integrity KINDS +2 rows with count pin 21→23 and collision list (:817) +EVD/HYP; prefix-count pin 4→6; partition +2 rows; supersede EVD arm (HYP None); literal lists in search.rs/tag.rs/dep_seq.rs gain EVD/HYP; install/templates/knowledge-evidence.toml + …-hypothesis.toml added; stale 'four knowledge kinds' comments updated (integrity.rs:825,838; dep_seq.rs:34,66; commands/supersede.rs:27)." },
   { id = "EX-5", text = "just gate green; existing record suites stay green unchanged (behaviour-preservation); e2e_knowledge_cli_golden.rs + e2e_memory_anchoring.rs updated for the 6-kind catalog." },
 ]
 verification = [
@@ -53,6 +55,7 @@ verification = [
   { id = "VT-4", expects = "end-to-end gating: a work item needs→EVD-captured is blocked; the EVD →confirmed makes the dependent actionable." },
   { id = "VT-5", expects = "supersede EVD confirmed→superseded flips; HYP refuses supersession cleanly (supersede_policy None path errors, not panics)." },
   { id = "VT-6", expects = "search finds an EVD/HYP body; tag sets/clears on each; both e2e goldens pass against the 6-kind catalog." },
+  { id = "VT-7", expects = "grep 'four (record|knowledge) kinds' returns zero hits in src/ (stale comments updated)." },
 ]
 specs        = []
 requirements = []
@@ -64,8 +67,10 @@ objective = """
 Add RelationLabel::Supports and ::Disputes as full plumbing (codex F5): enum
 variants at the declaration-order slot, name()/parse, inbound reciprocals
 supported_by/disputed_by, and RELATION_RULES rows (sources:[EVD],
-target:Kinds(RECORD), tier One, link Writable, role None). Extend the Shapes
-target set and GovernedBy source set to EVD/HYP. Wire the knowledge display
+target:Kinds(RECORD), tier One, link Writable, role None). Extend the
+References(Concerns) RELATION_RULES source set, Shapes target set, and
+GovernedBy source set to include EVD/HYP (all three are hardcoded, not RECORD).
+Wire the knowledge display
 renderers — format_metadata (knowledge.rs:1004) and show_json (:1149) — to emit
 the new edges and their inbound reciprocals; without this the edges are
 authorable-but-invisible (codex F4). Transitions stay manual via status (no
@@ -76,9 +81,9 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "RelationLabel::Supports + ::Disputes variants at the order slot the VT order pin expects; name()/parser + inbound reciprocals supported_by/disputed_by; order pin + source/target/tier/coverage canaries extended to the two rows." },
-  { id = "EX-2", text = "RELATION_RULES: two rows sources=&[EVD], target=Kinds(RECORD), tier One, link Writable, role None; the Shapes target set and GovernedBy source set in RELATION_RULES gain EVD,HYP (CON unchanged)." },
+  { id = "EX-2", text = "RELATION_RULES: two rows sources=&[EVD], target=Kinds(RECORD), tier One, link Writable, role None. Three hardcoded RELATION_RULES source/target sets gain EVD,HYP: References(Concerns) sources (:358), Shapes target (:447), GovernedBy sources (:465). CON unchanged in all." },
   { id = "EX-3", text = "format_metadata and show_json render supports/disputes and the inbound supported_by/disputed_by reciprocals — table and JSON." },
-  { id = "EX-4", text = "just gate green; relation.rs / relation_graph.rs order+coverage+edge-emission pins updated as consumer revision (not regression)." },
+  { id = "EX-4", text = "just gate green; consumer revisions (not regression): relation.rs source-set census expected vectors at :1422 (References) and :1427 (Supersedes) updated for EVD/HYP; relation_graph.rs edge-emission test (:2111) gains EVD + HYP fixtures (EVD additionally tests supports/disputes)." },
 ]
 verification = [
   { id = "VT-1", expects = "legal author = EVD only; a non-EVD source is refused; target outside RECORD is refused." },
