@@ -269,6 +269,31 @@ or record-delta the range after. Also observed: concurrent trunk advance (an unr
 commit) landed on `edge` after the fork, so the in_progress `code_start_oid` stamped at edge
 HEAD (`47910ba2`) ≠ the fork base (`071e9578`) — handle at completion (record-delta).
 
+## PHASE-02 — live coordination-worktree probe (landed `8095d13a` on edge)
+
+git.rs-only, file-disjoint. TDD red/green/refactor.
+- **EX-1** `parse_worktree_for_ref` now returns `Option<WorktreeEntry { path, branch,
+  prunable }>` via a `WorktreeBlock` accumulator that settles a block on the next
+  `worktree` line / blank / EOF. The prior shape early-returned on the `branch` match;
+  git emits `prunable` AFTER `branch`, so liveness was being dropped (the D9 watch-item).
+  RED test `parse_worktree_for_ref_surfaces_trailing_prunable` pinned it (prunable=false
+  under the old logic) → GREEN under block-accumulate. The 4 existing parse tests stayed
+  green (now `.map(|e| e.path)`) — behaviour preserved.
+- **EX-2** `live_worktree_for_ref(root, ref) -> Result<Option<WorktreeEntry>>` =
+  `parse(...).filter(|e| !e.prunable && e.path.exists())`. Unused until PHASE-03 wires it
+  into `capture_phase_boundary` → `cfg_attr(not(test), expect(dead_code, …))` (same pattern
+  as `forget_source_delta`; `branch` field likewise).
+- **EX-3** `worktree_for_ref` keeps `-> Option<PathBuf>` (`.map(|e| e.path)`); dispatch
+  callers untouched. VT-3: git module 91 green, dispatch 61 green.
+- **Land:** rebase fork onto edge + `merge --ff-only` (NOT `worktree land` — F-6 finding
+  above). Edge was still at the in_progress `code_start` (`ee5a41a9`), so the boundary
+  `[ee5a41a9 → 8095d13a]` is exact non-merge, provenance `solo` — no record-delta needed.
+- **Foreign churn observed (left untouched):** edge base carried uncommitted
+  `adr-012.toml`/`slice-138/156` etc.; `e2e_relation_migration_storage` REDs at base on
+  `adr-012.toml`'s `supersedes` relation (relation-migration in flight) — out of SL-154
+  scope, gated PHASE-02 on the git suite. `cargo fmt` also reformatted foreign
+  `guard.rs`/`revision.rs` (SL-155 landed unformatted) — restored, not committed.
+
 ## Relations & selectors
 
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171

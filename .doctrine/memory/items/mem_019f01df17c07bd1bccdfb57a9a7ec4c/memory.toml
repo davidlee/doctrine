@@ -1,0 +1,42 @@
+memory_uid = "mem_019f01df17c07bd1bccdfb57a9a7ec4c"
+memory_key = "mem.pattern.git.worktree-porcelain-prunable-trails-branch"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "git worktree porcelain: prunable trails branch — block-accumulate"
+summary = "git worktree list --porcelain emits prunable AFTER branch; parse the whole block, never early-return on the branch match"
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/git.rs"]
+globs = []
+commands = []
+tags = ["git", "worktree", "parsing", "sl-154"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e67b27fed9bcd3fe1bcf9c2f34e77b5199d49818"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5def21463521bb8ef4fee96e8db73a1ffea37ec4c13696440e9e1a7c446d6492"
+base_commit = "61685e2acdef85c8c46b04d2633070fb5c2ffd32"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
