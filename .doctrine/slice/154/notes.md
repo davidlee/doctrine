@@ -372,6 +372,53 @@ state.rs (impl) + git.rs (dead-fn removal). TDD red/green/refactor. Two behaviou
   boundary to my true single-commit range (Manual incoming preserved `solo`). Source committed
   separately from this notes/doc commit (knowledge trails code, design §4.3).
 
+## PHASE-05 — derive + projection-source guard + completeness gate (landed `d9892674` on edge)
+
+ISS-052 closed. At `prepare_review`, after the committed boundaries read and BEFORE the ref
+projection, three beats in load-bearing order (a halt creates no refs → the operator's
+record-delta → re-run collides with nothing, F1):
+
+- **Guard (D11, EX-2).** New pure helper `missing_committed_funnel_phases(registry, committed)`
+  (dispatch.rs): registry rows with provenance ∈ {Funnel, Unknown} whose phase ∉ the committed
+  ledger → `bail!` naming them. Solo/Manual excluded. Phase-id set compare, never a code-delta
+  diff. Reads the PRIMARY registry **pre-derive** (the derive can't mask the loss).
+- **Derive (EX-3).** `record_source_delta` each committed-ledger row (Funnel) into the primary
+  registry — upsert, so it fills a lost row and overwrites a binding mis-capture.
+- **Gate (EX-4).** `registry_completeness(&primary, &primary, slice)` → `bail!` on any gap.
+
+**EX-1 was already in code** — `run_record_boundary:606` stamps `Funnel` on the one row cloned
+to both the committed ledger and the registry. PHASE-05 only *pins* it (strengthened
+`record_boundary_also_writes_the_arm_neutral_registry` with a `provenance = "funnel"` assert on
+both files). Like PHASE-04's relation to PHASE-06 EX-1, the production write predates its phase.
+
+**KEY EMERGENT FINDING — the gate couples prepare-review to phase-completion status.**
+`registry_completeness` reads `completed_phase_ids(primary)` (phase-NN.toml `status==completed`).
+After the derive the registry mirrors the committed ledger, so a committed phase that is **not**
+marked `completed` reads as an `Extra` gap → halt. This is **design-intended** (§5.2 lines 119/159:
+prepare-review is the *pre-audit conclude beat*, post-completion), but it broke **27 existing
+projection fixtures** that seeded a boundaries ledger yet never marked phases completed. The
+behaviour-preservation clause (design line 154) names specific shared seams (`set_phase_status`
+solo path, `worktree_for_ref` callers), **not** these dispatch projection tests — so the fixture
+upgrade is in-scope, not a violation. Fix was one shared helper `seed_completed_phases` +
+**gitignoring the runtime tier** in the fixture repos (`.doctrine/state/`): the derive now writes
+the registry under runtime state, which otherwise shows untracked and dirties the
+`integrate`-tests' clean-status assertions. Recorded as a memory for future dispatch-test authors.
+
+- **Tests.** Guard predicate unit (VT-1/2/4) in dispatch::tests; e2e in e2e_dispatch_sync.rs via
+  new helpers (`build_guard_repo`, `commit_ledger_on_dispatch`, `seed_registry`, `boundary_row`,
+  `record_delta`, `prepare_review_from`): VT-1 total-loss-no-refs, VT-3 no-false-halt
+  (Solo + empty-code), VT-5 derive-authoritative (garbage overwrite), VT-6 primary-rooted from a
+  coord cwd, VT-7 gate-before-projection + clean re-run after record-delta.
+- **HashSet is clippy-disallowed** (determinism) — used `BTreeSet<&str>` for the committed set.
+- **Gate:** e2e_dispatch_sync 38, dispatch unit 37, state 46, ledger 21, record_delta 4,
+  list_conformance 4, shrinkage 3 — all green; clippy plain zero-warn; my files fmt-clean
+  (`cargo fmt` reflow of this slice's own pre-existing-unformatted `ledger.rs` PHASE-04 test was
+  restored, not committed — out of PHASE-05 scope).
+- **Land:** rebase onto current edge + `merge --ff-only` (F-6, not `worktree land`). Edge advanced
+  `176d46eb`→`0c53d483` under the fork (foreign SL-156). Rebased clean (SL-156 untouched these
+  files), ff-landed `d9892674`, then `record-delta --start 0c53d483 --end d9892674` corrected the
+  stale in_progress `code_start` (`176d46eb`) to my true single-commit range (Manual preserved `solo`).
+
 ## Relations & selectors
 
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171
