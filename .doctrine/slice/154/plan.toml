@@ -1,0 +1,182 @@
+# Implementation plan for SL-154 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-154"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Provenance data model + registry-writer merge"
+objective = """
+Add the `Provenance` discriminator to `BoundaryRow` (boundary.rs) and implement \
+the incoming-keyed sticky merge inside `record_source_delta`'s read-modify-write \
+(state.rs), plus `forget_source_delta` row eviction. This is the foundation every \
+other phase keys on: the registry's self-describing landing-path field and the \
+single, race-free seam that enforces provenance stickiness (design D12, §5.2/§5.3)."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked at Rev 6; BoundaryRow (boundary.rs:16) and record_source_delta (state.rs:613) seams confirmed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Provenance` enum (Solo|Funnel|Manual|Unknown, #[default] Unknown) + `#[serde(default)] provenance` field on BoundaryRow; a TOML row without the field deserializes as Unknown." },
+  { id = "EX-2", text = "`record_source_delta` merges provenance keyed on the INCOMING row inside its existing RMW: incoming Solo/Funnel overwrite; incoming Manual preserves any existing provenance (incl. Unknown); no existing row stores the incoming value. The F-6 guard (is_ancestor + non-merge) is unchanged." },
+  { id = "EX-3", text = "`forget_source_delta(cwd, slice, phase) -> Result<bool>` removes the phase's row (absent → Ok(false)), primary-tree-resolved, inverse of record_source_delta." },
+  { id = "EX-4", text = "existing state suites green; the range upsert + stamp behaviour is otherwise unchanged (only provenance + forget are added)." },
+]
+verification = [
+  { id = "VT-1", expects = "serde default: a boundaries.toml row with no `provenance` key deserializes to Unknown and round-trips." },
+  { id = "VT-2", expects = "merge table: incoming Manual over existing Funnel→Funnel, over Solo→Solo, over Unknown→Unknown, over no-row→Manual; incoming Funnel/Solo over any existing → overwrites." },
+  { id = "VT-3", expects = "forget round-trip: record → forget → absent (Ok(true)); forget on an absent phase → Ok(false), no error." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Live coordination-worktree probe"
+objective = """
+Surface worktree liveness so the solo guard and the ledger-commit locator key on \
+a *live* coordination worktree, not a stale/pruned entry (design D9). Extend \
+`parse_worktree_for_ref` to carry `prunable`; add `live_worktree_for_ref` \
+(`!prunable && path.exists()`). `worktree_for_ref`'s signature is untouched — \
+existing callers keep their behaviour (behaviour-preservation)."""
+entrance_criteria = [
+  { id = "EN-1", text = "git worktree parser located (parse_worktree_for_ref git.rs:1163, worktree_for_ref :1189); file-disjoint from PHASE-01 (may run in parallel)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`parse_worktree_for_ref` extended to surface the full block `{ path, branch, prunable }` (parser gains a field, not a wrapper)." },
+  { id = "EX-2", text = "`git::live_worktree_for_ref(root, ref) -> Result<Option<..>>` returns the entry only when `!prunable && path.exists()`." },
+  { id = "EX-3", text = "`worktree_for_ref` keeps its current signature; existing callers are unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "a live coord worktree for the ref → Some." },
+  { id = "VT-2", expects = "a prunable / deleted-path coord entry → None (liveness, not mere name match)." },
+  { id = "VT-3", expects = "existing worktree_for_ref callers + their suites stay green (behaviour-preservation)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Solo binding soundness + reopen eviction"
+objective = """
+Close the solo-path leaks (ISS-051): make `capture_phase_boundary` stand down only \
+under a *live* coord worktree (D3/D9, sound from the session root) and stamp \
+`Solo`; and on a completed→non-completed reopen, clear the stamp and evict the \
+registry row (D8). Never manufacture a passing garbage row; never reuse a stale start."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 (provenance + forget_source_delta) and PHASE-02 (live_worktree_for_ref) complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`capture_phase_boundary` guard replaced: branch-proxy → `live_worktree_for_ref`; stands down iff a live coord worktree exists for dispatch/NNN (works when the flip runs from the session root); a probe error warns + stands down." },
+  { id = "EX-2", text = "the recorded solo row carries `provenance = Solo`; an absent start-stamp records NOTHING + surfaces a warning (no chaining — D1)." },
+  { id = "EX-3", text = "`set_phase_status` reopen branch (completed→non-completed) clears `code_start_oid` AND calls `forget_source_delta` for the phase." },
+  { id = "EX-4", text = "the solo stamp-present path is byte-identical apart from the provenance stamp; the set_phase_status suite is green." },
+]
+verification = [
+  { id = "VT-1", expects = "guard soundness: a dispatched phase flipped from a session-root context with a live coord worktree → binding stands down (no garbage row); without a coord worktree → binding records." },
+  { id = "VT-2", expects = "liveness: a prunable/deleted coord entry → guard treats it as absent → solo capture records (not suppressed forever)." },
+  { id = "VT-3", expects = "reopen eviction: complete a phase (row present) → reopen → row evicted + stamp cleared → re-complete with a fresh range → exactly one fresh row." },
+  { id = "VT-4", expects = "solo stamp-present capture is unchanged (behaviour-preservation)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Commit the boundaries ledger at prepare-review (ISS-039)"
+objective = """
+Splice the working boundaries ledger onto `dispatch/NNN` at the top of \
+`prepare_review`, before any read — mirroring `commit_journal` — so `read_ledger`, \
+`plan_phases`, and the PHASE-05 derive all read one committed, SPEC-022-legal \
+source. Brings the impl into SPEC-022 conformance (D7/D10) and restores claude \
+per-phase projection (the ISS-039 `0 phase-cuts` symptom)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (BoundaryRow serializes provenance); commit_journal (dispatch.rs:2094) + read_ledger (:1991) patterns confirmed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ledger::read_boundaries_file(worktree_root, slice) -> Result<Option<String>>` raw working-file reader over the (private) dispatch_dir path; None when absent." },
+  { id = "EX-2", text = "`commit_boundaries(root, parent, coord_ref, coord, slice)` — parses+validates the working ledger BEFORE commit (malformed → Err, tip unchanged); content-idempotent via TREE-oid compare (identical content → no ref advance); advances dispatch/NNN under CAS (RefCas::Moved bails)." },
+  { id = "EX-3", text = "`prepare_review` splices via `commit_boundaries` guarded by `live_worktree_for_ref` (no-op when no live coord worktree / no working file), before the committed read; trunk_base recomputed off the resulting tip." },
+  { id = "EX-4", text = "`e2e_dispatch_lifecycle` (phase/064-01) + `e2e_dispatch_sync` stay green; a NEW fixture that does NOT pre-commit the ledger exercises the splice path." },
+]
+verification = [
+  { id = "VT-1", expects = "splice from uncommitted working ledger: record-boundary writes N rows with NO manual git commit → prepare-review itself commits boundaries.toml onto dispatch/NNN (ls-tree shows it beside journal.toml), read_ledger reads N rows, phase/<slice>-NN refs project." },
+  { id = "VT-2", expects = "content-idempotent: prepare-review twice on an unchanged working ledger → the second run does not advance dispatch/NNN (same tip oid) and does not rewrite verified journal rows as Failed." },
+  { id = "VT-3", expects = "malformed working boundaries.toml → commit_boundaries returns Err and the dispatch tip is unchanged (no garbage committed)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Derive registry + projection-source guard + gate (ISS-052)"
+objective = """
+At `prepare_review`, after the commit and BEFORE the ref projection, run the \
+projection-source guard (D11), derive the registry from the committed ledger \
+(authoritative upsert), and the primary-rooted completeness gate — and stamp \
+funnel rows `Funnel`. This closes the population leak (ISS-052) with no silent \
+under-projection and no false-halt (design §5.2/D11/D2/D4)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 (provenance + record_source_delta merge + read_source_deltas) and PHASE-04 (committed ledger exists at prepare-review) complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`run_record_boundary` stamps `provenance = Funnel` on BOTH the working-ledger row (record_boundary) and the registry row (record_source_delta)." },
+  { id = "EX-2", text = "projection-source guard (D11): read the primary registry (pre-derive); every row with provenance ∈ {Funnel, Unknown} absent from the committed ledger → `bail!` naming the phase(s); Solo/Manual excluded; no code-delta diff." },
+  { id = "EX-3", text = "derive: `record_source_delta` each committed-ledger row (Funnel) into the primary registry (upsert — fills missing, overwrites mis-captured)." },
+  { id = "EX-4", text = "gate: `registry_completeness(primary, primary, slice)` → `bail!` on any gap. Ordering is guard → derive → gate, all BEFORE the existing ref projection (a halt creates no refs)." },
+  { id = "EX-5", text = "dispatch suites green, including the run_record_boundary double-write pin." },
+]
+verification = [
+  { id = "VT-1", expects = "D11 total loss: registry has Funnel rows, committed ledger empty → halt naming the phases, no review/phase refs created." },
+  { id = "VT-2", expects = "D11 partial loss: committed ledger missing one funnel-recorded phase → halt naming ONLY it; a complete committed ledger → no halt." },
+  { id = "VT-3", expects = "D11 no false-halt: mixed solo→dispatch (Solo rows present) and an empty-code dispatch phase (start==end, recorded in both ledgers) → no halt; D11 never inspects code paths." },
+  { id = "VT-4", expects = "D11 set membership: an Unknown registry row absent from the committed ledger → halt; a Solo row or a fresh Manual row absent → no halt." },
+  { id = "VT-5", expects = "derive authoritative: a binding-written garbage row for a funnel phase is overwritten by the committed-ledger row; a committed ledger with N rows populates N registry rows." },
+  { id = "VT-6", expects = "gate primary-rooted: run prepare-review from a coord-tree cwd → the gate reads the PRIMARY completed-set + registry; a real gap halts (the ISS-052 regression), a complete registry passes." },
+  { id = "VT-7", expects = "gate-before-projection: an incomplete registry halts with NO review/*/phase/* refs; after record-delta + ledger commit a re-run projects cleanly." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "record-delta provenance + dispatch skill docs"
+objective = """
+Make `record-delta` set `provenance = Manual` as the incoming value (the PHASE-01 \
+merge preserves any existing landing path, so a bare record-delta cannot clear a \
+funnel/legacy halt), and document the enforced prepare-review derive+gate beat in \
+the three dispatch skills, dropping the skippable orchestrator `record-delta` \
+instruction. Closes the slice's surface (D5 escape hatch retained; the beat is \
+now machinery, not a documented-yet-skippable step)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 (provenance merge) and PHASE-05 (the enforced prepare-review beat exists) complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`run_record_delta` (slice.rs:1970) constructs its row with `provenance = Manual`; correctness rides the PHASE-01 merge (preserve existing Solo/Funnel/Unknown). The range upsert is otherwise unchanged." },
+  { id = "EX-2", text = "`dispatch`, `dispatch-agent`, `dispatch-subprocess` SKILL.md document the prepare-review derive+gate as the ENFORCED funnel beat and remove the skippable `slice record-delta` orchestrator step; record-delta remains documented only as the manual escape hatch." },
+  { id = "EX-3", text = "the record-delta verb's escape-hatch behaviour is otherwise unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "record-delta cannot clear a funnel/legacy halt: a Funnel (or Unknown) registry row whose committed-ledger row is missing → record-delta keeps its provenance → D11 still halts; only committing the ledger (Funnel) or reclassifying to Solo (legacy that was solo) clears it." },
+  { id = "VA-1", expects = "agent review confirms the three dispatch SKILL.md describe the enforced prepare-review beat and no longer instruct the skippable record-delta step; codex/pi record-delta survives only as the escape hatch." },
+]
+specs        = []
+requirements = []

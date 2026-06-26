@@ -1,0 +1,79 @@
+id    = 160
+slug  = "plan-review-of-sl-155"
+title = "plan review of SL-155"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-155"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Single-phase conflation: seven one-liners + 200-line list verb as one phase"
+detail = """
+Expected: Work decomposed into individually gateable phases per the principle of small, composable, single-responsibility units. File-disjoint work like template fixes and a new CLI verb have different risk profiles, test strategies, and verification scopes.
+
+Observed: PHASE-01 groups C1-C3 (4 template/docs fixes), G5 (ADR template + supersede edge), I1 (TAGGABLE addition), plus the entire revision list verb (~200 lines, 11 tests) into a single phase. The plan rationale says 'no phase has a dependency on another' — but file-disjointness enables separation, it does not justify conflation. A phase that must be re-executed entirely if any one piece fails is not small."""
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the plan artifact."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Criteria misalignment: plan and design carry independent verification sets"
+detail = """
+Expected: Plan criteria incorporate the design's criteria — the plan does not re-derive verification, it schedules it. The design's EN/EX/VT are the authority; the plan's task is to sequence and gate them, not mint a parallel taxonomy.
+
+Observed: Design has EN-01/EN-02, EX-01→EX-08, implicit VT-03. Plan has EN-1/EN-2, EX-1→EX-5, VT-1→VT-5, VA-1/VA-2. These are two independent sets. VT-4 (rev_statuses drift canary) and VT-5 (render_revision_toml_includes_tags) in the plan have no explicit counterpart in the design's verification table. VA-1 and VA-2 are agent-verified criteria not in the design. The two documents carry different truths about what must be verified."""
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the plan artifact."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "Unresolved design contradiction: plan EN-1 references design with active RV-161 blockers"
+detail = """
+Expected: Plan's EN-1 ('design.md locked and approved') is satisfied before the phase advances to in_progress. A design with an active contradiction between scope and design (RV-161 F-1: tags default vs opt-in) is not 'locked.'
+
+Observed: phase-01.toml status=in_progress, yet RV-161 carries F-1 (blocker) against the design's D2 decision contradicting scope. The plan cannot claim EN-1 is met while the design's D2 is under unresolved adversarial challenge. The phase has advanced past a gate that is not actually satisfied."""
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the plan artifact."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Tautological entry criteria: EN-1 and EN-2 are lifecycle gate-checks, not dependencies"
+detail = "Expected: Entry criteria name honest substantive preconditions per the EN convention. Observed: EN-1 (design.md locked and approved) and EN-2 (plan.md written) are structural lifecycle-gate tautologies — they name what must be true for ANY phase, not this phase's specific dependencies."
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the plan artifact."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Phase sheet hollow: in_progress with empty tasks, risks, reading list, assumptions"
+detail = "Expected: Phase sheet populated with concrete tasks, reading list, and assumptions before execution. Observed: phase-01.md has every section empty (Reading list, Assumptions, Tasks, Risks, Decisions, Findings all blank). Yet phase-01.toml shows status=in_progress. A phase in execution without a populated runtime sheet has not actually been planned."
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the plan artifact."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Underspecified test strategy: unit vs CLI goldens not distinguished"
+detail = "Expected: Plan specifies test approach. Observed: Plan says 'Write tests first' but never states whether revision list tests are unit tests in revision.rs or black-box CLI goldens. The implementer must guess."
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the plan artifact."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,0 +1,81 @@
+id    = 161
+slug  = "design-review-of-sl-155"
+title = "design review of SL-155"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-155"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "D2 contradicts scope: tags made default against scope's explicit non-default rule"
+detail = """
+Expected: D2 follows the scope's stated column intent. Scope $L1 says: 'Column set mirrors GOV_COLUMNS: id, status, approval, title default. tags column available via --columns tags but not in default visible set (following governance precedent).'
+
+Observed: D2 says 'Tags are a default column (id, status, approval, tags, title)' and dismisses the scope's precedent as 'a lag, not a precedent.'
+
+The design and scope are in direct conflict. The scope invokes governance precedent as the reason tags are opt-in; D2 reverses this without acknowledging the deviation or recording a scope amendment. This will produce a scope-design mismatch at audit."""
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the design artifact before the slice advances past design lock."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Un-scoped slug column defined in REV_COLUMNS without scope sanction"
+detail = """
+Expected: Design surfaces only columns traceable to the scope. Scope says default columns mirror GOV_COLUMNS: id, status, approval, title.
+
+Observed: Design D4 defines a slug Column in REV_COLUMNS (index 3). Scope never mentions slug. The slug is not in REV_DEFAULT but the column exists as selectable surface not authorized by scope. If intentional, D4 should state rationale. If accidental, it is dead code waiting to be discovered."""
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the design artifact before the slice advances past design lock."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Design silent on CLI subcommand integration with existing revision verbs"
+detail = """
+Expected: Design describes how RevisionCommand::List fits into the existing revision subcommand group (New, Show, Status, Change, Approve, Apply, Paths).
+
+Observed: Design shows the List variant and dispatch one-liner but never references the existing enum or run_* function. A reader cannot determine where List lives in the command tree — alongside Show, after Paths, or in a new sub-group. The design leaves the implementer to discover the dispatch point."""
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the design artifact before the slice advances past design lock."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Scope misattributes C2 template fixes to src/spec.rs; design should correct"
+detail = "Scope lists: 'src/spec.rs — C2 (two template comment fixes), C3 (one doc comment fix)' but C2 items are template files (spec-tech.toml, spec-product.toml, interactions.toml), not src/spec.rs. The design correctly maps each item to its file in the Code impact table but never notes or corrects the scope misattribution. A design should not silently propagate scope errors."
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the design artifact before the slice advances past design lock."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "IMP-144 tag surfacing: show surface deferred without design acknowledgement"
+detail = "Scope says 'revision show (future work in IMP-170 G2) renders tags in the relationships block.' EX-06 verifies JSON includes tags, but the design never addresses whether the human-readable show output omits tags. If this is intentional deferral, the design should state it. If it is an oversight, the design should specify the show surface's tag behaviour."
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the design artifact before the slice advances past design lock."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Missing migration guard: no test for tagless-revision round-trip"
+detail = "Expected: Design includes a test proving an existing revision without a tags field survives read-render-parse round-trip. Scope says 'Not changing the storage shape of any field.' Observed: Only render_revision_toml_includes_tags test exists, proving template output. No round-trip test for existing tagless revisions."
+disposition = "fix-now"
+response = "The accused confesses. This finding shall be remedied in the design artifact before the slice advances past design lock."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
