@@ -37,3 +37,29 @@ queried data lives in the TOMLs.
   jail (`mem.fact.jail.nix-absent-no-flake-eval`), so flake eval cannot run here at all.
 - VT-1 is honestly **fallback-path/simulation only** (codex 019f0214 rescope); VH-1
   is the sole proof of final `<wt>/target` semantics. See plan.toml / design §9 / §8 R5.
+
+## PHASE-02 (commit 059b141a)
+
+- dispatch-subprocess SKILL: dropped `$fork_env` capture+reinjection from both codex
+  and pi spawn blocks. Fork invocation + `|| halt` kept (it is the worktree-creation
+  seam, not the env contract). Worker inherits ambient (unset) env → in-tree default.
+  Skill doc only; VA-1 = agent read, no test.
+
+## PHASE-03 (commit 63049ddc)
+
+- Platform exited the build-env business: removed `project_env_contract` (+ run_fork /
+  coordinate stdout emission) and gc's target-base reap leg. The fork's `target/` is
+  **in-tree** (inside the worktree dir), so `git worktree remove` reaps it — gc needs
+  no separate target step; branch-gone is now an idempotent empty Reap.
+- **Scope wider than design's line cites:** gc target machinery spanned the pure
+  classifier (`GcState.target_present`, `GcPlan.reap_target`), the run_gc shell gather
+  + Step-3 reap, the e2e scaffold (`run_t`/`ext_target`/`gc_target` + two target-only
+  tests), AND the **mod.rs `#[cfg(test)]` classify_gc unit tests**. `target_dir_for_branch`
+  (shared.rs) is KEPT — ADR-008 D-B5 framework primitive, only its consumers went.
+- **`coordinate` stdout was never pure env contract** — it also carries phase-run
+  output ("materialised PHASE-NN"). So fork asserts stdout EMPTY; coordinate asserts
+  only the contract is GONE. A latent ISS-044 wrinkle, not in scope to fix here.
+- Fixed 2 stale-doc bugs beyond EAP-4's list (coordinate run_coordinate doc, gc
+  classify_gc branch-gone bullet — both still claimed live env-contract / wt reaping).
+- Gate: 2589 unit + all worktree suites green, clippy clean; only the 22
+  `e2e_dispatch_candidate` SL-154 reds remain (accepted baseline). VH-1 → reconcile.
