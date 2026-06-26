@@ -333,6 +333,45 @@ state.rs (impl) + git.rs (dead-fn removal). TDD red/green/refactor. Two behaviou
   e4dfd146` corrected the boundary to my true single-commit range (Manual incoming preserved
   the existing `solo` provenance via the sticky merge). gc oracle-certified landed → reaped.
 
+## PHASE-04 — commit the boundaries ledger at prepare-review (landed `d82ec4b7` on edge)
+
+- **What landed.** `ledger::read_boundaries_file` (EX-1, verbatim-bytes / None working-file
+  reader over the private `dispatch_dir`); `dispatch::commit_boundaries` (EX-2, validate-
+  before-commit → malformed `Err` leaves the tip; content-idempotent via a TREE-oid compare
+  → identical content does not advance the ref; advances `dispatch/NNN` under CAS, `Moved`
+  bails); `prepare_review` splice (EX-3 — `tip0` → `live_worktree_for_ref` guard →
+  `commit_boundaries` → `tip`, with `trunk_base` recomputed off the post-splice tip).
+  Dropped the `expect(dead_code)` on `Boundaries::parse`/`to_toml` (commit_boundaries is
+  their first live caller). `run_record_delta` already constructs `Provenance::Manual`
+  (PHASE-06's EX-1 is effectively pre-landed in code; PHASE-06 remains for the skill docs).
+- **VT-2 ruling (/consult, user-approved — durable).** The literal "second prepare-review
+  does not advance dispatch/NNN (same tip oid) and does not rewrite verified journal rows as
+  Failed" is **unsatisfiable at PHASE-04**: a full re-run collides on the already-created
+  `review/phase` refs (zero-oid CAS → `Moved` → Failed) and `with_journaled_projection`
+  churns the journal, advancing the tip — pre-existing EX-5/VT-4 behaviour (design §882).
+  The clean re-run needs the **PHASE-05** gate (halt-before-projection, F1). Verified instead
+  at the **commit_boundaries grain**: exactly one `ledger: boundaries` commit after two runs +
+  a stable committed blob. The "verified rows not Failed" clause is PHASE-05 territory.
+  Recorded as [[mem.pattern.dispatch.prepare-review-rerun-not-idempotent-until-gate]].
+- **D-OQ6 → keep separate.** `commit_journal` commits unconditionally; `commit_boundaries`
+  computes the candidate tree *first* to decide idempotency, so it can't share a bundled
+  `tree_with_file+commit` helper. The only common tail (`commit_tree → CAS → Moved-bail`) is
+  an idiom already inline at dispatch.rs:972/1746/2110 with stage-distinct bail messages
+  (RV-030 F-4). No helper — extraction adds indirection without riding a seam.
+- **New e2e fixture (EX-4/VT-1/2/3).** `build_fixture_uncommitted_ledger` registers a REAL
+  linked worktree on `dispatch/064` with an UNCOMMITTED `boundaries.toml` (so
+  `live_worktree_for_ref` → Some and the splice actually fires — the existing pre-committed
+  fixtures no-op it and prove EX-4 unchanged). VT-3 passes a malformed body via the same fixture.
+- **Gate:** e2e_dispatch_sync 33, lifecycle 1, ledger unit 21, dispatch unit 33, candidate 23,
+  h1 1, arm_spawn 3, shrinkage 3 — all green. clippy plain zero-warn. My files fmt-clean
+  (foreign `src/commands/guard.rs` is pre-existing-unformatted SL-155/156 dirt — left untouched).
+- **Land:** rebase fork onto current edge + `merge --ff-only` (F-6, not `worktree land`). Edge
+  advanced twice under the fork (`507a64fb`→`3ee00a6f`→`19a3cb80`, foreign SL-156 plan/design),
+  so the in_progress `code_start` (`3ee00a6f`) was stale. Rebased onto `19a3cb80` (clean),
+  ff-landed `d82ec4b7`, then `record-delta --start 19a3cb80 --end d82ec4b7` corrected the
+  boundary to my true single-commit range (Manual incoming preserved `solo`). Source committed
+  separately from this notes/doc commit (knowledge trails code, design §4.3).
+
 ## Relations & selectors
 
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171
