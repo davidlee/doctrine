@@ -1,14 +1,25 @@
 # Trinary actionability
 
-> **RESUMED (2026-06-26) — RFC-008 resolved → ADR-017.** The gating-edge mechanism is
-> settled: **gating is an inbound `needs` dependency edge on an unsettled record**, not
-> a new relation/role/axis. The chosen design collapses change 2 — there is no
-> "gating-edge" to build. SL-158's scope shrinks to: (1) the **trinary partition**
-> (unsettled record → non-`Terminal` `Gating` class; the sole engine delta), and (2)
-> the **`shapes`-roles** piece (semantic disambiguation, separate from gating, ADR-016).
-> Outbound authoring is a derived hub-view + deferred batch sugar — out of scope here.
-> See ADR-017 and `notes.md` for the engine-seam findings. Design re-opens to formalise
-> the shrunk scope.
+> **RESUMED + DESIGNED (2026-06-26) — RFC-008 resolved → ADR-017.** Gating is settled:
+> **an inbound `needs` dependency edge on an unsettled record**, not a new
+> relation/role/axis. There is no "gating-edge" to build.
+>
+> **Design correction (this pass).** ADR-017's premise that the `needs` work-like gate
+> is *source-only* (so a work item "may target a record today") is **false in the
+> current code**: `commands/dep_seq.rs` gates the **target** as work-like too, so
+> `doctrine needs SL-x QUE-1` is refused today. The trinary partition is therefore
+> **not** the sole engine delta — the target-admissibility gate must also widen. See
+> Design Decisions below; ADR-017 prose reconciled at close.
+>
+> **Locked scope (three changes):** (1) **trinary partition** — unsettled record →
+> non-`Terminal` `Gating` class; (2) **target-gate widening** — `needs`/`after`
+> admissible targets = work-like ∪ records (source gate unchanged); (3) **estimate/value
+> on records** — confirmatory design note only (already kind-agnostic; no code).
+>
+> **Split out:** the **`shapes`-roles** piece (semantic disambiguation, ADR-016) →
+> **IDE-022** — different layer, carries its own open question. Estimate/value
+> show/inspect surfacing → **IMP-183**. Outbound authoring stays a derived hub-view +
+> deferred batch sugar (ADR-017 §3). See ADR-017 + `design.md`.
 
 ## Context
 
@@ -39,38 +50,40 @@ a requirement), then the engine.
 
 ## Scope & Objectives
 
-**Two coupled changes.**
+**Three changes** (design.md holds the detail).
 
-1. **Third status-class** in `priority::partition` / `priority::channels` —
-   provisionally `Gating` (name is OQ-1: `Gating` / `Ambient` / `Pending`) — that
-   splits the two predicates the binary model fused:
-   - `eligible` (appears in `survey`/`next` as work) → `Workable` only;
-   - `blocks` (gates dependents via the `dep` overlay) → non-`Terminal`, i.e.
-     `Workable ∪ Gating`.
-   A `Gating` node blocks its dependents but never appears in the actionable
-   worklist; settling to `Terminal` stops the gating and unblocks the dependent.
-   The partition invariant (`workable ∪ terminal == vocab`) generalises to a
-   three-way cover. For knowledge records, **no state is ever `Workable`**:
-   unsettled → `Gating`, settled → `Terminal`.
+1. **Third status-class** in `priority::partition` — `Gating` (name settled, ADR-017):
+   non-`Workable`, non-`Terminal`. It splits the two predicates the binary model
+   fused: `eligible` (worklist) stays `== Workable`; `blocks` (gates via `dep`
+   overlay) is `!= Terminal`, i.e. `Workable ∪ Gating`. **`channels.rs` needs no
+   code change** — both predicates already read the right poles; the new variant
+   slots in. A `Gating` node blocks dependents but never surfaces as work; settling
+   → `Terminal` unblocks (for free). Per-kind settle boundary: ASM `held`/`testing`,
+   DEC `proposed`, QUE `open`, CON `active` are `Gating`; their settled states
+   `Terminal`. The VT-1 canary generalises to `workable ∪ gating ∪ terminal == vocab`.
 
-2. **Gating edge into the `dep` overlay** — **DEFERRED TO RFC-008.** A record's
-   unsettled state must gate the work it affects, with the record as dep
-   predecessor (blocker), the B→A flip `needs` uses. *How* that edge is modelled is
-   the open question RFC-008 owns: projection over the existing `Shapes` relation
-   vs a distinct `gates` axis vs a `Gates` label (RFC-003 disfavours the last —
-   gating is consumer graph-effect, not vocabulary). The IMP-047 "new
-   `RelationLabel` + `RELATION_RULES` rows" sketch is **superseded** by that
-   deliberation. Requirement: *association ≠ gating* (RFC-008). Direction
-   (outbound-from-record vs dependent's `needs → record`) is RFC-008 D-c.
+2. **Target-admissibility gate widening** in `commands/dep_seq.rs`. Split the one
+   `is_work_like` predicate into a **source** gate (unchanged — records still can't
+   *author* dep/seq; ADR-017 §3) and a **target** gate `is_admissible_dep_target` =
+   work-like ∪ records (ASM/DEC/QUE/CON). Governance (SPEC/ADR/POL/STD) stays
+   excluded — depending on canon routes through a Revision. record→record `needs` is
+   excluded for free (source gate). This is what makes `needs → <record>` authorable
+   — the edge then rides the existing kind-agnostic `graph.rs` build untouched.
+
+3. **estimate/value on records — confirmatory note (no code).** Already kind-agnostic
+   (`estimate set ASM-001` works; round-trips — `RawRecordToml` has no
+   `deny_unknown_fields`). Design states the intent + the base→leverage scoring
+   consequence; a VT pins the round-trip. `risk` stays excluded (kind-gated +
+   `[facet]` table-name collides with knowledge's typed kind-facet). Surfacing in
+   show/inspect → IMP-183.
 
 **Canon-first.** A SPEC-001 / PRD-011 D-decision + requirement for the third class
 and the `eligible`-vs-`blocks` split land before the engine code — design drives
 this, reconcile writes the spec.
 
-**Objective:** a record (and any non-workable gating kind) can block downstream
-work via the actionability graph without ever appearing in `next` as work; the
-binary `Workable | Terminal` partition becomes a three-way cover; existing
-behaviour for ordinary workable/terminal items is preserved.
+**Objective:** a record can block downstream work via `needs` without ever appearing
+in `next` as work; the binary `Workable | Terminal` partition becomes a three-way
+cover; existing behaviour for ordinary workable/terminal items is preserved.
 
 ## Non-Goals
 
@@ -83,33 +96,41 @@ behaviour for ordinary workable/terminal items is preserved.
   does not own IMP-033's full scope. Coordinate, don't absorb.
 - **Backlog actionability mask (IMP-026, SPEC-001 D6)** — adjacent, separate.
 
-## Affected surface (coarse — `/design` refines)
+## Affected surface (design-target)
 
-- `src/priority/partition.rs` — third class + generalised cover invariant
-- `src/priority/channels.rs` — `eligible` vs `blocks` split; `consequence` label set
-- `src/priority/graph.rs` — overlay allocation for the gating edge
-- `src/priority/{surface.rs,view.rs,render.rs}` — worklist must exclude `Gating`
-- `src/relation.rs` — new gating `RelationLabel`(s) + `RELATION_RULES` rows
+- `src/priority/partition.rs` — `Gating` class + `gating` set on `KindPartition` +
+  generalised three-way cover canary; per-kind knowledge settle boundary.
+- `src/commands/dep_seq.rs` — source/target gate split; `is_admissible_dep_target`
+  (work-like ∪ records); refusal message; refusal/admission tests.
 - `.doctrine/spec/tech/001/` (SPEC-001) + PRD-011 — canon D-decision + requirement
+  (third class; `eligible`-vs-`blocks` split; records-as-`needs`-targets).
 - `.doctrine/spec/tech/019/` (SPEC-019) — D7 / NF-003 / OQ-2 revised: records become
-  `Gating`, not inert (consumer of this mechanism)
+  `Gating` (unsettled) / `Terminal` (settled), not all-inert.
+
+**Explicitly NOT touched** (the elegance of ADR-017): `channels.rs` (predicates
+already correct), `graph.rs` (kind-agnostic `needs` build already emits the edge),
+`surface.rs`/`view.rs`/`render.rs` (`Gating` excluded via `eligible == Workable`,
+no worklist change), `relation.rs` (shapes-roles split to IDE-022).
 
 ## Risks / Assumptions / Open Questions
 
 - **Behaviour-preservation gate.** The priority engine is shared machinery; the
   existing suites are the proof and must stay green for ordinary workable/terminal
   items. The three-way cover must reduce to the old binary behaviour wherever no
-  `Gating` node exists.
-- **OQ-1** — name of the third class (`Gating` / `Ambient` / `Pending`). → RFC-008 D-e.
-- **OQ-2** — gating edge authored outbound-from-record vs dependent's `needs →
-  record` (outbound fits the relation seam / ADR-004). → RFC-008 D-c.
-- **Gating mechanism (the keystone OQ)** — projection-over-`shapes` vs distinct
-  `gates` axis vs `Gates` label. **Routed to RFC-008** (D-a/D-b). This slice is
-  parked on its resolution.
-- **Coordination** — shares dep-overlay machinery with IMP-033; sequence
-  after/alongside, don't fork a parallel implementation.
+  `Gating` node exists. Two existing knowledge canary tests **flip by design**
+  (consumer revision, not regression): `every_knowledge_status_classifies_terminal_never_workable`
+  and the `knowledge_partitions_cover_the_real_vocabularies` canary form.
+- **ADR-017 premise correction** (RESOLVED this pass) — target gate is NOT source-only;
+  change 2 (gate widening) restores ADR-017's intent. ADR-017 prose reconciled at close.
+- **OQ-1 (name)** — `Gating` adopted (ADR-017; cosmetic). Closed.
+- **Gating mechanism** — settled by ADR-017 (inbound `needs`). Closed.
+- **Coordination with IMP-033** — gate widening overlaps IMP-033's cross-tier dep/seq
+  scope. SL-158 widens *only* to records (not full cross-tier); coordinate, don't fork.
 - **Canon-moves-first ordering** — the SPEC-001/PRD-011 change is authored through
   design→reconcile, not hand-edited ahead of the engine.
+- **Assumption (low risk, VT-pinned)** — records are scanned graph nodes and
+  `ensure_ref_resolves` accepts `.doctrine/knowledge/...` (existing graph.rs tests
+  seed knowledge trees; admissibility VT confirms `needs → QUE` resolves + emits).
 
 ## Summary
 
@@ -117,7 +138,10 @@ behaviour for ordinary workable/terminal items is preserved.
 
 ## Follow-Ups
 
+- **IDE-022** — `shapes`-roles (semantic disambiguation, ADR-016), split from this slice.
+- **IMP-183** — surface estimate/value in show/inspect for all estimable kinds.
+- ADR-017 prose reconciliation (the source-only premise correction) — at close.
+- Outbound gating hub-view + deferred batch sugar (ADR-017 §3).
 - RFC-007 workstream 2 (legibility: fold `explain` into `next`/`survey`, what-if).
 - RFC-007 workstream 3 (epistemic-record authoring/lifecycle).
-- Revisit IMP-026 (actionability mask) and IMP-033 (cross-kind dep capture) once
-  the gating machinery exists.
+- Revisit IMP-026 (actionability mask) and IMP-033 (full cross-kind dep capture).
