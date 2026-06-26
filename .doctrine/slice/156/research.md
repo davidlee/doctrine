@@ -185,3 +185,54 @@ Design will select and harden the approach.
 - `mem.pattern.testing.shared-cargo-target-stale-binary`
 - `mem.pattern.testing.stale-cargo-bin-exe`
 - `mem.pattern.embed.rust-embed-no-rerun`
+
+## Design exploration (session 2026-06-26)
+
+### Probe 1 — `.cargo/config.toml` cannot beat inherited env (DONE)
+
+`[env] CARGO_TARGET_DIR = { value=…, force=true }` in a worktree `.cargo/config.toml`
+does NOT override an inherited `CARGO_TARGET_DIR` env var for target-dir resolution.
+Tested in `/tmp/cargoenvprobe`: inherited env won, `forced-target` dir never created.
+**Consequence:** any on-disk cargo-config approach is dead while the flake sets
+`CARGO_TARGET_DIR` jail-wide. The worker's inherited env is authoritative.
+
+### Why the flake sets it (corrected)
+
+`flake.nix:76-80` comment: parked under persisted out-of-tree `~/.cargo` for (1)
+warm cache across jail relaunches, (2) clean bound working tree, (3) host/jail
+target separation ("host stays on default `target/`"). **Not** the RO-binary
+workaround. Retiring it must preserve warm-cache + host separation.
+
+### Claude-arm env-channel facts (from docs/claude/hooks.md)
+
+- **SubagentStart** injects only `additionalContext` (text) — CANNOT set env. The
+  existing stamp hook is not a usable channel. (NB: its cwd IS the worker worktree —
+  `mem.pattern.dispatch.subagentstart-hook-cwd-is-worker-worktree`, ISS-011 Defect C.)
+- **`CLAUDE_ENV_FILE`** is the env channel: available to SessionStart, **CwdChanged**,
+  FileChanged hooks. `export` lines persist into subsequent Bash calls "for the
+  session." CwdChanged fires on every `cd`, gets `new_cwd`, pitched as direnv-style
+  per-directory env.
+- `/target` is gitignored; `.cargo/config.toml` is NOT.
+
+### Option matrix
+
+| | mechanism | reliability | risk |
+|---|---|---|---|
+| A | prompt base-guard export | weak (per-call compliance) | false-green at verify |
+| B | justfile self-derives target from `git rev-parse --show-toplevel` | strong (single verify entry, both arms) | touches justfile (ADR-008 D-B5 tension); raw `cargo` unguarded |
+| C | `.cargo/config.toml` | DEAD unless flake env retired; host hijack | — |
+| D | hook → `CLAUDE_ENV_FILE` (CwdChanged/SessionStart) direnv-style | clean, generic, no compliance, lets us retire flake env | ONE empirical unknown |
+
+### Decision direction (provisional, pre-probe)
+
+Primary **D** (retire flake env, direnv-style hook deriving `wt/<branch>` from
+`new_cwd`); fallback **B** if probe fails; drop A and C. codex/pi arm keeps its
+`run_fork` stdout `$fork_env` (CLAUDE_ENV_FILE is Claude-only) — but if env retired,
+`project_env_contract` must take an explicit persisted root, not env-derived base.
+
+### Open empirical question (PROBE NEXT)
+
+Does **CwdChanged fire when an Agent-tool worker (isolation:worktree) is spawned**
+into its worktree, and is `CLAUDE_ENV_FILE` scoped **per-subagent** (not polluting
+the orchestrator)? D depends on both. Probe: throwaway worker + CwdChanged hook that
+dumps `new_cwd` + `CLAUDE_ENV_FILE`; check firing + parent leakage.
