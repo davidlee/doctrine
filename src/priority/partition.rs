@@ -606,7 +606,7 @@ mod tests {
         // Every non-knowledge row must have `gating: &[]` — behaviour byte-identical
         // to the pre-SL-158 world where Gating did not exist.
         for p in super::PARTITION.iter() {
-            if ["ASM", "DEC", "QUE", "CON"].contains(&p.prefix) {
+            if crate::kinds::is_record(p.prefix) {
                 // Knowledge rows have non-empty gating by design.
                 continue;
             }
