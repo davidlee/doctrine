@@ -2400,4 +2400,49 @@ target = \"ADR-001\"
         assert!(all_lines[0].contains("assumption/001/record-001.toml"));
         assert!(all_lines[2].contains("decision/001/record-001.toml"));
     }
+
+    // --- VT-7 (SL-158 D3): estimate round-trip on a record ---
+    // `[estimate]` on a knowledge record TOML is silently tolerated by
+    // `RawRecordToml` (no `deny_unknown_fields`), so the parse succeeds and
+    // `estimate::parse_optional` reads the bounds back clean. The full validate
+    // pass ignores the table — table ignored, not rejected.
+
+    #[test]
+    fn estimate_roundtrip_on_record() {
+        let toml = "schema = \"doctrine.knowledge\"\n\
+                     version = 1\n\
+                     id = 1\n\
+                     slug = \"test\"\n\
+                     title = \"Test\"\n\
+                     record_kind = \"assumption\"\n\
+                     status = \"held\"\n\
+                     created = \"2026-01-01\"\n\
+                     updated = \"2026-01-01\"\n\
+                     tags = []\n\
+                     [facet]\n\
+                     claim = \"x\"\n\
+                     [evidence]\n\
+                     [estimate]\n\
+                     lower = 3.0\n\
+                     upper = 3.0\n";
+        // parse_entity_toml tolerates the unknown [estimate] table (no deny_unknown_fields).
+        let raw: RawRecordToml = crate::dtoml::parse_entity_toml(toml, "ASM", 1).unwrap();
+        assert_eq!(raw.id, 1);
+        assert_eq!(raw.record_kind, RecordKind::Assumption);
+        assert_eq!(raw.title, "Test");
+
+        // Extract and parse the [estimate] sub-table via the pure estimate path.
+        let full: toml::Table = toml.parse().unwrap();
+        let est_table = full.get("estimate").and_then(|v| v.as_table());
+        let facet = crate::estimate::parse_optional(est_table)
+            .unwrap()
+            .expect("estimate should be present");
+        assert_eq!(facet.lower, 3.0);
+        assert_eq!(facet.upper, 3.0);
+
+        // Full validate is clean — [estimate] is ignored, not rejected.
+        let record = validate(raw).unwrap();
+        assert_eq!(record.title, "Test");
+        assert_eq!(record.record_kind, RecordKind::Assumption);
+    }
 }
