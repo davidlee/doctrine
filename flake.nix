@@ -68,16 +68,21 @@
         jailEnvOptions = with jailLib.combinators; [
           (try-fwd-env "OPENROUTER_API_KEY")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
-          # Jail builds into its own target dir so it never clobbers the host's.
-          # The repo binds rw into the jail at a different absolute path, but
-          # cargo bakes CARGO_BIN_EXE (the e2e-test spawn path) at compile time —
-          # a shared target/ leaves a jail-built test binary pointing at the jail
-          # mount path, which spawn-fails when run on the host (and vice versa).
-          # Park it under the persisted, out-of-tree ~/.cargo (in-jail HOME
-          # appears as /home/david, backed by host /home/agent): survives
-          # launches (warm cache) and keeps the bound working tree clean. Host
-          # stays on default target/.
-          (set-env "CARGO_TARGET_DIR" "/home/david/.cargo/doctrine-target-jail")
+          # No CARGO_TARGET_DIR redirect: each worktree builds into its own
+          # in-tree, gitignored `target/` (cargo's default). Per-worktree build
+          # isolation is then correct by construction — both dispatch arms, `just`
+          # and raw `cargo`, with no shared target to thrash and no env channel
+          # required (SL-156; ADR-008 D-B1/D-B5 via REV-011). The original
+          # cross-mount concern (a jail-built test binary bakes CARGO_BIN_EXE at
+          # the jail mount path and spawn-fails on the host, and vice versa) is
+          # satisfied *by* in-tree targets: jail `/workspace/doctrine/target` and
+          # host `/home/.../doctrine/target` are distinct physical dirs, so no
+          # binary is shared across mounts. Persistent trees (main/edge) keep a
+          # warm cache in their bound `target/`; ephemeral forks cold-build (the
+          # deliberate trade — sccache is the warm-fork lever, ADR-008 D-B4). Host
+          # was always on default `target/` and is unchanged. Do not re-add a
+          # shared redirect: it reintroduces the cross-worktree fingerprint thrash
+          # this removal fixes.
           # Share the HOST doctrine binary into the jail. persist-home already
           # mounts an isolated, writable ~/.cargo; this ro-binds the host's real
           # install on top (extraOptions applies after persist-home, so it wins)
