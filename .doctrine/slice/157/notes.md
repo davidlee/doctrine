@@ -5,10 +5,23 @@ Status: **design LOCKED — ready for `/plan`.** Scope re-baselined + premise-co
 round + hardening (`26a867bc`). `design-target` selectors recorded
 (`src/dispatch.rs`, `src/git.rs`). No code yet.
 
-**Remaining:** (1) author ADR-012 mechanism Revision per ADR-013 (scope = design
-§5); (2) `/plan`. GPT verdict: no architecture block; the two hardened risks were
-the "cannot occur" framing (now: operating-model invariant, not Git impossibility)
-and the behaviour-delta claim (now: scoped to supported posture).
+**Remaining:** `/plan` (next). **No design-stage Revision** — see below.
+
+**D6 corrected (`/consult`, 2026-06-26):** the pre-split scope assumed an ADR-012
+mechanism Revision. Grep of ADR-012 + SL-121 + SPEC-022 corrected it:
+- **ADR-012 — no change.** Its text never names the resync; D4 CAS contract fully
+  preserved. No Revision against ADR-012.
+- **SL-121 design §2.2 — superseded** (slice-level; the resync mechanism lives
+  there, below the ADR). Carried by the `references SL-121` edge + design §5.
+- **SPEC-022 — one prose strike, deferred to reconcile.** `spec-022.md:140-141`
+  carries the resync parenthetical "(with a post-CAS re-probe that resyncs a
+  newly-checked-out ref)"; strip it. The `.toml` responsibility already conforms.
+  Routes via `revision change add --action modify --target SPEC-022` at
+  **reconcile** (after code lands, so spec doesn't lead code). Known obligation.
+
+GPT verdict (design): no architecture block; two hardened risks were the "cannot
+occur" framing (now: operating-model invariant, not Git impossibility) and the
+behaviour-delta claim (now: scoped to supported posture).
 
 **Self-review catch (folded into design §6):** `integrate_report_emits_disposition`
 (e2e:1121) asserts `(advanced+resynced)` but via the CHECKED-OUT leg (fixture

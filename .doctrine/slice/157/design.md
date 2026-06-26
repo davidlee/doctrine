@@ -1,14 +1,15 @@
 # SL-157 Design — Checkout-independent trunk advance: strip the speculative None-leg resync
 
-> Governed by ADR-012 (dispatch integration topology). Mechanism-only Revision
-> (no governance reversal — see §5). Successor to SL-121 (leg-aware advance):
-> SL-121 *introduced* the leg-aware branch; SL-157 *deletes* the speculative half
-> of its None leg. The non-FF auto-merge that would reverse ADR-012 D2/D4 is split
-> out to **RFC-006** (non-goal, see slice-157.md).
+> Governed by ADR-012 (dispatch integration topology) — **no ADR-012 decision
+> changes** (D4 CAS contract preserved in full; see §5). Successor to SL-121
+> (leg-aware advance): SL-121 *introduced* the leg-aware branch; SL-157 *deletes*
+> the speculative half of its None leg, **superseding SL-121 design §2.2**. The
+> non-FF auto-merge that would reverse ADR-012 D2/D4 is split out to **RFC-006**
+> (non-goal, see slice-157.md).
 >
 > Evidence base: `research.md` (go/no-go: **Go**, thesis CONFIRMED, no
 > counter-evidence). `notes.md` carries the onboarding map. This design is the
-> deletion map + the verification alignment + the Revision scope.
+> deletion map + the verification alignment + the governance/spec impact (§5).
 
 ## 1. Problem & root cause
 
@@ -61,7 +62,7 @@ is **not** what this resync guards.
 | D3 | **Retire `Disposition::RacedDesync`** (variant `dispatch.rs:2272` + `label()` arm 2284). | Reachable only from the deleted resync. `report_integrate` needs **no** structural change — `RacedDesync` rode the catch-all `disp =>` arm (1906), never a dedicated branch (`research.md` §3, supersedes the notes TODO). |
 | D4 | **Keep the checked-out leg unchanged** — `advance_checked_out` + `ff_advance_in_worktree` (`git.rs:1308`) + their tests. | The safe atomic path for the always-checked-out `edge`. Force-CASing `edge` (alt ii) would desync the dev's live tree = the ISS-038 phantom. Load-bearing, not legacy. |
 | D5 | **Keep the M4 dirty pre-gate** (`dispatch.rs:1753`) unchanged. | `worktree_for_ref(main)` is always `None`, so it only ever fires for a checked-out target — i.e. edge-dirty protection. Still wanted. |
-| D6 | **ADR-012 Revision is mechanism-only** (§5). | Restates the integrate topology (None-leg advance = pure ref CAS, no resync). FF-only D2/D4 + CAS-replay D4 preserved unchanged → no governance reversal → no RFC for the Revision itself (ADR-013). |
+| D6 | **No ADR-012 Revision; one SPEC-022 prose edit, deferred to reconcile** (§5). | The stripped resync is **SL-121 design** mechanism, *below* the ADR — ADR-012's text never mentions it (grep-confirmed); D4's CAS contract is preserved in full, so no ADR-012 decision changes. The only governance surface that names the resync is SPEC-022's prose body (`spec-022.md:141`); strip it via a `modify` REV at **reconcile** (after code lands), not now (else spec leads code). The SPEC-022 `.toml` responsibility already conforms. |
 
 **Rejected — pure one-leg integrate (alt ii):** force every target ref
 not-checked-out so the checked-out leg could retire. Fights AGENTS.md's
@@ -140,28 +141,49 @@ the None leg, `edge` keeps the Some leg) · `report_integrate` body (1895+).
 
 **Design-target selectors:** `src/dispatch.rs`, `src/git.rs`.
 
-## 5. ADR-012 mechanism Revision (D6)
+## 5. Governance & spec impact (D6)
 
-Per ADR-013 (Revision is the first-class change-axis kind; a mechanism change to an
-accepted ADR routes through a Revision, not a fresh ADR or a raw edit). Scope —
-**mechanism-only restatement**, no decision reversed:
+The pre-split scope assumed an ADR-012 mechanism Revision. Inspection (grep of
+ADR-012 + SL-121 design, 2026-06-26) corrected that: **there is no ADR-012 decision
+to revise, and exactly one SPEC-022 prose line to strip.**
 
-- **Restate:** the not-checked-out (trunk) advance is **pure ref CAS with no
-  worktree resync**. The speculative None→Some post-CAS resync is removed as
-  defending a transition that cannot occur (`main` never checked out; `edge` always
-  already checked out → never the None leg).
-- **Preserved unchanged — state explicitly so the Revision is not misread as a
-  reversal:** D2 (intent-target defaults; `trunk_ff_only` opt-in) · D4 (FF-only,
-  never auto non-FF; CAS-replay with journal; moved-target refusal). Every advance
-  stays a 3-arg CAS — no force-push, no auto-resolve; non-FF still refused on the
-  checked-out leg.
-- **Confirmed minimal** (OQ-E): mechanism-only, not a broader integrate rewrite.
-  The non-FF auto-merge that *would* reverse D2/D4 is RFC-006, gated by external
-  review (ADR-014).
+### ADR-012 — no change
 
-Verb shapes to confirm at authoring time via the CLI (don't guess): `doctrine
-revision new …` / `revision change` / `revision approve` / `revision apply` (per
-the boot command spine `revision  status change approve apply`).
+ADR-012's text mentions `ff-only`/CAS **only** in the trunk-projection contract
+(D4: every ref update a CAS, no-op-if-planned, refuse-if-moved, never auto-resolve).
+It says **nothing** about worktree resync, the None-leg re-probe, the checked-out
+leg, or `RacedDesync`. SL-157 **preserves D4 in full** — every advance stays a 3-arg
+CAS; no force-push, no auto-resolve; non-FF still refused. So no ADR-012 decision
+changes; **no Revision against ADR-012.** (The D2/D4 *reversal* — non-FF auto-merge
+— is RFC-006's, gated by external review per ADR-014.)
+
+### SL-121 design — superseded (slice-level)
+
+The stripped mechanism (worktree-aware advance, None-leg post-CAS re-probe/resync,
+the `{AdvancedResynced, AdvancedPureRef, RacedDesync}` dispositions) lives in
+**SL-121 design §2.2** — *below* the ADR. SL-157's design supersedes that sub-section
+of SL-121's; no governance vehicle needed for a per-slice design supersession (the
+`references SL-121` edge + this note carry it).
+
+### SPEC-022 — one prose edit, deferred to reconcile
+
+The only durable-governance surface naming the resync is SPEC-022's prose body:
+
+> `spec-022.md:140-141`: *"a not-checked-out target advances by pure `update_ref_cas`
+> **(with a post-CAS re-probe that resyncs a newly-checked-out ref)**;"*
+
+**Edit:** strike the parenthetical → "advances by pure `update_ref_cas`". The
+SPEC-022 `.toml` responsibility 4 already says only *"pure `update_ref_cas`"* — it
+**already conforms**; no `.toml` change. This is a single prose strike.
+
+**Vehicle & timing:** a SPEC change routes through a REV (`revision change add
+--action modify --target SPEC-022`, surfaced-for-manual at apply → hand-strike line
+141), per ADR-013 / the reconcile model ("REV for governance/spec"). Authored at
+**reconcile**, *after* the code lands — not now, else the spec would describe code
+that doesn't yet exist (the same governance-ahead-of-code hazard that retired the
+ADR-012 Revision). Recorded here as a known reconcile-stage obligation so it is not
+lost. Verb shapes confirmed via CLI: `revision new` / `revision change add` /
+`revision approve` / `revision apply`.
 
 ## 6. Verification alignment (behaviour-preservation)
 
