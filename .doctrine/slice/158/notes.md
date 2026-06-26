@@ -3,6 +3,28 @@
 Working notes for the `/design` pass. Reading list + sources consulted so a
 reviewer can bootstrap. Decisions land in `design.md`; this file is the trail.
 
+## ⚠️ STATUS: design PARKED — gated on an upstream RFC (2026-06-26)
+
+The design conversation itself surfaced that the **gating-mechanism question is
+not slice-shaped.** It is an unsettled model decision in RFC-007 that RFC-003's
+Layer-1 ruling (structure ≠ graph-effect) reopens, with corpus-wide blast radius,
+needing several deliberation passes. Decision (user): **resolve it in an RFC,
+outside the slice.** SL-158 cannot proceed to a lockable design until the RFC
+settles the mechanism. This notes file + the RFC carry the context forward.
+
+### The requirement the RFC must honour (user, 2026-06-26)
+
+1. **Gating canon is acceptable / can be a positive.** Governance is not itself
+   actionable, but an *unsettled* governance record transitively gating the work
+   that depends on it is sensible. So "records gate canon" is not disqualifying.
+2. **Association must not be hostage to gating (the protect-this).** One must be
+   able to associate an epistemic record wherever it is *semantically* sensible
+   (`shapes`) WITHOUT that association forcing an *insensible actionability*
+   effect. → RFC-003 Layer 1 applied to records: **association ≠ gating.** This is
+   the decisive argument against blanket (P) shapes-projection, which couples them.
+3. So the live design space = **how gating selects WHICH associations bite**: a
+   role on `shapes`, a target-class filter, a distinct gating signal, or a mix.
+
 ## Reading list (handover order)
 
 1. `doctrine slice show SL-158` — scope, non-goals, affected surface, OQs.
@@ -59,15 +81,62 @@ reviewer can bootstrap. Decisions land in `design.md`; this file is the trail.
   — the same B→A flip `needs` uses. Then partition class gates it (Gating blocks,
   Terminal doesn't), unconditional edge.
 
+## RFC-003 — bears directly on the gating-edge question (READ THIS)
+
+Holistic relation-model review (CHR-024 deliverable, 2026-06-23). Two rulings that
+reframe how gating is modelled:
+
+- **Layer 1 — structure is not graph-effect.** "Whether an edge *gates work* … is a
+  **consumer decision**, not a property of the relation." Relation contract =
+  structural truth (`shapes` durable); graph-effect (gating/eviction/scoring) =
+  a *projection* over selected edges, declared **in the consumer**.
+- **Design law — derivable, not relational.** Don't encode in the relation what the
+  consumer can project. RFC-003 explicitly files actionability
+  (`needs`/`after`/"IMP-047 `gates`") in the **dep/seq layer, not the semantic
+  relation model**; and names IMP-047 as "graph-effect is consumer policy; the
+  gating layer."
+
+This **tensions IMP-047 / RFC-007 wording** ("new gating `RelationLabel`(s) +
+`RELATION_RULES` rows") — RFC-003 says gating is NOT a new vocabulary label; it is a
+consumer projection over a structural edge (or a dep/seq-layer axis). Recency cuts
+both ways: RFC-003 is 2026-06-23; RFC-007 (2026-06-26) repeats the older
+label-wording, possibly inherited from IMP-047 without reconciling vs RFC-003.
+
+## User prior-lean (DO NOT FORGET — challengeable)
+
+In the RFC-003 design conversation the lean was **"shapes not edges"** — i.e. gating
+is a **consumer projection over the existing `Shapes` relation**, not a new
+`gates` edge/label. User: "we can challenge that view, just not forget it."
+
+## Three mechanism options for the gating edge
+
+- **(P) Shapes-projection (prior lean, RFC-003 Layer 1).** Keep `Shapes` as the
+  durable semantic relation; the priority consumer (`graph.rs` edge-pass) projects
+  record-sourced `Shapes` edges into the `dep_overlay`, oriented record→artefact.
+  Partition split does the gating (Gating blocks, Terminal doesn't). **NO `relation.rs`
+  change, NO `dep_seq` change** — just graph.rs edge-pass + partition. Minimal,
+  canon-coherent with RFC-003.
+- **(E) Distinct `gates` dep/seq axis.** New `[relationships].gates` axis alongside
+  `needs`/`after`, extended in `dep_seq` + `dep_seq_for` + graph.rs + an authoring
+  verb. RFC-003's "dep/seq layer" reading taken literally as a new axis.
+- **(L) Distinct `Gates` RelationLabel + `RELATION_RULES` rows.** IMP-047/RFC-007
+  literal wording. RFC-003 argues this is the **wrong layer** (graph-effect ≠
+  vocabulary).
+
+**Challenge to (P) — kept live:** `Shapes` targets a WIDE set (PRD/SPEC/REQ/SL/
+ISS/IMP/CHR/RSK/IDE/ADR/POL/STD + the 4 record kinds). If every unsettled-record
+shaping gates, blocking may be over-broad (a record shaping a `draft` SPEC blocks
+it; intra-family ASM→QUE gating), and the author loses "informs but does not block."
+Mitigations: only *unsettled* records gate (settled = inert); soft-shape control
+(role/facet on shapes) deferrable if it bites.
+
 ## Open design questions (decide before readiness)
 
 - **OQ-1** — name of the third class: `Gating` / `Ambient` / `Pending`.
 - **OQ-2** — edge direction: outbound-from-record (fits ADR-004 outbound-only) vs
-  dependent's `needs → record`.
-- **OQ-emergent** — is the gating edge the existing `Shapes` label (every shaping
-  record gates while unsettled), or a distinct minted `Gates` label (shaping ≠
-  gating)? IMP-047 says "new RelationLabel(s)"; `Shapes` already exists and is
-  inert. Needs resolution.
+  dependent's `needs → record`. (Largely settled → outbound-from-record.)
+- **OQ-3 (the live fork)** — mechanism: shapes-projection (P, prior lean) vs distinct
+  `gates` axis (E) vs `Gates` label (L). RFC-003 favours P/E over L.
 
 ## Guardrails (from handover)
 

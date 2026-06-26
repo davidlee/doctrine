@@ -1,5 +1,13 @@
 # Trinary actionability
 
+> **PARKED (`proposed`, 2026-06-26).** Design surfaced that the **gating-edge
+> mechanism** (change 2 below) is not slice-shaped — it is an unsettled graph-model
+> decision reopened by RFC-003's "structure ≠ graph-effect" ruling, routed to
+> **RFC-008** for deliberation. The partition half (change 1) is settled. This slice
+> resumes once RFC-008 chooses a mechanism (and likely emits an ADR). See
+> `notes.md` for the engine-seam findings and the requirement RFC-008 must honour
+> (*association ≠ gating*).
+
 ## Context
 
 Source: **IMP-047**. Keystone of **RFC-007** workstream 1 (correctness).
@@ -43,12 +51,15 @@ a requirement), then the engine.
    three-way cover. For knowledge records, **no state is ever `Workable`**:
    unsettled → `Gating`, settled → `Terminal`.
 
-2. **Gating edge into the `dep` overlay.** A record authors an outbound
-   gating edge to what it affects (PRD-010 §3); cordage allocates it to the `dep`
-   overlay with the record as predecessor (blocker), target as successor
-   (blocked) — the same B→A flip `needs` uses. New `RelationLabel`(s) +
-   `RELATION_RULES` rows for the record source-group. (Edge authored
-   outbound-from-record vs as dependent's `needs → record` is OQ-2.)
+2. **Gating edge into the `dep` overlay** — **DEFERRED TO RFC-008.** A record's
+   unsettled state must gate the work it affects, with the record as dep
+   predecessor (blocker), the B→A flip `needs` uses. *How* that edge is modelled is
+   the open question RFC-008 owns: projection over the existing `Shapes` relation
+   vs a distinct `gates` axis vs a `Gates` label (RFC-003 disfavours the last —
+   gating is consumer graph-effect, not vocabulary). The IMP-047 "new
+   `RelationLabel` + `RELATION_RULES` rows" sketch is **superseded** by that
+   deliberation. Requirement: *association ≠ gating* (RFC-008). Direction
+   (outbound-from-record vs dependent's `needs → record`) is RFC-008 D-c.
 
 **Canon-first.** A SPEC-001 / PRD-011 D-decision + requirement for the third class
 and the `eligible`-vs-`blocks` split land before the engine code — design drives
@@ -87,9 +98,12 @@ behaviour for ordinary workable/terminal items is preserved.
   existing suites are the proof and must stay green for ordinary workable/terminal
   items. The three-way cover must reduce to the old binary behaviour wherever no
   `Gating` node exists.
-- **OQ-1** — name of the third class (`Gating` / `Ambient` / `Pending`).
+- **OQ-1** — name of the third class (`Gating` / `Ambient` / `Pending`). → RFC-008 D-e.
 - **OQ-2** — gating edge authored outbound-from-record vs dependent's `needs →
-  record` (outbound fits the relation seam / ADR-004).
+  record` (outbound fits the relation seam / ADR-004). → RFC-008 D-c.
+- **Gating mechanism (the keystone OQ)** — projection-over-`shapes` vs distinct
+  `gates` axis vs `Gates` label. **Routed to RFC-008** (D-a/D-b). This slice is
+  parked on its resolution.
 - **Coordination** — shares dep-overlay machinery with IMP-033; sequence
   after/alongside, don't fork a parallel implementation.
 - **Canon-moves-first ordering** — the SPEC-001/PRD-011 change is authored through
