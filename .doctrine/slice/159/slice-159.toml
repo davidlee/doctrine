@@ -12,11 +12,11 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/knowledge.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/kinds.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/templates/knowledge-*.toml"
@@ -24,7 +24,47 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/using-doctrine.md"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/integrity.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/partition.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation_graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/supersede.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/templates/knowledge-evidence.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/templates/knowledge-hypothesis.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/templates/knowledge-invariant.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/glossary.md"
+intent = "design-target"
+
+[[selector]]
+selector = "memory/**"
+intent = "design-target"
 
 [[relation]]
 label = "references"
