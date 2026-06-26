@@ -20,7 +20,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Run `git -C <dir> <args>`, asserting success.
 fn git(dir: &Path, args: &[&str]) {
@@ -67,7 +71,7 @@ fn add_worktree(source: &Path, fork: &Path) {
 }
 
 fn provision(source: &Path, fork: &Path) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(["worktree", "provision"])
         .arg(fork)
         .arg("-p")
@@ -77,7 +81,7 @@ fn provision(source: &Path, fork: &Path) -> Output {
 }
 
 fn check_allowlist(source: &Path) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(["worktree", "check-allowlist", "-p"])
         .arg(source)
         .output()

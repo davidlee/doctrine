@@ -33,7 +33,11 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -79,7 +83,7 @@ fn seed(root: &Path, kind: &str, id: u32, slug: &str, title: &str, status: &str,
 
 /// `doctrine backlog list <extra...> -p <root>` over the built binary.
 fn list(root: &Path, extra: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .arg("backlog")
         .arg("list")
         .args(extra)
@@ -437,7 +441,7 @@ fn vt9_terminal_row_tails_the_live_chain_under_all() {
 #[test]
 fn vt7_backlog_order_is_an_unknown_subcommand() {
     let dir = tmp();
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .arg("backlog")
         .arg("order")
         .arg("-p")

@@ -17,14 +17,18 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
 }
 
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(args)
         .arg("-p")
         .arg(root)

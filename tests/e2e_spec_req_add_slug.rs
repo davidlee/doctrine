@@ -26,7 +26,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
+
 const SLUG_MAX: usize = 100;
 
 /// A throwaway git repo on `main` with pinned identity — enough for the minting
@@ -64,7 +69,7 @@ impl Repo {
     /// Run the built binary against this root with `DOCTRINE_WORKER` removed (a
     /// dispatch worker exports it; minting would otherwise refuse).
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(BIN)
+        Command::new(bin())
             .args(args)
             .arg("-p")
             .arg(&self.path)

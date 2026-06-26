@@ -22,7 +22,11 @@
 
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 const FAMILY_ORDER: &[&str] = &[
     "change",
@@ -36,7 +40,7 @@ const FAMILY_ORDER: &[&str] = &[
 ];
 
 fn boot_map_stdout() -> String {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["--help", "--boot-map"])
         .output()
         .expect("spawn doctrine --help --boot-map");
@@ -166,7 +170,7 @@ fn boot_map_leaf_command_has_no_subline() {
 /// `--boot-map` wins over `--commands` when both are passed (documented precedence).
 #[test]
 fn boot_map_takes_precedence_over_commands() {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["--help", "--commands", "--boot-map"])
         .output()
         .expect("spawn with both flags");

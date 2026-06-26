@@ -22,7 +22,11 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Write `root/<rel>` with `body`, creating parent dirs.
 fn write(root: &Path, rel: &str, body: &str) {
@@ -120,7 +124,7 @@ fn seed_chain(root: &Path) {
 
 /// `doctrine inspect <args...> -p <root>` over the built binary.
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .arg("inspect")
         .args(args)
         .arg("-p")

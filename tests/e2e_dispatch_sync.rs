@@ -33,7 +33,11 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -145,7 +149,7 @@ fn build_fixture(dir: &Path) -> Fixture {
 
 /// Run `doctrine <args>` in `cwd`; `worker = Some(true)` sets DOCTRINE_WORKER=1.
 fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
-    let mut cmd = Command::new(BIN);
+    let mut cmd = Command::new(bin());
     cmd.args(args).current_dir(cwd);
     match worker {
         Some(true) => {

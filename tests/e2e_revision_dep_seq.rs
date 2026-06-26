@@ -23,7 +23,11 @@
 
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// A throwaway git repo with a pinned identity and the `.doctrine/revision` tree
 /// pre-materialised (REV scaffolds eagerly into an existing dir). `revision status`
@@ -65,7 +69,7 @@ impl Repo {
     /// would spuriously red an authored round-trip
     /// (mem.pattern.dispatch.worker-verify-unset).
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(BIN)
+        Command::new(bin())
             .args(args)
             .arg("-p")
             .arg(&self.path)

@@ -14,11 +14,15 @@
 use std::path::Path;
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Run `doctrine <args…>` rooted at `dir`, asserting success; return stdout.
 fn doctrine(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(args)
         .arg("-p")
         .arg(dir)

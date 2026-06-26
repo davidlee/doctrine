@@ -21,7 +21,11 @@
 
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// The 8 family keys, in their canonical render order (FAMILIES declaration order).
 const FAMILY_ORDER: &[&str] = &[
@@ -36,7 +40,7 @@ const FAMILY_ORDER: &[&str] = &[
 ];
 
 fn help_stdout() -> String {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .arg("--help")
         .output()
         .expect("spawn doctrine --help");
