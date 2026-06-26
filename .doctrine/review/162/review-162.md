@@ -85,3 +85,26 @@ tolerated per F-2, not blocking SL-155.
 
 None. This slice made no governance or spec changes — only code, templates, and
 one supersede edge authoring.
+
+## Reconciliation Outcome
+
+### Per-slice (direct edit)
+
+- **design.md § L1 test count**: Already resolved during RV-160/RV-161
+  remediation (`e57cc991`). The design test table now lists all 14 tests by
+  name — no "12 unit tests" claim remains. No further edit needed.
+
+### REVs completed
+
+None. No governance or spec items in the brief.
+
+### Post-close note
+
+F-2 (e2e dispatch failures, tolerated) was subsequently fixed per user request
+in `b20cdbab` (`fix(SL-155): seed completed phases in dispatch candidate +
+lifecycle e2e fixtures`). The root cause was SL-154's PHASE-05 completeness
+gate — `e2e_dispatch_sync.rs` was updated but `e2e_dispatch_candidate.rs` and
+`e2e_dispatch_lifecycle.rs` were not. `just gate` now passes clean (2589+
+all green, zero clippy warnings).
+
+Reconcile pass complete — handoff to /close.
