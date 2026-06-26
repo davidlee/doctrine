@@ -2,11 +2,11 @@ memory_uid = "mem_019ef9b2e0ba7d41b9b8bd5c4da93358"
 memory_key = "mem.fact.build.rebuild-stale-skips-test-binaries"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "superseded"
 title = "rebuild-stale misses stale test binaries"
 summary = "just rebuild-stale retouches the bin only; stale TEST artifacts (deleted tests still running, wrong-path reads) survive it — an IMP-004 facet of shared CARGO_TARGET_DIR"
 created = "2026-06-24"
-updated = "2026-06-24"
+updated = "2026-06-26"
 
 [scope]
 paths = []
@@ -59,4 +59,8 @@ target = "mem_019ef8c35b407a738b66e1fa5eaaa0f3"
 [[relation]]
 label = "related"
 target = "IMP-004"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"
 

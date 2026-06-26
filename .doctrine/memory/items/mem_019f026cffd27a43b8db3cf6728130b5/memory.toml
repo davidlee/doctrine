@@ -1,0 +1,50 @@
+memory_uid = "mem_019f026cffd27a43b8db3cf6728130b5"
+memory_key = "mem.fact.build.in-tree-per-worktree-target"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "In-tree per-worktree target: isolation by construction, no shared CARGO_TARGET_DIR"
+summary = "Each worktree builds into its own gitignored in-tree target/ (cargo default); no shared CARGO_TARGET_DIR redirect. No cross-worktree/cross-mount stale-artifact class (SL-156, ADR-008 D-B1)."
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["flake.nix", "justfile"]
+globs = []
+commands = ["cargo", "just"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4ac941c75c20a3d5fa71a0ff3b1b1585015acfce"
+ref_name = "refs/heads/slice/SL-156-cargo-isolation"
+checkout_state_id = "301c9d77008937175d112eded90d4d89628a6e0e8d3e72ad53fa4d82ba35139c"
+base_commit = "49ed62389220421888f5d8375b41b06fec595bd0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-156"
+
+[[source]]
+kind = "adr"
+ref = "ADR-008"
+

@@ -2,11 +2,11 @@ memory_uid = "mem_019ec39d5df97cd1bbdfe99d7a2027b7"
 memory_key = "mem.pattern.testing.shared-cargo-target-false-red-in-worktree-audit"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "Shared CARGO_TARGET_DIR makes a worktree audit false-RED; touch+per-suite to defeat"
 summary = "Worktree audit false-RED: coord worktree shares CARGO_TARGET_DIR with main via the jail redirect, so test binaries built from main's source shadow the fork's — touch the test file + run suites individually (not --workspace), env -u DOCTRINE_WORKER"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-06-26"
 
 [scope]
 paths = []
@@ -43,3 +43,7 @@ weight = 0
 [[relation]]
 label = "related"
 target = "mem.pattern.dispatch.worktree-removal-stale-manifest-dir-false-red"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"

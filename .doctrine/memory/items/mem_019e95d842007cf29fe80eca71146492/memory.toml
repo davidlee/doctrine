@@ -2,11 +2,11 @@ memory_uid = "mem_019e95d842007cf29fe80eca71146492"
 memory_key = "mem.pattern.testing.stale-cargo-bin-exe"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "Stale CARGO_BIN_EXE makes e2e tests spawn-fail"
 summary = "e2e spawn NotFound from cross-mount target/ clobber — fixed by per-jail CARGO_TARGET_DIR; touch tests/*.rs is the fallback"
 created = "2026-06-05"
-updated = "2026-06-06"
+updated = "2026-06-26"
 
 [scope]
 paths = ["tests/e2e_memory_anchoring.rs"]
@@ -43,3 +43,7 @@ weight = 2
 [[relation]]
 label = "related"
 target = "mem.pattern.build.jail-target-redirect"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"

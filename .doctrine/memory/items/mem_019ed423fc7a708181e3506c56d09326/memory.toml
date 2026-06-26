@@ -2,11 +2,11 @@ memory_uid = "mem_019ed423fc7a708181e3506c56d09326"
 memory_key = "mem.fact.doctrine.jail-target-dir"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "superseded"
 title = "CARGO_TARGET_DIR is set to /home/david/.cargo/doctrine-target-jail in the bwrap jail"
 summary = ""
 created = "2026-06-17"
-updated = "2026-06-17"
+updated = "2026-06-26"
 
 [scope]
 paths = ["plugins/"]
@@ -39,3 +39,7 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"

@@ -2,11 +2,11 @@ memory_uid = "mem_019ec5bdca9c76219f4e18f37a2ae0b7"
 memory_key = "mem.pattern.testing.corpus-walk-test-baked-manifest-reads-worktree-branch-corpus"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "Corpus-walk invariant test compiled in a worktree validates the wrong branch corpus (false green)"
 summary = "Corpus-walk tests use env!(CARGO_MANIFEST_DIR); a worktree-compiled binary on a divergent branch reads that branch's corpus, false-greening a violation on the target branch"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-06-26"
 
 [scope]
 paths = ["tests/e2e_relation_migration_storage.rs"]
@@ -39,3 +39,7 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"
