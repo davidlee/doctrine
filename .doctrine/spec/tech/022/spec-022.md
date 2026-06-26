@@ -138,7 +138,7 @@ idempotent **3-way classification** against the live ref:
 - otherwise → **refuse** and report a moved target.
 
 The advance leg is **worktree-aware** (SL-121): a not-checked-out target advances by
-pure `update_ref_cas` (with a post-CAS re-probe that resyncs a newly-checked-out ref);
+pure `update_ref_cas` (CAS-and-done — the delivery ref is never checked out, SL-157);
 a checked-out target advances by `merge --ff-only` in its worktree so ref, index, and
 tree move together; a **non-ff advance on a checked-out ref is refused**
 (`integrate-nonff-checkout`) rather than reset. A dirty checked-out target fails the
