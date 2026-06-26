@@ -68,3 +68,18 @@ reconciliation and close.
   search.rs:39 to the expected-hit list — the criterion currently says
   "zero outside kinds.rs and dep_seq.rs:285" but the design explicitly
   designates these additional sites as staying (§5.4).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- Plan VA-1 (F-1): Updated to list all design-exempted sites — kinds.rs
+  (RECORD const), dep_seq.rs admissible vector, integrity.rs KINDS prefix pin,
+  relation.rs mixed supersets, search.rs "all" alias. Now matches design §5.4.
+
+### Withdrawn / tolerated
+- F-2: Tolerated — scan.rs fallthrough comment removed in restructure; old
+  text misleading after restructuring to guard-based branch. Rationale in
+  finding disposition.
+
+All findings resolved. No REVs needed. Reconcile pass complete — handoff to
+/close.
