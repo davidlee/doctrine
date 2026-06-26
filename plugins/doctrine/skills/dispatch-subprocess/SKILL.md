@@ -15,7 +15,7 @@ doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker \
 env -C "$D" DOCTRINE_WORKER=1 codex exec "<pre-distilled prompt>"
 ```
 Confined (bwrap); run the fork, check `$?`, then spawn. The worker inherits the
-ambient env and defaults `CARGO_TARGET_DIR` to its own in-tree `$D/target`.
+ambient env and compiles into its own in-tree `$D/target` (no env contract).
 ## Spawn — pi arm (RPC mode)
 ```sh
 doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker \

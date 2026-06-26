@@ -2,7 +2,7 @@
 //! SL-056 PHASE-06 — `doctrine worktree fork --base <B> --branch <name> --dir
 //! <path> [--worker]` end-to-end over the BUILT binary.
 //!
-//! * VT-1: happy path — env contract on stdout, human status on stderr, the
+//! * VT-1: happy path — human status on stderr, machine-clean (empty) stdout, the
 //!   worktree+branch exist at `<B>`, marker WRITTEN under `--worker` and ABSENT
 //!   solo; the three pre-`add` refusals (dir-exists / branch-exists / B-not-a-
 //!   commit) each exit non-zero and leave NO fork.
@@ -148,33 +148,16 @@ fn fork_happy_path_solo_and_worker() {
         "solo fork must succeed; stderr: {}",
         stderr(&out)
     );
-    // env contract on STDOUT (KEY=value); human status on STDERR.
-    assert!(
-        stdout(&out).contains("CARGO_TARGET_DIR="),
-        "env contract on stdout; got: {}",
-        stdout(&out)
-    );
-    assert!(
-        stdout(&out).contains("wt/wkr-solo"),
-        "contract maps target to wt/<branch>; got: {}",
-        stdout(&out)
-    );
+    // Human status on STDERR; stdout stays empty (SL-156 — the fork builds into its
+    // own in-tree `<dir>/target`, no env contract is emitted).
     assert!(
         stderr(&out).contains("forked wkr-solo"),
         "human status on stderr; got: {}",
         stderr(&out)
     );
-    // stdout is a PURE machine surface: every non-empty line is KEY=value, no
-    // human status leaks in (ISS-044 — `run_provision`'s "provisioned …" report
-    // belongs on stderr, else `env $(fork …)` word-splits the line and exits 127).
     assert!(
-        stdout(&out)
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .all(|l| l.split_once('=').is_some_and(|(k, _)| {
-                !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-            })),
-        "stdout must be pure KEY=value env contract; got: {}",
+        stdout(&out).trim().is_empty(),
+        "fork stdout is machine-clean (empty); got: {}",
         stdout(&out)
     );
     // The worktree + branch exist AT B.
