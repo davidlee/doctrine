@@ -94,6 +94,10 @@ label = "related"
 target = "ISS-011"
 
 [[relation]]
+label = "related"
+target = "REV-011"
+
+[[relation]]
 label = "references"
 role = "concerns"
 target = "SL-152"
@@ -102,10 +106,6 @@ target = "SL-152"
 label = "references"
 role = "concerns"
 target = "POL-002"
-
-[[relation]]
-label = "related"
-target = "REV-011"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
