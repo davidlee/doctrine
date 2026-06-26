@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 1
+slug = "gating-outbound-from-record"
+title = "Gating direction: outbound-from-record (record shows what it affects)"
+record_kind = "decision"
+status = "proposed"
+created = "2026-06-26"
+updated = "2026-06-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "RFC-008 D-c: should gating edges be outbound from the unsettled record (record shows what it affects) or inbound from the dependent (dependent declares `needs → record`)?"
+choice       = "Outbound-from-record: the unsettled record authors `gates → target`. The gate is an assertion of effect, not a dependency declaration."
+alternatives = ["inbound-from-record (dependent declares `needs → record`)", "bidirectional (both sides author)"]
+rationale    = "ADR-004 (relations outbound-only, reciprocity derived) establishes the pattern. The record knows what it affects; the dependent can derive which records gate it. Inbound `needs` already exists for direct dependency declarations — gating is a different intent: the record's unsettled state blocks, not the dependent's missing input."
+consequences = ["SL-158's graph layer projects gates from the unsettled record outward", "`blocked_by` is derived as the inverse of outbound gates", "coordinate with IMP-033 (cross-kind dep/seq)"]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = ["ADR-004 (relations outbound-only) strongly supports this choice.", "IMP-033's cross-kind dep/seq machinery must be coordinated — `gates` and `needs` are structurally inverses."]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "QUE-001"
+
+[[relation]]
+label = "shapes"
+target = "SL-158"
+
+[[relation]]
+label = "shapes"
+target = "RFC-008"

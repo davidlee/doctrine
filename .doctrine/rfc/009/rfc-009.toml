@@ -1,0 +1,24 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 9
+slug = "epistemic-kinds-observation-hypothesis"
+title = "Epistemic record kinds: observation, hypothesis, and the empirical loop"
+status = "open"
+created = "2026-06-26"
+updated = "2026-06-26"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "RFC-008"
+
+[[relation]]
+label = "related"
+target = "RFC-003"
+
