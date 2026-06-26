@@ -105,13 +105,26 @@ Removals (platform → build-tool-agnostic):
 - **`flake.nix:80`** — delete the `(set-env "CARGO_TARGET_DIR" …)`; update the
   comment to record the in-tree-per-worktree rationale (cross-mount safety now via
   distinct mount paths, §5.5).
-- **`src/worktree/fork.rs`** — remove `project_env_contract`; `run_fork` no longer
-  emits an env contract on stdout (its other output — the created path — stands).
+- **`src/worktree/fork.rs`** — remove `project_env_contract`; `run_fork`'s stdout
+  was **only** the env contract (the created path already goes to *stderr*,
+  `fork.rs:223-233`), so its stdout becomes **empty** — there is no "other stdout
+  output" to keep. Update the `run_fork` doc-comment (`fork.rs:207` "stdout: the
+  env contract") and the module-level note (`fork.rs:117`) accordingly.
 - **`src/worktree/coordinate.rs:255`** — drop the env-contract emission.
 - **`src/worktree/gc.rs:151-157`** — remove the cargo target-base reaping; GC
   reaps the worktree, and the in-tree `target/` dies with it.
+- **`src/worktree/mod.rs:111-113`** (EAP-4) — CLI `fork` help text still promises
+  "Emits the per-worktree env contract on stdout"; rewrite (fork now emits nothing
+  on stdout).
+- **`src/worktree/provision.rs:134-137`** (EAP-4) — the stdout-discipline comment
+  justifies stderr-only status by "fork/coordinate emit a KEY=value env contract on
+  stdout"; the ISS-044 discipline still holds (status stays on stderr) but the
+  rationale line is now stale — refresh it.
 - **`.agents/skills/dispatch-subprocess/SKILL.md`** — stop capturing/passing
   `$fork_env`; the codex worker inherits the (now unset) env and defaults in-tree.
+- **`.agents/skills/worktree/SKILL.md:118-123`** (EAP-4) — the generic `/worktree`
+  skill still documents `fork` step 4 "emits the per-worktree env contract …
+  declares `CARGO_TARGET_DIR`"; drop that step.
 - **`AGENTS.md`** (§95 + the `just rebuild-stale` guidance) — the shared-target
   warning and rebuild ritual are obsolete; rewrite to the in-tree model.
 - **Tests asserting the removed contract** (deleted/rewritten *with* the code, not
@@ -223,11 +236,21 @@ mechanism), and POL-002 as the forcing function. D-B2/D-B3/D-B4 unchanged
 
 - **R1 — cold-fork-build latency.** Mitigate: measure (OQ-1); D-B4 sccache if
   material. Not a correctness risk.
-- **R2 — migration-order regression.** Removing platform emission before the codex
-  skill migrates drops codex workers back to the (then-unset) env mid-flight.
-  Mitigate: **phase project-side first** — (i) retire flake export + confirm
-  in-tree isolation, (ii) migrate dispatch-subprocess skill/docs/tests, (iii)
-  remove `project_env_contract`/`coordinate`/`gc` coupling last.
+- **R2 — migration-order (reviewability, not regression — EAP-2).** Earlier framing
+  claimed reordering would "drop codex workers back to the unset env"; that is wrong
+  against the code. `project_env_contract` *fails closed to isolation*: with
+  `CARGO_TARGET_DIR` unset it falls back to `<fork>/target` then `wt/<branch>`
+  (`fork.rs:29-38`, research.md), and the un-migrated skill still captures+reinjects
+  `$fork_env`. So between flake-removal and skill-migration the codex worker is **not
+  stranded** — it gets an isolated (just non-final-shape `<fork>/target/wt/<branch>`)
+  dir. The real reasons to phase project-side first are (a) **reviewability** — one
+  contract change at a time — and (b) **validation**: step (i) cannot confirm *final*
+  B1 semantics for codex until the skill stops re-deriving a `wt/<branch>` subdir.
+  Order unchanged: (i) retire flake export + confirm in-tree isolation, (ii) migrate
+  dispatch-subprocess skill/docs/tests, (iii) remove `project_env_contract`/
+  `coordinate`/`gc` coupling last. (Caveat: in-session, pre-relaunch, the orchestrator
+  still inherits the old env, so codex emission resolves to the abandoned jail base
+  until relaunch — R5.)
 - **R3 — premature removal of stale-target rituals.** Some mitigations may still
   serve the host or non-jail flows. Mitigate: re-evaluate each individually; mark
   memories superseded only when confirmed.
@@ -242,15 +265,21 @@ mechanism), and POL-002 as the forcing function. D-B2/D-B3/D-B4 unchanged
 
 ## 9. Quality Engineering & Validation
 
-- **Behaviour-preservation — scoped precisely.** The gate holds for worktree
-  *creation / provision / marking* and dispatch coordination — those suites must
-  stay green unchanged. It does **not** cover the env-emission contract: removing
-  `project_env_contract` is a *deliberate* contract change, so the tests that
-  assert it (`e2e_worktree_coordinate.rs:205`, `e2e_worktree_fork.rs:153`) and the
-  gc target-base scaffold (`e2e_worktree_gc.rs`) are **deleted/rewritten with the
-  code**, not retrofitted. Distinguish the two in review: a *creation* test going
-  red is a regression; an *env-contract* test going red is expected and its
-  deletion is the change.
+- **Behaviour-preservation — scoped at assertion granularity (EAP-1).** The gate
+  holds for worktree *creation / provision / marking* and dispatch coordination.
+  The env-contract assertions are **not** whole separate tests that can be deleted
+  wholesale — they are *blocks inside* the creation tests: `fork_happy_path_solo_and_worker`
+  (`e2e_worktree_fork.rs:123-225`) asserts the `CARGO_TARGET_DIR=`/`wt/<branch>`
+  contract (`:153-160`) **and** the stdout KEY=value purity invariant (`:167-179`)
+  **and** registration/branch-at-B/marker; `coordinate_create_is_markerless_at_trunk_with_sheets`
+  (`e2e_worktree_coordinate.rs:157-228`) mixes the env asserts (`:203-213`) with
+  markerless/registered/sheets-regenerated. So the change is **surgical**: excise the
+  env-contract assertion blocks (and the now-vacuous stdout-purity block — fork stdout
+  becomes empty, §5.2) and keep every creation/marking assertion green unchanged. The
+  gc target-base scaffold (`e2e_worktree_gc.rs` — `run_pinned`/target_base helpers)
+  *is* a whole-test deletion (it exists only to exercise the removed reaping). Review
+  rule: a creation/marking assertion going red is a regression; an env-contract
+  assertion block being removed is the change.
 - **VT-1 — isolation by construction:** two worktrees on different branches each
   build a binary their *own* e2e tests spawn successfully; the target paths are
   distinct (`<wt>/target`), no cross-thrash. (Discharges ADR-008 D-B1 verification.)
@@ -258,8 +287,13 @@ mechanism), and POL-002 as the forcing function. D-B2/D-B3/D-B4 unchanged
   `just check` reporting correct pass/fail with no touch+re-run ritual.
 - **VT-3 — gc no longer references a cargo path:** `gc` reaps a worktree and its
   in-tree `target/` without any `wt/<branch>` base logic.
-- **VA — POL-002 conformance:** `grep` confirms no `CARGO_TARGET_DIR` / cargo
-  literal remains in shipped `src/`.
+- **VA — POL-002 conformance (scoped, EAP-3):** `grep` confirms no `CARGO_TARGET_DIR`
+  / cargo target literal remains in the **touched platform surfaces** —
+  `src/worktree/{fork,coordinate,gc,mod}.rs` plus the affected skills/docs. A whole-
+  `src/` grep is *not* the check: legitimate project-convention literals live outside
+  this slice (e.g. `src/root.rs:8-15` lists `Cargo.toml` as a default project-root
+  marker — correct, out of scope). The acceptance gate is the worktree/dispatch
+  surface, not every cargo string in the tree.
 
 ## 10. Review Notes
 
@@ -293,6 +327,30 @@ Hostile read of the draft + grounding greps. Findings, integrated above:
 
 - **Architecture consult (thread 019f01e9, pre-draft):** done — see §10 above /
   `research.md`. Approved PLATFORM→PROJECT; mandated D3 + migration order.
-- **Design-doc hostile pass:** _pending_ — handed to the next agent (this session's
-  `/handover`). Target: the full `design.md` against ADR-008/POL-002, the
-  behaviour-preservation scoping (AP-1), and the migration-order phasing (R2).
+- **Design-doc hostile pass (codex / GPT-5.5, thread 019f01fd, 2026-06-26):** done.
+  Verdict NEEDS-WORK → all findings integrated above; mechanism (B1) unchallenged.
+  - **EAP-1 (MAJOR) — behaviour-preservation granularity.** "Delete env-contract
+    tests with code" was wrong: the env asserts are *blocks inside* the creation
+    tests (`fork_happy_path_solo_and_worker`, `coordinate_create_is_markerless…`),
+    not standalone tests. Restated §9 to assertion granularity (surgical excision,
+    keep creation/marking green). Confirmed by reading both test bodies.
+  - **EAP-2 (MAJOR) — R2 was factually wrong.** `project_env_contract` fails closed
+    to isolation (`fork.join("target")` fallback), so reordering does not strand
+    codex. §8 R2 reworded: ordering is for reviewability + final-semantics validation,
+    not regression avoidance.
+  - **EAP-3 (MAJOR) — VA grep too broad.** Whole-`src/` `cargo` grep false-fails on
+    legitimate literals (`root.rs:8-15` `Cargo.toml` marker). §9 VA narrowed to the
+    touched worktree surfaces.
+  - **EAP-4 (MINOR) — missed consumers of the stdout env-contract story.** CLI help
+    (`mod.rs:111-113`), generic `/worktree` skill (`SKILL.md:118-123`), and the
+    `provision.rs:134-137` stdout-discipline comment all advertise the contract.
+    Added to §5.2 touch-set.
+  - **EAP-5 (this agent, while verifying EAP-1) — §5.2 fork.rs stdout claim was
+    wrong.** `run_fork`'s only stdout was the env contract; the created path goes to
+    *stderr* (`fork.rs:223-233`). So fork stdout becomes **empty**, not "the path
+    stands." §5.2 corrected; the stdout-purity assertion is now vacuous and excised
+    with the env block (EAP-1).
+  - **Confirmed correct (NIT, no change):** cross-mount claim §5.5 (distinct physical
+    target dirs; shared registry/git caches don't resurrect the `CARGO_BIN_EXE` bug);
+    B1 under the cargo `[workspace]` (one `target/` at workspace root per worktree, no
+    cross-member collision absent a re-exported `CARGO_TARGET_DIR`).
