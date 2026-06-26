@@ -55,6 +55,6 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "`cargo test` — full suite green" },
   { id = "VT-2", expects = "`just gate` zero warnings" },
-  { id = "VA-1", expects = "Grep `\"ASM\".*\"DEC\".*\"QUE\".*\"CON\"` in `src/` → zero outside `kinds.rs` and `dep_seq.rs:285` (admissible vector — mixed superset, accepted as-is per design F2)" },
+  { id = "VA-1", expects = "Grep `\"ASM\".*\"DEC\".*\"QUE\".*\"CON\"` in `src/` → zero outside `kinds.rs` (RECORD const), `dep_seq.rs` admissible vector (design F2), `integrity.rs` KINDS prefix pin, `relation.rs` mixed supersets, and `search.rs` \"all\" alias — all designated as staying per design §5.4" },
   { id = "VA-2", expects = "`catalog/scan.rs` `outbound_for` has no literal record-prefix match arm" },
 ]
