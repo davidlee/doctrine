@@ -402,21 +402,20 @@ plus per-verb black-box goldens.
   **already-shipped** `link`/`unlink` verb — FR-005 is v1-deliverable, label-blocked not
   verb-blocked; the `LifecycleOnly` supersession pair is owned by the **unbuilt** IMP-006
   verb, so FR-006 is IMP-006-gated.
-- **D7 — records are never actionable, but they gate work; gating needs IMP-047.** The
+- **D7 — records are never actionable, but they gate work (SL-158 / ADR-017).** The
   durable invariant: no record state is ever `Workable`, so a record is never `eligible`,
   never in `survey`/`next`, and carries zero work-lineage consequence — *truth is not
-  work*, enforced at the rank layer. **But records are meant to *gate* dependents** — an
-  `open` `QUE` blocking a slice's design, an `active` `CON` blocking a `REQ`, a `held`
-  `ASM` blocking an `IDE`, a `proposed` `DEC` blocking an `ISS` — which the *current*
-  binary `Workable|Terminal` partition cannot express (blocking is reserved to
-  non-`Terminal` nodes, which are necessarily also `eligible`). Decoupling blocking from
-  eligibility — a third `Gating` status-class plus a record→item gating edge into the
-  `dep` overlay — is **IMP-047**, a priority-engine (SPEC-001/PRD-011) change. Until it
-  lands, records are parked in an explicit all-`Terminal` partition (status-ful, *not*
-  REC's status-less `None → Terminal` path) and a belief gates work only indirectly,
-  through a *spawned backlog item* (PRD-010 §6). The target is direct gating; the interim
-  is inert. The partition invariant forces this to be a *declaration*, not a silent skip
-  of SL-047.
+  work*, enforced at the rank layer. **Records gate dependents directly** through the
+  trinary partition (SPEC-001 D13): unsettled states are `Gating` (non-`Workable`,
+  non-`Terminal` — blocks dependents via the `dep` overlay but never surfaces as work);
+  settled states are `Terminal` (never blocks). The per-kind boundary:
+  - ASM: `held`/`testing` → Gating; `validated`/`invalidated`/`obsolete` → Terminal
+  - DEC: `proposed` → Gating; `accepted`/`rejected`/`superseded` → Terminal
+  - QUE: `open` → Gating; `answered`/`obsolete` → Terminal
+  - CON: `active` → Gating; `waived`/`superseded`/`retired` → Terminal
+  A work item declares `needs → <record>` (SL-158 D2, REQ-239) to create the blocking
+  edge; settling the record → `Terminal` unblocks dependents for free (the channel
+  layer keeps `blocked_by` predecessors `!= Terminal`). No new relation vocabulary.
 - **D8 — `DEC` is dual-namespaced; the decision kind takes the 2-part form, external
   citations keep the 3-part.** The numbered decision kind is `DEC-NNN` (2-part); the
   entrenched `DEC-NNN-XX` (3-part) refs in the corpus are *external* forgettable
@@ -440,12 +439,7 @@ plus per-verb black-box goldens.
   *citable* target; how memory cites or is promoted into one is owned elsewhere when v2
   opens it.
 - OQ-2 — should a record ever be a **first-class blocker** in the priority graph?
-  **Resolved: yes** — records are meant to gate work directly (D7, the priority-engine
-  posture). The blocker is mechanism, not intent: SL-047's status partition is **binary**
-  (`workable | terminal`), and blocking is reserved to non-terminal nodes — which are also
-  necessarily `eligible` and thus `next`-actionable, so there is no "blocks but is not
-  itself work" class. The fix — a third `Gating` status-class decoupling blocking from
-  eligibility, plus a record→item gating edge into the `dep` overlay — is a priority-engine
-  (SPEC-001/PRD-011) change tracked as **IMP-047**, out of this surface's scope. Until it
-  lands records are `Terminal`-inert and gate only via a spawned backlog proxy (PRD-010
-  §6). This OQ now tracks IMP-047, not an open design question.
+  **Resolved: yes, landed as SL-158.** Records gate work directly via the trinary
+  partition (SPEC-001 D13, ADR-017): unsettled records are `Gating` (blocks dependents
+  but never eligible), settled → `Terminal` (unblocks for free). A work item authors
+  `needs → <record>` (REQ-239) to create the blocking edge. Closed.

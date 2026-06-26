@@ -174,6 +174,10 @@ the engine. ADR-017's source-only premise (D2) is reconciled in ADR prose at clo
   message; add admission + refusal tests.
 - **`src/relation.rs`** — add `RECORD` to a `references`/`concerns` source-set (D6);
   authoring-test for `link QUE references SL`.
+- **`src/knowledge.rs`** — D3 confirmatory test (VT-7): estimate round-trip on a record
+  (auxiliary test infrastructure, not a production seam).
+- **`src/relation_graph.rs`** — fixture updates: add `references(concerns)` edges to
+  knowledge-kind seeds in per-kind edge-label tests (auxiliary test infrastructure).
 - **`.doctrine/spec/tech/001/` (SPEC-001) + PRD-011** — D-decision + requirement (D4).
 - **`.doctrine/spec/tech/019/` (SPEC-019)** — D7 / NF-003 / OQ-2 revision (D4).
 

@@ -353,6 +353,35 @@ urgency, or product vocabulary in the crate).
   same kind's terminal-status item and any workable-but-`dep`-blocked item; the order
   is identical under input permutation.
 
+- **D13 — trinary partition: a third `Gating` class splits `eligible` from `blocks`
+  (SL-158 / ADR-017).** The D12 workable|terminal binary is sufficient for kinds
+  whose lifecycle is work-shaped, but knowledge records (ASM/DEC/QUE/CON, PRD-010)
+  are *never work* — an open question or held assumption must gate dependent work
+  without ever surfacing as actionable itself. D13 extends the partition to a
+  three-way cover:
+  - **`Workable`** — `eligible` (appears in `next`).
+  - **`Gating`** — non-eligible (never in `next`) but non-Terminal (blocks
+    dependents via the dep overlay). Records' unsettled states (ASM `held`/`testing`,
+    DEC `proposed`, QUE `open`, CON `active`) are `Gating`; settling → `Terminal`
+    unblocks dependents for free.
+  - **`Terminal`** — default-excluded, never blocks.
+  - **`Unrecognised`** — conservative default (non-eligible, diagnostic).
+  The channel layer is unchanged: `eligible == Workable` and `blocked_by` keeps
+  `!= Terminal` — the new variant slots into the existing pole reads with zero code
+  change in `channels.rs`/`graph.rs`/`render.rs`. The three-way cover reduces to the
+  binary wherever `gating == ∅` (all non-knowledge kinds). *SL-158 implements;
+  verified by VT-1 (three-way cover canary), VT-2 (class boundary), VT-5 (Gating
+  not eligible), VT-8 (knowledge-in-priority golden).*
+
+- **REQ-239 — records as admissible `needs`/`after` targets.** A work item may
+  author `needs → <record>` (and `after → <record>`, inert since records are never
+  eligible for ordering). The target gate (`is_admissible_dep_target`)
+  widens from work-like-only to work-like ∪ records (ASM/DEC/QUE/CON).
+  Governance (SPEC/ADR/POL/STD) stays excluded — depending on canon routes through
+  a Revision. The source gate (`is_work_like`) is unchanged — records cannot author
+  dep/seq. *SL-158 D2 implements; verified by VT-3 (gate blocks), VT-4
+  (settle→unblock), VT-6 (admissibility).*
+
 ## Open Questions
 
 Local to this spec. PRD-011 OQ-003 / OQ-005 / OQ-008 are closed above (D1 / D5 /

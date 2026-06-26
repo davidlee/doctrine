@@ -1,0 +1,52 @@
+id    = 167
+slug  = "sl-158-audit-trinary-actionability"
+title = "SL-158 Audit — Trinary actionability"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-158"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Conformance: undeclared files (knowledge.rs, relation_graph.rs)"
+detail = "Design-target selectors declared src/priority/partition.rs, src/commands/dep_seq.rs, src/relation.rs, .doctrine/spec/tech/001/**, .doctrine/spec/tech/019/**. Two additional files were touched: src/knowledge.rs (D3 VT-7 estimate round-trip test on records) and src/relation_graph.rs (fixture updates to include references(concerns) edges for knowledge kinds). These are test infrastructure additions supporting the design, not scope creep. They should either be added to design-target selectors or acknowledged as auxiliary test scaffolding."
+disposition = "aligned"
+response = "Acknowledged. These are test infrastructure additions required for VT verification. Design-target selectors should be widened in design.md at reconcile."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Conformance: undelivered specs (SPEC-001, SPEC-019) — by design"
+detail = "Design-target selectors include .doctrine/spec/tech/001/** and .doctrine/spec/tech/019/**. These were not edited. This is by design per D4 ('Canon moves first — authored through design→reconcile, not hand-edited ahead of the engine'). The spec changes (D-decision + requirement for trinary class; SPEC-019 D7/NF-003/OQ-2 revision) are delegated to /reconcile."
+disposition = "aligned"
+response = "Confirmed. D4 explicitly defers spec authorship to reconcile. Not a gap."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "ADR-017 premise correction: prose reconciliation needed at close"
+detail = "ADR-017 claimed the needs work-like gate is source-only ('a work item may target a record today'). D2 proved this false — the target was also gated as work-like. The code fix (D2 target-gate widening) is complete, but ADR-017 prose still carries the incorrect premise. Per design.md §D2 and notes.md: 'ADR-017 prose reconciled at close (follow-up).' This is a reconcile-time action."
+disposition = "aligned"
+response = "Confirmed. The code is correct; ADR-017 prose reconciliation is a reconcile-time follow-up tracked in the reconciliation brief."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Behaviour-preservation gate holds — all existing suites green"
+detail = "Full test suite: 2607 passed, 0 failed, 1 ignored (pre-existing). The two design-flipped partition tests (every_knowledge_status_classifies_terminal_never_workable, knowledge_partitions_cover_the_real_vocabularies) were correctly revised as consumer revisions. decision_accepted_diverges_hidden_from_status_class stays green unchanged. All priority, dep/seq, and relation suites pass. The three-way cover reduces to binary where gating==∅."
+disposition = "aligned"
+response = "Confirmed. All 2607 tests pass. The two consumer-revision tests correctly reflect the new trinary partition. Behaviour-preservation holds."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
