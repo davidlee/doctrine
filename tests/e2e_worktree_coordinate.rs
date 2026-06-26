@@ -29,7 +29,11 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// The coordination branch for slice 64 — `dispatch/{64:03}`.
 const COORD_BRANCH: &str = "dispatch/064";
@@ -108,7 +112,7 @@ fn marker_exists(root: &Path) -> bool {
 /// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
 /// DOCTRINE_WORKER=1; None removes it).
 fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
-    let mut cmd = Command::new(BIN);
+    let mut cmd = Command::new(bin());
     cmd.args(args).current_dir(cwd);
     match worker {
         Some(true) => {

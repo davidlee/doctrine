@@ -18,7 +18,11 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -53,7 +57,7 @@ fn seed_slice(root: &Path, id: u32, title: &str, slug: &str) {
 
 /// Spawn the MCP server subprocess with piped stdin/stdout.
 fn spawn_server(root: &Path) -> Child {
-    Command::new(BIN)
+    Command::new(bin())
         .arg("serve")
         .arg("--mcp")
         .arg("--path")

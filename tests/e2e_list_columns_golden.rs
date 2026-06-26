@@ -57,7 +57,11 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -65,7 +69,7 @@ fn tmp() -> tempfile::TempDir {
 
 /// `doctrine <kind> list <extra...> -p <root>` over the built binary.
 fn list(root: &Path, kind: &str, extra: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .arg(kind)
         .arg("list")
         .args(extra)

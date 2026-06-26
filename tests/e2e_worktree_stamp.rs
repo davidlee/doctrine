@@ -29,7 +29,11 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -90,7 +94,7 @@ fn marker_path(root: &Path) -> PathBuf {
 /// Some(true) sets DOCTRINE_WORKER=1; None removes it. CARGO_TARGET_DIR removed so
 /// provisioning into the fork is deterministic under the test.
 fn run(cwd: &Path, worker: Option<bool>, payload: &str, args: &[&str]) -> Output {
-    let mut cmd = Command::new(BIN);
+    let mut cmd = Command::new(bin());
     cmd.args(args)
         .current_dir(cwd)
         .env_remove("CARGO_TARGET_DIR")

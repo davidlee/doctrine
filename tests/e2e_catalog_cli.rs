@@ -15,7 +15,11 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 // --------------- fixture helpers (same seed as e2e_sl071_equivalence) ---------------
 
@@ -81,7 +85,7 @@ fn catalog_scan_json_valid() {
     let tmp = tempfile::tempdir().unwrap();
     seed_fixture(tmp.path());
 
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["catalog", "scan", "--root"])
         .arg(tmp.path())
         .output()
@@ -123,7 +127,7 @@ fn catalog_graph_json_valid() {
     let tmp = tempfile::tempdir().unwrap();
     seed_fixture(tmp.path());
 
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["catalog", "graph", "--root"])
         .arg(tmp.path())
         .output()
@@ -150,7 +154,7 @@ fn catalog_graph_json_valid() {
 
 #[test]
 fn catalog_scan_nonexistent_root_exits_nonzero() {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["catalog", "scan", "--root", "/nonexistent"])
         .output()
         .expect("spawn doctrine");
