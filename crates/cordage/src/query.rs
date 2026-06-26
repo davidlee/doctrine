@@ -9,39 +9,72 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::{
     Channel, ChannelDiagReason, ChannelDiagnostic, ChannelSpec, ChannelValue, Combinator,
-    Direction, InIndex, NodeId, OutIndex, OverlayId, ValueKind,
+    Direction, InIndex, NodeId, OutIndex, OverlayId, Reach, ValueKind,
 };
 
-/// Breadth-first discovery order from `start` over the `neighbours` relation:
-/// each reachable node yielded exactly once, `start` first. A FIFO frontier and a
+/// A breadth-first walk from `start`: the discovery `order` (`start` first, each
+/// node once), each node's min-hop `depth` from `start` (`start` at 0), and whether
+/// an `max_depth` cap suppressed a successor that was still unvisited (`truncated`).
+struct BfsWalk {
+    order: Vec<NodeId>,
+    depths: BTreeMap<NodeId, usize>,
+    truncated: bool,
+}
+
+/// Breadth-first discovery from `start` over the `neighbours` relation: each
+/// reachable node yielded exactly once, `start` first. A FIFO frontier and a
 /// visited set make it deterministic (given `neighbours` in adjacency-key order)
 /// and cycle-safe over a degraded `Reject` view — the visited set bounds re-entry
 /// (F12/F47). The single locus of that invariant, shared by `reachable` and
 /// `spine_path`. `neighbours` may yield a `Vec` (many successors) or an `Option`
 /// (≤1 successor) — `IntoIterator` covers both with no wrapper allocation.
 ///
+/// The FIFO frontier yields nodes in non-decreasing depth, so a node's first visit
+/// is its min-hop distance (SL-138 D6). `max_depth: Some(k)` bounds the walk to
+/// depth `k`: a node at depth `k` is kept, but its successors (depth `k+1`) are not
+/// enqueued. `truncated` is set when such a suppressed successor was still unvisited
+/// — by BFS ordering it is genuinely deeper than `k` (never a shallower node reached
+/// another way, F5). `None` is unbounded — byte-identical to the pre-SL-138 walk.
+///
 /// Deliberately NOT the basis of `cone_on_overlay`: the cone records each node's
 /// full pred-set as map values and must terminate at degraded-SCC entries
 /// (record, don't expand) — neither fits discovery order (SL-140 design D2).
-fn walk_bfs<I>(start: NodeId, neighbours: impl Fn(NodeId) -> I) -> Vec<NodeId>
+fn walk_bfs<I>(start: NodeId, max_depth: Option<usize>, neighbours: impl Fn(NodeId) -> I) -> BfsWalk
 where
     I: IntoIterator<Item = NodeId>,
 {
     let mut order = vec![start];
+    let mut depths: BTreeMap<NodeId, usize> = BTreeMap::new();
+    depths.insert(start, 0);
     let mut visited: BTreeSet<NodeId> = BTreeSet::new();
     visited.insert(start);
-    let mut frontier: VecDeque<NodeId> = VecDeque::new();
-    frontier.push_back(start);
-    while let Some(node) = frontier.pop_front() {
+    let mut frontier: VecDeque<(NodeId, usize)> = VecDeque::new();
+    frontier.push_back((start, 0));
+    let mut truncated = false;
+    while let Some((node, depth)) = frontier.pop_front() {
+        let at_cap = matches!(max_depth, Some(cap) if depth >= cap);
         for next in neighbours(node) {
+            if at_cap {
+                // A successor beyond the cap: flag truncation only if it is not
+                // already reached within the cap via another (shallower) path.
+                if !visited.contains(&next) {
+                    truncated = true;
+                }
+                continue;
+            }
             // visited carries `start`, so a cycle back to it never re-adds it.
             if visited.insert(next) {
+                depths.insert(next, depth + 1);
                 order.push(next);
-                frontier.push_back(next);
+                frontier.push_back((next, depth + 1));
             }
         }
     }
-    order
+    BfsWalk {
+        order,
+        depths,
+        truncated,
+    }
 }
 
 /// The strict reachable set of `start` on `overlay` in `direction` (I6/F8):
@@ -49,8 +82,8 @@ where
 /// out-edges, `Against` walks in-edges, `None` yields ∅ (F25). A foreign overlay
 /// or node yields ∅ (F14). Cycle-safe via `walk_bfs`'s visited set (F12).
 ///
-/// Strictness is `skip(1)`: `start` is always `walk_bfs`'s first (index-0)
-/// element and is never re-emitted, so dropping it yields exactly `{n} \ {start}`.
+/// Re-expressed over `reachable_bounded(.., None)` (SL-138): the unbounded depth
+/// map's keys, `start` already removed, are exactly the strict reachable set.
 pub(crate) fn reachable(
     out: &OutIndex,
     incoming: &InIndex,
@@ -58,12 +91,37 @@ pub(crate) fn reachable(
     start: NodeId,
     direction: Direction,
 ) -> BTreeSet<NodeId> {
-    walk_bfs(start, |node| {
+    reachable_bounded(out, incoming, overlay, start, direction, None)
+        .depths
+        .into_keys()
+        .collect()
+}
+
+/// The depth-tagged reachable set of `start` on `overlay` in `direction`, bounded by
+/// `max_depth` (SL-138 §5). `Reach::depths` maps each strictly-reachable node to its
+/// min-hop distance from `start` (`start` excluded, preserving I6/F8 strictness);
+/// `Reach::truncated` is true iff the cap suppressed a successor genuinely deeper than
+/// it (F5). `max_depth: None` is unbounded — the closure `reachable` returns. `Along`
+/// walks out-edges, `Against` in-edges, `None` yields an empty `Reach`; a foreign
+/// overlay or node likewise (F14/F25). Cycle-safe via `walk_bfs`'s visited set.
+pub(crate) fn reachable_bounded(
+    out: &OutIndex,
+    incoming: &InIndex,
+    overlay: OverlayId,
+    start: NodeId,
+    direction: Direction,
+    max_depth: Option<usize>,
+) -> Reach {
+    let mut walk = walk_bfs(start, max_depth, |node| {
         neighbours(out, incoming, overlay, node, direction)
-    })
-    .into_iter()
-    .skip(1)
-    .collect()
+    });
+    // Strictness: `start` is the only depth-0 entry and is never re-emitted, so
+    // dropping it yields exactly `{reachable} \ {start}`.
+    walk.depths.remove(&start);
+    Reach {
+        depths: walk.depths,
+        truncated: walk.truncated,
+    }
 }
 
 /// The spine chain of `node`: follow the single kept parent (pass-1 arity left
@@ -75,7 +133,8 @@ pub(crate) fn reachable(
 /// `single_parent` yields ≤1 successor, so the discovery order degenerates to the
 /// linear chain `node → … → root`; `reverse` makes it ancestor-first.
 pub(crate) fn spine_path(incoming: &InIndex, overlay: OverlayId, node: NodeId) -> Vec<NodeId> {
-    let mut chain = walk_bfs(node, |cur| single_parent(incoming, overlay, cur));
+    // Unbounded walk; the spine consumes discovery order only — depth is irrelevant.
+    let mut chain = walk_bfs(node, None, |cur| single_parent(incoming, overlay, cur)).order;
     chain.reverse();
     chain
 }

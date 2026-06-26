@@ -131,6 +131,19 @@ pub enum Direction {
     None,
 }
 
+/// A depth-bounded reachable set ([`Graph::reachable_bounded`]). `depths` maps each
+/// strictly-reachable node to its **min-hop** distance from the start (`start`
+/// excluded, preserving reachability strictness); `truncated` is true iff a depth
+/// cap suppressed a successor that was still unvisited — by BFS ordering, genuinely
+/// deeper than the cap, never a node reachable within it by another path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reach {
+    /// Node → min hops from the start node (`start` itself absent).
+    pub depths: BTreeMap<NodeId, usize>,
+    /// Whether the depth cap cut a genuinely-deeper successor short.
+    pub truncated: bool,
+}
+
 /// A channel value. The variant a [`Combinator`] consumes/emits is fixed by its
 /// domain (see the propagation contract).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -811,6 +824,30 @@ impl Graph {
         direction: Direction,
     ) -> BTreeSet<NodeId> {
         query::reachable(&self.out, &self.incoming, overlay, node, direction)
+    }
+
+    /// The depth-bounded reachable set of `node` on `overlay` in `direction` — the
+    /// strict successors (excluding `node`, I6/F8) tagged with their min-hop depth,
+    /// plus a `truncated` flag when `max_depth` cut a genuinely-deeper successor
+    /// short (SL-138 §5). `max_depth: None` is unbounded — its `depths` keys are
+    /// exactly [`reachable`](Self::reachable). `Along` walks out-edges, `Against`
+    /// in-edges, `None` yields an empty [`Reach`]; a foreign overlay or node likewise
+    /// (F14/F25). Total and terminating over a degraded `Reject` view (F12).
+    pub fn reachable_bounded(
+        &self,
+        overlay: OverlayId,
+        node: NodeId,
+        direction: Direction,
+        max_depth: Option<usize>,
+    ) -> Reach {
+        query::reachable_bounded(
+            &self.out,
+            &self.incoming,
+            overlay,
+            node,
+            direction,
+            max_depth,
+        )
     }
 
     /// The spine chain of `node` on `overlay`, **root → … → node** — or `None`

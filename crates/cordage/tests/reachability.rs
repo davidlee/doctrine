@@ -4,7 +4,7 @@
 //! ids minted by the builder, no vocabulary.
 
 use cordage::{Arity, CyclePolicy, Direction, EdgeAttrs, GraphBuilder, OverlayConfig};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn reject() -> OverlayConfig {
     OverlayConfig::new(CyclePolicy::Reject, Arity::Unbounded)
@@ -16,6 +16,12 @@ fn at_most_one() -> OverlayConfig {
 
 fn set<const N: usize>(ids: [cordage::NodeId; N]) -> BTreeSet<cordage::NodeId> {
     ids.into_iter().collect()
+}
+
+fn depths<const N: usize>(
+    entries: [(cordage::NodeId, usize); N],
+) -> BTreeMap<cordage::NodeId, usize> {
+    entries.into_iter().collect()
 }
 
 #[test]
@@ -126,6 +132,144 @@ fn spine_path_follows_the_arity_kept_parent() {
     let g = b.build().expect("valid");
 
     assert_eq!(g.spine_path(ov, n), Some(vec![p_hi, n]));
+}
+
+// ── reachable_bounded (SL-138 PHASE-01) ───────────────────────────────────────
+
+#[test]
+fn reachable_bounded_records_min_hop_depth() {
+    // Diamond: a→b→d (d at 2 hops) and a→c→e→d (d at 3 hops). BFS first-visit wins,
+    // so the shorter path sets depth[d] = 2 (VT-2).
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let na = b.node();
+    let nb = b.node();
+    let nc = b.node();
+    let nd = b.node();
+    let ne = b.node();
+    b.edge(ov, na, nb, EdgeAttrs::new(0, 0));
+    b.edge(ov, nb, nd, EdgeAttrs::new(0, 0));
+    b.edge(ov, na, nc, EdgeAttrs::new(0, 0));
+    b.edge(ov, nc, ne, EdgeAttrs::new(0, 0));
+    b.edge(ov, ne, nd, EdgeAttrs::new(0, 0));
+    let g = b.build().expect("valid");
+
+    let r = g.reachable_bounded(ov, na, Direction::Along, None);
+    assert_eq!(r.depths, depths([(nb, 1), (nc, 1), (nd, 2), (ne, 2)]));
+    assert!(!r.truncated);
+}
+
+#[test]
+fn reachable_bounded_cap_excludes_deeper_and_flags_truncation() {
+    // Chain a→b→c→d. Some(2) keeps b,c and excludes d; c sits at the cap with an
+    // unvisited successor (d) ⟹ truncated. Some(3) reaches the leaf, no truncation.
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let na = b.node();
+    let nb = b.node();
+    let nc = b.node();
+    let nd = b.node();
+    b.edge(ov, na, nb, EdgeAttrs::new(0, 0));
+    b.edge(ov, nb, nc, EdgeAttrs::new(0, 0));
+    b.edge(ov, nc, nd, EdgeAttrs::new(0, 0));
+    let g = b.build().expect("valid");
+
+    let capped = g.reachable_bounded(ov, na, Direction::Along, Some(2));
+    assert_eq!(capped.depths, depths([(nb, 1), (nc, 2)]));
+    assert!(capped.truncated);
+
+    let full = g.reachable_bounded(ov, na, Direction::Along, Some(3));
+    assert_eq!(full.depths, depths([(nb, 1), (nc, 2), (nd, 3)]));
+    assert!(!full.truncated);
+}
+
+#[test]
+fn reachable_bounded_truncation_false_when_closure_ends_at_cap() {
+    // Chain a→b→c, c a leaf. Some(2) reaches exactly to the cap with no unvisited
+    // successor beyond it ⟹ NOT truncated (the BFS-ordering invariant, F5).
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let na = b.node();
+    let nb = b.node();
+    let nc = b.node();
+    b.edge(ov, na, nb, EdgeAttrs::new(0, 0));
+    b.edge(ov, nb, nc, EdgeAttrs::new(0, 0));
+    let g = b.build().expect("valid");
+
+    let r = g.reachable_bounded(ov, na, Direction::Along, Some(2));
+    assert_eq!(r.depths, depths([(nb, 1), (nc, 2)]));
+    assert!(!r.truncated);
+}
+
+#[test]
+fn reachable_bounded_unbounded_matches_legacy_reachable() {
+    // None == today's strict `reachable` set on a fixture (VT-1, behaviour-preservation).
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let na = b.node();
+    let nb = b.node();
+    let nc = b.node();
+    b.edge(ov, na, nb, EdgeAttrs::new(0, 0));
+    b.edge(ov, nb, nc, EdgeAttrs::new(0, 0));
+    let g = b.build().expect("valid");
+
+    let r = g.reachable_bounded(ov, na, Direction::Along, None);
+    let keys: BTreeSet<cordage::NodeId> = r.depths.into_keys().collect();
+    assert_eq!(keys, g.reachable(ov, na, Direction::Along));
+}
+
+#[test]
+fn reachable_bounded_terminates_on_a_reject_cycle_under_cap() {
+    // a ↔ b on a Reject overlay (cyclic, diagnosed). A capped walk must terminate
+    // and stay strict — the visited set bounds re-entry to `start` (VT-4).
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let na = b.node();
+    let nb = b.node();
+    b.edge(ov, na, nb, EdgeAttrs::new(0, 0));
+    b.edge(ov, nb, na, EdgeAttrs::new(0, 0));
+    let g = b.build().expect("valid");
+    assert!(!g.provenance().cycles().is_empty());
+
+    let r = g.reachable_bounded(ov, na, Direction::Along, Some(1));
+    // b reached at depth 1; b's only successor is `start` (already visited) — no
+    // unvisited successor beyond the cap, so not truncated and start stays excluded.
+    assert_eq!(r.depths, depths([(nb, 1)]));
+    assert!(!r.truncated);
+}
+
+#[test]
+fn reachable_bounded_none_direction_is_empty() {
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let na = b.node();
+    let nb = b.node();
+    b.edge(ov, na, nb, EdgeAttrs::new(0, 0));
+    let g = b.build().expect("valid");
+
+    let r = g.reachable_bounded(ov, na, Direction::None, Some(5));
+    assert!(r.depths.is_empty());
+    assert!(!r.truncated);
+}
+
+#[test]
+fn reachable_bounded_foreign_ids_are_empty() {
+    let mut sib = GraphBuilder::new();
+    let foreign_ov = sib.overlay(reject());
+    let mut foreign_node = sib.node();
+    for _ in 0..4 {
+        foreign_node = sib.node();
+    }
+
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let n = b.node();
+    let g = b.build().expect("valid");
+
+    let by_overlay = g.reachable_bounded(foreign_ov, n, Direction::Along, None);
+    assert!(by_overlay.depths.is_empty() && !by_overlay.truncated);
+    let by_node = g.reachable_bounded(ov, foreign_node, Direction::Along, None);
+    assert!(by_node.depths.is_empty() && !by_node.truncated);
 }
 
 #[test]

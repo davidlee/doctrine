@@ -1,7 +1,7 @@
 id = 138
 slug = "relation-transitive-walk"
 title = "Relation-transitive walk for inspect — analogous to blockers --transitive"
-status = "ready"
+status = "started"
 created = "2026-06-21"
 updated = "2026-06-26"
 
