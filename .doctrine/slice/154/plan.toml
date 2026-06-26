@@ -95,6 +95,7 @@ verification = [
   { id = "VT-2", expects = "liveness: a prunable/deleted coord entry → guard treats it as absent → solo capture records (not suppressed forever)." },
   { id = "VT-3", expects = "reopen eviction: complete a phase (row present) → reopen → row evicted + stamp cleared → re-complete with a fresh range → exactly one fresh row." },
   { id = "VT-4", expects = "solo stamp-present capture is unchanged (behaviour-preservation)." },
+  { id = "VT-5", expects = "irreducible floor (design §5.5/§9): a completed pure-solo phase with NO stamped start (and no coord worktree) records NO row + warns; registry_completeness/conformance then reports Incomplete naming the phase (record-delta remedy) — the accepted floor never silently passes. Pins EX-2's absent-stamp branch end-to-end against the untouched conformance consumer." },
 ]
 specs        = []
 requirements = []
