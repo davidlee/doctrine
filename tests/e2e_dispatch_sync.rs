@@ -59,6 +59,23 @@ fn commit(dir: &Path, path: &str, content: &str, msg: &str) -> String {
     git(dir, &["rev-parse", "HEAD"])
 }
 
+/// Seed runtime phase-tracking in the PRIMARY tree marking each phase
+/// `completed`, so prepare-review's PHASE-05 completeness gate (design §5.2) sees
+/// a complete slice — the post-completion conclude beat it now is. Runtime state:
+/// gitignored, written to the working filesystem, never committed.
+fn seed_completed_phases(dir: &Path, slice: u32, phases: &[&str]) {
+    let pdir = dir.join(format!(".doctrine/state/slice/{slice:03}/phases"));
+    std::fs::create_dir_all(&pdir).unwrap();
+    for p in phases {
+        let stem = format!("phase-{}", p.strip_prefix("PHASE-").unwrap_or(p));
+        std::fs::write(
+            pdir.join(format!("{stem}.toml")),
+            "status = \"completed\"\n",
+        )
+        .unwrap();
+    }
+}
+
 /// The built fixture's captured OIDs.
 struct Fixture {
     base: String,
@@ -75,6 +92,11 @@ fn build_fixture(dir: &Path) -> Fixture {
     git(dir, &["init", "-q", "-b", "main"]);
     git(dir, &["config", "user.email", "t@example.com"]);
     git(dir, &["config", "user.name", "Test"]);
+    // Runtime state is gitignored (as in production) so prepare-review's derive
+    // (which writes the registry under `.doctrine/state/`) and the seeded phase
+    // tracking never dirty the working tree — the integrate tests assert clean status.
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
+    git(dir, &["add", ".gitignore"]);
     let base = commit(dir, "trunk.txt", "trunk", "base");
 
     git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
@@ -111,6 +133,9 @@ fn build_fixture(dir: &Path) -> Fixture {
     git(dir, &["commit", "-q", "-m", "ledger fixtures"]);
 
     git(dir, &["checkout", "-q", "main"]);
+    // prepare-review is the pre-audit conclude beat (design §5.2): its PHASE-05
+    // completeness gate requires every ledger phase to be `completed`.
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02", "PHASE-03"]);
     Fixture {
         base,
         code_end_1,
@@ -486,6 +511,10 @@ fn build_fixture_uncommitted_ledger(dir: &Path, ledger: &str) -> std::path::Path
     git(dir, &["init", "-q", "-b", "main"]);
     git(dir, &["config", "user.email", "t@example.com"]);
     git(dir, &["config", "user.name", "Test"]);
+    // Gitignore runtime state (as production) — prepare-review's derive writes the
+    // registry under `.doctrine/state/`; without this it would dirty the tree.
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
+    git(dir, &["add", ".gitignore"]);
     commit(dir, "trunk.txt", "trunk", "base");
 
     git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
@@ -506,10 +535,19 @@ fn build_fixture_uncommitted_ledger(dir: &Path, ledger: &str) -> std::path::Path
     let coord = dir.join(".coord-064");
     git(
         dir,
-        &["worktree", "add", "-q", coord.to_str().unwrap(), "dispatch/064"],
+        &[
+            "worktree",
+            "add",
+            "-q",
+            coord.to_str().unwrap(),
+            "dispatch/064",
+        ],
     );
     std::fs::create_dir_all(coord.join(".doctrine/dispatch/064")).unwrap();
     std::fs::write(coord.join(".doctrine/dispatch/064/boundaries.toml"), ledger).unwrap();
+    // The PHASE-05 completeness gate roots on the PRIMARY tree (`dir`), not the
+    // coord worktree — seed completion there (design §5.2: gate is primary-rooted).
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02", "PHASE-03"]);
     coord
 }
 
@@ -596,7 +634,10 @@ fn commit_boundaries_is_content_idempotent_on_rerun() {
     assert!(prepare_review(dir).status.success(), "first run projects");
     let blob_before = git(
         dir,
-        &["rev-parse", "dispatch/064:.doctrine/dispatch/064/boundaries.toml"],
+        &[
+            "rev-parse",
+            "dispatch/064:.doctrine/dispatch/064/boundaries.toml",
+        ],
     );
 
     // Re-run on the UNCHANGED working ledger. The full run bails on the already-
@@ -605,7 +646,10 @@ fn commit_boundaries_is_content_idempotent_on_rerun() {
     let _ = prepare_review(dir);
     let blob_after = git(
         dir,
-        &["rev-parse", "dispatch/064:.doctrine/dispatch/064/boundaries.toml"],
+        &[
+            "rev-parse",
+            "dispatch/064:.doctrine/dispatch/064/boundaries.toml",
+        ],
     );
     assert_eq!(
         blob_before, blob_after,
@@ -614,7 +658,13 @@ fn commit_boundaries_is_content_idempotent_on_rerun() {
 
     let boundaries_commits = git(
         dir,
-        &["log", "--grep", "ledger: boundaries", "--oneline", "dispatch/064"],
+        &[
+            "log",
+            "--grep",
+            "ledger: boundaries",
+            "--oneline",
+            "dispatch/064",
+        ],
     );
     assert_eq!(
         boundaries_commits.lines().count(),
@@ -1355,6 +1405,18 @@ fn record_boundary_also_writes_the_arm_neutral_registry() {
         neutral.contains(&fx.code_end_1),
         "neutral end oid: {neutral}"
     );
+
+    // (3) SL-154 PHASE-05 EX-1 pin: the funnel stamps `provenance = funnel` on
+    // BOTH writes — the committed ledger and the registry — so the prepare-review
+    // guard/derive (D11) can discriminate funnel-owned rows from solo/manual.
+    assert!(
+        committed.contains("provenance = \"funnel\""),
+        "committed ledger stamps funnel provenance: {committed}"
+    );
+    assert!(
+        neutral.contains("provenance = \"funnel\""),
+        "registry stamps funnel provenance: {neutral}"
+    );
 }
 
 // ====================================================================
@@ -1680,5 +1742,285 @@ fn vt2_close_integration_honours_deliver_to_override() {
         stderr(&out).contains("not integrated to trunk"),
         "refusal cites the integration gate: {}",
         stderr(&out)
+    );
+}
+
+// ============================================================================
+// SL-154 PHASE-05 (ISS-052) — projection-source guard (D11) + derive + the
+// primary-rooted completeness gate at prepare-review, ALL before the ref
+// projection (design §5.2). A halt creates NO review/phase refs.
+// ============================================================================
+
+/// A dispatch repo: `main` (trunk + a gitignored runtime tier) and a
+/// `dispatch/064` branch carrying two code phases, but NO committed boundaries
+/// ledger — the caller commits a ledger / seeds the registry per scenario.
+fn build_guard_repo(dir: &Path) -> (String, String, String) {
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-q", "-b", "main"]);
+    git(dir, &["config", "user.email", "t@example.com"]);
+    git(dir, &["config", "user.name", "Test"]);
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
+    git(dir, &["add", ".gitignore"]);
+    let base = commit(dir, "trunk.txt", "trunk", "base");
+    git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
+    let c1 = commit(dir, "src1.txt", "a", "phase1 code");
+    let c2 = commit(dir, "src2.txt", "b", "phase2 code");
+    git(dir, &["checkout", "-q", "main"]);
+    (base, c1, c2)
+}
+
+/// Commit a boundaries-ledger body onto `dispatch/064`, then return to `main`.
+fn commit_ledger_on_dispatch(dir: &Path, body: &str) {
+    git(dir, &["checkout", "-q", "dispatch/064"]);
+    let p = dir.join(".doctrine/dispatch/064");
+    std::fs::create_dir_all(&p).unwrap();
+    std::fs::write(p.join("boundaries.toml"), body).unwrap();
+    git(dir, &["add", ".doctrine/dispatch/064"]);
+    git(dir, &["commit", "-q", "-m", "ledger"]);
+    git(dir, &["checkout", "-q", "main"]);
+}
+
+/// Write the runtime registry (primary tree) directly — a pre-existing row state.
+fn seed_registry(dir: &Path, body: &str) {
+    let p = dir.join(".doctrine/state/slice/064");
+    std::fs::create_dir_all(&p).unwrap();
+    std::fs::write(p.join("boundaries.toml"), body).unwrap();
+}
+
+fn boundary_row(phase: &str, start: &str, end: &str, provenance: &str) -> String {
+    format!(
+        "[[boundary]]\nphase = \"{phase}\"\ncode_start_oid = \"{start}\"\ncode_end_oid = \"{end}\"\nprovenance = \"{provenance}\"\n"
+    )
+}
+
+/// `doctrine slice record-delta 64 <phase> --start <a> --end <b>` (Manual escape hatch).
+fn record_delta(dir: &Path, phase: &str, start: &str, end: &str) -> Output {
+    run(
+        dir,
+        None,
+        &[
+            "slice",
+            "record-delta",
+            "64",
+            phase,
+            "--start",
+            start,
+            "--end",
+            end,
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    )
+}
+
+/// Run prepare-review from an arbitrary `cwd`, rooted at `root` (for the
+/// coord-cwd case `primary_worktree(root)` resolves up to the main tree).
+fn prepare_review_from(cwd: &Path, root: &Path) -> Output {
+    run(
+        cwd,
+        None,
+        &[
+            "dispatch",
+            "sync",
+            "--prepare-review",
+            "--slice",
+            "64",
+            "-p",
+            root.to_str().unwrap(),
+        ],
+    )
+}
+
+// VT-1: total loss — the registry records funnel rows the committed ledger never
+// carried (coord worktree removed before prepare-review) → the guard halts naming
+// the phases, and NO review/phase refs are created.
+#[test]
+fn vt1_guard_halts_on_total_loss_creating_no_refs() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let (base, c1, c2) = build_guard_repo(dir);
+    seed_registry(
+        dir,
+        &format!(
+            "{}{}",
+            boundary_row("PHASE-01", &base, &c1, "funnel"),
+            boundary_row("PHASE-02", &c1, &c2, "funnel"),
+        ),
+    );
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02"]);
+
+    let out = prepare_review(dir);
+    assert!(!out.status.success(), "guard halts on total loss");
+    let err = stderr(&out);
+    assert!(
+        err.contains("PHASE-01") && err.contains("PHASE-02"),
+        "names the lost phases: {err}"
+    );
+    assert!(
+        !ref_exists(dir, "review/064"),
+        "no review ref created on halt"
+    );
+    assert!(
+        !ref_exists(dir, "phase/064-01"),
+        "no phase ref created on halt"
+    );
+}
+
+// VT-3: no false-halt — a Solo row (the binding, D11-excluded) plus a funnel
+// empty-code phase (start==end, recorded in BOTH ledgers) → prepare-review
+// succeeds. The guard never inspects code paths.
+#[test]
+fn vt3_no_false_halt_on_solo_rows_and_empty_code_phase() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let (base, c1, c2) = build_guard_repo(dir);
+    // Committed ledger: only the empty-code funnel phase 02 (start==end).
+    commit_ledger_on_dispatch(dir, &boundary_row("PHASE-02", &c2, &c2, "funnel"));
+    // Registry: a Solo binding row for 01 + the funnel empty-code 02.
+    seed_registry(
+        dir,
+        &format!(
+            "{}{}",
+            boundary_row("PHASE-01", &base, &c1, "solo"),
+            boundary_row("PHASE-02", &c2, &c2, "funnel"),
+        ),
+    );
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02"]);
+
+    let out = prepare_review(dir);
+    assert!(
+        out.status.success(),
+        "no false-halt on Solo + empty-code; stderr: {}",
+        stderr(&out)
+    );
+}
+
+// VT-5: derive is authoritative — a binding-written garbage row for a funnel
+// phase is overwritten by the committed-ledger row, and an N-row committed ledger
+// populates N registry rows.
+#[test]
+fn vt5_derive_overwrites_garbage_and_populates_every_row() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let (base, c1, c2) = build_guard_repo(dir);
+    commit_ledger_on_dispatch(
+        dir,
+        &format!(
+            "{}{}",
+            boundary_row("PHASE-01", &base, &c1, "funnel"),
+            boundary_row("PHASE-02", &c1, &c2, "funnel"),
+        ),
+    );
+    // A mis-firing binding wrote a GARBAGE range for funnel PHASE-01 (base..base).
+    seed_registry(dir, &boundary_row("PHASE-01", &base, &base, "funnel"));
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02"]);
+
+    let out = prepare_review(dir);
+    assert!(
+        out.status.success(),
+        "derive heals; stderr: {}",
+        stderr(&out)
+    );
+    let reg =
+        std::fs::read_to_string(dir.join(".doctrine/state/slice/064/boundaries.toml")).unwrap();
+    assert!(
+        reg.contains("PHASE-01") && reg.contains("PHASE-02"),
+        "all committed phases populate the registry: {reg}"
+    );
+    assert!(
+        reg.contains(&c1),
+        "the garbage PHASE-01 range is overwritten by the committed end {c1}: {reg}"
+    );
+}
+
+// VT-6: the gate is primary-rooted — run prepare-review from a COORD-tree cwd; a
+// phase completed only in the PRIMARY tree (no row) still halts the gate, proving
+// it reads the primary completed-set, not the coord cwd (the ISS-052 regression).
+#[test]
+fn vt6_gate_is_primary_rooted_when_run_from_coord_cwd() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    // Live coord on dispatch/064; the builder seeds PRIMARY completed 01/02/03.
+    let coord = build_fixture_uncommitted_ledger(dir, "");
+    let base = git(dir, &["rev-parse", "dispatch/064~3"]);
+    let c1 = git(dir, &["rev-parse", "dispatch/064~2"]);
+    let c2 = git(dir, &["rev-parse", "dispatch/064~1"]);
+    // The working ledger covers only 01/02 → PHASE-03 (completed in primary) is a gap.
+    std::fs::write(
+        coord.join(".doctrine/dispatch/064/boundaries.toml"),
+        format!(
+            "{}{}",
+            boundary_row("PHASE-01", &base, &c1, "funnel"),
+            boundary_row("PHASE-02", &c1, &c2, "funnel"),
+        ),
+    )
+    .unwrap();
+
+    let out = prepare_review_from(&coord, &coord);
+    assert!(
+        !out.status.success(),
+        "gate halts on the primary-completed gap even when run from the coord cwd"
+    );
+    assert!(
+        stderr(&out).contains("PHASE-03"),
+        "the halt names the primary-completed gap PHASE-03: {}",
+        stderr(&out)
+    );
+    assert!(
+        !ref_exists(dir, "review/064"),
+        "no refs created on the gate halt"
+    );
+}
+
+// VT-7: gate-before-projection — an incomplete registry halts with NO refs; after
+// the operator records the missing phase, a re-run projects cleanly (the headline
+// ISS-052 outcome — the clean re-run the PHASE-05 gate makes possible).
+#[test]
+fn vt7_gate_halts_before_projection_then_rerun_projects_after_fix() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let (base, c1, c2) = build_guard_repo(dir);
+    // Committed ledger covers 01/02 (funnel); PHASE-03 is completed but unrecorded.
+    commit_ledger_on_dispatch(
+        dir,
+        &format!(
+            "{}{}",
+            boundary_row("PHASE-01", &base, &c1, "funnel"),
+            boundary_row("PHASE-02", &c1, &c2, "funnel"),
+        ),
+    );
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02", "PHASE-03"]);
+
+    // Run 1: the gate halts (03 has no row) BEFORE projection — no refs created.
+    let out = prepare_review(dir);
+    assert!(!out.status.success(), "gate halts: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("PHASE-03"),
+        "the halt names the gap PHASE-03: {}",
+        stderr(&out)
+    );
+    assert!(
+        !ref_exists(dir, "review/064") && !ref_exists(dir, "phase/064-01"),
+        "gate-before-projection: NO refs exist after the halt"
+    );
+
+    // The operator records the missing phase (Manual escape hatch).
+    let rd = record_delta(dir, "PHASE-03", &c2, &c2);
+    assert!(rd.status.success(), "record-delta ok: {}", stderr(&rd));
+
+    // Run 2: the registry is complete → projects cleanly, refs created.
+    let out2 = prepare_review(dir);
+    assert!(
+        out2.status.success(),
+        "the clean re-run projects: {}",
+        stderr(&out2)
+    );
+    assert!(
+        ref_exists(dir, "review/064"),
+        "review ref created on the clean re-run"
+    );
+    assert!(
+        ref_exists(dir, "phase/064-01") && ref_exists(dir, "phase/064-02"),
+        "phase cuts created on the clean re-run"
     );
 }
