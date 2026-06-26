@@ -47,9 +47,11 @@ write `design.md`, record `design-target` selectors, adversarial review, then
   (2272) + its `label` arm `"raced-checkout-desync"` (2284). Trim the
   `AdvancedResynced` doc (2260-2264) — it's now *only* the checked-out ff leg, not
   "or a None-leg … resynced".
-- `report_integrate` (`dispatch.rs:1895+`): remove the `RacedDesync`
-  warning-line branch. **TODO next agent:** confirm exact lines (grep
-  `RacedDesync` / `raced-checkout-desync` in `report_integrate`).
+- `report_integrate` (`dispatch.rs:1895+`): **No structural change needed.**
+  `grep -rn RacedDesync` confirms zero matches in the `report_integrate` match
+  body — the variant was handled by the catch-all `disp =>` arm, identically to
+  all other non-NoOp dispositions. Only the stale doc-comment at line 1893
+  (mentions `raced-checkout-desync`) needs trimming. See `research.md` §3.
 - `git.rs`: remove `resync_worktree_hard` (**1373-1376**) + its unit test
   (`resync_worktree_hard_*`, ~**4023-4037**). Sole production caller is the deleted
   resync (OQ-D grep-confirmed).
