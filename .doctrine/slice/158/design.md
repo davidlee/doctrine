@@ -80,6 +80,13 @@ fn is_admissible_dep_target(kind) -> bool   // is_work_like(kind) ∨ is_record(
 The edge then rides the **existing** kind-agnostic `graph.rs` build (`needs` resolves
 any scanned target, emits `prereq→src`) — `graph.rs` is untouched.
 
+**`after` rides the same gate.** `resolve_dep_seq_src` is shared by `needs` *and*
+`after`, so widening the target predicate admits records as `after` targets too. This
+is **inert, not harmful**: `after` is soft sequence among workable items, and a record
+is never `eligible`, so it never participates in the seq ordering — `SL after QUE` writes
+a seq edge that orders nothing. We accept the shared widening (one predicate, minimal
+surface) rather than split a per-verb gate; the meaningful gating path is `needs`.
+
 ### D3 — estimate/value admissible on records (confirmatory; no code)
 
 `estimate` / `value` are already kind-agnostic (`estimate.rs`; no kind gate in
@@ -90,10 +97,15 @@ records the intent; a VT pins the round-trip.
 
 - `risk` stays **excluded**: kind-gated to risk-items, *and* its `[facet]` table name
   collides with knowledge records' typed kind-facet `[facet]`. Do not widen risk.
-- **Scoring consequence (named, accepted):** a record's `estimate`/`value` feed
-  `base_score`, and a record's base propagates into its dependents' **leverage**
-  (consequence post-pass). So a costly-to-settle gate raises its blocked work's score —
-  intended, not incidental.
+- **Scoring consequence — currently INERT (corrected).** A record's `estimate`/`value`
+  are read into the record's own `base_score`, but that base **does not propagate**: the
+  leverage DP flows *dependent → prereq* (`graph.rs:513`), and a record is always a prereq
+  with **no dep predecessors** (it can't author `needs`), so nothing downstream reads its
+  base. The record's own score is never displayed (not `eligible`). So estimate/value on a
+  record is authored-clean and round-trip-safe but has **zero scoring side-effect today** —
+  this is intent-capture, not a wiring change. Whether a *gate's cost* should influence its
+  blocked work's priority (leverage flows the wrong way for that) is a separate future
+  question, not in scope.
 - Surfacing estimate/value in `show`/`inspect` → **IMP-183** (out of scope).
 
 ### D4 — Canon moves first
