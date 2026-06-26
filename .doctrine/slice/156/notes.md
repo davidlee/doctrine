@@ -63,3 +63,29 @@ queried data lives in the TOMLs.
   classify_gc branch-gone bullet — both still claimed live env-contract / wt reaping).
 - Gate: 2589 unit + all worktree suites green, clippy clean; only the 22
   `e2e_dispatch_candidate` SL-154 reds remain (accepted baseline). VH-1 → reconcile.
+
+## PHASE-04 (commits 49ed6238, 70e6d3d7)
+
+- **Doc/memory-only — zero phase-authored Rust.** EX-1/EX-2: dropped `just
+  rebuild-stale` + the justfile staleness comment, rewrote AGENTS.md §95 to the
+  in-tree model. `./target/debug/doctrine` is live again. Historical references to
+  the footgun in slice-152/104/080/073/127 notes, backlog-004, rfc-005, review-158
+  left intact — out of scope; they record the world as it was.
+- **EX-3 memory triage (R3/OQ-3).** Read all 12 cluster bodies. Recorded successor
+  `mem.fact.build.in-tree-per-worktree-target` (mem_019f026cffd27a43b8db3cf6728130b5,
+  trust high); superseded **10** → it via `memory status … --by`; **retained 2**:
+  - `mem.fact.testing.runtime-manifest-dir` (live convention + `e2e_no_baked_manifest_dir`
+    guard; single-tree incremental staleness persists).
+  - `mem.pattern.jail.stale-test-fixture-vocabulary-change` (`| tail` masks-exit footgun
+    + single-tree fixture staleness — both independent of sharing).
+  Rule applied: supersede iff true ONLY by the shared redirect AND now false for BOTH
+  jail+host (design §5.5 distinct dirs; fork target reaped with fork).
+- **Coherence fix (not a supersede):** `mem.signpost.project.orientation` env bullet
+  rewritten redirect→in-tree (validate clean, body-guard auto-recomputed).
+- **Verification:** VA-1 ✓ (justfile parses, 0 rituals in justfile/AGENTS.md, 10
+  superseded + 2 retained-active). PHASE-03 green gate stands (no recompile-affecting
+  change). VH-1 (REV-011 apply) → reconcile.
+- **Flag for reconcile:** (1) `src/ledger.rs` carries a *pre-existing* uncommitted
+  rustfmt reflow (whitespace, test code) — NOT from this phase, left untouched. (2)
+  IMP-004 + historical footgun refs may now be mooted by in-tree → triage under design
+  AP-5 (reconcile relations).
