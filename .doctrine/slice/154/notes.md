@@ -3,18 +3,20 @@
 Durable per-slice scratchpad — tracked in git. Bootstrap for the next agent (plan +
 codex). `design.md` is the authority; this is the fast-ingest map.
 
-## Status (2026-06-26) — Rev 5 integrated (pass-5 reshape + pass-6 edges). Re-pass, then /plan.
+## Status (2026-06-26) — Rev 6 integrated (passes 5–7). Re-pass Rev 6; if clean, /plan.
 
-Slice in `design`. `design.md` = committed-ref (ISS-039-absorbed) model + the **pass-5
-reshape (Rev 4)** + **pass-6 edges (Rev 5)**: D11 is a **per-phase provenance set-check**
-(`provenance ∈ {Funnel, Unknown}` must be in the committed ledger), `D12` adds `provenance`
-to `BoundaryRow` (**sticky** — `record-delta` preserves landing path), `git::code_delta_paths`
-**deleted**, §5.6 records the registry's nav/value role. committed-ref core (D2/D7/D8/D9/D10)
-solid across 5 passes; pass-6 found 2 edge defects (record-delta downgrade, Unknown-on-active),
-both fixed. Scope absorbs ISS-039. **No code yet.**
+Slice in `design`. `design.md` = committed-ref (ISS-039-absorbed) model + **pass-5 reshape
+(Rev 4)** + **pass-6 edges (Rev 5)** + **pass-7 fixes (Rev 6)**: D11 is a **per-phase
+provenance set-check** (`provenance ∈ {Funnel, Unknown}` must be in the committed ledger),
+`D12` adds `provenance` to `BoundaryRow` with a **sticky merge in `record_source_delta`**
+(incoming `Solo`/`Funnel` overwrite; `Manual` preserves existing incl. `Unknown`; atomic,
+race-free), `git::code_delta_paths` **deleted**, §5.6 = registry nav/value role.
+committed-ref core (D2/D7/D8/D9/D10) solid 5 passes; passes 6–7 found 4 edge defects
+(record-delta downgrade, Unknown-on-active, wrong-seam race, doc drift), all fixed. Scope
+absorbs ISS-039. **No code yet.**
 
-**Next:** re-pass codex on **Rev 5** (the pass-6 fixes), THEN `/plan`. The pass-5 OPEN
-FINDINGS are **CLOSED**; pass-6 dispositions in design.md §10.
+**Next:** re-pass codex on **Rev 6**; if clean, `/plan`. Pass-5 OPEN FINDINGS **CLOSED**;
+pass-6/7 dispositions in design.md §10.
 
 Read order: `slice-154.md` (scope) → `design.md` §1–§9 → §10 (full pass ledger) → this.
 
@@ -73,10 +75,11 @@ Five moving parts:
 3. **Derive** from the **committed** ledger (`read_ledger`) — the SAME source
    `plan_phases` uses (INV-4) — `record_source_delta` each row (upsert) into the registry.
 4. **Gates, BEFORE ref projection** (ordering load-bearing, F1):
-   - **Projection-source guard (D11, Rev 4):** read the registry **pre-derive**; every
-     `provenance == Funnel` row must have a committed-ledger row ⇒ else halt naming the
-     phases. Pure phase-id set comparison (no `code_delta_paths`). Catches total + partial
-     ledger loss the registry gate can't.
+   - **Projection-source guard (D11, Rev 4/6):** before projection, every registry row with
+     `provenance ∈ {Funnel, Unknown}` must have a committed-ledger row ⇒ else halt naming
+     the phases. Pure phase-id set comparison (no `code_delta_paths`). Catches total +
+     partial ledger loss; excludes `Solo`/`Manual`; includes `Unknown` (loud on
+     mid-upgrade active slices).
    - **Registry gate (D4):** `registry_completeness(primary, primary, slice)` ⇒ bail on
      gap. A halt here creates no refs (clean record-delta → re-run).
 5. **Funnel inline double-write retained** (`run_record_boundary` unchanged: writes the
@@ -137,10 +140,13 @@ Five moving parts:
   halt loudly (pass-6 P6-2).
 - **D12** `provenance` field on `BoundaryRow` (the D11 discriminator) — `Solo|Funnel|Manual`
   (absent→`Unknown`). The only sound option (no committed run-state records landing path —
-  "derive from writer" is illusory). **Sticky for landing paths (pass-6 P6-1):** `record-delta`
-  preserves existing `Solo`/`Funnel`, stamps `Manual` only on a fresh row — else it would
-  blind D11 and reopen the silent gap. `#[serde(default)]` = whole back-compat story; no
-  migration code. Does NOT close F4 (post-record marker ≠ pre-record stand-down).
+  "derive from writer" is illusory). **Sticky merge in `record_source_delta` (pass-6/7):**
+  keyed on incoming provenance — `Solo`/`Funnel` (landing writers) overwrite; `Manual`
+  (`record-delta`) preserves existing incl. `Unknown`, atomic in the writer's RMW (NOT a
+  caller pre-read — race-free, P7-2). Legacy `Unknown` halt clears by **reclassification**
+  (re-record / hand-edit runtime row), never bare `record-delta` (P7-1). `#[serde(default)]`
+  = whole back-compat story; no migration code. Does NOT close F4 (post-record marker ≠
+  pre-record stand-down).
 
 ## Codex passes (full ledger in design.md §10)
 
