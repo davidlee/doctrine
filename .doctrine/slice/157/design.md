@@ -109,7 +109,7 @@ two dead arms removed (`research.md` §6).
 | Post-CAS re-probe + resync `match` | `dispatch.rs:1842-1848` → unconditional `AdvancedPureRef` | The deletion (D1) |
 | `advance_pure_ref` doc clause | `dispatch.rs:1818-1821` | Drop the re-probe/resync sentence |
 | `resync_worktree_hard` fn | `git.rs:1373-1376` | Sole caller deleted (D2) |
-| `resync_worktree_hard` unit test | `git.rs:~4023-4037` | Tests the deleted fn |
+| `resync_worktree_hard` unit test | `git.rs:4022-4046` | Tests the deleted fn; shared helper `main_at_c1_with_descendant_c2` has 3 other callers → not orphaned |
 | `Disposition::RacedDesync` variant | `dispatch.rs:2272` | + doc `2268-2271` (D3) |
 | `RacedDesync` `label()` arm | `dispatch.rs:2284` (`"raced-checkout-desync"`) | |
 | `AdvancedResynced` doc trim | `dispatch.rs:2260-2264` | Drop "or a None-leg … resynced"; it is now *only* the checked-out ff leg |
@@ -159,14 +159,24 @@ green unchanged. In `tests/e2e_dispatch_sync.rs`:
 | `integrate_refuses_clobbered_prepared_ref` | 897 | CAS refusal on moved target |
 | `integrate_trunk_checked_out_ff_leaves_clean_tree` | 962 | **VT-2** — checked-out FF leg atomic, no phantom |
 | `integrate_trunk_not_checked_out_advances_ref_leaves_live_checkout_clean` | 1000 | **VT-1** — pure-ref CAS doesn't desync a live checkout; exercises the surviving `None → AdvancedPureRef` path |
+| `integrate_report_emits_disposition_and_preserves_stdout_reflist` | 1121 | Asserts `(advanced+resynced)` + `(no-op)` tokens literally. **Its fixture checks `main` out** (1138-1139) → the **checked-out** leg, which `AdvancedResynced` is *kept* for (D4, `dispatch.rs:1872`). NOT a None-leg test — unaffected by the deletion. |
 
 VT-1 is the load-bearing regression: it advances a not-checked-out ref by pure CAS
 and asserts the live checkout is untouched — exactly the path SL-157 keeps.
 
-**Only removal:** the `resync_worktree_hard` unit test (`git.rs:~4027`), deleted
-with its fn. **No new test needed** — no surviving behaviour is added; the
-removed arms were unreachable under the invariants (no test could have legitimately
-exercised them without violating AGENTS.md).
+**The `advanced+resynced` label survives** — it is the checked-out leg's
+disposition (1872), kept by D4. No test asserts it via the None-leg resync path:
+the only None-leg resync coverage is the `git.rs` unit test below, which goes with
+the fn. (Adversarial self-review confirmed: no e2e exercises the deleted Some-arms
+— consistent with §1, they are unreachable without checking out a not-checked-out
+ref mid-run, which a fixture cannot orchestrate honestly.)
+
+**Only removal:** the `resync_worktree_hard` unit test
+(`resync_worktree_hard_resyncs_stale_index_after_pure_ref_advance`,
+`git.rs:4022-4046`), deleted with its fn. Its fixture helper
+`main_at_c1_with_descendant_c2` has 3 other callers (`git.rs:3960/3987/4009`) →
+**not orphaned**, stays live. **No new test needed** — no surviving behaviour is
+added; the removed arms were unreachable under the invariants.
 
 **Gate:** `just check` (fast inner loop) → `just gate` before commit. Plain
 `cargo clippy` (no `--all-targets`), zero warnings.
