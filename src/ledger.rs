@@ -691,10 +691,14 @@ mod tests {
 
         // Present ⇒ the EXACT bytes, unparsed and un-normalised: the reader does
         // no toml round-trip, so commit_boundaries owns validation.
-        let raw = "  [[boundary]]\nphase=\"PHASE-01\"\ncode_start_oid = \"s\"\ncode_end_oid=\"e\"\n";
+        let raw =
+            "  [[boundary]]\nphase=\"PHASE-01\"\ncode_start_oid = \"s\"\ncode_end_oid=\"e\"\n";
         std::fs::create_dir_all(root.join(".doctrine/dispatch/064")).unwrap();
         std::fs::write(root.join(".doctrine/dispatch/064/boundaries.toml"), raw).unwrap();
-        assert_eq!(read_boundaries_file(root, slice).unwrap().as_deref(), Some(raw));
+        assert_eq!(
+            read_boundaries_file(root, slice).unwrap().as_deref(),
+            Some(raw)
+        );
     }
 
     // --- VT-5: recording surface writes rows prepare-review reads back ------
