@@ -56,6 +56,23 @@ struct Fixture {
     base: String,
 }
 
+/// Seed runtime phase-tracking in the PRIMARY tree marking each phase
+/// `completed`, so prepare-review's PHASE-05 completeness gate (design §5.2) sees
+/// a complete slice — the post-completion conclude beat it now is. Runtime state:
+/// gitignored, written to the working filesystem, never committed.
+fn seed_completed_phases(dir: &Path, slice: u32, phases: &[&str]) {
+    let pdir = dir.join(format!(".doctrine/state/slice/{slice:03}/phases"));
+    std::fs::create_dir_all(&pdir).unwrap();
+    for p in phases {
+        let stem = format!("phase-{}", p.strip_prefix("PHASE-").unwrap_or(p));
+        std::fs::write(
+            pdir.join(format!("{stem}.toml")),
+            "status = \"completed\"\n",
+        )
+        .unwrap();
+    }
+}
+
 /// Build a repo with `main` at a trunk base and a `dispatch/064` branch carrying
 /// two code phases, an authored `.doctrine/` entity, and the
 /// `boundaries.toml` ledger. Leaves the working tree on `main`.
@@ -64,6 +81,11 @@ fn build_fixture(dir: &Path) -> Fixture {
     git(dir, &["init", "-q", "-b", "main"]);
     git(dir, &["config", "user.email", "t@example.com"]);
     git(dir, &["config", "user.name", "Test"]);
+    // Runtime state is gitignored (as in production) so prepare-review's derive
+    // (which writes the registry under `.doctrine/state/`) and the seeded phase
+    // tracking never dirty the working tree.
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
+    git(dir, &["add", ".gitignore"]);
     let base = commit(dir, "trunk.txt", "trunk", "base");
 
     git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
@@ -90,6 +112,9 @@ fn build_fixture(dir: &Path) -> Fixture {
     git(dir, &["commit", "-q", "-m", "ledger fixtures"]);
 
     git(dir, &["checkout", "-q", "main"]);
+    // prepare-review is the pre-audit conclude beat (design §5.2): its PHASE-05
+    // completeness gate requires every ledger phase to be `completed`.
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02"]);
     Fixture { base }
 }
 
@@ -565,6 +590,10 @@ fn build_conflict_fixture(dir: &Path) -> Fixture {
     git(dir, &["init", "-q", "-b", "main"]);
     git(dir, &["config", "user.email", "t@example.com"]);
     git(dir, &["config", "user.name", "Test"]);
+    // Runtime state is gitignored (as in production) so prepare-review's derive
+    // never dirties the working tree.
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
+    git(dir, &["add", ".gitignore"]);
     let base = commit(dir, "trunk.txt", "trunk\n", "base");
 
     git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
@@ -599,6 +628,8 @@ fn build_conflict_fixture(dir: &Path) -> Fixture {
     git(dir, &["checkout", "-q", "main"]);
     // Main side rewrites trunk.txt to a DIFFERENT value ⇒ conflicts with review/064.
     commit(dir, "trunk.txt", "MAIN SIDE\n", "main conflicting edit");
+    // prepare-review requires every ledger phase to be `completed`.
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02"]);
     Fixture { base }
 }
 

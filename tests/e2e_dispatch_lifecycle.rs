@@ -78,6 +78,22 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
+/// Seed runtime phase-tracking in the PRIMARY tree marking each phase
+/// `completed`, so prepare-review's PHASE-05 completeness gate (design §5.2) sees
+/// a complete slice.
+fn seed_completed_phases(dir: &Path, slice: u32, phases: &[&str]) {
+    let pdir = dir.join(format!(".doctrine/state/slice/{slice:03}/phases"));
+    std::fs::create_dir_all(&pdir).unwrap();
+    for p in phases {
+        let stem = format!("phase-{}", p.strip_prefix("PHASE-").unwrap_or(p));
+        std::fs::write(
+            pdir.join(format!("{stem}.toml")),
+            "status = \"completed\"\n",
+        )
+        .unwrap();
+    }
+}
+
 fn commit(dir: &Path, path: &str, content: &str, msg: &str) -> String {
     let full = dir.join(path);
     std::fs::create_dir_all(full.parent().unwrap()).unwrap();
@@ -174,6 +190,9 @@ fn full_lifecycle_coordinate_to_integrate_preserves_main_and_deliverables() {
     git(&coord, &["commit", "-q", "-m", "PHASE-01 boundary ledger"]);
 
     // --- 3. prepare-review: project the audit-ready refs from the coord tree ----
+    // The completeness gate roots on the PRIMARY worktree (git worktree list first
+    // entry), NOT the coord worktree — seed phases there.
+    seed_completed_phases(root, 64, &["PHASE-01"]);
     let out = run(
         &coord,
         &[
