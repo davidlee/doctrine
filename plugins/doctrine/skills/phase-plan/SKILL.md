@@ -14,7 +14,7 @@ Plan each phase in detail **just prior to execution** — not all phases up fron
 Inputs:
 
 - the phase's `plan.toml` entry — its `objective`, `exit_criteria` (`EX-`), and
-  `verification` (`VT-`)
+  `verification` (`VT-`/`VA-`/`VH-`)
 - `design.md` (canonical design reference) and `slice-nnn.md` (scope)
 - the materialised runtime phase sheet `state/.../phases/phase-NN.{toml,md}`
 
@@ -31,7 +31,7 @@ Inputs:
    disposable) with:
    - a concrete task breakdown — small, coherent units of work
    - assumptions and constraints carried into execution
-   - the verification steps that will satisfy each `VT-` expectation
+   - the verification steps that will satisfy each `VT-`/`VA-`/`VH-` expectation
    - the files / components each task is expected to touch
 5. This is **runtime state**. Never write task detail or progress back into the
    authored `plan.toml` / `plan.md` (the storage rule) — those stay the durable
