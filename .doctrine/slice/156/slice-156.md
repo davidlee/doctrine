@@ -73,7 +73,9 @@ mechanism change). Full rationale, alternatives, and validation in `design.md`.
 
 4. **Verify**: two worktrees build isolated (no cross-thrash); both arms' `just
    check`/`just gate` report honest pass/fail; no `CARGO_TARGET_DIR`/cargo literal
-   remains in shipped `src/`.
+   remains in the **touched platform surfaces** (`src/worktree/{fork,coordinate,gc,mod}.rs`
+   + the affected skills/docs) — NOT a whole-`src/` grep (legitimate project-root
+   markers like `root.rs`'s `Cargo.toml` are out of scope; design §9 EAP-3).
 
 ## Non-Goals
 
