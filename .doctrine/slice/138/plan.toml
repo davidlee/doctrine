@@ -1,0 +1,105 @@
+# Implementation plan for SL-138 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-138"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Layered bottom-up (ADR-001: leaf ← engine ← command). Each phase ends green and
+# is file-disjoint from the others: P1 = cordage crate, P2 = relation_graph.rs,
+# P3 = inspect.rs + cli.rs. Design §5 is the authoritative reference.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "cordage: depth-bounded reachability primitive"
+objective = """
+Add the depth-bounded traversal the cap + truncation indicator require, as the \
+PUBLIC `Graph::reachable_bounded` method (C1), and re-express the existing \
+`reachable` over it without behaviour change. Depth threads through the `walk_bfs` \
+locus shared by `reachable`/`spine_path` (C3); `predecessor_cone` is untouched.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §5/§6 locked; cordage `walk_bfs`/`reachable`/`spine_path` contract understood (query.rs:26/54/77)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Reach { depths: BTreeMap<NodeId,usize>, truncated: bool }` declared at crate root; `Graph::reachable_bounded(overlay, node, direction, max_depth: Option<usize>) -> Reach` public." },
+  { id = "EX-2", text = "private `query::reachable_bounded` threads depth + cap through `walk_bfs`; `start` excluded (strictness preserved); `depths` are min-hop (BFS first-visit)." },
+  { id = "EX-3", text = "`Graph::reachable` and `query::reachable` re-expressed over `reachable_bounded(.., None)` — public `BTreeSet<NodeId>` result unchanged." },
+  { id = "EX-4", text = "`predecessor_cone` untouched; `spine_path` adapts to any `walk_bfs` shape change but ignores depth; `just gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "`reachable_bounded(.., None).depths.into_keys()` == legacy `reachable` set on a fixture (behaviour-preservation); existing cordage/blockers/inspect suites green unchanged." },
+  { id = "VT-2", expects = "depth values are min-hop: a diamond node reachable via a 2-hop and a 3-hop path records depth 2." },
+  { id = "VT-3", expects = "`max_depth: Some(k)` excludes nodes deeper than k; `truncated` true iff a node at depth k had an unvisited successor, false when the closure ends exactly at k (the BFS-ordering invariant, F5)." },
+  { id = "VT-4", expects = "cycle-safe over a `Reject`-degraded view (visited-set bound, no infinite loop); foreign overlay / foreign node → empty `Reach`; `Direction::None` → empty." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "relation_graph: transitive_from + view + render"
+objective = """
+Build the engine-layer transitive query and its renders over the new primitive: \
+`transitive_from` walks per-overlay × per-direction via `Graph::reachable_bounded`, \
+reusing `build_relation_graph_from` + the `require_minted` gate; per-label sections \
+with the table-derived overlay-backed predicate (C2); human + JSON renders pinned \
+to the §5 output contract (C4). Relation-only — never calls `priority` (ADR-001).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged: `Graph::reachable_bounded` available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "engine-layer `TransitiveDir { Inbound, Outbound, Both }` defined HERE (ADR-001 — not in cli.rs); `TransitiveView { id, max_depth, truncated, inbound, outbound }` + `TransitiveGroup { label, targets, truncated }`; `transitive_from(scanned, root, id, dir: TransitiveDir, labels: Option<&[RelationLabel]>, max_depth)` returns it." },
+  { id = "EX-2", text = "walk: per selected overlay × selected direction (inbound=Against, outbound=Along) → `reachable_bounded` → NodeId→EntityKey→canonical; `targets` id-ascending (REQ-077)." },
+  { id = "EX-3", text = "overlay-backed predicate is table-derived (`OverlayMap::overlay_for` / `RELATION_RULES target != Unvalidated`); the no-overlay set `{contextualizes, drift, decision_ref}` is omitted from the default set and rejected from an explicit `labels` arg." },
+  { id = "EX-4", text = "existence gate reuses `require_minted` (never-minted id → error); `render_transitive_human` + `render_transitive_json` match §5 (kind=`inspect-transitive`, inbound before outbound, view-level `truncated`, `max_depth` null when unbounded)." },
+]
+verification = [
+  { id = "VT-1", expects = "inbound vs outbound differ correctly on a directed fixture (`SL --governed_by--> ADR`: `transitive_from(ADR, inbound)` reaches SL; outbound from ADR on that label is empty)." },
+  { id = "VT-2", expects = "per-label sectioning; `labels` narrowing to a subset; `references` collapses roles into ONE section (F3)." },
+  { id = "VT-3", expects = "`contextualizes`/`drift`/`bogus` in `labels` → 'not transitively walkable' error listing overlay-backed labels; absent from the default section set; predicate asserted table-derived (no hardcoded list)." },
+  { id = "VT-4", expects = "depth cap truncates + sets group + view `truncated`; unbounded reaches leaves; never-minted id → error." },
+  { id = "VT-5", expects = "JSON golden: `kind=inspect-transitive`, inbound before outbound, `max_depth: null` when unbounded, a non-requested direction key absent." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "CLI: inspect --transitive surface + e2e"
+objective = """
+Wire the command surface: `Inspect` gains `--transitive`, `--direction` (`Dir` \
+ValueEnum, up/down aliases), `--labels` (comma-delimited, `--label` alias), \
+`--max-depth`; `run_inspect` branches to the relation-only transitive view, with \
+the memory-ref rejection gate placed BEFORE the memory early-return (F2). Bare \
+`inspect <ID>` stays byte-unchanged.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 merged: `transitive_from` + renders available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Inspect` decl gains `--transitive` (bool), `--direction` (command-layer `DirArg` clap ValueEnum default Both, up/down aliases, `requires=transitive`), `--labels` (value_delimiter ',', alias `--label`, `requires`), `--max-depth` (`requires`); dispatch threads them to `run_inspect`, which maps `DirArg` DOWN to the engine `TransitiveDir` (ADR-001)." },
+  { id = "EX-2", text = "`--max-depth` parse: absent → 5, `0`/`all` → unbounded (None), `N` → N; `--labels` validated to overlay-backed labels with a clean error." },
+  { id = "EX-3", text = "`run_inspect` branches on `transitive`: routes to the transitive view (NO actionability/priority block); memory ref (`mem_*`/`mem.key`) + `--transitive` → error pointing at `retrieve --expand`, gated before the memory early-return." },
+  { id = "EX-4", text = "`just gate` green; bare `inspect <ID>` output byte-unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e golden: `inspect <ID> --transitive` table + `--json`; each direction (`inbound`/`outbound`/`both`, and `up`/`down` aliases); `--labels a,b`; `--max-depth N` and `all`; truncation line present/absent." },
+  { id = "VT-2", expects = "`inspect mem.<key> --transitive` and `mem_<uid>` → clean error naming `retrieve --expand` (F2)." },
+  { id = "VT-3", expects = "bare `inspect <ID>` (no `--transitive`) does not trip `requires` and is byte-unchanged; `--direction inbound` without `--transitive` errors (clap `requires`)." },
+  { id = "VT-4", expects = "`--labels contextualizes` / unknown label → 'not transitively walkable' error at the CLI surface." },
+]
+specs        = []
+requirements = []
