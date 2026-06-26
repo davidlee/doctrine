@@ -1,7 +1,24 @@
 # SL-157 notes — Checkout-independent integrate
 
-Status: **scoped, parked for `/design`.** Scope (`slice-157.md`) is written; no
-design, plan, or code yet. This file is the handover context for the design pass.
+Status: **in `/design`.** Scope (`slice-157.md`) re-baselined to **A** (see split
+below); design sections next.
+
+## Design decision log
+
+- **2026-06-26 — A/B split (foundational).** The original maximal scope bundled
+  two separable things: (A) checkout-independence — advance via object-DB CAS,
+  retire the live-checkout leg + resync + M4 gate (pure R1/R3/R4 hazard
+  dissolution; FF-only preserved); and (B) non-FF trunk auto-merge + conflict
+  surgery (absorbs IMP-127) — which **reverses ADR-012 D2/D4 FF-only**. Confirmed
+  orthogonal & independently shippable: the merge oid must be produced at *plan*
+  time (committer-date non-determinism would break D4 replay otherwise), so the
+  *land seam is identical* in both — a policy-free CAS to the journaled
+  `planned_new_oid`. **Decision: SL-157 = A** (mechanism-only ADR-012 Revision);
+  **B → RFC-006** (new, linked) for external review of the ADR reversal. SL-157's
+  land seam is kept policy-free so RFC-006 extends it with no rework. The single
+  rework trap to avoid in A: do **not** bake FF-only into the land seam — keep
+  FF-policy at plan time (`plan_trunk_row` ff-gate, unchanged).
+- IMP-127 reference moved off SL-157 onto RFC-006 (the surgery leg is B's).
 
 ## Where this came from
 

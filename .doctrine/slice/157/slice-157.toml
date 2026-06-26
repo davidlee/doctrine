@@ -1,7 +1,7 @@
 id = 157
 slug = "checkout-independent-integrate"
 title = "Checkout-independent integrate"
-status = "proposed"
+status = "design"
 created = "2026-06-26"
 updated = "2026-06-26"
 tags = []
@@ -27,11 +27,6 @@ target = "IMP-122"
 [[relation]]
 label = "references"
 role = "concerns"
-target = "IMP-127"
-
-[[relation]]
-label = "references"
-role = "concerns"
 target = "SL-121"
 
 [[relation]]
@@ -42,6 +37,10 @@ target = "SL-126"
 [[relation]]
 label = "related"
 target = "RFC-005"
+
+[[relation]]
+label = "related"
+target = "RFC-006"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
