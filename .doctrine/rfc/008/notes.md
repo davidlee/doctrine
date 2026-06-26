@@ -5,28 +5,23 @@ in `rfc-008.md`; this file is the *reading order, the state-of-the-world, the en
 facts, and the pitfalls* so you can engage without rediscovering them. Keep it
 current as passes land.
 
-## ⚠️ Read this first — the population is EMPTY (changes the method)
+## ✅ RESOLVED → ADR-017 (2026-06-26)
 
-A live check (2026-06-26):
+RFC-008 is **resolved**. Gating = **inbound `needs` on an unsettled record**; the sole
+engine delta is the **trinary partition** (unsettled record → non-`Terminal` `Gating`
+class). No new relation/role/axis. See `rfc-008.md` Outcome + **ADR-017**. SL-158
+unparks against the shrunk scope. The notes below are retained for the implementer.
 
-- `doctrine knowledge list` → **no knowledge records exist** (zero ASM/DEC/QUE/CON).
-- `doctrine relation census` → **zero `shapes` edges, zero `spawns` edges** (the
-  record→artefact relation surface is authored in SPEC-019 but never exercised).
-- **Cause:** the ASM/DEC/QUE/CON kinds are recently added (SL-059) and have **no
-  authoring skill / ergonomic support** — so in practice nobody creates records. That is
-  the ws3 gap; it is *why* the population is empty, not an accident of timing.
+> **Correction (was wrong).** An earlier version of this file claimed the population
+> was EMPTY. It was stale: as of 2026-06-26 there are **4 self-dogfooding seed records**
+> (QUE-001, CON-001, ASM-001, DEC-001) and **11 `shapes` edges** — including
+> `QUE-001(open) ──shapes──▷ SL-158`, which *is* scenario S1 live (SL-158 was parked
+> pending QUE-001). The decision was design-led regardless; the seeds suffice to
+> validate the gate's bite once the partition lands.
 
-**Consequence for RFC-008:** the M-Pr/M-E choice **cannot be census-led** the way
-RFC-003's P1 classification was — there is no edge population to classify. The
-decision is **design-led** on the canonical gating pairs (QUE→SL, ASM→IDE, CON→REQ/SL,
-DEC→ISS) and forward judgement, not evidence-led on live data.
-
-**The ws1↔ws3 chicken-egg (surface this in the RFC).** Trinary actionability (RFC-007
-ws1, this work) gates on records that **don't exist yet** (ws3 "populate — make gating
-bite"). RFC-007 says ws1 and ws3 are mutually reinforcing and ws3 can start in
-parallel. So a real RFC-008 question: is the gating mechanism premature before any
-record is authored, or must it land first so authoring has a target? Don't assume;
-decide. (The `census-led` line in the RFC Outcome is caveated for this.)
+**The ws1↔ws3 sequencing (settled).** ws1 (the trinary partition) lands first as the
+target; the `/knowledge` authoring skill (ws3 — **IMP-182**) follows close behind to
+validate against a real population. The mechanism is not blocked on the full skill.
 
 ## Reading order (annotated — why each matters)
 

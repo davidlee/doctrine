@@ -1,12 +1,14 @@
 # Trinary actionability
 
-> **PARKED (`proposed`, 2026-06-26).** Design surfaced that the **gating-edge
-> mechanism** (change 2 below) is not slice-shaped — it is an unsettled graph-model
-> decision reopened by RFC-003's "structure ≠ graph-effect" ruling, routed to
-> **RFC-008** for deliberation. The partition half (change 1) is settled. This slice
-> resumes once RFC-008 chooses a mechanism (and likely emits an ADR). See
-> `notes.md` for the engine-seam findings and the requirement RFC-008 must honour
-> (*association ≠ gating*).
+> **RESUMED (2026-06-26) — RFC-008 resolved → ADR-017.** The gating-edge mechanism is
+> settled: **gating is an inbound `needs` dependency edge on an unsettled record**, not
+> a new relation/role/axis. The chosen design collapses change 2 — there is no
+> "gating-edge" to build. SL-158's scope shrinks to: (1) the **trinary partition**
+> (unsettled record → non-`Terminal` `Gating` class; the sole engine delta), and (2)
+> the **`shapes`-roles** piece (semantic disambiguation, separate from gating, ADR-016).
+> Outbound authoring is a derived hub-view + deferred batch sugar — out of scope here.
+> See ADR-017 and `notes.md` for the engine-seam findings. Design re-opens to formalise
+> the shrunk scope.
 
 ## Context
 
