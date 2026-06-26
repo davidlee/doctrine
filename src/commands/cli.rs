@@ -18,6 +18,32 @@ use crate::commands::facet::{
 use crate::listing::Format;
 use crate::search::SearchArgs;
 
+/// `inspect --direction` — the command-layer walk-direction flag (SL-138). Maps DOWN
+/// to the engine's [`crate::relation_graph::TransitiveDir`] (ADR-001 — the engine
+/// never depends on this clap type). `up`/`down` are mnemonic aliases: `up` = inbound
+/// (blast radius — what depends on this), `down` = outbound (derivation / governance
+/// ancestry).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum DirArg {
+    #[value(alias = "up")]
+    Inbound,
+    #[value(alias = "down")]
+    Outbound,
+    Both,
+}
+
+impl DirArg {
+    /// Map the clap flag DOWN to the engine direction (ADR-001).
+    pub(crate) fn to_transitive(self) -> crate::relation_graph::TransitiveDir {
+        use crate::relation_graph::TransitiveDir;
+        match self {
+            Self::Inbound => TransitiveDir::Inbound,
+            Self::Outbound => TransitiveDir::Outbound,
+            Self::Both => TransitiveDir::Both,
+        }
+    }
+}
+
 // ── shared action enums (Estimate / Value) ──────────────────────────────────
 
 #[derive(clap::Subcommand)]
@@ -205,6 +231,30 @@ pub(crate) enum Command {
         /// Shorthand for `--format json`.
         #[arg(long)]
         json: bool,
+
+        /// Walk relations transitively (N-hop) instead of the 1-hop relation view.
+        /// Relation-only — no actionability block.
+        #[arg(long)]
+        transitive: bool,
+
+        /// Walk direction (transitive only): `inbound` (blast radius) | `outbound`
+        /// (derivation) | `both` (default). `up`/`down` aliases.
+        #[arg(long, value_enum, default_value_t = DirArg::Both, requires = "transitive")]
+        direction: DirArg,
+
+        /// Restrict the transitive walk to these labels (comma-separated). Default:
+        /// every overlay-backed label.
+        #[arg(
+            long = "labels",
+            alias = "label",
+            value_delimiter = ',',
+            requires = "transitive"
+        )]
+        labels: Vec<String>,
+
+        /// Transitive depth cap. Absent → 5; `0` or `all` → unbounded; `N` → N.
+        #[arg(long, requires = "transitive")]
+        max_depth: Option<String>,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -999,8 +1049,23 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             id,
             format,
             json,
+            transitive,
+            direction,
+            labels,
+            max_depth,
             path,
-        } => crate::commands::inspect::run_inspect(path, &id, format, json),
+        } => crate::commands::inspect::run_inspect(
+            path,
+            &crate::commands::inspect::InspectArgs {
+                id: &id,
+                format,
+                json,
+                transitive,
+                direction: direction.to_transitive(),
+                labels,
+                max_depth,
+            },
+        ),
         Command::Survey {
             all,
             format,
