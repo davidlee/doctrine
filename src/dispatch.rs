@@ -1503,8 +1503,18 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     let coord_ref = format!("refs/heads/dispatch/{slice3}");
     let journal_path = format!(".doctrine/dispatch/{slice3}/journal.toml");
 
-    let tip = resolve_commit(root, &coord_ref)?
+    let tip0 = resolve_commit(root, &coord_ref)?
         .with_context(|| format!("prepare-review: dispatch/{slice3} does not exist"))?;
+    // (ISS-039, design §5.2 step 1) Splice the live coord worktree's UNCOMMITTED
+    // boundaries ledger onto the tip BEFORE any read, mirroring `commit_journal`,
+    // so `read_ledger`/`plan_phases` (and the PHASE-05 derive) read one committed,
+    // checkout-independent source (SPEC-022-legal, D7/D10). No-op when there is no
+    // live coord worktree or no working file (D9 liveness wrapper); content-
+    // idempotent, so a re-run with identical content does not advance the ref.
+    let tip = match git::live_worktree_for_ref(root, &coord_ref)? {
+        Some(coord) => commit_boundaries(root, &tip0, &coord_ref, &coord, slice)?,
+        None => tip0,
+    };
     let tip_tree = tree_of(root, &tip)?;
     // Project off the PINNED FORK-POINT — merge-base(dispatch/<slice>, trunk) —
     // not the live trunk tip (RV-030 F-1, design §4.2/§4.3 trunk_base_B). The
@@ -2111,6 +2121,53 @@ fn commit_journal(
         RefCas::Updated => Ok(commit),
         RefCas::Moved { actual } => bail!(
             "journal-commit: dispatch branch moved under us (expected {parent}, found {})",
+            actual.as_deref().unwrap_or("?")
+        ),
+    }
+}
+
+/// Splice the **uncommitted** working boundaries ledger from the live coordination
+/// worktree onto `dispatch/<slice>` (design §5.2 step 1, ISS-039) — the boundaries
+/// twin of [`commit_journal`], with two hardenings over a naive byte splice:
+///
+/// 1. **Validate before commit (F3).** The working file is parsed to [`Boundaries`];
+///    a malformed ledger is a clean `Err` and the tip is left untouched — never
+///    commit garbage, unlike a verbatim-byte splice.
+/// 2. **Content-idempotent via TREE-oid compare (F1).** The parsed ledger is
+///    re-serialized to canonical TOML and spliced into the tip tree; if the
+///    candidate tree equals the current tip tree the ref is **not** advanced
+///    (returns `parent`). git dedups identical content to the same blob — hence
+///    the same tree — so a TREE compare is formatting-immune where a raw-blob
+///    compare would falsely diff.
+///
+/// `parent` is the branch's current tip (both the new commit's parent and the CAS
+/// expected-old). Absent working file ⇒ no-op (`parent`), so a re-run after the
+/// coord worktree's removal is safe. A moved ref bails like `commit_journal` (R6).
+fn commit_boundaries(
+    root: &Path,
+    parent: &str,
+    coord_ref: &str,
+    coord: &git::WorktreeEntry,
+    slice: u32,
+) -> anyhow::Result<String> {
+    let Some(raw) = crate::ledger::read_boundaries_file(&coord.path, slice)? else {
+        return Ok(parent.to_owned()); // no working ledger to splice
+    };
+    let boundaries = Boundaries::parse(&raw).with_context(|| {
+        format!("commit_boundaries: working boundaries.toml for dispatch/{slice:03} is malformed")
+    })?;
+    let canonical = boundaries.to_toml()?;
+    let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
+    let tip_tree = tree_of(root, parent)?;
+    let candidate = git::tree_with_file(root, &tip_tree, &path, &canonical)?;
+    if candidate == tip_tree {
+        return Ok(parent.to_owned()); // identical content — no ref advance (F1)
+    }
+    let commit = git::commit_tree(root, &candidate, parent, "ledger: boundaries")?;
+    match git::update_ref_cas(root, coord_ref, &commit, parent)? {
+        RefCas::Updated => Ok(commit),
+        RefCas::Moved { actual } => bail!(
+            "commit_boundaries: dispatch branch moved under us (expected {parent}, found {})",
             actual.as_deref().unwrap_or("?")
         ),
     }
