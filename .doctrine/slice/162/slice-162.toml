@@ -1,14 +1,38 @@
 id = 162
 slug = "runtime-resolve-bin-path"
 title = "Runtime-resolve test binary path"
-status = "proposed"
+status = "design"
 created = "2026-06-26"
 updated = "2026-06-26"
-tags = []
+tags = ["area:testing"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/test_support.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/common/mod.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_*.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/relation_cli.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_no_baked_manifest_dir.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "related"
+target = "CHR-014"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
