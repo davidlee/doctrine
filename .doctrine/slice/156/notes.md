@@ -93,3 +93,25 @@ queried data lives in the TOMLs.
   rustfmt reflow (whitespace, test code) — NOT from this phase, left untouched. (2)
   IMP-004 + historical footgun refs may now be mooted by in-tree → triage under design
   AP-5 (reconcile relations).
+
+## Close (post jail-relaunch — VH-1 discharged)
+
+- **Jail relaunched.** `CARGO_TARGET_DIR` now **unset** session-wide (was the shared
+  `~/.cargo/doctrine-target-jail` redirect); flake `set-env` removal is live. One-time
+  abandoned cache `rm -rf ~/.cargo/doctrine-target-jail` done. `./target/debug/doctrine`
+  is the live in-tree binary (no redirect).
+- **VT-1 ✓ isolation by construction.** Two trees on distinct branches built distinct
+  in-tree binaries, no cross-thrash:
+  - main `edge` → `/workspace/doctrine/target/debug/doctrine`
+  - fork `slice/SL-156-vt-check` (off d5de92cf) → `.worktrees/SL-156-vt/target/debug/doctrine`,
+    compiled `doctrine v0.7.2 (…/.worktrees/SL-156-vt)` — own source → own target. The
+    `worktree fork` verb emitted **empty stdout** per the REV-011 contract.
+- **VT-2 ✓ honest worker-tree verify.** `just check` in the fork (CARGO_TARGET_DIR
+  unset) → **green** (exit 0): worktree e2e suites pass incl. `e2e_worktree_verify_worker`
+  7/7; no FAILED/error/warning; no touch+re-run ritual. Builds against the fork's own
+  `target/`. Arm-independent under B1: target = *absence* of env, identical claude/codex
+  (the arm difference is spawn channel, not target resolution; worker-mode resolution
+  covered by the green `e2e_worktree_verify_worker`).
+- **VT-3 / VA ✓** terminal at audit; re-confirmed VA grep clean on `src/worktree/*`
+  (the lone AGENTS.md:96 hit is the new in-tree guidance, conformant).
+- Throwaway VT worktree + branch removed after the check.
