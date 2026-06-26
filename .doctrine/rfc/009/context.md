@@ -21,9 +21,9 @@ need. The RFC is **open**, organised in two fenced tiers:
 | id | decision | status |
 |---|---|---|
 | D1 | memory↔record boundary — ownership/legibility test | **settled in draft** (records = graph-resident + human-facing; memory = agent cache; crisp edges over coverage; crystallise out of prose). Open thread: is memory's 2nd-class linkage endemic? |
-| D2 | which kinds — survey design docs for the latent taxonomy (risk, mitigation, invariant, principle, procedure, interaction, responsibility, edge case, candidate solution, …); decide kind-by-kind vs prose vs facet/edge. **EVD** (evidence; `captured → confirmed \| disputed \| retracted`, terminal `{confirmed, retracted}`; a supports/disputes *role* replacing the OBS catch-all) + **HYP** = nearest-at-hand pair, now *decoupled*; **risk not subsumed**. Also **INV (invariant)** as replace/sibling/status-quo for CON | open |
+| D2 | which kinds — survey design docs for the latent taxonomy (risk, mitigation, invariant, principle, procedure, interaction, responsibility, edge case, candidate solution, …); decide kind-by-kind vs prose vs facet/edge. **EVD** (evidence; `captured → confirmed \| disputed \| retracted`, settled/inert `{confirmed, retracted}`, but `confirmed` reopenable via re-dispute *or* supersede — only `retracted` truly terminal; a supports/disputes *role* replacing the OBS catch-all) + **HYP** = nearest-at-hand pair, now *decoupled*; **risk not subsumed**. *Decided in draft:* **INV (invariant) replaces CON** | open (EVD/HYP); INV decided |
 | D3 | record/entity edges — `supports`/`disputes` (EVD → record, EVD-disputes-INV, HYP confirm/refute), `shapes` epistemic-vs-affects split, which CM relationship types are real edges vs derivable | open — **bulk of near-term work** |
-| D4 | concept maps — retire-as-is vs reify-as-view-over-concept-nodes; DEF/CPT naming (CON taken) | open — modest/low-risk |
+| D4 | concept maps — retire-as-is vs reify-as-view-over-concept-nodes; DEF/CPT prefix (distinct from INV; don't recycle retired CON) | open — modest/low-risk |
 | D5 | uptake — how far skill-anchoring must go | open — the real failure mode |
 | Tier 2 | spec-as-graph hypothesis | labelled bet, not for convergence here |
 
@@ -77,7 +77,7 @@ kind authors, target gates, create-invalid edges).
 
 - `src/` concept-map subsystem + `doctrine concept-map` command surface (CM-001, CM-002).
 - Reifying a concept into a first-class numbered kind needs its **own prefix** (DEF/CPT —
-  CON is taken by constraint) and a `KindRef` row; the CM DSL would become a projection
+  distinct from INV; don't recycle the retired CON) and a `KindRef` row; the CM DSL would become a projection
   over real concept-nodes rather than a private node container.
 
 ## Related entities (context for design decisions)
