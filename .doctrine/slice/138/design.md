@@ -33,8 +33,10 @@ already walks any overlay in either direction (`Direction::Along` = out-edges,
 
 **Non-goals (this slice):** indented-tree / path render (the `depths` field is
 returned but unconsumed — a clean follow-up); inbound default-exclude of `related`
-noise (escape hatch is `--labels`); no-overlay labels (`drift`, `decision_ref`)
-in transitive (they have no overlay — 1-hop-only by nature, silently omitted).
+noise (escape hatch is `--labels`); **no-overlay labels** in transitive — the
+`TargetSpec::Unvalidated` set is exactly **`{contextualizes, drift, decision_ref}`**
+(C2; pinned by the complement test at `relation_graph.rs:~1690`), 1-hop-only by
+nature, silently omitted from the default set and rejected by `--labels`.
 
 **Known limitations (from adversarial review):**
 - **F2 — memory refs.** `--transitive` operates on the **entity** relation graph
@@ -57,8 +59,10 @@ in transitive (they have no overlay — 1-hop-only by nature, silently omitted).
 - **ADR-004 (outbound-only storage, derived reciprocity).** The inbound walk reads
   nothing stored — it walks `Against` over the same per-label overlay, exactly as
   1-hop inbound is derived from `in_edges` today. No reverse field invented.
-- **SL-140 single-locus intent.** Depth + cap are threaded through the *one*
-  `walk_bfs` locus SL-140 consolidated, not a fourth parallel walk.
+- **SL-140 single-locus intent.** Depth + cap thread through `walk_bfs` — the loop
+  SL-140 shares between `reachable` and `spine_path` (C3: `predecessor_cone`
+  deliberately does *not* use it, and is untouched here). `spine_path` ignores the
+  new depth field; only `reachable`/`reachable_bounded` consume it. No new walk.
 
 ## 4. Current vs target behaviour
 
@@ -104,24 +108,36 @@ inspect ADR-005 --transitive --json
 ### Signatures
 
 ```rust
-// crates/cordage/src/query.rs
+// crates/cordage/src/lib.rs — the PUBLIC surface (C1). relation_graph holds a
+// `Graph`, never the private `out`/`incoming` indices, so the new entry point is a
+// Graph METHOD, mirroring the existing `Graph::reachable`.
 pub struct Reach {
     pub depths: BTreeMap<NodeId, usize>, // node → min hops from start; start excluded (strictness preserved)
     pub truncated: bool,                 // cap bit AND an unvisited neighbour remained beyond it
 }
+impl Graph {
+    pub fn reachable_bounded(&self, overlay: OverlayId, node: NodeId,
+        direction: Direction, max_depth: Option<usize>) -> Reach
+        { query::reachable_bounded(&self.out, &self.incoming, overlay, node, direction, max_depth) }
+    // existing `reachable` re-expressed over it — behaviour-identical:
+    // pub fn reachable(..) -> BTreeSet<NodeId> { self.reachable_bounded(overlay, node, dir, None).depths.into_keys().collect() }
+}
+
+// crates/cordage/src/query.rs — the private helper (NOT public; OutIndex/InIndex are crate-private).
 pub(crate) fn reachable_bounded(
     out: &OutIndex, incoming: &InIndex,
     overlay: OverlayId, start: NodeId,
     direction: Direction, max_depth: Option<usize>, // None = unbounded == today's reachable
 ) -> Reach;
-// reachable(..) == reachable_bounded(.., None).depths.keys().copied().collect()
+// query::reachable(..) == reachable_bounded(.., None).depths.into_keys().collect()
 
 // src/relation_graph.rs
 pub(crate) struct TransitiveGroup { pub label: RelationLabel, pub targets: Vec<String>, pub truncated: bool }
 pub(crate) struct TransitiveView {
     pub id: String,
     pub max_depth: Option<usize>,        // None = unbounded
-    pub inbound: Option<Vec<TransitiveGroup>>,   // Some iff direction includes inbound
+    pub truncated: bool,                 // view-level OR across emitted groups (C4)
+    pub inbound: Option<Vec<TransitiveGroup>>,   // Some iff direction includes inbound (emitted FIRST)
     pub outbound: Option<Vec<TransitiveGroup>>,  // Some iff direction includes outbound
 }
 pub(crate) fn transitive_from(
@@ -133,8 +149,27 @@ pub(crate) fn transitive_from(
 ```
 
 `targets` sorted canonical-id ascending (REQ-077 determinism). `truncated` on a
-group is the OR of the cap-hit across that label's walk; the view-level "some
-chains truncated" line is the OR across all groups.
+group is the OR of the cap-hit across that label's walk.
+
+**Output contract (C4 — pinned, golden-tested).** Mirrors `inspect_value`'s
+`"kind"`-discriminated envelope (`relation_graph.rs:872`):
+
+- **Section order (table + JSON):** `inbound` **before** `outbound` (blast-radius
+  first — the impact framing); within a direction, groups sorted by label `name()`
+  ascending. A direction not requested is **omitted** (not empty) — `--direction
+  inbound` emits no `outbound` key/section.
+- **Within a group:** `targets` id-ascending; empty group renders `(none)` (table)
+  but is still emitted in JSON as `"targets": []`.
+- **JSON envelope:**
+  ```json
+  { "kind": "inspect-transitive", "id": "ADR-005", "max_depth": 5, "truncated": false,
+    "inbound":  [ { "label": "governed_by", "truncated": false, "targets": ["SL-012","SL-047"] } ],
+    "outbound": [ ] }
+  ```
+  `max_depth` is `null` when unbounded. View-level `"truncated"` = OR across all
+  emitted groups (the table's "… some chains truncated" line reads the same bit).
+  No `role` key — transitive `references` is role-collapsed (F3). No `danglers`
+  (no-overlay labels are out by construction). No `actionability` (relation-only).
 
 ### CLI flag shapes (clap)
 
@@ -146,10 +181,12 @@ chains truncated" line is the OR across all groups.
 ```
 
 `Dir`: `Inbound` (`alias = "up"`), `Outbound` (`alias = "down"`), `Both`. `labels`
-validated via `RelationLabel::from_name` **and the overlay-backed predicate** (F4)
-— an unknown name *or* a no-overlay name (`drift`/`decision_ref`) → clean error
-listing the valid (overlay-backed) set; the two cases may share one "not
-transitively walkable" message. `requires = "transitive"` makes the modifier flags
+validated via `RelationLabel::from_name` **and the table-derived overlay-backed
+predicate** (F4/C2) — reuse `OverlayMap::overlay_for` (= `RELATION_RULES` `target
+!= Unvalidated`), never a hardcoded list. An unknown name *or* a no-overlay name
+(**`contextualizes`/`drift`/`decision_ref`**) → clean error listing the valid
+(overlay-backed) set; the two cases may share one "not transitively walkable"
+message. `requires = "transitive"` makes the modifier flags
 error if supplied without `--transitive`; because `--direction`'s `default_value_t`
 is applied as a *default* (not "present on the command line"), bare `inspect <ID>`
 does not trip `requires` — covered by a VT (F5-adjacent).
@@ -188,8 +225,13 @@ must be byte-identical; bare `inspect <ID>` output unchanged (VT).
   naming `retrieve --expand`, gated before the memory early-return.
 - VT (F3) — transitive `references` from a slice with mixed-role outbound edges
   renders ONE `references:` section (roles collapsed), distinct from 1-hop inspect.
-- VT (F4) — `--labels drift` and `--labels bogus` → "not transitively walkable"
-  error listing overlay-backed labels.
+- VT (F4/C2) — `--labels contextualizes`, `--labels drift`, `--labels bogus` → "not
+  transitively walkable" error listing overlay-backed labels; and `contextualizes`
+  is absent from the default (no-`--labels`) section set. The overlay-backed set is
+  asserted table-derived (no hardcoded list), guarding against drift.
+- VT (C4) — JSON envelope is `"kind": "inspect-transitive"`, `inbound` before
+  `outbound`, view-level `truncated`, `max_depth: null` when unbounded; a
+  non-requested direction key is absent (golden).
 - VT (clap) — bare `inspect <ID>` (no `--transitive`) does not trip `requires` and
   is byte-unchanged; `--direction inbound` without `--transitive` errors.
 
@@ -227,6 +269,19 @@ The original scope is **amended** (done after this doc locks):
 | F4 | `--labels` must reject *no-overlay* names, not just unknowns | validate via `from_name` + overlay-backed predicate (§5, VT) |
 | F5 | `truncated` correctness rests on a BFS-ordering argument | named tested invariant (§6) |
 | F6 | `--max-depth 0 == unbounded` is a footgun | accepted (your call); `all` is the primary spelling, `0` documented alias |
+
+### External inquisition (codex / GPT-5.5, 2026-06-26)
+
+| # | Sev | Finding | Resolution |
+|---|-----|---------|------------|
+| C1 | **blocker** | Proposed `reachable_bounded(&OutIndex, &InIndex, …)` is uncallable — those indices are crate-private; `relation_graph` holds only a `Graph`, whose public surface is `Graph::reachable`. | New **public `Graph::reachable_bounded` method**; private `query::reachable_bounded` does the work; `Graph::reachable` re-expressed over it (§5). |
+| C2 | **major** | No-overlay set is wrong — `contextualizes` is also `TargetSpec::Unvalidated`; the real set is `{contextualizes, drift, decision_ref}` (pinned by `relation_graph.rs:~1690`). Poisons `--labels` validation + the default label set. | Corrected throughout (§2/§5); predicate is table-derived (`overlay_for`), not a hardcoded list; VT guards drift. |
+| C3 | minor | "single locus" overstated — `walk_bfs` is shared by `reachable`+`spine_path` only; `predecessor_cone` deliberately doesn't use it. | Claim narrowed (§3). |
+| C4 | minor | Transitive output contract under-specified (section order, `kind`, JSON envelope, where view-level truncation lives). | Pinned + golden-tested (§5 output contract). |
+
+Verdict was "not safe to plan against yet; must change first (C1, C2)." All four
+integrated above; re-verified C1/C2 against the code (`lib.rs:807`, `relation.rs:434`,
+`relation_graph.rs:163/1690`).
 
 ## 9. design-target selectors
 
