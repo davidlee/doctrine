@@ -84,9 +84,13 @@ After the batch's code commit and before the knowledge commit:
 `doctrine dispatch record-boundary --slice <N> --phase PHASE-NN --code-start <B> --code-end <B+1>`.
 Claude-arm-only (no fork branch); skip on codex/pi. **One call double-writes both
 registries** (dispatch.rs): the committed `phase/<N>` ref-cut **and** the
-primary-tree conformance registry (F-6 guard, upsert by phase). So the claude arm
-needs **no** separate `slice record-delta` — that funnel beat (router step 8) is
-the codex/pi path; `record-delta` also stays the manual escape hatch on any arm.
+primary-tree conformance registry (F-6 guard, upsert by phase). The committed
+ledger is also what `dispatch sync --prepare-review` re-derives the registry from
+(auto-heal) before the completeness gate runs — so on this arm registry capture is
+**enforced machinery**, not a step the orchestrator can forget. The claude arm
+therefore needs **no** funnel `slice record-delta` step; `record-delta` survives
+on this arm **only** as the manual escape hatch (correct a range / bootstrap a
+pre-binding phase).
 
 ## Red Flags
 **Never:** spawn without first `arm-spawn`-ing and cd'ing INTO the spawn dir (a

@@ -53,9 +53,11 @@ fn dispatch_router_skill_is_shrunk() {
     // (refresh-base), raising the lean-router budget from 64 to 74.
     // SL-147 PHASE-06 added the conformance record beat (step 8, per-arm
     // boundary write), raising it from 74 to 80.
+    // SL-154 PHASE-06 documented the enforced prepare-review derive+gate beat
+    // (step 8 enforcement note + Conclude paragraph), raising it from 80 to 90.
     assert!(
-        body.len() <= 80,
-        "dispatch router body lines: {} (target ≤80)",
+        body.len() <= 90,
+        "dispatch router body lines: {} (target ≤90)",
         body.len()
     );
 
@@ -93,9 +95,11 @@ fn dispatch_agent_skill_is_shrunk() {
     // SL-152 PHASE-05: the WorktreeCreate-hook contract replaced the
     // placement-implicit base with the arm-spawn / cd-in-cd-back bracket and
     // the worktreePath-derived branch (post-spawn), raising it from 82 to 100.
+    // SL-154 PHASE-06: documented the prepare-review derive/gate as enforced
+    // machinery + record-delta as escape-hatch-only, raising it from 100 to 104.
     assert!(
-        body.len() <= 100,
-        "dispatch-agent body lines: {} (target ≤100)",
+        body.len() <= 104,
+        "dispatch-agent body lines: {} (target ≤104)",
         body.len()
     );
 
@@ -131,9 +135,11 @@ fn dispatch_subprocess_skill_is_shrunk() {
     let body = body_lines(&full);
     // SL-147 PHASE-06 added the codex/pi conformance record beat (this arm's
     // only neutral-registry write), raising the budget from 40 to 48.
+    // SL-154 PHASE-06: documented record-delta as RETAINED + gate-enforced
+    // (symmetric derive deferred, D6/IMP-171), raising it from 48 to 55.
     assert!(
-        body.len() <= 48,
-        "dispatch-subprocess body lines: {} (target ≤48)",
+        body.len() <= 55,
+        "dispatch-subprocess body lines: {} (target ≤55)",
         body.len()
     );
 

@@ -170,14 +170,20 @@ now machinery, not a documented-yet-skippable step)."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 (provenance merge) and PHASE-05 (the enforced prepare-review beat exists) complete." },
 ]
+# EX-2 / VA-1 amended 2026-06-26 (User decision A, phase-plan consult): the
+# pre-amendment wording "codex/pi record-delta survives only as the escape hatch"
+# contradicted design D6/IMP-171/§5.1 — the codex/pi symmetric derive is DEFERRED,
+# so codex/pi record-delta IS that arm's registry write, not merely an escape
+# hatch. Removing it would reintroduce ISS-052 on codex/pi. Prose scoped per arm;
+# ids unchanged (immutability is on ids, not text).
 exit_criteria = [
   { id = "EX-1", text = "`run_record_delta` (slice.rs:1970) constructs its row with `provenance = Manual`; correctness rides the PHASE-01 merge (preserve existing Solo/Funnel/Unknown). The range upsert is otherwise unchanged." },
-  { id = "EX-2", text = "`dispatch`, `dispatch-agent`, `dispatch-subprocess` SKILL.md document the prepare-review derive+gate as the ENFORCED funnel beat and remove the skippable `slice record-delta` orchestrator step; record-delta remains documented only as the manual escape hatch." },
+  { id = "EX-2", text = "the three dispatch SKILL.md document the prepare-review conclude beat as ENFORCED: claude-arm derive (auto-heal from the committed ledger) + the completeness gate (both arms). claude arm — drop any funnel `record-delta` step: `record-boundary` double-write + derive is machinery, `record-delta` is the manual escape hatch only. codex/pi arm (D6/IMP-171, symmetric derive deferred) — `record-delta` at the funnel Record beat is RETAINED as that arm's registry write, now non-skippable because the completeness gate halts on a missing row; it doubles as the escape hatch." },
   { id = "EX-3", text = "the record-delta verb's escape-hatch behaviour is otherwise unchanged." },
 ]
 verification = [
   { id = "VT-1", expects = "record-delta cannot clear a funnel/legacy halt: a Funnel (or Unknown) registry row whose committed-ledger row is missing → record-delta keeps its provenance → D11 still halts; only committing the ledger (Funnel) or reclassifying to Solo (legacy that was solo) clears it." },
-  { id = "VA-1", expects = "agent review confirms the three dispatch SKILL.md describe the enforced prepare-review beat and no longer instruct the skippable record-delta step; codex/pi record-delta survives only as the escape hatch." },
+  { id = "VA-1", expects = "agent review confirms the three dispatch SKILL.md describe the enforced prepare-review derive (claude) + completeness gate (both arms); the claude arm no longer instructs a funnel `record-delta` step (escape hatch only); the codex/pi funnel `record-delta` is documented as a RETAINED, gate-enforced registry write (D6/IMP-171), NOT removed." },
 ]
 specs        = []
 requirements = []

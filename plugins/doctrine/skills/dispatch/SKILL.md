@@ -48,7 +48,10 @@ Capture `B = git rev-parse HEAD` pre-spawn. After workers return, in exact order
    - **claude** — `dispatch record-boundary` already double-writes it (+ the
      `phase/<N>` ref-cut); no separate call (`/dispatch-agent`).
    - **codex/pi** — `doctrine slice record-delta <SL> PHASE-NN --start <B> --end
-     <B+1>` (no `record-boundary` on this arm; `/dispatch-subprocess`).
+     <B+1>` — the arm's registry write (symmetric derive deferred, D6/IMP-171; no
+     `record-boundary` on this arm; `/dispatch-subprocess`).
+   Neither is a "remember to also record" hand-step any more: the Conclude beat's
+   completeness gate halts if a landed phase is missing its row (below).
 **Report-and-halt** on conflict, moved HEAD, or authored-tree touch — never auto-resolve.
 
 ## Handover cadence
@@ -69,6 +72,13 @@ manual resolve in the coord tree — never auto-merged.
 When all phases land: `dispatch sync --prepare-review` → remove coordination worktree
 directory (KEEP the refs) → `slice status <id> audit` → `/audit` from parent/root.
 Stage-2 integrate is `/close`'s job, post-audit — never land code pre-audit.
+
+`prepare-review` is the **enforced** conformance beat (ISS-052): before projecting
+refs it commits the boundaries ledger, **derives** the registry from that committed
+ledger on the claude arm (auto-heals a lost funnel row), then runs a completeness
+**gate** that `bail!`s if any completed phase lacks a registry row — both arms. So
+the registry is guaranteed complete by audit; a gap halts here (no refs created),
+the operator commits the ledger / `record-delta`s the gap, and re-runs.
 
 ## Red Flags
 IMPORTANT: READ VERY CLOSELY
