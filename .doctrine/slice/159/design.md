@@ -278,7 +278,12 @@ revised VTs:
 - byte-stable round-trip per new kind (the `populated_fixture` arm extends).
 - seed migration: post-rewrite `knowledge show INV-001` succeeds; `CON-001` gone;
   no `constraint` tree remains.
-- supersede: EVD `confirmed → superseded` flips; HYP refuses supersession.
+- supersede: EVD `confirmed → superseded` flips; **HYP refuses supersession
+  cleanly** (the `supersede_policy → None` path — currently untested, all existing
+  kinds return `Some`; assert a clean error, not a panic).
+- **headline gating (end-to-end):** a work item `needs → EVD-captured` is blocked;
+  the EVD `→ confirmed` makes the dependent actionable. Proves the new kinds
+  participate in SL-158's trinary gating, not just that the partition rows parse.
 
 **Tests that flip by design (consumer revision, not regression):** the prefix-count
 pin (4→6), the `statuses(CON)` / `is_terminal(CON)` / partition-CON assertions
@@ -295,4 +300,28 @@ Roughly: (1) CON→INV rename + seed migration (self-contained, behaviour-preser
 
 ## 10. Review Notes
 
-<!-- adversarial pass + external review land here -->
+### Internal adversarial pass (2026-06-27)
+
+Cheap fixes integrated: narrowed the `memory/**` selector to the one shipped file
+(F4); added the `waived` literal to R1's grep (F5); added the headline end-to-end
+gating VT + the `supersede → None` clean-refusal VT to §9 (F6); added R5 (orphaned
+CON reservation ref).
+
+Three substantive findings **surfaced to the user, awaiting decision** before lock:
+
+- **F1 — `supports` edge-label collides with the `[evidence].supports` facet
+  field.** Both spellings now exist with different meanings (relation label vs
+  free-text citation list). RFC-009 uses `supports`/`disputes`; D1 names the
+  evidence-block-vs-EVD tension. *Options:* keep RFC names (collision tolerated —
+  distinct namespaces) | rename edges (`attests`/`refutes`). **Pending.**
+- **F2 — EVD's 5th status `superseded` is not in RFC's enumerated 4-state
+  lifecycle.** Added so the supersede verb has a landing state (RFC text implies
+  it: confirmed "may be superseded"). *Options:* keep 5 states (EVD supersedable) |
+  4 states (EVD not supersedable, like HYP). **Pending.**
+- **F3 — `supports`/`disputes` is adjacent to the open D3 `shapes`-split.** Adding
+  record→record evidentiary edges front-runs (without resolving) the shapes
+  epistemic-vs-affects question scoped out of this slice. They coexist cleanly.
+  *Options:* proceed (front-run accepted) | hold edges until D3 settles. **Pending.**
+
+<!-- external review (codex / opus sub-agent) lands here after F1–F3 resolved -->
+
