@@ -294,6 +294,45 @@ git.rs-only, file-disjoint. TDD red/green/refactor.
   scope, gated PHASE-02 on the git suite. `cargo fmt` also reformatted foreign
   `guard.rs`/`revision.rs` (SL-155 landed unformatted) — restored, not committed.
 
+## PHASE-03 — solo binding soundness + reopen eviction (landed `e4dfd146` on edge)
+
+state.rs (impl) + git.rs (dead-fn removal). TDD red/green/refactor. Two behaviour changes.
+- **EX-1 guard swap** (`capture_phase_boundary`): branch-proxy → `live_worktree_for_ref(
+  project_root, "refs/heads/dispatch/{slice_id:03}")`. `Ok(Some)`→stand down, `Ok(None)`→
+  record, `Err`→`warn_capture`+stand down. Sound from the session root (the branch-proxy
+  could not see a `dispatch/NNN` coord worktree when the flip ran from the primary tree on
+  `main`); liveness (`!prunable && path.exists()`) means a stale/pruned coord entry reads as
+  absent → capture is never suppressed forever. Removed the now-dead `git::current_branch`
+  (the old guard was its sole caller; dispatch.rs has its own private `current_branch`,
+  untouched). RED: rewrote `binding_skips_capture_in_a_dispatch_context` →
+  `binding_stands_down_under_a_live_coord_worktree` (real `git worktree add -b dispatch/147`,
+  flip from the repo root); added `binding_records_when_coord_worktree_is_prunable` (VT-2).
+- **EX-3 reopen eviction** (`set_phase_status`): capture `was_completed` BEFORE the status
+  insert overwrites it; on Completed→non-Completed clear `code_start_oid` (the next
+  in_progress re-stamps a FRESH start) + `forget_source_delta` the registry row. RED:
+  `binding_records_boundary_then_evicts_and_refreshes_on_reopen` asserts the row is empty
+  mid-reopen and re-completion records `[restart→end2]`, not the old preserved `[start→end2]`
+  (P2-1 reversed).
+- **forget degrades, does NOT propagate (deliberate departure from §5.2 pseudocode).** The
+  design shows `forget_source_delta(...)?`, but `?` makes a reopen *fail* in a non-repo / bare
+  cwd (`boundaries_path` itself errors) — breaking D5 (the binding must never block a status
+  transition; pinned by `binding_degrades_without_blocking_when_git_unavailable` and
+  `set_phase_status_clears_completed_on_reopen`, both on non-git roots). So forget warns like
+  the record tail and never blocks. Safe because a lingering row is **self-healing** (the
+  re-completion's upsert overwrites it) and a never-recompleted reopen surfaces loudly via the
+  completeness gate (`Extra`). Recorded as [[mem.pattern.state.reopen-evict-degrades-self-heal]].
+- **EX-2/EX-4 verification-only** (Solo stamp + absent-warn landed P01; stamp-present path
+  byte-identical). **VT-5** pins the untouched `registry_completeness` consumer end-to-end:
+  `binding_absent_start_records_nothing_and_completeness_flags_incomplete`.
+- **Gate:** bin unit 2584 green (state+git), dispatch lifecycle/sync + list-conformance
+  30+4 green (funnel double-record invariant intact); clippy plain zero-warning; fmt.
+- **Land:** rebase fork onto current edge + `merge --ff-only` (NOT `worktree land` — F-6).
+  Edge advanced under the fork (`5c884cdb`→`748db566`, a foreign SL-156 `research.md` doc
+  commit, disjoint), so the in_progress `code_start` (`5c884cdb`) was stale. Rebased onto
+  `748db566` (clean), ff-landed `e4dfd146`, then `record-delta --start 748db566 --end
+  e4dfd146` corrected the boundary to my true single-commit range (Manual incoming preserved
+  the existing `solo` provenance via the sticky merge). gc oracle-certified landed → reaped.
+
 ## Relations & selectors
 
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171
