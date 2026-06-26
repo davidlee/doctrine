@@ -1,9 +1,9 @@
 id = 154
 slug = "conformance-registry-capture"
 title = "Reliable conformance-registry capture"
-status = "design"
+status = "plan"
 created = "2026-06-25"
-updated = "2026-06-25"
+updated = "2026-06-26"
 tags = []
 
 [relationships]
