@@ -49,3 +49,11 @@ ref = "SL-115"
 kind = "design"
 ref = "SL-115-codex-round-2"
 
+[[relation]]
+label = "related"
+target = "mem_019ef885e7d97803a6617f48f9644fd6"
+
+[[relation]]
+label = "related"
+target = "mem_019eea38ced5771084808d609df882a6"
+

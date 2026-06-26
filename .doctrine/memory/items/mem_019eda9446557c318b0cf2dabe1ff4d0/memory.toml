@@ -42,3 +42,11 @@ weight = 0
 [[relation]]
 label = "related"
 target = "mem_019eacd4b2af7a7099792cc3e1671cc5"
+
+[[relation]]
+label = "related"
+target = "IMP-096"
+
+[[relation]]
+label = "related"
+target = "IMP-097"

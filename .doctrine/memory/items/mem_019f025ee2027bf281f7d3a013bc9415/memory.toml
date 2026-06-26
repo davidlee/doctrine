@@ -44,3 +44,7 @@ weight = 0
 kind = "slice"
 ref = "SL-154"
 
+[[relation]]
+label = "related"
+target = "mem_019ef8c35b407a738b66e1fa5eaaa0f3"
+

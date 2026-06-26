@@ -48,3 +48,7 @@ ref = "SL-156"
 kind = "adr"
 ref = "ADR-008"
 
+[[relation]]
+label = "related"
+target = "mem_019f025ee2027bf281f7d3a013bc9415"
+

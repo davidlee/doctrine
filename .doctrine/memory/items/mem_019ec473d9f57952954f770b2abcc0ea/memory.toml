@@ -67,3 +67,7 @@ target = "mem.pattern.dispatch.reanchor-base-on-disjoint-head-move"
 [[relation]]
 label = "related"
 target = "RFC-005"
+
+[[relation]]
+label = "related"
+target = "IMP-122"

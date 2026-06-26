@@ -43,3 +43,7 @@ weight = 0
 [[relation]]
 label = "related"
 target = "mem.pattern.cordage.opaque-ids-capture-from-builder"
+
+[[relation]]
+label = "related"
+target = "IMP-021"

@@ -47,3 +47,11 @@ target = "mem.concept.dispatch.gitignored-tier-partition"
 [[relation]]
 label = "related"
 target = "mem.pattern.dispatch.authoring-entities-not-dispatchable"
+
+[[relation]]
+label = "related"
+target = "mem_019ebeeda9c27f03808fdeeafb0e93cc"
+
+[[relation]]
+label = "related"
+target = "mem_019ee2a5d84077d3a93c5a3ee52af7ab"
