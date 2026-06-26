@@ -16,12 +16,14 @@
 //! `phase/*` is reported, never clobbered (EX-5). Trunk and `edge` are never
 //! touched — that is stage-2 `--integrate` (PHASE-05).
 
+use std::collections::BTreeSet;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
 use clap::Subcommand;
 
+use crate::boundary::{BoundaryRow, Provenance};
 use crate::git::{self, MergeTree, RefCas, ZERO_OID};
 use crate::ledger::{
     Admission, Boundaries, CandidateKind, CandidatePayload, CandidateRole, CandidateRow,
@@ -1497,6 +1499,30 @@ fn tree_of(root: &Path, commit: &str) -> anyhow::Result<String> {
     )?)
 }
 
+/// PHASE-05 (ISS-052) projection-source guard predicate (design §5.2 / D11).
+///
+/// The committed boundaries ledger holds **only funnel phases**; `plan_phases`
+/// projects a per-phase cut for each. A funnel phase whose committed-ledger row
+/// was lost (coord worktree removed before prepare-review, a partial working
+/// ledger) under-projects *silently* — yet the funnel double-write already wrote
+/// its **registry** row, so `registry_completeness` still passes. Provenance is
+/// the discriminator: every registry row that is **not** positively solo/manual
+/// (`Funnel`, or legacy `Unknown` we cannot clear) must have a committed-ledger
+/// row. `Solo` (the binding) and `Manual` (the record-delta escape hatch, which
+/// never asserts a ledger row exists) are excluded. Pure: a phase-id set compare,
+/// never a code-delta diff (the pass-5 reshape deleted that path).
+fn missing_committed_funnel_phases<'a>(
+    registry: &'a [BoundaryRow],
+    committed: &BTreeSet<&str>,
+) -> Vec<&'a str> {
+    registry
+        .iter()
+        .filter(|r| matches!(r.provenance, Provenance::Funnel | Provenance::Unknown))
+        .map(|r| r.phase.as_str())
+        .filter(|p| !committed.contains(p))
+        .collect()
+}
+
 /// Stage-1 prepare-review (design §4.2 B + §4.3 C).
 fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     let slice3 = format!("{slice:03}");
@@ -1535,6 +1561,53 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     //     working tree — works stage-1 and stage-2; design §4.1) --------------
     let orthogonal = read_ledger::<Orthogonal>(root, &coord_ref, &slice3, "orthogonal.toml")?;
     let boundaries = read_ledger::<Boundaries>(root, &coord_ref, &slice3, "boundaries.toml")?;
+
+    // --- PHASE-05 (ISS-052): guard → derive → gate, ALL before the ref
+    //     projection (the ordering is load-bearing — a halt creates no refs, so
+    //     the operator's record-delta → re-run collides with nothing; design
+    //     §5.2 steps 3–5 / D11 / F1). All three root on the PRIMARY tree so a
+    //     coordination-worktree cwd still reads/writes the registry the
+    //     integrator consumes. ----------------------------------------------------
+    let primary = git::primary_worktree(root)?;
+
+    // (3) projection-source guard (D11) — read the primary registry PRE-DERIVE:
+    //     a funnel/legacy row with no committed-ledger counterpart would
+    //     under-project silently (plan_phases emits no cut for it).
+    let registry = crate::state::read_source_deltas(&primary, slice)?;
+    let committed: BTreeSet<&str> = boundaries.rows.iter().map(|r| r.phase.as_str()).collect();
+    let missing = missing_committed_funnel_phases(&registry, &committed);
+    if !missing.is_empty() {
+        bail!(
+            "prepare-review: committed boundaries ledger is missing phase(s) {missing:?} on \
+             dispatch/{slice3} that the registry records as funnel-owned (or legacy/unclassified). \
+             The registry has them but the dispatch ref does not — the coordination worktree was \
+             likely removed before prepare-review, or these are pre-provenance rows. Re-run with \
+             the coord worktree present (it persists until integrate), or record-delta + COMMIT \
+             the ledger for the named phase(s)."
+        );
+    }
+
+    // (4) derive: upsert each committed-ledger row (Funnel) into the primary
+    //     registry — fills a missing row, overwrites a binding mis-capture.
+    for row in &boundaries.rows {
+        crate::state::record_source_delta(&primary, slice, row.clone())?;
+    }
+
+    // (5) gate: primary-rooted completeness (both the completed-set and the
+    //     registry resolve against `primary`) — bail BEFORE projection on any gap.
+    if let crate::state::Completeness::Incomplete { gaps } =
+        crate::state::registry_completeness(&primary, &primary, slice)?
+    {
+        let detail = gaps
+            .iter()
+            .map(crate::state::CompletenessGap::describe)
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!(
+            "prepare-review: conformance registry incomplete: {detail}; \
+             record-delta the missing phase(s) before audit"
+        );
+    }
 
     // --- compute projections (objects only; no ref mutation yet) ------------
     let mut planned: Vec<Planned> = Vec::new();
@@ -3769,5 +3842,76 @@ mod tests {
 
         let result = run_status(Some(src.path().to_path_buf()), 85, true);
         assert!(result.is_ok(), "status should succeed; err: {result:?}");
+    }
+
+    // --- PHASE-05 (ISS-052) projection-source guard predicate (D11) ----------
+
+    fn reg_row(phase: &str, provenance: Provenance) -> BoundaryRow {
+        BoundaryRow {
+            phase: phase.to_string(),
+            code_start_oid: "s".to_string(),
+            code_end_oid: "e".to_string(),
+            provenance,
+        }
+    }
+
+    fn committed_set<'a>(phases: &'a [&str]) -> BTreeSet<&'a str> {
+        phases.iter().copied().collect()
+    }
+
+    // VT-1: total loss — every registry row is funnel-owned, the committed ledger
+    // is empty → all phases are named missing.
+    #[test]
+    fn guard_total_loss_names_every_funnel_phase() {
+        let registry = vec![
+            reg_row("PHASE-01", Provenance::Funnel),
+            reg_row("PHASE-02", Provenance::Funnel),
+        ];
+        let committed = committed_set(&[]);
+        let missing = missing_committed_funnel_phases(&registry, &committed);
+        assert_eq!(missing, vec!["PHASE-01", "PHASE-02"]);
+    }
+
+    // VT-2: partial loss — one funnel phase absent from the committed ledger →
+    // only that one is named; a complete committed ledger → nothing missing.
+    #[test]
+    fn guard_partial_loss_names_only_the_uncommitted_phase() {
+        let registry = vec![
+            reg_row("PHASE-01", Provenance::Funnel),
+            reg_row("PHASE-02", Provenance::Funnel),
+        ];
+        assert_eq!(
+            missing_committed_funnel_phases(&registry, &committed_set(&["PHASE-01"])),
+            vec!["PHASE-02"],
+        );
+        assert!(
+            missing_committed_funnel_phases(&registry, &committed_set(&["PHASE-01", "PHASE-02"]))
+                .is_empty(),
+            "a complete committed ledger leaves nothing missing",
+        );
+    }
+
+    // VT-4: set membership by provenance — Unknown (legacy/unclassified) missing
+    // halts; Solo (binding) and a fresh Manual (record-delta) missing do NOT.
+    #[test]
+    fn guard_includes_unknown_excludes_solo_and_manual() {
+        let registry = vec![
+            reg_row("PHASE-01", Provenance::Unknown),
+            reg_row("PHASE-02", Provenance::Solo),
+            reg_row("PHASE-03", Provenance::Manual),
+        ];
+        // None present in the committed ledger; only the Unknown row is funnel-owned.
+        let missing = missing_committed_funnel_phases(&registry, &committed_set(&[]));
+        assert_eq!(
+            missing,
+            vec!["PHASE-01"],
+            "Unknown halts; Solo/Manual excluded"
+        );
+    }
+
+    // An empty registry can never produce a missing phase.
+    #[test]
+    fn guard_empty_registry_is_silent() {
+        assert!(missing_committed_funnel_phases(&[], &committed_set(&["PHASE-01"])).is_empty(),);
     }
 }
