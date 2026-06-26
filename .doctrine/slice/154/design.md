@@ -7,6 +7,11 @@
      prior working-file-read draft (codex pass-2 P2-3, SPEC-022 violation) is
      fully retracted; this body is the single source of truth. §10 is the review
      ledger (history of all passes + the decision trail). -->
+<!-- Revision 4 (2026-06-26): pass-5 reshape. D11 reshaped from the empty-only
+     projection-source guard (proven unsound — pass-5) to a PER-PHASE PROVENANCE
+     set-check; `BoundaryRow` gains a `provenance` field (D11/§5.2/§5.3/§7).
+     `git::code_delta_paths` is dropped. New §5.6 records the registry's nav/value
+     role (efficiency lens). F4 explicitly NOT closed by provenance. -->
 
 ## 1. Design Problem
 
@@ -182,20 +187,31 @@ from code, not live forensics).
 
 ### 5.1 System Model
 
+Every registry writer stamps the row's **`provenance`** (`Solo` | `Funnel` |
+`Manual`; absent → `Unknown`). It is the discriminator D11 needs and nothing else
+records (§5.6): the committed ledger holds *only* funnel phases, so "registry phase
+absent from the committed ledger" is ambiguous (legit solo vs lost funnel row)
+**without** provenance.
+
 ```
-solo completed-flip ──(guard: no LIVE coord worktree)──> record_source_delta ─┐
-prepare-review:                                                               │
-  1. commit-boundaries: splice working ledger → dispatch/NNN tip (SPEC-022)   │
-  2. derive: read_ledger(committed) → record_source_delta per row (UPSERT) ───┤
-codex/pi record-delta ────────────────────────────────────────────────────────┤
-manual record-delta (escape hatch) ────────────────────────────────────────────┤
-                                                                               v
-                                              .doctrine/state/slice/NNN/boundaries.toml
-                                                                               │
-                            prepare-review GATE: registry_completeness(primary,│primary,id)
-                                                                               v
+solo completed-flip ──(guard: no LIVE coord worktree)──> record_source_delta[Solo] ─┐
+prepare-review:                                                                      │
+  1. commit-boundaries: splice working ledger → dispatch/NNN tip (SPEC-022)         │
+  2. PROJECTION-SOURCE GUARD (D11): every registry[Funnel] phase ∈ committed ledger │
+  3. derive: read_ledger(committed) → record_source_delta[Funnel] per row (UPSERT) ─┤
+funnel double-write (run_record_boundary) ─> record_source_delta[Funnel] ───────────┤
+codex/pi + manual record-delta (escape hatch) ─> record_source_delta[Manual] ───────┤
+                                                                                    v
+                                                  .doctrine/state/slice/NNN/boundaries.toml
+                                                                                    │
+                              prepare-review GATE: registry_completeness(primary,│ primary,id)
+                                                                                    v
                                                               Complete | HALT (named gap)
 ```
+
+D11 (step 2) reads the registry **before** the derive (step 3) — the derive would
+otherwise backfill the registry from the committed ledger and mask exactly the gap
+D11 hunts.
 
 Reopen (completed→non-completed) **evicts** the phase's registry row + clears its
 stamp (P2-1), so a redo re-captures fresh or fails loud — never a stale blessed row.
@@ -204,13 +220,19 @@ stamp (P2-1), so a redo re-captures fresh or fails loud — never a stale blesse
   the live coord worktree's working `boundaries.toml` onto the `dispatch/NNN` tip via a
   doctrine-mediated commit (mirrors `commit_journal`). Now `read_ledger`, `plan_phases`,
   and the derive read **one** committed, checkout-independent source (SPEC-022-legal).
-- **Solo binding (solo phases).** Keep the stamp; record `(stamp, HEAD)` at `completed`.
-  **Guard:** skip iff a *live* coord worktree exists for `dispatch/NNN` (the slice is
-  under active dispatch → the funnel/derive owns recording). Stamp absent → no row + a
-  surfaced warning; the gate / conformance fail-closed catches it.
+- **Solo binding (solo phases).** Keep the stamp; record `(stamp, HEAD)` at `completed`
+  with **`provenance = Solo`**. **Guard:** skip iff a *live* coord worktree exists for
+  `dispatch/NNN` (the slice is under active dispatch → the funnel/derive owns recording).
+  Stamp absent → no row + a surfaced warning; the gate / conformance fail-closed catches it.
+- **Projection-source guard (D11, funnel phases).** *Before* the derive, assert every
+  registry row the **funnel owns** (`provenance == Funnel`) has a committed-ledger row;
+  halt naming the missing phases otherwise. Provenance is the discriminator — a registry
+  phase absent from the committed ledger is a legit solo phase OR a lost funnel row, and
+  only provenance tells them apart (§5.6). Subsumes the old empty-only guard.
 - **Derive-at-gate (funnel phases), authoritative + self-correcting.** At
   `prepare-review`, read the **committed** ledger and `record_source_delta` each row
-  (upsert) — overwrites any binding mis-capture, fills any missing funnel row.
+  (upsert, **`provenance = Funnel`**) — overwrites any binding mis-capture, fills any
+  missing funnel row.
 - **Gate (both arms).** `registry_completeness` resolved against the **primary** tree
   for *both* the completed-set and the registry; `bail!` on any gap.
 - **Funnel inline double-write retained.** `run_record_boundary` is **unchanged**
@@ -241,25 +263,33 @@ let trunk_base = merge_base(root, &tip, &trunk_tip)?;        // recomputed off t
 // (2) read the committed ledger (now populated) — the SINGLE source (INV-4).
 let boundaries = read_ledger::<Boundaries>(root, coord_ref, slice3, "boundaries.toml")?;
 
-// (3) PROJECTION-SOURCE GUARD (codex pass-4 BLOCKER, D11). prepare-review only runs
-//     on dispatched slices; an EMPTY committed ledger while code landed means the
-//     ledger was never committed (coord worktree removed before prepare-review).
-//     plan_phases would then project 0 AND the derive would add nothing — yet the
-//     funnel double-write (run_record_boundary:614) may have already filled the
-//     registry, so registry_completeness would FALSELY pass. Catch it loudly.
-if boundaries.rows.is_empty() {
-    let code = git::code_delta_paths(root, &trunk_base, &tip, &orthogonal)?; // non-.doctrine, non-verified-orthogonal
-    if !code.is_empty() {
-        bail!("prepare-review: boundaries ledger is empty but {} code path(s) landed on \
-               dispatch/{slice3}; the coordination worktree was likely removed before \
-               prepare-review. Re-run with the coord worktree present (it persists until \
-               integrate), or record-delta + commit the ledger.", code.len());
-    }
+// (3) PROJECTION-SOURCE GUARD (D11, reshaped pass-5). The committed ledger holds
+//     ONLY funnel phases. A funnel phase whose committed-ledger row was LOST (coord
+//     worktree removed before prepare-review; or a partial working ledger) under-
+//     projects silently: plan_phases emits no cut for it, yet the funnel double-write
+//     (run_record_boundary:614) already wrote the REGISTRY row, so registry_completeness
+//     passes. PROVENANCE discriminates: every registry row the FUNNEL owns must have a
+//     committed-ledger row. Read the registry BEFORE the derive (step 4) — the derive
+//     would backfill it from the committed ledger and mask the gap.
+let primary = git::primary_worktree(root)?;
+let registry = state::read_source_deltas(&primary, slice)?;        // pre-derive snapshot
+let committed: HashSet<&str> =
+    boundaries.rows.iter().map(|r| r.phase.as_str()).collect();
+let missing: Vec<&str> = registry.rows.iter()
+    .filter(|r| r.provenance == Provenance::Funnel)               // funnel-owned only
+    .map(|r| r.phase.as_str())
+    .filter(|p| !committed.contains(p))
+    .collect();
+if !missing.is_empty() {
+    bail!("prepare-review: committed boundaries ledger is missing funnel-owned phase(s) \
+           {missing:?} on dispatch/{slice3} — the registry records them but the dispatch \
+           ref does not (the coordination worktree was likely removed before prepare-review). \
+           Re-run with the coord worktree present (it persists until integrate), or \
+           record-delta + commit the ledger for the named phase(s).");
 }
 
 // (4) DERIVE the registry + (5) GATE — BEFORE projection, so a halt leaves NO
 //     refs to collide with on the operator's record-delta → re-run (F1).
-let primary = git::primary_worktree(root)?;
 for row in &boundaries.rows { state::record_source_delta(&primary, slice, row.clone())?; }
 if let Incomplete { gaps } = state::registry_completeness(&primary, &primary, slice)? {
     bail!("prepare-review: conformance registry incomplete: {gaps}; \
@@ -270,12 +300,15 @@ if let Incomplete { gaps } = state::registry_completeness(&primary, &primary, sl
 //     with_journaled_projection (journal.toml splice, :2182). Unchanged.
 ```
 
-`orthogonal` is the orthogonal ledger already read at dispatch.rs:1522;
-`git::code_delta_paths` is a thin diff of `trunk_base..tip` (`--name-only`) minus
-`.doctrine/` and the verified-orthogonal paths — the same exclusion set `plan_review`
-applies (dispatch.rs:2015–2020), lifted to a path list. (If a leaner check reads better
-at /plan — e.g. comparing the `plan_review` review tree to the trunk-base tree — adopt
-it; the invariant is "code landed ⇒ a committed ledger row must exist".)
+The guard reuses `state::read_source_deltas` (state.rs:588) and `Provenance` on the
+boundary row — **no code-delta diff, no exclusion set**. The pass-5 reshape *deletes*
+the old `git::code_delta_paths` helper and its `trunk_base..tip` filter: the invariant
+is now "**every funnel-owned registry phase has a committed-ledger row**", a pure
+phase-id set comparison that never touches the working tree or duplicates `plan_review`'s
+filter (the three pass-5 defects of the empty-only guard — too-weak predicate,
+false-halt on solo/empty-code, wrong-exclusion-set — all dissolve). `Provenance::Funnel`
+is written by the funnel double-write (`run_record_boundary`) and the derive; `Solo` by
+the binding; `Manual` by `record-delta`; absent rows read `Unknown` and are excluded.
 
 New `commit_boundaries(root, parent, coord_ref, coord_worktree, slice) -> Result<String>`
 — the boundaries twin of `commit_journal`, with two hardenings over a naive splice:
@@ -314,7 +347,9 @@ dispatch.rs; OQ-4). `None` when the file is absent (→ `commit_boundaries` no-o
    Sound from any tree (works when the flip runs from the session root) and immune to a
    pruned/stale coord entry (D9). No chaining — the absent-stamp branch records
    **nothing** (surfaced warning), unchanged in its non-blocking posture.
-2. Stamp-present path **unchanged** (precise `(stamp, HEAD)`).
+2. Stamp-present path: precise `(stamp, HEAD)`, now with **`provenance = Solo`** on the
+   recorded `BoundaryRow` (the only delta to this path — D11 reads it to exclude solo
+   phases from the funnel-expected set).
 
 `git::live_worktree_for_ref` is **not** a wrapper over `worktree_for_ref` — the existing
 `parse_worktree_for_ref` (git.rs:1163) returns the path on the matching `branch` line and
@@ -336,16 +371,40 @@ New `state::forget_source_delta(cwd, slice, phase) -> Result<bool>`: read-modify
 removal of the phase's row from `boundaries.toml` (the inverse of `record_source_delta`;
 absent → `false`, no error). Resolved against the **primary** tree (same as the writer).
 
-**Funnel** — `run_record_boundary`: **unchanged** (double-write retained). `record-delta`
-verb: **unchanged** (escape hatch).
+**Funnel** — `run_record_boundary` (dispatch.rs:587): double-write retained; the only
+change is it stamps **`provenance = Funnel`** on the `BoundaryRow` it writes to *both*
+the committed working ledger and the registry. `record-delta` verb: stamps
+**`provenance = Manual`** (escape hatch; otherwise unchanged).
 
 ### 5.3 Data, State & Ownership
 
-- **Registry** `.doctrine/state/slice/NNN/boundaries.toml` (runtime, primary-resolved):
-  shape unchanged. Writers: solo binding, `prepare-review` derive (new), funnel inline
-  write, codex/pi + manual `record-delta`. Eviction: reopen (new). All mutations via
-  `record_source_delta` (upsert) / `forget_source_delta` (remove) against the primary
-  tree → idempotent; the derive is the authoritative last writer for funnel phases.
+- **`BoundaryRow` (`boundary.rs:16`) gains one field — `provenance`** (the pass-5
+  reshape; D11):
+  ```rust
+  #[derive(…, Default)]
+  #[serde(rename_all = "snake_case")]
+  pub(crate) enum Provenance {
+      Solo,             // solo binding at the completed flip
+      Funnel,           // run_record_boundary double-write + the prepare-review derive
+      Manual,           // record-delta escape hatch
+      #[default] Unknown,   // pre-provenance row (absent in TOML) — excluded from D11
+  }
+  // on BoundaryRow:
+  #[serde(default)] pub provenance: Provenance,
+  ```
+  `#[serde(default)]` is the **entire** back-compat story (User decision): legacy
+  on-disk rows (147/153, any mid-flight committed ledger) parse as `Unknown` and are
+  inert — provenance has exactly one consumer, D11 at prepare-review, which closed
+  slices never re-enter. **No backfill, no migration code**; an active slice mid-upgrade
+  is hand-fixed (manual/LLM) if it ever matters. The committed-ledger rows carry `Funnel`
+  by construction (only the funnel writes them); D11 reads provenance from the *registry*,
+  not the committed ledger.
+- **Registry** `.doctrine/state/slice/NNN/boundaries.toml` (runtime, primary-resolved).
+  Writers stamp provenance: solo binding → `Solo`; `prepare-review` derive (new) +
+  funnel inline write → `Funnel`; codex/pi + manual `record-delta` → `Manual`. Eviction:
+  reopen (new). All mutations via `record_source_delta` (upsert) / `forget_source_delta`
+  (remove) against the primary tree → idempotent; the derive is the authoritative last
+  writer for funnel phases.
 - **Dispatch ledger** `.doctrine/dispatch/NNN/boundaries.toml` (claude-only): written as
   a working file by `run_record_boundary` during the drive; **now committed** onto
   `dispatch/NNN` at `prepare-review` (new, ISS-039). Read via `read_ledger` (committed
@@ -398,14 +457,51 @@ the accepted cost of never blessing a garbage row (R2).
   halted first pass, so the re-run reaches projection cleanly with the registry now
   complete. (Re-running a *successful* prepare-review still hits the pre-existing
   stale-ref bail — unchanged, out of scope.)
-- **Coord worktree absent / stale at prepare-review (pass-4 BLOCKER):** commit-boundaries
-  no-ops. If a prior run already committed the ledger, it stays on the tip — fine. But if
-  it was **never** committed (coord removed before the first prepare-review), the
-  committed ledger is empty while the funnel double-write (run_record_boundary:614) has
-  already filled the **registry** — so `registry_completeness` would FALSELY pass while
-  `plan_phases` projects nothing. The **projection-source guard (D11)** catches this:
-  empty committed ledger + landed code ⇒ halt. The registry gate alone is insufficient
-  here (it gates the conformance input, not the projection source).
+- **Coord worktree absent / stale / partial at prepare-review (D11):** commit-boundaries
+  no-ops or commits a partial ledger. The funnel double-write (run_record_boundary:614)
+  has independently filled the **registry** (`provenance = Funnel`) for every recorded
+  phase, so `registry_completeness` would FALSELY pass while `plan_phases` under-projects.
+  The **projection-source guard (D11)** catches it per-phase: any registry `Funnel` row
+  with no committed-ledger row ⇒ halt, naming the phase(s). This covers **total** loss
+  (committed ledger empty, all funnel rows missing) *and* **partial** loss (some funnel
+  rows missing) — the pass-5 hole the old empty-only predicate left open.
+- **Manual escape-hatch edge (D11 boundary):** `record-delta` writes the registry
+  (`Manual`) but **not** the committed ledger. So a `Manual` row satisfies the registry
+  gate without guaranteeing projection — D11 (which expects only `Funnel` rows in the
+  committed ledger) will not re-halt on it. This is the *intended* escape-hatch contract:
+  to fix a D11 halt the operator must **commit the ledger** (the halt message says so),
+  not merely `record-delta`. A `Manual` row for a funnel phase that was never committed
+  is operator-owned residual risk, accepted (consistent with D1/D5 — `record-delta` is
+  the operator's responsibility, not a machinery guarantee).
+- **Mixed solo→dispatch (the pass-5 false-halt):** solo phases land code on the dispatch
+  branch with **no** committed-ledger row by design; their registry rows are `Solo` and
+  D11 excludes them. An all-doc / empty-code *dispatch* phase is recorded by the funnel
+  (`start == end`, a present row) into both ledgers → present in the committed set → no
+  halt. D11 never inspects code paths, so neither shape false-halts (the two pass-5
+  false-halt cases).
+
+### 5.6 Value: registry as the authoritative, self-describing navigation surface
+
+The correctness work has an ergonomic dividend worth claiming as SL-154 value (User-
+requested efficiency/workflow lens):
+
+- **Nav-coherence.** Pre-slice, the registry and the dispatch ledger could diverge (the
+  registry hand-bootstrapped, the ledger uncommitted/empty — the ISS-039/ISS-052 split).
+  The committed-ref derive-upsert makes the registry the **one authoritative, populated**
+  per-phase record — a single place an agent or `slice conformance` reads, instead of
+  reconciling two ledgers by hand.
+- **Self-describing provenance.** The `provenance` field added for D11 also tags each
+  phase with *where it landed* — `Funnel` phases route an agent to `dispatch/NNN` /
+  `review/NNN-NN`; `Solo` to `edge`. The field earns its keep twice: soundness gate +
+  navigation signal.
+- **Storage rule holds — defer the derived view.** The registry stores OIDs (the source),
+  not a path list; a nav consumer re-diffs. Fine for the one current consumer. A *derived*
+  per-phase file-set view (`slice show --phase-files`, or a gitignored cache) is a
+  **follow-up feature gated on SL-154's reliable population** — backlogged, not scoped
+  here (no premature derived tier).
+- **Halt-message ergonomics.** The D11 (and gate) bail name the bounded missing **phase
+  ids**, not a count — the operator/agent goes straight to the fix. This falls out of the
+  per-phase set check for free.
 
 ## 6. Open Questions & Unknowns
 
@@ -480,20 +576,46 @@ the accepted cost of never blessing a garbage row (R2).
   a spec change — verified the spec text names `boundaries.toml` in the committed
   run-ledger set. (If any spec text had described it as uncommitted, a REV would route —
   it does not.)
-- **D11 — Projection-source guard (codex pass-4).** The registry gate (D4) proves the
-  conformance *input* is complete, but **not** that the projection *source* (the committed
-  boundaries ledger that feeds `plan_phases`) exists — and the funnel double-write (D5,
-  run_record_boundary:614) can fill the registry independently of the committed ledger.
-  So a coord worktree removed before the first prepare-review yields a green gate with
-  zero projection. Guard: at prepare-review, **empty committed ledger + non-orthogonal
-  code delta over `trunk_base` ⇒ halt** (sound because prepare-review only runs on
-  dispatched slices, so landed code without a committed ledger row is anomalous). Converts
-  a silent broken-projection into a loud, actionable halt. Cheap (one filtered diff).
-- **Alternatives rejected** — chain-fallback (B): unsound (D1). Working-file derive
+- **D11 — Projection-source guard, per-phase provenance set-check (pass-5 reshape).**
+  The registry gate (D4) proves the conformance *input* is complete, but **not** that the
+  projection *source* (the committed boundaries ledger feeding `plan_phases`) is complete
+  — and the funnel double-write (D5, run_record_boundary:614) fills the registry
+  independently of the committed ledger. **Pass-4's empty-only guard was proven unsound
+  (pass-5):** (i) it fired only on a *fully* empty ledger, missing **partial** loss;
+  (ii) "landed code ⇒ ledger row" **false-halted** mixed solo→dispatch and empty-code
+  dispatch phases; (iii) its `code_delta_paths` copied `plan_review`'s exclusion set,
+  guarding the wrong projection. **Reshaped:** at prepare-review, *before the derive*,
+  assert **every registry row with `provenance == Funnel` has a committed-ledger row**;
+  halt naming the gaps. This is a pure phase-id set comparison — no working-tree diff, no
+  exclusion set, no `code_delta_paths` (the helper is **deleted**). Sound because
+  provenance is the *only* signal distinguishing "legit solo phase, no committed row" from
+  "lost funnel row" (D12); catches total **and** partial loss; never false-halts solo or
+  empty-code phases. The halt names phases (ergonomics, §5.6).
+- **D12 — `provenance` field on `BoundaryRow` (the discriminator; D11's foundation).**
+  D11 needs to know, per completed phase, whether the funnel owns it. **No existing
+  committed state records that** (verified: `journal.toml` is the CAS projection ledger
+  *derived from* boundaries — circular; `candidates.toml` is review/close refs;
+  `BoundaryRow` carried only OIDs). So the notes' "(B) derive from which writer recorded,
+  cheaper" option is **illusory** — deriving from the writer requires persisting the
+  writer's identity, i.e. a field. Chosen: add `provenance: Solo | Funnel | Manual`
+  (absent → `Unknown`) to `BoundaryRow`. Lowest-touch (every registry writer already
+  writes a `BoundaryRow`); also self-describes the registry for navigation (§5.6).
+  Back-compat is `#[serde(default)]` only — **no migration machinery** (User decision):
+  provenance's sole consumer is D11 at prepare-review, which closed slices never re-enter,
+  so legacy rows are inert; a mid-flight active slice is hand-fixed if it ever matters.
+  `boundary.rs` joins `design-target`. **Does NOT close F4** — provenance marks ownership
+  *post-record*; the solo binding's *stand-down decision* (pre-record, F4/R2) still keys
+  on live-coord-worktree presence, and its precise fix (run-state ownership) remains the
+  hardening follow-up. The efficiency note's "provenance → F4" claim is tempered here.
+- **Alternatives rejected** — chain-fallback: unsound (D1). Working-file derive
   (the retracted pass-2 draft): SPEC-022 violation (P2-3). Read-time fallback in
   conformance: scope-rejected; papers over the write gap. **Dropping the funnel
   double-write to close the D11 gap:** rejected — it is a contract break (D5/F5); the D11
-  guard closes the hole without removing the double-write.
+  guard closes the hole without removing the double-write. **Empty-only D11 guard +
+  `code_delta_paths`** (pass-4 draft): rejected pass-5 — too weak (misses partial loss),
+  false-halts solo/empty-code, guards the wrong exclusion set (D11/D12). **Provenance
+  derived from a committed run-state** (notes option B): rejected — no such state exists
+  (D12).
 
 ## 8. Risks & Mitigations
 
@@ -558,11 +680,24 @@ the accepted cost of never blessing a garbage row (R2).
 - **VT — gate-before-projection (F1):** an incomplete registry → `prepare-review` halts
   with **no `review/*` / `phase/*` refs created**; after `record-delta` fills the gap a
   re-run projects cleanly.
-- **VT — projection-source guard (D11, pass-4 BLOCKER):** a dispatched slice whose
-  `run_record_boundary` filled the **registry** but whose coord worktree was removed
-  **before** prepare-review (committed ledger empty) → prepare-review **halts** ("ledger
-  empty but code landed"), does NOT pass on the pre-filled registry, and creates no refs.
-  Contrast: an empty-code dispatched slice (no code delta) with empty ledger → no halt.
+- **VT — D11 total loss:** a dispatched slice whose `run_record_boundary` filled the
+  **registry** (`Funnel` rows) but whose coord worktree was removed **before**
+  prepare-review (committed ledger empty) → prepare-review **halts naming the phases**,
+  does NOT pass on the pre-filled registry, creates no refs.
+- **VT — D11 partial loss (the pass-5 hole):** committed ledger has *some* funnel rows,
+  missing one a `Funnel` registry row records → halt naming **only the missing phase**;
+  a complete committed ledger → no halt. (The empty-only guard missed this.)
+- **VT — D11 no false-halt (the pass-5 false-halts):** (a) mixed solo→dispatch — solo
+  phases (`Solo`) land code on the branch with no committed-ledger row → **no halt**;
+  (b) empty-code dispatch phase (`start == end`, `Funnel`) recorded in both ledgers →
+  **no halt**. D11 never reads code paths.
+- **VT — D11 ignores `Manual`/`Unknown`:** a `Manual` registry row (record-delta) absent
+  from the committed ledger → no D11 halt (escape-hatch contract); an `Unknown` (legacy)
+  row → excluded, no halt.
+- **VT — provenance write-sites:** the solo binding stamps `Solo`, `run_record_boundary`
+  stamps `Funnel` on both the working ledger and registry rows, the derive stamps
+  `Funnel`, `record-delta` stamps `Manual`; a legacy TOML row without the field
+  deserializes as `Unknown`.
 - **VT — guard soundness (the unsound-capture fix):** a dispatched phase flipped from a
   session-root context with a live coord worktree → binding **stands down** (no garbage
   row); without a coord worktree → binding records.
@@ -683,13 +818,34 @@ Confirmed F1–F3, F5 integrations sound. Found one residual BLOCKER + one MINOR
 - **F4 re-confirmed insufficient-without-the-blocker → now covered:** the D11 guard closes
   the path where the gate was satisfied by the double-write while projection was empty.
 
-### Revision status — committed-ref core solid; D11 REOPENED by pass-5 (2026-06-26)
+### External pass 5 — codex (GPT-5.5), 2026-06-26 — D11 unsound — dispositions
 
-The committed-ref core (ISS-039 absorption, D2 derive, D8 reopen, D9 liveness, D10 no-REV)
-has cleared 5 codex passes. **BUT pass-5 proved D11 (the projection-source guard, §5.2
-step 3 / §7 D11) UNSOUND** (empty-only predicate too weak; false-halts mixed
-solo→dispatch; exclusion-set guards the wrong projection), and a User-requested
-efficiency/workflow review surfaced a converging fix (**per-phase landing-path
-provenance** → D11 + F4 + agent navigation). **Both finding-sets + the integration plan
-are in `notes.md` "⚠ OPEN FINDINGS".** §5.2/§7 D11 below are **stale** pending that
-reshape. **NOT plan-ready** — integrate, re-pass, then `/plan`.
+Pass-5 reopened **D11** (the pass-4 empty-only projection-source guard). All three
+defects ACCEPTED; the User-requested efficiency lens supplied the converging fix.
+
+- **P5-1 (BLOCKER) empty-only predicate too weak → ACCEPTED.** D11 fired only on a fully
+  empty committed ledger; a **partial** ledger slips past it and the registry gate
+  (pre-filled by the double-write) → silent under-projection. **Fixed:** per-phase
+  set-check (D11 reshaped).
+- **P5-2 (BLOCKER) false-halts mixed solo→dispatch / empty-code → ACCEPTED.** "landed
+  code ⇒ committed ledger row" is too broad: solo phases land code with no committed row
+  by design; empty-code dispatch phases leave an empty `code_delta`. **Fixed:** provenance
+  excludes `Solo`; the guard never inspects code paths (D11 reshaped).
+- **P5-3 (MAJOR) exclusion-set mismatch → ACCEPTED.** `code_delta_paths` copied
+  `plan_review`'s filter, not `plan_phases`' — guarding the wrong projection. **Fixed:**
+  `code_delta_paths` **deleted**; the invariant is a pure phase-id set comparison (D11).
+- **Efficiency lens (value/ergonomics, not correctness):** the missing per-phase landing
+  path is exactly D11's discriminator. Disposition: **D12** adds `provenance` to
+  `BoundaryRow` (the only sound option — B is illusory, D12); §5.6 claims nav-coherence as
+  value and **backlogs** the derived nav view; the F4 ownership-signal hardening stays a
+  backlog follow-up (provenance does **not** close F4 — D12). Halt-message phase-naming
+  absorbed into D11.
+
+### Revision 4 — pass-5 reshape integrated (2026-06-26)
+
+D11 reshaped from the empty-only guard to the **per-phase provenance set-check**; **D12**
+adds the `provenance` field; `git::code_delta_paths` **removed** from scope; **§5.6**
+records the registry's nav/value role. §1–§9 above are revised accordingly (this body is
+the single source of truth; `notes.md` "⚠ OPEN FINDINGS" is now **closed** — superseded by
+this revision). Committed-ref core (D2/D7/D8/D9/D10) unchanged. **Re-pass codex on the
+reshape, then `/plan`.**

@@ -85,8 +85,9 @@ Affected surface (coarse — `/design` refines):
   ledger + primary-rooted completeness gate (ISS-052).
 - `src/ledger.rs` — dispatch-ledger reader/writer; the source of the SHAs the
   derive mirrors, and the working-file reader for the splice-commit.
-- `src/boundary.rs` — `BoundaryRow` (shared row type; reference, likely
-  unchanged).
+- `src/boundary.rs` — `BoundaryRow` gains a `provenance` field (`Solo|Funnel|
+  Manual|Unknown`), the per-phase landing-path discriminator the projection-source
+  guard (D11) keys on (design Rev 4 / D12).
 - Dispatch skills (`dispatch`, `dispatch-subprocess`) — drop the skippable
   orchestrator `record-delta` instruction once the funnel beat is enforced.
 
