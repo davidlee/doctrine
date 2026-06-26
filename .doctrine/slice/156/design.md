@@ -356,3 +356,13 @@ Hostile read of the draft + grounding greps. Findings, integrated above:
     target dirs; shared registry/git caches don't resurrect the `CARGO_BIN_EXE` bug);
     B1 under the cargo `[workspace]` (one `target/` at workspace root per worktree, no
     cross-member collision absent a re-exported `CARGO_TARGET_DIR`).
+- **Plan-hardening hostile pass (codex / GPT-5.5, thread 019f0214, 2026-06-26):** done.
+  Targeted the authored plan + the EAP-1..5 changes; mechanism (B1) unchallenged.
+  Verdict NEEDS-WORK → integrated into `plan.toml`/`plan.md` (and `slice-156.md` §4),
+  not the locked design body. EAP-1/EAP-2/EAP-5 re-confirmed against code (assertions
+  separable; `project_env_contract` fails closed to `<fork>/target/wt/<branch>`,
+  `fork.rs:30-34`; `run_fork` stdout was only the env contract, `fork.rs:219-232`).
+  The one design-relevant nuance — VT-1's in-session simulation proves the env-absent
+  *fallback path*, not the post-relaunch `<wt>/target` final shape — is already covered
+  by R5 (§8) and §9 VT-1's "discharges D-B1" intent; the plan's VT-1 was rescoped and
+  VH-1 made the sole proof of final semantics.
