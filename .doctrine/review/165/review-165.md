@@ -107,3 +107,22 @@ the design is accurate to the implementation and no finding contradicts canon.
 
 `/reconcile` is effectively a pass-through to `/close` here: consume this brief,
 confirm there is no write surface to action, and proceed.
+
+## Reconciliation Outcome
+
+Pass-through. The reconciliation brief maps to no write surface.
+
+### Direct edits applied
+- None. design.md, plan.toml, slice-138.toml coherent with landed code.
+
+### REVs completed
+- None. No finding contradicts canon.
+
+### Already actioned in-audit (recorded for traceability)
+- RV-165 F-1: conformance registry corrected via `slice record-delta` (P1
+  `5cb84f3a..f4104f55`, P2 `83b9cea2..42de85c4`) — runtime state only.
+- RV-165 F-2: root cause captured as IMP-175 — no SL-138 action.
+
+All 5 findings terminal (`verified`); RV-165 `done · await=none`. No REV, no
+per-slice edit, no half-applied change blocks close. Reconcile complete — handoff
+to /close.
