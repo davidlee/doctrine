@@ -28,9 +28,9 @@ orchestrator funnel."
      [`/dispatch-agent`](../dispatch-agent/SKILL.md); otherwise →
      [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md).
    Then spawn worker(s) per the chosen arm's template.
-4. Funnel the batch (import → verify → branch-point → one commit → record)
-5. Repeat from new HEAD until all phases done
-6. Conclude: `dispatch sync --prepare-review` → remove coord worktree → audit
+5. Funnel the batch (import → verify → branch-point → one commit → record)
+6. Repeat from new HEAD until all phases done
+7. Conclude: `dispatch sync --prepare-review` → remove coord worktree → audit
 
 ## The funnel (per batch)
 
