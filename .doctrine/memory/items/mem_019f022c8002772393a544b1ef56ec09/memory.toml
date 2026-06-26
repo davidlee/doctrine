@@ -1,0 +1,42 @@
+memory_uid = "mem_019f022c8002772393a544b1ef56ec09"
+memory_key = "mem.pattern.dispatch.prepare-review-gate-couples-to-phase-completion"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "prepare-review gate couples projection to phase-completion"
+summary = "prepare-review's PHASE-05 completeness gate couples projection to phase-completion status; dispatch e2e fixtures must seed completed phases + gitignore the runtime tier"
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/dispatch.rs", "tests/e2e_dispatch_sync.rs"]
+globs = []
+commands = ["doctrine dispatch sync"]
+tags = ["sl-154", "dispatch", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6d2554faa362a908722c20d83327f6940e9ca1cd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a5cc847933842562a935c21ff7997c53feadac10ec1487ba2c94042764d5137c"
+base_commit = "f6833c6838fb13f836e177cbf92ee05a0425a19d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
