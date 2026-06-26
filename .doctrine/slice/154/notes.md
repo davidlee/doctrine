@@ -3,7 +3,13 @@
 Durable per-slice scratchpad — tracked in git. Bootstrap for the next agent (plan +
 codex). `design.md` is the authority; this is the fast-ingest map.
 
-## Status (2026-06-26) — Rev 6 integrated (passes 5–7). Re-pass Rev 6; if clean, /plan.
+## Status (2026-06-26) — Rev 6 DESIGN-CONVERGED (passes 5–8). Plan-ready pending User lock.
+
+> "Fixed" below = **fixed in the design prose. NO CODE YET.** Pass-8 (codex) confirmed the
+> Rev-6 prose internally consistent + the remediation doctrinally sound, and found no new
+> design defect; its "blockers" were design-vs-code divergence (the expected design-stage
+> state = the /plan worklist, not defects). Next reviewer prompt MUST say "review the
+> design prose, not the source tree".
 
 Slice in `design`. `design.md` = committed-ref (ISS-039-absorbed) model + **pass-5 reshape
 (Rev 4)** + **pass-6 edges (Rev 5)** + **pass-7 fixes (Rev 6)**: D11 is a **per-phase

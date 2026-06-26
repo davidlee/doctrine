@@ -1014,5 +1014,25 @@ Found two defects in the *pass-6 fixes themselves*; both ACCEPTED + integrated (
 `record-delta` (P7-1); the provenance merge is atomic in `record_source_delta` keyed on
 incoming provenance (P7-2); §5.1 + `notes.md` reconciled (P7-3); `state.rs` confirmed in
 design-target. The committed-ref core, the provenance discriminator, and the projection-
-source guard are now internally consistent across §5.1–§5.6/§7/§9. **Re-pass codex on Rev
-6; if clean, `/plan`.**
+source guard are now internally consistent across §5.1–§5.6/§7/§9.
+
+### External pass 8 — codex (GPT-5.5), 2026-06-26 — confirmatory on Rev 6 — CONVERGED
+
+**No new design-level findings.** The pass was **stage-confused**: it reviewed the *source
+tree* and reported design-vs-code divergence ("`record_source_delta` does a whole-row
+replace", "`BoundaryRow` has no `provenance` field", "`prepare_review` has no
+`commit_boundaries`/guard/derive") as BLOCKERs. These are **correct observations and
+exactly the expected state** — SL-154 is **design-stage, no code yet**; that divergence is
+the `/plan` → `/execute` worklist, not a design defect. On the design questions it could
+answer it **confirmed the design**: (d) "the Rev 6 prose is **internally reconciled** on
+{Funnel, Unknown} and seam-local merge"; (c) hand-edit reclassification is **doctrinally
+acceptable** (runtime/disposable tier, using-doctrine.md:80). Convergence signal: passes
+5–7 each found real design defects (all fixed); pass-8 found none. **Design is internally
+consistent and plan-ready** pending User lock. (Lesson for the next reviewer prompt: state
+"design-stage, no code yet — review the design prose, not the tree".)
+
+The implementation gaps codex enumerated are the authoritative **/plan worklist** (they
+match §5.2 / the notes code map): add `Provenance` + field to `BoundaryRow`; the
+incoming-keyed merge in `record_source_delta`; `commit_boundaries` + D11 set-check + derive
++ primary-rooted gate before projection in `prepare_review`; the live-coord-worktree guard;
+reopen eviction. Nothing new — just not yet built.
