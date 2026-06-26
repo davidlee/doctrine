@@ -84,3 +84,30 @@ main-checked-out race would re-pin the hazard).
 - **RFC-006** — non-FF trunk auto-merge + conflict surgery (the ADR-012 D2/D4
   reversal). External review gates any Revision.
 - **R2** — `/close` ISS-030 recovery procedure (independent skill fix).
+
+## Reconciliation Outcome
+
+Reconcile pass 2026-06-26. Code (`da243b3d`) is fork-only; per the
+reconcile-sequencing decision, governance writes are **deferred to /close** so the
+spec never leads the code (design §5).
+
+### REVs authored
+- **REV-012** (`reconcile-sl-157`): `started` + `approved`, **not applied** —
+  one `modify SPEC-022` row striking the advance-leg post-CAS-resync parenthetical
+  (covers RV-166 F-2). Narrative + before/after in revision-012.md. `apply` +
+  manual prose landing + `status done` deferred to /close, co-landed with the fork
+  code. No ADR-012 Revision (D4 CAS contract unchanged).
+
+### Deferred to /close
+- **IMP-122** (RV-166 F-3): left `open`; close as resolved-by-deletion (cite
+  SL-157) after the deletion lands.
+- **REV-012**: apply + SPEC-022 prose strike + `revision status done`.
+- **Fork landing**: merge `sl-157-phase-01` (`da243b3d`) → main/edge.
+
+### Direct edits applied (this pass)
+- None — all writes intentionally deferred to /close per the sequencing decision.
+
+### Out of scope (not reconcile)
+- RFC-006 (non-FF auto-merge); R2 (`/close` ISS-030 recovery skill fix).
+
+Reconcile pass complete — handoff to /close.
