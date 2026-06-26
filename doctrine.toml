@@ -1,0 +1,2 @@
+[dispatch]
+claude-force-subprocess-dispatch = true
