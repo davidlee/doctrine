@@ -309,3 +309,45 @@ Two scope shapes for the user:
   the platform cargo coupling as a separate flagged follow-up (backlog).
 - **Broad** — also retire the platform cargo coupling now (POL-002 cleanup), so both
   arms ride the project justfile and ADR-008's D-B1/D-B5 are revisited via a Revision.
+
+### Codex consult (Broad approved) — corrections to the design
+
+Thread 019f01e9. Verdict: PLATFORM→PROJECT is correct; a generic platform env seam
+"launders the smell" and is half-fiction (claude arm can't consume platform env
+anyway) — don't build it. Three corrections:
+
+1. **id token (BLOCKER).** `basename(git rev-parse --show-toplevel)` is a host path
+   veneer — mutable, collision-prone, transient-local-state. Use git's worktree
+   registration instead: `basename(realpath "$(git rev-parse --git-dir)")` (tracks
+   the linked-worktree git-dir), or better the **doctrine-owned worktree name** —
+   claude forks are `<root>/.worktrees/<name>` on branch `dispatch/<name>`
+   (`src/worktree/create.rs:240`); that `name` is closer to owned identity. Optionally
+   a tiny `doctrine` read verb that reports the owned worktree identity.
+
+2. **Retire the flake shared `CARGO_TARGET_DIR` (else the fix is fake).** If the
+   default shell still exports the shared dir, raw `cargo`/ad-hoc scripts still thrash
+   it — only the `just` happy path is fixed. Retire `flake.nix:68`'s export or replace
+   with a non-cargo doctrine-owned base var (`DOCTRINE_CARGO_TARGET_ROOT`). KEY
+   consequence: once the shared env is gone, each worktree defaults to its own in-tree
+   `target/` → per-worktree isolation falls out for free (both arms, raw cargo + just);
+   the justfile redirect to a persisted root becomes a warm-cache optimization, not the
+   correctness mechanism.
+
+3. **Migration order (major risk).** Land project-side target derivation FIRST →
+   update the dispatch-subprocess skill + docs + tests → THEN remove the platform env
+   emission (`project_env_contract`/`coordinate`). Reverse it and codex workers fall
+   straight back to the shared flake env. Phase the slice this way.
+
+4. **GC → project.** Don't keep a generic platform "reap derived path" hook (smuggles
+   host cleanup back into the product). Orphaned target dirs = disk leak, not
+   correctness. Start with a project-local lazy sweep recipe keyed off live worktrees +
+   the target root; retire `gc.rs` target-base logic.
+
+### Remaining sub-decisions for the user (before design.md)
+
+- **A. id token:** doctrine-owned worktree `name` (preferred) vs git-dir basename.
+- **B. flake fate:** retire entirely (in-tree per-worktree `target/`, simplest, loses
+  persisted warm cache) vs replace with `DOCTRINE_CARGO_TARGET_ROOT` (justfile redirects
+  to persisted `wt/<token>`, keeps warm cache).
+- **C. GC:** project-local lazy recipe (confirm) + retire platform `gc.rs` target logic.
+- **D. phasing:** project-derivation → codex-skill migration → platform removal (plan).
