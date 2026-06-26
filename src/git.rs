@@ -983,18 +983,6 @@ pub(crate) fn resolve_ref(root: &Path, refish: &str) -> Result<Option<String>, C
     git_opt(root, &["rev-parse", "--verify", "--quiet", &spec])
 }
 
-/// The short symbolic name of the branch HEAD is on (e.g. `dispatch/147`), or
-/// `Ok(None)` when HEAD is detached or unborn. Via `symbolic-ref --quiet --short
-/// HEAD`: `git_opt`'s success/None fold maps a detached HEAD (non-zero exit) to
-/// `None`, distinct from a git/spawn failure (a hard error). Used by the solo
-/// phase-binding arm guard (SL-147): the binding skips its capture when the
-/// current branch is the doctrine-owned `dispatch/<slice>` coordination branch —
-/// keying on the branch, NOT on "is a linked worktree" (a solo `/worktree` fork
-/// must still capture) and NOT on any host commit convention (POL-002).
-pub(crate) fn current_branch(root: &Path) -> Result<Option<String>, CaptureError> {
-    git_opt(root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
-}
-
 /// True iff `ancestor` is an ancestor of (or equal to) `descendant`, via
 /// `git merge-base --is-ancestor` (exit 0 ⇒ yes, exit 1 ⇒ no, anything else ⇒
 /// error). Reads the raw exit code rather than [`git_opt`]'s success/None fold so
@@ -1264,13 +1252,6 @@ pub(crate) fn worktree_for_ref(
 /// # Errors
 ///
 /// Returns [`CaptureError::Git`] if the `git worktree list` invocation fails.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "wired into capture_phase_boundary by SL-154 PHASE-03 (design D9)"
-    )
-)]
 pub(crate) fn live_worktree_for_ref(
     root: &Path,
     refname: &str,
