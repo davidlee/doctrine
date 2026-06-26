@@ -27,14 +27,6 @@ selector = "src/worktree/marker.rs"
 intent = "scope-relevant"
 
 [[selector]]
-selector = ".agents/skills/dispatch-agent/SKILL.md"
-intent = "scope-relevant"
-
-[[selector]]
-selector = ".agents/skills/dispatch-subprocess/SKILL.md"
-intent = "design-target"
-
-[[selector]]
 selector = "src/worktree/coordinate.rs"
 intent = "design-target"
 
@@ -77,9 +69,21 @@ intent = "design-target"
 note = "EAP-4: stale stdout env-contract references (CLI help / stdout-discipline comment / generic worktree skill)"
 
 [[selector]]
-selector = ".agents/skills/worktree/SKILL.md"
+selector = "plugins/doctrine/skills/dispatch-subprocess/SKILL.md"
 intent = "design-target"
-note = "EAP-4: stale stdout env-contract references (CLI help / stdout-discipline comment / generic worktree skill)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/worktree/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-agent/SKILL.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/memory/items/**"
+intent = "design-target"
+note = "EX-3 memory triage (OQ-3): supersede shared-target cluster + record successor"
 
 [[relation]]
 label = "governed_by"

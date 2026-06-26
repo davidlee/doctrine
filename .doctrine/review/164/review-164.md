@@ -128,3 +128,49 @@ code defect in the shipped mechanism; they cluster into three buckets:
 
 ### Out of scope (flag onward)
 - **F-6:** `src/ledger.rs` rustfmt drift → SL-154.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **Selectors (F-1):** removed the three stale `.agents/skills/{dispatch-subprocess,
+  worktree,dispatch-agent}/SKILL.md` selectors; added `plugins/doctrine/skills/…`
+  equivalents (design-target for the two §5.2 SKILLs + EAP-4 note restored;
+  scope-relevant for dispatch-agent).
+- **Selectors (F-2):** added `.doctrine/memory/items/**` (design-target) covering
+  the EX-3 triage surface. Result: `slice conformance 156` now 26 conformant, 0
+  undelivered, 1 undeclared (`notes.md`, expected authored-progress noise).
+- **design.md §5.2 (F-1):** the two `.agents/skills/…` prose path references →
+  `plugins/doctrine/skills/…`.
+
+### REVs completed
+- **REV-011 (`adr-008-d-b1d-b5-platform-exits-build-env`): done** — covers F-4.
+  started → approved → applied (1 `modify ADR-008` row surfaced for manual
+  landing) → landed by hand → done. ADR-008 edits: D-B1 mechanism revised
+  (platform-injects-`wt/<branch>`-at-spawn → retire shared export, in-tree
+  `<worktree>/target`, correct on both arms — intent preserved, Amendment 1); the
+  §5.1 "claude shares the jail-wide target / mitigation rituals stand" caveat
+  marked **resolved**; D-B5 "keep flake minimal" → "flake exits the build-env
+  business; justfile drops stale-target rituals" (Amendment 2). Rationale in
+  revision-011.md. D-B2/D-B3 unchanged; D-B4 (sccache) remains the deferred
+  warm-fork-cache lever.
+
+### Relations (F-7)
+- Linked **SL-156 `related` IMP-004** (slice-156.toml; relation block contiguous).
+  **Assessment:** IMP-004 is *narrowed, not resolved* — SL-156 delivers IMP-004's
+  D-B1 leg (via the revised in-tree mechanism); IMP-004's D-B3 (per-worker bwrap
+  confinement spike) and the D2b OS-floor work remain open. IMP-004 stays `open`.
+  Historical footgun references left intact (record the world as it was).
+
+### Deferred to /close (not reconcile writes)
+- **VH-1 (F-4):** final `<wt>/target` semantics on both arms — discharges only
+  after a **jail relaunch** ("apply & reset"; flake set-env is launch-time, nix
+  cannot eval in-jail, R5). In-session evidence: `.env_remove` simulation + fork's
+  recorded green gate. One-time post-relaunch: remove the abandoned
+  `~/.cargo/doctrine-target-jail`. This is the slice's remaining close-gate.
+
+### Out of scope (flagged onward)
+- **F-6:** `src/ledger.rs` rustfmt drift → CHR-027 (SL-154 domain), tolerated.
+
+Reconcile pass complete — every brief item resolved (REV-011 done, direct edits
+applied, relation linked). Handoff to /close; the sole open close-gate is VH-1,
+which requires the user's jail relaunch.

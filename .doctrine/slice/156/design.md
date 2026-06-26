@@ -120,9 +120,9 @@ Removals (platform → build-tool-agnostic):
   justifies stderr-only status by "fork/coordinate emit a KEY=value env contract on
   stdout"; the ISS-044 discipline still holds (status stays on stderr) but the
   rationale line is now stale — refresh it.
-- **`.agents/skills/dispatch-subprocess/SKILL.md`** — stop capturing/passing
+- **`plugins/doctrine/skills/dispatch-subprocess/SKILL.md`** — stop capturing/passing
   `$fork_env`; the codex worker inherits the (now unset) env and defaults in-tree.
-- **`.agents/skills/worktree/SKILL.md:118-123`** (EAP-4) — the generic `/worktree`
+- **`plugins/doctrine/skills/worktree/SKILL.md:118-123`** (EAP-4) — the generic `/worktree`
   skill still documents `fork` step 4 "emits the per-worktree env contract …
   declares `CARGO_TARGET_DIR`"; drop that step.
 - **`AGENTS.md`** (§95 + the `just rebuild-stale` guidance) — the shared-target
