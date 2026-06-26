@@ -1,0 +1,109 @@
+# Implementation plan for SL-158 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-158"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Trinary partition (D1)"
+objective = """
+Introduce StatusClass::Gating (non-Workable, non-Terminal) and a `gating` field on \
+KindPartition; reclassify the four knowledge kinds' unsettled states into `gating` and \
+keep their settled states Terminal; every non-knowledge row stays `gating: &[]` so its \
+behaviour is byte-identical. channels.rs/graph.rs/render.rs take no code change (pole \
+reads `== Workable` / `!= Terminal` and `{:?}` Debug render absorb the variant), but \
+unsettled records' rendered class flips Terminal → Gating — pin that surface output with \
+a knowledge-in-priority golden so it can't regress silently.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (ADR-017 governing); partition.rs confirmed as the sole partition seam." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "StatusClass gains `Gating`; KindPartition gains `gating: &'static [&'static str]`; status_class checks workable → gating → terminal → else Unrecognised." },
+  { id = "EX-2", text = "The four knowledge rows move unsettled states (ASM held/testing, DEC proposed, QUE open, CON active) into `gating`; settled states stay `terminal`; every non-knowledge row keeps `gating: &[]`." },
+  { id = "EX-3", text = "Existing priority/channels suites stay green UNCHANGED except the two flips noted by design (every_knowledge_status_classifies_terminal_never_workable, knowledge_partitions_cover_the_real_vocabularies); decision_accepted_diverges_hidden_from_status_class stays green." },
+  { id = "EX-4", text = "`just gate` clean (zero clippy warnings); cargo fmt applied." },
+]
+verification = [
+  { id = "VT-1", expects = "Drift canary, generalised: `workable ∪ gating ∪ terminal == <KIND>_STATUSES` per partitioned kind; non-knowledge rows assert `gating == ∅`." },
+  { id = "VT-2", expects = "Class boundary per knowledge kind — each unsettled status → Gating, each settled status → Terminal, never Workable." },
+  { id = "VT-5", expects = "A Gating record is not `eligible` / not on the worklist (channels pole read absorbs the variant)." },
+  { id = "VT-8", expects = "e2e knowledge-in-priority golden over a corpus with one unsettled + one settled (unsized) record: explain/inspect/survey --all render Gating for the unsettled, Terminal for the settled. Corpus carries no needs-edges/references so it is stable across later phases." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Target-admissibility gate widening (D2)"
+objective = """
+Split the single work-like predicate in dep_seq.rs::resolve_dep_seq_src into a SOURCE gate \
+(is_work_like, UNCHANGED — records still cannot author dep/seq) and a wider TARGET gate \
+(is_admissible_dep_target = is_work_like ∨ is_record). A work item may now `needs`/`after` a \
+record; governance (SPEC/ADR/POL/STD) stays excluded; record-as-source stays refused (so \
+record→record needs is un-authorable for free). Update the refusal message. The edge rides the \
+existing kind-agnostic graph.rs build — graph.rs is untouched. This is the delta ADR-017's \
+source-only premise missed; without it the inbound gate is un-authorable.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — records classify Gating when unsettled, so a `needs → open-record` edge actually blocks (the gate test is meaningful)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`is_record` (ASM/DEC/QUE/CON) and `is_admissible_dep_target` added; the TARGET check in resolve_dep_seq_src swapped to the wider predicate; is_work_like (source) unchanged." },
+  { id = "EX-2", text = "`doctrine needs SL-x QUE-y` is accepted and writes the `QUE→SL` edge; `needs SL-x ADR-y` (governance) still refused; `needs QUE-y SL-x` (record source) still refused; refusal message updated to records-now-allowed / governance-still-refused." },
+  { id = "EX-3", text = "`after` rides the same widened gate (shared resolver) — admitted but inert (records never eligible, so order nothing); no regression in existing dep/seq suites." },
+  { id = "EX-4", text = "`just gate` clean; cargo fmt applied." },
+]
+verification = [
+  { id = "VT-6", expects = "Admissibility (the ADR-017 VT that fails today): `needs SL-1 QUE-1` resolves + writes the edge; a governance target still refused; a record source still refused." },
+  { id = "VT-3", expects = "Gate blocks: `SL needs QUE` with QUE `open` → SL blocked, not actionable." },
+  { id = "VT-4", expects = "Settle → unblock: flip QUE → `answered` → SL unblocked, actionable (channels::blocked_by keeps only `!= Terminal` predecessors — free)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Records author references + estimate confirm (D6, D3)"
+objective = """
+Add RECORD (ASM/DEC/QUE/CON) as a legal `references` source under the `concerns` role in \
+relation.rs RELATION_RULES (aboutness; target AnyNumbered; the role already serving \
+work→any-numbered) — distinct from shapes-roles (IDE-022, split out). Confirm D3: estimate/value \
+already round-trip on records (no facet code; RawRecordToml has no deny_unknown_fields), and a \
+sized record's base now propagates to the targets it `references` via optionality \
+(graph.rs:163 CONSEQUENCE_LABELS includes References, role-blind). No gating, no dep/seq, no \
+cycle — references is a consequence overlay only.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md D6/D3 locked; relation.rs RELATION_RULES confirmed as the authoring-permission seam; references/concerns source-set located." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`link QUE-1 references SL-1` (concerns role) is accepted (was refused as illegal source); the edge renders inbound on SL-1 as \"concerned by\"; shapes-roles remain out of scope (no IDE-022 work)." },
+  { id = "EX-2", text = "`estimate set` on a record round-trips: `knowledge show` reads back clean (table ignored, not rejected); risk stays excluded (kind-gated + [facet] collision)." },
+  { id = "EX-3", text = "A record carrying `[estimate]`/`[value]` that `references` SL-1 raises SL-1's optionality by `ref_coeff · base(record)`; an unsized record (base 0) contributes 0." },
+  { id = "EX-4", text = "`just gate` clean; cargo fmt applied." },
+]
+verification = [
+  { id = "VT-9", expects = "references authoring (D6): `link QUE-1 references SL-1 [--role concerns]` accepted; edge renders inbound as \"concerned by\"; a sized record raises SL-1's optionality by ref_coeff · base(record)." },
+  { id = "VT-7", expects = "estimate round-trip (D3): `estimate set ASM-1 …` writes; `knowledge show ASM-1` reads back clean (unknown table ignored, not rejected)." },
+]
+specs             = []
+requirements      = []
