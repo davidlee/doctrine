@@ -114,3 +114,34 @@ F-1/F-4 `verified` → reconciliation brief.
 ### Deferred follow-ups (already filed — no new work, confirm only)
 - **IMP-171** — codex/pi symmetric ledger+registry derive (D6, claude-arm-bounded scope).
 - **IMP-173** — dispatch-run ownership signal for solo stand-down (F4 hardening, D9).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §5.2 (RV-163 F-1):** replaced the reopen-eviction pseudocode's
+  propagating `state::forget_source_delta(...)?;` with the shipped degrade-and-warn
+  form (`if let Err(e) = … { warn_capture(e); }`) and added the rationale paragraph
+  (a propagating `?` breaks D5 on non-git roots; lingering row is self-healing;
+  never-recompleted reopen surfaces via the completeness gate). Prose now matches
+  the PHASE-03 implementation. No code change.
+
+### Sibling-entity status reconciliation
+- **ISS-051 → resolved · fixed (RV-163 F-4):** closed by PHASE-03 (live-coord guard
+  + `Solo` stamp + absent-stamp records-nothing).
+- **ISS-052 → resolved · fixed (RV-163 F-4):** closed by PHASE-05 (derive + D11 guard
+  + completeness gate).
+- **ISS-039 → resolved · fixed (RV-163 F-4):** absorbed + closed by PHASE-04
+  (`commit_boundaries` splice at prepare-review).
+
+### REVs completed
+- **None.** D10 holds under reconcile: committing the boundaries ledger is SPEC-022
+  conformance, not a spec change. No governance/spec write surface touched.
+
+### Withdrawn / tolerated
+- **RV-163 F-2: aligned** — undeclared conformance paths expected (tests + authored
+  `.doctrine/`); no write.
+- **RV-163 F-3: tolerated** — runtime registry all-Unknown provenance (stale PATH
+  binary strip); rationale in the finding disposition + memory `mem_019f025e`. No
+  write (cosmetic hand-edit would be re-stripped; surfacing > masking).
+
+Reconcile pass complete — handoff to /close.
