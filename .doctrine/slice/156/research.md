@@ -236,3 +236,47 @@ Does **CwdChanged fire when an Agent-tool worker (isolation:worktree) is spawned
 into its worktree, and is `CLAUDE_ENV_FILE` scoped **per-subagent** (not polluting
 the orchestrator)? D depends on both. Probe: throwaway worker + CwdChanged hook that
 dumps `new_cwd` + `CLAUDE_ENV_FILE`; check firing + parent leakage.
+
+### Probe 2 — D is DEAD for the Claude worker (DONE, decisive)
+
+Installed a CwdChanged+SubagentStart hook (settings.local.json, hot-reloaded — no
+restart needed), spawned a throwaway `general-purpose` worker with `isolation: worktree`.
+
+Orchestrator side (works): CwdChanged fires on `cd`, `CLAUDE_ENV_FILE` is set
+(session-scoped path `…/session-env/<sid>/cwdchanged-hook-0.sh`), exported var
+propagates to later orchestrator Bash calls.
+
+Worker side (channel absent):
+- **SubagentStart fires** for the worker, `cwd` = the worktree — but
+  **`CLAUDE_ENV_FILE` is UNSET** in it → cannot persist env. (additionalContext-only,
+  now also confirmed no env-file.)
+- **CwdChanged does NOT fire** when the Agent-tool worker is placed in its worktree —
+  no log entry after the spawn boundary.
+- Inside the worker's Bash, **`CLAUDE_ENV_FILE` is `<unset>`** — the env-file channel
+  does not exist in the subagent at all.
+- The worker **inherits the orchestrator's env frozen at spawn time** (`MARK` = the
+  orchestrator's pre-spawn value; `CARGO_TARGET_DIR` = jail-wide, un-overridden).
+- No parent leak (moot).
+
+**Conclusion:** no Claude hook can inject per-worktree `CARGO_TARGET_DIR` into a
+worker. D is eliminated. Orchestrator-side env-file works but the worktree path is
+unknown until the Agent spawn creates it (claude arm), so pre-seeding by cd is not
+available either.
+
+### Revised direction — B (justfile self-derives) as the unifying mechanism
+
+`just` is the verify entry point (`just check` / `just gate`) — exactly the
+false-green/red surface. A justfile `export CARGO_TARGET_DIR := <root>/wt/<id>`
+(id = `basename(git rev-parse --show-toplevel)`; worker forks are detached HEAD so
+branch is empty — use the worktree dir basename) **overrides** the inherited jail
+env for every recipe shell, harness-independent, both arms + orchestrator.
+
+This can SUBSUME the codex/pi plumbing too: retire `project_env_contract` /
+`$fork_env` stdout dance and let the justfile be the single source. The "no env
+injection" the user wanted — via `just`, not `.cargo/config.toml`.
+
+Residual gaps to weigh: (1) raw `cargo`/`cargo test` invoked OUTSIDE `just` still
+hit the shared jail target (no worse than today; keep flake env as the base so raw
+cargo is unchanged). (2) **ADR-008 D-B5 says "justfile unchanged" and D-B1 says
+"set at worker spawn"** — B moves the mechanism into the justfile → an ADR deviation
+that needs a /consult + likely a Revision/amendment before locking the design.
