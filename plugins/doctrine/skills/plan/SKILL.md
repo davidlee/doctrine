@@ -51,8 +51,8 @@ Inputs:
     oversized, optimistic, requires verification, or presents implementation risk?
     For each of these, decide what new information is needed, or what mitigations
     to put in place. Ground the plan in known details of the implementation.
-8.  Plan the revision.
-9.  Revise the plan.
+8.  Plan the revision; print a summary of it for the user. Then work through it.
+9.  Revise the plan; summarise what changed.
 10. Hand off to `/phase-plan` to expand the next phase's runtime phase sheet
     just before execution — then `/execute`. Do this only after slice scope, `design.md`, and
     the plan tell the same story. Record the lifecycle move on handoff:
