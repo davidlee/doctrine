@@ -72,10 +72,10 @@ a requirement), then the engine.
 
 3. **estimate/value on records — confirmatory note (no code).** Already kind-agnostic
    (`estimate set ASM-001` works; round-trips — `RawRecordToml` has no
-   `deny_unknown_fields`). Design states the intent + the base→leverage scoring
-   consequence; a VT pins the round-trip. `risk` stays excluded (kind-gated +
-   `[facet]` table-name collides with knowledge's typed kind-facet). Surfacing in
-   show/inspect → IMP-183.
+   `deny_unknown_fields`). Currently **inert** for scoring (a record's base doesn't
+   propagate — leverage flows dependent→prereq, records have no dep predecessors). A VT
+   pins the round-trip. `risk` stays excluded (kind-gated + `[facet]` table-name collides
+   with knowledge's typed kind-facet). Surfacing in show/inspect → IMP-183.
 
 **Canon-first.** A SPEC-001 / PRD-011 D-decision + requirement for the third class
 and the `eligible`-vs-`blocks` split land before the engine code — design drives
