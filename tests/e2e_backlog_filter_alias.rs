@@ -16,11 +16,15 @@
 use std::path::Path;
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Create a backlog issue with the given title under `dir`.
 fn new_issue(dir: &Path, title: &str) {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["backlog", "new", "issue", title, "-p"])
         .arg(dir)
         .output()
@@ -34,7 +38,7 @@ fn new_issue(dir: &Path, title: &str) {
 
 /// Run `backlog list` with the given extra args, returning stdout.
 fn list(dir: &Path, extra: &[&str]) -> String {
-    let mut cmd = Command::new(BIN);
+    let mut cmd = Command::new(bin());
     cmd.args(["backlog", "list"]).args(extra).arg("-p").arg(dir);
     let out = cmd.output().expect("spawn doctrine");
     assert!(

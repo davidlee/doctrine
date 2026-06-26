@@ -7,7 +7,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Run `git -C <dir> <args>`, asserting success.
 fn git(dir: &Path, args: &[&str]) {
@@ -53,7 +57,7 @@ fn add_worktree(source: &Path, fork: &Path) {
 }
 
 fn record(root: &Path) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(["memory", "record", "--type", "fact", "A fact", "-p"])
         .arg(root)
         .output()

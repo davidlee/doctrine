@@ -19,7 +19,11 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -51,7 +55,7 @@ fn init_repo(dir: &Path) -> std::path::PathBuf {
 /// Run `doctrine slice record-delta <id> <phase> --start <a> --end <b> -p <root>`
 /// from `cwd` (which may differ from the project root passed via `-p`).
 fn record_delta(cwd: &Path, root: &Path, id: &str, phase: &str, start: &str, end: &str) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .current_dir(cwd)
         .args([
             "slice",
