@@ -1,9 +1,9 @@
 id = 155
 slug = "rel-ux-revision-list"
 title = "Relation CLI UX fixes + revision list with tag surfacing"
-status = "closed"
+status = "started"
 created = "2026-06-25"
-updated = "2026-06-25"
+updated = "2026-06-26"
 tags = []
 
 [relationships]
