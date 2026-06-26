@@ -32,11 +32,11 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
+use crate::CommonListArgs;
 use crate::entity::{self, Kind, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::requirement::ReqStatus;
 use crate::tomlfmt::toml_string;
-use crate::CommonListArgs;
 
 use std::str::FromStr;
 
@@ -849,6 +849,7 @@ fn show_json(doc: &RevDoc, body: &str) -> anyhow::Result<String> {
             "title": doc.title,
             "status": doc.status.as_str(),
             "approval": doc.approval.as_str(),
+            "tags": doc.tags,
         },
         "body": body,
     });
@@ -2126,9 +2127,16 @@ primary = true
         assert_eq!(doc.id, 1);
         assert_eq!(doc.slug, "s");
         assert_eq!(doc.title, "Tagless Old Rev");
-        assert!(doc.tags.is_empty(), "tags default to empty vec: {:?}", doc.tags);
+        assert!(
+            doc.tags.is_empty(),
+            "tags default to empty vec: {:?}",
+            doc.tags
+        );
         let text = render_revision_toml(doc.id, &doc.slug, &doc.title, "2026-01-01", None).unwrap();
-        assert!(text.contains("tags"), "re-rendered text contains tags field: {text}");
+        assert!(
+            text.contains("tags"),
+            "re-rendered text contains tags field: {text}"
+        );
         let back: RevDoc = toml::from_str(&text).unwrap();
         assert_eq!(back.id, 1);
         assert_eq!(back.slug, "s");
