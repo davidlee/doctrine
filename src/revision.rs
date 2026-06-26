@@ -36,6 +36,7 @@ use crate::entity::{self, Kind, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::requirement::ReqStatus;
 use crate::tomlfmt::toml_string;
+use crate::CommonListArgs;
 
 use std::str::FromStr;
 
@@ -201,7 +202,7 @@ pub(crate) enum RevisionCommand {
     /// List revisions with filtering, column selection, and tag surfacing.
     List {
         #[command(flatten)]
-        list: crate::CommonListArgs,
+        list: CommonListArgs,
 
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
