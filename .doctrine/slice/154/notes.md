@@ -3,16 +3,18 @@
 Durable per-slice scratchpad — tracked in git. Bootstrap for the next agent (plan +
 codex). `design.md` is the authority; this is the fast-ingest map.
 
-## Status (2026-06-26) — Rev 4 integrated: D11 reshaped (provenance). Re-pass, then /plan.
+## Status (2026-06-26) — Rev 5 integrated (pass-5 reshape + pass-6 edges). Re-pass, then /plan.
 
-Slice in `design`. `design.md` is the committed-ref (ISS-039-absorbed) model + the
-**pass-5 reshape (Rev 4)**: D11 is now a **per-phase provenance set-check**, `D12` adds
-`provenance` to `BoundaryRow`, `git::code_delta_paths` is **deleted**, §5.6 records the
-registry's nav/value role. committed-ref core (D2/D7/D8/D9/D10) solid across 5 passes.
-Scope (`slice-154.md`) absorbs ISS-039. **No code yet.**
+Slice in `design`. `design.md` = committed-ref (ISS-039-absorbed) model + the **pass-5
+reshape (Rev 4)** + **pass-6 edges (Rev 5)**: D11 is a **per-phase provenance set-check**
+(`provenance ∈ {Funnel, Unknown}` must be in the committed ledger), `D12` adds `provenance`
+to `BoundaryRow` (**sticky** — `record-delta` preserves landing path), `git::code_delta_paths`
+**deleted**, §5.6 records the registry's nav/value role. committed-ref core (D2/D7/D8/D9/D10)
+solid across 5 passes; pass-6 found 2 edge defects (record-delta downgrade, Unknown-on-active),
+both fixed. Scope absorbs ISS-039. **No code yet.**
 
-**Next:** re-pass codex on the Rev-4 reshape, THEN `/plan`. The pass-5 OPEN FINDINGS are
-**CLOSED** (integrated — see below).
+**Next:** re-pass codex on **Rev 5** (the pass-6 fixes), THEN `/plan`. The pass-5 OPEN
+FINDINGS are **CLOSED**; pass-6 dispositions in design.md §10.
 
 Read order: `slice-154.md` (scope) → `design.md` §1–§9 → §10 (full pass ledger) → this.
 
@@ -128,12 +130,16 @@ Five moving parts:
   gate/conformance; precise dispatch-run ownership signal = hardening follow-up.
 - **D10** no SPEC-022 REV — the spec already mandates the committed ledger
   (spec-022.md:180); ISS-039 is the impl in violation, so committing is conformance.
-- **D11** projection-source guard (Rev 4, pass-5 reshape) — every `Funnel` registry row
-  must have a committed-ledger row, else halt naming the gaps. Per-phase set compare; no
-  `code_delta_paths`. Catches total + partial loss; no false-halt on solo/empty-code.
+- **D11** projection-source guard (Rev 4 reshape, Rev 5 edges) — every registry row with
+  `provenance ∈ {Funnel, Unknown}` must have a committed-ledger row, else halt naming the
+  gaps (run BEFORE projection). Per-phase set compare; no `code_delta_paths`. Catches total
+  + partial loss; excludes `Solo`/`Manual`; includes `Unknown` so mid-upgrade active slices
+  halt loudly (pass-6 P6-2).
 - **D12** `provenance` field on `BoundaryRow` (the D11 discriminator) — `Solo|Funnel|Manual`
   (absent→`Unknown`). The only sound option (no committed run-state records landing path —
-  "derive from writer" is illusory). `#[serde(default)]` = whole back-compat story; no
+  "derive from writer" is illusory). **Sticky for landing paths (pass-6 P6-1):** `record-delta`
+  preserves existing `Solo`/`Funnel`, stamps `Manual` only on a fresh row — else it would
+  blind D11 and reopen the silent gap. `#[serde(default)]` = whole back-compat story; no
   migration code. Does NOT close F4 (post-record marker ≠ pre-record stand-down).
 
 ## Codex passes (full ledger in design.md §10)
@@ -168,7 +174,10 @@ Five moving parts:
   (the journal double-commit; recovery commit persists Failed rows — F1).
 - `src/git.rs`: `:1163` `parse_worktree_for_ref` (EXTEND for prunable — D9); `:1189`
   `worktree_for_ref` (keep signature); `:554` `primary_worktree`; `:994` `current_branch`;
-  `:1003` `is_ancestor`. `code_delta_paths` to be added (D11).
+  `:1003` `is_ancestor`. (Rev 4: `code_delta_paths` NOT added — D11 needs no git helper.)
+- `src/slice.rs`: `:1970` `run_record_delta` — Rev 5: provenance-preserving (read existing
+  row, keep `Solo`/`Funnel`, else `Manual`). design-target.
+- `src/boundary.rs`: `:16` `BoundaryRow` — Rev 4: add `provenance` (D12). design-target.
 - `src/ledger.rs`: `:541` `record_boundary`; `:375` `dispatch_dir` (private — expose
   `read_boundaries_file`, OQ-4).
 - `src/slice.rs`: `:1894`/`:1919` `conformance_outcome` (folds all paths, no `.doctrine/`
@@ -219,5 +228,5 @@ Five moving parts:
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171
   (codex/pi symmetry), F4 ownership-signal hardening (to file).
 - design-target: `src/state.rs`, `src/dispatch.rs`, `src/ledger.rs`, `src/git.rs`,
-  `src/boundary.rs` (Rev 4: `provenance` field, D12),
-  `plugins/doctrine/skills/dispatch{,-agent,-subprocess}/SKILL.md`.
+  `src/boundary.rs` (Rev 4: `provenance` field, D12), `src/slice.rs` (Rev 5: record-delta
+  provenance-preserving, P6-1), `plugins/doctrine/skills/dispatch{,-agent,-subprocess}/SKILL.md`.
