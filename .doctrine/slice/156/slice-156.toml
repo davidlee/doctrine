@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/worktree/fork.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/create.rs"
@@ -32,7 +32,39 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = ".agents/skills/dispatch-subprocess/SKILL.md"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/coordinate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/gc.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "flake.nix"
+intent = "design-target"
+
+[[selector]]
+selector = "justfile"
+intent = "design-target"
+
+[[selector]]
+selector = "AGENTS.md"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_coordinate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_fork.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_gc.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
