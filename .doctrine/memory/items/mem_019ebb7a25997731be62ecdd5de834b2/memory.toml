@@ -2,11 +2,11 @@ memory_uid = "mem_019ebb7a25997731be62ecdd5de834b2"
 memory_key = "mem.pattern.dispatch.shared-target-false-green-touch-rerun"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "Dispatch verify shared-target false-green: touch + re-run to confirm a fresh compile"
 summary = "Jail shares CARGO_TARGET_DIR across worktrees: a worker's first just check can read a stale compile (false green, new tests unrun) — touch edited files + re-run, confirm new test names executed"
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-26"
 
 [scope]
 paths = []
@@ -39,3 +39,7 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"

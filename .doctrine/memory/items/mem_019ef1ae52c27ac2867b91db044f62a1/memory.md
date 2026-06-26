@@ -90,8 +90,9 @@ Module layering (ADR-001): leaf ← engine ← command, no cycles.
   required). Do this before every commit.
 - **Format:** `cargo fmt`.
 - **Environment:** NixOS. Development happens inside a bubblewrap jail mounted
-  at `/workspace`. `CARGO_TARGET_DIR` redirects to
-  `~/.cargo/doctrine-target-jail`.
+  at `/workspace`. Each worktree builds into its own gitignored in-tree
+  `target/` (cargo's default — no shared `CARGO_TARGET_DIR` redirect; SL-156,
+  ADR-008 D-B1).
 - **Branch strategy:** `edge` (primary) → `main` (landing zone). Worktrees for
   parallel work. Promote edge to main before dispatch: `git fetch . edge:main`.
 - **Boot:** run `doctrine boot` after governance edits to regenerate the boot

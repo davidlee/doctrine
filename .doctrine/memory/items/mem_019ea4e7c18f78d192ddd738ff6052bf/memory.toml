@@ -2,11 +2,11 @@ memory_uid = "mem_019ea4e7c18f78d192ddd738ff6052bf"
 memory_key = "mem.pattern.build.jail-target-redirect"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "In the jail, cargo build writes to ~/.cargo/doctrine-target-jail/debug — ./target/debug/doctrine is stale"
 summary = "Embed-dependent runs must use the jail target binary, not ./target/debug/doctrine (a separate stale file)"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-06-26"
 
 [scope]
 paths = []
@@ -43,3 +43,7 @@ weight = 0
 [[relation]]
 label = "related"
 target = "mem.fact.doctrine.jail-target-dir"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"
