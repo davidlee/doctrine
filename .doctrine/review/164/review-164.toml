@@ -1,0 +1,79 @@
+id    = 164
+slug  = "reconciliation-review-of-sl-156"
+title = "reconciliation review of SL-156"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-156"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Stale design-target selectors: .agents/skills/… vs actual plugins/doctrine/skills/…"
+detail = "Expected: slice conformance shows the two edited SKILLs as conformant. Observed: `slice conformance 156` reports 2 undelivered (`.agents/skills/dispatch-subprocess/SKILL.md`, `.agents/skills/worktree/SKILL.md`) and the actual edits as undeclared (`plugins/doctrine/skills/dispatch-subprocess/SKILL.md`, `plugins/doctrine/skills/worktree/SKILL.md`). Root cause: the design-target selectors (and design.md §5.2 prose) cite the pre-SL-152 path `.agents/skills/…`, which no longer exists; the repo migrated skills to `plugins/doctrine/skills/…`. The edits themselves are correct and design-anticipated (§5.2 + EAP-4 name both SKILLs). This is a selector/prose path-drift artifact, not a code defect — it accounts for 4 of the conformance algebra cells."
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile (per-slice direct edit). The edits are correct and design-anticipated — only the design-target selectors + design.md §5.2 prose carry the stale pre-SL-152 `.agents/skills/…` path. Reconciliation brief → Per-slice: update the two SKILL selector paths to `plugins/doctrine/skills/…` so conformance reads conformant. No code change."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "EX-3 memory-triage paths undeclared in design-target selectors"
+detail = "Expected: the EX-3 memory-triage deliverables fall inside a design-target selector. Observed: 11 `.doctrine/memory/items/…` edits (10 supersede + successor + orientation coherence fix) plus `.doctrine/slice/156/notes.md` appear as undeclared in `slice conformance 156`. The work is correct and matches plan EX-3 / design §5.2 scope-item-2 + OQ-3; the design-target selectors simply did not enumerate `.doctrine/memory/items/`. notes.md is expected-undeclared (authored progress narrative). Selector-coverage gap, not scope creep."
+disposition = "verified"
+response = "Observation confirmed; same selector-hygiene class as F-1, delegated to /reconcile (per-slice direct edit). The EX-3 triage is correct per plan; the design-target selectors omit `.doctrine/memory/items/`. Reconciliation brief → Per-slice: extend selectors to cover the memory-triage path (or accept as authored-progress noise). notes.md remains expected-undeclared. No code change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-04 committed successor memory uid dir without its key-alias symlink"
+detail = "Expected: the successor memory `mem.fact.build.in-tree-per-worktree-target` (uid mem_019f026cffd27a43b8db3cf6728130b5, recorded in PHASE-04 commit 70e6d3d7) carries a key-alias symlink under `.doctrine/memory/items/`, like every other item. Observed: 70e6d3d7 committed only the uid dir (memory.toml + memory.md); the `mem.fact.build.in-tree-per-worktree-target -> mem_019f026…` alias was left untracked. Without it, `memory show`/`retrieve` by key would miss the successor. Remediated during audit land: committed the alias on the fork before merge (so it landed in 79b1ee21)."
+disposition = "fix-now"
+response = "Fixed within audit scope: committed the missing `mem.fact.build.in-tree-per-worktree-target -> mem_019f026…` key-alias symlink on the fork before the land, so it merged to edge in 79b1ee21. `memory show`/`retrieve` by key now resolve the successor. Verified present and tracked post-merge."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Close gate deferred: REV-011 (ADR-008 D-B1/D-B5) apply + VT-1/VT-2/VH-1 post-relaunch"
+detail = "Expected: the slice's substantive acceptance — final `<wt>/target` semantics on both arms (VT-1/VT-2) and the ADR-008 mechanism amendment (REV-011) — is discharged. Observed (correctly, by design R5/§8): the flake `set-env` change is launch-time and inert in this session (jail has no nix, `mem.fact.jail.nix-absent-no-flake-eval`); CARGO_TARGET_DIR is still the shared jail export in-session (confirmed: =/home/david/.cargo/doctrine-target-jail). In-session proof is the `.env_remove` simulation + the fork's recorded green gate (PHASE-03: 2589 unit + all worktree suites green, clippy clean). VH-1 (final semantics post jail-relaunch) + REV-011 (proposed; approve+apply revising ADR-008 D-B1 mechanism + D-B5) are reconcile/close work. Routed to the reconciliation brief, NOT raised as an RV blocker (a blocker would refuse the audit→reconcile transition the brief itself requires)."
+disposition = "verified"
+response = "Observation confirmed and correct by design (R5/§8). Remediation delegated to /reconcile + /close. Reconciliation brief → Governance/spec (REV): approve+apply REV-011 (revises ADR-008 D-B1 mechanism + D-B5 — the flake removal IS the mechanism; POL-002 the forcing function). VH-1 (final `<wt>/target` semantics, both arms) discharges post jail-relaunch at reconcile/close — not in-session (flake set-env is launch-time; nix absent in jail). In-session evidence: `.env_remove` simulation + fork's recorded green gate. Deliberately NOT an RV blocker so audit→reconcile stays open."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "worktree/SKILL.md edit (PHASE-03, §5.2 EAP-4) not individually recorded in notes.md"
+detail = """Expected: notes.md enumerates each touched surface. Observed: PHASE-03 notes record the platform removals + "2 stale-doc bugs beyond EAP-4's list" but do not name the `plugins/doctrine/skills/worktree/SKILL.md` edit (fork step-4 env-contract removal), which is an explicit §5.2 / EAP-4 touch-set item and was correctly executed. Cosmetic notes-completeness gap; the edit is in-scope and verified-correct by diff."""
+disposition = "fix-now"
+response = "Fixed within audit scope: appended a notes.md line recording the PHASE-03 `plugins/doctrine/skills/worktree/SKILL.md` edit (fork step-4 env-contract removal, §5.2 EAP-4). Cosmetic completeness only; the edit was always in-scope and correct."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "src/ledger.rs uncommitted rustfmt drift (pre-existing, SL-154 domain)"
+detail = "Expected: a clean working tree post-landing. Observed: `src/ledger.rs` shows an uncommitted rustfmt reflow (whitespace, test code) on edge — pre-existing committed-unformatted SL-154 code that `just check`'s in-place `cargo fmt` reflows. Not introduced by SL-156 (no SL-156 commit touches it); the merge took edge's version (--ours). Out of SL-156 scope; flag to SL-154."
+disposition = "tolerated"
+response = "Accepted out-of-scope drift. The `src/ledger.rs` rustfmt reflow is pre-existing SL-154 committed-unformatted code, not touched by any SL-156 commit; the merge preserved edge's version. Leaving it untouched (no SL-156 surface). Flag to SL-154 to commit the formatted version."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "IMP-004 + historical footgun references may be mooted by in-tree target (AP-5 relations)"
+detail = "Expected: relations to the shared-target artifact axis are reconciled. Observed: PHASE-04 intentionally left historical footgun references intact (slice-152/104/080/073/127 notes, backlog-004, rfc-005, review-158 — they record the world as it was) but flagged that IMP-004 (the open shared-target artifact backlog item, design §10 AP-5) and these refs may now be mooted by the in-tree-per-worktree target. Needs reconcile-time relation triage: relate SL-156→IMP-004 and assess whether IMP-004 is resolved by this slice. Per design AP-5."
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile (relations, design AP-5). Historical footgun refs correctly left intact (they record the world as it was). Reconciliation brief → Governance/spec: relate SL-156 → IMP-004 (shared-target artifact axis) and assess whether in-tree-per-worktree target resolves IMP-004 (status move) or merely narrows it. No edit to the historical references."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

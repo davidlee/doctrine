@@ -51,6 +51,10 @@ queried data lives in the TOMLs.
   coordinate stdout emission) and gc's target-base reap leg. The fork's `target/` is
   **in-tree** (inside the worktree dir), so `git worktree remove` reaps it — gc needs
   no separate target step; branch-gone is now an idempotent empty Reap.
+- Also dropped fork step-4 (env-contract emission) from
+  `plugins/doctrine/skills/worktree/SKILL.md` — the generic `/worktree` skill (§5.2
+  EAP-4); now: stdout empty, fork builds its own in-tree `target/`. (Recorded at
+  audit RV-164 F-5; the §5.2 touch was always in-scope.)
 - **Scope wider than design's line cites:** gc target machinery spanned the pure
   classifier (`GcState.target_present`, `GcPlan.reap_target`), the run_gc shell gather
   + Step-3 reap, the e2e scaffold (`run_t`/`ext_target`/`gc_target` + two target-only
