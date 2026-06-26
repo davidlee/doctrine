@@ -1,0 +1,59 @@
+memory_uid = "mem_019f01e2f7d27fe1886c12ff80811c0c"
+memory_key = "mem.fact.dispatch.claude-worker-no-per-worktree-env"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Claude dispatch worker cannot get per-worktree env via hooks"
+summary = "Claude Agent-tool workers cannot receive per-worktree env vars via hooks; they inherit the orchestrator's frozen env at spawn."
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = []
+globs = ["src/worktree/**", "flake.nix"]
+commands = []
+tags = ["dispatch", "jail", "harness", "claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "73036be51107e2665143a7758f34dd155951ed14"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ceadbf71bdb2a08297a951fd8f6fe766ebc334cd5fd684c9affb457ea6b17045"
+base_commit = "b4647419a03dbe4d2aac154707edfaf9227e45e8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "probe"
+ref = "SL-156 research.md Probe 2"
+
+[[relation]]
+label = "related"
+target = "mem_019ebfb61ba870219aafc14f8dc7da3b"
+
+[[relation]]
+label = "related"
+target = "mem_019ebeeda9c27f03808fdeeafb0e93cc"
+
+[[relation]]
+label = "related"
+target = "mem_019efe28d60b7d51998f1f7912b8e7b8"
+
