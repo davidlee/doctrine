@@ -119,13 +119,9 @@ pub(crate) fn seed_requirement(root: &Path, id: u32) {
 /// Seed a knowledge record entity (assumption/decision/question/constraint).
 #[allow(dead_code)]
 pub(crate) fn seed_knowledge(root: &Path, prefix: &str, id: u32, title: &str, status: &str) {
-    let kind_dir = match prefix {
-        "ASM" => "assumption",
-        "DEC" => "decision",
-        "QUE" => "question",
-        "CON" => "constraint",
-        other => panic!("unknown knowledge prefix: {other}"),
-    };
+    let record_kind = crate::knowledge::RecordKind::from_prefix(prefix)
+        .unwrap_or_else(|| panic!("unknown knowledge prefix: {prefix}"));
+    let kind_dir = record_kind.as_str();
     write(
         root,
         &format!(".doctrine/knowledge/{kind_dir}/{id:03}/record-{id:03}.toml"),

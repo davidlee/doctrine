@@ -26,7 +26,7 @@ pub(crate) fn is_work_like(kind: &'static crate::entity::Kind) -> bool {
 /// dep/seq), but are admissible as dep/seq TARGETS. Governance (SPEC/ADR/POL/STD)
 /// stays excluded from BOTH gates.
 pub(crate) fn is_record(kind: &'static crate::entity::Kind) -> bool {
-    matches!(kind.prefix, "ASM" | "DEC" | "QUE" | "CON")
+    crate::kinds::is_record(kind.prefix)
 }
 
 /// The admissible target membership predicate (SL-158 D2) — widens the old single
@@ -257,23 +257,21 @@ mod tests {
     /// widen-later guard — exactly { slice } ∪ { the 5 backlog kinds } ∪ { revision },
     /// every other admitted kind refused. REV joins as both dep/seq source and target
     /// (the IDE-010 payoff); governance docs stay off the allowlist (SL-060 invariant).
-    /// SL-158 D2: the record membership predicate — exactly {ASM, DEC, QUE, CON}.
-    /// These are knowledge records, admissible as dep/seq TARGETS but NOT as sources
-    /// (records cannot author dep/seq).
+    /// SL-158 D2 / SL-161 PHASE-01: the record membership predicate
+    /// over KINDS equals [`crate::kinds::RECORD`] — set equality guards
+    /// both false positives (a prefix in KINDS but not in RECORD) and
+    /// false negatives (a prefix in RECORD but not captured by the predicate).
     #[test]
-    fn is_record_is_exactly_knowledge_records() {
-        for k in integrity::KINDS
+    fn is_record_predicate_matches_kinds_record() {
+        let mut from_pred: Vec<&str> = crate::integrity::KINDS
             .iter()
-            .filter(|k| matches!(k.kind.prefix, "ASM" | "DEC" | "QUE" | "CON"))
-        {
-            assert!(is_record(k.kind), "{} is a record", k.kind.prefix);
-        }
-        for k in integrity::KINDS
-            .iter()
-            .filter(|k| !matches!(k.kind.prefix, "ASM" | "DEC" | "QUE" | "CON"))
-        {
-            assert!(!is_record(k.kind), "{} must NOT be a record", k.kind.prefix);
-        }
+            .filter(|k| is_record(k.kind))
+            .map(|k| k.kind.prefix)
+            .collect();
+        from_pred.sort_unstable();
+        let mut want: Vec<&str> = crate::kinds::RECORD.to_vec();
+        want.sort_unstable();
+        assert_eq!(from_pred, want);
     }
 
     /// SL-158 D2: the admissible-target predicate = work-like ∪ record.

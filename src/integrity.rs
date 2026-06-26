@@ -42,6 +42,9 @@ pub(crate) struct KindRef {
     pub(crate) state_dir: Option<&'static str>,
 }
 
+/// When adding a numbered kind, add its `KindRef` row here and bump the count
+/// in `kinds_table_covers_the_numbered_kinds`.
+///
 /// Every numbered kind, in canonical order. The one place this list lives; a new
 /// numbered kind must be added here or it silently escapes `validate` (R-b — a
 /// drift surface this table accepts in exchange for not threading a registry
@@ -809,6 +812,7 @@ mod tests {
 
     #[test]
     fn kinds_table_covers_the_numbered_kinds() {
+        assert_eq!(KINDS.len(), 21, "add/remove a KindRef row? bump this count");
         let prefixes: Vec<_> = KINDS.iter().map(|k| k.kind.prefix).collect();
         assert_eq!(
             prefixes,
