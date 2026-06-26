@@ -58,6 +58,18 @@ and scaffold template. The "add a kind" surface is a checklist threaded through
 - **`src/commands/dep_seq.rs`** — `is_record` (`:29`) hardcodes the record prefix
   match + its pin test (`:264-273`); add EVD/HYP, CON→INV (SL-158 dependency).
 - **`src/relation_graph.rs`** — CON-keyed edge-emission tests.
+- **`src/catalog/scan.rs`** — `outbound_for` dispatch (`:62`) routes the record
+  family (`"ASM"|"DEC"|"QUE"|"CON"`) to `knowledge::relation_edges`; the
+  fallthrough is `debug_assert!(false, …)` (`:88`). A `KINDS` row with no scan arm
+  **panics every debug-build corpus scan** — so adding EVD/HYP rows to
+  `integrity::KINDS` *without* extending this arm is a panic, not a silent gap.
+  CON→INV literal + add `EVD|HYP` (codex-2 F1). **Not caught by any drift canary.**
+- **`src/catalog/test_helpers.rs`** — `seed_knowledge` (`:119`) maps record
+  prefix → tree dir (`ASM→assumption …`); needs `INV|EVD|HYP` arms or the helper
+  breaks for the new kinds (codex-2 F4, test-only).
+- **`src/integrity.rs`** — beyond the `KINDS` table (above), a **third** in-file
+  site: the prefix-collision list (`:817`, `"…ASM","DEC","QUE","CON"…"`) — CON→INV
+  + EVD/HYP (codex-2, within the already-selected file).
 - **`src/search.rs`** — hardcodes the knowledge prefix group
   `("knowledge", &["ASM","DEC","QUE","CON"])` + two flat prefix lists; EVD/HYP/INV
   are **unsearchable** until added (codex F3).
@@ -224,14 +236,20 @@ proposition, predicts`, and the `waiver_* → relaxation_*` renames) and arms to
 HYP is terminal, no use case now). `validate_matrix` extends to same-kind
 supersession for INV and EVD.
 
-**CON→INV seed migration** (DD-F, decided: **in-place rewrite**, not supersede —
-the CON kind ceases to exist, so there is nothing to supersede *into*):
-- move `.doctrine/knowledge/constraint/001/` → `.doctrine/knowledge/invariant/001/`
-- rewrite `record-001.toml`: `record_kind = "invariant"`; facet field renames if
-  populated; status (`active`) unchanged.
-- rename the `001-<slug>` symlink; rewrite the `.md` canonical ref `CON-001 → INV-001`.
-- reservation namespace: `INV` mints fresh from id 2 above the seed (the seed is id 1).
-- the CON tree dir is removed.
+**CON→INV seed migration** (D6, **recreate — don't migrate**): CON-001 is a
+disposable seed (one record, trivially re-mintable from the template), so the
+in-place file-move ceremony (reservation hygiene, symlink rename, field surgery)
+is over-built for the value (user, codex-2 pass). Instead:
+- delete the `.doctrine/knowledge/constraint/` tree wholesale.
+- re-seed `INV-001` fresh from the new `knowledge-invariant.toml` template (CLI
+  `knowledge new invariant …` or template copy); `active` status, same statement.
+  `INV` reservation mints from id 1 (fresh namespace, no carry-over).
+- **two live citations** re-pointed `CON-001 → INV-001` (codex-2 F2, trivial):
+  `.doctrine/adr/017/adr-017.md` (accepted ADR naming the protected requirement)
+  and `.doctrine/knowledge/question/001/record-001.md` (live record). Historical
+  / closed-context prose (`slice/097`, `rfc/003`, `rfc/008`, `rfc/009`) is **left
+  as-is** — it narrates past state, nothing gates it (no corpus-wide dangler scan;
+  `scan_danglers` fires only on explicit `reseat`, `integrity.rs:546`).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -274,8 +292,11 @@ the CON kind ceases to exist, so there is nothing to supersede *into*):
 - **D4 — target breadth = RECORD-only** (not RECORD ∪ RSK). Crisp; widen later if
   the risk-substantiation need is real.
 - **D5 — drop HYP `tested_by` facet** in favour of the inbound edge (DRY).
-- **D6 — in-place seed rewrite** for CON-001 (the kind is renamed, the record
-  migrates with it). *Alt rejected:* supersede (no surviving CON kind to point at).
+- **D6 — recreate the seed, don't migrate it.** CON-001 is a disposable one-record
+  seed; delete the `constraint/` tree and re-mint INV-001 fresh from the template.
+  *Alt rejected:* in-place file-move + reservation/symlink/field surgery — ceremony
+  out of proportion to a trivially re-mintable seed (user, codex-2). *Alt rejected:*
+  supersede (no surviving CON kind to point at).
 - **D7 — HYP not supersedable** (supersede_policy `None`); EVD/INV supersedable.
 
 ## 8. Risks & Mitigations
@@ -292,12 +313,16 @@ the CON kind ceases to exist, so there is nothing to supersede *into*):
   wrong). Net effect stays **harmless**: id 1 is ≤ existing maxima and the CAS
   create guards collisions. *Mitigation:* delete `refs/doctrine/reservation/CON/*`
   in the migration for hygiene; not correctness-critical.
-- **R6 — authored prose citing `CON-001` would dangle (codex F2, low).** Integrity
-  scans authored `.doctrine/**/*.md` for inbound citations and reports danglers with
-  a non-zero exit (`integrity.rs:545-566`; disposable `state/` prose is skipped).
-  **Grep is clean today** — the only `CON-001` hits are in gitignored
-  `.doctrine/state/dispatch/**`. *Mitigation:* re-grep authored tier before close;
-  rewrite any `CON-001` → `INV-001` if one appears.
+- **R6 — authored prose citing `CON-001` dangles after rename (codex-2 F2,
+  corrected).** The earlier "grep is clean" claim was **false** (codex-2 verified
+  against the live tree; the pass-1 dismissal grepped wrong). Authored `CON-001`
+  citations *do* exist: **live** — `adr-017.md:21,67`, `question/001/record-001.md:26`
+  (re-pointed in §5.4); **historical** — `slice/097`, `rfc/003`, `rfc/008`, `rfc/009`
+  (left as past-state narrative). No automated gate forces the rewrites:
+  `scan_danglers` (`integrity.rs:546`) fires **only** on explicit `reseat OLD NEW`,
+  and the migration is a recreate (D6), not a reseat — there is no corpus-wide
+  dangler check. *Mitigation:* the two live re-points are in the §5.4 step list;
+  historical prose is a deliberate no-op.
 - **R2 — SL-158 not yet landed when execution starts.** *Mitigation:* sequence
   after SL-158 (`git fetch . edge:main` before execute); design targets the landed
   trinary `KindPartition` shape. If SL-158 slips, the partition rows are the only
@@ -407,12 +432,34 @@ paths/lines — and two here did over-claim).
   cleanup added as hygiene.
 
 **Over-claimed (dismissed with evidence):**
-- **F2 (claimed MAJOR):** the named authored files (`question/001/record-001.md:26`,
-  `adr-017.md:21`) do **not** cite `CON-001` (grep-clean); the only hits are
-  gitignored `state/dispatch/**`, which integrity skips. The real guard (authored
-  prose dangling) is genuine-but-vacuous today → captured as R6 (re-grep before
-  close), not a touch-site.
+- **F2 (claimed MAJOR):** ~~the named authored files do not cite `CON-001`
+  (grep-clean)~~ — **this dismissal was wrong** (see codex-2 F2 / R6). The pass-1
+  grep was faulty; `adr-017.md` and `question/001/record-001.md` *do* cite
+  CON-001. Corrected in the second pass.
 
-Net: the touch surface grew from ~13 to ~18 sites; no decision (D1–D7) overturned.
-Design holds; ready to lock.
+### Second external adversarial pass (codex, 2026-06-27)
+
+A second codex (GPT-5.5) hostile pass, aimed at post-integration claims the first
+pass could not check. Each finding verified against ground truth before integrating.
+
+**Accepted + integrated:**
+- **F1 (MAJOR, panic-grade)** — `src/catalog/scan.rs` `outbound_for` dispatch
+  (`:62`) hardcodes the record family; the fallthrough is `debug_assert!(false)`
+  (`:88`). Adding EVD/HYP to `integrity::KINDS` without a scan arm **panics every
+  debug-build corpus scan**. The whole `src/catalog/` module was missed by §2 and
+  pass-1. → §2 bullet + selectors (`scan.rs`, `test_helpers.rs`). *Verified real.*
+- **F2 (MAJOR)** — pass-1's "grep-clean" dismissal was factually wrong; live
+  `CON-001` citations exist. → R6 rewritten, §10 corrected, §5.4 live re-points.
+- **F4 (MINOR)** — `catalog/test_helpers.rs:119` `seed_knowledge` prefix→dir map.
+  → §2 + selectors.
+- **F5 (MINOR)** — extra in-file `dep_seq.rs` sites (user message `:83`, pin
+  vector `:285`) inside the already-selected file. → noted; no new selector.
+- **F3 (LOW)** — integrity dangler scan globs only `.doctrine/**/*.md`, so
+  memory/install CON cleanup is unproven by it. True scope note, but no live
+  `CON-001` in `memory/` or `install/` today → captured as a close-time re-grep,
+  not a touch-site.
+
+Net: touch surface grew to ~20 sites (+`catalog/scan.rs`, `catalog/test_helpers.rs`);
+no decision (D1–D7) overturned; D6 simplified to recreate-not-migrate. Design holds;
+ready to re-lock.
 

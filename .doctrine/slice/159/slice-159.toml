@@ -90,6 +90,14 @@ intent = "design-target"
 selector = "src/commands/dep_seq.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/test_helpers.rs"
+intent = "design-target"
+
 [[relation]]
 label = "references"
 role = "concerns"

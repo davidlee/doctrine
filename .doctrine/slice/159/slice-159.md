@@ -51,13 +51,15 @@ _Full detail in `design.md` §5; this is the scope summary._
    Not supersedable (D7).
 3. **CON → INV replacement** — faithful rename **+ `waived → relaxed`** (status) and
    facet `waiver_* → relaxation_*`; `ConstraintSource → InvariantSource` (variants
-   kept). Migrate seed CON-001 → INV-001 by **in-place rewrite** (D6); rename tree
-   dir + template.
+   kept). Seed CON-001 → INV-001 by **recreate, not migrate** (D6): delete the
+   `constraint/` tree, re-mint INV-001 fresh from the template; re-point two live
+   citations (adr-017, question/001). Rename tree dir + template.
 4. **`supports` / `disputes` edges** — new `RelationLabel`s (full plumbing: enum,
    `name()`, parser, order pin, canaries), `sources:[EVD]`, `target:Kinds(RECORD)`,
    `Writable`; rendered in `knowledge show`/JSON.
-5. **Catalog wiring across ~18 sites** — `kinds.rs`, `knowledge.rs`, `integrity.rs`,
+5. **Catalog wiring across ~20 sites** — `kinds.rs`, `knowledge.rs`, `integrity.rs`,
    `priority/partition.rs` (trinary rows), `relation.rs` + `relation_graph.rs`,
+   `catalog/scan.rs` (dispatch arm — panic-grade, codex-2 F1) + `catalog/test_helpers.rs`,
    `supersede.rs` + `commands/supersede.rs`, `search.rs`, `tag.rs`, templates, docs,
    shipped memory, e2e goldens.
 6. **Governance axis** — the catalog change routes through a **Revision** (ADR-013):
@@ -81,14 +83,15 @@ _Full detail in `design.md` §5; this is the scope summary._
 ## Affected Surface
 
 The design-target selectors (`doctrine slice selector list SL-159`) are the
-authoritative touch-set. Summary (~18 sites): `src/knowledge.rs`, `src/kinds.rs`,
+authoritative touch-set. Summary (~20 sites): `src/knowledge.rs`, `src/kinds.rs`,
 `src/integrity.rs`, `src/priority/partition.rs`, `src/relation.rs`,
-`src/relation_graph.rs`, `src/supersede.rs`, `src/commands/supersede.rs`,
+`src/relation_graph.rs`, `src/catalog/scan.rs`, `src/catalog/test_helpers.rs`,
+`src/supersede.rs`, `src/commands/supersede.rs`,
 `src/search.rs`, `src/tag.rs`; `install/templates/knowledge-*.toml` (add evidence +
 hypothesis, rename constraint → invariant), `install/using-doctrine.md`,
 `install/glossary.md`; `memory/mem.signpost.doctrine.knowledge`;
 `tests/e2e_knowledge_cli_golden.rs`, `tests/e2e_memory_anchoring.rs`; the seed
-CON-001 → INV-001 data migration.
+CON-001 → INV-001 recreate (delete `constraint/` tree, re-mint INV-001).
 
 ## Risks / Assumptions / Open Questions
 
