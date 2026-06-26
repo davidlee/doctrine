@@ -69,3 +69,24 @@ lets PHASE-01 validate the mechanism before the skill stops re-deriving a
   silently skip these — they are checked downstream at reconcile.
 - **REV-011** is the governance counterpart; its apply at reconcile lands the
   ADR-008 D-B1/D-B5 mechanism edit. Plan execution must not edit ADR-008 directly.
+  Enforced as a closure gate: **PHASE-04 VH-1** — SL-156 must not reach `done`
+  with REV-011 unapplied (codex flagged the risk that only prose carried it).
+
+## External plan-hardening pass (codex / GPT-5.5, thread 019f0214, 2026-06-26)
+
+Hostile pass on the authored plan + the EAP-1..5 design changes. Verdict
+NEEDS-WORK; mechanism (B1) unchallenged. Findings integrated:
+- **BLOCKER — PHASE-01 VT-1 over-claimed.** The `.env_remove` simulation only
+  exercises the env-absent fallback (`<fork>/target/wt/<branch>`, `fork.rs:30-34`),
+  not the final `<wt>/target` shape (flake set-env is launch-time, R5). VT-1
+  rescoped to a fallback-path check; **VH-1 is now the sole proof** of final B1
+  semantics.
+- **MAJOR — PHASE-03 EX-2 missed in-file `fork.rs` doc surfaces** (`:116-118`,
+  `:202-208`) that design §5.2 put in scope. Added to EX-2.
+- **MAJOR — REV-011 could slip** (only prose carried it). Added **PHASE-04 VH-1**
+  closure gate.
+- **MINOR — scope/plan grep boundary disagreed.** Narrowed `slice-156.md` §4 to the
+  touched surfaces, matching design §9 EAP-3.
+- **Confirmed fine:** phase split/order, EAP-1 (assertions separable), EAP-2
+  (fail-closed fallback), EAP-5 (fork stdout was only the env contract),
+  dispatch-subprocess sufficiency, OQ-1/OQ-2 staying out of acceptance criteria.

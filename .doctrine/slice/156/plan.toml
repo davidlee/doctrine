@@ -35,8 +35,8 @@ exit_criteria = [
   { id = "EX-2", text = "host path unaffected (it never carried the jail export); the existing .env_remove(\"CARGO_TARGET_DIR\") e2e neutraliser now matches production" },
 ]
 verification = [
-  { id = "VT-1", expects = "isolation by construction: two worktrees on different branches each build a binary their own e2e tests spawn; target paths distinct (<wt>/target), no cross-thrash — simulated in-session via .env_remove(\"CARGO_TARGET_DIR\") (design VT-1, R5)" },
-  { id = "VH-1", expects = "true end-to-end check after a jail relaunch (flake set-env is launch-time, inert in the authoring session — design R5): first build is cold for every tree; old ~/.cargo/doctrine-target-jail abandoned out-of-band" },
+  { id = "VT-1", expects = "fallback-path check ONLY (NOT final B1 semantics — codex 019f0214): an in-session test with .env_remove(\"CARGO_TARGET_DIR\") confirms a process seeing no inherited CARGO_TARGET_DIR resolves an isolated per-fork dir. But the unset-fallback is <fork>/target/wt/<branch> (fork.rs:30-34), NOT the final <wt>/target, and the flake set-env is launch-time (R5). This proves the env-absent code path, not post-relaunch isolation-by-construction. Final <wt>/target semantics are proved ONLY by VH-1." },
+  { id = "VH-1", expects = "SOLE proof of final B1 semantics — true end-to-end check after a jail relaunch (flake set-env is launch-time, inert in the authoring session — design R5): two worktrees on different branches build binaries their own e2e tests spawn, target paths distinct (<wt>/target), no cross-thrash; first build is cold for every tree; old ~/.cargo/doctrine-target-jail abandoned out-of-band" },
 ]
 specs        = []
 requirements = []
@@ -66,7 +66,7 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "project_env_contract removed; run_fork emits nothing on stdout (the created path was always stderr — fork.rs:223-233, EAP-5); coordinate.rs:255 emission dropped; gc.rs target-base reaping removed (GC reaps the worktree, in-tree target/ dies with it)" },
-  { id = "EX-2", text = "stale stdout-contract surfaces refreshed (EAP-4): worktree/mod.rs:111-113 fork help, provision.rs:134-137 stdout-discipline comment, .agents/skills/worktree/SKILL.md:118-123 fork step 4" },
+  { id = "EX-2", text = "stale stdout-contract surfaces refreshed (EAP-4): IN-FILE fork.rs doc surfaces (codex 019f0214, design §5.2) — fork.rs:116-118 fork_core doc (\"emits the per-worktree env contract on stdout\") + fork.rs:202-208 run_fork doc-comment (\"stdout: the env contract\"); worktree/mod.rs:111-113 fork help, provision.rs:134-137 stdout-discipline comment, .agents/skills/worktree/SKILL.md:118-123 fork step 4" },
   { id = "EX-3", text = "env-contract test assertions excised surgically (EAP-1): the CARGO_TARGET_DIR/wt-branch and stdout-purity blocks in fork_happy_path_solo_and_worker (e2e_worktree_fork.rs) and coordinate_create_is_markerless_at_trunk_with_sheets (e2e_worktree_coordinate.rs); gc target-base scaffold (e2e_worktree_gc.rs run_pinned/target_base) deleted whole" },
 ]
 verification = [
@@ -92,6 +92,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VA-1", expects = "agent sweep confirms no stale rebuild-stale/touch ritual remains in justfile/AGENTS.md and the superseded memories are marked (design R3); host-still-relevant items explicitly retained, not blanket-deleted" },
+  { id = "VH-1", expects = "governance/code coherence gate (codex 019f0214): REV-011 (revises ADR-008 D-B1/D-B5) is approved+applied at reconcile before SL-156 reaches done — the slice MUST NOT close with the ADR-008 mechanism edit unapplied (design §Governance, plan.md). Discharged downstream at reconcile/close like other VH (plan.md §Notes), not during PHASE-04 execution" },
 ]
 specs        = []
 requirements = []
