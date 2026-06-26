@@ -460,6 +460,20 @@ dispatch SKILL.md to the PHASE-05 enforced beat.
   clippy plain zero-warn; fmt clean.
 - Derived skill copies (`.agents/skills/`, `.doctrine/skills/`) are gitignored,
   RustEmbed-regenerated — not the deliverable; authored `plugins/` source is.
+- **FINDING — stale PATH binary strips provenance from the registry.** `which
+  doctrine` → readonly `~/.cargo/bin/doctrine` (jail), which PREDATES this slice's
+  `BoundaryRow.provenance`. Any `doctrine slice phase` (binding) / `record-delta`
+  via that binary read→modify→writes the registry through a pre-provenance struct,
+  silently DROPPING `provenance` from **every** row (read-back default = Unknown).
+  Net: SL-154's own `state/slice/154/boundaries.toml` ended **all-Unknown** even
+  though every phase was solo-landed (notes attest `solo`). Not a code defect —
+  the provenance code is unit+e2e green built current; it's the jail stale-binary
+  footgun (`just rebuild-stale` rebuilds `./target` but cannot replace the readonly
+  PATH binary). **Harmless for THIS audit:** SL-154 is solo, so `slice conformance`
+  keys on the oids (correct), never provenance (provenance gates only the dispatch
+  prepare-review D11 guard). Left Unknown rather than cosmetically hand-edit (the
+  PATH binary would re-strip; surfacing > masking). **Remaining lifecycle ops use
+  `./target/debug/doctrine`.** Captured as a durable memory.
 
 ## Relations & selectors
 
