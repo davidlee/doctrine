@@ -1,0 +1,40 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 8
+slug = "actionability-gating-association-vs-graph-effect"
+title = "Actionability gating: association vs graph-effect"
+status = "open"
+created = "2026-06-26"
+updated = "2026-06-26"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "RFC-007"
+
+[[relation]]
+label = "related"
+target = "RFC-003"
+
+[[relation]]
+label = "related"
+target = "IMP-047"
+
+[[relation]]
+label = "related"
+target = "SPEC-001"
+
+[[relation]]
+label = "related"
+target = "SPEC-019"
+
+[[relation]]
+label = "related"
+target = "SL-158"
+
