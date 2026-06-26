@@ -52,18 +52,6 @@ pub(crate) fn outbound_for(
         // REQUIREMENT authors no outbound relations — it is an edge target only.
         // CM (concept-map, SL-076) likewise authors no outbound relations.
         "REQ" | "CM" => Ok(Vec::new()),
-        // Knowledge records (SL-059, L7/F-A1) author no outbound relations in Slice
-        // A — routing only, no rules/labels/reader. The empty arm keeps the
-        // KINDS-driven dispatch total once a record exists (a KINDS row with no arm
-        // panics every debug-build graph scan); Slice B swaps it for the real
-        // `knowledge::relation_edges` accessor. Kept a SEPARATE arm from `REQ`
-        // (which is empty forever) precisely because its body diverges in Slice B —
-        // merging the identical-today bodies would couple two distinct futures.
-        "ASM" | "DEC" | "QUE" | "CON" => {
-            let record_kind = crate::knowledge::RecordKind::from_prefix(kind.prefix)
-                .ok_or_else(|| anyhow::anyhow!("unknown record prefix {}", kind.prefix))?;
-            crate::knowledge::relation_edges(root, record_kind, id)
-        }
         "RV" => crate::review::relation_edges(root, id),
         "REC" => crate::rec::relation_edges(root, id),
         // REV (SL-066, G3) — the arm MUST land WITH the `KINDS` row or the
@@ -74,16 +62,12 @@ pub(crate) fn outbound_for(
         // RFC (SL-122) — governance-spine dispatching via governance::relation_edges
         // (reads tier-1 `[[relation]]` rows). PHASE-03 filled.
         "RFC" => crate::governance::relation_edges(&crate::rfc::RFC_KIND, root, id),
-        // The five backlog kinds share one accessor, routed by their ItemKind (the
-        // prefix↔kind map is backlog's single source — no second copy here).
         other => {
-            if let Some(item_kind) = crate::backlog::kind_from_prefix(other) {
+            if let Some(record_kind) = crate::knowledge::RecordKind::from_prefix(other) {
+                crate::knowledge::relation_edges(root, record_kind, id)
+            } else if let Some(item_kind) = crate::backlog::kind_from_prefix(other) {
                 crate::backlog::relation_edges(root, item_kind, id)
             } else {
-                // Unreachable for any `integrity::KINDS` row (the explicit arms above
-                // plus the five backlog prefixes route every kind). A new KINDS row
-                // with no arm here lands here — loud in debug (the invariant), a
-                // benign empty in release (dispatch stays total, never a panic).
                 debug_assert!(false, "outbound_for: unrouted KINDS prefix `{other}`");
                 Ok(Vec::new())
             }
