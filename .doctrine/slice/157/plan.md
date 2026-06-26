@@ -46,9 +46,31 @@ adjacent.
 
 ## Notes
 
-- **SPEC-022 prose edit is NOT a plan phase.** `spec-022.md:140-141` carries the
-  resync parenthetical; it is stripped via a `modify` REV (`--target SPEC-022`) at
-  **reconcile**, after the code lands — so the spec never leads the code (design
-  §5). Recorded as a reconcile-stage obligation, out of plan scope.
+### Reconcile / close obligations (out of plan scope, do not lose)
+
+- **SPEC-022 prose edit.** `spec-022.md:140-141` carries the resync parenthetical;
+  strip it via a `modify` REV (`--target SPEC-022`) at **reconcile**, after the
+  code lands — so the spec never leads the code (design §5). The `.toml`
+  responsibility already conforms.
+- **IMP-122 closure.** Its F-1/F-2 resync hardenings target the exact deleted code;
+  close IMP-122 at slice close (design §7). Tracked here so close picks it up.
 - No ADR-012 Revision (D4 preserved); SL-121 design §2.2 superseded at the slice
   level (design §5).
+
+### Execution guidance (for /phase-plan → /execute)
+
+- **Navigate by symbol, not line.** The line numbers in plan/design are accurate as
+  of authoring (re-verified — no drift) but the repo is multi-agent; locate
+  `advance_pure_ref` / `resync_worktree_hard` / `RacedDesync` by name. Import-clean:
+  `advance_pure_ref` keeps only `git::update_ref_cas`; `tree_clean` /
+  `worktree_for_ref` stay used (M4 gate + branch point), so no `use` edits.
+- **Fork from a clean base.** The working tree carries cross-agent uncommitted
+  files; EN-2's baseline gate must run on a fork from a **committed, green** base
+  (main, promoted from edge per AGENTS.md), not dirty edge — else the baseline is
+  not a true regression anchor.
+- **`advance_pure_ref` inline/rename = NON-GOAL.** Post-deletion the fn is a thin
+  ~6-line sibling of `advance_checked_out`; leave it as its own fn (leg symmetry).
+  `AdvancedResynced` becomes checked-out-only but its report label
+  `"advanced+resynced"` is test-pinned (e2e:1141) — do **not** rename the label
+  (behaviour change). A variant rename without a label change is possible but is
+  scope creep; if it seems worth it, raise via `/consult`, don't fold it in.
