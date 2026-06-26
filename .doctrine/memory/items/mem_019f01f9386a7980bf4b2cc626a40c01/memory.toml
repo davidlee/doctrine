@@ -1,0 +1,43 @@
+memory_uid = "mem_019f01f9386a7980bf4b2cc626a40c01"
+memory_key = "mem.pattern.state.reopen-evict-degrades-self-heal"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Reopen eviction degrades, never blocks the status transition"
+summary = "set_phase_status reopen forget_source_delta warns (not ?) — D5 non-blocking; self-healing via re-completion upsert"
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/state.rs"]
+globs = []
+commands = []
+tags = ["sl-154", "state", "binding"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5273becd674eabea44bf607959c541748244ce72"
+ref_name = "refs/heads/edge"
+checkout_state_id = "7940f93224053950730528247bc95718126dd8baf26abbb08ba13479ae2254b9"
+base_commit = "e4dfd146f30c75badb73d9caa67d72db6af402bf"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
