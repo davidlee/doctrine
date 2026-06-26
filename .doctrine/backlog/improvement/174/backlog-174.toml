@@ -1,0 +1,33 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 174
+slug = "split-brain-authored-state-close"
+title = "Split-brain authored state at audit/reconcile/close"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-26"
+updated = "2026-06-26"
+tags = ["area:dispatch", "area:review", "area:slice", "quality"]
+
+# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
+# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
+[[relation]]
+label = "related"
+target = "IMP-024"
+
+[[relation]]
+label = "related"
+target = "IDE-017"
