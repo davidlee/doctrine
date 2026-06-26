@@ -1,0 +1,42 @@
+memory_uid = "mem_019f05f6550d7fc3b4fe0dbd4dacf7a7"
+memory_key = "mem.pattern.doctrine.record-kind-touch-sites"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Record-kind catalog: ~17 hardcoded prefix sites, not centralised"
+summary = "Adding/renaming a knowledge record kind touches ~17 hardcoded prefix sites; kinds::RECORD exists but most consumers ignore it. Grep, don't trust 'centralised'. catalog/scan.rs dispatch is panic-grade."
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/knowledge.rs", "src/kinds.rs", "src/catalog/scan.rs"]
+globs = []
+commands = ["knowledge", "knowledge new"]
+tags = ["record-kinds", "dry", "touch-sites"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "52ad6f4c2baf5d1751f31900b80618f60bcb7cba"
+tree = "8bcdec9f84eefdd9ad49aaf7b7bbe4063584a3f3"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "52ad6f4c2baf5d1751f31900b80618f60bcb7cba"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
