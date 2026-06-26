@@ -1,0 +1,47 @@
+memory_uid = "mem_019f0212b9037d41a1ceaadad34b802e"
+memory_key = "mem.pattern.dispatch.prepare-review-rerun-not-idempotent-until-gate"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "prepare-review full re-run is not idempotent until the PHASE-05 gate"
+summary = "commit_boundaries is content-idempotent, but a full prepare-review re-run collides on created refs + churns the journal until the PHASE-05 halt-before-projection gate"
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/dispatch.rs"]
+globs = ["src/dispatch.rs"]
+commands = ["doctrine dispatch sync"]
+tags = ["sl-154", "dispatch", "idempotency"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c8668a0ae1d4f45c0b28f277950bec279ec5837a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "51a0fab17ac3fdaf18b6611e067b7da4664a89a8020853ec8a7c76f3d0f1c263"
+base_commit = "d82ec4b7dc1e2deec09dad358e11b693eebac104"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019ec88a6b43746395017bd7869e38e9"
+
