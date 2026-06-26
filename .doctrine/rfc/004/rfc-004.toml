@@ -6,7 +6,7 @@ slug = "path-intent-selector-role-stamped-selectorintent-primitive"
 title = "Path-intent selector: role-stamped selector+intent primitive"
 status = "open"
 created = "2026-06-23"
-updated = "2026-06-23"
+updated = "2026-06-26"
 tags = []
 
 [relationships]
@@ -48,4 +48,20 @@ target = "ADR-010"
 label = "references"
 role = "concerns"
 target = "IMP-042"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
+[[relation]]
+label = "related"
+target = "SL-154"
+
+[[relation]]
+label = "related"
+target = "ISS-051"
+
+[[relation]]
+label = "related"
+target = "ISS-052"
 
