@@ -1,0 +1,42 @@
+memory_uid = "mem_019f0248d9b97800a340472dac2b1fdd"
+memory_key = "mem.fact.jail.nix-absent-no-flake-eval"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "nix is absent inside the bubblewrap jail — flake edits can't be eval-checked in-session"
+summary = "Jail built from flake.nix externally; no nix/nix-instantiate inside. A flake edit can only be validated by relaunching (broken flake fails to launch) — defer flake-eval verification to post-relaunch."
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["flake.nix"]
+globs = []
+commands = []
+tags = ["jail", "build", "flake"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a016e6d6bff6218dde10df2b23544970c6ba263b"
+ref_name = "refs/heads/slice/SL-156-cargo-isolation"
+checkout_state_id = "074d59a06078173fac3d2c34d4d505caf4247f7fa045b87a27cdb1fad7661582"
+base_commit = "17b12679ef17b9050a85d176995acc78d06f1147"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
