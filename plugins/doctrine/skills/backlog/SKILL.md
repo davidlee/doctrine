@@ -22,7 +22,7 @@ The CLI is the source of truth for exact flags: `doctrine backlog --help`
 - [ ] Create the new backlog item 
 - [ ] Read & fill its template
 - [ ] Tag it appropriately and consistently
-- [ ] Record any dependecies and appropriate sequencing priorities
+- [ ] Record any dependencies and appropriate sequencing priorities
 
 ## Verbs
 
@@ -33,7 +33,7 @@ The CLI is the source of truth for exact flags: `doctrine backlog --help`
 | survey items | `doctrine backlog list [--kind …] [--status …] [--tag …] [--all]` |
 | inspect one item | `doctrine backlog show <ID>` |
 | transition status | `doctrine backlog edit <ID>` (prompts) |
-| add/remove tags | `doctrine backlog tag <ID> --add <tag> [--remove <tag>]` |
+| add/remove tags | `doctrine backlog tag <ID> <tag> … [--remove <tag>]` (adds positional; `--remove`/`-d` repeatable) |
 | record a hard dep | `doctrine backlog needs <ID> <DEP-ID> [<DEP-ID> …]` |
 | record soft ordering | `doctrine backlog after <ID> <PREDECESSOR-ID>` |
 
@@ -61,8 +61,9 @@ a candidate that does not fit the work-status lifecycle
 
 ## Tags
 
-Lowercased, `[a-z0-9_:-]`. Colon namespacing (e.g. `area:backlog`). Add/remove
-in one call: `doctrine backlog tag <ID> --add area:cli --remove stale`.
+Lowercased, `[a-z0-9_:-]`. Colon namespacing (e.g. `area:backlog`). Adds are
+positional, removes use `--remove`/`-d` — both in one call:
+`doctrine backlog tag <ID> area:cli --remove stale`.
 
 ## Dependencies
 
