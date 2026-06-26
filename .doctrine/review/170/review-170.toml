@@ -1,0 +1,34 @@
+id    = 170
+slug  = "sl-161-audit-dry-kind-registry-seam"
+title = "SL-161 audit: DRY kind-registry seam"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-161"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Plan VA-1 imprecise — doesn't account for design §5.4 exceptions"
+detail = """Plan VA-1 states: grep for record-literal clusters should return "zero outside kinds.rs and dep_seq.rs:285". But design §5.4 explicitly designates integrity.rs:821 (KINDS prefix pin), relation.rs:1422,1427 (mixed supersets), and search.rs:39 ("all" alias) as staying — they all contain record-prefix string literals in census/pin contexts, not record-only dispatch. The implementation is correct per design; the plan's VA-1 is over-narrow. No code change needed — plan's VA-1 should be clarified during reconciliation to list the full expected-hit set."""
+disposition = "aligned"
+response = 'The implementation is correct per design §5.4. The VA-1 criterion in the plan should list the full expected-hit set: kinds.rs (RECORD const), dep_seq.rs:285 (admissible vector, F2), integrity.rs:821 (KINDS prefix pin), relation.rs:1422,1427 (mixed supersets), and search.rs:39 ("all" alias). All are explicitly designated as staying in the design. Clarify VA-1 in reconciliation.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "scan.rs other arm: fallthrough invariant comment removed"
+detail = 'The scan.rs `other` arm restructure removed two comments: (1) the backlog accessor comment ("The five backlog kinds share one accessor...") and (2) the fallthrough invariant comment ("Unreachable for any integrity::KINDS row..."). Removal of (1) is correct — it described the old structure where only backlog kinds fell through to `other`, now stale. Removal of (2) is a minor readability regression — the `debug_assert!` message is adequate but less descriptive than the old comment which explained the KINDS invariant, debug/release behavior difference, and purpose. Not a design violation — the invariant is unchanged and the assert message suffices.'
+disposition = "tolerated"
+response = 'The old fallthrough comment was tied to the arm structure where only backlog kinds fell through — its text about "the explicit arms above plus the five backlog prefixes route every kind" is now misleading since record kinds ALSO fall through to `other`. The debug_assert! message ("outbound_for: unrouted KINDS prefix `{other}`") is adequate. Tolerated — not worth re-adding a reworded comment for a well-understood invariant.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
