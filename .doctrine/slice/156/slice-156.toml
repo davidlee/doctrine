@@ -1,7 +1,7 @@
 id = 156
 slug = "cargo-binary-isolation"
 title = "Per-worktree CARGO_TARGET_DIR for dispatch workers"
-status = "reconcile"
+status = "done"
 created = "2026-06-26"
 updated = "2026-06-26"
 tags = []
