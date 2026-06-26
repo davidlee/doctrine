@@ -5,16 +5,10 @@ description: Use after routing has chosen this path, when the next step is bound
 
 # Preflight
 
-This is NOT the first routing skill for work in a Doctrine repo.
-
-If you have not already chosen the governing skill path, stop and use `/route`
-first.
-
-Use `/preflight` only after routing has already established that the immediate
-need is bounded up-front research before proceeding.
-
-In other words: `/route` routes into `/preflight` when appropriate. `/preflight`
-does not replace `/route`.
+`/route` routes into `/preflight`; it does not replace `/route`. Use this only
+after routing has established that the immediate need is bounded up-front
+research. If you have not chosen the governing skill path yet, stop — use
+`/route` first.
 
 You're about to begin work on something: $ARGUMENTS
 
