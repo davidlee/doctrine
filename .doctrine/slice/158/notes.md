@@ -1,149 +1,126 @@
-# SL-158 design notes — Trinary actionability
+# SL-158 notes — Trinary actionability (context bootstrap)
 
-Working notes for the `/design` pass. Reading list + sources consulted so a
-reviewer can bootstrap. Decisions land in `design.md`; this file is the trail.
+General-purpose bootstrap for any agent picking up SL-158. Durable trail; the
+disposable `handover.md` points here. Authoritative design = `design.md`;
+governing canon = **ADR-017**. This file frames + supersedes the earlier
+exploration (which predates RFC-008/ADR-017 and is no longer the plan).
 
-## ⚠️ STATUS: design PARKED — gated on an upstream RFC (2026-06-26)
+## STATUS: design locked pending user approval (2026-06-26)
 
-The design conversation itself surfaced that the **gating-mechanism question is
-not slice-shaped.** It is an unsettled model decision in RFC-007 that RFC-003's
-Layer-1 ruling (structure ≠ graph-effect) reopens, with corpus-wide blast radius,
-needing several deliberation passes. Decision (user): **resolve it in an RFC,
-outside the slice.** SL-158 cannot proceed to a lockable design until the RFC
-settles the mechanism. This notes file + the RFC carry the context forward.
+RFC-008 resolved → **ADR-017 accepted**. Gating = an **inbound `needs` edge on an
+unsettled record**. No new relation/role/axis, no projection, no "gating edge" to
+build. The earlier P/E/L mechanism fork and OQ-1/OQ-2/OQ-3 are all **closed** by
+ADR-017 — ignore them (history below, struck).
 
-### The requirement the RFC must honour (user, 2026-06-26)
+Design + scope reconciled, selectors recorded, SL-158→ADR-017 linked. Internal +
+external (codex) adversarial passes done and integrated. Next routed step: **/plan**
+(unless re-review of D6 or /inquisition is requested first).
 
-1. **Gating canon is acceptable / can be a positive.** Governance is not itself
-   actionable, but an *unsettled* governance record transitively gating the work
-   that depends on it is sensible. So "records gate canon" is not disqualifying.
-2. **Association must not be hostage to gating (the protect-this).** One must be
-   able to associate an epistemic record wherever it is *semantically* sensible
-   (`shapes`) WITHOUT that association forcing an *insensible actionability*
-   effect. → RFC-003 Layer 1 applied to records: **association ≠ gating.** This is
-   the decisive argument against blanket (P) shapes-projection, which couples them.
-3. So the live design space = **how gating selects WHICH associations bite**: a
-   role on `shapes`, a target-class filter, a distinct gating signal, or a mix.
+## The four changes (see design.md for detail)
 
-## Reading list (handover order)
+1. **D1 — trinary partition** (`src/priority/partition.rs`): add `StatusClass::Gating`
+   (non-Workable, non-Terminal) + a `gating` field on `KindPartition`. Knowledge rows
+   move unsettled states into `gating`; every other row `gating: &[]` (byte-identical).
+2. **D2 — `needs`/`after` target-gate widening** (`src/commands/dep_seq.rs`): split the
+   one `is_work_like` gate — **source** unchanged (records still can't author dep/seq),
+   **target** widens to `is_admissible_dep_target` = work-like ∪ records. Governance
+   excluded. *This is the delta ADR-017's prose missed* (see "Gate contradiction").
+3. **D3 — estimate/value on records**: already works (no facet code). Inert via leverage,
+   **live via optionality** once D6 lands. `risk` excluded (gated + `[facet]` collision).
+4. **D6 — records author `references` (`concerns`)** (`src/relation.rs` RELATION_RULES):
+   user-requested; records were illegally barred. Distinct from `shapes`-roles (IDE-022).
 
-1. `doctrine slice show SL-158` — scope, non-goals, affected surface, OQs.
-2. `doctrine rfc show RFC-007` — program: 3 workstreams, sequencing. ws1 keystone.
-3. `doctrine backlog show IMP-047` — source item; richest mechanism spec.
-4. `.doctrine/spec/tech/019/spec-019.md` — D7 / NF-003 / OQ-2: the consumer.
-   Records parked all-`Terminal`, explicitly awaiting IMP-047.
-5. `src/priority/{partition,channels,graph}.rs` — the engine seam.
+Canon (SPEC-001/PRD-011/SPEC-019) moves via **reconcile**, not hand-edited ahead of code.
 
-## Other sources consulted
+## Gate contradiction (the load-bearing design finding)
 
-- `ADR-004` (superseded_by ADR-012) — relations stored **outbound-only**,
-  reciprocity derived. One canonical authoring side; record→artefact authored
-  **on the record**. Bears on OQ-2 (edge direction).
-- `ADR-010` — relation modelling: unify contract + write seam (`RELATION_RULES`).
-- `src/relation.rs` — `RelationRule` (sources, label, role, inbound_name,
-  TargetSpec, Tier, LinkPolicy), `RELATION_RULES` table. Records (`RECORD`
-  source-group) already author `Shapes` (→ wide artefact set incl SL/REQ/ISS…)
-  and `Spawns` (→ backlog kinds). Both are currently **graph-inert** (not in any
-  overlay).
+ADR-017 claims the `needs` work-like gate is *source-only* ("a work item may target a
+record today"). **False.** `src/commands/dep_seq.rs:59-65` gates the **target** as
+work-like too → `doctrine needs SL-x QUE-1` is **refused today**. So the trinary
+partition is NOT the sole engine delta — D2 (gate widening) is required to make the
+inbound gate authorable. The *read/build* path (`graph.rs`) IS kind-agnostic; only the
+*authoring gate* refuses records. **ADR-017 prose reconciled at close** (follow-up).
 
-## Key engine findings (the load-bearing facts)
+## Key engine findings (still valid — confirmed in code)
 
-### partition.rs — the binary that must become trinary
-- `StatusClass { Workable, Terminal, Unrecognised }`. `status_class(kind, status)`
-  is a `(prefix → KindPartition{workable,terminal})` lookup.
-- VT-1 **drift canary** per kind: `workable ∪ terminal == <kind>_STATUSES`. Adding
-  a `gating` set generalises this to `workable ∪ gating ∪ terminal == vocab`.
-- Knowledge kinds (ASM/DEC/QUE/CON) currently `workable: &[]`,
-  `terminal: <KIND>_STATUSES` (all-Terminal, the SL-059 interim per D7).
-- Per-kind settle boundary (unsettled = Gating, settled = Terminal):
-  - ASM: `held`,`testing` → Gating; `validated`,`invalidated`,`obsolete` → Terminal
-  - DEC: `proposed` → Gating; `accepted`,`rejected`,`superseded` → Terminal
-  - QUE: `open` → Gating; `answered`,`obsolete` → Terminal
-  - CON: `active` → Gating; `waived`,`superseded`,`retired` → Terminal
-- Existing tests that MUST change (consumer revision, not behaviour regression):
+### partition.rs — binary → trinary
+- `StatusClass { Workable, Terminal, Unrecognised }`; `status_class(kind, status)` is a
+  `(prefix → KindPartition{workable,terminal})` lookup. Add `gating` set + check.
+- VT-1 drift canary per kind: generalise `workable ∪ terminal == <KIND>_STATUSES` to the
+  three-way cover.
+- Knowledge kinds currently `workable:&[]`, `terminal:<KIND>_STATUSES` (all-Terminal).
+- Per-kind settle boundary (matches `knowledge.rs:173-180`):
+  - ASM `held`/`testing` → Gating; `validated`/`invalidated`/`obsolete` → Terminal
+  - DEC `proposed` → Gating; `accepted`/`rejected`/`superseded` → Terminal
+  - QUE `open` → Gating; `answered`/`obsolete` → Terminal
+  - CON `active` → Gating; `waived`/`superseded`/`retired` → Terminal
+- Tests that flip BY DESIGN (consumer revision, not regression):
   `every_knowledge_status_classifies_terminal_never_workable`,
-  `knowledge_partitions_cover_the_real_vocabularies` (canary form),
-  `decision_accepted_diverges_hidden_from_status_class` (accepted stays Terminal).
+  `knowledge_partitions_cover_the_real_vocabularies`. **Stays green:**
+  `decision_accepted_diverges_hidden_from_status_class` (`accepted` ∈ terminal).
 
-### channels.rs — **needs (almost) no change** (the elegant part)
-- `eligible = class == Workable` → Gating excluded from worklist automatically.
-- `blocked_by` keeps dep-overlay predecessors with `class != Terminal` → a Gating
-  predecessor blocks automatically; a settled (Terminal) one stops blocking.
-- So the trinary class slots into the existing pole tests. **Settle→unblock falls
-  out for free.** Behaviour-preservation holds: no Gating node ⇒ identical.
+### channels.rs — ZERO code change (the elegant part)
+- `eligible == Workable` → Gating off the worklist automatically.
+- `blocked_by` keeps predecessors `!= Terminal` → a Gating predecessor blocks; settling
+  → Terminal unblocks. **Settle→unblock is free.** No exhaustive `match` on StatusClass
+  here — comparison predicates absorb the new variant.
 
-### graph.rs — the gating EDGE (the real second change)
-- dep overlay fed only by `needs`/`after` via `relation_graph::dep_seq_for`.
-- Reference/lineage overlays fed by `entity.outbound` filtered to `REF_LABELS`
-  (NOT incl `Shapes`/`Spawns`). So record relations contribute **no graph edge**.
-- To make a record gate: route a record→artefact edge into `dep_overlay` oriented
-  **record→artefact** (record = predecessor/blocker, artefact = successor/blocked)
-  — the same B→A flip `needs` uses. Then partition class gates it (Gating blocks,
-  Terminal doesn't), unconditional edge.
+### graph.rs — ZERO code change (kind-agnostic needs build)
+- dep overlay fed by `needs`/`after` (`relation_graph::dep_seq_for`), kind-blind:
+  `graph.rs:344` resolves any `needs` target + emits `prereq→src`. Records are scanned
+  nodes (`catalog/scan.rs:199`, `integrity.rs:113`). So a `needs → record` edge builds
+  with no change once D2 lets it be authored.
+- **leverage DP flows dependent→prereq** (`graph.rs:513`). A record is always a prereq
+  with no dep predecessors (can't author `needs`) → its base never propagates via
+  leverage. **optionality** (`graph.rs:163` CONSEQUENCE_LABELS incl `References`,
+  filtered by label not role) flows referrer-base → target → so D6 makes a record's base
+  live via the targets it `references`.
 
-## RFC-003 — bears directly on the gating-edge question (READ THIS)
+### Surface output flips with NO code change (codex finding)
+- `render.rs:184` prints class via `{:?}` (Debug) — Gating compiles + prints, no forced
+  edit. But `survey --all` (bypasses eligibility, `surface.rs:136`), `explain`, `inspect`
+  render `StatusClass`/score for any minted node → unsettled records flip `Terminal →
+  Gating` in output. Intended; pin with a knowledge-in-priority golden (VT-8). Existing
+  priority goldens cover work/backlog/review only (`tests/e2e_priority_golden.rs:105`).
 
-Holistic relation-model review (CHR-024 deliverable, 2026-06-23). Two rulings that
-reframe how gating is modelled:
+## Codex adversarial pass — disposition (2026-06-26)
 
-- **Layer 1 — structure is not graph-effect.** "Whether an edge *gates work* … is a
-  **consumer decision**, not a property of the relation." Relation contract =
-  structural truth (`shapes` durable); graph-effect (gating/eviction/scoring) =
-  a *projection* over selected edges, declared **in the consumer**.
-- **Design law — derivable, not relational.** Don't encode in the relation what the
-  consumer can project. RFC-003 explicitly files actionability
-  (`needs`/`after`/"IMP-047 `gates`") in the **dep/seq layer, not the semantic
-  relation model**; and names IMP-047 as "graph-effect is consumer policy; the
-  gating layer."
+External (codex MCP, read-only). One MAJOR: my "record score never displayed" claim was
+false (survey --all/explain/inspect surface it) — **corrected** in design.md. MINORs
+(surface blast radius, missing knowledge golden) → folded as VT-8. Confirmed CORRECT: D2
+required; `graph.rs` kind-agnostic; record→record needs excluded + no dep cycle;
+`ensure_ref_resolves` accepts knowledge refs (KINDS table); D1 boundary matches consts.
+D6 was added AFTER this pass — self-verified only (optionality wiring at graph.rs:163).
 
-This **tensions IMP-047 / RFC-007 wording** ("new gating `RelationLabel`(s) +
-`RELATION_RULES` rows") — RFC-003 says gating is NOT a new vocabulary label; it is a
-consumer projection over a structural edge (or a dep/seq-layer axis). Recency cuts
-both ways: RFC-003 is 2026-06-23; RFC-007 (2026-06-26) repeats the older
-label-wording, possibly inherited from IMP-047 without reconciling vs RFC-003.
+## Verification map (design.md §4)
 
-## User prior-lean (DO NOT FORGET — challengeable)
+VT-1 canary (3-way cover) · VT-2 class boundary · VT-3 gate blocks · VT-4 settle→unblock
+· VT-5 record never eligible · VT-6 admissibility (`needs SL QUE` ok; gov refused; record
+source refused) · VT-7 estimate round-trip · VT-8 knowledge-in-priority golden · VT-9
+references authoring + optionality.
 
-In the RFC-003 design conversation the lean was **"shapes not edges"** — i.e. gating
-is a **consumer projection over the existing `Shapes` relation**, not a new
-`gates` edge/label. User: "we can challenge that view, just not forget it."
+## Split out / follow-ups
 
-## Three mechanism options for the gating edge
+- **IDE-022** — `shapes`-roles (semantic disambiguation, ADR-016). Different from D6.
+- **IMP-183** — surface estimate/value in show/inspect for all estimable kinds.
+- ADR-017 prose reconciliation (source-only premise correction) — at close.
+- Outbound gating hub-view + deferred batch sugar (ADR-017 §3).
+- Coordinate with IMP-033 (full cross-tier dep/seq) — D2 widens only to records.
 
-- **(P) Shapes-projection (prior lean, RFC-003 Layer 1).** Keep `Shapes` as the
-  durable semantic relation; the priority consumer (`graph.rs` edge-pass) projects
-  record-sourced `Shapes` edges into the `dep_overlay`, oriented record→artefact.
-  Partition split does the gating (Gating blocks, Terminal doesn't). **NO `relation.rs`
-  change, NO `dep_seq` change** — just graph.rs edge-pass + partition. Minimal,
-  canon-coherent with RFC-003.
-- **(E) Distinct `gates` dep/seq axis.** New `[relationships].gates` axis alongside
-  `needs`/`after`, extended in `dep_seq` + `dep_seq_for` + graph.rs + an authoring
-  verb. RFC-003's "dep/seq layer" reading taken literally as a new axis.
-- **(L) Distinct `Gates` RelationLabel + `RELATION_RULES` rows.** IMP-047/RFC-007
-  literal wording. RFC-003 argues this is the **wrong layer** (graph-effect ≠
-  vocabulary).
+## Guardrails / environment
 
-**Challenge to (P) — kept live:** `Shapes` targets a WIDE set (PRD/SPEC/REQ/SL/
-ISS/IMP/CHR/RSK/IDE/ADR/POL/STD + the 4 record kinds). If every unsettled-record
-shaping gates, blocking may be over-broad (a record shaping a `draft` SPEC blocks
-it; intra-family ASM→QUE gating), and the author loses "informs but does not block."
-Mitigations: only *unsettled* records gate (settled = inert); soft-shape control
-(role/facet on shapes) deferrable if it bites.
+- Behaviour-preservation: ordinary workable/terminal items unchanged; existing priority
+  suites green; trinary reduces to binary where `gating == ∅`.
+- Canon-first: SPEC-001/PRD-011/SPEC-019 via design→reconcile, not hand-edited.
+- Jail: writes need `DOCTRINE_RESERVATION_FALLBACK=1`. `link` flag is `--role`. RW
+  doctrine = build target (`./target/debug/doctrine`); `~/.cargo/bin/doctrine` is RO.
+- Lint: `just check` inner loop / `just gate` before commit; plain `cargo clippy` (NOT
+  `--all-targets`); repo denies `as`/`unwrap`/`expect`/`print_stdout`/`format_push_string`
+  — build Strings via `Vec<String>` + concat (`mem.pattern.lint.*`).
+- Shared index: path-limit `git add`/`commit`; watch `.git/index.lock` (other agents).
 
-## Open design questions (decide before readiness)
-
-- **OQ-1** — name of the third class: `Gating` / `Ambient` / `Pending`.
-- **OQ-2** — edge direction: outbound-from-record (fits ADR-004 outbound-only) vs
-  dependent's `needs → record`. (Largely settled → outbound-from-record.)
-- **OQ-3 (the live fork)** — mechanism: shapes-projection (P, prior lean) vs distinct
-  `gates` axis (E) vs `Gates` label (L). RFC-003 favours P/E over L.
-
-## Guardrails (from handover)
-
-- Behaviour-preservation: ordinary workable/terminal items unchanged; existing
-  priority suites green; trinary reduces to binary where no Gating node exists.
-- Don't fork IMP-033's dep-overlay machinery — coordinate.
-- Canon-first: SPEC-001/PRD-011 D-decision + requirement authored via
-  design→reconcile, not hand-edited ahead of the engine.
-- Jail: reservation needs `DOCTRINE_RESERVATION_FALLBACK=1`. `link` flag is
-  `--role` not `--intent`.
+---
+*Superseded (pre-ADR-017): the "shapes-projection (P) vs gates-axis (E) vs Gates-label
+(L)" fork, OQ-1 (name → `Gating`), OQ-2 (edge direction), OQ-3 (mechanism), and the
+"graph.rs gating edge is the real second change" framing. ADR-017 closed all of them:
+inbound `needs`, no new edge. Kept out of the live notes to avoid misleading the planner.*
