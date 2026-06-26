@@ -19,7 +19,11 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Write `root/<rel>` with `body`, creating parent dirs.
 fn write(root: &Path, rel: &str, body: &str) {
@@ -70,7 +74,7 @@ fn seed_fixture(root: &Path) {
 
 /// `doctrine inspect <id> --json -p <root>`.
 fn run_inspect(root: &Path, id: &str) -> String {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["inspect", id, "--json", "-p"])
         .arg(root)
         .output()

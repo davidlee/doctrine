@@ -17,7 +17,11 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Run `git -C <dir> <args>`, asserting success; returns trimmed stdout.
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -56,7 +60,7 @@ fn branch_point_check(root: &Path, args: &[&str]) -> Output {
         root.to_str().unwrap(),
     ];
     full.extend_from_slice(args);
-    Command::new(BIN)
+    Command::new(bin())
         .args(&full)
         .output()
         .expect("spawn doctrine")

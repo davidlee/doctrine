@@ -32,3 +32,45 @@ pub(crate) fn repo_root() -> PathBuf {
         }
     }
 }
+
+/// The built `doctrine` binary, resolved at RUNTIME from the running test exe.
+/// SL-162 / CHR-014: never bake the path via `env!("CARGO_BIN_EXE_doctrine")` —
+/// a shared target serves one artifact across namespaces/profiles, so the baked
+/// path NotFounds in the namespace that did not compile it.
+pub(crate) fn doctrine_bin() -> PathBuf {
+    let mut p = std::env::current_exe().expect("resolve current_exe for doctrine_bin");
+    p.pop(); // drop test-exe name → …/deps/
+    p.pop(); // drop deps/          → …/<profile>/
+    p.push(format!("doctrine{}", std::env::consts::EXE_SUFFIX));
+    p
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn doctrine_bin_returns_existing_executable() {
+        let path = doctrine_bin();
+
+        // File name ends with "doctrine" (+ ".exe" on Windows).
+        let name = path.file_name().expect("doctrine_bin path has a file name");
+        let name_str = name.to_str().expect("doctrine_bin file name is valid UTF-8");
+        assert!(
+            name_str.starts_with("doctrine"),
+            "doctrine_bin file name starts with 'doctrine': {name_str}"
+        );
+
+        // The resolved path exists.
+        assert!(path.exists(), "doctrine_bin path exists: {}", path.display());
+
+        // It is a file, not a directory.
+        let meta = path
+            .metadata()
+            .expect("doctrine_bin metadata readable");
+        assert!(meta.is_file(), "doctrine_bin is a file: {}", path.display());
+
+        // File size > 0 (non-zero binary).
+        assert!(meta.len() > 0, "doctrine_bin non-zero size: {}", path.display());
+    }
+}

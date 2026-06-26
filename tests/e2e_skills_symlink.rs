@@ -18,11 +18,15 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Install `code-review` for Claude rooted at `dir`, asserting success; return stdout.
 fn install(dir: &Path) -> String {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args([
             "install",
             "--agent",

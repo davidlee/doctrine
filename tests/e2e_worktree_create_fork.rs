@@ -28,7 +28,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
+
 const CREATE: &[&str] = &["worktree", "create-fork"];
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -85,7 +90,7 @@ fn payload(cwd: &Path, name: &str) -> String {
 /// so provisioning into the fork is deterministic and the worker guard sees a clean
 /// (markerless) parent.
 fn run(cwd: &Path, payload: &str, args: &[&str]) -> Output {
-    let mut child = Command::new(BIN)
+    let mut child = Command::new(bin())
         .args(args)
         .current_dir(cwd)
         .env_remove("CARGO_TARGET_DIR")
