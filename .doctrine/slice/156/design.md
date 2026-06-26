@@ -112,6 +112,14 @@ Removals (platform → build-tool-agnostic):
   reaps the worktree, and the in-tree `target/` dies with it.
 - **`.agents/skills/dispatch-subprocess/SKILL.md`** — stop capturing/passing
   `$fork_env`; the codex worker inherits the (now unset) env and defaults in-tree.
+- **`AGENTS.md`** (§95 + the `just rebuild-stale` guidance) — the shared-target
+  warning and rebuild ritual are obsolete; rewrite to the in-tree model.
+- **Tests asserting the removed contract** (deleted/rewritten *with* the code, not
+  retrofitted): `tests/e2e_worktree_coordinate.rs:205` and `tests/e2e_worktree_fork.rs:153`
+  (`stdout contains "CARGO_TARGET_DIR="`); `tests/e2e_worktree_gc.rs` (the entire
+  external-target-base `wt/<branch>` reaping scaffold — `run_pinned` / target_base
+  helpers). The `*.env_remove("CARGO_TARGET_DIR")` setup other e2e tests use to
+  neutralise the jail env stays valid (it now matches production).
 - **Project stale-target mitigations** (scope item 2) — retire what the shared
   target made necessary: `just rebuild-stale`, the `justfile:50` staleness
   comment, touch-`main.rs` rituals, and the `mem.fact.build.rebuild-stale-skips-
@@ -224,13 +232,25 @@ mechanism), and POL-002 as the forcing function. D-B2/D-B3/D-B4 unchanged
   serve the host or non-jail flows. Mitigate: re-evaluate each individually; mark
   memories superseded only when confirmed.
 - **R4 — disk growth.** Bounded + reaped with worktrees; monitor (OQ-2).
+- **R5 — flake effect needs a jail relaunch.** `set-env` applies at jail launch,
+  so removing it is not live in the authoring session. Mitigate: validate the
+  mechanism in-session by simulating with `.env_remove("CARGO_TARGET_DIR")` (the
+  e2e harness pattern already in the suite); the true end-to-end check (VT-1/VT-2)
+  runs after a jail relaunch. Note for the executor: the first build post-relaunch
+  is cold for every tree (the old `~/.cargo/doctrine-target-jail` is abandoned —
+  one-time; remove it out-of-band).
 
 ## 9. Quality Engineering & Validation
 
-- **Behaviour-preservation:** the existing `src/worktree/` + dispatch suites must
-  stay green after the platform removals (the proof that the engine is unchanged
-  in behaviour). Tests asserting `project_env_contract` output are **removed with
-  the function**, not retro-fitted.
+- **Behaviour-preservation — scoped precisely.** The gate holds for worktree
+  *creation / provision / marking* and dispatch coordination — those suites must
+  stay green unchanged. It does **not** cover the env-emission contract: removing
+  `project_env_contract` is a *deliberate* contract change, so the tests that
+  assert it (`e2e_worktree_coordinate.rs:205`, `e2e_worktree_fork.rs:153`) and the
+  gc target-base scaffold (`e2e_worktree_gc.rs`) are **deleted/rewritten with the
+  code**, not retrofitted. Distinguish the two in review: a *creation* test going
+  red is a regression; an *env-contract* test going red is expected and its
+  deletion is the change.
 - **VT-1 — isolation by construction:** two worktrees on different branches each
   build a binary their *own* e2e tests spawn successfully; the target paths are
   distinct (`<wt>/target`), no cross-thrash. (Discharges ADR-008 D-B1 verification.)
@@ -248,4 +268,31 @@ mechanism), and POL-002 as the forcing function. D-B2/D-B3/D-B4 unchanged
 - **External consult — codex / GPT-5.5 (thread 019f01e9):** approved PLATFORM→
   PROJECT; rejected generic env seam; flagged the id-token blocker (moot under B1,
   no token), mandated retiring the flake export (D3), and the migration order (R2).
-- **Internal adversarial pass:** _pending_ (next).
+### Internal adversarial pass (2026-06-26)
+
+Hostile read of the draft + grounding greps. Findings, integrated above:
+
+- **AP-1 — "suites green unchanged" was imprecise.** `e2e_worktree_coordinate.rs:205`
+  and `e2e_worktree_fork.rs:153` assert the `CARGO_TARGET_DIR=` stdout line; that
+  contract is deliberately removed. §9 now scopes behaviour-preservation to
+  creation/marking and names the env-contract tests as deleted-with-code.
+- **AP-2 — gc tests entangled.** `e2e_worktree_gc.rs` builds external-target-base
+  `wt/<branch>` reaping scaffolds for `gc.rs:151-157`. Added to the touch-set (§5.2).
+- **AP-3 — live project doc.** `AGENTS.md:95` + `just rebuild-stale` guidance is
+  stale under B1. Added to §5.2 removals.
+- **AP-4 — jail-relaunch latency.** flake `set-env` is launch-time; mechanism not
+  live in-session. Added R5 (§8) — simulate via `.env_remove`, true check
+  post-relaunch.
+- **AP-5 — related entities (reconcile relations).** `CHR-014` (closed) is the
+  path-baking *cousin* axis, not the implementer; the shared-target *artifact* axis
+  this slice fixes is tracked by the open backlog item (research cites IMP-004). See
+  also `review/158`, backlog issues 044/037/008 — touch-points for the memory/ritual
+  cleanup (scope item 2).
+
+### External adversarial review (codex / GPT-5.5)
+
+- **Architecture consult (thread 019f01e9, pre-draft):** done — see §10 above /
+  `research.md`. Approved PLATFORM→PROJECT; mandated D3 + migration order.
+- **Design-doc hostile pass:** _pending_ — handed to the next agent (this session's
+  `/handover`). Target: the full `design.md` against ADR-008/POL-002, the
+  behaviour-preservation scoping (AP-1), and the migration-order phasing (R2).
