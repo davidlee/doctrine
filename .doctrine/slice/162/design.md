@@ -105,8 +105,13 @@ pub(crate) fn doctrine_bin() -> PathBuf {
 Re-exported in `tests/common/mod.rs`:
 
 ```rust
+#![allow(dead_code)]   // shared helpers: not every includer uses every fn (D5)
 pub(crate) use test_support::{doctrine_bin, repo_root};
 ```
+
+The inner attribute covers the `#[path]`-included `test_support`, so a crate that
+uses only `doctrine_bin` does not trip `dead_code` on the unused `repo_root`
+helper (see D5 / R4).
 
 Per-file call-site shape (decision D1 — local wrapper, uniform across all 59):
 
@@ -166,6 +171,12 @@ see §7.)
   uses `current_exe`, so it never self-trips.
 - **D4 — Extend CHR-014, don't fork it.** Same footgun class, same seam
   (`test_support` + `tests/common`), same guard test — one coherent pattern.
+- **D5 — `#![allow(dead_code)]` on `tests/common/mod.rs`** (the standard shared-
+  helper idiom). Introducing a second helper means a crate may use a subset;
+  without the allow, the unused helper trips `dead_code` under the zero-warning
+  gate. Verified: today all 4 includers use `repo_root`, so the subset case is
+  new. Alternatives (per-file selective import; splitting helpers into separate
+  modules) add churn for no benefit — the included module still carries both fns.
 
 ## 8. Risks & Mitigations
 
@@ -177,15 +188,22 @@ see §7.)
 - **R3 — Layout assumption A1 drifts** if a future bespoke target layout lands.
   Mitigation: INV-1 guard + the assumption recorded at the call site; low
   likelihood (cargo default).
+- **R4 — Shared-helper `dead_code` under the zero-warning gate** (the subset-use
+  case D5 introduces). Mitigation: `#![allow(dead_code)]` on `common/mod.rs`;
+  confirm clippy-clean during execute, and widen to `unused_imports` only if the
+  re-export itself is flagged (pub(crate) re-exports usually are not). `just gate`
+  is the backstop.
 
 ## 9. Quality Engineering & Validation
 
 - **VT-1** Formerly-failing suites (`e2e_adr_cli_golden`,
   `e2e_backlog_filter_alias`) pass after migration. *(by test)*
 - **VT-2** Full e2e suite green, goldens byte-identical — `just gate`. *(by test)*
-- **VT-3** Generalised guard `e2e_no_baked_paths` passes, and fails if either
-  macro is reintroduced (assert via a negative fixture or by construction of the
-  two needles). *(by test)*
+- **VT-3** Generalised guard `e2e_no_baked_paths` passes — scanning `src/` +
+  `tests/` for both fragment-assembled needles (`CARGO_MANIFEST_DIR`,
+  `CARGO_BIN_EXE`). Reintroduction-protection is by construction: both needles run
+  the same proven scan as CHR-014's, so a positive pass demonstrates the property
+  (no separate negative fixture — matches prior art). *(by test)*
 - **VA-1** `grep -rn 'env!("CARGO_BIN_EXE' tests/ src/` returns nothing outside
   the guard's assembled-fragment needle. *(by agent)*
 - **VH-1** Cross-namespace proof: run a previously-failing suite in one namespace,
@@ -194,4 +212,20 @@ see §7.)
 
 ## 10. Review Notes
 
-(Adversarial pass pending — §6 of the design skill.)
+Internal adversarial pass (findings integrated above):
+
+- **F1 — `dead_code` on subset-use of shared helpers.** Verified real: today all 4
+  `mod common;` includers use `repo_root`; 55 new ones use only `doctrine_bin`.
+  Resolved by D5 / R4 (`#![allow(dead_code)]`), the standard `tests/common`
+  idiom. Empirical clippy confirmation deferred to execute.
+- **F2 — Guard self-trip / comment-skip.** The `doctrine_bin` doc-comment names
+  `env!("CARGO_BIN_EXE_doctrine")` in prose; the guard scans `src/` too but skips
+  `//`/`///`/`//!` lines, so the mention must stay in a **doc-comment, never
+  code**. Recorded at INV-1; the resolver body uses `current_exe`, no macro.
+- **F3 — VT-3 over-claim** ("fails if reintroduced" implied a negative test).
+  Softened to by-construction, matching CHR-014's guard (no negative fixture).
+- **F4 — VH-1 unverifiable in a single namespace.** Accepted and marked VH: the
+  cross-namespace run is the only direct proof; in-jail, correctness is by
+  construction (no baked path). Not a blocker.
+- **Layering / governance:** ADR-001 satisfied (test-only helper, no cycle). No
+  POL/STD conflict. No `/consult` trigger — no unresolved tradeoff.
