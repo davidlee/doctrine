@@ -444,7 +444,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         role: None,
         inbound_name: "shaped_by",
         target: TargetSpec::Kinds(&[
-            PRD, SPEC, REQ, SL, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON,
+            PRD, SPEC, REQ, SL, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, RFC, ASM, DEC, QUE, CON,
         ]),
         tier: Tier::One,
         link: LinkPolicy::Writable,
@@ -1747,7 +1747,7 @@ mod tests {
                 got,
                 [
                     "ADR", "ASM", "CHR", "CON", "DEC", "IDE", "IMP", "ISS", "POL", "PRD", "QUE",
-                    "REQ", "RSK", "SL", "SPEC", "STD"
+                    "REQ", "RFC", "RSK", "SL", "SPEC", "STD"
                 ]
             );
         } else {
