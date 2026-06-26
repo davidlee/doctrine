@@ -37,68 +37,86 @@ slice (shared touch-site files, serial edits).
 `src/knowledge.rs` (~2.4k lines) is the kind-specific module over the kind-blind
 `crate::entity` engine. Four `RecordKind`s each ride an `entity::Kind` const with
 its own tree, reservation namespace, prefix, status vocabulary, typed `[facet]`,
-and scaffold template. The "add a kind" surface is **not** as centralised as it
-looks — ~17 sites hardcode the record-prefix literals rather than reading
-`kinds::RECORD` (see `mem.pattern.doctrine.record-kind-touch-sites`). Adding EVD/HYP
-touches every one:
+and scaffold template.
 
-- **`src/kinds.rs`** — prefix consts; `RECORD = &[ASM, DEC, QUE, CON]` grouping →
-  append `EVD, HYP`.
+**SL-161 (kind-registry DRY, landed 2026-06-27)** centralised record-membership:
+`kinds::is_record()` reads `kinds::RECORD`; the `scan.rs` dispatch routes via
+`RecordKind::from_prefix()` guard; `partition.rs` guard, `search.rs` knowledge
+alias, `dep_seq.rs` predicate, and `test_helpers.rs` seed all delegate to the
+registry. The `Shapes`/`Spawns` target sets in `relation.rs` tests read `RECORD`.
+A `record_kinds_are_taggable` test in `tag.rs` validates RECORD ⊆ TAGGABLE.
+`integrity.rs` carries a `KINDS.len()` count assertion (currently 21) as a drift
+canary.
+
+Adding EVD/HYP now touches **two tiers** of sites:
+
+### Zero-diff (DRY'd by SL-161 — adding EVD/HYP to RECORD is sufficient)
+
+- **`src/commands/dep_seq.rs`** — `is_record()` delegates to `kinds::is_record()`
+  which reads `RECORD`. The predicate test is set-equality over `RECORD ∩ KINDS`.
+  **No change.**
+- **`src/priority/partition.rs`** — `:609` guard uses `crate::kinds::is_record()`.
+  **No change.**
+- **`src/catalog/scan.rs`** — dispatch restructured: the record family routes
+  through `RecordKind::from_prefix(other)` in the `other` arm, no literal match.
+  **No change.**
+- **`src/catalog/test_helpers.rs`** — `seed_knowledge` uses
+  `RecordKind::from_prefix(prefix)` for the dir mapping. **No change.**
+- **`src/search.rs`** — knowledge group alias `("knowledge", kinds::RECORD)`.
+  **No change.**
+- **`src/relation.rs`** — `Shapes`/`Spawns` target sets in the label-coverage
+  canary (`:1444-1445`) read `RECORD`. **No change.**
+
+### Sites that still need EVD/HYP edits
+
+- **`src/kinds.rs`** — add `EVD`/`HYP` prefix consts; append to `RECORD`.
+  `is_record()` picks them up automatically.
 - **`src/knowledge.rs`** — `RecordKind` enum; per-kind `Kind` const; the
   `kind()`/`as_str()`/`statuses()`/`hidden()`/`terminal()`/scaffold-template/
   `validate_facet()`/`render_facet()`/`format_facet()`/`facet_json()` match arms;
   `RecordKind::ALL: [_; 4]` → `[_; 6]`; per-kind facet struct + `RecordFacet`
   variant; the kind-blind `RawFacet` superset; closed facet value-enums (new
   `Provenance`; `Confidence` reused); `resolve_ref` diagnostic; tests (`ctx_for`,
-  `populated_fixture`, vocab/prefix-count/terminal assertions).
-- **`src/integrity.rs`** — `KINDS` identity table (+2 rows); `kinds_table_*`
-  literal pin (advisory, not enforced); **and** a **third** in-file site: the
-  prefix-collision list (`:817`) gains EVD/HYP.
+  `populated_fixture`, vocab/prefix-count/terminal assertions). **Irreducible.**
+- **`src/integrity.rs`** — `KINDS` identity table (+2 rows); bump the
+  `KINDS.len()` count assertion 21→23; the prefix-collision list (`:817`)
+  gains EVD/HYP.
 - **`src/priority/partition.rs`** — one `KindPartition` row per record kind (+2;
-  `:609` guard list gains EVD/HYP).
-- **`src/relation.rs`** — `RELATION_RULES`; `RECORD` const drives `supersedes`/
-  `shapes`/`spawns` **source** sets, but the `Shapes` **target** set and
-  `GovernedBy` **source** set **hardcode** `ASM, DEC, QUE, CON` → gain `EVD, HYP`.
+  the guard at `:609` is DRY, but the rows themselves are per-kind).
+- **`src/relation.rs`** — new `supports`/`disputes` `RELATION_RULES` rows; the
+  `Shapes` target set and `GovernedBy` source set in `RELATION_RULES` (not the
+  test canary) **hardcode** `ASM, DEC, QUE, CON` → gain `EVD, HYP`. Two
+  hardcoded cross-kind vectors (`:1422`, `:1427`) still literal (mixed supersets,
+  not RECORD-only; IMP-184).
 - **`src/supersede.rs`** — `supersede_policy` + `validate_matrix` record arms (add
   EVD; HYP excluded); **and `src/commands/supersede.rs`** — the command shell.
-- **`src/commands/dep_seq.rs`** — `is_record` (`:29`) hardcodes the record prefix
-  match + pin test (`:267,:273`), admissible vector (`:285`), and a user-facing
-  message (`:83`); all gain EVD/HYP.
+- **`src/commands/dep_seq.rs`** — admissible vector (`:285`, mixed superset) and
+  user-facing message (`:83`) gain EVD/HYP.
 - **`src/relation_graph.rs`** — record-keyed edge-emission tests.
-- **`src/catalog/scan.rs`** — `outbound_for` dispatch (`:62`) routes the record
-  family (`"ASM"|"DEC"|"QUE"|"CON"`) to `knowledge::relation_edges`; the fallthrough
-  is `debug_assert!(false, …)` (`:88`). A `KINDS` row with **no scan arm panics
-  every debug-build corpus scan** — so adding EVD/HYP rows to `integrity::KINDS`
-  *without* extending this arm is a panic, not a silent gap. **Not caught by any
-  drift canary** (codex-2 F1).
-- **`src/catalog/test_helpers.rs`** — `seed_knowledge` (`:119`) maps record prefix
-  → tree dir; needs `EVD|HYP` arms (codex-2 F4, test-only).
-- **`src/search.rs`** — hardcodes the knowledge prefix group
-  `("knowledge", &["ASM","DEC","QUE","CON"])` + flat lists; EVD/HYP **unsearchable**
-  until added (codex F3).
-- **`src/tag.rs`** — hardcodes the taggable-prefix list; new kinds **untaggable**
-  until added (codex F3).
+- **`src/search.rs`** — the flat "all" list (`:38`, mixed superset) gains EVD/HYP.
+- **`src/tag.rs`** — `TAGGABLE` list gains EVD/HYP (the
+  `record_kinds_are_taggable` test auto-validates after).
 - **`tests/e2e_knowledge_cli_golden.rs`, `tests/e2e_memory_anchoring.rs`** — e2e
   goldens pinned to the kind catalog (catalog listing + help strings shift with +2
-  kinds; codex F6).
+  kinds).
 - **`install/templates/knowledge-evidence.toml`, `…-hypothesis.toml`** — two new
   seed templates.
 - **Docs / shipped memory** — `using-doctrine.md`, glossary,
   `mem.signpost.doctrine.knowledge` (document the two new kinds).
 
-### Built on the landed SL-158 (trinary actionability)
+### Built on SL-158 (trinary actionability) and SL-161 (DRY membership)
 
-SL-158 (commit `5dd1715c`, merged to edge/main) turned the priority partition
-trinary: `priority::partition::KindPartition` carries a `gating` set between
-`workable` and `terminal`; the partition-cover canary is
-`workable ∪ gating ∪ terminal == <KIND>_STATUSES`. `commands/dep_seq.rs` grew
-`is_admissible_dep_target = is_work_like ∨ is_record`, where `is_record` (`:29`)
-**hardcodes** `matches!(prefix, "ASM"|"DEC"|"QUE"|"CON")` with a twin pin test.
-SL-159 edits these to add EVD/HYP.
+SL-158 (commit `5dd1715c`) turned the priority partition trinary:
+`priority::partition::KindPartition` carries a `gating` set between `workable`
+and `terminal`. SL-161 (landed `69ef596d` on main, merged to edge 2026-06-27)
+added `kinds::is_record()` reading `kinds::RECORD` and restructured the `scan.rs`
+dispatch to route through `RecordKind::from_prefix()`. `commands/dep_seq.rs`
+`is_record()` delegates to `kinds::is_record()` with a set-equality pin test.
 
 Consequence: EVD/HYP gate **correctly on arrival** — a work item can
 `needs → EVD-captured` and stay blocked until the EVD is `confirmed`. The kinds are
-not inert.
+not inert. And adding them to `kinds::RECORD` propagates through all DRY'd sites
+automatically.
 
 ## 3. Forces & Constraints
 
@@ -121,11 +139,15 @@ not inert.
 
 ## 4. Guiding Principles
 
-The checklist is mechanical but **not** auto-canaried — correctness comes from doing
-**every** site (grep, don't trust "centralised") and letting the drift canaries
-(vocab/known-set/partition-cover/prefix-count) catch the structured omissions. The
-literal match-arm sites (`scan.rs`, `dep_seq.rs`, `search.rs`, `tag.rs`) have no
-canary — grep finds them. Prefer the existing seam over a new verb.
+The checklist is mechanical but **not fully** auto-canaried — correctness comes
+from doing **every** site and letting the drift canaries (vocab/known-set/
+partition-cover/prefix-count/KINDS-count) catch the structured omissions. SL-161
+dry'd the record-membership predicate and `scan.rs` dispatch — the DRY'd sites
+(`scan.rs`, `dep_seq.rs`, `partition.rs` guard, `test_helpers.rs`) now read
+`RECORD` and need **no edit** for new kinds. The remaining non-DRY literal sites
+(`search.rs` flat "all" list, `tag.rs` TAGGABLE, `dep_seq.rs` admissible vector,
+`relation.rs` hardcoded cross-kind vectors) are mixed supersets — partial grep
+still needed. Prefer the existing seam over a new verb.
 
 ## 5. Proposed Design
 
@@ -134,7 +156,8 @@ canary — grep finds them. Prefer the existing seam over a new verb.
 `RecordKind` goes from 4 to 6 variants: `Assumption, Decision, Question, Constraint,
 Evidence, Hypothesis` (Evidence/Hypothesis append; Constraint unchanged).
 `RECORD = &[ASM, DEC, QUE, CON, EVD, HYP]`. `RecordKind::ALL: [_; 6]`. New prefixes
-`EVD`, `HYP` in `kinds.rs`.
+`EVD`, `HYP` in `kinds.rs`. `kinds::is_record()` reads `RECORD` — the DRY'd sites
+pick up EVD/HYP automatically with no further edit (see §2 zero-diff list).
 
 ### 5.2 Interfaces & Contracts
 
@@ -224,11 +247,16 @@ to same-kind supersession for EVD. (CON's arm is untouched here; SL-160 renames 
 
 - **VT canaries gate the structured checklist**: per-kind `statuses` known-set, the
   facet-enum drift canaries (+ a new `Provenance` one), the SL-158 partition-cover
-  canary (now over 6 kinds), the prefix-count pin (4 → 6), and the byte-stable
-  round-trip per kind. An omitted *structured* site trips one of these.
-- **The literal match-arm sites have no canary** — `scan.rs`, `dep_seq.rs`,
-  `search.rs`, `tag.rs`, `integrity.rs:817`. Grep is the only guard (R1).
-- **`integrity::KINDS` pin is advisory** — must be hand-updated.
+  canary (now over 6 kinds), the prefix-count pin (4 → 6), the `KINDS.len()` count
+  assertion (21 → 23), and the byte-stable round-trip per kind. An omitted
+  *structured* site trips one of these.
+- **SL-161 DRY'd the predicate-bearing sites**: `scan.rs` dispatch, `dep_seq.rs`
+  `is_record()`, `partition.rs` guard, `search.rs` knowledge alias, and
+  `test_helpers.rs` seed read `RECORD` → no edit. The remaining literal sites
+  (`dep_seq.rs` admissible vector, `search.rs` flat "all" list, `tag.rs` TAGGABLE,
+  `relation.rs` hardcoded cross-kind vectors, `integrity.rs:817` collision list)
+  are mixed-superset or per-kind lists — partial grep still needed (R1 reduced).
+- **`integrity::KINDS` count assertion catches drift** — must bump 21→23.
 - **EVD/HYP both carry `confirmed`** — fine; vocab is per-kind, `union_statuses`
   dedups for the cross-kind `--status` filter.
 - **`Shapes` target now includes EVD/HYP** — a record may `shapes` another record
@@ -237,9 +265,11 @@ to same-kind supersession for EVD. (CON's arm is untouched here; SL-160 renames 
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1** — `is_record` (`dep_seq.rs:29`) and the partition rows hardcode the
-  prefix list rather than reading `kinds::RECORD`. **Out of scope** (IMP-184 tracks
-  the DRY refactor); this slice adds EVD/HYP at every site.
+- **OQ-1** — ~~`is_record` hardcodes the prefix list.~~ **Resolved by SL-161:**
+  `dep_seq::is_record()` now delegates to `kinds::is_record()` which reads
+  `kinds::RECORD`. The partition guard at `:609` likewise uses
+  `crate::kinds::is_record()`. No change needed for EVD/HYP — they propagate
+  through `RECORD` automatically.
 - **OQ-2** — Should `Provenance` carry a free-text escape (e.g. an `other` + detail)
   or stay a closed 4-set? Default closed (crisp-edge bar); `datum` holds detail.
   Revisit if it feels narrow in use.
@@ -261,15 +291,20 @@ to same-kind supersession for EVD. (CON's arm is untouched here; SL-160 renames 
 
 ## 8. Risks & Mitigations
 
-- **R1 — a hardcoded literal site is missed.** The literal match-arm sites
-  (`scan.rs:62`, `dep_seq.rs`, `search.rs:33`, `tag.rs:17`, `integrity.rs:817`) have
-  **no drift canary**; `scan.rs` omission is a debug-build panic. *Mitigation:* grep
-  every record-prefix cluster (`mem.pattern.doctrine.record-kind-touch-sites`) and
-  confirm EVD/HYP present before close; the partition-cover + prefix-pin + KINDS-pin
-  canaries catch the structured sites.
+- **R1 — a hardcoded literal site is missed.** Reduced scope from SL-161: the
+  predicate-bearing sites (`scan.rs`, `dep_seq.rs` predicate, `partition.rs` guard,
+  `search.rs` knowledge alias, `test_helpers.rs`) are now DRY — adding EVD/HYP to
+  `RECORD` covers them. Remaining literal sites that need manual edit:
+  `dep_seq.rs:285` (admissible vector), `search.rs:38` (flat "all" list),
+  `tag.rs:17` (TAGGABLE), `relation.rs:1422,1427` (hardcoded cross-kind vectors),
+  `integrity.rs:817` (collision list). *Mitigation:* the `KINDS.len()` assertion
+  (bump 21→23) catches the structured `KINDS` row omission; the
+  `record_kinds_are_taggable` test catches `TAGGABLE`; grep the remaining mixed-
+  superset lists before close.
 - **R2 — SL-160 (CON→INV) edits the same lines.** *Mitigation:* SL-159 lands first;
   SL-160 `after` it, rebases on the EVD/HYP-extended sites. Serial — report-and-halt
-  on any conflict, never parallel.
+  on any conflict, never parallel. SL-161 reduced the touch-set overlap: 6 fewer
+  sites both slices edit.
 - **R3 — `mem.signpost.doctrine.knowledge` (shipped) drifts** — documents 4 kinds.
   *Mitigation:* update + re-embed (`cargo build`) + `memory sync` in the docs step.
 
@@ -307,16 +342,21 @@ prefix-group tests, and the two e2e goldens.
 ### Implementation shape (phasing is /plan's job)
 
 Roughly: (1) add EVD + HYP kinds (catalog + facets + partition + integrity +
-scan arm + templates); (2) `supports`/`disputes` edges + show wiring; (3) docs +
-shipped memory; the **Revision** is cut post-design and settled in reconciliation.
+templates — `scan.rs` arm is DRY, no edit); (2) `supports`/`disputes` edges +
+show wiring; (3) docs + shipped memory; the **Revision** is cut post-design and
+settled in reconciliation.
 
 ## 10. Review Notes
 
 > **Scope note (2026-06-27):** CON→INV was split out to **SL-160** after the codex
 > passes below. Findings about CON-keyed sites (e.g. the CON-001 citations, the
 > `waived`/`constraint` literals) moved with it; what remains here is the EVD/HYP
-> half. The codex-2 F1 `scan.rs` panic finding applies to **both** halves — this
-> slice adds the `EVD|HYP` arm; SL-160 changes the `CON` literal.
+> half.
+>
+> **SL-161 landed (2026-06-27):** the `scan.rs` dispatch was restructured to
+> route through `RecordKind::from_prefix()` — the codex-2 F1 literal-arm panic
+> is **resolved**. EVD/HYP are picked up automatically by the guard. Design §2
+> updated to reflect the DRY'd sites.
 
 ### Internal adversarial pass (2026-06-27)
 
