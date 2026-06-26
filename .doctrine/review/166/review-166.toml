@@ -1,0 +1,52 @@
+id    = 166
+slug  = "audit-strip-none-leg-speculative-resync-sl-157"
+title = "Audit: strip None-leg speculative resync (SL-157)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-157"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Source-delta registry: PHASE-01 unbound at audit start (conformance reported undelivered)"
+detail = "Expected: solo /execute auto-binds PHASE-01's source-delta as the phase lands, so slice conformance 157 reads the touched paths. Observed: conformance reported src/dispatch.rs + src/git.rs as UNDELIVERED, no registry row. Cause: the delta da243b3d landed on fork sl-157-phase-01 and the phase flip did not bind it to the primary-tree registry. Bootstrapped during audit per step-2 backstop (start 42c55624, end da243b3d); conformance now reads 2 conformant, 0 undeclared, 0 undelivered."
+disposition = "fix-now"
+response = "Repaired within audit scope: doctrine slice record-delta 157 PHASE-01 --start 42c55624 --end da243b3d. Conformance now clean (2 conformant). Process note: solo-on-fork did not auto-bind; carry as a known gap of fork-based solo execute."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "SPEC-022 advance-leg prose still describes the stripped None-leg resync"
+detail = "Expected: SPEC-022 describes the not-checked-out advance as pure CAS-and-done. Observed: spec-022.md advance-leg paragraph still reads 'a not-checked-out target advances by pure update_ref_cas (with a post-CAS re-probe that resyncs a newly-checked-out ref)' — names the mechanism this slice deleted. Design section 5: strike the parenthetical via a modify REV at reconcile so the spec does not lead the code. The D4 CAS contract itself is unchanged, so no ADR-012 Revision."
+disposition = "verified"
+response = "Drift confirmed. Remediation delegated to /reconcile (spec must not lead code): modify REV --target SPEC-022 striking the post-CAS-resync parenthetical from the advance-leg paragraph. Logged in the Reconciliation Brief (Governance/spec REV)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "IMP-122 (open) hardens a mechanism this slice deleted, now obsolete"
+detail = "Expected: IMP-122 (harden the None-leg post-CAS resync: re-resolve before reset --hard, untracked-collision guard) tracks live work. Observed: the slice deletes resync_worktree_hard and the post-CAS resync wholesale, dissolving R1/R3/R4 at the mechanism, so IMP-122's hardenings are moot. Resolve at reconcile: close as resolved-by-deletion, cite SL-157."
+disposition = "verified"
+response = "Obsolescence confirmed. Remediation delegated to /reconcile: close IMP-122 as resolved-by-deletion, citing SL-157. Logged in the Reconciliation Brief (direct edit, backlog)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Scope + behaviour conformance: only resync machinery removed, load-bearing paths intact (EX/VT/VA)"
+detail = "Verified against da243b3d plus gate run in fork worktree. EX-1: advance_pure_ref RefCas::Updated arm is unconditional AdvancedPureRef with do-not-re-add comment. EX-2: resync_worktree_hard and its unit test removed, helper main_at_c1_with_descendant_c2 retained with 3 callers. EX-3: RacedDesync variant and label arm removed, AdvancedResynced retained, stale doc-comments trimmed. EX-4: advance_checked_out, ff_advance_in_worktree (+3 tests, sole prod caller dispatch.rs:1864), M4 gate, report_integrate body unchanged. EX-5/VT-2: just gate green, clippy zero warnings, fmt clean, --workspace tests pass. VT-1: integrate e2e 38 passed 0 failed, all named tests green incl. the checked-out FF and pure-ref regressions. VA-1: no new test (design section 6). D4 CAS contract preserved."
+disposition = "aligned"
+response = "Conformance confirmed across EX-1..5, VT-1/VT-2, VA-1; only the resync machinery removed, all load-bearing paths intact, D4 CAS contract preserved. No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
