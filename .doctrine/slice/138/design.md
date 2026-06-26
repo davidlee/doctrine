@@ -140,9 +140,14 @@ pub(crate) struct TransitiveView {
     pub inbound: Option<Vec<TransitiveGroup>>,   // Some iff direction includes inbound (emitted FIRST)
     pub outbound: Option<Vec<TransitiveGroup>>,  // Some iff direction includes outbound
 }
+// `TransitiveDir` is defined HERE in the engine layer (relation_graph), NOT in
+// cli.rs — ADR-001: the command layer maps its clap flag DOWN to this; the engine
+// must not depend on a command-layer type (the `Format`/`listing.rs` precedent).
+pub(crate) enum TransitiveDir { Inbound, Outbound, Both }
+
 pub(crate) fn transitive_from(
     scanned: &[ScannedEntity], root: &Path, id: &str,
-    dir: Dir,                            // Inbound | Outbound | Both (the same enum the CLI parses — F1)
+    dir: TransitiveDir,                  // Inbound (Against) | Outbound (Along) | Both
     labels: Option<&[RelationLabel]>,    // None = all overlay-backed
     max_depth: Option<usize>,
 ) -> anyhow::Result<TransitiveView>;
@@ -175,12 +180,15 @@ group is the OR of the cap-hit across that label's walk.
 
 ```rust
 #[arg(long)] transitive: bool,
-#[arg(long, value_enum, default_value_t = Dir::Both, requires = "transitive")] direction: Dir,
+#[arg(long, value_enum, default_value_t = DirArg::Both, requires = "transitive")] direction: DirArg,
 #[arg(long = "labels", alias = "label", value_delimiter = ',', requires = "transitive")] labels: Vec<String>,
 #[arg(long, requires = "transitive")] max_depth: Option<String>, // absent→5; "0"|"all"→unbounded; "N"→N
 ```
 
-`Dir`: `Inbound` (`alias = "up"`), `Outbound` (`alias = "down"`), `Both`. `labels`
+`DirArg` is the **command-layer** clap `ValueEnum` (`Inbound`/`alias="up"`,
+`Outbound`/`alias="down"`, `Both`); `run_inspect` maps it DOWN to the engine's
+`TransitiveDir` before calling `transitive_from` (ADR-001 — engine never sees the
+clap type). (The mnemonic aliases live on `DirArg`, the clap side.) `labels`
 validated via `RelationLabel::from_name` **and the table-derived overlay-backed
 predicate** (F4/C2) — reuse `OverlayMap::overlay_for` (= `RELATION_RULES` `target
 != Unvalidated`), never a hardcoded list. An unknown name *or* a no-overlay name
