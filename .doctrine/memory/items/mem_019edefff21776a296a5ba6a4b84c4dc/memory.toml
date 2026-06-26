@@ -2,11 +2,11 @@ memory_uid = "mem_019edefff21776a296a5ba6a4b84c4dc"
 memory_key = "mem.pattern.testing.shared-cargo-target-stale-binary"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "Shared CARGO_TARGET_DIR causes stale binaries in integration tests spawning the binary"
 summary = ""
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-26"
 
 [scope]
 paths = []
@@ -39,4 +39,8 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"
 
