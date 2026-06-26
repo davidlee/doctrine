@@ -106,3 +106,57 @@ the overlay-backed predicate; `--max-depth` absent→Some(5), `0`/`all`→None, 
 gate memory refs (F2) before the memory early-return. Remove the dead-code `cfg_attr`s.
 
 **Commit:** `feat(SL-138): PHASE-02` (code + notes, SL-138 paths only).
+
+## PHASE-03 — CLI: inspect --transitive surface + e2e (done, green)
+
+**Delivered.**
+- `src/commands/cli.rs`: command-layer `enum DirArg { Inbound(alias `up`),
+  Outbound(alias `down`), Both }` (clap `ValueEnum`) + `DirArg::to_transitive()` —
+  the ADR-001 DOWN-map to engine `TransitiveDir` (engine never sees the clap type).
+  `Inspect` gains `--transitive`, `--direction` (default `Both`, `requires=transitive`),
+  `--labels` (`value_delimiter=','`, alias `--label`, `requires`), `--max-depth`
+  (`Option<String>`, `requires`). Dispatch maps `DirArg` DOWN and builds `InspectArgs`.
+- `src/commands/inspect.rs`: `InspectArgs<'_>` struct (run_inspect now 2-arg —
+  args-struct dodges `clippy::too_many_arguments`, the InstallArgs precedent).
+  `run_inspect` takes `&InspectArgs` (clippy `needless_pass_by_value` — all uses are
+  borrows). F2 memory gate placed ABOVE the memory early-return: a `mem_*`/`mem.key`
+  ref + `--transitive` → error naming `retrieve --expand`. Transitive branch is
+  relation-only (NO actionability/priority call): resolve labels → parse max_depth →
+  `transitive_from` → `render_transitive_human`/`render_transitive_json`. `parse_max_depth`:
+  absent→`Some(5)`, `0`/`all`→`None`, `N`→`Some(N)`, junk→clean error.
+- `src/relation_graph.rs`: lifted `render_transitive_human`/`render_transitive_json` to
+  `pub(crate)`; added `resolve_transitive_label_names` (the SINGLE name-validation
+  point — `from_name` + table-derived overlay predicate via a fresh `OverlayMap::build`,
+  no scan) sharing a new `not_walkable_message` helper with `transitive_labels` (DRY).
+  **Retired all 11 PHASE-02 `#[cfg_attr(not(test), expect(dead_code))]`** on the
+  transitive subgraph (now reached by `run_inspect`); left L574's distinct `inspect`-
+  wrapper expect untouched.
+
+**Direction-alias polarity (corrected mid-flight).** The phase sheet guessed
+`up→outbound`; design §5 (line 188) PINS the opposite: `up`=Inbound (blast radius),
+`down`=Outbound (derivation). Implemented + golden-pinned per the design.
+
+**Label validation is two-tier, one message.** Unknown NAME (`bogus`) dies at the CLI
+`from_name` miss; known-but-no-overlay (`contextualizes`/`drift`/`decision_ref`) dies
+at the overlay predicate. Both share `not_walkable_message` → one "not transitively
+walkable: …; overlay-backed labels are: …" surface. `resolve_transitive_label_names`
+handles both before the walk; `transitive_labels` still re-validates the parsed labels
+(defense-in-depth + default-set expansion).
+
+**SL-156 integration (no action needed).** Fork base `6703ddc5` IS `close(SL-156)`;
+its ancestor `d5de92cf` dropped the brittle `dispatch_subprocess_skill_is_shrunk`
+line-count guard — so the regression the PHASE-02 handover flagged is resolved by
+SL-156, and this phase's `just gate` ran green against the full SL-156 tree. edge was
+2 SL-157-design commits ahead (disjoint docs) — clean `merge --no-ff` land.
+
+**Verification.** New black-box golden suite `tests/e2e_inspect_transitive_golden.rs`
+(18 tests): byte-exact human goldens (outbound/inbound/both, depth header, truncation
+line, `--labels` narrow), up/down alias equivalence, JSON byte-exact (`kind=inspect-
+transitive`, alphabetical keys, non-requested direction OMITTED, `max_depth: null`
+unbounded, per-group `truncated`), F2 memory rejection (key + uid), `--labels`
+no-overlay + unknown-name rejection, clap `requires` (modifier w/o `--transitive`
+errors; bare inspect unaffected), shared existence gate. EX-1..4 met. `just gate`
+green: existing `e2e_inspect_golden` 16/16 (bare inspect byte-unchanged — EX-4),
+transitive 18/18, clippy `--workspace` zero warnings, fmt clean.
+
+**Commit:** `feat(SL-138): PHASE-03` (code + tests + notes, SL-138 paths only).

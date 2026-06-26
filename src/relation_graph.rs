@@ -895,26 +895,12 @@ pub(crate) fn inspect_value(view: &InspectView) -> serde_json::Value {
 /// the entity); `Outbound` walks out-edges (`Along` — derivation / governance
 /// ancestry); `Both` emits the two as separate sections (the awareness view, D3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 pub(crate) enum TransitiveDir {
     Inbound,
     Outbound,
     Both,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 impl TransitiveDir {
     fn has_inbound(self) -> bool {
         matches!(self, Self::Inbound | Self::Both)
@@ -928,13 +914,6 @@ impl TransitiveDir {
 /// are canonical ids, id-ascending (REQ-077 determinism); `truncated` is the OR of
 /// the depth cap biting across that label's walk.
 #[derive(Debug)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 pub(crate) struct TransitiveGroup {
     pub label: RelationLabel,
     pub targets: Vec<String>,
@@ -949,13 +928,6 @@ pub(crate) struct TransitiveGroup {
 /// key). `max_depth` is `None` when unbounded; view-level `truncated` is the OR
 /// across every emitted group (the table's "… some chains truncated" line reads it).
 #[derive(Debug)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 pub(crate) struct TransitiveView {
     pub id: String,
     pub max_depth: Option<usize>,
@@ -976,13 +948,54 @@ pub(crate) struct TransitiveView {
 ///
 /// A requested label lacking an overlay (`contextualizes` / `drift` / `decision_ref`)
 /// yields a "not transitively walkable" error listing the overlay-backed set.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
+/// The shared "not transitively walkable" error body: the offending names plus the
+/// table-derived overlay-backed set (sorted). ONE message for both rejection cases —
+/// an unknown name (CLI `from_name` miss) and a known no-overlay label (F4) — so the
+/// surface is uniform regardless of which tier caught it.
+fn not_walkable_message(bad: &[&str], overlays: &OverlayMap) -> String {
+    let mut walkable: Vec<&str> = overlays.by_label.keys().map(|label| label.name()).collect();
+    walkable.sort_unstable();
+    format!(
+        "not transitively walkable: {}; overlay-backed labels are: {}",
+        bad.join(", "),
+        walkable.join(", ")
     )
-)]
+}
+
+/// Resolve raw `--labels` names (the command tier) to validated overlay-backed
+/// [`RelationLabel`]s. Empty input → `None` (the default = every overlay-backed
+/// label). An unknown name OR a no-overlay name (`contextualizes` / `drift` /
+/// `decision_ref`) yields one [`not_walkable_message`] error. Table-derived via
+/// [`OverlayMap::build`] (no scan, no hardcoded list — C2/F4): the SINGLE
+/// name-validation point for `inspect --transitive`. The command layer calls this and
+/// hands the result to [`transitive_from`] (ADR-001 — the engine never parses the clap
+/// strings; it only ever sees typed `RelationLabel`s).
+///
+/// # Errors
+///
+/// A name that is unknown or not overlay-backed (see above).
+pub(crate) fn resolve_transitive_label_names(
+    names: &[String],
+) -> anyhow::Result<Option<Vec<RelationLabel>>> {
+    if names.is_empty() {
+        return Ok(None);
+    }
+    let mut builder = GraphBuilder::new();
+    let overlays = OverlayMap::build(&mut builder);
+    let mut good = Vec::with_capacity(names.len());
+    let mut bad = Vec::new();
+    for name in names {
+        match RelationLabel::from_name(name) {
+            Some(label) if overlays.overlay_for(label).is_some() => good.push(label),
+            _ => bad.push(name.as_str()),
+        }
+    }
+    if !bad.is_empty() {
+        anyhow::bail!("{}", not_walkable_message(&bad, &overlays));
+    }
+    Ok(Some(good))
+}
+
 fn transitive_labels(
     overlays: &OverlayMap,
     labels: Option<&[RelationLabel]>,
@@ -996,14 +1009,7 @@ fn transitive_labels(
                 .map(|label| label.name())
                 .collect();
             if !bad.is_empty() {
-                let mut walkable: Vec<&str> =
-                    overlays.by_label.keys().map(|label| label.name()).collect();
-                walkable.sort_unstable();
-                anyhow::bail!(
-                    "not transitively walkable: {}; overlay-backed labels are: {}",
-                    bad.join(", "),
-                    walkable.join(", ")
-                );
+                anyhow::bail!("{}", not_walkable_message(&bad, overlays));
             }
             requested.to_vec()
         }
@@ -1018,13 +1024,6 @@ fn transitive_labels(
 /// label). A truncated walk always has ≥1 target (the node at the cap is in `depths`),
 /// so suppressing empty groups never drops a truncation signal. `targets` are mapped
 /// `NodeId`→`EntityKey`→canonical and sorted id-ascending (REQ-077).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 fn walk_transitive(
     rg: &RelationGraph,
     node: cordage::NodeId,
@@ -1075,13 +1074,6 @@ fn walk_transitive(
 ///
 /// A malformed / unknown-prefix `id` (parse), a never-minted id (the existence gate),
 /// or a `labels` entry that is not overlay-backed ([`transitive_labels`]).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 pub(crate) fn transitive_from(
     scanned: &[ScannedEntity],
     _root: &Path,
@@ -1140,14 +1132,7 @@ pub(crate) fn transitive_from(
 /// truncation line appears iff the view truncated. House style: `Vec<String>` parts
 /// joined by `concat` (the `render_human` precedent — avoids the `push_str(&format!)`
 /// lint).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
-fn render_transitive_human(view: &TransitiveView) -> String {
+pub(crate) fn render_transitive_human(view: &TransitiveView) -> String {
     let depth = view
         .max_depth
         .map_or_else(|| "all".to_string(), |d| d.to_string());
@@ -1173,13 +1158,6 @@ fn render_transitive_human(view: &TransitiveView) -> String {
 
 /// Append one direction's group lines (`  label: a, b, c`), or a single `  (none)`
 /// when the requested direction reached nothing.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 fn push_transitive_groups(parts: &mut Vec<String>, groups: &[TransitiveGroup]) {
     if groups.is_empty() {
         parts.push("  (none)\n".to_string());
@@ -1199,14 +1177,7 @@ fn push_transitive_groups(parts: &mut Vec<String>, groups: &[TransitiveGroup]) {
 /// # Errors
 ///
 /// Propagates a `serde_json` serialization failure (not expected for this shape).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
-fn render_transitive_json(view: &TransitiveView) -> anyhow::Result<String> {
+pub(crate) fn render_transitive_json(view: &TransitiveView) -> anyhow::Result<String> {
     serde_json::to_string_pretty(&transitive_value(view))
         .map_err(|e| anyhow::anyhow!("failed to serialize transitive JSON: {e}"))
 }
@@ -1219,13 +1190,6 @@ fn render_transitive_json(view: &TransitiveView) -> anyhow::Result<String> {
 /// `inbound` precedes `outbound` and `kind` falls mid-object — the order the C4 golden
 /// pins. Built MANUALLY (the `inspect_value` precedent — the repo derives no
 /// `Serialize` on domain enums; `RelationLabel` renders via `.name()`).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-138 PHASE-03 wires `inspect --transitive` onto this engine surface"
-    )
-)]
 pub(crate) fn transitive_value(view: &TransitiveView) -> serde_json::Value {
     let group = |group: &TransitiveGroup| {
         serde_json::json!({
