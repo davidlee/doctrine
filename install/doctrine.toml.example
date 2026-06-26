@@ -44,6 +44,36 @@
 # [value]
 # unit = "magic_beans"
 #
+# [reservation]
+# # How fresh entity ids are allocated (SL-148).
+# #   local  — single-tree: local mkdir is the claim; remote is never touched
+# #   shared — cross-clone: remote ref CAS is the claim; unreachable remote hard-errors
+# #   auto   — shared when a remote is reachable, degrade to local otherwise (default)
+# reach = "auto"
+# # Explicit remote name for reservation coordination (default: auto-detect).
+# remote = "origin"
+# # Accept local allocation when a configured remote is unreachable (non-interactive
+# # equivalent of the D8 y/N prompt). Default false.
+# allow-local-fallback = false
+#
+# [verification]
+# # Project-default base argv for checks whose matcher names no source.
+# command = ["just", "gate"]
+# # Default matcher source when a check's matcher names none.
+# #   stdout  — match against stdout
+# #   exit    — match exit code only
+# default-source = "stdout"
+# # Per-check timeout in seconds (default 300).
+# timeout-secs = 300
+#
+# # Named base argvs that checks can alias against.
+# [verification.aliases]
+# gate = ["just", "check"]
+#
+# [install]
+# # Git repo slug for npx-skills / plugin marketplace (default: davidlee/doctrine).
+# repo = "davidlee/doctrine"
+#
 # [dispatch]
 # # Preferred subprocess harness for dispatch workers.
 # # "pi"   — pi RPC mode (SL-108)
