@@ -21,7 +21,7 @@ need. The RFC is **open**, organised in two fenced tiers:
 | id | decision | status |
 |---|---|---|
 | D1 | memory↔record boundary — ownership/legibility test | **settled in draft** (records = graph-resident + human-facing; memory = agent cache; crisp edges over coverage; crystallise out of prose). Open thread: is memory's 2nd-class linkage endemic? |
-| D2 | which kinds — adopt OBS+HYP as *decomposition units* (both-or-neither) or neither; risk-as-knowledge folds away | open |
+| D2 | which kinds — survey design docs for the latent taxonomy (risk, mitigation, invariant, principle, procedure, interaction, responsibility, edge case, candidate solution, …); decide kind-by-kind vs prose vs facet/edge. OBS/HYP = nearest-at-hand pair (both-or-neither), not the whole answer; **risk not subsumed** | open |
 | D3 | record/entity edges — typed lifecycle edges (`confirmed_by`/`refuted_by`), `shapes` epistemic-vs-affects split, which CM relationship types are real edges vs derivable | open — **bulk of near-term work** |
 | D4 | concept maps — retire-as-is vs reify-as-view-over-concept-nodes; CON naming collision | open — modest/low-risk |
 | D5 | uptake — how far skill-anchoring must go | open — the real failure mode |
