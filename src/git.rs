@@ -1160,20 +1160,79 @@ pub(crate) fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Ve
 /// block — the more defensive of the two pre-extraction parses (a detached or
 /// bare block leaves no stale path to mis-attribute). No I/O — fed by
 /// [`worktree_for_ref`].
-fn parse_worktree_for_ref(listing: &str, refname: &str) -> Option<PathBuf> {
-    let mut current_path: Option<PathBuf> = None;
+fn parse_worktree_for_ref(listing: &str, refname: &str) -> Option<WorktreeEntry> {
+    // Accumulate the whole `worktree …`-delimited block before deciding: git emits
+    // `prunable` AFTER `branch`, so an early return on the branch match (the pre-D9
+    // shape) would settle the block before its liveness annotation is read. A block
+    // closes on a blank line (M9 reset) or the next `worktree` line; a closed block
+    // yields iff its `branch` matched and it carried a path. A ref is checked out in
+    // at most one worktree, so the first match is the answer.
+    let mut block = WorktreeBlock::default();
     for line in listing.lines() {
-        if let Some(path) = line.strip_prefix("worktree ") {
-            current_path = Some(PathBuf::from(path));
-        } else if let Some(branch) = line.strip_prefix("branch ") {
-            if branch == refname {
-                return current_path;
+        if let Some(p) = line.strip_prefix("worktree ") {
+            if let Some(entry) = block.settle(refname) {
+                return Some(entry);
             }
-        } else if line.is_empty() {
-            current_path = None;
+            block.path = Some(PathBuf::from(p));
+        } else if let Some(b) = line.strip_prefix("branch ") {
+            block.branch = Some(b.to_string());
+        } else if line == "prunable" || line.starts_with("prunable ") {
+            block.prunable = true;
+        } else if line.is_empty()
+            && let Some(entry) = block.settle(refname)
+        {
+            return Some(entry);
         }
     }
-    None
+    block.settle(refname)
+}
+
+/// Mutable accumulator for one in-flight `git worktree list --porcelain` block while
+/// [`parse_worktree_for_ref`] scans it line by line (PURE, no I/O).
+#[derive(Default)]
+struct WorktreeBlock {
+    path: Option<PathBuf>,
+    branch: Option<String>,
+    prunable: bool,
+}
+
+impl WorktreeBlock {
+    /// Close the block: yield a [`WorktreeEntry`] iff its `branch` matched `refname`
+    /// and it carried a `worktree` path, then reset for the next block. A matched
+    /// branch with no path (the M9 orphan case) yields nothing.
+    fn settle(&mut self, refname: &str) -> Option<WorktreeEntry> {
+        let matched = self.branch.as_deref() == Some(refname);
+        let entry = matched
+            .then(|| self.path.take())
+            .flatten()
+            .map(|path| WorktreeEntry {
+                path,
+                branch: refname.to_string(),
+                prunable: self.prunable,
+            });
+        *self = Self::default();
+        entry
+    }
+}
+
+/// One worktree block from `git worktree list --porcelain`, scoped to the matched
+/// `refname`. `path`/`branch` come straight from the block; `prunable` is true iff
+/// git annotated the block with a `prunable` line — a stale gitdir whose checkout no
+/// longer backs the ref. Surfacing `prunable` is what lets [`live_worktree_for_ref`]
+/// tell a *live* checkout from a dead entry git has not yet pruned (SL-154 PHASE-02,
+/// design D9).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "`branch` is read by the SL-154 PHASE-03 D9 guard rewrite, not yet wired"
+    )
+)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorktreeEntry {
+    pub(crate) path: PathBuf,
+    pub(crate) branch: String,
+    pub(crate) prunable: bool,
 }
 
 /// The worktree path that has `refname` (e.g. `refs/heads/main`) checked out, or
@@ -1191,7 +1250,34 @@ pub(crate) fn worktree_for_ref(
     refname: &str,
 ) -> Result<Option<PathBuf>, CaptureError> {
     let listing = git_text(root, &["worktree", "list", "--porcelain"])?;
-    Ok(parse_worktree_for_ref(&listing, refname))
+    Ok(parse_worktree_for_ref(&listing, refname).map(|entry| entry.path))
+}
+
+/// The *live* worktree entry that has `refname` checked out, or `None` when no live
+/// worktree does. Where [`worktree_for_ref`] reports any block git lists, this rejects
+/// an entry git still lists but no longer backs a real checkout: it yields the block
+/// only when it is **not** `prunable` and its `path` still exists on disk (SL-154
+/// PHASE-02, design D9). This is the liveness signal the solo-capture guard keys on —
+/// a stale/pruned coordination worktree must read as *absent*, not as a live dispatch
+/// context.
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if the `git worktree list` invocation fails.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "wired into capture_phase_boundary by SL-154 PHASE-03 (design D9)"
+    )
+)]
+pub(crate) fn live_worktree_for_ref(
+    root: &Path,
+    refname: &str,
+) -> Result<Option<WorktreeEntry>, CaptureError> {
+    let listing = git_text(root, &["worktree", "list", "--porcelain"])?;
+    Ok(parse_worktree_for_ref(&listing, refname)
+        .filter(|entry| !entry.prunable && entry.path.exists()))
 }
 
 /// True iff the *tracked* working tree at `root` is clean — `git status
@@ -2009,8 +2095,9 @@ mod tests {
 
     use super::{
         AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, Frame, REMOTE_NORMALIZER,
-        RepoIdKind, RepoIdentity, canonical_bytes, capture, checkout_state_id, commits_touching,
-        explicit_identity, normalize_remote_url, parse_worktree_for_ref, sha256, worktree_for_ref,
+        RepoIdKind, RepoIdentity, WorktreeEntry, canonical_bytes, capture, checkout_state_id,
+        commits_touching, explicit_identity, live_worktree_for_ref, normalize_remote_url,
+        parse_worktree_for_ref, sha256, worktree_for_ref,
     };
 
     /// Render canonical bytes as a `String` for readable assertions (canonical
@@ -3693,11 +3780,11 @@ HEAD bbbb
 branch refs/heads/dispatch/121
 ";
         assert_eq!(
-            parse_worktree_for_ref(listing, "refs/heads/dispatch/121"),
+            parse_worktree_for_ref(listing, "refs/heads/dispatch/121").map(|e| e.path),
             Some(PathBuf::from("/repos/feature")),
         );
         assert_eq!(
-            parse_worktree_for_ref(listing, "refs/heads/main"),
+            parse_worktree_for_ref(listing, "refs/heads/main").map(|e| e.path),
             Some(PathBuf::from("/repos/main")),
         );
     }
@@ -3730,7 +3817,7 @@ HEAD dddd
 branch refs/heads/target
 ";
         assert_eq!(
-            parse_worktree_for_ref(listing, "refs/heads/target"),
+            parse_worktree_for_ref(listing, "refs/heads/target").map(|e| e.path),
             Some(PathBuf::from("/repos/live")),
         );
         // And a refname that only the detached block could (wrongly) satisfy stays None.
@@ -3791,6 +3878,61 @@ branch refs/heads/orphan
                 Err(CaptureError::Git(_))
             ),
             "a git failure surfaces as Err, distinct from Ok(None)",
+        );
+    }
+
+    // --- SL-154 PHASE-02: live coordination-worktree probe --------------------
+
+    #[test]
+    fn parse_worktree_for_ref_surfaces_trailing_prunable() {
+        // git porcelain emits the `prunable` annotation AFTER the `branch` line, so
+        // the parser must read the whole block — an early return on the branch match
+        // would silently drop liveness (the SL-154 D9 watch-item).
+        let listing = "\
+worktree /repos/stale
+HEAD aaaa
+branch refs/heads/dispatch/154
+prunable gitdir file points to non-existent location
+
+worktree /repos/live
+HEAD bbbb
+branch refs/heads/main
+";
+        let stale = parse_worktree_for_ref(listing, "refs/heads/dispatch/154")
+            .expect("the stale block is present");
+        assert_eq!(stale.path, PathBuf::from("/repos/stale"));
+        assert!(
+            stale.prunable,
+            "a `prunable` line trailing `branch` must be surfaced, not skipped",
+        );
+        // A block with no prunable line reports prunable = false.
+        let live = parse_worktree_for_ref(listing, "refs/heads/main").expect("present");
+        assert!(!live.prunable, "a non-prunable block is not prunable");
+    }
+
+    #[test]
+    fn live_worktree_for_ref_returns_live_entry_rejects_deleted_path() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        let linked = repo._dir.path().join("linked");
+        repo.git(&["worktree", "add", "-b", "coord", &linked.to_string_lossy()]);
+
+        // VT-1: a live coord worktree for the ref → Some(entry) with the live path.
+        let live = live_worktree_for_ref(repo.path(), "refs/heads/coord")
+            .expect("worktree list must succeed");
+        assert!(
+            live.as_ref()
+                .is_some_and(|e: &WorktreeEntry| e.path.ends_with("linked")),
+            "a live worktree for the ref yields Some, got {live:?}",
+        );
+
+        // VT-2: delete the worktree dir on disk — git still lists it (now prunable),
+        // but liveness must read it as absent (`!prunable && path.exists()` both fail).
+        std::fs::remove_dir_all(&linked).expect("remove the linked worktree dir");
+        assert_eq!(
+            live_worktree_for_ref(repo.path(), "refs/heads/coord").expect("list ok"),
+            None,
+            "a deleted-path / prunable coord entry is not live → None (liveness, not name match)",
         );
     }
 
