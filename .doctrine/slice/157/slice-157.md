@@ -1,128 +1,115 @@
 # Checkout-independent integrate
 
+> Title is a handle. Precisely: *make the never-checked-out (trunk) advance fully
+> ref-based by stripping the pure-ref leg's speculative post-CAS resync.* The
+> always-checked-out `edge` target keeps its safe atomic leg (see Context).
+
 ## Context
 
-`dispatch sync --integrate` advances the trunk ref (`main`) at the end of a
-dispatch run. Today it has **two legs**, branching on whether the target ref is
-checked out (`advance_row`, `src/dispatch.rs:1812`):
+`dispatch sync --integrate` advances trunk/edge refs at the end of a dispatch run.
+`advance_row` (`src/dispatch.rs:1812`) branches on whether the target is checked
+out:
 
-- **`advance_checked_out`** (`dispatch.rs:1859`) — the "dumb" leg: `git merge
-  --ff-only` in the live worktree, syncing ref + index + tree together. Refuses
-  non-FF (`integrate-nonff-checkout`, line 1885).
-- **`advance_pure_ref`** (`dispatch.rs:1822`) — pure CAS (`update_ref_cas`) when
-  the target is **not** checked out; re-probes and resyncs any worktree that
-  raced onto the ref.
+- **`advance_pure_ref`** (`dispatch.rs:1822`) — the not-checked-out leg: pure CAS
+  (`update_ref_cas`), **then a speculative post-CAS re-probe + resync**
+  (`1842-1848`): if the ref raced into a checkout during the CAS window, it
+  `reset --hard`s a clean racer or warns `RacedDesync` on a dirty one.
+- **`advance_checked_out`** (`dispatch.rs:1859`) — the checked-out leg: `git merge
+  --ff-only` in the live worktree (`ff_advance_in_worktree`), syncing ref + index
+  + tree atomically; refuses non-FF (`integrate-nonff-checkout`, 1885).
 
-The checked-out leg is the source of **RFC-005's H2** correctness hazard: keeping
-a live shared checkout in step with a moving ref is where the phantom-revert
-(ISS-038), the None-leg RacedDesync window (R1), and the IMP-122 resync sharp
-edges (R3/R4) all live. SL-121 closed the tracked-dirty phantom chain with the M4
-dirty pre-gate (`dispatch.rs:1753`); a low-likelihood None-leg window survives.
+**Where the hazard actually lives (RFC-005 H2's own localization).** R1 (None-leg
+`RacedDesync`, low×high), R3, R4 (IMP-122 resync hardenings) are **all** in the
+pure-ref leg's post-CAS resync (`1842-1848`). RFC-005 names the checked-out leg
+the **safe** one — *"FF-merge syncs ref+index+tree atomically, no phantom"* —
+proven by `integrate_trunk_checked_out_ff_leaves_clean_tree` (e2e). The earlier
+ISS-038 phantom was the *pre-SL-121* pure-CAS-on-checked-out path, already retired
+by SL-121's leg-aware advance + M4 gate.
 
-**Decisive premise (confirmed 2026-06-26):** `main` is **never worked in** — it
-exists purely as a contention-buffer ref. Nothing reads a checked-out `main` as a
-working folder. So the live-checkout leg buys nothing the ref + CAS doesn't, and
-its only legacy is the hazard class.
+**The real invariants (confirmed 2026-06-26):**
+- **`main` (trunk) is never checked out.** It is a contention-buffer ref
+  (`git fetch . edge:main` promotes it); no worktree holds it. `worktree_for_ref`
+  always returns `None` → it takes the pure-ref leg. There is **no `main` worktree
+  to drop** (OQ-A) — already realized.
+- **`edge` IS checked out** — AGENTS.md mandates *"the primary worktree stays on
+  `edge`."* `--edge refs/heads/edge` therefore hits a **live** ref → the
+  checked-out leg. Its atomic ff is the **safe** advance; force-CASing it would
+  desync the dev's own tree (the ISS-038 phantom). The checked-out leg is
+  **load-bearing**, not legacy.
 
-**Direction (RFC-005 OQ-5 steer):** make integrate **checkout-independent** —
-advance the trunk/edge refs purely against the git object DB, never via a live
-worktree. This *dissolves* R1/R3/R4 at the mechanism rather than guarding each
-window. The **FF-only trunk posture (ADR-012 D2/D4) is preserved unchanged** — a
-non-FF trunk advance still refuses at plan time. (Auto-merging a non-FF trunk is
-an ADR-reversing capability, split to **RFC-006** for external review — see
-Non-Goals.)
-
-**The building block already exists** — `update_ref_cas` (`git.rs:913`) is the
-universal CAS primitive; `advance_pure_ref` (`dispatch.rs:1822`) already lands the
-trunk through it whenever the ref is not checked out. This slice *promotes that
-existing leg to the sole mechanism* and retires the checked-out twin — DRY on a
-proven seam (no parallel implementation), not greenfield.
+So the speculative None-leg resync defends a None→Some transition that **cannot
+happen** under these invariants: nobody checks out `main`; `edge` is *always*
+already checked out (Some leg, never the None leg). It guards an impossible window
+— and the guard *is* the R1/R3/R4 hazard. **Delete the condition, don't harden the
+window** (RFC-005 OQ-5 steer).
 
 ## Scope & Objectives
 
-The one landing seam — **policy-free**, agnostic to how `planned_new_oid` was
-derived:
+1. **Strip the pure-ref leg's speculative post-CAS resync.** `advance_pure_ref`
+   becomes CAS-and-done: on `RefCas::Updated` the disposition is always
+   `AdvancedPureRef` — no re-probe, no resync, no `RacedDesync`. R1/R3/R4 dissolve
+   at the mechanism. (`dispatch.rs:1842-1848` removed.)
 
-```
-land(ref, planned_new_oid, expected_old):
-  current == planned_new_oid → no-op            (idempotent replay, D4)
-  current != expected_old    → refuse           (moved target, D4)
-  else                       → update_ref_cas(ref, planned_new_oid, expected_old)
-```
+2. **Retire `resync_worktree_hard`.** Its only production caller is the deleted
+   resync; remove the fn (`git.rs:1373`) and its unit test (OQ-D — grep-confirmed
+   sole caller). The `RacedDesync` disposition + its `report_integrate`
+   warning-line branch go with it.
 
-FF-policy stays at **plan time** (`plan_trunk_row:1984` ff-gate, unchanged): a
-non-FF trunk still refuses before any ref moves. Keeping the land seam free of
-FF/derivation policy is the deliberate forward-compat seam for RFC-006 (which adds
-a merge-at-plan oid producer without touching `land`).
+3. **Keep the checked-out leg unchanged.** `advance_checked_out` /
+   `ff_advance_in_worktree` stay — they are the safe atomic path for the
+   always-checked-out `edge`. `ff_advance_in_worktree` keeps its sole caller
+   (OQ-D), so it and its unit tests stay.
 
-1. **Object-DB CAS becomes the sole advance mechanism.** `advance_row` classifies
-   (no-op / moved / advance) then lands every real advance through
-   `update_ref_cas`, regardless of checkout state. Retire `advance_checked_out` /
-   `ff_advance_in_worktree` from the integrate path.
+4. **Keep the M4 dirty pre-gate.** It only ever fires for a checked-out target
+   (`worktree_for_ref` is `None` for `main`), i.e. it is edge-dirty protection —
+   still wanted. Unchanged (`dispatch.rs:1753`).
 
-2. **One policy-free landing seam.** Both trunk (FF-gated planned oid) and edge
-   (force-moveable aggregate) feed the same CAS lander. Don't fork it — that is
-   how divergence returns. The seam is agnostic to oid derivation, so RFC-006's
-   non-FF merge producer drops in without rework.
+5. **ADR-012 mechanism Revision.** Restate the integrate mechanism: the
+   not-checked-out advance is **pure ref CAS with no worktree resync** (the
+   speculative None→Some resync is removed as defending an impossible transition).
+   The **FF-only trunk posture (D2/D4) and the CAS-replay safety contract (D4) are
+   preserved unchanged** — every advance stays a 3-arg CAS; no force-push, no
+   auto-resolve; non-FF still refused. Route per ADR-013.
 
-3. **Drop the live-checkout dependence.** Remove the integrate-path checkout
-   assumptions the object-DB model makes moot: the M4 dirty pre-gate
-   (`dispatch.rs:1753`), the post-CAS resync (`advance_pure_ref:1842-1848`,
-   `resync_worktree_hard`), and the None-leg RacedDesync disposition. `main` need
-   not be checked out at all for the buffer role (OQ-A — confirm, then stop
-   requiring it; drop the `main` worktree if clear).
-
-4. **ADR-012 mechanism Revision.** The change restates *how* integrate advances a
-   ref — always object-DB CAS, no checkout leg — leaving the **FF-only trunk
-   posture (D2/D4) and the CAS-replay safety contract (D4) intact**. Every advance
-   stays a 3-arg CAS; no force-push, no auto-resolve, non-FF still refused. Route
-   the mechanism change through a Revision per ADR-013.
-
-5. **Behaviour-preservation.** The integrate safety semantics stay green
-   *unchanged*: idempotent replay (no-op if `target==planned`), moved-target
-   refusal, FF land, **non-FF refusal** (`integrate_trunk_refuses_non_fast_forward`,
-   e2e:803, stays as-is), clobbered-prepared-ref refusal. Tests in
-   `tests/e2e_dispatch_sync.rs` (PHASE-05 integrate set, 727–927) are the proof;
-   the `git.rs` primitive unit tests for the retired legs
-   (`ff_advance_in_worktree_*`, `resync_worktree_hard_*`) adapt as those legs go.
+6. **Behaviour-preservation.** Integrate safety semantics stay green *unchanged*:
+   idempotent replay (no-op if `target==planned`), moved-target refusal, FF land,
+   non-FF refusal, clobbered-prepared-ref refusal, **and the checked-out ff
+   regression** (`integrate_trunk_checked_out_ff_leaves_clean_tree`,
+   `integrate_trunk_not_checked_out_advances_ref_leaves_live_checkout_clean`).
+   Tests in `tests/e2e_dispatch_sync.rs` (PHASE-05 set, 727–1010) are the proof;
+   only the `resync_worktree_hard` unit test (`git.rs:4023+`) is removed with its
+   fn.
 
 ## Non-Goals
 
 - **B — non-FF trunk auto-merge + conflict surgery (RFC-006).** Merging a
-  concurrently-advanced trunk (`clean non-FF → merge-tree → commit-tree → CAS`),
-  the ephemeral private surgery worktree, and the IMP-127 hand-resolved-conflict
-  ingest **reverse ADR-012 D2/D4's FF-only posture**. That is an ADR-reversing
-  decision routed to **RFC-006** for external review, *not* this slice. SL-157's
-  policy-free land seam is built so RFC-006 extends it without rework. The H2
-  shared-trunk-race self-unblock (mem.close-integrate-shared-trunk-race) is the
-  payoff there, not here.
-- **R2 — `/close` recovery procedure.** The missing ISS-030 recovery is a cheap,
-  independent skill fix; worth landing regardless but **not** this slice's
-  mechanism (carry separately).
-- **Candidate-flow rewrite.** The candidate object-DB merge already works; SL-157
-  does not touch it (and, being FF-only, does not yet reuse its merge leg —
-  RFC-006 will).
-- **RV baton / coordination-worktree placement (ADR-012 D1, D5).** The
-  coordination worktree as the run's SSoT + the RV-refuses-on-fork posture are
-  untouched except where integrate stops needing a checked-out *trunk*.
-- **The split-brain authored-state hazard (IMP-174).** Adjacent, separate axis.
-- **Non-dispatch / solo integrate paths**, if any exist outside this seam.
+  concurrently-advanced trunk + the ephemeral surgery worktree + IMP-127 ingest
+  **reverse ADR-012 D2/D4 FF-only**. Routed to **RFC-006** for external review.
+  B touches `plan_trunk_row` (a merge-at-plan oid producer); it does not touch the
+  advance leg this slice edits, so the two are independent. The H2
+  shared-trunk-race self-unblock is B's payoff, not this slice's.
+- **Pure one-leg integrate (alternative (ii), rejected).** Forcing every target
+  ref to be not-checked-out (so the checked-out leg could retire) fights AGENTS.md's
+  primary-on-edge mandate and is operationally hostile. Not pursued.
+- **R2 — `/close` recovery procedure** (ISS-030 detector has no remedy). Cheap
+  independent skill fix; carry separately.
+- **Candidate-flow rewrite**; **RV baton / coord-worktree placement (D1, D5)**;
+  **IMP-174 split-brain**; **non-dispatch / solo integrate paths**.
 
 ## Summary
 
-Retire integrate's live-checkout leg; advance the trunk/edge refs purely through
-the object-DB CAS lander (`update_ref_cas`) regardless of checkout state. `main`
-is a contention-buffer ref, never a working folder, so the live checkout bought
-only hazard — RFC-005 H2's R1/R3/R4 dissolve at the mechanism. The FF-only trunk
-posture and D4 CAS-replay safety are preserved unchanged; non-FF still refuses at
-plan time. The ADR-012 Revision is mechanism-only. The non-FF auto-merge
-capability that *reverses* FF-only is split to RFC-006 for external review; the
-land seam is kept policy-free so RFC-006 extends it without rework.
+The integrate hazard RFC-005 H2 still carries (R1/R3/R4) lives entirely in the
+not-checked-out leg's *speculative post-CAS resync* — a guard against a ref racing
+into a checkout mid-advance. Under the real invariants that race is impossible
+(`main` is never checked out; `edge` is always already checked out and rides the
+safe atomic ff leg), so the guard only adds hazard. Strip it: the pure-ref advance
+becomes CAS-and-done, `resync_worktree_hard` + the `RacedDesync` disposition
+retire, R1/R3/R4 dissolve. The safe checked-out leg and the M4 gate stay (edge
+needs them). FF-only and D4 CAS-replay are preserved; the ADR-012 Revision is
+mechanism-only. The non-FF auto-merge that *reverses* FF-only is split to RFC-006.
 
 ## Follow-Ups
 
-- **RFC-006** — non-FF trunk auto-merge + conflict surgery (IMP-127), the
-  ADR-012 D2/D4 reversal; external review gates any Revision.
+- **RFC-006** — non-FF trunk auto-merge + conflict surgery (IMP-127), the ADR-012
+  D2/D4 reversal; external review gates any Revision.
 - R2: `/close` ISS-030 recovery procedure (independent skill fix).
-- Confirm and, if clear, drop the `main` worktree entirely (buffer is the ref +
-  CAS, not a folder).
