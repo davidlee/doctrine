@@ -21,12 +21,95 @@ dependencies = []
 # are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
 # reference forms): EN-1 entry, EX-1 exit, and verification by mode —
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
 [[phase]]
 id        = "PHASE-01"
-name      = ""
-objective = ""
-entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
-exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
-specs             = []           # per-phase narrowing of the plan's specs
-requirements      = []
+name      = "EVD + HYP kinds land in the catalog"
+objective = """
+Add Evidence (EVD) and Hypothesis (HYP) as RecordKind variants end to end:
+prefixes + engine Kind consts, status vocabularies, typed facets (new closed
+Provenance enum; Confidence reused), partition rows, integrity table + pins,
+supersede arms (EVD supersedable; HYP None), the remaining literal mixed-superset
+lists (search/tag/dep_seq), and the two seed templates. SL-161's DRY'd sites
+(scan.rs, partition guard, test_helpers, dep_seq predicate, search alias) pick the
+kinds up via RECORD with no edit. Outcome: both kinds creatable, transition per
+their vocab, gate via SL-158 trinary, end green incl the catalog e2e goldens.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked; SL-158 (trinary) and SL-161 (RECORD-membership DRY) are landed on edge." },
+  { id = "EN-2", text = "kinds::is_record() reads kinds::RECORD in-tree (DRY'd sites confirmed zero-diff per design §2)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RecordKind gains Evidence + Hypothesis (append); RECORD = [ASM,DEC,QUE,CON,EVD,HYP]; RecordKind::ALL arity 6; EVD/HYP prefix consts in kinds.rs." },
+  { id = "EX-2", text = "Status vocabularies per §5.3: EVD captured(seed)/disputed/confirmed/retracted/superseded; HYP proposed(seed)/confirmed/refuted — with the gating/terminal/is_terminal/hidden subsets each as their own row (EVD confirmed deliberately NOT is_terminal)." },
+  { id = "EX-3", text = "EvidenceFacet{datum,provenance,confidence} with new closed Provenance{Inspection,Experiment,Reproduction,Citation} (kebab serde + as_str + KNOWN canary); HypothesisFacet{proposition,predicts} (tested_by dropped); RawFacet superset + validate/render/format/json arms extended." },
+  { id = "EX-4", text = "integrity KINDS +2 rows with count pin 21→23 and collision list (:817) +EVD/HYP; prefix-count pin 4→6; partition +2 rows; supersede EVD arm (HYP None); literal lists in search.rs/tag.rs/dep_seq.rs gain EVD/HYP; install/templates/knowledge-evidence.toml + …-hypothesis.toml added." },
+  { id = "EX-5", text = "just gate green; existing record suites stay green unchanged (behaviour-preservation); e2e_knowledge_cli_golden.rs + e2e_memory_anchoring.rs updated for the 6-kind catalog." },
+]
+verification = [
+  { id = "VT-1", expects = "per-kind status known-set tests for EVD/HYP pass; new Provenance known-set drift canary passes." },
+  { id = "VT-2", expects = "SL-158 partition-cover canary green over 6 kinds; EVD and HYP gating subsets non-empty." },
+  { id = "VT-3", expects = "byte-stable round-trip per new kind (populated_fixture arm extended) passes." },
+  { id = "VT-4", expects = "end-to-end gating: a work item needs→EVD-captured is blocked; the EVD →confirmed makes the dependent actionable." },
+  { id = "VT-5", expects = "supersede EVD confirmed→superseded flips; HYP refuses supersession cleanly (supersede_policy None path errors, not panics)." },
+  { id = "VT-6", expects = "search finds an EVD/HYP body; tag sets/clears on each; both e2e goldens pass against the 6-kind catalog." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "supports / disputes evidentiary edges + show wiring"
+objective = """
+Add RelationLabel::Supports and ::Disputes as full plumbing (codex F5): enum
+variants at the declaration-order slot, name()/parse, inbound reciprocals
+supported_by/disputed_by, and RELATION_RULES rows (sources:[EVD],
+target:Kinds(RECORD), tier One, link Writable, role None). Extend the Shapes
+target set and GovernedBy source set to EVD/HYP. Wire the knowledge display
+renderers — format_metadata (knowledge.rs:1004) and show_json (:1149) — to emit
+the new edges and their inbound reciprocals; without this the edges are
+authorable-but-invisible (codex F4). Transitions stay manual via status (no
+automation engine).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and green — EVD/HYP kinds exist with their vocabularies and facets." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RelationLabel::Supports + ::Disputes variants at the order slot the VT order pin expects; name()/parser + inbound reciprocals supported_by/disputed_by; order pin + source/target/tier/coverage canaries extended to the two rows." },
+  { id = "EX-2", text = "RELATION_RULES: two rows sources=&[EVD], target=Kinds(RECORD), tier One, link Writable, role None; the Shapes target set and GovernedBy source set in RELATION_RULES gain EVD,HYP (CON unchanged)." },
+  { id = "EX-3", text = "format_metadata and show_json render supports/disputes and the inbound supported_by/disputed_by reciprocals — table and JSON." },
+  { id = "EX-4", text = "just gate green; relation.rs / relation_graph.rs order+coverage+edge-emission pins updated as consumer revision (not regression)." },
+]
+verification = [
+  { id = "VT-1", expects = "legal author = EVD only; a non-EVD source is refused; target outside RECORD is refused." },
+  { id = "VT-2", expects = "link / unlink round-trip for supports and disputes." },
+  { id = "VT-3", expects = "after `link EVD-1 disputes HYP-2`: `knowledge show HYP-2` surfaces disputed_by and `knowledge show EVD-1` surfaces disputes — in both table and JSON." },
+  { id = "VT-4", expects = "RelationLabel order pin + label-coverage canaries green with the two new labels; relation_graph edge-emission test updated and green." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "docs, shipped memory, coherence"
+objective = """
+Document the two new kinds where the shipped corpus describes the catalog:
+using-doctrine.md and glossary.md (kinds, lifecycle, the supports/disputes role),
+and update mem.signpost.doctrine.knowledge from 4 to 6 kinds. Re-embed the shipped
+memory (cargo build) and run memory sync so the index matches (R3). Close on a
+coherent catalog: docs, templates, memory and goldens tell one story.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 and PHASE-02 complete and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/using-doctrine.md and install/glossary.md document EVD + HYP (kinds, lifecycle vocab, the supports/disputes evidentiary role)." },
+  { id = "EX-2", text = "memory/mem.signpost.doctrine.knowledge updated to the 6-kind catalog; re-embedded via cargo build; memory sync run." },
+  { id = "EX-3", text = "just gate green; full slice suite green." },
+]
+verification = [
+  { id = "VT-1", expects = "after memory sync, memory find / retrieve surfaces EVD and HYP via the updated signpost." },
+  { id = "VA-1", expects = "agent review confirms using-doctrine.md + glossary.md are coherent with the shipped 6-kind catalog and templates (prose, no test assertion)." },
+]
+specs        = []
+requirements = []
