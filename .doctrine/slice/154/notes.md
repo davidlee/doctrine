@@ -235,6 +235,40 @@ Five moving parts:
   (dispatch drive started), P03 `71466d0d`, P04 `0cc4800c`. Ledger
   `.doctrine/dispatch/153/boundaries.toml` has only P03/P04 (funnel); not committed (ISS-039).
 
+## PHASE-01 implemented (2026-06-26) — solo `/worktree` fork `sl-154-phase-01`
+
+Data-model keystone landed (TDD red/green/refactor). `just check` green, clippy plain
+zero warnings, 2579 bin tests pass.
+
+- **`boundary.rs`** — `Provenance` enum `Solo|Funnel|Manual|Unknown` (`#[default] Unknown`,
+  `#[serde(rename_all="snake_case")]`, `Copy`) + `#[serde(default)] provenance` on
+  `BoundaryRow`. `#[serde(default)]` is the whole back-compat story (legacy row → `Unknown`).
+  VT-1 in-module.
+- **`state.rs`** — sticky merge in `record_source_delta` keyed on the INCOMING row, inside
+  the existing RMW (atomic, F-6 guard byte-identical): `Solo`/`Funnel` overwrite, `Manual`/
+  `Unknown` preserve existing. `forget_source_delta` (D8 reopen-evict sibling; dead-code-
+  phased via `cfg_attr(not(test))` until its PHASE-03 caller). **Refactor (T5):** extracted
+  `read_registry`/`write_registry` (mirror `ledger::load`/`store`); the `fs::write`/
+  `create_dir_all` lint-expect now lives once on `write_registry`. VT-2/VT-3 at the state seam.
+- **Construction sites (13)** stamped to FINAL values now (pre-satisfies later phases'
+  *stamp-value* criteria; those phases still own BEHAVIOUR+VERIFY): `state.rs:438`→`Solo`,
+  `dispatch.rs`→`Funnel` (one row cloned to ledger+registry), `slice.rs` record-delta→`Manual`;
+  test sites: `state.rs row()`→`Unknown` (generic), `ledger.rs`→`Funnel`, `slice.rs` conf
+  tests→`Manual`. EX-4 churn: 4 solo-binding capture tests now expect `Solo` (struct-update
+  over `row()`) — behaviour identical, new field only.
+
+**FINDING — solo capture + `worktree land` vs F-6 (for PHASE-03 / audit, NOT PHASE-01 scope):**
+`capture_phase_boundary` reads HEAD/branch from the cwd worktree (`root::find`), but the
+registry is primary-rooted. A solo phase landed via `doctrine worktree land` (`merge --no-ff`)
+makes the trunk HEAD a **merge commit**; a post-land `completed` flip then captures a
+merge-commit `code_end_oid`, which the F-6 non-merge guard rejects → capture degrades to a
+named warning (non-blocking by design) with `slice record-delta` as the sanctioned remedy.
+For a clean non-merge boundary the `completed` flip must capture the fork tip (a non-merge
+commit) — i.e. flip from the same worktree whose HEAD is the code tip, before the no-ff land,
+or record-delta the range after. Also observed: concurrent trunk advance (an unrelated SL-138
+commit) landed on `edge` after the fork, so the in_progress `code_start_oid` stamped at edge
+HEAD (`47910ba2`) ≠ the fork base (`071e9578`) — handle at completion (record-delta).
+
 ## Relations & selectors
 
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171

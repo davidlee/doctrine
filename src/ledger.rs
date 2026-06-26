@@ -595,6 +595,7 @@ pub(crate) fn write_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::boundary::Provenance;
 
     // --- VT-4: round-trip incl. field-name + status-token pinning ----------
 
@@ -632,6 +633,7 @@ mod tests {
                 phase: "PHASE-03".into(),
                 code_start_oid: "s".into(),
                 code_end_oid: "e".into(),
+                provenance: Provenance::Funnel,
             }],
         };
         let text = boundaries.to_toml().expect("ser");
@@ -686,6 +688,7 @@ mod tests {
                 phase: "PHASE-01".into(),
                 code_start_oid: "s1".into(),
                 code_end_oid: "e1".into(),
+                provenance: Provenance::Funnel,
             },
         )
         .expect("record boundary 1");
@@ -696,6 +699,7 @@ mod tests {
                 phase: "PHASE-02".into(),
                 code_start_oid: "s2".into(),
                 code_end_oid: "e2".into(),
+                provenance: Provenance::Funnel,
             },
         )
         .expect("record boundary 2");
@@ -743,6 +747,7 @@ mod tests {
                 phase: "PHASE-04".into(),
                 code_start_oid: "a".into(),
                 code_end_oid: "b".into(),
+                provenance: Provenance::Funnel,
             },
         )
         .expect("record boundary 1");
@@ -753,6 +758,7 @@ mod tests {
                 phase: "PHASE-04".into(),
                 code_start_oid: "a".into(),
                 code_end_oid: "c".into(),
+                provenance: Provenance::Funnel,
             },
         )
         .expect("record boundary 2 (same phase)");
