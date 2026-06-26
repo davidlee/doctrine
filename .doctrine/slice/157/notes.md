@@ -1,6 +1,29 @@
 # SL-157 notes — Checkout-independent integrate
 
-Status: **plan LOCKED — lifecycle `ready`, next is `/phase-plan` → `/execute`.**
+Status: **PHASE-01 IMPLEMENTED (completed) — next is `/audit` → `/reconcile` →
+`/close`.** Solo `/execute` on fork `sl-157-phase-01` (base edge@`42c55624`).
+Single atomic delta `da243b3d` (`src/dispatch.rs`, `src/git.rs`; +13/-75). NOT yet
+landed on `main` — that is `/close`'s post-audit job. Fork retained.
+
+**Execution record (2026-06-26):**
+- EN-2 baseline GREEN before edits (env note: `DOCTRINE_RESERVATION_FALLBACK`
+  must NOT leak into `just check`/`just gate` — it flips `reserve::tests::vt3_*`
+  red; only the doctrine CLI reservation needs it).
+- Delta exactly the keep/remove map (design §4): `advance_pure_ref` `RefCas::
+  Updated` → unconditional `AdvancedPureRef` + do-not-re-add comment; retired
+  `resync_worktree_hard` (+ unit test), `Disposition::RacedDesync` (+ `label()`
+  arm); trimmed 3 stale docs. KEPT `AdvancedResynced`, helper
+  `main_at_c1_with_descendant_c2` (3 callers), `ff_advance_in_worktree`, M4 gate,
+  `report_integrate` body, D4 CAS contract.
+- VT-1/VT-2 GREEN (`just check` + `just gate` rc=0, clippy zero warnings, no new
+  test). VA-1 self-review PASS (footprint = resync machinery only, no over-deletion).
+- **Reconcile/close obligations (carry forward):** SPEC-022 prose strike
+  (`spec-022.md:140-141`) via `revision change add --action modify --target
+  SPEC-022` at reconcile; close IMP-122 at slice close. (Detail in D6 below.)
+
+---
+
+Status (design stage, historical): **plan LOCKED — lifecycle `ready`, next is `/phase-plan` → `/execute`.**
 Scope re-baselined + premise-corrected; `design.md` locked (`31be77aa` author,
 `e53642e5` self-review, `26a867bc` GPT hardening, `66c688e8` D6 correction);
 `plan.toml`/`plan.md` authored (`b1e764aa`, single phase PHASE-01); PHASE-01 sheet
