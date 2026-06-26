@@ -16,42 +16,55 @@ as a consumption surface gap.
 
 ## Scope & Objectives
 
+> **Scope amended 2026-06-26** (design lock). Direction-selectable (inbound is
+> the primary blast-radius direction), depth cap default 5, multi-label
+> `--labels`, and a new depth-bounded cordage primitive. See `design.md` for the
+> authoritative decisions; this scope is reconciled to it.
+
 ```bash
-# Transitive walk on one relation label
-doctrine inspect SL-047 --transitive --label governed_by
-# → SL-047 and everything it (transitively) governs
+# Blast radius — what transitively depends on ADR-005 (inbound; the default both also shows it)
+doctrine inspect ADR-005 --transitive --direction inbound
 
-# Transitive walk on all labels
-doctrine inspect PRD-001 --transitive
-# → Full transitive closure of all relation edges from PRD-001
+# Both directions (awareness view, default), all labels, depth 5
+doctrine inspect ADR-005 --transitive
 
-# Depth limit to prevent explosion
-doctrine inspect ADR-001 --transitive --max-depth 5
+# Full derivation closure outward, unbounded
+doctrine inspect PRD-001 --transitive --direction outbound --max-depth all
+
+# Narrow to specific labels (comma-separated)
+doctrine inspect SL-047 --transitive --labels governed_by,references
 ```
 
 ### Implementation
 
-- Reuse `cordage::reachable` (same as `blockers --transitive`)
-- Build a relation overlay filtered to one label (or all labels if omitted)
-- Walk outward from the source entity
-- Render as indented tree or table (matching `blockers --transitive` format)
-- Default depth limit: 10 (safety valve)
+- Add `cordage::reachable_bounded` (depth-tagged + `truncated`); `reachable`
+  re-expressed over it, behaviour-identical. (The existing `reachable` carries no
+  depth — the cap and truncation indicator require the new primitive.)
+- `relation_graph::transitive_from` — reuse `build_relation_graph_from` + the
+  `require_minted` gate; per-overlay × per-direction `reachable_bounded`.
+- Direction-selectable: `inbound` (`Against`), `outbound` (`Along`), `both` (default).
+- Per-label sections, all overlay-backed labels by default; `--labels` narrows.
+- Default depth 5; `--max-depth N`; `0`/`all` = unbounded; truncation indicator.
 
 ## Non-Goals
 
-- No inbound transitive walk (only outward from source)
-- No cycle detection beyond what cordage already provides
-- No graph export
+- No indented-tree / path render (cordage returns `depths`, display drops it this
+  slice — a clean follow-up).
+- No cycle detection beyond what cordage already provides.
+- No graph export. No actionability/priority block on the transitive view.
+- No-overlay labels (`drift`, `decision_ref`) are 1-hop-only — omitted from transitive.
 
 ## Terrain
 
 | File | Change |
 |------|--------|
-| `src/commands/inspect.rs` | Add `--transitive`, `--label`, `--max-depth` flags |
-| `src/relation_graph.rs` | Build single-label overlay for cordage walk |
-| `src/priority/` (cordage) | Reuse `reachable` — no changes |
+| `crates/cordage/src/query.rs`, `lib.rs` | New `reachable_bounded` + `Reach`; `reachable` re-expressed over it |
+| `src/relation_graph.rs` | `transitive_from` + `TransitiveView`/`TransitiveGroup` + transitive render |
+| `src/commands/inspect.rs` | Branch `run_inspect` on `--transitive` (relation-only) |
+| `src/commands/cli.rs` | `--transitive`, `--direction`, `--labels` (+`--label` alias), `--max-depth` |
 
 ## Dependencies
 
-- SL-137 (corpus relation query) — soft `after` (builds on same catalog query surface)
-- Cordage `reachable` — already used by `blockers --transitive`
+- SL-137 (corpus relation query) — soft `after` (same catalog query surface)
+- SL-140 (cordage traversal unification) — closed IMP-020; `reachable` is the
+  clean primitive `reachable_bounded` extends
