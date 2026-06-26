@@ -223,7 +223,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-001 — Module layering: leaf ← engine ← command, no cycles](.doctrine/adr/001/adr-001.md) — `accepted`
 - [ADR-002 — Global orientation memory class: repo-empty, unanchored, evergreen](.doctrine/adr/002/adr-002.md) — `accepted`
 - [ADR-003 — Canonical change loop: slice-first, observe, reconcile, close](.doctrine/adr/003/adr-003.md) — `accepted`
-- [ADR-004 — Relations stored outbound-only; reciprocity is derived](.doctrine/adr/004/adr-004.md) — `accepted`
+- [ADR-004 — Relations stored outbound-only; reciprocity is derived](.doctrine/adr/004/adr-004.md) — `superseded`
 - [ADR-005 — Shipped knowledge is tiered by access pattern; skills route, reference docs explain](.doctrine/adr/005/adr-005.md) — `accepted`
 - [ADR-006 — Worktree posture: policy-agnostic framework, orchestrator-sole-writer dispatch](.doctrine/adr/006/adr-006.md) — `accepted`
 - [ADR-007 — Adversarial review as a first-class kind with turn-based ledger coordination](.doctrine/adr/007/adr-007.md) — `accepted`
@@ -234,4 +234,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-012 — Dispatch integration topology: isolated coordination worktree, class-routed projection, preserved code branches](.doctrine/adr/012/adr-012.md) — `accepted`
 - [ADR-013 — Revision as a first-class change-axis kind; governance dependency routes through a Revision](.doctrine/adr/013/adr-013.md) — `accepted`
 - [ADR-014 — RFC: governance-neutral first-class kind, precursor to Revision](.doctrine/adr/014/adr-014.md) — `accepted`
+- [ADR-015 — Multi-dimensional priority scoring](.doctrine/adr/015/adr-015.md) — `accepted`
+- [ADR-016 — Relation intent as a closed role dimension](.doctrine/adr/016/adr-016.md) — `accepted`
+- [ADR-017 — Actionability gating via inbound needs on unsettled records](.doctrine/adr/017/adr-017.md) — `accepted`
 <!-- END:readme-index -->
