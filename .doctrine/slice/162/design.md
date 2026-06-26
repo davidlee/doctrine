@@ -105,7 +105,7 @@ pub(crate) fn doctrine_bin() -> PathBuf {
 Re-exported in `tests/common/mod.rs`:
 
 ```rust
-#![allow(dead_code)]   // shared helpers: not every includer uses every fn (D5)
+#![allow(dead_code, unused_imports)]   // shared helpers: not every includer uses every fn (D5 / R4)
 pub(crate) use test_support::{doctrine_bin, repo_root};
 ```
 

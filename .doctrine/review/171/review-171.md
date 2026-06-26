@@ -99,3 +99,26 @@ optional per-slice cosmetic tidies; one is out-of-scope work harvested to backlo
 - **F-3**: dispatch candidate worktree provisioning does not seed gitignored build
   assets (`web/map/dist/`), so a fresh worktree cannot compile the bin until copied.
   Harvested as a durable gotcha.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §5.2** (RV-171 F-4): `tests/common/mod.rs` snippet
+  `#![allow(dead_code)]` → `#![allow(dead_code, unused_imports)]` — prose now
+  tracks the shipped code; R4 already sanctioned the wider allow.
+- **design-target selectors** (RV-171 F-1): removed the redundant literal
+  `tests/e2e_no_baked_paths.rs` selector (covered by the `tests/e2e_*.rs` glob).
+  `slice conformance 162` now reads clean: 0 undeclared, 0 undelivered, 63
+  conformant.
+
+### REVs completed
+- None — no governance/spec items in the brief.
+
+### Withdrawn / tolerated
+- None — all four findings `aligned`/verified.
+
+### Harvested (not reconciled here)
+- RV-171 F-2 → **ISS-054** (main-tree NF-001 red, unrelated to SL-162).
+- RV-171 F-3 → already covered by existing dispatch-worktree-embed memories.
+
+Reconcile pass complete — handoff to /close.
