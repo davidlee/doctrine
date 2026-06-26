@@ -600,6 +600,10 @@ pub(crate) fn run_record_boundary(
         phase: phase.to_string(),
         code_start_oid: resolve(code_start)?,
         code_end_oid: resolve(code_end)?,
+        // The funnel is the dispatch landing writer (design §5.3); the one row is
+        // cloned to both the committed ledger and the registry, so this single
+        // stamp covers both writes.
+        provenance: crate::boundary::Provenance::Funnel,
     };
     // (1) The committed claude-arm ledger (`.doctrine/dispatch/<N>/boundaries.toml`)
     // — UNCHANGED, the phase-cut input prepare-review tree-reads.

@@ -18,7 +18,7 @@ use clap::ValueEnum;
 use serde::Deserialize;
 use toml_edit::Item;
 
-use crate::boundary::BoundaryRow;
+use crate::boundary::{BoundaryRow, Provenance};
 use crate::fsutil;
 // `Plan`/`PlanPhase` are now an engine-tier leaf (`crate::plan`, SL-016): the
 // state layer depends *down* on a neutral home, not up into the slice-CLI
@@ -439,6 +439,8 @@ pub(crate) fn set_phase_status(
                 phase: phase_id.to_string(),
                 code_start_oid: start,
                 code_end_oid: end,
+                // Solo binding capture is the solo landing writer (design §5.3).
+                provenance: Provenance::Solo,
             },
         )
     {
@@ -582,19 +584,42 @@ pub(crate) fn boundaries_path(cwd: &Path, slice_id: u32) -> anyhow::Result<PathB
         .join("boundaries.toml"))
 }
 
+/// Load a slice's registry from `path` (an absent file is an empty registry,
+/// never an error; a present-but-malformed file is a hard error). The shared
+/// read half of the registry's read-modify-write surface — mirrors the
+/// `ledger::load` idiom.
+fn read_registry(path: &Path) -> anyhow::Result<SourceDeltas> {
+    match fs::read_to_string(path) {
+        Ok(text) => {
+            toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(SourceDeltas::default()),
+        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    }
+}
+
+/// Persist a slice's registry to `path`, creating the slice runtime dir on first
+/// write. The shared write half (mirrors `ledger::store`); the single
+/// `fs::write`/`create_dir_all` site, so the disposable-state lint expectation
+/// lives here, not on every caller.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "runtime registry — disposable gitignored state, atomicity not required"
+)]
+fn write_registry(path: &Path, registry: &SourceDeltas) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    let body = toml::to_string(registry).context("serialize source-delta registry")?;
+    fs::write(path, body).with_context(|| format!("Failed to write {}", path.display()))
+}
+
 /// Read the recorded source deltas for `slice_id` (empty Vec when the file is
 /// absent or empty — never an error). Mirrors the `read_phase_status`
 /// not-found-is-empty idiom; a present-but-malformed file is a hard error.
 pub(crate) fn read_source_deltas(cwd: &Path, slice_id: u32) -> anyhow::Result<Vec<BoundaryRow>> {
-    let path = boundaries_path(cwd, slice_id)?;
-    let text = match fs::read_to_string(&path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
-    };
-    let registry: SourceDeltas =
-        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
-    Ok(registry.rows)
+    Ok(read_registry(&boundaries_path(cwd, slice_id)?)?.rows)
 }
 
 /// Record (UPSERT by phase) one phase's committed source delta into the slice's
@@ -606,10 +631,6 @@ pub(crate) fn read_source_deltas(cwd: &Path, slice_id: u32) -> anyhow::Result<Ve
 /// leaf's `CaptureError`), never a panic. Read-modify-write; the dir/file are
 /// created on first write. `row.phase` keys the upsert so a re-record of the
 /// same phase replaces (never duplicates) its row.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "runtime registry — disposable gitignored state, atomicity not required"
-)]
 pub(crate) fn record_source_delta(
     cwd: &Path,
     slice_id: u32,
@@ -630,25 +651,56 @@ pub(crate) fn record_source_delta(
     }
 
     let path = boundaries_path(cwd, slice_id)?;
-    let mut registry: SourceDeltas = match fs::read_to_string(&path) {
-        Ok(text) => {
-            toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?
-        }
-        Err(e) if e.kind() == ErrorKind::NotFound => SourceDeltas::default(),
-        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
-    };
+    let mut registry = read_registry(&path)?;
 
+    // Sticky provenance merge (design §5.2/§5.3, D12), keyed on the INCOMING row
+    // and resolved here inside the RMW so it is atomic — never a caller pre-read.
+    // The range/oids always take the incoming value (a re-record corrects the
+    // boundary); only the landing-path stamp is sticky.
     match registry.rows.iter_mut().find(|r| r.phase == row.phase) {
-        Some(existing) => *existing = row,
+        Some(existing) => {
+            let keep = match row.provenance {
+                // Landing writers are authoritative — they overwrite.
+                Provenance::Solo | Provenance::Funnel => row.provenance,
+                // A correction (Manual) or a legacy read (Unknown) never
+                // reclassifies an already-recorded landing path.
+                Provenance::Manual | Provenance::Unknown => existing.provenance,
+            };
+            *existing = row;
+            existing.provenance = keep;
+        }
+        // A fresh phase stores the incoming value as-is.
         None => registry.rows.push(row),
     }
 
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    write_registry(&path, &registry)
+}
+
+/// Evict one phase's row from the slice's registry — the inverse of
+/// [`record_source_delta`] and its reopen-eviction sibling (design D8; the sole
+/// caller is the PHASE-03 completed→non-completed reopen, which must not leave a
+/// stale row behind a cleared start-stamp). Primary-tree-resolved like the
+/// writer. Returns whether a row was removed: an absent registry file or an
+/// absent phase is a no-op `Ok(false)`, never an error. No git guard — a removal
+/// records no range.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the reopen-eviction caller lands in PHASE-03 (mem.pattern.lint.dead-code-expect-vs-cfg-test)"
+    )
+)]
+pub(crate) fn forget_source_delta(cwd: &Path, slice_id: u32, phase: &str) -> anyhow::Result<bool> {
+    let path = boundaries_path(cwd, slice_id)?;
+    let mut registry = read_registry(&path)?;
+
+    let before = registry.rows.len();
+    registry.rows.retain(|r| r.phase != phase);
+    if registry.rows.len() == before {
+        return Ok(false);
     }
-    let body = toml::to_string(&registry).context("serialize source-delta registry")?;
-    fs::write(&path, body).with_context(|| format!("Failed to write {}", path.display()))
+    write_registry(&path, &registry)?;
+    Ok(true)
 }
 
 /// The completeness verdict of the recorded registry against a slice's completed
@@ -1242,11 +1294,15 @@ mod tests {
         fs::canonicalize(dir).unwrap()
     }
 
+    // Generic registry-row helper: provenance is irrelevant to the upsert/round-trip
+    // contracts these tests assert, so it carries the neutral `Unknown`. The merge
+    // tests below construct rows with explicit provenance instead.
     fn row(phase: &str, start: &str, end: &str) -> BoundaryRow {
         BoundaryRow {
             phase: phase.into(),
             code_start_oid: start.into(),
             code_end_oid: end.into(),
+            provenance: Provenance::Unknown,
         }
     }
 
@@ -1304,6 +1360,104 @@ mod tests {
 
         let rows = read_source_deltas(&repo, 147).unwrap();
         assert_eq!(rows, vec![row("PHASE-01", &a, &head)], "one row, replaced");
+    }
+
+    // VT-2: the sticky provenance merge is keyed on the INCOMING row and runs
+    // INSIDE record_source_delta's RMW (atomic, not a caller pre-read). Landing
+    // writers (Solo/Funnel) are authoritative; Manual never reclassifies an
+    // existing path (incl. a legacy Unknown); a fresh phase stores the incoming
+    // value as-is. The range upsert is unaffected.
+    #[test]
+    fn record_source_delta_merges_provenance_keyed_on_incoming() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let a = git(&repo, &["rev-parse", "HEAD"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "two"]);
+        let b = git(&repo, &["rev-parse", "HEAD"]);
+
+        let prov_row = |phase: &str, p: Provenance| BoundaryRow {
+            phase: phase.into(),
+            code_start_oid: a.clone(),
+            code_end_oid: b.clone(),
+            provenance: p,
+        };
+        let recorded = |phase: &str| -> Provenance {
+            read_source_deltas(&repo, 200)
+                .unwrap()
+                .into_iter()
+                .find(|r| r.phase == phase)
+                .expect("row present")
+                .provenance
+        };
+
+        // Incoming Manual preserves any existing landing path (a correction never
+        // reclassifies) — including a legacy Unknown.
+        for (phase, existing) in [
+            ("PHASE-01", Provenance::Funnel),
+            ("PHASE-02", Provenance::Solo),
+            ("PHASE-03", Provenance::Unknown),
+        ] {
+            record_source_delta(&repo, 200, prov_row(phase, existing)).unwrap();
+            record_source_delta(&repo, 200, prov_row(phase, Provenance::Manual)).unwrap();
+            assert_eq!(
+                recorded(phase),
+                existing,
+                "Manual must not reclassify {existing:?}"
+            );
+        }
+
+        // A fresh phase (no existing row) stores the incoming value as-is.
+        record_source_delta(&repo, 200, prov_row("PHASE-04", Provenance::Manual)).unwrap();
+        assert_eq!(
+            recorded("PHASE-04"),
+            Provenance::Manual,
+            "fresh row keeps incoming"
+        );
+
+        // A landing writer is authoritative and overwrites any existing path.
+        record_source_delta(&repo, 200, prov_row("PHASE-05", Provenance::Solo)).unwrap();
+        record_source_delta(&repo, 200, prov_row("PHASE-05", Provenance::Funnel)).unwrap();
+        assert_eq!(
+            recorded("PHASE-05"),
+            Provenance::Funnel,
+            "incoming Funnel overwrites"
+        );
+
+        record_source_delta(&repo, 200, prov_row("PHASE-06", Provenance::Funnel)).unwrap();
+        record_source_delta(&repo, 200, prov_row("PHASE-06", Provenance::Solo)).unwrap();
+        assert_eq!(
+            recorded("PHASE-06"),
+            Provenance::Solo,
+            "incoming Solo overwrites"
+        );
+    }
+
+    // VT-3: forget_source_delta evicts one phase's row (the reopen-eviction
+    // sibling of record_source_delta — design D8, caller is PHASE-03). Record →
+    // forget → absent (Ok(true)); forget on an absent phase, or an absent
+    // registry file, is a no-op Ok(false), never an error. Siblings survive.
+    #[test]
+    fn forget_source_delta_evicts_then_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let a = git(&repo, &["rev-parse", "HEAD"]);
+
+        record_source_delta(&repo, 200, row("PHASE-01", &a, &a)).unwrap();
+        record_source_delta(&repo, 200, row("PHASE-02", &a, &a)).unwrap();
+
+        // Evict a present phase → true, only its row gone.
+        assert!(forget_source_delta(&repo, 200, "PHASE-01").unwrap());
+        assert_eq!(
+            read_source_deltas(&repo, 200).unwrap(),
+            vec![row("PHASE-02", &a, &a)],
+            "only PHASE-01 evicted"
+        );
+
+        // Re-forgetting the now-absent phase → false, no error (idempotent).
+        assert!(!forget_source_delta(&repo, 200, "PHASE-01").unwrap());
+
+        // Forget against an entirely absent registry file → false, no error.
+        assert!(!forget_source_delta(&repo, 999, "PHASE-01").unwrap());
     }
 
     // VT-2 resolver: a record from a LINKED worktree lands the row in the
@@ -1447,7 +1601,10 @@ mod tests {
 
         assert_eq!(
             read_source_deltas(&repo, 147).unwrap(),
-            vec![row("PHASE-01", &start, &end1)],
+            vec![BoundaryRow {
+                provenance: Provenance::Solo,
+                ..row("PHASE-01", &start, &end1)
+            }],
             "one boundary spanning the phase"
         );
 
@@ -1460,7 +1617,10 @@ mod tests {
 
         assert_eq!(
             read_source_deltas(&repo, 147).unwrap(),
-            vec![row("PHASE-01", &start, &end2)],
+            vec![BoundaryRow {
+                provenance: Provenance::Solo,
+                ..row("PHASE-01", &start, &end2)
+            }],
             "upsert: one row, start preserved, end advanced"
         );
     }
@@ -1479,7 +1639,10 @@ mod tests {
 
         assert_eq!(
             read_source_deltas(&repo, 147).unwrap(),
-            vec![row("PHASE-01", &head, &head)],
+            vec![BoundaryRow {
+                provenance: Provenance::Solo,
+                ..row("PHASE-01", &head, &head)
+            }],
             "zero-delta row, start == end"
         );
     }
@@ -1550,7 +1713,10 @@ mod tests {
 
         assert_eq!(
             read_source_deltas(&repo, 147).unwrap(),
-            vec![row("PHASE-01", &start, &end)],
+            vec![BoundaryRow {
+                provenance: Provenance::Solo,
+                ..row("PHASE-01", &start, &end)
+            }],
             "solo context: exactly one boundary"
         );
     }

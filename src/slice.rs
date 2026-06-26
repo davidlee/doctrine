@@ -1986,6 +1986,10 @@ fn run_record_delta(
             phase: phase.to_string(),
             code_start_oid: resolve(start)?,
             code_end_oid: resolve(end)?,
+            // record-delta is the manual escape hatch (design §5.3). As an
+            // incoming `Manual` it never reclassifies an existing landing path —
+            // the PHASE-01 sticky merge preserves any prior Solo/Funnel/Unknown.
+            provenance: crate::boundary::Provenance::Manual,
         },
     )?;
     writeln!(
@@ -5522,6 +5526,7 @@ mod tests {
                 phase: "PHASE-01".into(),
                 code_start_oid: base.clone(),
                 code_end_oid: p1.clone(),
+                provenance: crate::boundary::Provenance::Manual,
             },
         )
         .unwrap();
@@ -5532,6 +5537,7 @@ mod tests {
                 phase: "PHASE-02".into(),
                 code_start_oid: p1.clone(),
                 code_end_oid: p2.clone(),
+                provenance: crate::boundary::Provenance::Manual,
             },
         )
         .unwrap();
@@ -5588,6 +5594,7 @@ mod tests {
                 phase: "PHASE-01".into(),
                 code_start_oid: base,
                 code_end_oid: p1,
+                provenance: crate::boundary::Provenance::Manual,
             },
         )
         .unwrap();
