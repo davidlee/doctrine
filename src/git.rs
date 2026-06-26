@@ -1350,31 +1350,6 @@ pub(crate) fn ff_advance_in_worktree(
     Ok(FfAdvance::Advanced)
 }
 
-/// Resync the checked-out worktree `wt`'s index + tracked tree onto `oid` via `git
-/// reset --hard <oid>` — the None-leg post-CAS resync (design §2.2). When the race
-/// fires, `update_ref_cas` has ALREADY advanced `target_ref` to `oid`, so the live
-/// worktree's HEAD now resolves to `oid` while its index/tree are stale at the old
-/// commit. `reset --keep`/`--merge` only touch files differing between `<oid>` and
-/// HEAD — and HEAD == `oid` here (the ref moved under it), so they see no diff and
-/// leave the desync UNFIXED (proven empirically). `reset --hard` sets index+tree to
-/// `<oid>` unconditionally, immune to the HEAD-already-moved ordering. It is
-/// content-safe ONLY because the caller invokes it after [`tree_clean`] confirmed
-/// the tree clean (no tracked local modification to discard; untracked files
-/// survive `reset --hard`); a failure here is a genuine plumbing fault,
-/// `?`-propagated.
-///
-/// (Design §2.2 originally named `reset --keep`; that cannot fix the
-/// already-advanced ref — corrected to `reset --hard` under the clean precondition,
-/// folded back into the design at reconcile.)
-///
-/// # Errors
-///
-/// Returns [`CaptureError::Git`] if the `git reset --hard` invocation fails.
-pub(crate) fn resync_worktree_hard(wt: &Path, oid: &str) -> Result<(), CaptureError> {
-    git_text(wt, &["reset", "--hard", oid])?;
-    Ok(())
-}
-
 /// Retry `git write-tree` with exponential backoff on transient index.lock
 /// contention. Multiple concurrent doctrine processes (e.g. parallel `memory
 /// verify` invocations) can race for the lock; this is harmless and resolves
@@ -4017,31 +3992,5 @@ branch refs/heads/main
             super::FfAdvance::Advanced => panic!("must refuse: tree is dirty"),
         }
         assert_eq!(repo.git(&["rev-parse", "main"]), c1, "main untouched");
-    }
-
-    /// The None-leg clean resync: a pure `update-ref` under a live checkout
-    /// desyncs the index/worktree; `resync_worktree_hard` restores them to the
-    /// advanced ref with a clean tree. `reset --keep` cannot (HEAD already moved
-    /// with the ref → no diff to apply); `reset --hard` is immune to that ordering.
-    #[test]
-    fn resync_worktree_hard_resyncs_stale_index_after_pure_ref_advance() {
-        let repo = ScratchRepo::new();
-        let (_c1, c2) = main_at_c1_with_descendant_c2(&repo);
-        // Simulate the None-leg desync: advance the ref under the live checkout.
-        repo.git(&["update-ref", "refs/heads/main", &c2]);
-        assert!(
-            !repo.git(&["status", "--porcelain"]).is_empty(),
-            "pure update-ref desynced the live checkout",
-        );
-
-        super::resync_worktree_hard(repo.path(), &c2).expect("reset --hard");
-        assert!(
-            repo.git(&["status", "--porcelain"]).is_empty(),
-            "resync restored index + worktree to the advanced ref",
-        );
-        assert_eq!(
-            std::fs::read_to_string(repo.path().join("b.txt")).expect("read b"),
-            "2",
-        );
     }
 }
