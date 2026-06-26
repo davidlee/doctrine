@@ -16,7 +16,8 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/relation.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "D6: records author references (concerns)"
 
 [[selector]]
 selector = "src/priority/partition.rs"

@@ -97,16 +97,41 @@ records the intent; a VT pins the round-trip.
 
 - `risk` stays **excluded**: kind-gated to risk-items, *and* its `[facet]` table name
   collides with knowledge records' typed kind-facet `[facet]`. Do not widen risk.
-- **Scoring consequence — currently INERT (corrected).** A record's `estimate`/`value`
-  are read into the record's own `base_score`, but that base **does not propagate**: the
-  leverage DP flows *dependent → prereq* (`graph.rs:513`), and a record is always a prereq
-  with **no dep predecessors** (it can't author `needs`), so nothing downstream reads its
-  base. The record's own score is never displayed (not `eligible`). So estimate/value on a
-  record is authored-clean and round-trip-safe but has **zero scoring side-effect today** —
-  this is intent-capture, not a wiring change. Whether a *gate's cost* should influence its
-  blocked work's priority (leverage flows the wrong way for that) is a separate future
-  question, not in scope.
+- **Scoring wiring (corrected — two paths, opposite verdicts):**
+  - *via leverage — INERT.* The leverage DP flows *dependent → prereq* (`graph.rs:513`);
+    a record is always a prereq with **no dep predecessors** (it can't author `needs`), so
+    its base never propagates to anyone through the dep overlay.
+  - *via optionality — LIVE (with D6).* A record's base **does** propagate to the targets
+    it `references` — `optionality(N) = ref_coeff · Σ base(referrers)` over
+    `CONSEQUENCE_LABELS`, which includes `References` (`graph.rs:163`, filtered by label,
+    role-blind). Once D6 lets records author `references`, an estimated record raises its
+    referenced target's optionality. **This is the purpose** estimate/value on records earns.
+  - *Visibility (codex correction).* A record's own `score` **is** surfaced — `survey --all`
+    bypasses the eligibility filter (`surface.rs:136`) and `explain`/`inspect` render score
+    + the raw `StatusClass` for any minted id (`render.rs:184`). So this is **not** a hidden
+    quantity; the earlier "never displayed" claim was wrong.
 - Surfacing estimate/value in `show`/`inspect` → **IMP-183** (out of scope).
+
+### D6 — Records may author `references` (concerns)
+
+A knowledge record cannot author `references` today — `link QUE-171 references SL-158`
+is refused (*"QUE may not author `references`; legal: shapes, spawns, governed_by"*).
+`RECORD` is absent from every `references` source-set (`relation.rs:331-366`). That is a
+gratuitous limit: a record should be able to declare it is *about* an artefact.
+
+Add `RECORD` (ASM/DEC/QUE/CON) as a legal `references` source under the **`concerns`**
+role (aboutness/relevance; target `AnyNumbered`) — the role that already serves
+work→any-numbered (`relation.rs:355-366`). `shapes` (epistemic influence) stays distinct;
+`concerns` is plain aboutness. This is **not** `shapes`-roles (IDE-022) — a different,
+independent edit to the same file.
+
+- **Layer:** `src/relation.rs` `RELATION_RULES` only (authoring permission). No gating,
+  no dep/seq — `references` is a ref/consequence overlay, never the dep overlay, so **no
+  cycle or blocking effect**.
+- **Scoring interaction (intended):** a record's `references` edge feeds its target's
+  optionality (see D3). With most records carrying no `estimate`/`value` (base 0), the
+  contribution is 0 by default; it activates only when a record is deliberately sized.
+- **Inbound render:** `concerns` inbound name is "concerned by" (existing).
 
 ### D4 — Canon moves first
 
@@ -135,7 +160,8 @@ the engine. ADR-017's source-only premise (D2) is reconciled in ADR prose at clo
 | QUE-1 → `answered` | n/a | SL-1 **unblocked** |
 | `doctrine needs SL-1 ADR-1` | refused | **still refused** (governance) |
 | `doctrine needs QUE-1 SL-1` | refused | **still refused** (record can't author) |
-| `estimate set QUE-1 …` | writes (works) | writes (intent now documented + VT'd) |
+| `link QUE-1 references SL-1` | **refused** (illegal source) | accepted (concerns role) — D6 |
+| `estimate set QUE-1 …` | writes (works) | writes; now feeds optionality of what QUE-1 `references` |
 
 ## 3. Code impact (design-target touch-set)
 
@@ -146,11 +172,19 @@ the engine. ADR-017's source-only premise (D2) is reconciled in ADR prose at clo
 - **`src/commands/dep_seq.rs`** — add `is_record` + `is_admissible_dep_target`; swap the
   *target* check in `resolve_dep_seq_src` to the wider predicate; update the refusal
   message; add admission + refusal tests.
+- **`src/relation.rs`** — add `RECORD` to a `references`/`concerns` source-set (D6);
+  authoring-test for `link QUE references SL`.
 - **`.doctrine/spec/tech/001/` (SPEC-001) + PRD-011** — D-decision + requirement (D4).
 - **`.doctrine/spec/tech/019/` (SPEC-019)** — D7 / NF-003 / OQ-2 revision (D4).
 
-**Deliberately untouched:** `channels.rs`, `graph.rs`, `surface.rs`, `view.rs`,
-`render.rs`, `relation.rs`.
+**No *code* change, but observable OUTPUT flips (codex):** `channels.rs`, `graph.rs`,
+`surface.rs`, `view.rs`, `render.rs` are not edited — predicates use `== Workable` /
+`!= Terminal` (not exhaustive `match`es) and `render.rs:184` prints the class via
+`{:?}` (Debug), so a new `Gating` variant compiles untouched. **But** `survey --all`,
+`explain`, and `inspect` render `StatusClass` for any minted node, so an unsettled
+record's eligibility/score output flips `Terminal → Gating`. Intended; pinned by a
+knowledge-in-priority golden (VT-8). `relation.rs` IS edited (D6); `shapes`-roles still
+split to IDE-022.
 
 ## 4. Verification
 
@@ -166,6 +200,13 @@ the engine. ADR-017's source-only premise (D2) is reconciled in ADR prose at clo
   record *source* still refused.
 - **VT-7 (estimate round-trip):** `estimate set ASM-1 …` writes; `knowledge show ASM-1`
   reads back clean (table ignored, not rejected).
+- **VT-8 (knowledge-in-priority golden, codex):** an e2e golden over a corpus including an
+  unsettled + a settled record — `explain`/`inspect`/`survey --all` render `Gating` for the
+  unsettled record and `Terminal` for the settled one. Pins the intended output flip the
+  existing priority goldens (work/backlog/review only) don't cover.
+- **VT-9 (references authoring, D6):** `link QUE-1 references SL-1 [--role concerns]` is
+  accepted (was refused); the edge renders inbound as "concerned by" on SL-1; a record with
+  an `[estimate]`/`[value]` raises SL-1's optionality by `ref_coeff · base(record)`.
 
 ### Tests that flip **by design** (consumer revision, not regression)
 

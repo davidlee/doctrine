@@ -11,15 +11,17 @@
 > **not** the sole engine delta — the target-admissibility gate must also widen. See
 > Design Decisions below; ADR-017 prose reconciled at close.
 >
-> **Locked scope (three changes):** (1) **trinary partition** — unsettled record →
+> **Locked scope (four changes):** (1) **trinary partition** — unsettled record →
 > non-`Terminal` `Gating` class; (2) **target-gate widening** — `needs`/`after`
 > admissible targets = work-like ∪ records (source gate unchanged); (3) **estimate/value
-> on records** — confirmatory design note only (already kind-agnostic; no code).
+> on records** — already kind-agnostic (no facet code); now earns purpose via D6's
+> optionality path; (4) **records may author `references`** (`concerns` role) — small
+> `relation.rs` `RELATION_RULES` widening (user-requested; records were illegally barred).
 >
 > **Split out:** the **`shapes`-roles** piece (semantic disambiguation, ADR-016) →
-> **IDE-022** — different layer, carries its own open question. Estimate/value
-> show/inspect surfacing → **IMP-183**. Outbound authoring stays a derived hub-view +
-> deferred batch sugar (ADR-017 §3). See ADR-017 + `design.md`.
+> **IDE-022** — different layer, own open question (distinct from D6's `references` edit).
+> Estimate/value show/inspect surfacing → **IMP-183**. Outbound gating authoring stays a
+> derived hub-view + deferred batch sugar (ADR-017 §3). See ADR-017 + `design.md`.
 
 ## Context
 
@@ -70,12 +72,17 @@ a requirement), then the engine.
    excluded for free (source gate). This is what makes `needs → <record>` authorable
    — the edge then rides the existing kind-agnostic `graph.rs` build untouched.
 
-3. **estimate/value on records — confirmatory note (no code).** Already kind-agnostic
-   (`estimate set ASM-001` works; round-trips — `RawRecordToml` has no
-   `deny_unknown_fields`). Currently **inert** for scoring (a record's base doesn't
-   propagate — leverage flows dependent→prereq, records have no dep predecessors). A VT
-   pins the round-trip. `risk` stays excluded (kind-gated + `[facet]` table-name collides
-   with knowledge's typed kind-facet). Surfacing in show/inspect → IMP-183.
+3. **estimate/value on records — no facet code.** Already kind-agnostic (`estimate set
+   ASM-001` works; round-trips — `RawRecordToml` has no `deny_unknown_fields`). Inert via
+   *leverage* (records have no dep predecessors) but **live via optionality** once D6 lets
+   records `references` (record base → target optionality). A VT pins the round-trip.
+   `risk` stays excluded (kind-gated + `[facet]` table-name collides with knowledge's typed
+   kind-facet). Surfacing in show/inspect → IMP-183.
+
+4. **Records may author `references` (`concerns`).** `relation.rs` `RELATION_RULES`: add
+   `RECORD` to the `references`/`concerns` source-set (target `AnyNumbered`). Authoring
+   permission only — `references` is a ref/consequence overlay, never dep/seq, so no
+   gating/cycle effect. Distinct from `shapes`-roles (IDE-022). User-requested.
 
 **Canon-first.** A SPEC-001 / PRD-011 D-decision + requirement for the third class
 and the `eligible`-vs-`blocks` split land before the engine code — design drives
@@ -102,15 +109,16 @@ cover; existing behaviour for ordinary workable/terminal items is preserved.
   generalised three-way cover canary; per-kind knowledge settle boundary.
 - `src/commands/dep_seq.rs` — source/target gate split; `is_admissible_dep_target`
   (work-like ∪ records); refusal message; refusal/admission tests.
+- `src/relation.rs` — add `RECORD` to the `references`/`concerns` source-set (D6).
 - `.doctrine/spec/tech/001/` (SPEC-001) + PRD-011 — canon D-decision + requirement
   (third class; `eligible`-vs-`blocks` split; records-as-`needs`-targets).
 - `.doctrine/spec/tech/019/` (SPEC-019) — D7 / NF-003 / OQ-2 revised: records become
   `Gating` (unsettled) / `Terminal` (settled), not all-inert.
 
-**Explicitly NOT touched** (the elegance of ADR-017): `channels.rs` (predicates
-already correct), `graph.rs` (kind-agnostic `needs` build already emits the edge),
-`surface.rs`/`view.rs`/`render.rs` (`Gating` excluded via `eligible == Workable`,
-no worklist change), `relation.rs` (shapes-roles split to IDE-022).
+**No code change but output flips (codex):** `channels.rs`/`graph.rs`/`surface.rs`/
+`view.rs`/`render.rs` aren't edited (comparison predicates + `{:?}` Debug absorb the new
+variant), but `survey --all`/`explain`/`inspect` render `Gating` for unsettled records —
+pinned by a knowledge-in-priority golden (VT-8). `shapes`-roles split to IDE-022.
 
 ## Risks / Assumptions / Open Questions
 
