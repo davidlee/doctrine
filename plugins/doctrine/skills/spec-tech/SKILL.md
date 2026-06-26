@@ -18,8 +18,9 @@ engine (TOML+MD tiers, relations, `show` command) is documented in
 > `--help`; verb model in `using-doctrine.md`). Identity, the relational spine, and
 > flat fields (incl. `c4_level`, `[[source]]` anchors) live in `spec-NNN.toml`, the
 > narrative in `spec-NNN.md`; requirements are **peer entities** (`REQ-NNN`) membered
-> via `members.toml`; tech-only spec→spec edges are hand-authored in
-> `interactions.toml`. **There is no CLI flag for the spine — it is authored TOML, and
+> via `members.toml`; tech-only spec→spec edges are written with `doctrine spec
+> interactions add`/`remove` (not hand-authored). **There is no CLI flag for the
+> spine — it is authored TOML, and
 > `spec validate` is the integrity gate.**
 
 Capture the durable architecture and mechanism:

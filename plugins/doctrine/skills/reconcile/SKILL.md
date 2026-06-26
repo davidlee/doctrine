@@ -111,7 +111,7 @@ doctrine revision show REV-N
 Otherwise, create one by convention:
 
 ```bash
-doctrine revision new --title "reconcile SL-NNN" --slug reconcile-sl-NNN
+doctrine revision new "reconcile SL-NNN" --slug reconcile-sl-NNN
 ```
 
 The REV starts `proposed` with no change rows. Transition it to `started` before

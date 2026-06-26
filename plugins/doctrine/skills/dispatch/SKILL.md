@@ -24,13 +24,13 @@ orchestrator funnel."
      (default `false` if the file or key is absent).
    - If `true`, route workers via [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)
      (default to `pi` arm until `preferred-subprocess-harness` selection is wired — IMP-101).
-   - Otherwise, route per env-marker: `printenv CLAUDECODE` present →
+   - Otherwise, route per env-marker: `.claude/` present →
      [`/dispatch-agent`](../dispatch-agent/SKILL.md); otherwise →
      [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md).
    Then spawn worker(s) per the chosen arm's template.
-4. Funnel the batch (import → verify → branch-point → one commit → record)
-5. Repeat from new HEAD until all phases done
-6. Conclude: `dispatch sync --prepare-review` → remove coord worktree → audit
+5. Funnel the batch (import → verify → branch-point → one commit → record)
+6. Repeat from new HEAD until all phases done
+7. Conclude: `dispatch sync --prepare-review` → remove coord worktree → audit
 
 ## The funnel (per batch)
 

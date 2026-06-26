@@ -18,7 +18,6 @@ see [[mem.fact.doctrine.cli-source-of-truth]].
 - `.doctrine/adr/` — project-global ADRs (authored; status lives in
   `adr-nnn.toml`). List them: `doctrine adr list`. Read the relevant bodies.
 - `.doctrine/spec/tech/` — authoritative technical specs (the *how*).
-- `.doctrine/adr/` — authoritative decisions.
 - the governing slice's `design.md` — canon for *this* change's design intent.
 
 For subsystem-level truth (gotchas, patterns, invariants tied to files or
