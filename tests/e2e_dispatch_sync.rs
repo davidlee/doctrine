@@ -462,6 +462,195 @@ fn refused_row_persists_failed_status_in_committed_journal() {
 }
 
 // ====================================================================
+// PHASE-04 — commit the boundaries ledger at prepare-review (ISS-039)
+// ====================================================================
+//
+// VT-1: splice from an UNCOMMITTED working ledger living in a live coordination
+//   worktree → prepare-review commits boundaries.toml onto dispatch/064 (beside
+//   journal.toml), read_ledger reads N rows, phase/064-NN refs project.
+// VT-2: content-idempotent — a second prepare-review on the unchanged working
+//   ledger adds NO second `ledger: boundaries` commit and the committed
+//   boundaries blob is stable (commit_boundaries no-op via TREE-oid compare).
+// VT-3: malformed working boundaries.toml → the run fails and the dispatch tip
+//   is unchanged (commit_boundaries validates before committing — no garbage).
+
+/// Like [`build_fixture`] but the boundaries ledger is left **uncommitted** in a
+/// live coordination worktree on `dispatch/064` (no `ledger fixtures` commit). The
+/// dispatch tip carries the code + authored entity only; the working `boundaries.toml`
+/// sits in the coord worktree, so `prepare_review` must splice it via
+/// `commit_boundaries` (guarded by `live_worktree_for_ref`) before any read. Returns
+/// the coord worktree path. `ledger` is written verbatim — callers pass a malformed
+/// body to exercise the validate-before-commit path (VT-3).
+fn build_fixture_uncommitted_ledger(dir: &Path, ledger: &str) -> std::path::PathBuf {
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-q", "-b", "main"]);
+    git(dir, &["config", "user.email", "t@example.com"]);
+    git(dir, &["config", "user.name", "Test"]);
+    commit(dir, "trunk.txt", "trunk", "base");
+
+    git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
+    commit(dir, "src1.txt", "a", "phase1 code");
+    commit(dir, "src2.txt", "b", "phase2 code");
+    commit(
+        dir,
+        ".doctrine/slice/064/slice-064.md",
+        "scope",
+        "authored entity",
+    );
+    // Return the primary tree to `main` so `dispatch/064` is free to check out in
+    // a linked worktree (git refuses a branch checked out in two worktrees).
+    git(dir, &["checkout", "-q", "main"]);
+
+    // A LIVE coordination worktree on dispatch/064 — what `live_worktree_for_ref`
+    // keys on, and where the uncommitted ledger lives on the working filesystem.
+    let coord = dir.join(".coord-064");
+    git(
+        dir,
+        &["worktree", "add", "-q", coord.to_str().unwrap(), "dispatch/064"],
+    );
+    std::fs::create_dir_all(coord.join(".doctrine/dispatch/064")).unwrap();
+    std::fs::write(coord.join(".doctrine/dispatch/064/boundaries.toml"), ledger).unwrap();
+    coord
+}
+
+/// A well-formed three-phase boundaries body (PHASE-03 is empty-code: start==end).
+fn working_boundaries(dir: &Path) -> String {
+    let base = git(dir, &["rev-parse", "dispatch/064~3"]);
+    let code_end_1 = git(dir, &["rev-parse", "dispatch/064~2"]);
+    let code_end_2 = git(dir, &["rev-parse", "dispatch/064~1"]);
+    format!(
+        "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"{base}\"\ncode_end_oid = \"{code_end_1}\"\nprovenance = \"funnel\"\n\
+         [[boundary]]\nphase = \"PHASE-02\"\ncode_start_oid = \"{code_end_1}\"\ncode_end_oid = \"{code_end_2}\"\nprovenance = \"funnel\"\n\
+         [[boundary]]\nphase = \"PHASE-03\"\ncode_start_oid = \"{code_end_2}\"\ncode_end_oid = \"{code_end_2}\"\nprovenance = \"funnel\"\n"
+    )
+}
+
+// --- VT-1: splice from an uncommitted working ledger, then project -----------
+
+#[test]
+fn prepare_review_splices_uncommitted_ledger_then_projects() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    // Seed with a placeholder, then write the oid-bearing ledger once the branch exists.
+    let coord = build_fixture_uncommitted_ledger(dir, "");
+    std::fs::write(
+        coord.join(".doctrine/dispatch/064/boundaries.toml"),
+        working_boundaries(dir),
+    )
+    .unwrap();
+
+    // Precondition: the dispatch tip carries NO committed ledger yet.
+    assert!(
+        !git(dir, &["ls-tree", "-r", "--name-only", "dispatch/064"]).contains("boundaries.toml"),
+        "precondition: boundaries ledger is uncommitted"
+    );
+
+    let out = prepare_review(dir);
+    assert!(
+        out.status.success(),
+        "prepare-review ok; stderr: {}",
+        stderr(&out)
+    );
+
+    // commit_boundaries spliced the working ledger onto dispatch/064, beside journal.toml.
+    let listing = git(dir, &["ls-tree", "-r", "--name-only", "dispatch/064"]);
+    assert!(
+        listing.contains(".doctrine/dispatch/064/boundaries.toml"),
+        "boundaries.toml committed onto dispatch/064: {listing}"
+    );
+    assert!(
+        listing.contains(".doctrine/dispatch/064/journal.toml"),
+        "journal.toml committed beside it: {listing}"
+    );
+
+    // read_ledger read the now-committed N rows → phase cuts project (PHASE-03 empty, skipped).
+    assert!(ref_exists(dir, "review/064"), "review/064 projected");
+    assert!(ref_exists(dir, "phase/064-01"), "phase/064-01 projected");
+    assert!(ref_exists(dir, "phase/064-02"), "phase/064-02 projected");
+    assert!(
+        !ref_exists(dir, "phase/064-03"),
+        "empty-code PHASE-03 emits no cut"
+    );
+}
+
+// --- VT-2: commit_boundaries is content-idempotent on an unchanged re-run -----
+//
+// Verified at the commit_boundaries grain (the literal "same dispatch tip oid"
+// full-rerun assertion is unsatisfiable at PHASE-04 — a second prepare-review
+// collides on the already-created refs and the journal churns, pre-existing
+// EX-5/VT-4 behaviour; the clean re-run needs the PHASE-05 gate). The content-
+// idempotency claim (design F1 / EX-2): identical working content ⇒ no second
+// `ledger: boundaries` commit and a stable committed blob.
+
+#[test]
+fn commit_boundaries_is_content_idempotent_on_rerun() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let coord = build_fixture_uncommitted_ledger(dir, "");
+    std::fs::write(
+        coord.join(".doctrine/dispatch/064/boundaries.toml"),
+        working_boundaries(dir),
+    )
+    .unwrap();
+
+    assert!(prepare_review(dir).status.success(), "first run projects");
+    let blob_before = git(
+        dir,
+        &["rev-parse", "dispatch/064:.doctrine/dispatch/064/boundaries.toml"],
+    );
+
+    // Re-run on the UNCHANGED working ledger. The full run bails on the already-
+    // created refs (out of PHASE-04 scope) — but commit_boundaries must no-op:
+    // no new boundaries commit, identical committed blob.
+    let _ = prepare_review(dir);
+    let blob_after = git(
+        dir,
+        &["rev-parse", "dispatch/064:.doctrine/dispatch/064/boundaries.toml"],
+    );
+    assert_eq!(
+        blob_before, blob_after,
+        "committed boundaries blob is stable across the re-run (TREE-oid no-op)"
+    );
+
+    let boundaries_commits = git(
+        dir,
+        &["log", "--grep", "ledger: boundaries", "--oneline", "dispatch/064"],
+    );
+    assert_eq!(
+        boundaries_commits.lines().count(),
+        1,
+        "commit_boundaries fired exactly once — content-idempotent: {boundaries_commits}"
+    );
+}
+
+// --- VT-3: malformed working ledger → run fails, dispatch tip unchanged -------
+
+#[test]
+fn malformed_working_ledger_fails_and_leaves_dispatch_tip_unchanged() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture_uncommitted_ledger(dir, "this is not valid boundaries toml ][\n");
+    let tip_before = git(dir, &["rev-parse", "dispatch/064"]);
+
+    let out = prepare_review(dir);
+    assert!(
+        !out.status.success(),
+        "malformed working ledger makes the run fail: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("malformed"),
+        "error names the malformed ledger: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "dispatch/064"]),
+        tip_before,
+        "dispatch tip unchanged — validate-before-commit committed no garbage"
+    );
+}
+
+// ====================================================================
 // PHASE-05 — stage-2 `dispatch sync --integrate` (design §4 / ADR-012 D4/D5)
 // ====================================================================
 
