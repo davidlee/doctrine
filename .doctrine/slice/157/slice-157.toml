@@ -1,7 +1,7 @@
 id = 157
 slug = "checkout-independent-integrate"
 title = "Checkout-independent integrate"
-status = "ready"
+status = "reconcile"
 created = "2026-06-26"
 updated = "2026-06-26"
 tags = []
