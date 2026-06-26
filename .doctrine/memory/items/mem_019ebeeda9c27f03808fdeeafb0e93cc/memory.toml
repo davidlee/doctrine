@@ -47,3 +47,11 @@ target = "mem.system.coordination.concurrent-design-shared-main-worktree"
 [[relation]]
 label = "related"
 target = "mem.pattern.dispatch.fork-rung3-base-not-session-head"
+
+[[relation]]
+label = "related"
+target = "IMP-104"
+
+[[relation]]
+label = "related"
+target = "IMP-155"

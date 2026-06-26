@@ -44,3 +44,11 @@ weight = 0
 label = "related"
 target = "RFC-005"
 
+[[relation]]
+label = "related"
+target = "mem_019eec3285e471c287a0c3d74c235b25"
+
+[[relation]]
+label = "related"
+target = "CHR-020"
+

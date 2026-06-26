@@ -40,3 +40,7 @@ trust_level = "medium"
 severity = "none"
 weight = 0
 
+[[relation]]
+label = "related"
+target = "IMP-126"
+
