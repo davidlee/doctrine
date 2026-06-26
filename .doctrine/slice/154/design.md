@@ -209,9 +209,13 @@ codex/pi + manual record-delta (escape hatch) ─> record_source_delta[Manual] �
                                                               Complete | HALT (named gap)
 ```
 
-D11 (step 2) reads the registry **before** the derive (step 3) — the derive would
-otherwise backfill the registry from the committed ledger and mask exactly the gap
-D11 hunts.
+D11 (step 2) runs **before the ref projection** (step 6) — the load-bearing ordering,
+so a halt creates no refs (clean `record-delta` → re-run, F1). The registry read is
+taken pre-derive for clarity; the derive cannot mask the gap (it only upserts rows that
+*are* in the committed ledger, never removes a `Funnel` registry row absent from it —
+pass-6 MINOR). D11's expected-in-ledger set is provenance **∈ {Funnel, Unknown}**:
+positively-`Solo` and `Manual` rows are excluded; `Unknown` (legacy, unclassifiable) is
+included so a mid-upgrade active slice halts loudly rather than silently under-projecting.
 
 Reopen (completed→non-completed) **evicts** the phase's registry row + clears its
 stamp (P2-1), so a redo re-captures fresh or fails loud — never a stale blessed row.
@@ -224,11 +228,13 @@ stamp (P2-1), so a redo re-captures fresh or fails loud — never a stale blesse
   with **`provenance = Solo`**. **Guard:** skip iff a *live* coord worktree exists for
   `dispatch/NNN` (the slice is under active dispatch → the funnel/derive owns recording).
   Stamp absent → no row + a surfaced warning; the gate / conformance fail-closed catches it.
-- **Projection-source guard (D11, funnel phases).** *Before* the derive, assert every
-  registry row the **funnel owns** (`provenance == Funnel`) has a committed-ledger row;
+- **Projection-source guard (D11, funnel phases).** Before the ref projection, assert
+  every registry row whose `provenance ∈ {Funnel, Unknown}` has a committed-ledger row;
   halt naming the missing phases otherwise. Provenance is the discriminator — a registry
   phase absent from the committed ledger is a legit solo phase OR a lost funnel row, and
-  only provenance tells them apart (§5.6). Subsumes the old empty-only guard.
+  only provenance tells them apart (§5.6). `Unknown` (legacy) is included so a mid-upgrade
+  active slice halts loudly (pass-6); `Solo`/`Manual` excluded. Subsumes the old
+  empty-only guard.
 - **Derive-at-gate (funnel phases), authoritative + self-correcting.** At
   `prepare-review`, read the **committed** ledger and `record_source_delta` each row
   (upsert, **`provenance = Funnel`**) — overwrites any binding mis-capture, fills any
@@ -263,29 +269,31 @@ let trunk_base = merge_base(root, &tip, &trunk_tip)?;        // recomputed off t
 // (2) read the committed ledger (now populated) — the SINGLE source (INV-4).
 let boundaries = read_ledger::<Boundaries>(root, coord_ref, slice3, "boundaries.toml")?;
 
-// (3) PROJECTION-SOURCE GUARD (D11, reshaped pass-5). The committed ledger holds
-//     ONLY funnel phases. A funnel phase whose committed-ledger row was LOST (coord
-//     worktree removed before prepare-review; or a partial working ledger) under-
-//     projects silently: plan_phases emits no cut for it, yet the funnel double-write
-//     (run_record_boundary:614) already wrote the REGISTRY row, so registry_completeness
-//     passes. PROVENANCE discriminates: every registry row the FUNNEL owns must have a
-//     committed-ledger row. Read the registry BEFORE the derive (step 4) — the derive
-//     would backfill it from the committed ledger and mask the gap.
+// (3) PROJECTION-SOURCE GUARD (D11, reshaped pass-5; refined pass-6). The committed
+//     ledger holds ONLY funnel phases. A funnel phase whose committed-ledger row was
+//     LOST (coord worktree removed before prepare-review; partial working ledger)
+//     under-projects silently: plan_phases emits no cut for it, yet the funnel double-
+//     write (run_record_boundary:614) already wrote the REGISTRY row, so
+//     registry_completeness passes. PROVENANCE discriminates: every registry row that is
+//     NOT positively solo/manual (Funnel, or Unknown legacy we cannot clear) must have a
+//     committed-ledger row. Read pre-derive (the derive can't mask it — pass-6 MINOR);
+//     the load-bearing ordering is BEFORE projection (step 6).
 let primary = git::primary_worktree(root)?;
-let registry = state::read_source_deltas(&primary, slice)?;        // pre-derive snapshot
+let registry = state::read_source_deltas(&primary, slice)?;
 let committed: HashSet<&str> =
     boundaries.rows.iter().map(|r| r.phase.as_str()).collect();
 let missing: Vec<&str> = registry.rows.iter()
-    .filter(|r| r.provenance == Provenance::Funnel)               // funnel-owned only
+    .filter(|r| matches!(r.provenance, Provenance::Funnel | Provenance::Unknown))
     .map(|r| r.phase.as_str())
     .filter(|p| !committed.contains(p))
     .collect();
 if !missing.is_empty() {
-    bail!("prepare-review: committed boundaries ledger is missing funnel-owned phase(s) \
-           {missing:?} on dispatch/{slice3} — the registry records them but the dispatch \
-           ref does not (the coordination worktree was likely removed before prepare-review). \
-           Re-run with the coord worktree present (it persists until integrate), or \
-           record-delta + commit the ledger for the named phase(s).");
+    bail!("prepare-review: committed boundaries ledger is missing phase(s) {missing:?} on \
+           dispatch/{slice3} that the registry records as funnel-owned (or legacy/unclassified). \
+           The registry has them but the dispatch ref does not — the coordination worktree was \
+           likely removed before prepare-review, or these are pre-provenance rows. Re-run with \
+           the coord worktree present (it persists until integrate), or record-delta + COMMIT \
+           the ledger for the named phase(s).");
 }
 
 // (4) DERIVE the registry + (5) GATE — BEFORE projection, so a halt leaves NO
@@ -302,13 +310,26 @@ if let Incomplete { gaps } = state::registry_completeness(&primary, &primary, sl
 
 The guard reuses `state::read_source_deltas` (state.rs:588) and `Provenance` on the
 boundary row — **no code-delta diff, no exclusion set**. The pass-5 reshape *deletes*
-the old `git::code_delta_paths` helper and its `trunk_base..tip` filter: the invariant
-is now "**every funnel-owned registry phase has a committed-ledger row**", a pure
-phase-id set comparison that never touches the working tree or duplicates `plan_review`'s
-filter (the three pass-5 defects of the empty-only guard — too-weak predicate,
-false-halt on solo/empty-code, wrong-exclusion-set — all dissolve). `Provenance::Funnel`
-is written by the funnel double-write (`run_record_boundary`) and the derive; `Solo` by
-the binding; `Manual` by `record-delta`; absent rows read `Unknown` and are excluded.
+the old `git::code_delta_paths` helper and its `trunk_base..tip` filter: the invariant is
+now "**every registry phase that is not positively solo/manual has a committed-ledger
+row**", a pure phase-id set comparison that never touches the working tree or duplicates
+`plan_review`'s filter (the three pass-5 defects of the empty-only guard — too-weak
+predicate, false-halt on solo/empty-code, wrong-exclusion-set — all dissolve).
+
+Provenance write/expectation rules (pass-6):
+- `Funnel` — funnel double-write (`run_record_boundary`) + the derive. **Expected** in
+  the committed ledger.
+- `Solo` — the binding. **Excluded** (solo phases legitimately have no committed-ledger row).
+- `Manual` — `record-delta`, but **only on a fresh row with no prior landing capture**;
+  `record-delta` **preserves** an existing `Funnel`/`Solo` provenance (it corrects the
+  *range*, not the landing path). **Excluded** — a genuine `Manual` row is the irreducible
+  hand-bootstrap floor (D1), with no funnel assertion that a ledger row should exist. The
+  preserve rule is what stops `record-delta` from blinding D11 (pass-6 BLOCKER): a lost
+  funnel row stays `Funnel`, so D11 keeps halting until the operator commits the ledger.
+- `Unknown` — absent field (legacy / pre-provenance). **Expected** (included), so a
+  mid-upgrade active slice with an unclassified funnel row halts loudly instead of
+  silently under-projecting (pass-6 MAJOR). Closed slices never re-enter prepare-review,
+  so their `Unknown` rows are inert.
 
 New `commit_boundaries(root, parent, coord_ref, coord_worktree, slice) -> Result<String>`
 — the boundaries twin of `commit_journal`, with two hardenings over a naive splice:
@@ -373,8 +394,16 @@ absent → `false`, no error). Resolved against the **primary** tree (same as th
 
 **Funnel** — `run_record_boundary` (dispatch.rs:587): double-write retained; the only
 change is it stamps **`provenance = Funnel`** on the `BoundaryRow` it writes to *both*
-the committed working ledger and the registry. `record-delta` verb: stamps
-**`provenance = Manual`** (escape hatch; otherwise unchanged).
+the committed working ledger and the registry.
+
+**`record-delta`** (`run_record_delta`, slice.rs:1970) — provenance-preserving (pass-6
+BLOCKER fix). It reads the phase's existing registry row first: if one exists with
+`provenance ∈ {Solo, Funnel}`, it **keeps** that provenance (record-delta corrects the
+*range*, never the landing path); only a phase with **no prior landing capture** records
+`provenance = Manual`. So a lost funnel row stays `Funnel` and D11 keeps halting until the
+ledger is committed — `record-delta` alone cannot clear a funnel-projection gap. (The
+range upsert itself is unchanged; this adds the read + provenance-merge. `slice.rs` joins
+design-target.)
 
 ### 5.3 Data, State & Ownership
 
@@ -384,27 +413,34 @@ the committed working ledger and the registry. `record-delta` verb: stamps
   #[derive(…, Default)]
   #[serde(rename_all = "snake_case")]
   pub(crate) enum Provenance {
-      Solo,             // solo binding at the completed flip
-      Funnel,           // run_record_boundary double-write + the prepare-review derive
-      Manual,           // record-delta escape hatch
-      #[default] Unknown,   // pre-provenance row (absent in TOML) — excluded from D11
+      Solo,             // solo binding at the completed flip — D11-EXCLUDED
+      Funnel,           // run_record_boundary double-write + the prepare-review derive — D11-EXPECTED
+      Manual,           // record-delta, fresh row only (preserves Solo/Funnel) — D11-EXCLUDED
+      #[default] Unknown,   // pre-provenance row (absent in TOML) — D11-EXPECTED (loud on active slices)
   }
   // on BoundaryRow:
   #[serde(default)] pub provenance: Provenance,
   ```
   `#[serde(default)]` is the **entire** back-compat story (User decision): legacy
-  on-disk rows (147/153, any mid-flight committed ledger) parse as `Unknown` and are
-  inert — provenance has exactly one consumer, D11 at prepare-review, which closed
-  slices never re-enter. **No backfill, no migration code**; an active slice mid-upgrade
-  is hand-fixed (manual/LLM) if it ever matters. The committed-ledger rows carry `Funnel`
-  by construction (only the funnel writes them); D11 reads provenance from the *registry*,
-  not the committed ledger.
+  on-disk rows (147/153, any mid-flight committed ledger) parse as `Unknown`. Provenance
+  has exactly one consumer — D11 at prepare-review — which **closed slices never
+  re-enter**, so their `Unknown` rows are inert. An **active** slice crossing the upgrade
+  is the only exposed case: D11 treats `Unknown` as **expected** (§5.2), so it halts
+  loudly rather than silently under-projecting; the operator hand-fixes once (re-record
+  boundaries → `Funnel`, or `record-delta`). **No backfill, no migration code** — the
+  guard makes the need loud, the fix is manual (User decision: a one-time hand-fix beats
+  ongoing legacy machinery). The committed-ledger rows carry `Funnel` by construction
+  (only the funnel writes them); D11 reads provenance from the *registry*, not the
+  committed ledger.
 - **Registry** `.doctrine/state/slice/NNN/boundaries.toml` (runtime, primary-resolved).
   Writers stamp provenance: solo binding → `Solo`; `prepare-review` derive (new) +
-  funnel inline write → `Funnel`; codex/pi + manual `record-delta` → `Manual`. Eviction:
-  reopen (new). All mutations via `record_source_delta` (upsert) / `forget_source_delta`
-  (remove) against the primary tree → idempotent; the derive is the authoritative last
-  writer for funnel phases.
+  funnel inline write → `Funnel`; codex/pi + manual `record-delta` → **preserve existing
+  `Solo`/`Funnel`, else `Manual`** (pass-6). Eviction: reopen (new). All mutations via
+  `record_source_delta` (upsert) / `forget_source_delta` (remove) against the primary
+  tree → idempotent; the derive is the authoritative last writer for funnel phases.
+  Provenance is **sticky for landing paths**: once a row is `Solo`/`Funnel`, only another
+  landing writer (binding/funnel/derive) re-sets it — a correction (`record-delta`) never
+  downgrades it.
 - **Dispatch ledger** `.doctrine/dispatch/NNN/boundaries.toml` (claude-only): written as
   a working file by `run_record_boundary` during the drive; **now committed** onto
   `dispatch/NNN` at `prepare-review` (new, ISS-039). Read via `read_ledger` (committed
@@ -465,20 +501,37 @@ the accepted cost of never blessing a garbage row (R2).
   with no committed-ledger row ⇒ halt, naming the phase(s). This covers **total** loss
   (committed ledger empty, all funnel rows missing) *and* **partial** loss (some funnel
   rows missing) — the pass-5 hole the old empty-only predicate left open.
-- **Manual escape-hatch edge (D11 boundary):** `record-delta` writes the registry
-  (`Manual`) but **not** the committed ledger. So a `Manual` row satisfies the registry
-  gate without guaranteeing projection — D11 (which expects only `Funnel` rows in the
-  committed ledger) will not re-halt on it. This is the *intended* escape-hatch contract:
-  to fix a D11 halt the operator must **commit the ledger** (the halt message says so),
-  not merely `record-delta`. A `Manual` row for a funnel phase that was never committed
-  is operator-owned residual risk, accepted (consistent with D1/D5 — `record-delta` is
-  the operator's responsibility, not a machinery guarantee).
+- **Manual escape-hatch — D11 enforces "commit the ledger" (pass-6 BLOCKER fix):**
+  `record-delta` writes the registry but **not** the committed ledger. The earlier draft
+  let it stamp `Manual` unconditionally, so an operator could clear a D11 halt with
+  `record-delta` while projection stayed empty — a silent under-projection (pass-6).
+  **Closed:** `record-delta` is **provenance-preserving** — a phase that already has a
+  `Funnel` row keeps `Funnel`, so D11 **re-halts** on the next run until the operator
+  actually commits the ledger (re-run with the coord worktree present). A `Manual` row
+  therefore only arises for a phase with **no prior landing capture** — the irreducible
+  hand-bootstrap floor (D1, a pure-solo phase whose flip-time range was destroyed) — for
+  which there is no funnel assertion that a committed-ledger row should exist; D11
+  excluding it is correct, not a hole. Note this means a funnel phase whose
+  `run_record_boundary` **never fired at all** (no registry row → D4 halts → operator
+  `record-delta`s a fresh `Manual` row) gets its *conformance* repaired but not a
+  *review-cut* — the missing cut is a funnel-drive defect (the funnel never recorded the
+  phase), outside D11's remit and the accepted floor, not a regression this guard introduces.
 - **Mixed solo→dispatch (the pass-5 false-halt):** solo phases land code on the dispatch
   branch with **no** committed-ledger row by design; their registry rows are `Solo` and
   D11 excludes them. An all-doc / empty-code *dispatch* phase is recorded by the funnel
   (`start == end`, a present row) into both ledgers → present in the committed set → no
   halt. D11 never inspects code paths, so neither shape false-halts (the two pass-5
   false-halt cases).
+- **Legacy / mid-upgrade active slice (pass-6 MAJOR):** rows written before the
+  `provenance` field read `Unknown`. For a **closed** slice this is inert (no re-entry to
+  prepare-review). For an **active** slice crossing the upgrade, an `Unknown` row absent
+  from the committed ledger is unclassifiable — possibly a lost funnel row — so D11
+  **includes** `Unknown` in the expected set and **halts loudly**, naming the phase, with
+  a "legacy/unclassified — re-record or commit the ledger" message. A legacy `Unknown`
+  row that *is* solo will false-halt; that is the accepted, bounded, **loud** cost of
+  never silently under-projecting on a mid-upgrade slice (the operator re-records or
+  `record-delta`s it once). This trades a transient false-halt for the elimination of the
+  silent-gap class — the User's explicit preference (hand-fix > legacy machinery).
 
 ### 5.6 Value: registry as the authoritative, self-describing navigation surface
 
@@ -584,13 +637,17 @@ requested efficiency/workflow lens):
   (pass-5):** (i) it fired only on a *fully* empty ledger, missing **partial** loss;
   (ii) "landed code ⇒ ledger row" **false-halted** mixed solo→dispatch and empty-code
   dispatch phases; (iii) its `code_delta_paths` copied `plan_review`'s exclusion set,
-  guarding the wrong projection. **Reshaped:** at prepare-review, *before the derive*,
-  assert **every registry row with `provenance == Funnel` has a committed-ledger row**;
-  halt naming the gaps. This is a pure phase-id set comparison — no working-tree diff, no
-  exclusion set, no `code_delta_paths` (the helper is **deleted**). Sound because
-  provenance is the *only* signal distinguishing "legit solo phase, no committed row" from
-  "lost funnel row" (D12); catches total **and** partial loss; never false-halts solo or
-  empty-code phases. The halt names phases (ergonomics, §5.6).
+  guarding the wrong projection. **Reshaped:** at prepare-review, **before the ref
+  projection**, assert **every registry row whose `provenance ∈ {Funnel, Unknown}` has a
+  committed-ledger row**; halt naming the gaps. Pure phase-id set comparison — no
+  working-tree diff, no exclusion set, no `code_delta_paths` (the helper is **deleted**).
+  Provenance is the *only* signal distinguishing "legit solo phase, no committed row" from
+  "lost funnel row" (D12); catches total **and** partial loss; never false-halts `Solo`
+  or empty-code phases; names phases (§5.6). **`Unknown` is included** so a mid-upgrade
+  active slice halts loudly, not silently (pass-6 MAJOR); closed-slice `Unknown` rows are
+  inert (no prepare-review re-entry). Ordering load-bearing **before projection** (a halt
+  creates no refs); the pre-derive read is clarity only — the derive cannot mask the gap
+  (pass-6 MINOR).
 - **D12 — `provenance` field on `BoundaryRow` (the discriminator; D11's foundation).**
   D11 needs to know, per completed phase, whether the funnel owns it. **No existing
   committed state records that** (verified: `journal.toml` is the CAS projection ledger
@@ -600,13 +657,19 @@ requested efficiency/workflow lens):
   writer's identity, i.e. a field. Chosen: add `provenance: Solo | Funnel | Manual`
   (absent → `Unknown`) to `BoundaryRow`. Lowest-touch (every registry writer already
   writes a `BoundaryRow`); also self-describes the registry for navigation (§5.6).
-  Back-compat is `#[serde(default)]` only — **no migration machinery** (User decision):
-  provenance's sole consumer is D11 at prepare-review, which closed slices never re-enter,
-  so legacy rows are inert; a mid-flight active slice is hand-fixed if it ever matters.
-  `boundary.rs` joins `design-target`. **Does NOT close F4** — provenance marks ownership
-  *post-record*; the solo binding's *stand-down decision* (pre-record, F4/R2) still keys
-  on live-coord-worktree presence, and its precise fix (run-state ownership) remains the
-  hardening follow-up. The efficiency note's "provenance → F4" claim is tempered here.
+  **Provenance is sticky for landing paths (pass-6 BLOCKER fix):** the landing writers
+  (binding→`Solo`, funnel/derive→`Funnel`) set it; `record-delta` is a *range* correction
+  that **preserves** an existing `Solo`/`Funnel`, stamping `Manual` only on a fresh row
+  with no prior landing capture. Without this, `record-delta` would downgrade a lost
+  funnel row to `Manual`, blind D11, and reopen the silent-under-projection hole — instead
+  D11 keeps halting until the operator commits the ledger. Back-compat is `#[serde(default)]`
+  only — **no migration machinery** (User decision): D11 makes a mid-upgrade active slice's
+  `Unknown` rows halt *loudly* (so never silent), and the fix is a one-time hand-record;
+  closed slices never re-enter. `boundary.rs` + `slice.rs` join `design-target`. **Does
+  NOT close F4** — provenance marks ownership *post-record*; the solo binding's *stand-down
+  decision* (pre-record, F4/R2) still keys on live-coord-worktree presence, and its precise
+  fix (run-state ownership) remains the hardening follow-up (IMP-173). The efficiency
+  note's "provenance → F4" claim is tempered here.
 - **Alternatives rejected** — chain-fallback: unsound (D1). Working-file derive
   (the retracted pass-2 draft): SPEC-022 violation (P2-3). Read-time fallback in
   conformance: scope-rejected; papers over the write gap. **Dropping the funnel
@@ -691,13 +754,17 @@ requested efficiency/workflow lens):
   phases (`Solo`) land code on the branch with no committed-ledger row → **no halt**;
   (b) empty-code dispatch phase (`start == end`, `Funnel`) recorded in both ledgers →
   **no halt**. D11 never reads code paths.
-- **VT — D11 ignores `Manual`/`Unknown`:** a `Manual` registry row (record-delta) absent
-  from the committed ledger → no D11 halt (escape-hatch contract); an `Unknown` (legacy)
-  row → excluded, no halt.
+- **VT — D11 excludes `Solo`/`Manual`, includes `Unknown` (pass-6):** a `Solo` row absent
+  from the committed ledger → no halt; a fresh `Manual` row (pure-solo hand-bootstrap)
+  absent → no halt; an **`Unknown`** row absent from the committed ledger → **halt**
+  naming it ("legacy/unclassified", the mid-upgrade active-slice case).
+- **VT — record-delta provenance-preserving (pass-6 BLOCKER):** a phase with a `Funnel`
+  registry row whose committed-ledger row is missing → `record-delta` on it **keeps
+  `Funnel`** (not downgraded to `Manual`) → D11 **still halts** until the ledger is
+  committed; `record-delta` on a phase with *no* prior row → records `Manual`.
 - **VT — provenance write-sites:** the solo binding stamps `Solo`, `run_record_boundary`
   stamps `Funnel` on both the working ledger and registry rows, the derive stamps
-  `Funnel`, `record-delta` stamps `Manual`; a legacy TOML row without the field
-  deserializes as `Unknown`.
+  `Funnel`; a legacy TOML row without the field deserializes as `Unknown`.
 - **VT — guard soundness (the unsound-capture fix):** a dispatched phase flipped from a
   session-root context with a live coord worktree → binding **stands down** (no garbage
   row); without a coord worktree → binding records.
@@ -847,5 +914,43 @@ D11 reshaped from the empty-only guard to the **per-phase provenance set-check**
 adds the `provenance` field; `git::code_delta_paths` **removed** from scope; **§5.6**
 records the registry's nav/value role. §1–§9 above are revised accordingly (this body is
 the single source of truth; `notes.md` "⚠ OPEN FINDINGS" is now **closed** — superseded by
-this revision). Committed-ref core (D2/D7/D8/D9/D10) unchanged. **Re-pass codex on the
-reshape, then `/plan`.**
+this revision). Committed-ref core (D2/D7/D8/D9/D10) unchanged.
+
+### External pass 6 — codex (GPT-5.5), 2026-06-26 — Rev-4 reshape — dispositions
+
+Hostile pass on the provenance reshape. Two real defects + two doc fixes; all ACCEPTED
+and integrated (Rev 5). The reshape's core (provenance as the discriminator, set-check,
+`code_delta_paths` dropped) survived — the defects were in the *edges* of provenance use.
+
+- **P6-1 (BLOCKER) `record-delta` reintroduces silent under-projection → ACCEPTED, FIXED.**
+  `record-delta` writes only the registry (`Manual`), not the committed ledger
+  (slice.rs:1970); `plan_phases` projects only from committed rows (dispatch.rs:2041). The
+  Rev-4 draft let it stamp `Manual` unconditionally → an operator could clear a D11 halt
+  while projection stayed empty. **Fix:** `record-delta` is **provenance-preserving** —
+  keeps an existing `Solo`/`Funnel`, stamps `Manual` only on a fresh row (D12, §5.2/§5.3/
+  §5.5). A lost funnel row stays `Funnel`, so D11 re-halts until the ledger is committed —
+  the "commit the ledger" contract is now **enforced**, not documented.
+- **P6-2 (MAJOR) `Unknown` unsound for mid-upgrade active slices → ACCEPTED, FIXED.**
+  Excluding `Unknown` let a legacy funnel row satisfy D4 while invisible to D11. **Fix:**
+  D11 **includes** `Unknown` in the expected set (provenance ∈ {Funnel, Unknown}) → a
+  mid-upgrade active slice halts loudly; a one-time hand-record clears it (User's
+  hand-fix-over-machinery decision). Closed slices never re-enter, so their `Unknown` rows
+  stay inert. §5.2/§5.3/§5.5/D11.
+- **P6-3 (MINOR) "before derive" rationale wrong → ACCEPTED, FIXED.** The derive only
+  upserts *committed* rows; it can't mask a missing-ledger registry row. Load-bearing
+  ordering is **before projection**, not before derive. Text corrected (§5.1/§5.2/D11);
+  the pre-derive read kept for clarity only.
+- **P6-4 (MINOR) `notes.md` self-contradiction → ACCEPTED, FIXED.** A stale
+  `code_delta_paths "to be added"` survived in the code map (notes.md:171). Reconciled.
+  (Codex's "source has no `provenance` field" is a non-finding — design stage, not yet
+  implemented.)
+- **Residual risk (codex):** provenance is a *post-record* ownership mark; the binding's
+  *pre-record* stand-down still rides liveness (F4) — already accepted + backlogged
+  (IMP-173). Unchanged.
+
+### Revision 5 — pass-6 edges integrated (2026-06-26)
+
+`record-delta` provenance-preserving (P6-1); D11 expected-set = {Funnel, Unknown} (P6-2);
+ordering text corrected (P6-3); `slice.rs` joins design-target. Committed-ref core +
+provenance discriminator (D2/D7/D8/D9/D10/D11/D12) intact. **Re-pass codex on Rev 5, then
+`/plan`.**

@@ -47,6 +47,11 @@ selector = "src/git.rs"
 intent = "design-target"
 note = "live_worktree_for_ref liveness wrapper (P2-2/D9)"
 
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+note = "run_record_delta provenance-preserving (Rev 5, P6-1 BLOCKER fix)"
+
 [[relation]]
 label = "references"
 role = "concerns"
