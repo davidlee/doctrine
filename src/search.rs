@@ -12,6 +12,7 @@ use anyhow::Result;
 use clap::Args;
 
 use crate::catalog::hydrate::{CatalogEntity, CatalogKey, scan_catalog};
+use crate::kinds;
 use crate::catalog::scan::ScanMode;
 use crate::integrity;
 use crate::lexical::{
@@ -30,7 +31,7 @@ const GROUP_ALIASES: &[(&str, &[&str])] = &[
     ("backlog", &["ISS", "IMP", "CHR", "RSK", "IDE"]),
     ("governance", &["ADR", "POL", "STD"]),
     ("specs", &["PRD", "SPEC"]),
-    ("knowledge", &["ASM", "DEC", "QUE", "CON"]),
+    ("knowledge", kinds::RECORD),
     (
         "all",
         &[

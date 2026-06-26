@@ -1441,8 +1441,8 @@ mod tests {
             (RelationLabel::OwningSlice, &["REC"]),
             (RelationLabel::Drift, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
             (RelationLabel::DecisionRef, &["REC"]),
-            (RelationLabel::Shapes, &["ASM", "DEC", "QUE", "CON"]),
-            (RelationLabel::Spawns, &["ASM", "DEC", "QUE", "CON"]),
+            (RelationLabel::Shapes, RECORD),
+            (RelationLabel::Spawns, RECORD),
             (RelationLabel::OriginatesFrom, &["REV"]),
         ];
         for (label, want_prefixes) in expected {

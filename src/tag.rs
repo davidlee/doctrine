@@ -252,6 +252,8 @@ mod tests {
         assert!(!changed, "remove from empty is no-op");
     }
 
+    use crate::kinds;
+
     // ── fold_filter_tag ─────────────────────────────────────────────
 
     #[test]
@@ -259,5 +261,14 @@ mod tests {
         assert_eq!(fold_filter_tag("  Security "), "security");
         // The lenient fold accepts what the write chokepoint rejects.
         assert_eq!(fold_filter_tag("a b"), "a b");
+    }
+
+    /// SL-161 PHASE-01: every record kind (ASM, DEC, QUE, CON) must be
+    /// in TAGGABLE so tagging works on knowledge records.
+    #[test]
+    fn record_kinds_are_taggable() {
+        for prefix in kinds::RECORD {
+            assert!(TAGGABLE.contains(prefix), "{prefix} missing from TAGGABLE");
+        }
     }
 }
