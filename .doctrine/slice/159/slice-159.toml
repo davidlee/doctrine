@@ -1,9 +1,9 @@
 id = 159
 slug = "epistemic-kinds-evd-hyp-inv"
 title = "Epistemic kind catalog: add EVD + HYP"
-status = "design"
+status = "ready"
 created = "2026-06-26"
-updated = "2026-06-27"
+updated = "2026-06-26"
 tags = []
 
 [relationships]
