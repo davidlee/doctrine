@@ -197,6 +197,15 @@ pub(crate) enum RevisionCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// List revisions with filtering, column selection, and tag surfacing.
+    List {
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: RevisionCommand, color: bool) -> anyhow::Result<()> {
@@ -245,6 +254,7 @@ pub(crate) fn dispatch(cmd: RevisionCommand, color: bool) -> anyhow::Result<()> 
         },
         RevisionCommand::Approve { reference, path } => run_approve(path, &reference),
         RevisionCommand::Apply { reference, path } => run_apply(path, &reference),
+        RevisionCommand::List { list, path } => run_list(path, list.into_list_args(color)),
         RevisionCommand::Paths {
             refs,
             toml,
@@ -332,14 +342,6 @@ impl RevStatus {
 /// G1 drift canary (`revision_partition_covers_the_real_vocabulary`) — a `cfg(test)`
 /// reference — and by this module's own canary, so it is dead in the non-test lib;
 /// the partition row spells its vocab literally, the canary proves they agree. The
-/// PHASE-03 `revision change`/list surfaces will read it in non-test builds.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-066 PHASE-02: REV's status SSoT — consumed only by the G1 drift canary now; the PHASE-03 list/change surfaces read it in non-test builds"
-    )
-)]
 pub(crate) const REV_STATUSES: &[&str] = &["proposed", "started", "done", "abandoned"];
 
 /// A Revision's approval state — a SEPARATE field, ORTHOGONAL to `status` (hard
@@ -1494,13 +1496,6 @@ fn settle_disposition(
 // ---------------------------------------------------------------------------
 
 /// List revisions: read all revision TOMLs, filter, sort, render.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-155: consumed by run_list once RevisionCommand::List is wired"
-    )
-)]
 fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
     listing::validate_statuses(&args.status, REV_STATUSES)?;
     let render = args.render;
@@ -1534,10 +1529,6 @@ fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
 }
 
 /// `doctrine revision list` entry point.
-#[expect(
-    dead_code,
-    reason = "SL-155: consumed by RevisionCommand::List dispatch (next commit)"
-)]
 pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let mut out = io::stdout();
@@ -1596,7 +1587,7 @@ fn json_rows(docs: &[RevDoc]) -> Vec<ListRow> {
         .collect()
 }
 
-const REV_COLUMNS: [Column<RevDoc>; 6] = [
+const REV_COLUMNS: [Column<RevDoc>; 5] = [
     Column {
         name: "id",
         header: "id",
@@ -1618,12 +1609,6 @@ const REV_COLUMNS: [Column<RevDoc>; 6] = [
         paint: listing::ColumnPaint::None,
     },
     Column {
-        name: "slug",
-        header: "slug",
-        cell: |d| d.slug.clone(),
-        paint: listing::ColumnPaint::None,
-    },
-    Column {
         name: "tags",
         header: "tags",
         cell: |d| d.tags.join(", "),
@@ -1637,7 +1622,7 @@ const REV_COLUMNS: [Column<RevDoc>; 6] = [
     },
 ];
 
-const REV_DEFAULT: &[&str] = &["id", "status", "approval", "tags", "title"];
+const REV_DEFAULT: &[&str] = &["id", "status", "approval", "title"];
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -2117,5 +2102,35 @@ primary = true
             text.contains("tags") && text.contains("[]"),
             "tags scaffolded: {text}"
         );
+    }
+
+    /// A revision TOML without a `tags` field (pre-IMP-144) survives
+    /// read → render → parse round-trip without corruption.
+    #[test]
+    fn tagless_revision_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let rev_dir = root.join(REV_DIR).join("001");
+        fs::create_dir_all(&rev_dir).unwrap();
+        let tagless_toml = concat!(
+            "id = 1\n",
+            "slug = \"s\"\n",
+            "title = \"Tagless Old Rev\"\n",
+            "status = \"proposed\"\n",
+            "approval = \"none\"\n",
+        );
+        fs::write(rev_dir.join("revision-001.toml"), tagless_toml).unwrap();
+        let rev_root = root.join(REV_DIR);
+        let doc = read_rev(&rev_root, 1).unwrap();
+        assert_eq!(doc.id, 1);
+        assert_eq!(doc.slug, "s");
+        assert_eq!(doc.title, "Tagless Old Rev");
+        assert!(doc.tags.is_empty(), "tags default to empty vec: {:?}", doc.tags);
+        let text = render_revision_toml(doc.id, &doc.slug, &doc.title, "2026-01-01", None).unwrap();
+        assert!(text.contains("tags"), "re-rendered text contains tags field: {text}");
+        let back: RevDoc = toml::from_str(&text).unwrap();
+        assert_eq!(back.id, 1);
+        assert_eq!(back.slug, "s");
+        assert_eq!(back.title, "Tagless Old Rev");
     }
 }
