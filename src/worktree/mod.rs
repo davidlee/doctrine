@@ -110,9 +110,9 @@ pub(crate) enum WorktreeCommand {
 
     /// Create a worktree fork.
     /// Orchestrator-owned fork off `<base>` on a NEW branch, provisioned,
-    /// optionally worker-stamped. Emits the per-worktree env contract on stdout.
-    /// Orchestrator-classed — refused under worker-mode. Atomic via compensating
-    /// rollback.
+    /// optionally worker-stamped. Status to stderr, empty stdout (the fork builds
+    /// into its own in-tree `<dir>/target`). Orchestrator-classed — refused under
+    /// worker-mode. Atomic via compensating rollback.
     Fork {
         /// The base commit `B` the fork is created from (the orchestrator's
         /// captured coordination HEAD).
@@ -429,13 +429,11 @@ mod tests {
     fn gc_state(
         branch_exists: bool,
         worktree_present: bool,
-        target_present: bool,
         landed_verdict: Option<bool>,
     ) -> GcState {
         GcState {
             branch_exists,
             worktree_present,
-            target_present,
             landed_verdict,
         }
     }
@@ -463,58 +461,41 @@ mod tests {
 
     #[test]
     fn classify_gc_landed_reaps_present_things_in_order() {
-        // Branch + worktree + target present, oracle positive ⇒ reap all three.
-        let v = classify_gc(gc_state(true, true, true, Some(true)), false, false, false);
+        // Branch + worktree present, oracle positive ⇒ reap both (the in-tree
+        // target/ dies with the worktree dir — SL-156, no separate target leg).
+        let v = classify_gc(gc_state(true, true, Some(true)), false, false, false);
         assert_eq!(
             v,
             GcVerdict::Reap(GcPlan {
                 remove_worktree: true,
                 delete_branch: true,
-                reap_target: true,
             })
         );
     }
 
     #[test]
     fn classify_gc_skips_absent_steps() {
-        // Worktree already gone (crash mid-gc), target gone too ⇒ only branch -D.
-        let v = classify_gc(
-            gc_state(true, false, false, Some(true)),
-            false,
-            false,
-            false,
-        );
+        // Worktree already gone (crash mid-gc) ⇒ only branch -D.
+        let v = classify_gc(gc_state(true, false, Some(true)), false, false, false);
         assert_eq!(
             v,
             GcVerdict::Reap(GcPlan {
                 remove_worktree: false,
                 delete_branch: true,
-                reap_target: false,
             })
         );
     }
 
     #[test]
-    fn classify_gc_branch_gone_reaps_only_the_target() {
-        // Branch-gone ⇒ already-certified; the ONLY residue is the target dir,
-        // reaped from the branch NAME alone (landed_verdict is None — gate skipped).
-        let v = classify_gc(gc_state(false, false, true, None), false, false, false);
+    fn classify_gc_branch_gone_reaps_nothing() {
+        // Branch-gone ⇒ already-certified AND the worktree (with its in-tree
+        // target/) is already gone — nothing left to reap (idempotent no-op).
+        let v = classify_gc(gc_state(false, false, None), false, false, false);
         assert_eq!(
             v,
             GcVerdict::Reap(GcPlan {
                 remove_worktree: false,
                 delete_branch: false,
-                reap_target: true,
-            })
-        );
-        // Branch gone AND target gone ⇒ a fully-reaped no-op (idempotent rerun).
-        let done = classify_gc(gc_state(false, false, false, None), false, false, false);
-        assert_eq!(
-            done,
-            GcVerdict::Reap(GcPlan {
-                remove_worktree: false,
-                delete_branch: false,
-                reap_target: false,
             })
         );
     }
@@ -523,7 +504,7 @@ mod tests {
     fn classify_gc_not_landed_refuses_unless_overridden() {
         // Non-ancestor tip with a `+` (oracle false; also the squash case — the two
         // are indistinguishable), no override ⇒ not-landed.
-        let st = gc_state(true, true, true, Some(false));
+        let st = gc_state(true, true, Some(false));
         assert_eq!(
             classify_gc(st, false, false, false),
             GcVerdict::Refuse(GcRefusal::NotLanded)
@@ -544,12 +525,12 @@ mod tests {
     fn classify_gc_dry_run_does_not_change_the_verdict() {
         // dry_run is honoured in the shell; the classifier returns the SAME verdict
         // a real run would act on (so the dry-run print is truthful).
-        let landed = gc_state(true, true, true, Some(true));
+        let landed = gc_state(true, true, Some(true));
         assert_eq!(
             classify_gc(landed, false, false, true),
             classify_gc(landed, false, false, false)
         );
-        let refused = gc_state(true, true, true, Some(false));
+        let refused = gc_state(true, true, Some(false));
         assert_eq!(
             classify_gc(refused, false, false, true),
             classify_gc(refused, false, false, false)

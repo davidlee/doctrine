@@ -4,9 +4,9 @@
 //! create/resume path (design §2).
 //!
 //! * VT-1: create — markerless (NO `.doctrine/state/dispatch/worker`), branch
-//!   `dispatch/064` at the resolved trunk, worktree registered, env contract on
-//!   stdout / human status on stderr, runtime phase sheets regenerated from the
-//!   committed `plan.toml`; a post-`add` provision failure rolls back the
+//!   `dispatch/064` at the resolved trunk, worktree registered, human status on
+//!   stderr / machine-clean (empty) stdout, runtime phase sheets regenerated from
+//!   the committed `plan.toml`; a post-`add` provision failure rolls back the
 //!   worktree AND the freshly minted branch (Create rollback drops the branch).
 //! * VT-2: impersonation — a marker-present linked worktree AND a
 //!   `DOCTRINE_WORKER=1` process each refuse `coordinate` through the shared
@@ -200,21 +200,17 @@ fn coordinate_create_is_markerless_at_trunk_with_sheets() {
         "coordination branch forks off the resolved trunk (integration base)"
     );
 
-    // env contract on STDOUT (KEY=value), human status on STDERR.
-    assert!(
-        stdout(&out).contains("CARGO_TARGET_DIR="),
-        "env contract on stdout; got: {}",
-        stdout(&out)
-    );
-    assert!(
-        stdout(&out).contains("wt/dispatch/064"),
-        "contract maps target to wt/<branch>; got: {}",
-        stdout(&out)
-    );
+    // Human status on STDERR; the env contract is GONE from stdout (SL-156 — no
+    // CARGO_TARGET_DIR emission; the fork builds into its own in-tree target/).
     assert!(
         stderr(&out).contains("created") && stderr(&out).contains(COORD_BRANCH),
         "human status names the create; got: {}",
         stderr(&out)
+    );
+    assert!(
+        !stdout(&out).contains("CARGO_TARGET_DIR="),
+        "no env contract on stdout; got: {}",
+        stdout(&out)
     );
 
     // Provisioned + sheets REGENERATED from the committed plan.toml (proves the

@@ -3,20 +3,20 @@
 //! BUILT binary (design §8/§8.1/§8.2). The idempotent spent-fork reaper + the
 //! two-leg (ancestry ∪ patch-id) durable-git landed oracle.
 //!
-//! * VT-1: a positive verdict reaps worktree+branch+target. Two legs: the ANCESTOR
-//!   leg (a landed-via-`land` fork — `merge --no-ff` so the tip is an ancestor of
-//!   HEAD) and the all-`-` PATCH-ID leg (a landed-via-`import` fork — apply the
-//!   fork's diff + commit at coord HEAD so ancestry is severed but every patch
-//!   landed). A non-ancestor tip with a `+` (unlanded) refuses UNLESS
+//! * VT-1: a positive verdict reaps worktree+branch (the fork's in-tree `target/`
+//!   dies with the worktree dir — SL-156, no separate target leg). Two legs: the
+//!   ANCESTOR leg (a landed-via-`land` fork — `merge --no-ff` so the tip is an
+//!   ancestor of HEAD) and the all-`-` PATCH-ID leg (a landed-via-`import` fork —
+//!   apply the fork's diff + commit at coord HEAD so ancestry is severed but every
+//!   patch landed). A non-ancestor tip with a `+` (unlanded) refuses UNLESS
 //!   `--superseded-head <head>` / `--force`.
 //! * VT-2: a SQUASH-merged fork (trips neither leg) → NAMED `squash-uncertifiable`
 //!   refusal mentioning `worktree land` / `--no-ff` / `--force`; `--superseded-head`
 //!   honesty (reaps iff SHA == current head; a WRONG SHA refuses → safe side);
 //!   `--dry-run` prints the verdict and destroys NOTHING.
 //! * VT-3 (idempotent rerun): crash AFTER each destructive step completes / names a
-//!   leftover on rerun — branch-gone+target-present (reap T from the NAME alone),
-//!   the W-removed-before-B ordering case, and a stale admin worktree entry folded
-//!   via `git worktree prune`.
+//!   leftover on rerun — the W-removed-before-B ordering case, a fully-reaped no-op,
+//!   and a stale admin worktree entry folded via `git worktree prune`.
 //! * VT-4 (EXHAUSTIVE Orchestrator refusal): from a marked linked-worktree fork
 //!   (env unset) AND from a DOCTRINE_WORKER-set process, EACH of fork/import/land/gc
 //!   is refused. `marker --clear` is deliberately OUT of this class.
@@ -80,30 +80,13 @@ fn stamp_marker(root: &Path) {
 }
 
 /// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
-/// DOCTRINE_WORKER=1; None removes it). CARGO_TARGET_DIR is removed so the gc
-/// target-base resolution degrades to `<fork>/target` deterministically under the
-/// test (the env-absent fallback the design names) — otherwise an inherited jail
-/// CARGO_TARGET_DIR would point the T-reap at a shared dir.
+/// DOCTRINE_WORKER=1; None removes it). CARGO_TARGET_DIR is removed so the spawned
+/// binary inherits no jail target redirect — the fork's `target/` is in-tree
+/// (SL-156); gc no longer reads CARGO_TARGET_DIR at all.
 fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
-    run_t(cwd, worker, None, args)
-}
-
-/// As [`run`], but pins `CARGO_TARGET_DIR` to `target_base` (when `Some`) so the
-/// gc target-base resolution lands the `wt/<branch>` dir OUTSIDE the fork worktree
-/// — the real jail shape, where the T-reap is a distinct step from worktree-remove
-/// (a `<fork>/target` base would be reaped together with the worktree, hiding the
-/// step). `None` strips the env (the design's `<fork>/target` fallback).
-fn run_t(cwd: &Path, worker: Option<bool>, target_base: Option<&Path>, args: &[&str]) -> Output {
     let mut cmd = Command::new(BIN);
     cmd.args(args).current_dir(cwd);
-    match target_base {
-        Some(base) => {
-            cmd.env("CARGO_TARGET_DIR", base);
-        }
-        None => {
-            cmd.env_remove("CARGO_TARGET_DIR");
-        }
-    }
+    cmd.env_remove("CARGO_TARGET_DIR");
     match worker {
         Some(true) => {
             cmd.env("DOCTRINE_WORKER", "1");
@@ -113,11 +96,6 @@ fn run_t(cwd: &Path, worker: Option<bool>, target_base: Option<&Path>, args: &[&
         }
     }
     cmd.output().expect("spawn doctrine")
-}
-
-/// The `wt/<branch>` target dir under an external `CARGO_TARGET_DIR` base.
-fn ext_target(base: &Path, branch: &str) -> PathBuf {
-    base.join("wt").join(branch)
 }
 
 fn stdout(out: &Output) -> String {
@@ -163,47 +141,37 @@ fn make_fork_branch(src: &Path, holder: &Path, branch: &str, commits: &[(&str, &
     wt
 }
 
-/// The `wt/<branch>` target dir gc reaps, under the env-absent base `<fork>/target`
-/// (the test strips CARGO_TARGET_DIR). `fork` is the fork worktree dir.
-fn gc_target(fork: &Path, branch: &str) -> PathBuf {
-    fork.join("target").join("wt").join(branch)
-}
-
-// --- VT-1: positive verdict reaps worktree+branch+target (both oracle legs) ---
+// --- VT-1: positive verdict reaps worktree+branch (both oracle legs) ---
 
 #[test]
 fn gc_ancestor_leg_reaps_a_landed_via_land_fork() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let tbase = tempfile::tempdir().unwrap();
     let wt = make_fork_branch(src.path(), holder.path(), "anc", &[("one.rs", "fn a() {}")]);
-    // Materialise the EXTERNAL target dir (jail shape) so the T-reap is a distinct
-    // step from worktree-remove.
-    let target = ext_target(tbase.path(), "anc");
-    std::fs::create_dir_all(&target).unwrap();
+    // Materialise the fork's in-tree target/ so we can prove it dies with the
+    // worktree dir (SL-156 — no separate target-reap step).
+    std::fs::create_dir_all(wt.join("target")).unwrap();
     // Merge --no-ff so the fork tip becomes an ANCESTOR of coordination HEAD (the
     // `land` route — ancestry preserved ⇒ tip reachable from HEAD).
     git(src.path(), &["merge", "--no-ff", "--no-edit", "anc"]);
     let (is_ancestor, _) = git_try(src.path(), &["merge-base", "--is-ancestor", "anc", "HEAD"]);
     assert!(is_ancestor, "precondition: fork tip is an ancestor of HEAD");
 
-    let out = run_t(
-        src.path(),
-        None,
-        Some(tbase.path()),
-        &["worktree", "gc", "--fork", "anc"],
-    );
+    let out = run(src.path(), None, &["worktree", "gc", "--fork", "anc"]);
     assert!(
         out.status.success(),
         "ancestor-leg gc must reap; stderr: {}",
         stderr(&out)
     );
-    // Branch gone, worktree gone, target gone.
+    // Branch gone, worktree gone — and the in-tree target/ went with the worktree.
     let (br, _) = git_try(src.path(), &["rev-parse", "--verify", "--quiet", "anc"]);
     assert!(!br, "fork branch reaped");
     assert!(!wt.exists(), "fork worktree dir reaped");
-    assert!(!target.exists(), "target dir reaped");
+    assert!(
+        !wt.join("target").exists(),
+        "in-tree target/ died with the worktree"
+    );
     // The recompile WARN fires on a successful reap.
     assert!(
         stderr(&out).contains("recompile"),
@@ -217,11 +185,9 @@ fn gc_patch_id_leg_reaps_a_landed_via_import_fork() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let tbase = tempfile::tempdir().unwrap();
     // A fork with one commit adding new.rs.
     let wt = make_fork_branch(src.path(), holder.path(), "imp", &[("new.rs", "fn x() {}")]);
-    let target = ext_target(tbase.path(), "imp");
-    std::fs::create_dir_all(&target).unwrap();
+    std::fs::create_dir_all(wt.join("target")).unwrap();
     // Simulate the IMPORT route: apply the fork's patch onto coordination HEAD and
     // commit it as a NEW commit. Ancestry is severed (the fork tip is NOT reachable
     // from HEAD), but the patch landed ⇒ `git cherry HEAD imp` lists every commit
@@ -245,12 +211,7 @@ fn gc_patch_id_leg_reaps_a_landed_via_import_fork() {
         "precondition: every cherry line is `-` (patch landed); got: {cherry:?}"
     );
 
-    let out = run_t(
-        src.path(),
-        None,
-        Some(tbase.path()),
-        &["worktree", "gc", "--fork", "imp"],
-    );
+    let out = run(src.path(), None, &["worktree", "gc", "--fork", "imp"]);
     assert!(
         out.status.success(),
         "patch-id-leg gc must reap; stderr: {}",
@@ -259,7 +220,10 @@ fn gc_patch_id_leg_reaps_a_landed_via_import_fork() {
     let (br, _) = git_try(src.path(), &["rev-parse", "--verify", "--quiet", "imp"]);
     assert!(!br, "fork branch reaped");
     assert!(!wt.exists(), "fork worktree dir reaped");
-    assert!(!target.exists(), "target dir reaped");
+    assert!(
+        !wt.join("target").exists(),
+        "in-tree target/ died with the worktree"
+    );
 }
 
 #[test]
@@ -408,7 +372,6 @@ fn gc_dry_run_prints_verdict_and_destroys_nothing() {
     let holder = tempfile::tempdir().unwrap();
     // Unlanded fork ⇒ verdict is not-landed.
     let wt = make_fork_branch(src.path(), holder.path(), "dr", &[("f.rs", "x")]);
-    std::fs::create_dir_all(gc_target(&wt, "dr")).unwrap();
 
     let out = run(
         src.path(),
@@ -425,11 +388,10 @@ fn gc_dry_run_prints_verdict_and_destroys_nothing() {
         "dry-run prints the verdict; stdout: {}",
         stdout(&out)
     );
-    // NOTHING destroyed: worktree, branch, target all survive.
+    // NOTHING destroyed: worktree + branch survive.
     let (br, _) = git_try(src.path(), &["rev-parse", "--verify", "--quiet", "dr"]);
     assert!(br, "dry-run leaves the branch");
     assert!(wt.exists(), "dry-run leaves the worktree");
-    assert!(gc_target(&wt, "dr").exists(), "dry-run leaves the target");
 
     // A LANDED fork's dry-run prints the positive verdict, still destroying nothing.
     git(src.path(), &["merge", "--no-ff", "--no-edit", "dr"]);
@@ -494,81 +456,7 @@ fn gc_dry_run_force_over_unlanded_reports_override_not_landed() {
     assert!(wt.exists(), "dry-run leaves the worktree");
 }
 
-// F-5 secondary: a branch-gone target-only dry-run must report the ACTUAL
-// reap set (target only), not the hardcoded `worktree/branch/target`.
-#[test]
-fn gc_dry_run_branch_gone_reports_target_only() {
-    let src = tempfile::tempdir().unwrap();
-    init_repo(src.path());
-    let holder = tempfile::tempdir().unwrap();
-    let tbase = tempfile::tempdir().unwrap();
-    let wt = make_fork_branch(src.path(), holder.path(), "bgd", &[("f.rs", "x")]);
-    let target = ext_target(tbase.path(), "bgd");
-    std::fs::create_dir_all(&target).unwrap();
-    git(
-        src.path(),
-        &["worktree", "remove", "--force", wt.to_str().unwrap()],
-    );
-    git(src.path(), &["branch", "-D", "bgd"]);
-
-    let out = run_t(
-        src.path(),
-        None,
-        Some(tbase.path()),
-        &["worktree", "gc", "--fork", "bgd", "--dry-run"],
-    );
-    assert!(
-        out.status.success(),
-        "dry-run exits 0; stderr: {}",
-        stderr(&out)
-    );
-    let so = stdout(&out);
-    assert!(so.contains("target"), "names the target reap; stdout: {so}");
-    assert!(
-        !so.contains("worktree/branch"),
-        "must not claim it would reap the gone worktree/branch; stdout: {so}"
-    );
-    assert!(target.exists(), "dry-run destroys nothing");
-}
-
 // --- VT-3: idempotent crash-rerun ---
-
-#[test]
-fn gc_branch_gone_target_present_reaps_target_from_the_name() {
-    let src = tempfile::tempdir().unwrap();
-    init_repo(src.path());
-    let holder = tempfile::tempdir().unwrap();
-    let tbase = tempfile::tempdir().unwrap();
-    // Simulate a crash AFTER worktree-remove + branch -D but BEFORE target-reap:
-    // the branch + worktree are gone, only T survives (an EXTERNAL target base, so
-    // it outlives the worktree). T's path is a pure function of the branch NAME, so
-    // a rerun reaps it from `--fork <branch>` alone.
-    let wt = make_fork_branch(src.path(), holder.path(), "bg", &[("f.rs", "x")]);
-    let target = ext_target(tbase.path(), "bg");
-    std::fs::create_dir_all(&target).unwrap();
-    git(
-        src.path(),
-        &["worktree", "remove", "--force", wt.to_str().unwrap()],
-    );
-    git(src.path(), &["branch", "-D", "bg"]);
-    assert!(target.exists(), "precondition: only the target survives");
-
-    let out = run_t(
-        src.path(),
-        None,
-        Some(tbase.path()),
-        &["worktree", "gc", "--fork", "bg"],
-    );
-    assert!(
-        out.status.success(),
-        "branch-gone rerun completes; stderr: {}",
-        stderr(&out)
-    );
-    assert!(
-        !target.exists(),
-        "the target dir is reaped from the branch NAME"
-    );
-}
 
 #[test]
 fn gc_fully_reaped_rerun_is_a_clean_noop() {

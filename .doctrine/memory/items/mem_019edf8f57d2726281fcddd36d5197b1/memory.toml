@@ -1,11 +1,11 @@
 memory_uid = "mem_019edf8f57d2726281fcddd36d5197b1"
 schema_version = 1
 memory_type = "system"
-status = "active"
+status = "superseded"
 title = "Worktrees share CARGO_TARGET_DIR — builds thrash, just check can be a stale-cache no-op, PATH doctrine is stale"
 summary = "Shared CARGO_TARGET_DIR across worktrees => debug binary may lag source; just check 'Finished' can be a no-op; PATH doctrine is old; verify with strings or cargo build from the worktree"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-06-26"
 
 [scope]
 paths = []
@@ -42,4 +42,8 @@ weight = 0
 [[relation]]
 label = "related"
 target = "mem_019edefff21776a296a5ba6a4b84c4dc"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"
 

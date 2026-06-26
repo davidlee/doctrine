@@ -131,10 +131,10 @@ pub(crate) fn run_provision(path: Option<PathBuf>, fork: &Path) -> anyhow::Resul
         writeln!(io::stderr(), "withheld {} ({} tier)", held.path, held.tier)?;
     }
 
-    // Human status to stderr (ISS-044): every consumer reuses this sole copier —
-    // fork/coordinate emit a KEY=value env contract on stdout, so a "provisioned …"
-    // line there pollutes it (`env $(fork …)` word-splits → rc 127). Siblings
-    // (skipped/withheld) already go to stderr; this joins them.
+    // Human status to stderr (ISS-044): every consumer reuses this sole copier, and
+    // fork/coordinate keep stdout machine-clean (empty), so a "provisioned …" line
+    // belongs on stderr — never let copier chatter leak onto a caller's stdout.
+    // Siblings (skipped/withheld) already go to stderr; this joins them.
     writeln!(
         io::stderr(),
         "provisioned {}: {copied} copied, {} withheld, {skipped} skipped",

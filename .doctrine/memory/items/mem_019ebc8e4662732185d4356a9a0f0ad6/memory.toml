@@ -2,11 +2,11 @@ memory_uid = "mem_019ebc8e4662732185d4356a9a0f0ad6"
 memory_key = "mem.pattern.dispatch.worktree-removal-stale-manifest-dir-false-red"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "Removing a dispatch worktree leaves env!(CARGO_MANIFEST_DIR)-baked test binaries pointing at the deleted fork path — false RED until recompiled"
 summary = "After removing a dispatch worker worktree, cordage denylist test false-REDs: env!(CARGO_MANIFEST_DIR) baked the deleted fork path; touch+rebuild fixes"
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-26"
 
 [scope]
 paths = ["crates/cordage/tests/denylist.rs"]
@@ -47,3 +47,7 @@ target = "mem.pattern.dispatch.shared-target-false-green-touch-rerun"
 [[relation]]
 label = "related"
 target = "mem.pattern.build.just-check-workspace-gates-members"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f026cffd27a43b8db3cf6728130b5"

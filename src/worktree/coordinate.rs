@@ -8,7 +8,7 @@ use crate::git;
 use crate::root;
 use anyhow::{Context, bail};
 
-use super::fork::{project_env_contract, remove_worktree_dir, rollback_fork};
+use super::fork::{remove_worktree_dir, rollback_fork};
 use super::provision::run_provision;
 use super::shared::{gather_fork_worktree, matches, resolve_commit};
 
@@ -226,9 +226,9 @@ pub(crate) fn coordinate(root: &Path, slice: u32, dir: &Path) -> anyhow::Result<
 /// never on a positive coordination marker (that is OQ-D / IMP-065, deferred).
 ///
 /// Thin wrapper over [`coordinate`]: resolves the repo root, calls into the
-/// pure-ish core, then emits the fork-style env contract on stdout and human
-/// status on stderr. The existing integration tests (`e2e_worktree_coordinate`)
-/// must stay green — the I/O surface is unchanged.
+/// pure-ish core, then reports human status on stderr (the fork builds into its own
+/// in-tree `target/` — no env contract on stdout; SL-156). The existing integration
+/// tests (`e2e_worktree_coordinate`) must stay green.
 ///
 /// Orchestrator-classed; refused under worker-mode by `worker_guard` (EX-4) — the
 /// marker-present / `DOCTRINE_WORKER` refusals ride the SAME guard as `fork`.
@@ -251,10 +251,7 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
 
     let _outcome = coordinate(&repo, slice, dir)?;
 
-    // --- env contract on stdout; human status on stderr (mirrors `fork`) ---
-    for (key, value) in project_env_contract(dir, &branch) {
-        writeln!(io::stdout(), "{key}={value}")?;
-    }
+    // --- human status on stderr; stdout stays empty (machine-clean, mirrors `fork`) ---
     let verb = if branch_existed { "resumed" } else { "created" };
     writeln!(
         io::stderr(),
