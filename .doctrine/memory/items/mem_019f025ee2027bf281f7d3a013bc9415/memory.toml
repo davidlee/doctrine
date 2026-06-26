@@ -1,0 +1,46 @@
+memory_uid = "mem_019f025ee2027bf281f7d3a013bc9415"
+memory_key = "mem.pattern.jail.stale-binary-strips-registry-field"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Stale PATH doctrine binary strips new BoundaryRow fields from the registry"
+summary = "A pre-schema ~/.cargo/bin/doctrine read-modify-writes boundaries.toml through the old struct, silently dropping a newly-added BoundaryRow field (e.g. provenance) from every row."
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = [".doctrine/state/slice/", "src/boundary.rs", "src/state.rs"]
+globs = []
+commands = ["doctrine slice phase", "doctrine slice record-delta"]
+tags = ["jail", "stale-binary", "conformance-registry", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "032e5a7608996b4cfcdbf2ad50ac0133ec491eb4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0c2bbdd69e1d6e644749a0bee13223fda9248778a414c657561be0bd7a93deca"
+base_commit = "0c4a2e037815f2ff998ccccaaf09ba67449553fc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "major"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-154"
+
