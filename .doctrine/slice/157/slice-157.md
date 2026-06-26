@@ -52,8 +52,9 @@ window** (RFC-005 OQ-5 steer).
 
 2. **Retire `resync_worktree_hard`.** Its only production caller is the deleted
    resync; remove the fn (`git.rs:1373`) and its unit test (OQ-D — grep-confirmed
-   sole caller). The `RacedDesync` disposition + its `report_integrate`
-   warning-line branch go with it.
+   sole caller). The `RacedDesync` disposition goes with it. (`report_integrate`
+   needs **no** structural change — `RacedDesync` rode the catch-all `disp =>` arm,
+   never a dedicated branch; only its stale doc-comment trims — see design §3.)
 
 3. **Keep the checked-out leg unchanged.** `advance_checked_out` /
    `ff_advance_in_worktree` stay — they are the safe atomic path for the
@@ -64,12 +65,16 @@ window** (RFC-005 OQ-5 steer).
    (`worktree_for_ref` is `None` for `main`), i.e. it is edge-dirty protection —
    still wanted. Unchanged (`dispatch.rs:1753`).
 
-5. **ADR-012 mechanism Revision.** Restate the integrate mechanism: the
-   not-checked-out advance is **pure ref CAS with no worktree resync** (the
-   speculative None→Some resync is removed as defending an impossible transition).
-   The **FF-only trunk posture (D2/D4) and the CAS-replay safety contract (D4) are
-   preserved unchanged** — every advance stays a 3-arg CAS; no force-push, no
-   auto-resolve; non-FF still refused. Route per ADR-013.
+5. **Governance & spec impact (no ADR-012 Revision).** ADR-012's text never names
+   the resync; **D4's CAS contract is preserved in full** (every advance a 3-arg
+   CAS; no force-push, no auto-resolve; non-FF still refused), so **no ADR-012
+   decision changes → no Revision against ADR-012**. The stripped mechanism is
+   **SL-121 design §2.2**, superseded at the slice level. The only durable-gov
+   surface naming the resync is **SPEC-022 prose** (`spec-022.md:140-141`); strip
+   that parenthetical via a `modify` REV (`--target SPEC-022`) at **reconcile**,
+   after the code lands — not before (so the spec never leads the code). The
+   SPEC-022 `.toml` responsibility already conforms. (Corrected from the original
+   "mechanism-only ADR-012 Revision" premise — see design §5.)
 
 6. **Behaviour-preservation.** Integrate safety semantics stay green *unchanged*:
    idempotent replay (no-op if `target==planned`), moved-target refusal, FF land,
@@ -105,8 +110,10 @@ into a checkout mid-advance. Under the real invariants that race is impossible
 safe atomic ff leg), so the guard only adds hazard. Strip it: the pure-ref advance
 becomes CAS-and-done, `resync_worktree_hard` + the `RacedDesync` disposition
 retire, R1/R3/R4 dissolve. The safe checked-out leg and the M4 gate stay (edge
-needs them). FF-only and D4 CAS-replay are preserved; the ADR-012 Revision is
-mechanism-only. The non-FF auto-merge that *reverses* FF-only is split to RFC-006.
+needs them). FF-only and D4 CAS-replay are preserved unchanged → **no ADR-012
+Revision**; the one governance touch is a SPEC-022 prose strike deferred to
+reconcile (design §5). The non-FF auto-merge that *reverses* FF-only is split to
+RFC-006.
 
 ## Follow-Ups
 
