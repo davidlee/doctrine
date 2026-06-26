@@ -66,6 +66,21 @@ intent = "design-target"
 selector = "tests/e2e_worktree_gc.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+note = "EAP-4: stale stdout env-contract references (CLI help / stdout-discipline comment / generic worktree skill)"
+
+[[selector]]
+selector = "src/worktree/provision.rs"
+intent = "design-target"
+note = "EAP-4: stale stdout env-contract references (CLI help / stdout-discipline comment / generic worktree skill)"
+
+[[selector]]
+selector = ".agents/skills/worktree/SKILL.md"
+intent = "design-target"
+note = "EAP-4: stale stdout env-contract references (CLI help / stdout-discipline comment / generic worktree skill)"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-008"
