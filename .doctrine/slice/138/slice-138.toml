@@ -9,6 +9,11 @@ updated = "2026-06-21"
 needs = []                      # slice→work hard prerequisite
 after = [{ to = "SL-137", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-002"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
