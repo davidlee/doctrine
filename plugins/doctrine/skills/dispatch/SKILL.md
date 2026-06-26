@@ -24,7 +24,7 @@ orchestrator funnel."
      (default `false` if the file or key is absent).
    - If `true`, route workers via [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)
      (default to `pi` arm until `preferred-subprocess-harness` selection is wired — IMP-101).
-   - Otherwise, route per env-marker: `.claude/` present →
+   - Otherwise, route per env-marker: `printenv CLAUDECODE` present →
      [`/dispatch-agent`](../dispatch-agent/SKILL.md); otherwise →
      [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md).
    Then spawn worker(s) per the chosen arm's template.
