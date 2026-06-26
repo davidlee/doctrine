@@ -1,148 +1,140 @@
-# Design SL-159: Epistemic kind catalog: add EVD + HYP, replace CON with INV
+# Design SL-159: Epistemic kind catalog: add EVD + HYP
 
 <!-- Reference forms (.doctrine/glossary.md § reference forms): entity ids padded
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
-     R1 (§10), Q1. -->
+     R1 (§10). -->
 
 > Source: **RFC-009** (epistemic records as the human-facing relational substrate).
-> Carries the three *locked-in-draft* kind-catalog changes; the RFC's open
-> deliberation (D2 corpus survey, the `shapes` epistemic-vs-affects split, D4
-> concept-map reify, Tier 2) stays out. Decisions locked with the user in the
-> `/design` pass (2026-06-27). Governance axis: a **Revision** (ADR-013) is cut
-> **after** this design and settled in reconciliation — not authored now.
+> Carries the two *locked-in-draft* kind **additions** (EVD, HYP). The third
+> RFC-009 catalog change — **CON → INV** — was **split out to SL-160** (2026-06-27)
+> because its `waived → relaxed` semantics are unsettled and should not block the
+> two clean additions. The RFC's broader open deliberation (D2 corpus survey, the
+> `shapes` epistemic-vs-affects split, D4 concept-map reify, Tier 2) stays out.
+> Governance axis: a **Revision** (ADR-013) is cut **after** this design and settled
+> in reconciliation.
 
 ## 1. Design Problem
 
 Doctrine's epistemic record taxonomy is four kinds — assumption (ASM), decision
-(DEC), question (QUE), constraint (CON). RFC-009 lands two additions and one
-replacement, all decided:
+(DEC), question (QUE), constraint (CON). RFC-009 adds two:
 
 - **EVD (evidence)** — a captured datum with provenance that **supports** or
   **disputes** other records. A role, not a topic.
 - **HYP (hypothesis)** — a testable proposed answer to a question, distinct from
   QUE (the unsettled matter) and ASM (proceed-as-if-true).
-- **CON → INV (invariant)** — replace "a boundary that must not be crossed" with
-  "a property that must hold." Near-duals; the crisp-edge bar admits one framing,
-  and INV is the engineering-appropriate one that composes with EVD (an EVD can
-  `disputes` an INV — evidence the property was violated).
 
-"Fully modelled" (user, this pass): the kinds land able to do their job — EVD's
+"Fully modelled" (user): the kinds land able to do their job — EVD's
 `supports`/`disputes` edges are **in scope**, not deferred. Only the broader D3
 surface (the `shapes` role split, concept-map edge types) stays open.
+
+**CON stays unchanged here.** EVD `supports`/`disputes` targets the `RECORD` family,
+which includes CON in the interim; when SL-160 renames CON→INV, those edges carry
+through unchanged. No dependency in this direction — SL-160 sequences `after` this
+slice (shared touch-site files, serial edits).
 
 ## 2. Current State
 
 `src/knowledge.rs` (~2.4k lines) is the kind-specific module over the kind-blind
 `crate::entity` engine. Four `RecordKind`s each ride an `entity::Kind` const with
 its own tree, reservation namespace, prefix, status vocabulary, typed `[facet]`,
-and scaffold template. The "add a kind" surface is a checklist threaded through
-~13 sites, all centralised:
+and scaffold template. The "add a kind" surface is **not** as centralised as it
+looks — ~17 sites hardcode the record-prefix literals rather than reading
+`kinds::RECORD` (see `mem.pattern.doctrine.record-kind-touch-sites`). Adding EVD/HYP
+touches every one:
 
-- **`src/kinds.rs`** — prefix consts; `RECORD = &[ASM, DEC, QUE, CON]` grouping.
+- **`src/kinds.rs`** — prefix consts; `RECORD = &[ASM, DEC, QUE, CON]` grouping →
+  append `EVD, HYP`.
 - **`src/knowledge.rs`** — `RecordKind` enum; per-kind `Kind` const; the
   `kind()`/`as_str()`/`statuses()`/`hidden()`/`terminal()`/scaffold-template/
   `validate_facet()`/`render_facet()`/`format_facet()`/`facet_json()` match arms;
-  `RecordKind::ALL: [_; 4]`; per-kind facet struct + `RecordFacet` variant;
-  the kind-blind `RawFacet` superset; closed facet value-enums (`Confidence`,
-  `Basis`, `ConstraintSource`); `resolve_ref` diagnostic; tests (`ctx_for`,
+  `RecordKind::ALL: [_; 4]` → `[_; 6]`; per-kind facet struct + `RecordFacet`
+  variant; the kind-blind `RawFacet` superset; closed facet value-enums (new
+  `Provenance`; `Confidence` reused); `resolve_ref` diagnostic; tests (`ctx_for`,
   `populated_fixture`, vocab/prefix-count/terminal assertions).
-- **`src/integrity.rs`** — `KINDS` identity table (records present since SL-059);
-  `kinds_table_*` literal pin (advisory, not enforced —
-  `mem.pattern.entity.numbered-kind-identity-table`).
-- **`src/priority/partition.rs`** — one `KindPartition` row per record kind.
+- **`src/integrity.rs`** — `KINDS` identity table (+2 rows); `kinds_table_*`
+  literal pin (advisory, not enforced); **and** a **third** in-file site: the
+  prefix-collision list (`:817`) gains EVD/HYP.
+- **`src/priority/partition.rs`** — one `KindPartition` row per record kind (+2;
+  `:609` guard list gains EVD/HYP).
 - **`src/relation.rs`** — `RELATION_RULES`; `RECORD` const drives `supersedes`/
   `shapes`/`spawns` **source** sets, but the `Shapes` **target** set and
-  `GovernedBy` **source** set **hardcode** `ASM, DEC, QUE, CON`.
-- **`src/supersede.rs`** — `supersede_policy` + `validate_matrix` record arms;
-  **and `src/commands/supersede.rs`** — the command shell + CON-001 fixtures.
+  `GovernedBy` **source** set **hardcode** `ASM, DEC, QUE, CON` → gain `EVD, HYP`.
+- **`src/supersede.rs`** — `supersede_policy` + `validate_matrix` record arms (add
+  EVD; HYP excluded); **and `src/commands/supersede.rs`** — the command shell.
 - **`src/commands/dep_seq.rs`** — `is_record` (`:29`) hardcodes the record prefix
-  match + its pin test (`:264-273`); add EVD/HYP, CON→INV (SL-158 dependency).
-- **`src/relation_graph.rs`** — CON-keyed edge-emission tests.
+  match + pin test (`:267,:273`), admissible vector (`:285`), and a user-facing
+  message (`:83`); all gain EVD/HYP.
+- **`src/relation_graph.rs`** — record-keyed edge-emission tests.
 - **`src/catalog/scan.rs`** — `outbound_for` dispatch (`:62`) routes the record
-  family (`"ASM"|"DEC"|"QUE"|"CON"`) to `knowledge::relation_edges`; the
-  fallthrough is `debug_assert!(false, …)` (`:88`). A `KINDS` row with no scan arm
-  **panics every debug-build corpus scan** — so adding EVD/HYP rows to
-  `integrity::KINDS` *without* extending this arm is a panic, not a silent gap.
-  CON→INV literal + add `EVD|HYP` (codex-2 F1). **Not caught by any drift canary.**
-- **`src/catalog/test_helpers.rs`** — `seed_knowledge` (`:119`) maps record
-  prefix → tree dir (`ASM→assumption …`); needs `INV|EVD|HYP` arms or the helper
-  breaks for the new kinds (codex-2 F4, test-only).
-- **`src/integrity.rs`** — beyond the `KINDS` table (above), a **third** in-file
-  site: the prefix-collision list (`:817`, `"…ASM","DEC","QUE","CON"…"`) — CON→INV
-  + EVD/HYP (codex-2, within the already-selected file).
+  family (`"ASM"|"DEC"|"QUE"|"CON"`) to `knowledge::relation_edges`; the fallthrough
+  is `debug_assert!(false, …)` (`:88`). A `KINDS` row with **no scan arm panics
+  every debug-build corpus scan** — so adding EVD/HYP rows to `integrity::KINDS`
+  *without* extending this arm is a panic, not a silent gap. **Not caught by any
+  drift canary** (codex-2 F1).
+- **`src/catalog/test_helpers.rs`** — `seed_knowledge` (`:119`) maps record prefix
+  → tree dir; needs `EVD|HYP` arms (codex-2 F4, test-only).
 - **`src/search.rs`** — hardcodes the knowledge prefix group
-  `("knowledge", &["ASM","DEC","QUE","CON"])` + two flat prefix lists; EVD/HYP/INV
-  are **unsearchable** until added (codex F3).
-- **`src/tag.rs`** — hardcodes the taggable-prefix list incl. `CON`; new kinds
-  **untaggable** until added (codex F3).
+  `("knowledge", &["ASM","DEC","QUE","CON"])` + flat lists; EVD/HYP **unsearchable**
+  until added (codex F3).
+- **`src/tag.rs`** — hardcodes the taggable-prefix list; new kinds **untaggable**
+  until added (codex F3).
 - **`tests/e2e_knowledge_cli_golden.rs`, `tests/e2e_memory_anchoring.rs`** — e2e
-  goldens pinned to `constraint`/`CON` (codex F6).
-- **`install/templates/knowledge-*.toml`** — one seed template per kind.
-- **Docs / shipped memory** — `using-doctrine.md`, glossary, `seed-onboarding.md`,
-  `mem.signpost.doctrine.knowledge`.
-- **Seed corpus** — `CON-001` (the shipped constraint seed).
+  goldens pinned to the kind catalog (catalog listing + help strings shift with +2
+  kinds; codex F6).
+- **`install/templates/knowledge-evidence.toml`, `…-hypothesis.toml`** — two new
+  seed templates.
+- **Docs / shipped memory** — `using-doctrine.md`, glossary,
+  `mem.signpost.doctrine.knowledge` (document the two new kinds).
 
-### Dependency on SL-158 (lands first)
+### Built on the landed SL-158 (trinary actionability)
 
-SL-158 (Trinary actionability, phases nearly complete) changes the shared surface
-this slice extends; **SL-159 rebases on the landed SL-158**:
-
-- `priority::partition::KindPartition` gains a third set, `gating`, between
-  `workable` and `terminal` (unsettled record → non-`Workable`, non-`Terminal`
-  `Gating` class). The records move their unsettled states into `gating`. The VT
-  canary generalises to `workable ∪ gating ∪ terminal == <KIND>_STATUSES`.
-- `commands/dep_seq.rs` grew `is_admissible_dep_target = is_work_like ∨ is_record`
-  — a work item may `needs`/`after` a record. **OQ-1 resolved against merged code:
-  `is_record` (dep_seq.rs:29) HARDCODES `matches!(prefix, "ASM"|"DEC"|"QUE"|"CON")`**
-  with a twin pin test (`:264-273`). SL-159 must edit both (add EVD/HYP, CON→INV) —
-  `dep_seq.rs` is a touch-site.
-- `RECORD` gains `references` (concerns-role) authoring.
-
-**SL-158 has landed** (commit `5dd1715c`, merged to edge/main). The merged
-`KindPartition` carries the `gating` field and the record rows match this design's
-§5.3 table exactly (ASM `gating:[held,testing]`; CON `gating:[active],
-terminal:[waived,superseded,retired]` → INV becomes `gating:[active],
-terminal:[relaxed,superseded,retired]`). Partition design verified against real
-code, not just SL-158's design doc.
+SL-158 (commit `5dd1715c`, merged to edge/main) turned the priority partition
+trinary: `priority::partition::KindPartition` carries a `gating` set between
+`workable` and `terminal`; the partition-cover canary is
+`workable ∪ gating ∪ terminal == <KIND>_STATUSES`. `commands/dep_seq.rs` grew
+`is_admissible_dep_target = is_work_like ∨ is_record`, where `is_record` (`:29`)
+**hardcodes** `matches!(prefix, "ASM"|"DEC"|"QUE"|"CON")` with a twin pin test.
+SL-159 edits these to add EVD/HYP.
 
 Consequence: EVD/HYP gate **correctly on arrival** — a work item can
-`needs → EVD-captured` and stay blocked until the EVD is `confirmed`. The kinds
-are not inert.
+`needs → EVD-captured` and stay blocked until the EVD is `confirmed`. The kinds are
+not inert.
 
 ## 3. Forces & Constraints
 
 - **Behaviour-preservation gate** (AGENTS.md): the entity engine is shared
-  machinery; existing record suites are the proof and must stay green (adjusted
-  for the rename, never broken).
+  machinery; existing record suites are the proof and must stay green.
 - **No parallel implementation**: ride the existing `RecordKind` checklist, the
-  existing `link`/`status`/`new` verbs, the existing supersede transition — add
-  no second mechanism. `confidence` reuses the existing `Confidence` enum.
-- **Crisp-edge bar** (RFC-009 D1): each new kind names a role/shape with hard
-  edges; no kind becomes a parallel implementation of another.
-- **CON→INV is a destructive rename of a shipped kind** — tree dir, reservation
-  namespace, seed record, templates, and every literal `"CON"`/`Constraint` site
-  move together or integrity breaks.
+  existing `link`/`status`/`new` verbs, the existing supersede transition — add no
+  second mechanism. `confidence` reuses the existing `Confidence` enum.
+- **Crisp-edge bar** (RFC-009 D1): each new kind names a role/shape with hard edges;
+  no kind becomes a parallel implementation of another. EVD names a role (evidence
+  *about* records); HYP names a shape (a testable proposed answer) distinct from QUE
+  and ASM.
 - **Pure/imperative split**: no clock/rng/git/disk in the pure layer (scaffold,
   validate, render stay pure; the date is passed in).
 - **ADR-001 layering**: `kinds.rs` is leaf; `relation.rs`/`knowledge.rs` are
   engine/command — no cycle introduced.
+- **Shared touch-set with SL-160**: both slices edit the ~17 hardcoded prefix sites.
+  SL-159 lands first (these additions); SL-160 (CON→INV) rebases. Serial — no
+  parallel edits to the same lines.
 
 ## 4. Guiding Principles
 
-The checklist is mechanical and centralised; correctness comes from doing **every**
-site and letting the drift canaries (vocab/known-set/partition-cover/prefix-count)
-catch omissions. Prefer the existing seam over a new verb. Keep CON→INV a faithful
-rename plus the single agreed semantic nudge (`waived`→`relaxed`).
+The checklist is mechanical but **not** auto-canaried — correctness comes from doing
+**every** site (grep, don't trust "centralised") and letting the drift canaries
+(vocab/known-set/partition-cover/prefix-count) catch the structured omissions. The
+literal match-arm sites (`scan.rs`, `dep_seq.rs`, `search.rs`, `tag.rs`) have no
+canary — grep finds them. Prefer the existing seam over a new verb.
 
 ## 5. Proposed Design
 
 ### 5.1 System Model
 
-`RecordKind` goes from 4 to 6 variants: `Assumption, Decision, Question, Invariant,
-Evidence, Hypothesis` (Invariant takes Constraint's slot; Evidence/Hypothesis
-append). `RECORD = &[ASM, DEC, QUE, INV, EVD, HYP]`. `RecordKind::ALL: [_; 6]`.
-New prefixes `EVD`, `HYP`, `INV` in `kinds.rs` (CON retired; **its prefix const is
-removed**, not recycled — RFC-009 D4: recycling CON would mislead).
+`RecordKind` goes from 4 to 6 variants: `Assumption, Decision, Question, Constraint,
+Evidence, Hypothesis` (Evidence/Hypothesis append; Constraint unchanged).
+`RECORD = &[ASM, DEC, QUE, CON, EVD, HYP]`. `RecordKind::ALL: [_; 6]`. New prefixes
+`EVD`, `HYP` in `kinds.rs`.
 
 ### 5.2 Interfaces & Contracts
 
@@ -150,10 +142,10 @@ removed**, not recycled — RFC-009 D4: recycling CON would mislead).
 
 | intent | verb (existing) |
 |---|---|
-| author a kind | `knowledge new evidence\|hypothesis\|invariant …` (new `ValueEnum` variants) |
+| author a kind | `knowledge new evidence\|hypothesis …` (new `ValueEnum` variants) |
 | transition status | `knowledge status EVD-1 confirmed` (kind-blind; validates per-kind vocab) |
 | author `supports`/`disputes` | `link EVD-1 disputes HYP-3` (new `Writable` labels) |
-| supersede | `supersede OLD NEW` (existing transition; new arms) |
+| supersede | `supersede OLD NEW` (existing transition; new EVD arm) |
 
 **New relation labels** (`src/relation.rs`) — full plumbing, not just rows (codex F5):
 
@@ -164,8 +156,8 @@ removed**, not recycled — RFC-009 D4: recycling CON would mislead).
   `disputed_by`.
 - `RELATION_RULES` rows: `sources: &[EVD]`, `target: Kinds(RECORD)`, `tier: One`,
   `link: Writable`, `role: None`. EVD is the sole author (RFC: "EVD names a role").
-  Target is the **record family only** (epistemic targets; widening to RSK
-  deferred). EVD→HYP, EVD→INV, EVD→QUE/ASM/EVD all legal.
+  Target is the **record family only** (incl CON in the interim; widening to RSK
+  deferred). EVD→HYP, EVD→CON, EVD→QUE/ASM/DEC/EVD all legal.
 - The source/target/tier/coverage canaries that pin every label extend to the two
   new rows.
 - Transitions stay **manual** via `status` — `supports`/`disputes` do **not**
@@ -177,11 +169,10 @@ removed**, not recycled — RFC-009 D4: recycling CON would mislead).
 `[Shapes, Spawns, GovernedBy]` — `supports`/`disputes` would be authorable but
 **invisible**. Add both labels to those two renderers (a record that is
 `supported_by`/`disputed_by` should also surface the inbound reciprocal). The
-earlier design's "rides the existing overlay" claim was wrong — the render list is
-literal, not generic.
+earlier "rides the existing overlay" claim was wrong — the render list is literal.
 
-**Hardcoded RELATION_RULES lists updated** (the RFC's "no table change" was wrong):
-`Shapes` target set and `GovernedBy` source set drop `CON`, gain `INV, EVD, HYP`.
+**Hardcoded RELATION_RULES lists updated**: the `Shapes` target set and `GovernedBy`
+source set gain `EVD, HYP` (CON unchanged).
 
 ### 5.3 Data, State & Ownership
 
@@ -191,91 +182,67 @@ literal, not generic.
 |---|---|---|---|---|---|
 | EVD | `captured, disputed, confirmed, retracted, superseded` | `captured, disputed` | `confirmed, retracted, superseded` | `retracted, superseded` | `confirmed, retracted, superseded` |
 | HYP | `proposed, confirmed, refuted` | `proposed` | `confirmed, refuted` | `confirmed, refuted` | `confirmed, refuted` |
-| INV | `active, relaxed, superseded, retired` | `active` | `relaxed, superseded, retired` | `relaxed, superseded, retired` | `relaxed, superseded, retired` |
 
 Notes:
 - **EVD `confirmed` is deliberately NOT `is_terminal`** — so the supersede verb can
   flip a `confirmed` EVD to `superseded` (RFC: confirmed may be re-disputed *or*
-  superseded). `retracted`/`superseded` are the truly-final states. `superseded`
-  is added to EVD's vocab so the existing supersede transition has a landing state.
-- **INV** = CON's vocab with `waived → relaxed`. The facet's waiver fields rename
-  (below). `superseded`/`retired`/`active` unchanged.
-- Three distinct per-kind subsets persist (pre-existing design): `hidden`
-  (list default-hide), `terminal`/`is_terminal` (supersession guard), and the
-  SL-158 `gating`/`terminal` partition. They are independent and each get a row.
+  superseded). `retracted`/`superseded` are the truly-final states. `superseded` is
+  added to EVD's vocab so the existing supersede transition has a landing state.
+- Three distinct per-kind subsets persist (pre-existing design): `hidden` (list
+  default-hide), `terminal`/`is_terminal` (supersession guard), and the SL-158
+  `gating`/`terminal` partition. Independent; each gets a row.
 
 **Facets** (typed `[facet]`, kind-dispatched; every field `"" / [] → absent`):
 
 - `EvidenceFacet { datum: Option<String>, provenance: Option<Provenance>,
-  confidence: Option<Confidence> }`. New closed enum `Provenance {
-  Inspection, Experiment, Reproduction, Citation }` (kebab serde + `as_str` +
-  `KNOWN` drift-canary, mirroring `Basis`). `confidence` **reuses** the existing
-  `Confidence` enum. `supports`/`disputes` are **edges, not facet fields**.
+  confidence: Option<Confidence> }`. New closed enum `Provenance { Inspection,
+  Experiment, Reproduction, Citation }` (kebab serde + `as_str` + `KNOWN`
+  drift-canary, mirroring `Basis`). `confidence` **reuses** the existing `Confidence`
+  enum. `supports`/`disputes` are **edges, not facet fields**.
 - `HypothesisFacet { proposition: Option<String>, predicts: Option<String> }`.
   RFC's candidate `tested_by` is **dropped** — derivable from the inbound
   `supported_by`/`disputed_by` edges (DRY; don't store what the edge yields).
-- `InvariantFacet` = renamed `ConstraintFacet`: `statement, source(InvariantSource),
-  applies_to[], relaxation_reason, relaxed_by, relaxed_on` (was `waiver_reason,
-  waived_by, waived_on`). `ConstraintSource → InvariantSource`, variants unchanged
-  (`canon, adr, external, technical, legal, compatibility, operator`).
 
 These add fields to the kind-blind `RawFacet` superset (`datum, provenance,
-proposition, predicts`, and the `waiver_* → relaxation_*` renames) and arms to
+proposition, predicts`) and arms to
 `validate_facet`/`render_facet`/`format_facet`/`facet_json`.
 
-**Engine `Kind` consts**: rename `CONSTRAINT_KIND → INVARIANT_KIND`
-(dir `.doctrine/knowledge/invariant`, prefix `INV`); add `EVIDENCE_KIND`
-(dir `…/evidence`, prefix `EVD`), `HYPOTHESIS_KIND` (dir `…/hypothesis`, prefix
-`HYP`). `integrity::KINDS` rename + two new rows + pin update.
+**Engine `Kind` consts**: add `EVIDENCE_KIND` (dir `.doctrine/knowledge/evidence`,
+prefix `EVD`), `HYPOTHESIS_KIND` (dir `…/hypothesis`, prefix `HYP`).
+`integrity::KINDS` +2 rows + pin update.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Supersession** (`src/supersede.rs`): `supersede_policy` — rename the `CON` arm to
-`INV` (`superseded_status: "superseded"`); add `EVD` (`superseded_status:
-"superseded"`); **HYP excluded** (`None` — RFC silent on HYP supersession; a refuted
-HYP is terminal, no use case now). `validate_matrix` extends to same-kind
-supersession for INV and EVD.
+**Supersession** (`src/supersede.rs`): `supersede_policy` — add `EVD`
+(`superseded_status: "superseded"`); **HYP excluded** (`None` — RFC silent on HYP
+supersession; a refuted HYP is terminal, no use case now). `validate_matrix` extends
+to same-kind supersession for EVD. (CON's arm is untouched here; SL-160 renames it.)
 
-**CON→INV seed migration** (D6, **recreate — don't migrate**): CON-001 is a
-disposable seed (one record, trivially re-mintable from the template), so the
-in-place file-move ceremony (reservation hygiene, symlink rename, field surgery)
-is over-built for the value (user, codex-2 pass). Instead:
-- delete the `.doctrine/knowledge/constraint/` tree wholesale.
-- re-seed `INV-001` fresh from the new `knowledge-invariant.toml` template (CLI
-  `knowledge new invariant …` or template copy); `active` status, same statement.
-  `INV` reservation mints from id 1 (fresh namespace, no carry-over).
-- **two live citations** re-pointed `CON-001 → INV-001` (codex-2 F2, trivial):
-  `.doctrine/adr/017/adr-017.md` (accepted ADR naming the protected requirement)
-  and `.doctrine/knowledge/question/001/record-001.md` (live record). Historical
-  / closed-context prose (`slice/097`, `rfc/003`, `rfc/008`, `rfc/009`) is **left
-  as-is** — it narrates past state, nothing gates it (no corpus-wide dangler scan;
-  `scan_danglers` fires only on explicit `reseat`, `integrity.rs:546`).
+**No seed migration** — EVD/HYP are pure additions; no existing data moves.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **VT canaries gate the checklist**: per-kind `statuses` known-set, the three
+- **VT canaries gate the structured checklist**: per-kind `statuses` known-set, the
   facet-enum drift canaries (+ a new `Provenance` one), the SL-158 partition-cover
   canary (now over 6 kinds), the prefix-count pin (4 → 6), and the byte-stable
-  round-trip per kind. An omitted site trips one of these.
-- **`integrity::KINDS` pin is advisory** — must be hand-updated; nothing else
-  catches a missing row.
+  round-trip per kind. An omitted *structured* site trips one of these.
+- **The literal match-arm sites have no canary** — `scan.rs`, `dep_seq.rs`,
+  `search.rs`, `tag.rs`, `integrity.rs:817`. Grep is the only guard (R1).
+- **`integrity::KINDS` pin is advisory** — must be hand-updated.
 - **EVD/HYP both carry `confirmed`** — fine; vocab is per-kind, `union_statuses`
   dedups for the cross-kind `--status` filter.
-- **`Shapes` target now includes EVD/HYP/INV** — a record may `shapes` another
-  record (existing behaviour for ASM↔record; extends to the new kinds).
+- **`Shapes` target now includes EVD/HYP** — a record may `shapes` another record
+  (existing behaviour for ASM↔record; extends to the new kinds).
 - No clock/disk in the pure scaffold/validate/render paths (date passed in).
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1** — ~~Does SL-158's `is_record` read `kinds::RECORD` or hardcode?~~
-  **RESOLVED** (SL-158 merged): hardcoded (`dep_seq.rs:29` + pin test `:264-273`).
-  Both edited by this slice. *(A latent cleanup — `is_record` and the partition
-  rows could read `kinds::RECORD` — is noted as a follow-up, not in scope.)*
-- **OQ-2** — Should `Provenance` carry a free-text escape (e.g. an `other` +
-  detail) or stay a closed 4-set? Default closed (crisp-edge bar); `datum` holds
-  detail. Revisit if it feels narrow in use.
-- **OQ-3** — `applies_to` on INV: keep the list as-is (it reads fine for "the
-  invariant applies to these paths/modules"). No change proposed.
+- **OQ-1** — `is_record` (`dep_seq.rs:29`) and the partition rows hardcode the
+  prefix list rather than reading `kinds::RECORD`. **Out of scope** (IMP-184 tracks
+  the DRY refactor); this slice adds EVD/HYP at every site.
+- **OQ-2** — Should `Provenance` carry a free-text escape (e.g. an `other` + detail)
+  or stay a closed 4-set? Default closed (crisp-edge bar); `datum` holds detail.
+  Revisit if it feels narrow in use.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -285,181 +252,110 @@ is over-built for the value (user, codex-2 pass). Instead:
 - **D2 — `supports`/`disputes` are `Writable` `link` edges, manual transitions.**
   *Alt rejected:* `LifecycleOnly` + an evidence→status automation verb (RFC floated
   it). Heavier; conflicts with author's-judgment posture; deferred.
-- **D3 — CON→INV faithful rename + `waived → relaxed`** (and facet `waiver_* →
-  relaxation_*`). *Alt rejected:* full invariant-native lifecycle/facet redesign —
-  bleeds into the open D3 EVD-disputes-INV loop; over-scoped. *Alt rejected:* pure
-  rename keeping `waived` — reads wrong for "a property that must hold."
 - **D4 — target breadth = RECORD-only** (not RECORD ∪ RSK). Crisp; widen later if
   the risk-substantiation need is real.
 - **D5 — drop HYP `tested_by` facet** in favour of the inbound edge (DRY).
-- **D6 — recreate the seed, don't migrate it.** CON-001 is a disposable one-record
-  seed; delete the `constraint/` tree and re-mint INV-001 fresh from the template.
-  *Alt rejected:* in-place file-move + reservation/symlink/field surgery — ceremony
-  out of proportion to a trivially re-mintable seed (user, codex-2). *Alt rejected:*
-  supersede (no surviving CON kind to point at).
-- **D7 — HYP not supersedable** (supersede_policy `None`); EVD/INV supersedable.
+- **D7 — HYP not supersedable** (supersede_policy `None`); EVD supersedable.
+- **(split)** — CON→INV moved to **SL-160** (`after` this slice). Its `waived →
+  relaxed` semantic question was unsettled and would have blocked these additions.
 
 ## 8. Risks & Mitigations
 
-- **R1 — destructive CON rename misses a literal site.** *Mitigation:* grep
-  `Constraint|CONSTRAINT|"CON"|kinds::CON|/constraint|waived` to zero before close
-  (the `waived` literal too — it lives in HIDDEN/TERMINAL arrays + tests); the
-  partition-cover + prefix-pin + KINDS-pin canaries catch the structured sites.
-- **R5 — orphaned CON reservation ref (reasoning corrected, codex F1).**
-  `reserve::remote_reservation_ids` (`reserve.rs:203`) is **NOT prefix-scoped** — it
-  unions the trailing `NNN` of *every* `refs/doctrine/reservation/*/NNN` into the
-  candidate set for *any* mint. So a stale `CON/001` ref **is** read into INV/EVD/HYP
-  allocation (the earlier "INV mints from the tree, CON ref irrelevant" claim was
-  wrong). Net effect stays **harmless**: id 1 is ≤ existing maxima and the CAS
-  create guards collisions. *Mitigation:* delete `refs/doctrine/reservation/CON/*`
-  in the migration for hygiene; not correctness-critical.
-- **R6 — authored prose citing `CON-001` dangles after rename (codex-2 F2,
-  corrected).** The earlier "grep is clean" claim was **false** (codex-2 verified
-  against the live tree; the pass-1 dismissal grepped wrong). Authored `CON-001`
-  citations *do* exist: **live** — `adr-017.md:21,67`, `question/001/record-001.md:26`
-  (re-pointed in §5.4); **historical** — `slice/097`, `rfc/003`, `rfc/008`, `rfc/009`
-  (left as past-state narrative). No automated gate forces the rewrites:
-  `scan_danglers` (`integrity.rs:546`) fires **only** on explicit `reseat OLD NEW`,
-  and the migration is a recreate (D6), not a reseat — there is no corpus-wide
-  dangler check. *Mitigation:* the two live re-points are in the §5.4 step list;
-  historical prose is a deliberate no-op.
-- **R2 — SL-158 not yet landed when execution starts.** *Mitigation:* sequence
-  after SL-158 (`git fetch . edge:main` before execute); design targets the landed
-  trinary `KindPartition` shape. If SL-158 slips, the partition rows are the only
-  blocked sites — the rest proceeds.
-- **R3 — seed CON-001 inbound relations orphaned by the rewrite.** *Mitigation:*
-  scan for inbound edges to `CON-001` before migration; rewrite referrers to
-  `INV-001` in the same step (or confirm none exist — likely, it's a fresh seed).
-- **R4 — `mem.signpost.doctrine.knowledge` (shipped) drifts** — it documents 4
-  kinds with *stale* status vocabularies. *Mitigation:* update + re-embed +
-  `memory sync` in the docs step.
+- **R1 — a hardcoded literal site is missed.** The literal match-arm sites
+  (`scan.rs:62`, `dep_seq.rs`, `search.rs:33`, `tag.rs:17`, `integrity.rs:817`) have
+  **no drift canary**; `scan.rs` omission is a debug-build panic. *Mitigation:* grep
+  every record-prefix cluster (`mem.pattern.doctrine.record-kind-touch-sites`) and
+  confirm EVD/HYP present before close; the partition-cover + prefix-pin + KINDS-pin
+  canaries catch the structured sites.
+- **R2 — SL-160 (CON→INV) edits the same lines.** *Mitigation:* SL-159 lands first;
+  SL-160 `after` it, rebases on the EVD/HYP-extended sites. Serial — report-and-halt
+  on any conflict, never parallel.
+- **R3 — `mem.signpost.doctrine.knowledge` (shipped) drifts** — documents 4 kinds.
+  *Mitigation:* update + re-embed (`cargo build`) + `memory sync` in the docs step.
 
 ## 9. Quality Engineering & Validation
 
 Red/green/refactor, behaviour-preservation gate, `just gate` zero-warnings. New /
 revised VTs:
 
-- per-kind status known-set for EVD/HYP/INV (extends the existing table test).
-- `Provenance` known-set drift canary (new); `InvariantSource` canary (renamed).
+- per-kind status known-set for EVD/HYP (extends the existing table test).
+- `Provenance` known-set drift canary (new).
 - SL-158 partition-cover canary now green over 6 kinds; EVD/HYP `gating` non-empty.
-- `supports`/`disputes`: legal author = EVD only; illegal author refused; target
-  ∈ RECORD; `link`/`unlink` round-trip; `show` renders the edge + reciprocal.
+- `supports`/`disputes`: legal author = EVD only; illegal author refused; target ∈
+  RECORD; `link`/`unlink` round-trip; `show` renders the edge + reciprocal.
 - byte-stable round-trip per new kind (the `populated_fixture` arm extends).
-- seed migration: post-rewrite `knowledge show INV-001` succeeds; `CON-001` gone;
-  no `constraint` tree remains.
-- supersede: EVD `confirmed → superseded` flips; **HYP refuses supersession
-  cleanly** (the `supersede_policy → None` path — currently untested, all existing
-  kinds return `Some`; assert a clean error, not a panic).
+- supersede: EVD `confirmed → superseded` flips; **HYP refuses supersession cleanly**
+  (the `supersede_policy → None` path — currently untested, all existing kinds
+  return `Some`; assert a clean error, not a panic).
 - **headline gating (end-to-end):** a work item `needs → EVD-captured` is blocked;
   the EVD `→ confirmed` makes the dependent actionable. Proves the new kinds
   participate in SL-158's trinary gating, not just that the partition rows parse.
 - **`supports`/`disputes` render (codex F4):** after `link EVD-1 disputes HYP-2`,
   `knowledge show HYP-2` surfaces the `disputed_by` reciprocal and `knowledge show
   EVD-1` the `disputes` edge — in both table and JSON.
-- **search/tag reach the new kinds (codex F3):** `search` finds an EVD/HYP/INV body;
+- **search/tag reach the new kinds (codex F3):** `search` finds an EVD/HYP body;
   `tag` sets/clears a tag on each — the hardcoded prefix groups now include them.
-- **e2e goldens (codex F6):** `e2e_knowledge_cli_golden.rs` +
-  `e2e_memory_anchoring.rs` updated for the 6-kind catalog + `constraint→invariant`
-  rename (these flip by design — listed below).
+- **e2e goldens (codex F6):** `e2e_knowledge_cli_golden.rs` + `e2e_memory_anchoring.rs`
+  updated for the 6-kind catalog (+EVD/HYP listing + help strings).
 
 **Tests that flip by design (consumer revision, not regression):** the prefix-count
-pin (4→6), the `statuses(CON)` / `is_terminal(CON)` / partition-CON assertions
-(rename to INV + `relaxed`), `relation.rs` hardcoded vectors (1425/1442) + the
-RelationLabel order/coverage pins (two new labels), the `relation_graph.rs` CON
-edge-emission test, `integrity` `kinds_table_*` pin, `supersede` CON arm test
-(src + `src/commands/supersede.rs` fixtures), the `search.rs`/`tag.rs` prefix-group
-tests, and the two e2e goldens.
+pin (4→6), the `RecordKind::ALL` arity, `relation.rs` hardcoded vectors + the
+RelationLabel order/coverage pins (two new labels), the `relation_graph.rs`
+edge-emission test, `integrity` `kinds_table_*` pin, the `search.rs`/`tag.rs`
+prefix-group tests, and the two e2e goldens.
 
 ### Implementation shape (phasing is /plan's job)
 
-Roughly: (1) CON→INV rename + seed migration (self-contained, behaviour-preserving);
-(2) add EVD + HYP kinds (catalog + facets + partition + integrity + templates);
-(3) `supports`/`disputes` edges + show wiring; (4) docs + shipped memory; the
-**Revision** is cut post-design and settled in reconciliation.
+Roughly: (1) add EVD + HYP kinds (catalog + facets + partition + integrity +
+scan arm + templates); (2) `supports`/`disputes` edges + show wiring; (3) docs +
+shipped memory; the **Revision** is cut post-design and settled in reconciliation.
 
 ## 10. Review Notes
 
+> **Scope note (2026-06-27):** CON→INV was split out to **SL-160** after the codex
+> passes below. Findings about CON-keyed sites (e.g. the CON-001 citations, the
+> `waived`/`constraint` literals) moved with it; what remains here is the EVD/HYP
+> half. The codex-2 F1 `scan.rs` panic finding applies to **both** halves — this
+> slice adds the `EVD|HYP` arm; SL-160 changes the `CON` literal.
+
 ### Internal adversarial pass (2026-06-27)
 
-Cheap fixes integrated: narrowed the `memory/**` selector to the one shipped file
-(F4); added the `waived` literal to R1's grep (F5); added the headline end-to-end
-gating VT + the `supersede → None` clean-refusal VT to §9 (F6); added R5 (orphaned
-CON reservation ref).
-
-Three substantive findings surfaced to the user; **all resolved 2026-06-27**:
+Three substantive findings on the additions, **all resolved**:
 
 - **F1 — `supports` edge-label collides with the `[evidence].supports` facet
   field.** *Resolved: keep RFC's `supports`/`disputes`.* Cross-namespace clash
   (relation label vs free-text field), not a real ambiguity; doctrine reuses
-  spellings across tiers and users expect the RFC vocabulary. Aside: the typed EVD
-  edges may make the free-text `[evidence]` block redundant — a later deprecation
-  question, out of scope here.
+  spellings across tiers. Aside: the typed EVD edges may make the free-text
+  `[evidence]` block redundant — a later deprecation question, out of scope.
 - **F2 — EVD's 5th status `superseded`.** *Resolved: keep 5 states, EVD
-  supersedable.* RFC implies it ("confirmed may be superseded by new contrary
-  evidence"); evidence-superseded-by-better-evidence is a real path.
-- **F3 — `supports`/`disputes` adjacent to the open D3 `shapes`-split.**
-  *Resolved: proceed.* D3's open question is the `shapes` *role* split
-  (epistemic-vs-affects), not whether `supports`/`disputes` exist; EVD-authored
-  evidentiary edges are distinct and do not preempt that resolution.
+  supersedable.* RFC implies it; evidence-superseded-by-better-evidence is real.
+- **F3 — `supports`/`disputes` adjacent to the open D3 `shapes`-split.** *Resolved:
+  proceed.* D3's open question is the `shapes` *role* split, not whether
+  `supports`/`disputes` exist; EVD-authored evidentiary edges are distinct.
 
-### External adversarial pass (codex, 2026-06-27)
+### External adversarial passes (codex, 2026-06-27)
 
-Codex (GPT-5.5) hostile review of the design doc. Seven findings; each verified
-against ground truth before integrating (external reviewers hallucinate
-paths/lines — and two here did over-claim).
+Codex (GPT-5.5) hostile review, two passes; each finding verified against ground
+truth before integrating (external reviewers hallucinate paths/lines). Findings
+relevant to the EVD/HYP additions:
 
-**Accepted + integrated:**
-- **F3 (MAJOR)** — `src/search.rs` + `src/tag.rs` hardcode the 4-kind knowledge
-  prefix set; EVD/HYP/INV would be unsearchable/untaggable. → added to §2 + §9 +
-  selectors. *Verified real* (`search.rs:33`, `tag.rs:17`).
-- **F4 (MAJOR)** — `format_metadata`/`show_json` hardcode `[Shapes, Spawns,
-  GovernedBy]`; `supports`/`disputes` authorable-but-invisible. → §5.2 renderer
-  edit + §9 render VT. *Verified real* (`knowledge.rs:1004`, `:1149`); the prior
-  "rides the overlay" claim was wrong.
-- **F5 (MAJOR)** — new `RelationLabel` is full plumbing (enum variant, `name()`,
-  parser, order pin, canaries), not two rows. → §5.2 expanded.
-- **F6 (MAJOR)** — e2e goldens + CLI/help/doc strings pinned to `constraint`/`CON`.
-  → §9 goldens added. *Verified real* (`tests/e2e_knowledge_cli_golden.rs`,
-  `e2e_memory_anchoring.rs`, `using-doctrine.md:50` — which also mis-states the CON
-  lifecycle today, a free fix).
-- **F7 (MINOR)** — `src/commands/supersede.rs` (distinct from `src/supersede.rs`)
-  carries CON-001 fixtures. → §2 + selectors. *Verified real.*
+- **F3 (MAJOR)** — `search.rs:33` + `tag.rs:17` hardcode the 4-kind knowledge prefix
+  set; EVD/HYP would be unsearchable/untaggable. → §2 + §9 + selectors. *Verified.*
+- **F4 (MAJOR)** — `format_metadata`/`show_json` (`knowledge.rs:1004`,`:1149`)
+  hardcode `[Shapes, Spawns, GovernedBy]`; `supports`/`disputes` authorable-but-
+  invisible. → §5.2 renderer edit + §9 render VT. *Verified.*
+- **F5 (MAJOR)** — new `RelationLabel` is full plumbing (enum, `name()`, parser,
+  order pin, canaries), not two rows. → §5.2.
+- **F6 (MAJOR)** — e2e goldens shift with the catalog. → §9. *Verified.*
+- **F7 (MINOR)** — `src/commands/supersede.rs` distinct from `src/supersede.rs`. → §2.
+- **Codex-2 F1 (MAJOR, panic-grade)** — `src/catalog/scan.rs` `outbound_for`
+  dispatch (`:62`) + `debug_assert!(false)` fallthrough (`:88`): a `KINDS` row with
+  no scan arm panics every debug-build corpus scan. The whole `src/catalog/` module
+  was missed by the original §2. → §2 + selectors (`scan.rs`, `test_helpers.rs`).
+  *Verified.*
+- **Codex-2 F4 (MINOR)** — `catalog/test_helpers.rs:119` `seed_knowledge`. → §2.
 
-**Accepted with corrected severity:**
-- **F1 (claimed CRITICAL → MAJOR/reasoning):** reservation ids are pooled, not
-  prefix-scoped (`reserve.rs:203`), so R5's rationale was wrong — but the effect is
-  still harmless (CAS-guarded, id 1 ≤ maxima). → R5 reasoning corrected; ref
-  cleanup added as hygiene.
+Harvested to durable memory: `mem.pattern.doctrine.record-kind-touch-sites` (the
+~17-site scatter) + IMP-184 (DRY refactor).
 
-**Over-claimed (dismissed with evidence):**
-- **F2 (claimed MAJOR):** ~~the named authored files do not cite `CON-001`
-  (grep-clean)~~ — **this dismissal was wrong** (see codex-2 F2 / R6). The pass-1
-  grep was faulty; `adr-017.md` and `question/001/record-001.md` *do* cite
-  CON-001. Corrected in the second pass.
-
-### Second external adversarial pass (codex, 2026-06-27)
-
-A second codex (GPT-5.5) hostile pass, aimed at post-integration claims the first
-pass could not check. Each finding verified against ground truth before integrating.
-
-**Accepted + integrated:**
-- **F1 (MAJOR, panic-grade)** — `src/catalog/scan.rs` `outbound_for` dispatch
-  (`:62`) hardcodes the record family; the fallthrough is `debug_assert!(false)`
-  (`:88`). Adding EVD/HYP to `integrity::KINDS` without a scan arm **panics every
-  debug-build corpus scan**. The whole `src/catalog/` module was missed by §2 and
-  pass-1. → §2 bullet + selectors (`scan.rs`, `test_helpers.rs`). *Verified real.*
-- **F2 (MAJOR)** — pass-1's "grep-clean" dismissal was factually wrong; live
-  `CON-001` citations exist. → R6 rewritten, §10 corrected, §5.4 live re-points.
-- **F4 (MINOR)** — `catalog/test_helpers.rs:119` `seed_knowledge` prefix→dir map.
-  → §2 + selectors.
-- **F5 (MINOR)** — extra in-file `dep_seq.rs` sites (user message `:83`, pin
-  vector `:285`) inside the already-selected file. → noted; no new selector.
-- **F3 (LOW)** — integrity dangler scan globs only `.doctrine/**/*.md`, so
-  memory/install CON cleanup is unproven by it. True scope note, but no live
-  `CON-001` in `memory/` or `install/` today → captured as a close-time re-grep,
-  not a touch-site.
-
-Net: touch surface grew to ~20 sites (+`catalog/scan.rs`, `catalog/test_helpers.rs`);
-no decision (D1–D7) overturned; D6 simplified to recreate-not-migrate. Design holds;
-ready to re-lock.
-
+Net: no decision overturned; CON→INV split to SL-160. Design holds; ready to lock.
