@@ -385,12 +385,19 @@ completed→non-completed transition (detected from the pre-write status):
 ```text
 if old_status == Completed && new_status != Completed {
     table.insert("code_start_oid", value(""));         // clear stamp → redo re-stamps fresh
-    state::forget_source_delta(&primary, slice, phase)?;  // evict the registry row (NEW)
+    // evict the registry row (NEW) — DEGRADE, never propagate (rationale below)
+    if let Err(e) = state::forget_source_delta(&primary, slice, phase) { warn_capture(e); }
 }
 ```
 New `state::forget_source_delta(cwd, slice, phase) -> Result<bool>`: read-modify-write
 removal of the phase's row from `boundaries.toml` (the inverse of `record_source_delta`;
 absent → `false`, no error). Resolved against the **primary** tree (same as the writer).
+**It degrades-and-warns, never propagates** (implementation departure from the earlier
+`?` sketch — RV-163 F-1): a propagating `?` would make a reopen *fail* on a non-repo /
+bare cwd (where `boundaries_path` itself errors), breaking D5 (the binding must never
+block a status transition). Safe because a lingering row is self-healing — the
+re-completion's upsert overwrites it — and a never-recompleted reopen surfaces loudly
+via the completeness gate. See `mem.pattern.state.reopen-evict-degrades-self-heal`.
 
 **Funnel** — `run_record_boundary` (dispatch.rs:587): double-write retained; the only
 change is it stamps **`provenance = Funnel`** on the `BoundaryRow` it writes to *both*
