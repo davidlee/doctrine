@@ -1,0 +1,52 @@
+id    = 171
+slug  = "audit-sl-162-runtime-resolve-test-binary-path"
+title = "Audit SL-162 — runtime-resolve test binary path"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-162"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Behaviour-preservation gate: declared selector tests/e2e_no_baked_paths.rs reads as 'undelivered' in conformance"
+detail = "slice conformance 162 reports 1 undelivered cell: design-target literal selector 'tests/e2e_no_baked_paths.rs' matched no recorded source-delta. Benign near-miss: the file WAS delivered — it is the git-mv rename of e2e_no_baked_manifest_dir.rs and is recorded conformant via the broader 'tests/e2e_*.rs' selector. The literal selector double-counts the same path; the rename landed it under the glob. No undeclared paths (0). Not drift, a selector-overlap artifact."
+disposition = "aligned"
+response = "Aligned. The path was delivered via the e2e_*.rs glob (and is the git-mv rename of the old guard); the literal selector overlaps the glob and double-declares it. Zero undeclared paths. No code or design change — a cosmetic selector-overlap in the design-target list."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Pre-existing unrelated main-tree red: e2e_estimate_non_blocking::no_facet_symbol_outside_allowlist (knowledge.rs)"
+detail = "Full integration suite on candidate/162/review-001: exactly ONE failing test — no_facet_symbol_outside_allowlist — tripping NF-001 because src/knowledge.rs names a facet symbol outside the allowlist. NOT introduced by SL-162: review/162 touches neither knowledge.rs nor e2e_estimate_non_blocking.rs (verified via git diff --name-only main..candidate). Candidate = main + test-only sweep, so the tripwire inputs are byte-identical to main → inherited red on main. Out of SL-162 scope but must be captured as separate work."
+disposition = "aligned"
+response = "Aligned w.r.t. SL-162: the slice preserved behaviour (all 59 swept suites green, goldens byte-identical); the failing tripwire is inherited from main and untouched by review/162. Out of audit scope. Captured as a separate backlog issue for the main-tree NF-001 red (knowledge.rs facet-symbol exposure)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Candidate worktree omits gitignored web/map/dist embed → bin fails to compile until copied"
+detail = "Fresh candidate worktree (cand-162-review-001) lacked web/map/dist/ (gitignored RustEmbed asset root, src/map_server/assets.rs). cargo build --bin doctrine failed with 'RustEmbed folder web/map/dist/ does not exist' until I copied it from the main tree. Dispatch/candidate worktree provisioning does not seed gitignored build assets. Orthogonal to SL-162 (no map_server change); a worktree-provisioning gotcha, relevant to anyone auditing a dispatched slice in a fresh worktree."
+disposition = "aligned"
+response = "Aligned. Worktree-provisioning gap, not SL-162 code (no map_server touch). Resolved during audit by copying web/map/dist from the main tree. Harvested as a durable gotcha for fresh-worktree dispatched-slice audits."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "tests/common/mod.rs allow widened to unused_imports; design §5.2 code block shows only dead_code"
+detail = "Impl writes '#![allow(dead_code, unused_imports)]'; design §5.2 inner-attribute snippet shows only '#![allow(dead_code)]'. Design R4 explicitly pre-authorised widening to unused_imports if the re-export is flagged, so this is sanctioned, not drift — but the design §5.2 prose snippet was not updated to match. Cosmetic design-prose lag."
+disposition = "aligned"
+response = "Aligned. Design R4 pre-authorised widening to unused_imports; the impl is sanctioned. Only the §5.2 prose snippet lags. Recorded in the reconciliation brief as an optional per-slice design-prose tidy (non-gating)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
