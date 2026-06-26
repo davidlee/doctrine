@@ -12,23 +12,27 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/test_support.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/common/mod.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_*.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/relation_cli.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_no_baked_manifest_dir.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_no_baked_paths.rs"
+intent = "design-target"
 
 [[relation]]
 label = "related"
