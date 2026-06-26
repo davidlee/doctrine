@@ -1,0 +1,52 @@
+id    = 163
+slug  = "sl-154-conformance-registry-capture-post-implementation-audit"
+title = "SL-154 conformance-registry capture — post-implementation audit"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-154"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design.md §5.2 reopen pseudocode propagates forget error (`?`); shipped code deliberately degrades+warns"
+detail = "Expected (design §5.2, design.md:388): `state::forget_source_delta(&primary, slice, phase)?;` — error propagates out of the reopen branch. Observed (PHASE-03, state.rs:386–401): forget degrades and warns, never propagates. Rationale is sound and load-bearing: `?` would make a reopen FAIL on a non-repo/bare cwd (boundaries_path itself errors), breaking D5 (the binding must never block a status transition) — pinned by binding_degrades_without_blocking_when_git_unavailable + set_phase_status_clears_completed_on_reopen on non-git roots. A lingering row is self-healing (re-completion's upsert overwrites) and a never-recompleted reopen surfaces via the completeness gate. The CODE is correct; the design PROSE is stale. Per-slice design.md drift → reconcile (direct edit §5.2 to show degrade-not-propagate). Captured as mem.pattern.state.reopen-evict-degrades-self-heal."
+disposition = "verified"
+response = "Observation confirmed: design §5.2 pseudocode (design.md:388) still shows the propagating `?`; shipped code degrades+warns (correct — `?` breaks D5 on non-git roots). Code is right, design prose is stale. Delegated to /reconcile: per-slice DIRECT EDIT of design.md §5.2 to replace the `forget_source_delta(...)?` line with the degrade-and-warn contract (self-healing rationale). No code change. See Reconciliation Brief."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "conformance: 5 undeclared paths (3 test files + notes.md/plan.toml) — all expected, not scope creep"
+detail = "Expected vs observed: `slice conformance 154` reports undelivered=0, conformant=9 (all design-targets delivered), undeclared=5: tests/e2e_dispatch_sync.rs, tests/e2e_skills_dispatch_shrinkage.rs, tests/e2e_slice_record_delta.rs, .doctrine/slice/154/notes.md, .doctrine/slice/154/plan.toml. Tests carry no `tests/` design-target selector by convention — they are the VT verification evidence for the EX criteria, expected to be touched. notes.md/plan.toml are authored .doctrine/ files folded because conformance does not strip .doctrine/ (notes §Constraints; the boundary ends were deliberately set to code commits for this reason). No undeclared SOURCE path. Clean signal."
+disposition = "aligned"
+response = "Aligned, no change needed. undelivered=0; all 9 design-targets conformant. The 5 undeclared paths are 3 test files (VT evidence, no `tests/` selector by convention) + notes.md/plan.toml (authored .doctrine/ files, conformance folds all paths — boundary ends deliberately set to code commits). Zero undeclared SOURCE. Expected, clean."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "runtime registry state/slice/154/boundaries.toml rows are all-Unknown despite solo landing (stale PATH binary strip)"
+detail = "Expected: every solo-landed phase row carries provenance=Solo. Observed: all rows read Unknown. Cause (notes PHASE-06 FINDING; mem_019f025e): `which doctrine` → readonly ~/.cargo/bin/doctrine (jail), which PREDATES BoundaryRow.provenance; any binding/record-delta through it read-modify-writes the registry via a pre-provenance struct, silently dropping the field (read-back default=Unknown). NOT a code defect — the provenance code is unit+e2e green built current (boundary.rs:48 serde-default, state.rs:698/701 merge). HARMLESS for this audit: SL-154 is solo, so `slice conformance` keys on the oids (correct), never provenance (provenance gates ONLY the dispatch prepare-review D11 guard, which solo never hits). Left Unknown rather than cosmetically hand-edit — the PATH binary would re-strip; surfacing > masking. Conscious accepted drift."
+disposition = "tolerated"
+response = "Tolerated — conscious accepted drift with rationale. Runtime registry rows all-Unknown because the readonly PATH jail binary predates BoundaryRow.provenance and strips it on RMW. NOT a code defect (provenance code unit+e2e green built current). Harmless for THIS solo audit: conformance keys on oids, not provenance (provenance gates only the dispatch D11 guard, never reached solo). Left Unknown deliberately: hand-editing is cosmetic (the PATH binary re-strips on next op) and masking > surfacing. Captured as durable memory mem_019f025e. No reconcile action — accepted runtime-tier artifact, not authored truth."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "ISS-039 / ISS-051 / ISS-052 still `open` — the slice fixed all three"
+detail = "Expected vs observed: the slice's motivating issues remain backlog status `open`. ISS-051 (solo final-phase miss) closed by PHASE-03 (live-coord guard + Solo stamp + absent-stamp records-nothing); ISS-052 (funnel never populates) closed by PHASE-05 (derive + D11 guard + completeness gate); ISS-039 (dispatch ledger never committed) absorbed + closed by PHASE-04 (commit_boundaries splice at prepare-review). All three are fixed and green in code, but none is resolved in the backlog. Cross-entity status reconciliation — route to /reconcile (resolve the three issues) → /close. Not an in-audit code fix."
+disposition = "verified"
+response = "Observation confirmed: ISS-039 (PHASE-04), ISS-051 (PHASE-03), ISS-052 (PHASE-05) are all fixed+green but still backlog status `open`. Cross-entity status reconciliation, not an in-audit code fix. Delegated to /reconcile → /close: resolve all three issues against this slice's closure. See Reconciliation Brief."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
