@@ -1,0 +1,61 @@
+id    = 165
+slug  = "reconciliation-review-of-sl-138"
+title = "reconciliation review of SL-138"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-138"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "P1/P2 conformance boundary ranges swept 30 foreign commits into the phase delta"
+detail = "Recorded code_start_oid (P1 53e04df9, P2 f4104f55) = HEAD at the in_progress stamp, but each phase landed rebased onto an advanced edge tip, so start..end spanned interleaved foreign work (P1 +3 SL-154 close/reconcile/audit commits; P2 +27 SL-156/SL-154/IMP-174/RFC-005 commits). Conformance reported 49 undeclared, masking true scope. Each phase is in fact exactly ONE non-merge feat commit (P1 f4104f55, P2 42de85c4, P3 1ed4c750); true deltas touch only design-targeted source + tests. Expected: registry range == the phase's own delta. Observed: ranges polluted by edge history between in_progress and land."
+disposition = "fix-now"
+response = "Corrected in-audit: re-recorded P1 (5cb84f3a..f4104f55) and P2 (83b9cea2..42de85c4) via slice record-delta. Conformance now 5 conformant / 0 undelivered / 4 undeclared (all legitimate — see F-3). Registry-only correction; no shipped code/design/governance change."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Root cause: solo binding stamps code_start_oid at in_progress, stale if edge advances before land"
+detail = "capture_phase_boundary (src/state.rs:414, SL-147 PHASE-04) stamps code_start_oid = HEAD on the InProgress flip and code_end_oid = HEAD on Completed. When a phase is developed/landed rebased onto a newer edge tip (other slices land in between), the range attributes those foreign commits to the phase. Pre-existing mechanism — SL-138 did not touch it. P3 was already manually corrected per the handoff (F-6 non-merge guard); P1/P2 were not. Systemic, out of SL-138 scope."
+disposition = "follow-up"
+response = "Minted IMP-175 (solo binding stamps stale code_start_oid when edge advances before land). Pre-existing SL-147 mechanism, out of SL-138 scope. Manual record-delta + conformance undeclared signal are the current mitigations; IMP-175 proposes auto-deriving start from the landed feat's first parent."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Residual 4 undeclared paths after correction are selector-by-design, not scope creep"
+detail = "Post-correction conformance: 5 conformant (exactly the §9 design-target selectors), 0 undelivered, 4 undeclared = .doctrine/slice/138/notes.md + slice-138.toml (doctrine authored state) and crates/cordage/tests/reachability.rs + tests/e2e_inspect_transitive_golden.rs (tests). Design §9 selectors intentionally name only the 5 source files; authored-state + test paths are legitimate SL-138 deltas outside the source-selector set. Expected vs observed: residual undeclared is the known selector granularity, not undocumented touches."
+disposition = "aligned"
+response = "Selector-by-design: §9 design-target selectors name only the 5 source files; notes.md + slice-138.toml (authored doctrine state) and the 2 test files are legitimate SL-138 deltas outside the source-selector granularity. No undocumented touch."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "transitive_from(_root) param unused — signature symmetry, not a dropped existence gate"
+detail = "Design §5 + plan EX-1 list root: &Path, but the relation-only walk reads nothing per-entity from disk: build_relation_graph_from and the require_minted existence gate operate off the scanned corpus, not root. Kept as _root for call-site tuple symmetry with inspect_from/render_from. Confirmed benign: the transitive_depth_cap_truncation_and_existence_gate unit test proves never-minted ids are rejected without consulting root. warnings=deny forced the leading underscore. Not a deviation from the locked signature."
+disposition = "aligned"
+response = "Benign signature symmetry honoring the locked design signature; existence gate verified to work without root (transitive_depth_cap_truncation_and_existence_gate green). Not a deviation."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Behaviour-preservation + invariants verified against landed code"
+detail = "EX-4 gate: bare inspect 16/16 byte-unchanged (e2e_inspect_golden); reachable re-expressed over reachable_bounded(.., None) byte-identical (cordage reachability 15/15, blockers green unchanged). Transitive golden 18/18; relation_graph transitive unit 6/6 (VT-1..5 + render). Layering (ADR-001): TransitiveDir defined only in relation_graph.rs:898 (not cli.rs); transitive branch in run_inspect returns early with zero priority:: calls. Direction polarity up=Inbound / down=Outbound per design §5 L188 (sheet's inverted guess corrected + golden-pinned). F2 memory gate placed before the memory early-return (inspect.rs:72 vs 79), names retrieve --expand. All 11 PHASE-02 expect(dead_code) retired (0 remain). just check green."
+disposition = "aligned"
+response = "All invariants verified against landed code: behaviour-preservation (bare inspect 16/16 byte-unchanged, cordage 15/15, blockers unchanged), transitive 18/18 + unit 6/6, layering, polarity (§5 L188), F2 gate ordering, 11 dead-code expects retired, just check green. EX-1..4 + VT per phase evidenced."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,0 +1,42 @@
+memory_uid = "mem_019f031a315c7803900fcf398092e674"
+memory_key = "mem.pattern.audit.conformance-boundary-pollution"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Conformance undeclared noise from boundary start-oid pollution"
+summary = "Audit: huge undeclared conformance noise often means polluted boundary start-oids, not scope creep — fix with record-delta(parent..feat)."
+created = "2026-06-26"
+updated = "2026-06-26"
+
+[scope]
+paths = ["src/state.rs"]
+globs = []
+commands = ["slice conformance", "slice record-delta"]
+tags = ["audit", "conformance", "registry"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9947ea89b37d53954c56d44c83541aa01f098f61"
+ref_name = "refs/heads/edge"
+checkout_state_id = "992f303f089edbcd341205a5a67081217ef3514c5f794e6a50e786c46f7522e2"
+base_commit = "fd2eb21679d53c28a7e78b516a584b58841236df"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
