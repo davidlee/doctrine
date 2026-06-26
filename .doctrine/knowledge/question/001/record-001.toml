@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 1
+slug = "gating-locus-shapes-role-vs-gates-axis"
+title = "Gating locus: role on shapes (M-Pr) vs distinct gates axis (M-E)"
+record_kind = "question"
+status = "open"
+created = "2026-06-26"
+updated = "2026-06-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = "Should actionability gating be a role on the `shapes` relation (M-Pr) or a distinct dep/seq axis `gates` (M-E)?"
+why_matters = "Determines whether the relation model carries gate-intent as a refinement of semantic association (one edge, two roles) or as an orthogonal concern (two edges). Corpus-wide blast radius: every epistemic→work edge is affected."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = ["RFC-008 frames the fork; S2 (shape WITHOUT gate) eliminates M-P/M-Pk, leaving M-Pr vs M-E as the live options."]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-158"
+
+[[relation]]
+label = "shapes"
+target = "SPEC-019"
+
+[[relation]]
+label = "shapes"
+target = "RFC-008"

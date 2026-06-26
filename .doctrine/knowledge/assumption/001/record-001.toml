@@ -1,0 +1,42 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 1
+slug = "roles-extend-to-shapes"
+title = "Role machinery extends to shapes — ADR-016 roles apply to shapes label"
+record_kind = "assumption"
+status = "held"
+created = "2026-06-26"
+updated = "2026-06-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+claim           = "SL-149's role machinery (ADR-016) can be extended to the `shapes` RelationLabel to carry a `{gates, informs}` role dimension, analogous to how it refines `references` with `{implements, concerns, scoped_from}`."
+confidence      = "medium"
+basis           = "design-inference"
+validation_plan = "Verify that ADR-016's role contract (closed dimension, per-edge role assertion via `link --role`) cleanly applies to `shapes` without grammar changes. Coordinate with SL-149."
+validated_by    = ""
+validated_on    = ""
+invalidated_by  = ""
+invalidated_on  = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = ["If this assumption fails, M-Pr collapses and M-E becomes the only surviving option.", "ADR-016 establishes closed role dimensions; extending to `shapes` is the first application beyond `references`."]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "QUE-001"
+
+[[relation]]
+label = "shapes"
+target = "RFC-008"
+
+[estimate]
+lower = 1.0
+upper = 2.0
