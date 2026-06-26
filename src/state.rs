@@ -382,6 +382,10 @@ pub(crate) fn set_phase_status(
         .with_context(|| format!("Failed to parse {}", path.display()))?;
 
     let table = doc.as_table_mut();
+    // Capture the prior status BEFORE the insert overwrites it: a reopen
+    // (Completed→non-Completed) must retire the now-defunct boundary (D8/P2-1).
+    let was_completed =
+        table.get("status").and_then(Item::as_str) == Some(PhaseStatus::Completed.as_str());
     table.insert("status", toml_edit::value(status.as_str()));
     table.insert("last_updated", toml_edit::value(now));
     if status == PhaseStatus::InProgress && table.get("started").and_then(Item::as_str) == Some("")
@@ -398,6 +402,13 @@ pub(crate) fn set_phase_status(
         }
     } else {
         table.insert("completed", toml_edit::value(""));
+        // Reopen (Completed→non-Completed): clear the start-stamp so the binding
+        // re-captures a FRESH range on the next in_progress flip (capture_phase_boundary
+        // below re-stamps it), never reusing the stale start (P2-1). The registry row is
+        // evicted just before the sheet write (D8).
+        if was_completed {
+            table.insert("code_start_oid", toml_edit::value(""));
+        }
     }
 
     // Solo phase-binding capture (SL-147 PHASE-04, design D5): a SEPARATE,
@@ -426,6 +437,21 @@ pub(crate) fn set_phase_status(
 
     fs::write(&path, doc.to_string())
         .with_context(|| format!("Failed to write {}", path.display()))?;
+
+    // Reopen eviction (design D8): a Completed→non-Completed transition retires the
+    // recorded boundary — drop its registry row so a re-completion records a fresh one
+    // rather than the conformance gate blessing a stale row. DEGRADING like the record
+    // tail below (named warning, never returned): the binding must NEVER block a status
+    // transition (D5), and a non-repo/bare cwd makes `boundaries_path` itself error. A
+    // lingering row is self-healing — the re-completion's upsert overwrites it — and a
+    // never-recompleted reopen surfaces it loudly via the completeness gate (Extra).
+    // Primary-tree-resolved like the writer; an absent row is a no-op (`Ok(false)`).
+    if was_completed
+        && status != PhaseStatus::Completed
+        && let Err(e) = forget_source_delta(project_root, slice_id, phase_id)
+    {
+        warn_capture(phase_id, &format!("reopen eviction failed: {e:#}"));
+    }
 
     // The registry write is the tail of the DEGRADING capture: it runs only on a
     // completion that resolved a `(start, end)` pair, and its failure is reported
@@ -461,10 +487,11 @@ struct CaptureCompletion {
 /// Solo phase-binding capture step (SL-147 PHASE-04). Mutates `table` (the phase
 /// sheet) to stamp `code_start_oid` on entry to `InProgress`, and returns the
 /// `(start, end)` pair to record on `Completed`. Returns `None` (no registry
-/// write) for every other status, when the arm guard fires (current branch ==
-/// `dispatch/<slice_id>`), or when any git read degrades — emitting a NAMED
-/// warning so the operator sees why no row landed, WITHOUT blocking the
-/// transition. `project_root` doubles as the git cwd (the repo it lives in).
+/// write) for every other status, when the arm guard fires (a *live* coordination
+/// worktree exists for `dispatch/<slice_id>` — D3/D9), or when any git read
+/// degrades — emitting a NAMED warning so the operator sees why no row landed,
+/// WITHOUT blocking the transition. `project_root` doubles as the git cwd (the
+/// repo it lives in).
 fn capture_phase_boundary(
     project_root: &Path,
     slice_id: u32,
@@ -477,14 +504,21 @@ fn capture_phase_boundary(
     }
 
     // Arm guard: a dispatch coordination context records via the funnel recorder,
-    // never the solo binding — they must NEVER both record a phase. Key on the
-    // doctrine-owned branch, not "is a linked worktree" (a solo /worktree fork
-    // must still capture) and not any host commit convention (POL-002).
-    match crate::git::current_branch(project_root) {
-        Ok(Some(branch)) if branch == format!("dispatch/{slice_id:03}") => return None,
-        Ok(_) => {}
+    // never the solo binding — they must NEVER both record a phase. Key on a *live*
+    // coordination worktree for `dispatch/<slice_id>` (D3 + D9), not the current
+    // branch: the branch-proxy was unsound when the flip ran from the session root
+    // (the primary tree on `main` while the coord worktree owns `dispatch/NNN`), and
+    // a solo `/worktree` fork on its own feature branch must still capture. Liveness
+    // (`!prunable && path.exists()`) means a stale/pruned coord entry reads as absent,
+    // so capture is never suppressed forever. A probe error warns + stands down.
+    match crate::git::live_worktree_for_ref(
+        project_root,
+        &format!("refs/heads/dispatch/{slice_id:03}"),
+    ) {
+        Ok(Some(_)) => return None,
+        Ok(None) => {}
         Err(e) => {
-            warn_capture(phase_id, &format!("branch probe failed: {e}"));
+            warn_capture(phase_id, &format!("coord worktree probe failed: {e}"));
             return None;
         }
     }
@@ -683,13 +717,6 @@ pub(crate) fn record_source_delta(
 /// writer. Returns whether a row was removed: an absent registry file or an
 /// absent phase is a no-op `Ok(false)`, never an error. No git guard — a removal
 /// records no range.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the reopen-eviction caller lands in PHASE-03 (mem.pattern.lint.dead-code-expect-vs-cfg-test)"
-    )
-)]
 pub(crate) fn forget_source_delta(cwd: &Path, slice_id: u32, phase: &str) -> anyhow::Result<bool> {
     let path = boundaries_path(cwd, slice_id)?;
     let mut registry = read_registry(&path)?;
@@ -1584,10 +1611,11 @@ mod tests {
         .unwrap();
     }
 
-    // VT-1: in_progress → completed records the boundary deterministically; a
-    // re-record (reopen → re-complete) upserts to the new tip.
+    // VT-1/VT-3: in_progress → completed records the boundary deterministically; a
+    // reopen EVICTS the row and clears the stamp (D8/P2-1) so the re-completion records
+    // a FRESH range — never a stale start preserved across the reopen.
     #[test]
-    fn binding_records_boundary_on_completion_and_upserts_on_reopen() {
+    fn binding_records_boundary_then_evicts_and_refreshes_on_reopen() {
         let tmp = tempfile::tempdir().unwrap();
         let repo = init_repo(&tmp.path().join("repo"));
         seed_phase_sheet(&repo, 147, "phase-01");
@@ -1608,9 +1636,17 @@ mod tests {
             "one boundary spanning the phase"
         );
 
-        // Reopen + re-complete after another commit → the SAME phase upserts, the
-        // start is preserved (stamped once), the end advances.
+        // Reopen (Completed→non-Completed) EVICTS the recorded row and clears the
+        // start-stamp (design D8/P2-1): mid-reopen the registry is empty, so a redo
+        // re-captures a FRESH range rather than reusing the stale start.
         set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T3").unwrap();
+        assert!(
+            read_source_deltas(&repo, 147).unwrap().is_empty(),
+            "reopen evicts the recorded row — no stale row survives the reopen"
+        );
+        // The reopen→in_progress re-stamps a fresh start at the reopen HEAD (== end1,
+        // no commit landed between the completion and the reopen).
+        let restart = git(&repo, &["rev-parse", "HEAD"]);
         git(&repo, &["commit", "-q", "--allow-empty", "-m", "more"]);
         let end2 = git(&repo, &["rev-parse", "HEAD"]);
         set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T4").unwrap();
@@ -1619,9 +1655,9 @@ mod tests {
             read_source_deltas(&repo, 147).unwrap(),
             vec![BoundaryRow {
                 provenance: Provenance::Solo,
-                ..row("PHASE-01", &start, &end2)
+                ..row("PHASE-01", &restart, &end2)
             }],
-            "upsert: one row, start preserved, end advanced"
+            "re-completion records exactly one FRESH row (start re-stamped at reopen, not preserved)"
         );
     }
 
@@ -1673,16 +1709,30 @@ mod tests {
         assert!(read_source_deltas(root, 4).is_err());
     }
 
-    // VT-2: arm mutual-exclusion — a completion in a SIMULATED dispatch context
-    // (current branch `dispatch/<NNN>`) records ZERO rows from the binding; a
-    // solo-context completion records exactly one.
+    // VT-1: arm mutual-exclusion — a LIVE coordination worktree for `dispatch/<NNN>`
+    // makes the binding stand down, EVEN when the flip runs from the session root (the
+    // primary tree on `main`, never checked out to `dispatch/NNN`). The guard keys on
+    // worktree liveness (D3/D9), not the current branch — the branch-proxy was unsound
+    // under flip-from-session-root (design §2).
     #[test]
-    fn binding_skips_capture_in_a_dispatch_context() {
+    fn binding_stands_down_under_a_live_coord_worktree() {
         let tmp = tempfile::tempdir().unwrap();
         let repo = init_repo(&tmp.path().join("repo"));
         seed_phase_sheet(&repo, 147, "phase-01");
-        // Put the repo on the doctrine-owned coordination branch for slice 147.
-        git(&repo, &["checkout", "-q", "-b", "dispatch/147"]);
+        // A live coordination worktree on dispatch/147 — the dispatch funnel owns
+        // recording. The primary repo stays on `main` (the session-root flip the
+        // branch-proxy could not see).
+        let coord = tmp.path().join("coord");
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "dispatch/147",
+                &coord.to_string_lossy(),
+            ],
+        );
 
         set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
         git(&repo, &["commit", "-q", "--allow-empty", "-m", "code"]);
@@ -1690,7 +1740,46 @@ mod tests {
 
         assert!(
             read_source_deltas(&repo, 147).unwrap().is_empty(),
-            "dispatch context: the binding records nothing (the funnel recorder owns it)"
+            "live coord worktree: the binding records nothing (the funnel recorder owns it)"
+        );
+    }
+
+    // VT-2: liveness, not name-match — a PRUNABLE / deleted-path `dispatch/<NNN>` coord
+    // entry reads as ABSENT, so the solo binding records (a stale coord worktree must not
+    // suppress capture forever). git keeps listing a worktree whose checkout was deleted,
+    // marking it `prunable`, until `git worktree prune` runs.
+    #[test]
+    fn binding_records_when_coord_worktree_is_prunable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        let coord = tmp.path().join("coord");
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "dispatch/147",
+                &coord.to_string_lossy(),
+            ],
+        );
+        // Delete the coord checkout on disk: git still lists dispatch/147, now prunable.
+        std::fs::remove_dir_all(&coord).unwrap();
+
+        let start = git(&repo, &["rev-parse", "HEAD"]);
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "code"]);
+        let end = git(&repo, &["rev-parse", "HEAD"]);
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        assert_eq!(
+            read_source_deltas(&repo, 147).unwrap(),
+            vec![BoundaryRow {
+                provenance: Provenance::Solo,
+                ..row("PHASE-01", &start, &end)
+            }],
+            "a prunable coord entry is not live → the solo binding records"
         );
     }
 
@@ -1718,6 +1807,36 @@ mod tests {
                 ..row("PHASE-01", &start, &end)
             }],
             "solo context: exactly one boundary"
+        );
+    }
+
+    // VT-5 (irreducible floor, design §5.5/§9): a completed PURE-SOLO phase with NO
+    // stamped start (never flipped in_progress under the binding) and no coord worktree
+    // records NOTHING (+ a surfaced warning) — never a manufactured garbage row. The
+    // UNTOUCHED conformance consumer (`registry_completeness`) then reports Incomplete
+    // naming the phase, so the accepted floor never silently passes (record-delta remedy).
+    #[test]
+    fn binding_absent_start_records_nothing_and_completeness_flags_incomplete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+
+        // Straight to Completed — no in_progress flip, so no `code_start_oid` was ever
+        // stamped: the absent-stamp branch records nothing.
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T1").unwrap();
+
+        assert!(
+            read_source_deltas(&repo, 147).unwrap().is_empty(),
+            "no stamped start → no boundary recorded (no garbage row)"
+        );
+        assert_eq!(
+            registry_completeness(&repo, &repo, 147).unwrap(),
+            Completeness::Incomplete {
+                gaps: vec![CompletenessGap::Missing {
+                    phase: "PHASE-01".to_string()
+                }]
+            },
+            "the floor surfaces as Incomplete end-to-end, never a silent pass"
         );
     }
 
