@@ -14,6 +14,26 @@ label = "references"
 role = "concerns"
 target = "RFC-002"
 
+[[selector]]
+selector = "crates/cordage/src/query.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "crates/cordage/src/lib.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation_graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/inspect.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
