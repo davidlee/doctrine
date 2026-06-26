@@ -12,9 +12,9 @@ use anyhow::Result;
 use clap::Args;
 
 use crate::catalog::hydrate::{CatalogEntity, CatalogKey, scan_catalog};
-use crate::kinds;
 use crate::catalog::scan::ScanMode;
 use crate::integrity;
+use crate::kinds;
 use crate::lexical::{
     Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker, tokenize, tokenize_with_spans,
 };

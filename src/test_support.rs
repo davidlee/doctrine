@@ -55,22 +55,30 @@ mod tests {
 
         // File name ends with "doctrine" (+ ".exe" on Windows).
         let name = path.file_name().expect("doctrine_bin path has a file name");
-        let name_str = name.to_str().expect("doctrine_bin file name is valid UTF-8");
+        let name_str = name
+            .to_str()
+            .expect("doctrine_bin file name is valid UTF-8");
         assert!(
             name_str.starts_with("doctrine"),
             "doctrine_bin file name starts with 'doctrine': {name_str}"
         );
 
         // The resolved path exists.
-        assert!(path.exists(), "doctrine_bin path exists: {}", path.display());
+        assert!(
+            path.exists(),
+            "doctrine_bin path exists: {}",
+            path.display()
+        );
 
         // It is a file, not a directory.
-        let meta = path
-            .metadata()
-            .expect("doctrine_bin metadata readable");
+        let meta = path.metadata().expect("doctrine_bin metadata readable");
         assert!(meta.is_file(), "doctrine_bin is a file: {}", path.display());
 
         // File size > 0 (non-zero binary).
-        assert!(meta.len() > 0, "doctrine_bin non-zero size: {}", path.display());
+        assert!(
+            meta.len() > 0,
+            "doctrine_bin non-zero size: {}",
+            path.display()
+        );
     }
 }
