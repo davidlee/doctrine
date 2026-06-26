@@ -24,12 +24,16 @@ use std::process::Command;
 
 use serde_json::Value;
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Run `doctrine install --agent claude --skill code-review` rooted at `dir`,
 /// asserting success; return stdout.
 fn install(dir: &Path) -> String {
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args([
             "install",
             "--agent",
@@ -154,7 +158,7 @@ fn install_agent_pi_dry_run_prints_delegation_plan() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(["install", "--agent", "pi", "--dry-run", "-p"])
         .arg(dir)
         .output()

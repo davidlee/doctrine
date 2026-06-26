@@ -29,6 +29,10 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
+
 mod common;
 
 /// The committed corpus — `.doctrine/` beside `Cargo.toml` in the invoking tree.
@@ -37,7 +41,6 @@ fn doctrine_root() -> PathBuf {
 }
 
 /// The freshly-built binary under test (SL-058 PHASE-01 scaffold goldens).
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
 
 /// The on-disk template-source dir (the source that RustEmbed snapshots into the
 /// binary). The PHASE-01 template guard scans these directly: it guards the SOURCE
@@ -515,7 +518,7 @@ fn template_source_is_post_cut_shape_kind_specific() {
 fn scaffold(new_args: &[&str], toml_rel: &str) -> String {
     let t = tempfile::tempdir().expect("tempdir");
     let root = t.path();
-    let out = Command::new(BIN)
+    let out = Command::new(bin())
         .args(new_args)
         .arg("-p")
         .arg(root)

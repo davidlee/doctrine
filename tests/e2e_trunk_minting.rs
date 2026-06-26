@@ -21,7 +21,11 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// A throwaway git repo with `main` as the initial branch + pinned identity, so
 /// `trunk_tree_ish` resolves `main` (no origin, no `DOCTRINE_TRUNK_REF`).
@@ -74,7 +78,7 @@ impl TrunkRepo {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(BIN)
+        Command::new(bin())
             .args(args)
             .arg("-p")
             .arg(&self.path)

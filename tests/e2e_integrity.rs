@@ -21,7 +21,11 @@ use std::os::unix::fs::symlink;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -57,7 +61,7 @@ fn alias(root: &Path, name: &str, target: &str) {
 }
 
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(args)
         .arg("-p")
         .arg(root)

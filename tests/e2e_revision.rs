@@ -20,7 +20,11 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// A throwaway git repo with a `.doctrine/revision` tree, pinned identity on `main`.
 struct RevRepo {
@@ -56,7 +60,7 @@ impl RevRepo {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(BIN)
+        Command::new(bin())
             .args(args)
             .arg("-p")
             .arg(&self.path)

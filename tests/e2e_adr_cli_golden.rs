@@ -25,7 +25,11 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Hand-seed one ADR's authored tree (`.doctrine/adr/NNN/adr-NNN.{toml,md}`) with
 /// the caller's exact toml + md bytes — fixed dates make show/list deterministic.
@@ -38,7 +42,7 @@ fn seed(root: &Path, id: u32, toml: &str, md: &str) {
 
 /// `doctrine adr <args...> -p <root>` over the built binary.
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .arg("adr")
         .args(args)
         .arg("-p")

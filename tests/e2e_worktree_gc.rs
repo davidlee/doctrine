@@ -31,7 +31,11 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -84,7 +88,7 @@ fn stamp_marker(root: &Path) {
 /// binary inherits no jail target redirect — the fork's `target/` is in-tree
 /// (SL-156); gc no longer reads CARGO_TARGET_DIR at all.
 fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
-    let mut cmd = Command::new(BIN);
+    let mut cmd = Command::new(bin());
     cmd.args(args).current_dir(cwd);
     cmd.env_remove("CARGO_TARGET_DIR");
     match worker {

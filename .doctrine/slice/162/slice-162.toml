@@ -1,7 +1,7 @@
 id = 162
 slug = "runtime-resolve-bin-path"
 title = "Runtime-resolve test binary path"
-status = "design"
+status = "ready"
 created = "2026-06-26"
 updated = "2026-06-26"
 tags = ["area:testing"]
