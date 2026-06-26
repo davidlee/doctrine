@@ -2,8 +2,8 @@ schema = "doctrine.rfc"
 version = 1
 
 id = 9
-slug = "epistemic-kinds-observation-hypothesis"
-title = "Epistemic record kinds: observation, hypothesis, and the empirical loop"
+slug = "epistemic-records-design-substrate"
+title = "Epistemic records as the human-facing relational substrate for design ambiguity"
 status = "open"
 created = "2026-06-26"
 updated = "2026-06-26"
@@ -21,4 +21,12 @@ target = "RFC-008"
 [[relation]]
 label = "related"
 target = "RFC-003"
+
+[[relation]]
+label = "related"
+target = "ADR-017"
+
+[[relation]]
+label = "related"
+target = "RFC-007"
 
