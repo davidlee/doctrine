@@ -19,6 +19,22 @@ below); design sections next.
   rework trap to avoid in A: do **not** bake FF-only into the land seam — keep
   FF-policy at plan time (`plan_trunk_row` ff-gate, unchanged).
 - IMP-127 reference moved off SL-157 onto RFC-006 (the surgery leg is B's).
+- **2026-06-26 — scope premise corrected (the design caught it).** The original
+  scope said "retire the checked-out leg, always pure CAS — the live checkout buys
+  only hazard." **Backwards.** Evidence: (1) RFC-005 H2 localizes R1/R3/R4 to the
+  *not-checked-out* leg's speculative post-CAS resync (`advance_pure_ref:1842-1848`);
+  it calls the checked-out leg the **safe** one (`ff` syncs atomically, proven by
+  `integrate_trunk_checked_out_ff_leaves_clean_tree`). (2) `edge` IS checked out —
+  AGENTS.md mandates primary-on-edge — so `--edge` rides the checked-out leg;
+  force-CASing it would desync the dev's tree (ISS-038 phantom). (3) `main` is
+  never checked out → pure-ref leg; no `main` worktree exists to drop (OQ-A). So
+  **corrected A = strip the speculative None-leg resync** (it guards a None→Some
+  race impossible under these invariants), retire `resync_worktree_hard` +
+  `RacedDesync`; **keep** the checked-out leg + M4 gate. User chose (i) keep the
+  safe atomic edge leg over (ii) pure-one-leg (which fights AGENTS.md). OQ-D:
+  `resync_worktree_hard` sole caller is the deleted resync → delete; `ff_advance_in_worktree`
+  keeps its caller → stays. OQ-B: edge rides the (safe) checked-out leg. OQ-C: N/A
+  (no surgery in A). OQ-E: mechanism-only Revision.
 
 ## Where this came from
 
