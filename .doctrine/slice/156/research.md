@@ -280,3 +280,32 @@ hit the shared jail target (no worse than today; keep flake env as the base so r
 cargo is unchanged). (2) **ADR-008 D-B5 says "justfile unchanged" and D-B1 says
 "set at worker spawn"** — B moves the mechanism into the justfile → an ADR deviation
 that needs a /consult + likely a Revision/amendment before locking the design.
+
+### POL-002 reframe — platform/project layering (user steer)
+
+cargo / justfile / `CARGO_TARGET_DIR` / flake = **doctrine-the-REPO conventions**
+(PROJECT layer; the host happens to be a Rust project). The dispatch/worktree
+machinery = **PLATFORM** (shipped product). POL-002: shipped code must not
+load-bear on a host convention.
+
+**Existing violation found.** `CARGO_TARGET_DIR` is hardcoded in the platform:
+- `src/worktree/fork.rs::project_env_contract` — emits `CARGO_TARGET_DIR=<base>/wt/<branch>`
+- `src/worktree/coordinate.rs:255` — consumes it
+- `src/worktree/gc.rs:151-157` — replicates the cargo target-base to GC `wt/<branch>` dirs
+
+A non-cargo doctrine client gets a spurious `CARGO_TARGET_DIR` injected into worker
+forks + GC managing dirs that never exist. The codex arm's `$fork_env` IS this
+violation — extending it to the claude arm would deepen it.
+
+**Implication for the design.** Per-worktree build isolation is a PROJECT concern,
+solved in the project justfile (B), serving BOTH arms uniformly (justfile runs in
+the worker cwd regardless of arm; needs no platform env channel — which the claude
+worker lacks anyway). The platform should EXIT the build-env business: retire the
+cargo coupling from `project_env_contract` / `coordinate` / `gc` so dispatch is
+build-tool-agnostic.
+
+Two scope shapes for the user:
+- **Narrow** — fix claude-arm isolation purely in the project justfile (B); leave
+  the platform cargo coupling as a separate flagged follow-up (backlog).
+- **Broad** — also retire the platform cargo coupling now (POL-002 cleanup), so both
+  arms ride the project justfile and ADR-008's D-B1/D-B5 are revisited via a Revision.
