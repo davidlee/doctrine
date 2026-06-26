@@ -1,0 +1,76 @@
+# Implementation plan for SL-162 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-162"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Resolver + seam + constructor test"
+objective = """
+Introduce the runtime resolver `test_support::doctrine_bin()` (current_exe \
+sibling, profile/target-dir agnostic), re-export it through `tests/common/mod.rs` \
+under `#![allow(dead_code)]`, and prove it with a constructor test (IMP-185). \
+Lands the foundation green before any call-site sweep — no production code, no \
+golden touched.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked: RV-169 inquisition clean, slice at plan/ready." },
+  { id = "EN-2", text = "src/test_support.rs and tests/common/mod.rs present (the CHR-014 seam)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "test_support::doctrine_bin() -> PathBuf exists: current_exe() then pop exe, pop deps/, push 'doctrine'+EXE_SUFFIX. No env! macro in the body." },
+  { id = "EX-2", text = "tests/common/mod.rs re-exports doctrine_bin (and repo_root) with inner #![allow(dead_code)]." },
+  { id = "EX-3", text = "The 4 existing `mod common;` includers and the full suite stay green — no regression from the re-export/allow." },
+]
+verification = [
+  { id = "VT-1", expects = "Constructor test (IMP-185): asserts doctrine_bin() returns an existing, executable path under target/<profile>/. In-namespace verifiable. Maps to slice VT-4." },
+  { id = "VT-2", expects = "`just check` green — resolver + re-export compile clippy-clean (zero warnings), existing suites unaffected." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "59-file sweep + guard lock"
+objective = """
+Migrate every `const BIN = env!(\"CARGO_BIN_EXE_doctrine\")` site to the runtime \
+resolver via a local `bin()` wrapper, then rename+generalise the path-baking \
+guard to ban both macros. TDD within the phase: generalise the guard first (goes \
+red — files still carry the macro), sweep the 59 files, end green. The \
+behaviour-preservation gate (byte-identical goldens, all suites green) is the \
+proof the sweep is faithful.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: doctrine_bin() available and re-exported." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All 59 files migrated: `const BIN` line removed; `mod common;` present; `fn bin() -> PathBuf { common::doctrine_bin() }` wrapper; every `Command::new(BIN)` -> `Command::new(bin())`." },
+  { id = "EX-2", text = "Zero `env!(\"CARGO_BIN_EXE` occurrences in non-comment code across src/ and tests/." },
+  { id = "EX-3", text = "Guard renamed tests/e2e_no_baked_manifest_dir.rs -> tests/e2e_no_baked_paths.rs (git mv), test fn generalised, banning both CARGO_MANIFEST_DIR and CARGO_BIN_EXE via fragment-assembled needles; passes." },
+]
+verification = [
+  { id = "VT-1", expects = "Full e2e suite green and goldens BYTE-IDENTICAL (`just gate`) — the behaviour-preservation gate. Formerly-failing suites (e2e_adr_cli_golden, e2e_backlog_filter_alias) pass." },
+  { id = "VT-2", expects = "Generalised guard e2e_no_baked_paths passes; by construction it fails if either macro is reintroduced." },
+  { id = "VA-1", expects = "`grep -rn 'env!(\"CARGO_BIN_EXE' tests/ src/` returns nothing outside the guard's own assembled-fragment needle." },
+  { id = "VH-1", expects = "Cross-namespace proof: run a formerly-failing suite in one namespace then the other WITHOUT recompiling between — both green. Single-namespace CI cannot exercise this; correctness in-jail is by construction (no baked path)." },
+]
+specs        = []
+requirements = []

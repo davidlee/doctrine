@@ -22,7 +22,11 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -58,7 +62,7 @@ fn stderr(out: &Output) -> String {
 
 /// `doctrine dispatch arm-spawn --base <base> -p <root>` (argv-driven; no stdin).
 fn arm_spawn(root: &Path, base: &str) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(["dispatch", "arm-spawn", "--base", base, "-p"])
         .arg(root)
         .env_remove("DOCTRINE_WORKER")
@@ -69,7 +73,7 @@ fn arm_spawn(root: &Path, base: &str) -> Output {
 /// `doctrine worktree verify-worker --base <B> --dir <worktree> --branch <S>` —
 /// the post-spawn base==B belt the funnel runs against a returned worker.
 fn verify_worker(base: &str, dir: &Path, branch: &str) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args([
             "worktree",
             "verify-worker",
@@ -87,7 +91,7 @@ fn verify_worker(base: &str, dir: &Path, branch: &str) -> Output {
 
 /// `doctrine worktree create-fork` with `{cwd,name}` on STDIN, process cwd = `cwd`.
 fn create_fork(cwd: &Path, payload: &str) -> Output {
-    let mut child = Command::new(BIN)
+    let mut child = Command::new(bin())
         .args(["worktree", "create-fork"])
         .current_dir(cwd)
         .env_remove("CARGO_TARGET_DIR")

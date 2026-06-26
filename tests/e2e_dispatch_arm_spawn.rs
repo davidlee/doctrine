@@ -23,7 +23,11 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -53,7 +57,7 @@ fn init_repo(dir: &Path) {
 
 /// Run `doctrine dispatch arm-spawn --base <base> -p <root>` (argv-driven; no stdin).
 fn arm_spawn(root: &Path, base: &str) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(["dispatch", "arm-spawn", "--base", base, "-p"])
         .arg(root)
         .env_remove("DOCTRINE_WORKER")

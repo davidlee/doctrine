@@ -25,7 +25,11 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 /// Hand-seed one standard's authored tree
 /// (`.doctrine/standard/NNN/standard-NNN.{toml,md}`) with the caller's exact toml +
@@ -39,7 +43,7 @@ fn seed(root: &Path, id: u32, toml: &str, md: &str) {
 
 /// `doctrine standard <args...> -p <root>` over the built binary.
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .arg("standard")
         .args(args)
         .arg("-p")

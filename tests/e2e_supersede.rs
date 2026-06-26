@@ -23,7 +23,11 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+mod common;
+
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -32,7 +36,7 @@ fn tmp() -> tempfile::TempDir {
 /// Run the binary against the temp corpus. DOCTRINE_WORKER is explicitly UNSET — the
 /// self-arm guard refuses authored writes under it (mem.pattern.dispatch.worker-verify-unset).
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(BIN)
+    Command::new(bin())
         .args(args)
         .arg("-p")
         .arg(root)
