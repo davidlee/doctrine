@@ -55,6 +55,9 @@ const FACET_SYMBOLS: &[&str] = &[
 /// `toml::value::`, and `serde_json::from_value::` — those lines are excluded
 /// from matching (see `line_matches_symbol`), so false-positives in revision.rs,
 /// knowledge.rs, and backlog.rs are correctly skipped.
+///
+/// `knowledge.rs` is also allowlisted for test-only `crate::estimate` usage
+/// (VT-7 `estimate_roundtrip_on_record`, SL-158 D3) — no production gating path.
 const ALLOWLIST: &[&str] = &[
     "estimate.rs",
     "value.rs",
@@ -67,6 +70,7 @@ const ALLOWLIST: &[&str] = &[
     "main.rs",
     "commands/facet.rs",
     "facet.rs",
+    "knowledge.rs",
 ];
 
 fn src_dir() -> PathBuf {
