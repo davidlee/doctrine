@@ -1,9 +1,16 @@
 # SL-157 notes — Checkout-independent integrate
 
-Status: **design LOCKED — ready for `/plan`.** Scope re-baselined + premise-corrected.
-`design.md` authored (`31be77aa`), self-review patch (`e53642e5`), GPT external
-round + hardening (`26a867bc`). `design-target` selectors recorded
-(`src/dispatch.rs`, `src/git.rs`). No code yet.
+Status: **plan LOCKED — lifecycle `ready`, next is `/phase-plan` → `/execute`.**
+Scope re-baselined + premise-corrected; `design.md` locked (`31be77aa` author,
+`e53642e5` self-review, `26a867bc` GPT hardening, `66c688e8` D6 correction);
+`plan.toml`/`plan.md` authored (`b1e764aa`, single phase PHASE-01); PHASE-01 sheet
+materialised; `design-target` selectors recorded. No code yet.
+
+**Execute posture:** code-changing slice → needs isolation (AGENTS.md: main
+worktree stays on edge). One phase touching both files → solo `/execute` on a
+worktree fork, land on `main`. PHASE-01 = the atomic deletion (keep/remove EX
+pairs guard over-deletion). EN-2: verify baseline gate green on the fork BEFORE
+edits. Then SPEC-022 strike at reconcile (design §5).
 
 **Remaining:** `/plan` (next). **No design-stage Revision** — see below.
 
