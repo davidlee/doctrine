@@ -53,8 +53,16 @@ and scaffold template. The "add a kind" surface is a checklist threaded through
 - **`src/relation.rs`** — `RELATION_RULES`; `RECORD` const drives `supersedes`/
   `shapes`/`spawns` **source** sets, but the `Shapes` **target** set and
   `GovernedBy` **source** set **hardcode** `ASM, DEC, QUE, CON`.
-- **`src/supersede.rs`** — `supersede_policy` + `validate_matrix` record arms.
+- **`src/supersede.rs`** — `supersede_policy` + `validate_matrix` record arms;
+  **and `src/commands/supersede.rs`** — the command shell + CON-001 fixtures.
 - **`src/relation_graph.rs`** — CON-keyed edge-emission tests.
+- **`src/search.rs`** — hardcodes the knowledge prefix group
+  `("knowledge", &["ASM","DEC","QUE","CON"])` + two flat prefix lists; EVD/HYP/INV
+  are **unsearchable** until added (codex F3).
+- **`src/tag.rs`** — hardcodes the taggable-prefix list incl. `CON`; new kinds
+  **untaggable** until added (codex F3).
+- **`tests/e2e_knowledge_cli_golden.rs`, `tests/e2e_memory_anchoring.rs`** — e2e
+  goldens pinned to `constraint`/`CON` (codex F6).
 - **`install/templates/knowledge-*.toml`** — one seed template per kind.
 - **Docs / shipped memory** — `using-doctrine.md`, glossary, `seed-onboarding.md`,
   `mem.signpost.doctrine.knowledge`.
@@ -124,17 +132,30 @@ removed**, not recycled — RFC-009 D4: recycling CON would mislead).
 | author `supports`/`disputes` | `link EVD-1 disputes HYP-3` (new `Writable` labels) |
 | supersede | `supersede OLD NEW` (existing transition; new arms) |
 
-**New relation labels** (`src/relation.rs`):
+**New relation labels** (`src/relation.rs`) — full plumbing, not just rows (codex F5):
 
-- `RelationLabel::Supports`, `RelationLabel::Disputes` — reciprocals
-  `supported_by` / `disputed_by`.
+- `RelationLabel::Supports`, `RelationLabel::Disputes` enum variants, placed at the
+  **declaration-order slot** the VT-1 order pin expects (new variants land at their
+  source kind's axis-run tail; the test regroups by enum `Ord`).
+- `name()` / parse coverage + `inbound_name` reciprocals `supported_by` /
+  `disputed_by`.
 - `RELATION_RULES` rows: `sources: &[EVD]`, `target: Kinds(RECORD)`, `tier: One`,
   `link: Writable`, `role: None`. EVD is the sole author (RFC: "EVD names a role").
   Target is the **record family only** (epistemic targets; widening to RSK
   deferred). EVD→HYP, EVD→INV, EVD→QUE/ASM/EVD all legal.
+- The source/target/tier/coverage canaries that pin every label extend to the two
+  new rows.
 - Transitions stay **manual** via `status` — `supports`/`disputes` do **not**
   auto-flip the target (no evidence→status automation engine; author's judgment,
   per RFC's EVD-reopen note).
+
+**Knowledge display renderers must emit the new edges (codex F4).**
+`format_metadata` (`knowledge.rs:1004`) and `show_json` (`:1149`) **hardcode**
+`[Shapes, Spawns, GovernedBy]` — `supports`/`disputes` would be authorable but
+**invisible**. Add both labels to those two renderers (a record that is
+`supported_by`/`disputed_by` should also surface the inbound reciprocal). The
+earlier design's "rides the existing overlay" claim was wrong — the render list is
+literal, not generic.
 
 **Hardcoded RELATION_RULES lists updated** (the RFC's "no table change" was wrong):
 `Shapes` target set and `GovernedBy` source set drop `CON`, gain `INV, EVD, HYP`.
@@ -251,9 +272,20 @@ the CON kind ceases to exist, so there is nothing to supersede *into*):
   `Constraint|CONSTRAINT|"CON"|kinds::CON|/constraint|waived` to zero before close
   (the `waived` literal too — it lives in HIDDEN/TERMINAL arrays + tests); the
   partition-cover + prefix-pin + KINDS-pin canaries catch the structured sites.
-- **R5 — orphaned CON reservation ref.** Renaming the kind leaves
-  `refs/doctrine/reservation/CON` stranded (harmless — the CON tree is gone, INV
-  mints from the tree scan). Note for cleanup; not load-bearing.
+- **R5 — orphaned CON reservation ref (reasoning corrected, codex F1).**
+  `reserve::remote_reservation_ids` (`reserve.rs:203`) is **NOT prefix-scoped** — it
+  unions the trailing `NNN` of *every* `refs/doctrine/reservation/*/NNN` into the
+  candidate set for *any* mint. So a stale `CON/001` ref **is** read into INV/EVD/HYP
+  allocation (the earlier "INV mints from the tree, CON ref irrelevant" claim was
+  wrong). Net effect stays **harmless**: id 1 is ≤ existing maxima and the CAS
+  create guards collisions. *Mitigation:* delete `refs/doctrine/reservation/CON/*`
+  in the migration for hygiene; not correctness-critical.
+- **R6 — authored prose citing `CON-001` would dangle (codex F2, low).** Integrity
+  scans authored `.doctrine/**/*.md` for inbound citations and reports danglers with
+  a non-zero exit (`integrity.rs:545-566`; disposable `state/` prose is skipped).
+  **Grep is clean today** — the only `CON-001` hits are in gitignored
+  `.doctrine/state/dispatch/**`. *Mitigation:* re-grep authored tier before close;
+  rewrite any `CON-001` → `INV-001` if one appears.
 - **R2 — SL-158 not yet landed when execution starts.** *Mitigation:* sequence
   after SL-158 (`git fetch . edge:main` before execute); design targets the landed
   trinary `KindPartition` shape. If SL-158 slips, the partition rows are the only
@@ -284,12 +316,22 @@ revised VTs:
 - **headline gating (end-to-end):** a work item `needs → EVD-captured` is blocked;
   the EVD `→ confirmed` makes the dependent actionable. Proves the new kinds
   participate in SL-158's trinary gating, not just that the partition rows parse.
+- **`supports`/`disputes` render (codex F4):** after `link EVD-1 disputes HYP-2`,
+  `knowledge show HYP-2` surfaces the `disputed_by` reciprocal and `knowledge show
+  EVD-1` the `disputes` edge — in both table and JSON.
+- **search/tag reach the new kinds (codex F3):** `search` finds an EVD/HYP/INV body;
+  `tag` sets/clears a tag on each — the hardcoded prefix groups now include them.
+- **e2e goldens (codex F6):** `e2e_knowledge_cli_golden.rs` +
+  `e2e_memory_anchoring.rs` updated for the 6-kind catalog + `constraint→invariant`
+  rename (these flip by design — listed below).
 
 **Tests that flip by design (consumer revision, not regression):** the prefix-count
 pin (4→6), the `statuses(CON)` / `is_terminal(CON)` / partition-CON assertions
-(rename to INV + `relaxed`), `relation.rs` hardcoded vectors (1425/1442), the
-`relation_graph.rs` CON edge-emission test, `integrity` `kinds_table_*` pin,
-`supersede` CON arm test.
+(rename to INV + `relaxed`), `relation.rs` hardcoded vectors (1425/1442) + the
+RelationLabel order/coverage pins (two new labels), the `relation_graph.rs` CON
+edge-emission test, `integrity` `kinds_table_*` pin, `supersede` CON arm test
+(src + `src/commands/supersede.rs` fixtures), the `search.rs`/`tag.rs` prefix-group
+tests, and the two e2e goldens.
 
 ### Implementation shape (phasing is /plan's job)
 
@@ -325,5 +367,40 @@ Three substantive findings surfaced to the user; **all resolved 2026-06-27**:
 
 ### External adversarial pass (codex, 2026-06-27)
 
-<!-- codex inquisition findings land here -->
+Codex (GPT-5.5) hostile review of the design doc. Seven findings; each verified
+against ground truth before integrating (external reviewers hallucinate
+paths/lines — and two here did over-claim).
+
+**Accepted + integrated:**
+- **F3 (MAJOR)** — `src/search.rs` + `src/tag.rs` hardcode the 4-kind knowledge
+  prefix set; EVD/HYP/INV would be unsearchable/untaggable. → added to §2 + §9 +
+  selectors. *Verified real* (`search.rs:33`, `tag.rs:17`).
+- **F4 (MAJOR)** — `format_metadata`/`show_json` hardcode `[Shapes, Spawns,
+  GovernedBy]`; `supports`/`disputes` authorable-but-invisible. → §5.2 renderer
+  edit + §9 render VT. *Verified real* (`knowledge.rs:1004`, `:1149`); the prior
+  "rides the overlay" claim was wrong.
+- **F5 (MAJOR)** — new `RelationLabel` is full plumbing (enum variant, `name()`,
+  parser, order pin, canaries), not two rows. → §5.2 expanded.
+- **F6 (MAJOR)** — e2e goldens + CLI/help/doc strings pinned to `constraint`/`CON`.
+  → §9 goldens added. *Verified real* (`tests/e2e_knowledge_cli_golden.rs`,
+  `e2e_memory_anchoring.rs`, `using-doctrine.md:50` — which also mis-states the CON
+  lifecycle today, a free fix).
+- **F7 (MINOR)** — `src/commands/supersede.rs` (distinct from `src/supersede.rs`)
+  carries CON-001 fixtures. → §2 + selectors. *Verified real.*
+
+**Accepted with corrected severity:**
+- **F1 (claimed CRITICAL → MAJOR/reasoning):** reservation ids are pooled, not
+  prefix-scoped (`reserve.rs:203`), so R5's rationale was wrong — but the effect is
+  still harmless (CAS-guarded, id 1 ≤ maxima). → R5 reasoning corrected; ref
+  cleanup added as hygiene.
+
+**Over-claimed (dismissed with evidence):**
+- **F2 (claimed MAJOR):** the named authored files (`question/001/record-001.md:26`,
+  `adr-017.md:21`) do **not** cite `CON-001` (grep-clean); the only hits are
+  gitignored `state/dispatch/**`, which integrity skips. The real guard (authored
+  prose dangling) is genuine-but-vacuous today → captured as R6 (re-grep before
+  close), not a touch-site.
+
+Net: the touch surface grew from ~13 to ~18 sites; no decision (D1–D7) overturned.
+Design holds; ready to lock.
 
