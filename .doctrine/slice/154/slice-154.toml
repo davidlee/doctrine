@@ -27,8 +27,8 @@ note = "read_boundaries_file working-ledger reader for the commit splice (OQ-4)"
 
 [[selector]]
 selector = "src/boundary.rs"
-intent = "scope-relevant"
-note = "conformance-registry capture seam (solo binding + funnel write)"
+intent = "design-target"
+note = "provenance field on BoundaryRow (D12, pass-5 reshape)"
 
 [[selector]]
 selector = "plugins/doctrine/skills/dispatch/SKILL.md"

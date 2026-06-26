@@ -3,77 +3,38 @@
 Durable per-slice scratchpad — tracked in git. Bootstrap for the next agent (plan +
 codex). `design.md` is the authority; this is the fast-ingest map.
 
-## Status (2026-06-26) — NOT plan-ready: pass-5 reopened D11 + efficiency findings open
+## Status (2026-06-26) — Rev 4 integrated: D11 reshaped (provenance). Re-pass, then /plan.
 
-Slice in `design`. `design.md` (§1–§9 body + §10 review ledger) is the committed-ref
-(ISS-039-absorbed) model — committed-ref/ISS-039/P2-1/P2-2 are solid across 5 passes. BUT
-**pass-5 proved D11 (the projection-source guard) unsound**, and the User requested an
-efficiency/workflow review that surfaced a converging design refinement (provenance). Both
-finding-sets are in **⚠ OPEN FINDINGS** below — NOT yet integrated into design.md. Scope
-(`slice-154.md`) absorbs ISS-039. **No code yet.**
+Slice in `design`. `design.md` is the committed-ref (ISS-039-absorbed) model + the
+**pass-5 reshape (Rev 4)**: D11 is now a **per-phase provenance set-check**, `D12` adds
+`provenance` to `BoundaryRow`, `git::code_delta_paths` is **deleted**, §5.6 records the
+registry's nav/value role. committed-ref core (D2/D7/D8/D9/D10) solid across 5 passes.
+Scope (`slice-154.md`) absorbs ISS-039. **No code yet.**
 
-**Next:** a fresh agent integrates both finding-sets (see "Integration plan"), re-passes,
-THEN `/plan`. Do NOT /plan with D11 as drafted.
+**Next:** re-pass codex on the Rev-4 reshape, THEN `/plan`. The pass-5 OPEN FINDINGS are
+**CLOSED** (integrated — see below).
 
 Read order: `slice-154.md` (scope) → `design.md` §1–§9 → §10 (full pass ledger) → this.
 
-## ⚠ OPEN FINDINGS — NEXT AGENT MUST INTEGRATE (not yet in design.md)
+## ⚠ OPEN FINDINGS — CLOSED (integrated into design.md Rev 4)
 
-Two finding-sets landed AFTER the §10 pass-4 record and are **not yet integrated** into
-the design body. D11 as written (§5.2 step 3 / §7 D11) is **unsound** — do not /plan until
-reshaped. Integrate both, then re-pass.
+Pass-5 (D11 unsound) + the efficiency lens are **integrated**; this block is retained as a
+disposition record only.
 
-### A. codex pass-5 — D11 is unsound (reshape required)
-
-- **BLOCKER — empty-only predicate too weak.** D11 fires only on
-  `boundaries.rows.is_empty()`. A **partial** committed ledger (some phases lost) slips
-  past D11 AND the registry gate (pre-filled by the double-write, dispatch.rs:614) →
-  `plan_phases` projects an incomplete chain silently. Need: guard the projected phase set
-  against the *expected* (completed, funnel-owned) set, not mere non-emptiness.
-- **BLOCKER — false-halts mixed solo→dispatch.** "prepare-review only runs on dispatched
-  slices, so landed code without a ledger row is anomalous" is too broad. Solo phases land
-  code on the dispatch branch with **no** committed-ledger row (by design). If dispatch
-  phases are empty-code/doc-only, `boundaries` is legitimately empty while
-  `code_delta_paths` is non-empty → D11 wrongly halts (walk the SL-153 shape). Need an
-  **ownership-aware** condition; don't equate "code on the branch" with "must have a
-  dispatch row".
-- **MAJOR — exclusion-set mismatch.** `plan_phases` filters only `.doctrine`
-  (dispatch.rs:2058); `plan_review` also strips verified-orthogonal (dispatch.rs:2015–2020).
-  D11 copies `plan_review`'s set → guards the wrong projection. Define the protected
-  invariant precisely (compare projected phase-source coverage to the code delta it must
-  cover) rather than duplicating `plan_review`'s filter.
-- ~~"D11 absent in checkout"~~ — **FALSE finding, discard.** Design stage; no code yet.
-
-### B. Efficiency / workflow lens (User-requested: ledger as agent file-finder)
-
-Review axis = value/ergonomics + token efficiency, not correctness.
-
-- **★ Provenance convergence (headline).** Neither ledger records the per-phase **landing
-  path** (solo vs funnel). That missing bit is *exactly* what **D11** and **F4** need to be
-  sound (distinguish "solo code, no ledger row = fine" from "funnel phase, ledger row lost
-  = broken"), AND a navigation win (route an agent: funnel phase → `dispatch/NNN` /
-  `review/NNN-NN`; solo → `edge`). **One per-phase provenance field → D11 soundness + F4
-  ownership signal + agent nav.** Strongly consider reshaping D11/F4 around provenance
-  instead of two patches. (Likely the right fix for the pass-5 blockers above.)
-- **Nav-coherence is a real SL-154 value (claim it).** Committed-ref derive-upsert makes
-  the registry and dispatch ledger consistent (pre-slice they diverged) → one authoritative
-  populated registry = one place an agent looks. Frame as ergonomic value, not just
-  correctness.
-- **Storage rule holds; defer a derived nav view.** Registry stores OIDs (source), so nav
-  consumers re-diff. Fine for one consumer; a derived per-phase file-set view (gitignored
-  cache or `slice show --phase-files`) is a **follow-up feature gated on SL-154's reliable
-  population** — backlog it, don't scope-creep.
-- **Halt-message ergonomics (minor).** Name the (bounded) changed paths in the D11/gate
-  bail, not just a count — saves the agent a re-diff.
-
-### Integration plan for the next agent
-1. Reshape D11 around **per-phase landing-path provenance** (resolves both pass-5 blockers
-   + the exclusion-set mismatch + F4 ownership). Decide: provenance field on the boundary
-   row (schema touch — `boundary.rs`, scope-relevant → may become design-target) vs derive
-   provenance from which writer recorded (cheaper, less durable).
-2. Integrate the efficiency findings: add a design §  on the registry's nav/value role;
-   claim nav-coherence; backlog the derived nav view + the F4 hardening.
-3. Re-pass (codex) on the provenance reshape, then /plan.
+- **P5-1 empty-only too weak** → D11 reshaped to a per-phase set-check (catches partial loss).
+- **P5-2 false-halts mixed/empty-code** → provenance excludes `Solo`; guard never reads code paths.
+- **P5-3 exclusion-set mismatch** → `code_delta_paths` deleted; pure phase-id set comparison.
+- **Provenance** → **D12**: `provenance: Solo|Funnel|Manual` (absent→`Unknown`) on `BoundaryRow`.
+  The "derive from the writer (cheaper)" option was **illusory** — no committed run-state
+  records landing path (`journal.toml` is derived from boundaries; `candidates.toml` is
+  refs), so persisting the writer's identity = a field. `#[serde(default)]` is the entire
+  back-compat story; **no migration machinery** (closed slices never re-hit D11; active
+  mid-flight slices hand-fixed). `boundary.rs` → design-target.
+- **Nav-coherence** → §5.6 claims it as value; derived nav view (`slice show --phase-files`)
+  **backlogged**, gated on SL-154.
+- **F4 NOT closed by provenance** → ownership-signal hardening stays a backlog follow-up
+  (provenance marks ownership post-record; F4 is the binding's pre-record stand-down).
+- **Halt ergonomics** → D11/gate name the missing **phase ids**.
 
 ## What this slice is
 
@@ -110,9 +71,10 @@ Five moving parts:
 3. **Derive** from the **committed** ledger (`read_ledger`) — the SAME source
    `plan_phases` uses (INV-4) — `record_source_delta` each row (upsert) into the registry.
 4. **Gates, BEFORE ref projection** (ordering load-bearing, F1):
-   - **Projection-source guard (D11):** empty committed ledger + non-orthogonal code
-     delta over `trunk_base` ⇒ halt (catches the coord-gone-early hole the registry gate
-     can't, see pass-4 below).
+   - **Projection-source guard (D11, Rev 4):** read the registry **pre-derive**; every
+     `provenance == Funnel` row must have a committed-ledger row ⇒ else halt naming the
+     phases. Pure phase-id set comparison (no `code_delta_paths`). Catches total + partial
+     ledger loss the registry gate can't.
    - **Registry gate (D4):** `registry_completeness(primary, primary, slice)` ⇒ bail on
      gap. A halt here creates no refs (clean record-delta → re-run).
 5. **Funnel inline double-write retained** (`run_record_boundary` unchanged: writes the
@@ -126,9 +88,13 @@ Five moving parts:
 - `git::live_worktree_for_ref` — **extend** `parse_worktree_for_ref` (git.rs:1163) to
   surface `{ path, branch, prunable }`; helper applies `!prunable && path.exists()`. Keep
   `worktree_for_ref` signature (existing callers). (D9/F2)
-- `git::code_delta_paths(root, trunk_base, tip, &orthogonal)` — filtered diff
-  (non-`.doctrine/`, non-verified-orthogonal; same exclusion set as `plan_review`
-  dispatch.rs:2015–2020). (D11)
+- `boundary.rs::Provenance` (NEW enum `Solo|Funnel|Manual|Unknown(default)`) + a
+  `#[serde(default)] provenance` field on `BoundaryRow`. (D12) `boundary.rs` →
+  **design-target**. Write-sites: solo binding→`Solo`; `run_record_boundary`→`Funnel`
+  (both ledger + registry rows); derive→`Funnel`; `run_record_delta`→`Manual`.
+- ~~`git::code_delta_paths`~~ — **DROPPED** (Rev 4). D11 is a phase-id set compare over
+  `state::read_source_deltas` (state.rs:588, existing) + the committed `boundaries.rows`;
+  no new git helper, no working-tree diff.
 - `dispatch::commit_boundaries(root, parent, coord_ref, coord_worktree, slice)` — twin of
   `commit_journal` (dispatch.rs:2094); parse+validate, tree-oid idempotency, CAS. (D7)
 - `ledger::read_boundaries_file(worktree_root, slice) -> Option<String>` — raw
@@ -162,8 +128,13 @@ Five moving parts:
   gate/conformance; precise dispatch-run ownership signal = hardening follow-up.
 - **D10** no SPEC-022 REV — the spec already mandates the committed ledger
   (spec-022.md:180); ISS-039 is the impl in violation, so committing is conformance.
-- **D11** projection-source guard — empty committed ledger + landed code ⇒ halt (pass-4
-  BLOCKER fix; the registry gate alone can't see broken projection).
+- **D11** projection-source guard (Rev 4, pass-5 reshape) — every `Funnel` registry row
+  must have a committed-ledger row, else halt naming the gaps. Per-phase set compare; no
+  `code_delta_paths`. Catches total + partial loss; no false-halt on solo/empty-code.
+- **D12** `provenance` field on `BoundaryRow` (the D11 discriminator) — `Solo|Funnel|Manual`
+  (absent→`Unknown`). The only sound option (no committed run-state records landing path —
+  "derive from writer" is illusory). `#[serde(default)]` = whole back-compat story; no
+  migration code. Does NOT close F4 (post-record marker ≠ pre-record stand-down).
 
 ## Codex passes (full ledger in design.md §10)
 
@@ -189,7 +160,8 @@ Five moving parts:
   completed-set read.
 - `src/dispatch.rs`: `:1497` `prepare_review` (insert commit→derive→guard→gate before
   projection); `:1522` reads `orthogonal`; `:1523` reads `boundaries`; `:587`
-  `run_record_boundary` (UNCHANGED double-write — `:606` working ledger, `:614` registry);
+  `run_record_boundary` (double-write retained; Rev 4: stamps `provenance=Funnel` on both
+  rows — `:606` working ledger, `:614` registry);
   `:1991` `read_ledger` (committed-ref; now derive + plan_phases source); `:2015`
   `plan_review` exclusion set; `:2041` `plan_phases` (iterates `boundaries.rows`); `:2094`
   `commit_journal` (mirror for `commit_boundaries`); `:2182` `with_journaled_projection`
@@ -227,10 +199,12 @@ Five moving parts:
 - **OQ-7 / R4:** committing the ledger re-enables claude `plan_phases` projection (0 in
   production today) — verify `e2e_dispatch_lifecycle` (`phase/064-01`) + `e2e_dispatch_sync`
   hold, and add the no-pre-commit-ledger fixture (F5).
-- **`code_delta_paths` shape (D11):** filtered diff vs comparing the `plan_review` review
-  tree to the trunk-base tree — pick the leaner read.
+- ~~`code_delta_paths` shape~~ — RESOLVED (Rev 4): helper dropped; D11 is a phase-id set
+  compare, no diff.
+- **Provenance write-site coverage:** confirm all four writers stamp correctly + the
+  serde-default `Unknown` round-trips (VTs drafted §9).
 - **F4 hardening:** a precise dispatch-run ownership signal (run-state, not worktree
-  presence) — file as a backlog item.
+  presence) — file as a backlog item (NOT closed by D12 provenance).
 
 ## Evidence / forensics (don't re-derive)
 
@@ -245,5 +219,5 @@ Five moving parts:
 - references→RFC-004 (concerns); related→ISS-039, ISS-051, ISS-052. Follow-ups: IMP-171
   (codex/pi symmetry), F4 ownership-signal hardening (to file).
 - design-target: `src/state.rs`, `src/dispatch.rs`, `src/ledger.rs`, `src/git.rs`,
-  `plugins/doctrine/skills/dispatch{,-agent,-subprocess}/SKILL.md`. scope-relevant:
-  `src/boundary.rs`.
+  `src/boundary.rs` (Rev 4: `provenance` field, D12),
+  `plugins/doctrine/skills/dispatch{,-agent,-subprocess}/SKILL.md`.
