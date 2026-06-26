@@ -248,8 +248,12 @@ the CON kind ceases to exist, so there is nothing to supersede *into*):
 ## 8. Risks & Mitigations
 
 - **R1 — destructive CON rename misses a literal site.** *Mitigation:* grep
-  `Constraint|CONSTRAINT|"CON"|kinds::CON|/constraint` to zero before close; the
+  `Constraint|CONSTRAINT|"CON"|kinds::CON|/constraint|waived` to zero before close
+  (the `waived` literal too — it lives in HIDDEN/TERMINAL arrays + tests); the
   partition-cover + prefix-pin + KINDS-pin canaries catch the structured sites.
+- **R5 — orphaned CON reservation ref.** Renaming the kind leaves
+  `refs/doctrine/reservation/CON` stranded (harmless — the CON tree is gone, INV
+  mints from the tree scan). Note for cleanup; not load-bearing.
 - **R2 — SL-158 not yet landed when execution starts.** *Mitigation:* sequence
   after SL-158 (`git fetch . edge:main` before execute); design targets the landed
   trinary `KindPartition` shape. If SL-158 slips, the partition rows are the only

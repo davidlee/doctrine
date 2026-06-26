@@ -63,7 +63,7 @@ selector = "install/glossary.md"
 intent = "design-target"
 
 [[selector]]
-selector = "memory/**"
+selector = "memory/mem.signpost.doctrine.knowledge"
 intent = "design-target"
 
 [[relation]]
