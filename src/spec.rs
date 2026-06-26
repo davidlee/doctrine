@@ -736,7 +736,7 @@ pub(crate) struct Spec {
     #[serde(default, rename = "source")]
     pub(crate) sources: Vec<Source>,
     /// Cross-family descent to the product capability this spec realises
-    /// (`PRD-NNN`). Tech-only, single-valued outbound (ADR-004 §1); absent on a
+    /// (`PRD-NNN`). Single-valued outbound (ADR-004 §1); absent on a
     /// product or unfilled tech spec. Integrity is `validate`'s job (SL-022 §5.2).
     #[serde(default)]
     pub(crate) descends_from: Option<String>,
