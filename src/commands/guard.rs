@@ -127,7 +127,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         Command::Revision { command } => match command {
             RevisionCommand::New { .. } => Write("revision new"),
             RevisionCommand::Status { .. } => Write("revision status"),
-            RevisionCommand::Show { .. } | RevisionCommand::Paths { .. } | RevisionCommand::List { .. } => Read,
+            RevisionCommand::Show { .. }
+            | RevisionCommand::Paths { .. }
+            | RevisionCommand::List { .. } => Read,
             RevisionCommand::Change { command } => match command {
                 RevisionChangeCommand::Add { .. } => Write("revision change add"),
             },
