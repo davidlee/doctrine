@@ -18,6 +18,26 @@ intent = "scope-relevant"
 selector = "src/relation.rs"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/priority/partition.rs"
+intent = "design-target"
+note = "SL-158 ADR-017 impl: trinary partition + needs-target gate widening + canon"
+
+[[selector]]
+selector = "src/commands/dep_seq.rs"
+intent = "design-target"
+note = "SL-158 ADR-017 impl: trinary partition + needs-target gate widening + canon"
+
+[[selector]]
+selector = ".doctrine/spec/tech/001/**"
+intent = "design-target"
+note = "SL-158 ADR-017 impl: trinary partition + needs-target gate widening + canon"
+
+[[selector]]
+selector = ".doctrine/spec/tech/019/**"
+intent = "design-target"
+note = "SL-158 ADR-017 impl: trinary partition + needs-target gate widening + canon"
+
 [[relation]]
 label = "related"
 target = "RFC-007"
