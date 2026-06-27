@@ -32,3 +32,74 @@ Captured during informal subagent-orchestration of SL-166 PHASE-04/05
   read + 1 diff. Root cause: handover.md committed into the tree (so it forks
   with the branch) while also being a per-phase mutable doc — two live copies,
   no freshness marker except mtime.
+
+## PHASE-04 (g1) — worker friction (subagent report + orchestrator)
+
+- **Bin-crate test invisibility.** `cargo test --lib` produced NO output: the
+  dispatch/corpus_guard code lives in the BIN crate (`src/main.rs`), while the
+  workspace also has a lib crate (`cordage`). A worker ran `--lib`, saw nothing,
+  briefly assumed its tests didn't exist. Correct form: `cargo test --bin doctrine
+  <filter>`. Root cause: mixed bin+lib workspace with the primary logic in the bin
+  — non-obvious to a cold worker. Cost: ~1 confused iteration. Candidate fix: a
+  `just test` recipe that targets the right crate, documented in AGENTS.md.
+- **Self-referential audit test.** The VA-1 verb-set audit test does
+  `include_str!("dispatch.rs")` and counts call sites — it miscounted (7 vs 1)
+  because the test's OWN assertions name the guarded symbol. Worker had to scope
+  the scan to `split("#[cfg(test)]").next()`. Inherent to grep-the-source-as-a-test
+  patterns; ~1 extra iteration. Not a doctrine/dispatch issue — a test-design
+  hazard worth a memory.
+- **Orchestrator overhead (positive note).** Delegation was clean: the worker's
+  single final message (commits + coverage map + deviations + gate tail + friction)
+  was enough to verify-and-flip without re-reading its diffs. The PHASE-02/03 notes'
+  layering-split guidance transferred accurately, so the worker wired g1 directly
+  with no design back-and-forth. Main-thread cost to verify: 2 calls (gate + grep)
+  + the lifecycle flip. This is the efficient path; the expensive parts were all
+  in orientation (above), not execution.
+
+## Cross-phase: warm-agent reuse unavailable
+
+- The Agent tool docs advertise `SendMessage` to continue a prior subagent with
+  its context intact. For PHASE-05 (same terrain as PHASE-04: doctrine.toml load,
+  `--allow-corpus-clobber` arg, dispatch verbs) reusing the warm PHASE-04 worker
+  would have skipped a full re-orientation (~tens of k tokens). But no
+  `SendMessage` tool was exposed/loadable in this harness — `ToolSearch` found
+  none. Fallback: spawn fresh + hand-carry the prior worker's file:line findings
+  into the new prompt. Net: re-orientation partly avoided by manual context
+  transplant, but the clean "resume the warm agent" path was not available. Root
+  cause: tool surface mismatch between the Agent tool's described capability and
+  the loadable tool set. Cost: orchestrator must curate a context packet by hand
+  per phase instead of one cheap continue-call.
+
+## PHASE-05 (enable+parity+docs) — worker friction + a governance coherence gap
+
+- **STALE DESIGN PREMISE (highest-cost finding).** PHASE-05 EX-1, design §5.3, and
+  the slice all specify enablement as "set `authoring-branch` in `doctrine.toml`
+  in a dedicated *commit*." Reality: SL-146/ISS-055 (`a0acf0eb`, merged the SAME
+  DAY the SL-166 design was written) moved config to `.doctrine/doctrine.toml`,
+  which is **gitignored and never tracked** (the `.doctrine/*` ignore + whitelist
+  excludes `doctrine.toml`; repo-root `doctrine.toml` is also ignored at
+  `.gitignore:11`). So a "dedicated enabling commit" is **impossible as written** —
+  config is deliberately environment-local now. The design carried a pre-SL-146
+  mental model. Worker cost: the single most expensive investigation of the phase
+  (git-log both paths, gitignore whitelist analysis, dtoml.rs resolution, tracing
+  to the main worktree's live config because the worktree has none). Root cause:
+  two same-day slices with a contract overlap; the later design didn't reconcile
+  against the just-merged config relocation. This is the canonical RFC-011 shape:
+  a worker burns a large fraction of its budget reconciling a doc against a moved
+  target rather than doing the work. **Mitigation candidate:** design lock should
+  re-grep the touched subsystem's constants/paths at lock time, not author-time.
+- **Phantom test target.** Plan EX-2 + design §9 name `e2e_dispatch_close`; no such
+  target exists (close-integration tests live in `e2e_dispatch_sync` +
+  `e2e_dispatch_lifecycle`). Worker grepped to locate. And `e2e_dispatch_lifecycle`
+  is itself one of the foreign SL-165-dirty files the worker was told not to touch —
+  runnable but a confusing overlap. Cost: ~1 grep + momentary "am I allowed to run
+  this?" Root cause: criteria named a test target that was never created / renamed.
+- **Config absent from the worktree entirely.** "First inspect the current
+  doctrine.toml" returned nothing — the gitignored config doesn't exist in a fresh
+  worktree, only in the main worktree. A worker reasoning purely from its own
+  worktree cannot observe posture state at all. Root cause: env-local config +
+  worktree isolation interact badly for any phase whose criteria reference live
+  config. Cost: extra hop to the main worktree.
+
+[SL-166 P3-5 C drive complete @ 148k]
+
