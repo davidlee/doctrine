@@ -175,8 +175,10 @@ then `rev-list -1 <ref> -- .doctrine` — `Ok(Some(tip))` if the corpus exists, 
 no-op). Do **not** route through `git_opt`, which conflates exit 1 with 128 and
 would re-collapse the two cases — mirror `is_ancestor`'s explicit exit-code handling
 ([[mem.pattern.dispatch.project-off-pinned-fork-base-not-live-trunk-tip]]). A
-`config validate` check (R4) additionally rejects an unresolvable `authoring-branch`
-ahead of setup.
+`config validate`-time ref-resolution check (R4) was *considered but intentionally
+not built*: resolving the ref needs git/disk, which would breach the pure/imperative
+split in the pure `validate_posture` path. The setup-time g2 gate (VT-3) is the
+shipped fail-closed protection against an unresolvable `authoring-branch`.
 
 **g3 — `corpus_clobber_check(root, base, new, cur, allow) -> Result<()>`** (new,
 pure-ish over injected tree readings). Called in `advance_row` per leg, *before*
@@ -196,8 +198,11 @@ integrate journal row. Fail-closed when absent.
 
 ### 5.3 Data, State & Ownership
 
-- **Authored.** New `[dispatch] authoring-branch` in the project's `doctrine.toml`
-  (set to `refs/heads/edge` here, in a separate commit — it *enables* the posture).
+- **Operator config (env-local, not authored).** `[dispatch] authoring-branch`
+  lives in the gitignored `.doctrine/doctrine.toml` — SL-146/ISS-055 moved config
+  there (untracked), so it is *not* a tracked/authored commit. Set to
+  `refs/heads/edge` here by an operator runtime edit, which *enables* the posture
+  (`config validate` ⇒ ok).
 - **No new runtime/derived state.** Guards are read-only over git objects/refs plus
   the CLI allow-list arg; the allowlist is recorded on the existing journal row,
   not a new store.

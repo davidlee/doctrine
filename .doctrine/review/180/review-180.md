@@ -124,3 +124,47 @@ All remediation is **per-slice direct edit** (design.md + plan.toml for SL-166).
   g2 consumes only authoring_branch.
 - plan PHASE-02 EX-4 (plan.toml:68) [F-8]: "journal row" → "journal manifest
   (call-global across legs)", matching §10 / PHASE-05 EX-3 docs.
+
+## Reconciliation Outcome
+
+All findings terminal; no REV (no governance/spec touched — ADR-012 + specs
+honoured as-built). Three brief items applied as per-slice direct edits.
+
+### Direct edits applied
+- **plan.toml PHASE-05 EX-1** + **objective** (F-1): replaced the impossible
+  "dedicated enabling commit" with the post-SL-146 env-local model — posture is
+  operator config in the gitignored `.doctrine/doctrine.toml`, set by a runtime
+  edit, `config validate` ⇒ ok. (Objective prose fixed alongside EX-1: same
+  defect, same file — coherence.)
+- **design.md §5.3** (F-1): the `[dispatch] authoring-branch` bullet relabelled
+  "Authored" → "Operator config (env-local, not authored)"; records SL-146/ISS-055
+  config move and that it is untracked, not a tracked commit.
+- **plan.toml PHASE-05 EX-2** (F-2): phantom `e2e_dispatch_close` → real targets
+  `e2e_dispatch_sync` + `e2e_dispatch_lifecycle`.
+- **design.md §5.2 R4 (~:178)** (F-7): the config-validate ref-resolution check
+  reframed from "additionally rejects" to *considered but intentionally not built*
+  (resolving the ref needs git/disk — breaches the pure/imperative split in pure
+  `validate_posture`); g2 (VT-3) named as the shipped fail-closed protection.
+
+### REVs completed
+- None.
+
+### Withdrawn / tolerated
+- F-9 (tolerated): PHASE-05 source-delta unbound — expected pre-land state, not
+  dropped work. Carried to /close as a MANDATORY binding step (land fork
+  `slice/SL-166-corpus-loss-guards` 5e185148→09ee705f from primary `--no-ff`,
+  then `slice record-delta --start 5e185148 --end 09ee705f`, re-run
+  `slice conformance 166`).
+
+### Aligned (no change — recorded for completeness)
+- F-3, F-4, F-5, F-6, F-8: as-built choices faithful to criteria substance,
+  diverging only from illustrative design snippets. Optional F-5/F-8 plan-prose
+  tidies left unapplied (below the reconcile threshold, reconciler's discretion).
+
+### Standing items carried to /close
+- **Land + bind (F-9, mandatory)** — fork unlanded; bind deltas + re-run
+  conformance at land; promote edge→main only via `git fetch . edge:main` (g1 armed).
+- **VH-1 (operator)** — eyeball EX-3 docs wording before close.
+- **PHASE-05 phase-binding** — delta `1d09b73e`; bind at land.
+
+Reconcile pass complete — handoff to /close.

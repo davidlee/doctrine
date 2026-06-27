@@ -138,7 +138,7 @@ id        = "PHASE-05"
 name      = "Enable posture + parity + docs"
 objective = """
 Enable the buffered-trunk posture for this repo (`[dispatch] authoring-branch =
-\"refs/heads/edge\"` in doctrine.toml, a separate enabling commit, design §5.3),
+\"refs/heads/edge\"` as operator config in the gitignored `.doctrine/doctrine.toml`, design §5.3),
 re-run the existing dispatch suites with the posture both unset and set to prove
 INV-2 parity, and document the operator-facing contract (verb help for the global
 `--allow-corpus-clobber`, the single-linear-authoring-ref posture precondition).
@@ -147,8 +147,8 @@ entrance_criteria = [
   { id = "EN-1", text = "g1/g2/g3 (PHASE-02..04) landed and green." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "doctrine.toml sets `authoring-branch = \"refs/heads/edge\"` in a dedicated enabling commit." },
-  { id = "EX-2", text = "e2e_dispatch_sync / e2e_dispatch_close re-run UNCHANGED with authoring-branch unset → green (INV-2 parity)." },
+  { id = "EX-1", text = "`authoring-branch = \"refs/heads/edge\"` is set as operator config in the gitignored `.doctrine/doctrine.toml` (SL-146/ISS-055 moved config there — untracked), an env-local runtime edit, NOT a tracked enabling commit; `config validate` ⇒ ok confirms the posture is armed." },
+  { id = "EX-2", text = "e2e_dispatch_sync / e2e_dispatch_lifecycle re-run UNCHANGED with authoring-branch unset → green (INV-2 parity)." },
   { id = "EX-3", text = "Verb help notes the global-across-legs `--allow-corpus-clobber` imprecision (§10) and the single-linear-authoring-ref posture contract (R3)." },
 ]
 verification = [
