@@ -108,3 +108,24 @@ coverage reconciliation owed.
 ### Governance/spec (REV)
 - None. No ADR, policy, standard, spec, or REQ change owed; POL-002 is satisfied,
   not amended.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §9** — added a "Removed" bullet recording the deletion of
+  `tests/e2e_skills_dispatch_shrinkage.rs`; states the SL-085 line-count
+  shrink-guard invariant is consciously abandoned, no replacement owed
+  (`e2e_no_shipped_couplings` guards the coupling, not line counts). Drives RV-181 F-1.
+- **slice-163.md §3 item 3** — replaced the "all six are phase/close-boundary
+  sites" framing with D6's two-treatment split: 4 instruction rewrites
+  (execute/close/audit/notes → `doctrine check gate`) + 2 worktree
+  illustrative-example token-only updates preserving caller-control semantics
+  (CR-F4). Drives RV-181 F-2.
+
+### REVs completed
+- None. Reconciliation brief carried no governance/spec item.
+
+### Withdrawn / tolerated
+- None. Both findings verified and remediated by direct edit.
+
+Reconcile pass complete — handoff to /close.
