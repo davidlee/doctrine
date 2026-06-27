@@ -14,3 +14,31 @@ tags = []
 # Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
 superseded_by = []   # reverse link is derived (REV→RFC originates_from)
 
+[[relation]]
+label = "related"
+target = "IMP-059"
+
+[[relation]]
+label = "related"
+target = "IMP-060"
+
+[[relation]]
+label = "related"
+target = "IMP-024"
+
+[[relation]]
+label = "related"
+target = "IMP-187"
+
+[[relation]]
+label = "related"
+target = "IMP-110"
+
+[[relation]]
+label = "related"
+target = "IMP-075"
+
+[[relation]]
+label = "related"
+target = "IMP-129"
+

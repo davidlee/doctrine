@@ -47,3 +47,7 @@ target = "mem.pattern.dispatch.candidate-build-seam"
 [[relation]]
 label = "related"
 target = "mem.pattern.dispatch.gc-squash-indistinguishable-from-unlanded"
+
+[[relation]]
+label = "related"
+target = "RFC-011"

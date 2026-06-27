@@ -43,3 +43,7 @@ weight = 0
 [[relation]]
 label = "related"
 target = "IMP-065"
+
+[[relation]]
+label = "related"
+target = "RFC-011"
