@@ -14,7 +14,7 @@ ref   = "SL-164"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Conformance: 3 undeclared touch-paths missing from design-target selectors"
 detail = """
@@ -29,7 +29,7 @@ response = "Add `install/boot-footer.md`, `src/boot.rs`, and `src/retrieve.rs` t
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Conformance: `.doctrine/boot-footer.md` declared as design-target but not touched"
 detail = "The design declared `.doctrine/boot-footer.md` as a design-target selector. But the actual authored source that was edited is `install/boot-footer.md` (the install-time source, which gets copied to `.doctrine/boot-footer.md` by `doctrine install`). The selector should point at the actual authored path: `install/boot-footer.md`."
