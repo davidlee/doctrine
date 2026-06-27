@@ -1,0 +1,86 @@
+# Implementation plan for SL-163 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-163"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "check verb — resolution leaf + proxy shell + wiring"
+objective = """
+Ship `doctrine check {quick|commit|gate}` end-to-end: a pure resolution leaf in
+`verify.rs` (the three `[verification]` override fields, `CheckKind`, the
+`CheckPlan` { Run / Noop / Empty } enum, and the total `resolve_check`), the
+impure proxy shell in a new `commands/check.rs` (inherit stdio, no timeout,
+`ENOENT`→keyed error, exit-code forwarding incl. `128+signo` on signal death),
+and the CLI/guard wiring (`Command::Check` + `CheckCommand` with `-p/--path`,
+dispatch arm, `commands/mod.rs` registration, `guard::write_class`→Read). The VT
+`command` path is untouched (INV-1). Design §5.2–§5.5, D1–D6, CR-F2/F3/F5/F6.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (internal A1–A6 + codex CR-F1–F6 integrated); lifecycle is plan/ready." },
+  { id = "EN-2", text = "Existing VerificationConfig parse + verify::resolve unit suites are green at HEAD (the behaviour-preservation baseline)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`resolve_check(cfg, kind)` returns Run(override) when a non-empty override is set, Run(DEFAULT_COMMIT|DEFAULT_GATE) for unconfigured commit/gate, Noop(QUICK_UNSET_NOTE) for unconfigured quick, and Empty(kind) for a configured `[]` override — pure, total, no IO." },
+  { id = "EX-2", text = "`doctrine check {quick|commit|gate}` resolves root (honouring `-p/--path`), reads config via the ONE `coverage_store::load_config` reader, and: Noop→prints note + exit 0 with no spawn; Empty→keyed error naming `[verification].<kind>`; Run→spawns argv with cwd=root and inherited stdio, no timeout." },
+  { id = "EX-3", text = "Exit forwarding: the child's exit code is propagated verbatim; a signal-killed child exits `128+signo` on unix; a missing program (`ENOENT`) yields an actionable error naming the owned config key (not a raw spawn error)." },
+  { id = "EX-4", text = "`guard::write_class(Command::Check{..})` is Read (pass-through under worker-mode); `command` (VT base) resolution is byte-for-byte unchanged (INV-1) and its existing suites stay green unedited." },
+]
+verification = [
+  { id = "VT-1", expects = "verify.rs unit tests: for each kind, override-present→Run(override); override-absent→Quick=Noop / Commit=Run(DEFAULT_COMMIT) / Gate=Run(DEFAULT_GATE); override `[]`→Empty(kind). Exact plan/argv asserted." },
+  { id = "VT-2", expects = "verify.rs unit tests: the three new keys deserialize on VerificationConfig; an absent `[verification]` table yields all-None; the existing `command`/`aliases`/`resolve` tests pass unedited (INV-1)." },
+  { id = "VT-3", expects = "tests/e2e_check_proxy.rs (built binary, temp root via -p): (i) gate=[\"sh\",\"-c\",\"exit 7\"]→exit 7 + streamed output; (ii) bogus program→error names the key; (iii) [\"sh\",\"-c\",\"kill -TERM $$\"]→exit 143; (iv) unconfigured quick→exit 0 + note on stdout + no child spawned." },
+  { id = "VT-4", expects = "`just gate` is green on this repo (clippy --workspace zero warnings, all suites pass)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "shipped-skill sweep + uid scrub + surface guard + re-embed"
+objective = """
+Rewrite the shipped skill corpus off this repo's `just` convention and onto the
+verb, scrub the dangling repo-local memory uid, and add a regression guard so the
+coupling cannot return. Per D6: four instruction sites become `doctrine check
+gate`; the two `worktree` sites get illustrative-example-only updates that
+preserve their project-provided / orchestrator-supplied caller-control semantics.
+Re-bake the RustEmbed asset and regenerate the installed skills. Design §3, D6,
+§9 (shipped-surface guard).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `doctrine check gate` exists and runs, so a skill instruction pointing at it is live (not a dangling reference)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The four instruction sites (execute:50, close:33, audit:109, notes:32) read `doctrine check gate` in place of `just check`." },
+  { id = "EX-2", text = "The two worktree sites (192, 219) update only the illustrative `just check` token to `doctrine check gate`; the surrounding 'project-provided, never a hardcoded cargo …' (192) and 'orchestrator-supplied verify command' (219) semantics are unchanged." },
+  { id = "EX-3", text = "`dispatch/SKILL.md:19` no longer cites the bare uid `mem_019ec65ecbc7`; the base==B mechanism is described in portable prose." },
+  { id = "EX-4", text = "No `just check` / `just gate` string and no bare `mem_…` uid remains anywhere under `plugins/**`." },
+  { id = "EX-5", text = "`cargo build` re-bakes the RustEmbed asset and `doctrine claude install` regenerates `.agents/` (gitignored) to match source — a client install issues only `doctrine check …` and carries no dangling memory reference." },
+]
+verification = [
+  { id = "VT-1", expects = "tests/e2e_no_shipped_couplings.rs scans `plugins/**` and fails on any `just check` / `just gate` literal or bare `mem_…` uid (needles assembled from fragments so the guard does not self-match — the e2e_no_baked_paths.rs precedent)." },
+  { id = "VA-1", expects = "Agent diff-review confirms the two worktree sites preserve caller-control semantics (example-only change), not a flattening to a fixed gate call (CR-F4)." },
+  { id = "VT-2", expects = "`just gate` is green on this repo after the sweep + re-embed." },
+  { id = "VH-1", expects = "A fresh `doctrine claude install` into a scratch dir shows the swept skills and no dangling uid (the materialised client surface)." },
+]
+specs        = []
+requirements = []
