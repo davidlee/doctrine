@@ -1,0 +1,47 @@
+id    = 94
+slug  = "accept-req-317"
+title = "accept REQ-317"
+# no status — a REC is the immutable record of ONE reconciliation act (SPEC-002
+# D-Q3): it has no lifecycle, so no status is stored. The act is the commit.
+
+[rec]
+move = "accept"              # accept | revise | redesign
+owning_slice = "SL-165"
+
+# SL-165 satisfies REQ-317 (the substrate path it mandates); status stays
+# `active`. The act re-affirms REQ-317 at `active`. `to` must equal the current
+# authored status for the closure discharge predicate (slice.rs rec_discharges b).
+[[status_delta]]
+requirement = "REQ-317"
+from = "active"
+to = "active"
+
+# Evidence ⊇ ALL coverage keys feeding REQ-317's composite (discharge clause c).
+[[evidence_ref]]
+slice = "SL-064"
+requirement = "REQ-317"
+contributing_change = "SL-064"
+mode = "VA"
+
+[[evidence_ref]]
+slice = "SL-165"
+requirement = "REQ-317"
+contributing_change = "SL-165"
+mode = "VA"
+
+# status_deltas — the requirement-status facts THIS act already applied. May be
+# EMPTY for a `redesign`, which records the reconcile→design escalation, not an
+# instance-truth write (SPEC-002 F7/D7). The reconcile writer (Slice B) appends
+# them as `[[status_delta]]` tables; a fresh `rec new` writes none:
+#   [[status_delta]]
+#   requirement = "REQ-NNN"
+#   from = "pending"
+#   to   = "active"
+#
+# evidence_refs — the coverage entries this act rests on, cited by the stable
+# 4-tuple key (slice, requirement, contributing_change, mode), never a file#line:
+#   [[evidence_ref]]
+#   slice = "SL-NNN"
+#   requirement = "REQ-NNN"
+#   contributing_change = "SL-NNN"
+#   mode = "VT"

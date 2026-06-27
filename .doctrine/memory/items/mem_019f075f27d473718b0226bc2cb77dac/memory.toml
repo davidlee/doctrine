@@ -1,0 +1,50 @@
+memory_uid = "mem_019f075f27d473718b0226bc2cb77dac"
+memory_key = "mem.pattern.doctrine.close-drift-discharge-rec"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Closure drift discharge via accept REC"
+summary = "slice status done refuses with 'undischarged residual drift' until an accept REC discharges each touched/covered requirement"
+created = "2026-06-27"
+updated = "2026-06-27"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:close", "area:reconciliation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e26369b46ce45f2e4d3dbd1b1b43976f329d2355"
+ref_name = "refs/heads/edge"
+checkout_state_id = "6ad3895fd03f9f647ec2ca197698cc98b462ce6c948733bb7edf0917ae8df5c7"
+base_commit = "e3900c88c2523431fedf1d764ac7074e792605b7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-165"
+
+[[source]]
+kind = "code"
+ref = "src/slice.rs:1268"
+
