@@ -1493,7 +1493,7 @@ mod tests {
         assert!(!promoted, "REV carries no backlog-only promoted projection");
     }
 
-    // -- SL-059 VT-1: outbound_for total-dispatch for the four knowledge kinds --
+    // -- SL-059 VT-1: outbound_for total-dispatch for the six knowledge kinds --
 
     #[test]
     fn knowledge_kinds_author_outbound_edges() {
@@ -2058,11 +2058,11 @@ mod tests {
                 "{label:?} (Unvalidated) must have no overlay"
             );
         }
-        // The 16 = 19 distinct labels minus the 3 Unvalidated (SL-149 PHASE-05 retired
+        // The 18 = 21 distinct labels minus the 3 Unvalidated (SL-149 PHASE-05 retired
         // specs/requirements, collapsing them into the single resolvable `references`
-        // label → one overlay, label-keyed per R5). The set, not just the count, is the
-        // real assertion above; the count is a sanity tag.
-        assert_eq!(overlay_backed.len(), 16, "overlay-backed label count is 16");
+        // label → one overlay, label-keyed per R5; SL-159 PHASE-02 added supports/disputes).
+        // The set, not just the count, is the real assertion above; the count is a sanity tag.
+        assert_eq!(overlay_backed.len(), 18, "overlay-backed label count is 18");
     }
 
     // -- PHASE-04 VT-4 / X3 arm (a): exact reader coverage (read_block live) ---
@@ -2391,6 +2391,74 @@ mod tests {
                 emitted_labels(root, "CON", 1),
                 expected,
                 "CON: shapes + spawns + governed_by + references(concerns) (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+            );
+        }
+
+        // --- EVD (knowledge): shapes + spawns + governed_by + supports + disputes + references(concerns) ---
+        write(
+            &root,
+            ".doctrine/knowledge/evidence/001/record-001.toml",
+            "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
+             id = 1\nslug = \"e\"\ntitle = \"E\"\n\
+             record_kind = \"evidence\"\nstatus = \"captured\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             tags = []\n\n\
+             [facet]\n\
+             datum = \"\"\nprovenance = \"\"\nconfidence = \"\"\n\n\
+             [evidence]\n\
+             supports = []\ncontradicts = []\nnotes = []\n\
+             [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"supports\"\ntarget = \"ASM-001\"\n\
+             [[relation]]\nlabel = \"disputes\"\ntarget = \"HYP-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/evidence/001/record-001.md",
+            "body\n",
+        );
+        {
+            let mut expected = table_labels_for("EVD");
+            expected.remove(&(RelationLabel::Supersedes, None));
+            assert_eq!(
+                emitted_labels(root, "EVD", 1),
+                expected,
+                "EVD: shapes + spawns + governed_by + supports + disputes + references(concerns) (supersedes is LifecycleOnly)"
+            );
+        }
+
+        // --- HYP (knowledge): shapes + spawns + governed_by + references(concerns) ---
+        write(
+            &root,
+            ".doctrine/knowledge/hypothesis/001/record-001.toml",
+            "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
+             id = 1\nslug = \"h\"\ntitle = \"H\"\n\
+             record_kind = \"hypothesis\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             tags = []\n\n\
+             [facet]\n\
+             proposition = \"\"\npredicts = \"\"\n\n\
+             [evidence]\n\
+             supports = []\ncontradicts = []\nnotes = []\n\
+             [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/hypothesis/001/record-001.md",
+            "body\n",
+        );
+        {
+            let mut expected = table_labels_for("HYP");
+            expected.remove(&(RelationLabel::Supersedes, None));
+            assert_eq!(
+                emitted_labels(root, "HYP", 1),
+                expected,
+                "HYP: shapes + spawns + governed_by + references(concerns) (supersedes is LifecycleOnly)"
             );
         }
     }

@@ -31,7 +31,7 @@ pub(crate) fn is_record(kind: &'static crate::entity::Kind) -> bool {
 
 /// The admissible target membership predicate (SL-158 D2) — widens the old single
 /// work-like gate for targets to include records. A work item may now `needs`/`after`
-/// a record (ASM/DEC/QUE/CON). Governance (SPEC/ADR/POL/STD) stays excluded because
+/// a record (ASM/DEC/QUE/CON/EVD/HYP). Governance (SPEC/ADR/POL/STD) stays excluded because
 /// depending on governance routes THROUGH a Revision, never the evergreen doc (the
 /// SL-060 invariant).
 pub(crate) fn is_admissible_dep_target(kind: &'static crate::entity::Kind) -> bool {
@@ -63,7 +63,7 @@ fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Res
 ///   1. SRC must resolve AND be a dep/seq-authoring (work-like) kind.
 ///   2. TGT must resolve on disk (free-text / dangling refused) AND be
 ///      admissible as a dep/seq target (work-like OR record). SL-158 D2 widened
-///      the old work-like-only gate to admit knowledge records (ASM/DEC/QUE/CON).
+///      the old work-like-only gate to admit knowledge records (ASM/DEC/QUE/CON/EVD/HYP).
 ///      Governance (SPEC/ADR/POL/STD) stays excluded from BOTH gates.
 ///   3. self-edge (SRC == TGT) refused.
 fn resolve_dep_seq_src(
@@ -80,7 +80,7 @@ fn resolve_dep_seq_src(
     crate::integrity::ensure_ref_resolves(root, target)?;
     anyhow::ensure!(
         is_admissible_dep_target(tkref.kind),
-        "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record (assumption/decision/question/constraint); governance docs are excluded",
+        "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record (assumption/decision/question/constraint/evidence/hypothesis); governance docs are excluded",
         tkref.kind.prefix
     );
     anyhow::ensure!(
@@ -278,9 +278,10 @@ mod tests {
     /// Governance (SPEC/ADR/POL/STD) and everything else stay excluded.
     #[test]
     fn is_admissible_dep_target_is_work_like_plus_records() {
-        // Work-like (SL, ISS, IMP, CHR, RSK, IDE, REV) + records (ASM, DEC, QUE, CON)
+        // Work-like (SL, ISS, IMP, CHR, RSK, IDE, REV) + records (ASM, DEC, QUE, CON, EVD, HYP)
         let admissible: &[&str] = &[
-            "SL", "ISS", "IMP", "CHR", "RSK", "IDE", "REV", "ASM", "DEC", "QUE", "CON",
+            "SL", "ISS", "IMP", "CHR", "RSK", "IDE", "REV", "ASM", "DEC", "QUE", "CON", "EVD",
+            "HYP",
         ];
         for k in integrity::KINDS
             .iter()

@@ -5,18 +5,18 @@
 //! queried metadata), a scaffolded `record-NNN.md` prose body, and an `NNN-slug`
 //! symlink alias — the `backlog.rs` structural twin (design SL-059 §5).
 //!
-//! Four `RecordKind`s ride four `entity::Kind`s over the same kind-blind engine,
+//! Six `RecordKind`s ride six `entity::Kind`s over the same kind-blind engine,
 //! each its own tree + reservation namespace (`ASM-001` and `DEC-001` coexist —
 //! the counters are independent). The subtypes diverge in their prefix, status
 //! vocabulary, and the typed `[facet]` they carry.
 //!
-//! This module owns the *knowledge-specific* parts — the four `Kind`s, the
+//! This module owns the *knowledge-specific* parts — the six `Kind`s, the
 //! per-kind status vocabularies (data, not an enum), the typed facet enum-of-
 //! structs, the shared `Evidence`, the three closed facet value-enums, the
 //! three-layer tolerant parse (`RawRecordToml` + a kind-blind superset `RawFacet`
 //! → `validate` dispatches on `record_kind` → the typed `RecordFacet`, with the
 //! `""`/`[]` → absent seam), and the per-kind scaffold templates. The kind-
-//! agnostic engine is `crate::entity` (unchanged — four new scaffold callers).
+//! agnostic engine is `crate::entity` (unchanged — six new scaffold callers).
 //!
 //! All phases landed — every production symbol has a real consumer. The only
 //! non-production code is the hand-emit render subtree below (VT-1's byte-stable
@@ -40,12 +40,12 @@ use crate::tomlfmt::toml_string;
 #[cfg(test)]
 use crate::tomlfmt::toml_array_inner;
 
-/// The toml/md file stem — shared by all four kinds (`record-NNN.toml`). Distinct
+/// The toml/md file stem — shared by all six kinds (`record-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`ASM`/`DEC`/…) and from the per-kind tree dirs.
 const RECORD_STEM: &str = "record";
 
 // ---------------------------------------------------------------------------
-// The discriminator + its four engine `Kind`s
+// The discriminator + its six engine `Kind`s
 // ---------------------------------------------------------------------------
 
 /// Which knowledge record this is. Closed set; kebab serde (round-trips the
@@ -59,6 +59,8 @@ pub(crate) enum RecordKind {
     Decision,
     Question,
     Constraint,
+    Evidence,
+    Hypothesis,
 }
 
 /// The assumption kind: a working belief held until validated. Own tree +
@@ -94,6 +96,22 @@ pub(crate) const CONSTRAINT_KIND: Kind = Kind {
     scaffold: |c| record_scaffold(RecordKind::Constraint, c),
 };
 
+/// The evidence kind: an observed datum with provenance and confidence.
+pub(crate) const EVIDENCE_KIND: Kind = Kind {
+    dir: ".doctrine/knowledge/evidence",
+    prefix: crate::kinds::EVD,
+    stem: "record",
+    scaffold: |c| record_scaffold(RecordKind::Evidence, c),
+};
+
+/// The hypothesis kind: a testable proposition that predicts an outcome.
+pub(crate) const HYPOTHESIS_KIND: Kind = Kind {
+    dir: ".doctrine/knowledge/hypothesis",
+    prefix: crate::kinds::HYP,
+    stem: "record",
+    scaffold: |c| record_scaffold(RecordKind::Hypothesis, c),
+};
+
 impl RecordKind {
     /// The engine `Kind` for this record kind — the single source of its tree +
     /// prefix + scaffold.
@@ -103,6 +121,8 @@ impl RecordKind {
             RecordKind::Decision => &DECISION_KIND,
             RecordKind::Question => &QUESTION_KIND,
             RecordKind::Constraint => &CONSTRAINT_KIND,
+            RecordKind::Evidence => &EVIDENCE_KIND,
+            RecordKind::Hypothesis => &HYPOTHESIS_KIND,
         }
     }
 
@@ -120,6 +140,8 @@ impl RecordKind {
             RecordKind::Decision => "decision",
             RecordKind::Question => "question",
             RecordKind::Constraint => "constraint",
+            RecordKind::Evidence => "evidence",
+            RecordKind::Hypothesis => "hypothesis",
         }
     }
 
@@ -156,11 +178,13 @@ impl RecordKind {
 
     /// Every kind in DECLARATION order — the single source for the cross-kind
     /// `list` read (each tree in turn) and the prefix round-trip.
-    pub(crate) const ALL: [RecordKind; 4] = [
+    pub(crate) const ALL: [RecordKind; 6] = [
         RecordKind::Assumption,
         RecordKind::Decision,
         RecordKind::Question,
         RecordKind::Constraint,
+        RecordKind::Evidence,
+        RecordKind::Hypothesis,
     ];
 }
 
@@ -178,6 +202,16 @@ pub(crate) const DECISION_STATUSES: &[&str] = &["proposed", "accepted", "rejecte
 pub(crate) const QUESTION_STATUSES: &[&str] = &["open", "answered", "obsolete"];
 /// The constraint status vocabulary; `active` is the seed.
 pub(crate) const CONSTRAINT_STATUSES: &[&str] = &["active", "waived", "superseded", "retired"];
+/// The evidence status vocabulary; `captured` is the seed.
+pub(crate) const EVIDENCE_STATUSES: &[&str] = &[
+    "captured",
+    "disputed",
+    "confirmed",
+    "retracted",
+    "superseded",
+];
+/// The hypothesis status vocabulary; `proposed` is the seed.
+pub(crate) const HYPOTHESIS_STATUSES: &[&str] = &["proposed", "confirmed", "refuted"];
 
 /// The default-list HIDE-set (settled states only) — NOT the full vocab, and NOT
 /// the priority partition's terminal set. Drives `listing::retain` (PHASE-03).
@@ -186,6 +220,10 @@ const ASSUMPTION_HIDDEN: &[&str] = &["validated", "invalidated", "obsolete"];
 const DECISION_HIDDEN: &[&str] = &["rejected", "superseded"];
 const QUESTION_HIDDEN: &[&str] = &["answered", "obsolete"];
 const CONSTRAINT_HIDDEN: &[&str] = &["waived", "superseded", "retired"];
+/// Settled evidence — confirmed is visible by default (terminal but not hidden).
+const EVIDENCE_HIDDEN: &[&str] = &["retracted", "superseded"];
+/// Settled hypothesis — confirmed and refuted both terminal, both hidden.
+const HYPOTHESIS_HIDDEN: &[&str] = &["confirmed", "refuted"];
 
 /// The per-kind terminal status sets (D2, SL-097 PHASE-01) — distinct from the
 /// hide-set: `accepted` (decision) is terminal but not hidden. Each is a subset of
@@ -195,6 +233,10 @@ const ASSUMPTION_TERMINAL: &[&str] = &["validated", "invalidated", "obsolete"];
 const DECISION_TERMINAL: &[&str] = &["accepted", "rejected", "superseded"];
 const QUESTION_TERMINAL: &[&str] = &["answered", "obsolete"];
 const CONSTRAINT_TERMINAL: &[&str] = &["waived", "superseded", "retired"];
+/// Terminal evidence statuses — confirmed is deliberately NOT terminal.
+const EVIDENCE_TERMINAL: &[&str] = &["retracted", "superseded"];
+/// Terminal hypothesis statuses — both confirmed and refuted are terminal.
+const HYPOTHESIS_TERMINAL: &[&str] = &["confirmed", "refuted"];
 
 /// The kind's status vocabulary + known-set — the single source `default_status`,
 /// the PHASE-02 partition, and the PHASE-03 `--status` validator read.
@@ -204,6 +246,8 @@ pub(crate) fn statuses(k: RecordKind) -> &'static [&'static str] {
         RecordKind::Decision => DECISION_STATUSES,
         RecordKind::Question => QUESTION_STATUSES,
         RecordKind::Constraint => CONSTRAINT_STATUSES,
+        RecordKind::Evidence => EVIDENCE_STATUSES,
+        RecordKind::Hypothesis => HYPOTHESIS_STATUSES,
     }
 }
 
@@ -222,6 +266,8 @@ const fn hidden(k: RecordKind) -> &'static [&'static str] {
         RecordKind::Decision => DECISION_HIDDEN,
         RecordKind::Question => QUESTION_HIDDEN,
         RecordKind::Constraint => CONSTRAINT_HIDDEN,
+        RecordKind::Evidence => EVIDENCE_HIDDEN,
+        RecordKind::Hypothesis => HYPOTHESIS_HIDDEN,
     }
 }
 
@@ -233,6 +279,8 @@ const fn terminal(k: RecordKind) -> &'static [&'static str] {
         RecordKind::Decision => DECISION_TERMINAL,
         RecordKind::Question => QUESTION_TERMINAL,
         RecordKind::Constraint => CONSTRAINT_TERMINAL,
+        RecordKind::Evidence => EVIDENCE_TERMINAL,
+        RecordKind::Hypothesis => HYPOTHESIS_TERMINAL,
     }
 }
 
@@ -264,6 +312,28 @@ impl Confidence {
     /// variants (`confidence_known_set_matches_variants`), its only consumer.
     #[cfg(test)]
     pub(crate) const KNOWN: &'static [&'static str] = &["low", "medium", "high"];
+}
+
+/// How evidence was obtained. Closed set, kebab serde; optional.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Provenance {
+    Inspection,
+    Experiment,
+    Reproduction,
+    Citation,
+}
+
+impl Provenance {
+    /// The kebab string for render.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Provenance::Inspection => "inspection",
+            Provenance::Experiment => "experiment",
+            Provenance::Reproduction => "reproduction",
+            Provenance::Citation => "citation",
+        }
+    }
 }
 
 /// The basis an assumption rests on (assumption facet only). Closed set, kebab
@@ -377,6 +447,8 @@ pub(crate) enum RecordFacet {
     Decision(DecisionFacet),
     Question(QuestionFacet),
     Constraint(ConstraintFacet),
+    Evidence(EvidenceFacet),
+    Hypothesis(HypothesisFacet),
 }
 
 /// The assumption facet — `confidence` is assumption-only (§9). Every optional
@@ -428,7 +500,22 @@ pub(crate) struct ConstraintFacet {
     waived_on: Option<String>,
 }
 
-/// The shared evidence block (all four kinds, §9): free-text citations. Never the
+/// The evidence facet — an observed datum with provenance and confidence.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct EvidenceFacet {
+    pub(crate) datum: Option<String>,
+    pub(crate) provenance: Option<Provenance>,
+    pub(crate) confidence: Option<Confidence>,
+}
+
+/// The hypothesis facet — a testable proposition that predicts an outcome.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct HypothesisFacet {
+    pub(crate) proposition: Option<String>,
+    pub(crate) predicts: Option<String>,
+}
+
+/// The shared evidence block (all six kinds, §9): free-text citations. Never the
 /// queryable relation graph (D5) — three plain `Vec<String>`, `[]` default.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Evidence {
@@ -443,7 +530,7 @@ pub(crate) struct Evidence {
 
 /// The tolerant top layer. `status` stays `String` (validated against
 /// `statuses(kind)` at the CLI seam, PHASE-03 — not here). `[facet]` is read as ONE
-/// kind-blind superset `RawFacet` (every field across all four kinds, each
+/// kind-blind superset `RawFacet` (every field across all six kinds, each
 /// `#[serde(default)]`), so the read is kind-blind and `validate` is kind-aware.
 /// `[evidence]` defaults empty.
 #[derive(Debug, Deserialize)]
@@ -525,6 +612,17 @@ struct RawFacet {
     waived_by: String,
     #[serde(default)]
     waived_on: String,
+    // evidence
+    #[serde(default)]
+    datum: String,
+    #[serde(default)]
+    provenance: String,
+    // evidence confidence — re-uses the `confidence` field already declared
+    // hypothesis
+    #[serde(default)]
+    proposition: String,
+    #[serde(default)]
+    predicts: String,
 }
 
 /// The tolerant evidence layer — three free lists, `[]` default.
@@ -632,6 +730,15 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
             waiver_reason: optional_text(raw.waiver_reason),
             waived_by: optional_text(raw.waived_by),
             waived_on: optional_text(raw.waived_on),
+        }),
+        RecordKind::Evidence => RecordFacet::Evidence(EvidenceFacet {
+            datum: optional_text(raw.datum),
+            provenance: optional_enum(&raw.provenance, "provenance")?,
+            confidence: optional_enum(&raw.confidence, "confidence")?,
+        }),
+        RecordKind::Hypothesis => RecordFacet::Hypothesis(HypothesisFacet {
+            proposition: optional_text(raw.proposition),
+            predicts: optional_text(raw.predicts),
         }),
     })
 }
@@ -741,6 +848,21 @@ fn render_facet(facet: &RecordFacet) -> String {
             out.push_str(&opt_text_line("waived_by", f.waived_by.as_deref()));
             out.push_str(&opt_text_line("waived_on", f.waived_on.as_deref()));
         }
+        RecordFacet::Evidence(f) => {
+            out.push_str(&opt_text_line("datum", f.datum.as_deref()));
+            out.push_str(&opt_text_line(
+                "provenance",
+                f.provenance.map(Provenance::as_str),
+            ));
+            out.push_str(&opt_text_line(
+                "confidence",
+                f.confidence.map(Confidence::as_str),
+            ));
+        }
+        RecordFacet::Hypothesis(f) => {
+            out.push_str(&opt_text_line("proposition", f.proposition.as_deref()));
+            out.push_str(&opt_text_line("predicts", f.predicts.as_deref()));
+        }
     }
     out
 }
@@ -778,6 +900,8 @@ fn render_record_toml_seed(
         RecordKind::Decision => "templates/knowledge-decision.toml",
         RecordKind::Question => "templates/knowledge-question.toml",
         RecordKind::Constraint => "templates/knowledge-constraint.toml",
+        RecordKind::Evidence => "templates/knowledge-evidence.toml",
+        RecordKind::Hypothesis => "templates/knowledge-hypothesis.toml",
     };
     Ok(crate::install::asset_text(template)?
         .replace("{{id}}", &id.to_string())
@@ -797,7 +921,7 @@ fn render_record_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 /// The knowledge fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
 /// relative to the kind's tree root — structurally `backlog_scaffold`. The `kind`
 /// decides the toml template (the per-kind facet + seed status); the md and symlink
-/// are kind-uniform. Shared by all four `Kind`s via their scaffold closure.
+/// are kind-uniform. Shared by all six `Kind`s via their scaffold closure.
 fn record_scaffold(kind: RecordKind, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
     let name = format!("{id:03}");
@@ -825,7 +949,7 @@ fn record_scaffold(kind: RecordKind, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fi
 /// — the prefix auto-detect shared by `show` and `status` (FR-004, design §6).
 /// Split on the LAST `-`, upper-case the prefix (`dec-3` is tolerated, mirroring
 /// `backlog::parse_ref`), resolve it via [`RecordKind::from_prefix`], and parse the
-/// numeric tail (`DEC-7` and `DEC-007` both yield 7). The four counters are
+/// numeric tail (`DEC-7` and `DEC-007` both yield 7). The six counters are
 /// independent, so the prefix is load-bearing for disambiguation (`ASM-1` ≠ `DEC-1`).
 /// An unknown prefix or a non-numeric tail is a hard error — never an implicit create.
 fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
@@ -833,7 +957,9 @@ fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
         format!("`{reference}` is not a canonical record ref (expected e.g. ASM-007)")
     })?;
     let kind = RecordKind::from_prefix(&prefix.to_uppercase()).with_context(|| {
-        format!("unknown record prefix `{prefix}` in `{reference}` (expected ASM/DEC/QUE/CON)")
+        format!(
+            "unknown record prefix `{prefix}` in `{reference}` (expected ASM/DEC/QUE/CON/EVD/HYP)"
+        )
     })?;
     let id: u32 = tail
         .parse()
@@ -841,7 +967,7 @@ fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
     Ok((kind, id))
 }
 
-/// The union of all four kinds' status vocabularies — the cross-kind `--status`
+/// The union of all six kinds' status vocabularies — the cross-kind `--status`
 /// known-set for `knowledge list` (design §6: the validator admits any token that is
 /// in-vocab for ANY kind, so `-s superseded` spans DEC + CON). De-duplicated, in a
 /// stable `RecordKind::ALL` × vocab order.
@@ -1000,11 +1126,13 @@ fn format_metadata(record: &KnowledgeRecord) -> Vec<String> {
     }
     parts.push(format_facet(&record.facet));
     parts.push(format_evidence(&record.evidence));
-    // shapes, spawns, governed_by axes
+    // shapes, spawns, governed_by, supports, disputes axes
     for label in [
         crate::relation::RelationLabel::Shapes,
         crate::relation::RelationLabel::Spawns,
         crate::relation::RelationLabel::GovernedBy,
+        crate::relation::RelationLabel::Supports,
+        crate::relation::RelationLabel::Disputes,
     ] {
         let targets = crate::relation::targets_for(&record.tier1, label);
         if !targets.is_empty() {
@@ -1088,6 +1216,17 @@ fn format_facet(facet: &RecordFacet) -> String {
             show_opt_line("waived_on", f.waived_on.as_deref()),
         ]
         .concat(),
+        RecordFacet::Evidence(f) => [
+            show_opt_line("datum", f.datum.as_deref()),
+            show_opt_line("provenance", f.provenance.map(Provenance::as_str)),
+            show_opt_line("confidence", f.confidence.map(Confidence::as_str)),
+        ]
+        .concat(),
+        RecordFacet::Hypothesis(f) => [
+            show_opt_line("proposition", f.proposition.as_deref()),
+            show_opt_line("predicts", f.predicts.as_deref()),
+        ]
+        .concat(),
     };
     if body.is_empty() {
         String::new()
@@ -1150,6 +1289,8 @@ fn show_json(record: &KnowledgeRecord, with_body: bool) -> anyhow::Result<String
         "shapes": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Shapes),
         "spawns": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Spawns),
         "governed_by": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::GovernedBy),
+        "supports": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Supports),
+        "disputes": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Disputes),
     }));
     let value = serde_json::json!({
         "kind": "knowledge",
@@ -1196,6 +1337,15 @@ fn facet_json(facet: &RecordFacet) -> serde_json::Value {
             "waiver_reason": f.waiver_reason,
             "waived_by": f.waived_by,
             "waived_on": f.waived_on,
+        }),
+        RecordFacet::Evidence(f) => serde_json::json!({
+            "datum": f.datum,
+            "provenance": f.provenance.map(Provenance::as_str),
+            "confidence": f.confidence.map(Confidence::as_str),
+        }),
+        RecordFacet::Hypothesis(f) => serde_json::json!({
+            "proposition": f.proposition,
+            "predicts": f.predicts,
         }),
     }
 }
@@ -1479,7 +1629,7 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum KnowledgeCommand {
-    /// Create a new knowledge record (assumption / decision / question / constraint).
+    /// Create a new knowledge record (assumption / decision / question / constraint / evidence / hypothesis).
     New {
         kind: RecordKind,
         title: Option<String>,
@@ -1596,6 +1746,8 @@ mod tests {
             RecordKind::Decision => "DEC-003",
             RecordKind::Question => "QUE-003",
             RecordKind::Constraint => "CON-003",
+            RecordKind::Evidence => "EVD-003",
+            RecordKind::Hypothesis => "HYP-003",
         };
         ScaffoldCtx {
             id: 3,
@@ -1615,7 +1767,7 @@ mod tests {
         }
         assert_eq!(RecordKind::from_prefix("REQ"), None);
         let prefixes: BTreeSet<&str> = RecordKind::ALL.iter().map(|k| k.prefix()).collect();
-        assert_eq!(prefixes.len(), 4, "the four prefixes are distinct");
+        assert_eq!(prefixes.len(), 6, "the six prefixes are distinct");
     }
 
     #[test]
@@ -1632,6 +1784,8 @@ mod tests {
         assert_eq!(RecordKind::Decision.default_status(), "proposed");
         assert_eq!(RecordKind::Question.default_status(), "open");
         assert_eq!(RecordKind::Constraint.default_status(), "active");
+        assert_eq!(RecordKind::Evidence.default_status(), "captured");
+        assert_eq!(RecordKind::Hypothesis.default_status(), "proposed");
         // the seed is exactly statuses(kind)[0] — one source, never a second copy.
         for kind in RecordKind::ALL {
             assert_eq!(Some(kind.default_status()), statuses(kind).first().copied());
@@ -1655,6 +1809,20 @@ mod tests {
         assert_eq!(
             statuses(RecordKind::Constraint),
             ["active", "waived", "superseded", "retired"]
+        );
+        assert_eq!(
+            statuses(RecordKind::Evidence),
+            [
+                "captured",
+                "disputed",
+                "confirmed",
+                "retracted",
+                "superseded"
+            ]
+        );
+        assert_eq!(
+            statuses(RecordKind::Hypothesis),
+            ["proposed", "confirmed", "refuted"]
         );
     }
 
@@ -1699,6 +1867,16 @@ mod tests {
         assert!(RecordKind::Constraint.is_terminal("waived"));
         assert!(RecordKind::Constraint.is_terminal("superseded"));
         assert!(RecordKind::Constraint.is_terminal("retired"));
+        // Evidence (VT-5)
+        assert!(!RecordKind::Evidence.is_terminal("captured"));
+        assert!(!RecordKind::Evidence.is_terminal("disputed"));
+        assert!(!RecordKind::Evidence.is_terminal("confirmed"));
+        assert!(RecordKind::Evidence.is_terminal("retracted"));
+        assert!(RecordKind::Evidence.is_terminal("superseded"));
+        // Hypothesis (VT-6)
+        assert!(!RecordKind::Hypothesis.is_terminal("proposed"));
+        assert!(RecordKind::Hypothesis.is_terminal("confirmed"));
+        assert!(RecordKind::Hypothesis.is_terminal("refuted"));
     }
 
     #[test]
@@ -1784,6 +1962,12 @@ mod tests {
                 }
                 RecordFacet::Constraint(f) => {
                     assert_eq!(f, &ConstraintFacet::default());
+                }
+                RecordFacet::Evidence(f) => {
+                    assert_eq!(f, &EvidenceFacet::default());
+                }
+                RecordFacet::Hypothesis(f) => {
+                    assert_eq!(f, &HypothesisFacet::default());
                 }
             }
         }
@@ -1876,6 +2060,12 @@ confidence = \"bogus\"
             }
             RecordKind::Constraint => {
                 "\n[facet]\nstatement = \"no disk in the pure layer\"\nsource = \"canon\"\napplies_to = [\"src/knowledge.rs\", \"src/backlog.rs\"]\nwaiver_reason = \"\"\nwaived_by = \"\"\nwaived_on = \"\"\n"
+            }
+            RecordKind::Evidence => {
+                "\n[facet]\ndatum = \"the IdP returns 401 after 1h\"\nprovenance = \"experiment\"\nconfidence = \"high\"\n"
+            }
+            RecordKind::Hypothesis => {
+                "\n[facet]\nproposition = \"token TTL is 3600s\"\npredicts = \"requests after 3601s get 401\"\n"
             }
         };
         let evidence = "\n[evidence]\nsupports = [\"ADR-001\"]\ncontradicts = []\nnotes = [\"see §5\", \"and §9\"]\n";
