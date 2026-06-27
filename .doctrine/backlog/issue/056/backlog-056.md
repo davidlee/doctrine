@@ -64,12 +64,33 @@ the working trees and both branch tips until repaired.
 
 ## Candidate fixes
 
-- (a) **Deletion guard at integrate**: refuse to advance trunk if the projection
-  removes authored `.doctrine/**` paths not in the slice's own authored set.
-- (b) **Base-corpus freshness check at setup**: assert the fork base contains the
-  *current* authored corpus head, not merely the slice's plan.
-- (c) **Promotion guard**: `edge:main` fast-forward must be ancestor-checked
+- (a) **Deletion guard at integrate** (= RFC-005 H6 g3): refuse to advance trunk
+  if the projection removes authored `.doctrine/**` paths not in the slice's own
+  authored set. **Must be absolute-referenced** against the canonical corpus tip,
+  not relative to the moving trunk tip — relative is blind once trunk is already
+  gutted (which it was here: `main` had been promoted back to the stale base
+  before integrate, so the FF was clean *relative to main*). Invariant: the
+  authored corpus is append-mostly; no funnel op may advance trunk to a tree that
+  shrinks it.
+- (b) **Base-corpus freshness check at setup** (= g2): assert the fork base
+  contains the *current* authored corpus head, not merely the slice's plan.
+  Earliest, fail-closed, fully doctrine-owned — stops the chain at the fork. Core.
+- (c) **Promotion guard** (= g4): `edge:main` fast-forward must be ancestor-checked
   against the authored-corpus tip, not just ref reachability.
+- (d) **Refuse integrate-on-trunk-checkout** (= g1, NEW 2026-06-27): refuse any
+  trunk-mutating dispatch/integrate verb whose own HEAD is on the trunk branch
+  (`main`), with a loud, instructive diagnostic (restore to `edge`; promote via
+  `fetch`, not `checkout`). Converts the unenforced *"primary stays on edge / never
+  checkout main"* etiquette into a hard mechanism refusal. `never` was behavioral,
+  not enforced — agents violate it (deepseek switched main↔edge 4× on the SL-164
+  drive), which is *also* what re-opened SL-157's R1 (its `main`-never-checked-out
+  premise). Cheapest layer; closes the agent-induced R1 window at the verb.
+
+**Reference frame.** The destructive event was *manual* git — a `git merge` of the
+corpus-less bundle onto the live `edge` tree + the `git fetch . edge:main`
+promotion — neither a doctrine verb. So guards must be mechanism-level and hold
+regardless of which branch is checked out where. See RFC-005 §H6 (OQ-7/8/9) for
+the layering + canonical-corpus-tip questions.
 
 Related: ISS-038 (mirror — silent code revert via phantom index),
 RSK-010 + SL-127 (stale-base loud variants, fixed), ISS-036 (setup stale-base
