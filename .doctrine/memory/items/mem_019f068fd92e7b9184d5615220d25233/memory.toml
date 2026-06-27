@@ -1,0 +1,50 @@
+memory_uid = "mem_019f068fd92e7b9184d5615220d25233"
+memory_key = "mem.pattern.doctrine.worktree-embed-gate"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Gating a dispatch candidate worktree fails on missing generated embed assets"
+summary = "Fresh git worktrees lack gitignored generated dirs (web/map/dist); RustEmbed builds fail there — stage the dir before gating a candidate."
+created = "2026-06-27"
+updated = "2026-06-27"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a59afcb43c8d41842b54efd0b5ab10c4ad1a17e8"
+ref_name = "refs/heads/edge"
+checkout_state_id = "47d365fe3d522ee37af8fa3483254cad92340c9de61842b6d5d098ee61dd7894"
+base_commit = "a74dc3d35dd7eef71e048410a7849d489dd697e9"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-159"
+
+[[source]]
+kind = "improvement"
+ref = "IMP-187"
+
