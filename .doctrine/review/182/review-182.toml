@@ -1,0 +1,71 @@
+id    = 182
+slug  = "sl-167-code-review-accept-prefixed-canonical-ids-on-all-cli-idu32-args"
+title = "SL-167 code-review: Accept prefixed canonical ids on all CLI id:u32 args"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-167"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "adr.rs: parse_ref doc-comment is a copy-paste artifact from run_status"
+detail = """
+Expected: `parse_ref`'s doc comment describes what parse_ref does — parse an ADR reference, accepting both canonical and bare forms.
+
+Observed (src/adr.rs lines 281-282):
+```
+/// `doctrine adr status` — bind the concrete `AdrStatus` enum at the boundary,
+/// Parse an ADR reference — accepts both `ADR-007` and bare `7`.
+```
+
+The first line is a verbatim copy of the `run_status` doc-comment that follows at line 297. It describes a completely different function (run_status), misleading any reader using rustdoc/cargo doc. The second line is correct. This is a clear paste artifact from inserting parse_ref + parse_cli_id between the run_show forwarder and run_status.
+
+The other three modules (policy, rfc, standard) have correct standalone doc comments for their parse_ref functions — only adr.rs has this defect."""
+disposition = "fix-now"
+response = "Confirmed. The first doc-comment line on adr::parse_ref is a paste artifact from run_status. Fix: remove `/// ` ``doctrine adr status` — bind the concrete `AdrStatus` enum at the boundary,` `` — leaving only the correct second line. Trivial one-line deletion."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Four mechanically identical parse_ref implementations across kind modules (DRY / maintenance burden)"
+detail = """
+Expected: While D1 chose per-kind implementations, the functions are mechanically identical — the only variation is the prefix string ("ADR-"/"adr-", "POL-"/"pol-", etc.) and the kind name in the error message. A single parameterised function `parse_ref_with_prefix(prefix_canonical: &str, prefix_lower: &str, kind_label: &str, reference: &str) -> Result<u32>` would be ~8 lines serving all four kinds.
+
+Observed: Four 7-line functions (28 lines total) whose bodies differ only by string literals. The slice module already has the identical pattern. Any logic change (e.g., accepting mixed-case prefixes, improving error messages, handling whitespace) now requires editing 5 files instead of 1.
+
+Design D1 states "each kind controls its own error message formatting" — but the formatting IS identical across all kinds (`"not a {kind} reference: `{reference}` (expected `{PREFIX-007}` or `7`)"`). The rationale doesn't hold: the variation is data (prefix string, kind name), not formatting logic.
+
+The copy-paste doc error in F-1 is direct evidence of this DRY cost — it would not exist in a single-shared implementation."""
+disposition = "tolerated"
+response = 'Design D1 chose per-kind implementations explicitly: "Per-kind parse_ref + parse_cli_id (not a global generic). Reuses the proven slice pattern; each kind controls its own error message formatting." While the error message formatting is indeed identical today, the decision was made consciously. The cost asymmetry — 28 lines of near-identical code in exchange for per-kind error message control — is a valid tradeoff. Future maintenance: if a logic change is needed, apply it across all five modules (slice + the four governance kinds). The doc paste error (F-1) is an argument for DRY, but the design governs.'
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "parse_ref error tests assert `.is_err()` but don't verify the error message names the expected kind"
+detail = """
+Each kind's test only asserts `assert!(parse_ref("nope").is_err())` — a boolean check that proves the function rejects invalid input but says nothing about **what** error the user sees. If a future change accidentally swaps prefixes (e.g., adr::parse_ref stripping "POL-" instead of "ADR-"), the test would still pass because `"nope"` doesn't contain either prefix.
+
+Expected: The error test should verify the error message names the expected kind — e.g., `assert!(parse_ref("nope").unwrap_err().to_string().contains("ADR"))` — so a prefix mix-up or kind-label copy-paste fails the test.
+
+Observed in all four modules (adr.rs:458, policy.rs:445, rfc.rs:633, standard.rs:460):
+```
+assert!(parse_ref("nope").is_err());
+```
+
+This is the only invalid-input assertion across all four parse_ref test functions."""
+disposition = "fix-now"
+response = """Agreed. Each test's invalid-input assertion currently only proves rejection, not that the error names the right kind. The fix is a one-expression strengthening: replace `assert!(parse_ref("nope").is_err())` with `assert!(parse_ref("nope").unwrap_err().to_string().contains("ADR"))` (and analogously for POL/STD/RFC). This would catch a prefix-string or kind-label copy-paste mistake at test time. Trivial to add alongside the F-1 fix."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

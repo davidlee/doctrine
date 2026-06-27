@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 189
-slug = "lifecycle-verbs-reject-prefixed-ids-with-opaque-parse-error"
-title = "Lifecycle verbs reject prefixed ids with opaque parse error"
+id = 192
+slug = "solo-slice-reaches-close-with-stale-runtime-phase-rollup-noisy-binding-warning"
+title = "Solo slice reaches close with stale runtime phase-rollup + noisy binding warning"
 kind = "improvement"
-status = "closed"
-resolution = "fixed"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-27"
 updated = "2026-06-27"
-tags = []
+tags = ["area:lifecycle", "area:skills", "quality"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
