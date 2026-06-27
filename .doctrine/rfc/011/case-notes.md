@@ -205,3 +205,5 @@ Two compounding factors worth flagging for RFC-011:
 Minor git ergonomics (not doctrine): `git rev-parse --short <A> <B>` with two
 args errors `Needed a single revision` even when both resolve individually —
 cost one redundant re-run. Harness/git, not a doctrine surface.
+
+[SL-155-close reconcile -> close agent @ 141k]

@@ -1815,10 +1815,7 @@ fn bootstrap_slice(dir: &Path, slice_num: u32) {
     // Seeded phases for completeness gate.
     let pdir = dir.join(format!(".doctrine/state/slice/{slice_str}/phases"));
     std::fs::create_dir_all(&pdir).unwrap();
-    std::fs::write(
-        pdir.join("phase-01.toml"),
-        "status = \"completed\"\n",
-    ).unwrap();
+    std::fs::write(pdir.join("phase-01.toml"), "status = \"completed\"\n").unwrap();
     // Source-delta registry — prepare-review requires it for each completed phase.
     let main_oid = git(dir, &["rev-parse", "HEAD"]);
     let boundaries_reg = format!(
@@ -2050,7 +2047,11 @@ fn close_target_from_moved_candidate_ref_refuses() {
     let main_oid = git(dir, &["rev-parse", "refs/heads/main"]);
     git(
         dir,
-        &["update-ref", "refs/heads/candidate/203/review-001", &main_oid],
+        &[
+            "update-ref",
+            "refs/heads/candidate/203/review-001",
+            &main_oid,
+        ],
     );
     // close_target from the moved ref must refuse on the lineage binding.
     let ct = candidate_create(
