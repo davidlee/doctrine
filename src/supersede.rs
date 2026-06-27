@@ -73,9 +73,12 @@ pub(crate) fn supersede_policy(kind: &Kind) -> Option<SupersedePolicy> {
 /// - OLD decision → decision, constraint
 /// - OLD constraint → constraint, decision
 pub(crate) fn validate_matrix(new: RecordKind, old: RecordKind) -> bool {
-    use RecordKind::{Assumption, Constraint, Decision, Evidence, Hypothesis, Question};
+    use RecordKind::{Assumption, Constraint, Decision, Evidence, Question};
     #[expect(clippy::unnested_or_patterns, reason = "clear matrix representation")]
     {
+        // HYP is intentionally absent: `supersede_policy` returns `None` for HYP
+        // (D7 — a refuted hypothesis is terminal, not supersedable), so the
+        // command rejects HYP as NEW or OLD before this matrix is consulted.
         matches!(
             (old, new),
             (Assumption, Assumption | Decision | Constraint)
@@ -83,7 +86,6 @@ pub(crate) fn validate_matrix(new: RecordKind, old: RecordKind) -> bool {
                 | (Decision, Decision | Constraint)
                 | (Constraint, Constraint | Decision)
                 | (Evidence, Evidence | Decision | Constraint)
-                | (Hypothesis, Hypothesis | Decision | Constraint | Assumption)
         )
     }
 }
