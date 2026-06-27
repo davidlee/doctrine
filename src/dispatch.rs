@@ -77,7 +77,9 @@ pub(crate) enum DispatchCommand {
 
         /// Stage-2 g3 escape (SL-166): allow the advance to delete/revert this
         /// authored `.doctrine/**` path even though the slice did not author the
-        /// change. Repeatable; applies globally across the `--trunk`/`--edge` legs.
+        /// change. Repeatable; the allowlist is global across BOTH the
+        /// `--trunk` and `--edge` legs of a single integrate call (design §10) —
+        /// one named path is permitted on either ref it would clobber.
         /// Absent for a clobbered path ⇒ the advance is refused (fail-closed).
         #[arg(long = "allow-corpus-clobber", requires = "integrate")]
         allow_corpus_clobber: Vec<String>,
