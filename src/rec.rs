@@ -127,6 +127,28 @@ pub(crate) struct RecDoc {
     pub(crate) status_delta: Vec<StatusDelta>,
     #[serde(default)]
     pub(crate) evidence_ref: Vec<EvidenceRef>,
+    #[serde(default, deserialize_with = "deserialize_tags_lenient")]
+    pub(crate) tags: Vec<String>,
+}
+
+/// Lenient [`tags`] deserializer: absent → empty vec; non-array value
+/// (e.g. a scalar `tags = "not-an-array"`) → empty vec. Only a real
+/// `toml::Value::Array` is read, with non-string elements silently
+/// dropped. This keeps a single malformed tag value from crashing the
+/// entity parse (SL-169).
+fn deserialize_tags_lenient<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let value = toml::Value::deserialize(deserializer)?;
+    match value {
+        toml::Value::Array(arr) => Ok(arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect()),
+        _ => Ok(Vec::new()),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -528,7 +550,7 @@ fn show_json(doc: &RecDoc, body: &str) -> anyhow::Result<String> {
     serde_json::to_string_pretty(&value).context("failed to serialize rec show JSON")
 }
 
-const REC_COLUMNS: [Column<RecDoc>; 4] = [
+const REC_COLUMNS: [Column<RecDoc>; 5] = [
     Column {
         name: "id",
         header: "id",
@@ -550,6 +572,15 @@ const REC_COLUMNS: [Column<RecDoc>; 4] = [
         paint: listing::ColumnPaint::None,
     },
     Column {
+        name: "tags",
+        header: "tags",
+        cell: |d| d.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |d| d.tags.clone(),
+            render: listing::paint_tag,
+        },
+    },
+    Column {
         name: "title",
         header: "title",
         cell: |d| d.title.clone(),
@@ -568,7 +599,7 @@ fn key(d: &RecDoc) -> listing::FilterFields {
         slug: d.slug.clone(),
         title: d.title.clone(),
         status: String::new(),
-        tags: Vec::new(),
+        tags: d.tags.clone(),
     }
 }
 
@@ -582,10 +613,11 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     let rec_root = root.join(REC_DIR);
     if !rec_root.is_dir() {
         // No tree yet ⇒ no recs; render an empty result for the chosen format.
+        let effective_default = listing::default_with_tags(REC_DEFAULT, false);
         return match format {
             Format::Table => Ok(listing::render_columns::<RecDoc>(
                 &[],
-                &listing::select_columns(&REC_COLUMNS, REC_DEFAULT, columns.as_deref())?,
+                &listing::select_columns(&REC_COLUMNS, &effective_default, columns.as_deref())?,
                 render,
             )),
             Format::Json => listing::json_envelope::<ListRow>("rec", &[]),
@@ -593,9 +625,12 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     }
     let mut docs = listing::retain(read_recs(&rec_root)?, &filter, |_| false, key);
     docs.sort_by_key(|d| d.id);
+    let any_tagged = docs.iter().any(|d| !d.tags.is_empty());
     match format {
         Format::Table => {
-            let sel = listing::select_columns(&REC_COLUMNS, REC_DEFAULT, columns.as_deref())?;
+            let effective_default = listing::default_with_tags(REC_DEFAULT, any_tagged);
+            let sel =
+                listing::select_columns(&REC_COLUMNS, &effective_default, columns.as_deref())?;
             Ok(listing::render_columns(&docs, &sel, render))
         }
         Format::Json => listing::json_envelope("rec", &json_rows(&docs)),
@@ -608,6 +643,7 @@ struct ListRow {
     id: String,
     r#move: String,
     owning: String,
+    tags: Vec<String>,
     title: String,
 }
 
@@ -617,6 +653,7 @@ fn json_rows(docs: &[RecDoc]) -> Vec<ListRow> {
             id: canonical_id(d.id),
             r#move: d.rec.r#move.clone(),
             owning: owning_label(d),
+            tags: d.tags.clone(),
             title: d.title.clone(),
         })
         .collect()
@@ -816,6 +853,7 @@ mod tests {
                 contributing_change: "SL-042".to_owned(),
                 mode: "VT".to_owned(),
             }],
+            tags: Vec::new(),
         };
         let text = toml::to_string(&doc).unwrap();
         let back: RecDoc = toml::from_str(&text).unwrap();
@@ -837,6 +875,7 @@ mod tests {
             },
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
+            tags: Vec::new(),
         };
         let text = toml::to_string(&doc).unwrap();
         let back: RecDoc = toml::from_str(&text).unwrap();
@@ -868,6 +907,7 @@ mod tests {
                 contributing_change: "SL-040".to_owned(),
                 mode: "VT".to_owned(),
             }],
+            tags: Vec::new(),
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // A REAL (un-commented) array-of-tables header, not the template's `#  …`
@@ -902,6 +942,7 @@ mod tests {
             },
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
+            tags: Vec::new(),
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // No REAL (un-commented) status_delta table — only the template's `#  …`
@@ -933,6 +974,7 @@ mod tests {
                 to: "active".to_owned(),
             }],
             evidence_ref: Vec::new(),
+            tags: Vec::new(),
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // The document still parses (the breaker was escaped, not spliced raw) …
@@ -959,6 +1001,7 @@ mod tests {
             },
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
+            tags: Vec::new(),
         };
         let text = toml::to_string(&doc).unwrap();
         assert!(text.contains("move = \"accept\""), "bare move key: {text}");

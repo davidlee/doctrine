@@ -1337,6 +1337,28 @@ struct ReviewDoc {
     target: Target,
     #[serde(default)]
     finding: Vec<FindingRow>,
+    #[serde(default, deserialize_with = "deserialize_tags_lenient")]
+    tags: Vec<String>,
+}
+
+/// Lenient [`tags`] deserializer: absent → empty vec; non-array value
+/// (e.g. a scalar `tags = "not-an-array"`) → empty vec. Only a real
+/// `toml::Value::Array` is read, with non-string elements silently
+/// dropped. This keeps a single malformed tag value from crashing the
+/// entity parse (SL-169).
+fn deserialize_tags_lenient<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let value = toml::Value::deserialize(deserializer)?;
+    match value {
+        toml::Value::Array(arr) => Ok(arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect()),
+        _ => Ok(Vec::new()),
+    }
 }
 
 impl ReviewDoc {
@@ -1587,6 +1609,9 @@ fn format_show(doc: &ReviewDoc, body: &str) -> String {
         doc.review.raiser,
         doc.review.responder
     ));
+    if !doc.tags.is_empty() {
+        parts.push(format!("tags: {}\n", doc.tags.join(", ")));
+    }
     parts.push(format!("\n{body}"));
     parts.concat()
 }
@@ -1616,7 +1641,7 @@ fn show_json(doc: &ReviewDoc, body: &str) -> anyhow::Result<String> {
 /// The `review list` row tuple: the doc plus its derived status (computed once).
 type ReviewRow = (ReviewDoc, ReviewStatus, Await);
 
-const REVIEW_COLUMNS: [Column<ReviewRow>; 5] = [
+const REVIEW_COLUMNS: [Column<ReviewRow>; 6] = [
     Column {
         name: "id",
         header: "id",
@@ -1652,6 +1677,15 @@ const REVIEW_COLUMNS: [Column<ReviewRow>; 5] = [
         paint: listing::ColumnPaint::None,
     },
     Column {
+        name: "tags",
+        header: "tags",
+        cell: |(d, _, _)| d.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |(d, _, _)| d.tags.clone(),
+            render: listing::paint_tag,
+        },
+    },
+    Column {
         name: "title",
         header: "title",
         cell: |(d, _, _)| d.title.clone(),
@@ -1671,7 +1705,7 @@ fn key(d: &ReviewDoc) -> listing::FilterFields {
         slug: d.slug.clone(),
         title: d.title.clone(),
         status: status.as_str().to_owned(),
-        tags: Vec::new(),
+        tags: d.tags.clone(),
     }
 }
 
@@ -1686,6 +1720,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<(String, Vec<Lis
     let review_root = root.join(REVIEW_DIR);
     let mut docs = listing::retain(read_reviews(&review_root)?, &filter, |_| false, key);
     docs.sort_by_key(|d| d.id);
+    let any_tagged = docs.iter().any(|d| !d.tags.is_empty());
     let rows: Vec<ReviewRow> = docs
         .into_iter()
         .map(|d| {
@@ -1695,7 +1730,9 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<(String, Vec<Lis
         .collect();
     let formatted = match format {
         Format::Table => {
-            let sel = listing::select_columns(&REVIEW_COLUMNS, REVIEW_DEFAULT, columns.as_deref())?;
+            let effective_default = listing::default_with_tags(REVIEW_DEFAULT, any_tagged);
+            let sel =
+                listing::select_columns(&REVIEW_COLUMNS, &effective_default, columns.as_deref())?;
             listing::render_columns(&rows, &sel, render)
         }
         Format::Json => listing::json_envelope("review", &json_rows(&rows))?,
@@ -1712,6 +1749,7 @@ pub(crate) struct ListRow {
     pub(crate) awaiting: String,
     pub(crate) facet: String,
     pub(crate) target: String,
+    pub(crate) tags: Vec<String>,
     pub(crate) title: String,
 }
 
@@ -1723,6 +1761,7 @@ fn json_rows(rows: &[ReviewRow]) -> Vec<ListRow> {
             awaiting: awaited.as_str().to_owned(),
             facet: d.review.facet.clone(),
             target: edge_label(d),
+            tags: d.tags.clone(),
             title: d.title.clone(),
         })
         .collect()
@@ -3079,6 +3118,7 @@ mod tests {
                 phase: None,
             },
             finding: Vec::new(),
+            tags: Vec::new(),
         };
         let out = format_show(&doc, "## Brief\n");
         assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
@@ -3102,6 +3142,7 @@ mod tests {
                 phase: Some("PHASE-02".to_owned()),
             },
             finding: Vec::new(),
+            tags: Vec::new(),
         };
         let (status, awaited) = doc.derived();
         let rows = vec![(doc, status, awaited)];
@@ -3139,6 +3180,7 @@ mod tests {
                 disposition: None,
                 response: None,
             }],
+            tags: Vec::new(),
         };
         assert_eq!(doc.derived(), (ReviewStatus::Active, Await::Responder));
         // all-terminal ⇒ Done.

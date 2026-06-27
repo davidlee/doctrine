@@ -325,10 +325,11 @@ pub(crate) fn render_list(
     rows: &[RelationRow],
     format: listing::Format,
     opts: listing::RenderOpts,
+    columns: Option<&[String]>,
 ) -> anyhow::Result<String> {
     match format {
-        listing::Format::Json => render_list_json(rows),
-        listing::Format::Table => render_list_table(rows, opts),
+        listing::Format::Json => render_list_json(rows, columns),
+        listing::Format::Table => render_list_table(rows, opts, columns),
     }
 }
 
@@ -337,30 +338,39 @@ pub(crate) fn render_census(
     rows: &[CensusRow],
     format: listing::Format,
     opts: listing::RenderOpts,
+    columns: Option<&[String]>,
 ) -> anyhow::Result<String> {
     match format {
         listing::Format::Json => render_census_json(rows),
-        listing::Format::Table => render_census_table(rows, opts),
+        listing::Format::Table => render_census_table(rows, opts, columns),
     }
 }
 
 /// Table render for relation rows.
-fn render_list_table(rows: &[RelationRow], opts: listing::RenderOpts) -> anyhow::Result<String> {
+fn render_list_table(
+    rows: &[RelationRow],
+    opts: listing::RenderOpts,
+    columns: Option<&[String]>,
+) -> anyhow::Result<String> {
     if rows.is_empty() {
         return Ok(String::new());
     }
     let default: &[&str] = &["source", "label", "target", "state"];
-    let sel = listing::select_columns(&RELATION_COLUMNS, default, None)?;
+    let sel = listing::select_columns(&RELATION_COLUMNS, default, columns)?;
     Ok(listing::render_columns(rows, &sel, opts))
 }
 
 /// Table render for census rows.
-fn render_census_table(rows: &[CensusRow], opts: listing::RenderOpts) -> anyhow::Result<String> {
+fn render_census_table(
+    rows: &[CensusRow],
+    opts: listing::RenderOpts,
+    columns: Option<&[String]>,
+) -> anyhow::Result<String> {
     if rows.is_empty() {
         return Ok(String::new());
     }
     let default: &[&str] = &["label", "count", "resolved", "unresolved", "free_text"];
-    let sel = listing::select_columns(&CENSUS_COLUMNS, default, None)?;
+    let sel = listing::select_columns(&CENSUS_COLUMNS, default, columns)?;
     Ok(listing::render_columns(rows, &sel, opts))
 }
 
@@ -387,7 +397,7 @@ struct CensusJsonRow {
     free_text: usize,
 }
 
-fn render_list_json(rows: &[RelationRow]) -> anyhow::Result<String> {
+fn render_list_json(rows: &[RelationRow], _columns: Option<&[String]>) -> anyhow::Result<String> {
     let json_rows: Vec<RelationJsonRow> = rows
         .iter()
         .map(|r| RelationJsonRow {
@@ -804,7 +814,13 @@ mod tests {
 
     #[test]
     fn render_list_empty_is_empty_string() {
-        let out = render_list(&[], listing::Format::Table, listing::RenderOpts::default()).unwrap();
+        let out = render_list(
+            &[],
+            listing::Format::Table,
+            listing::RenderOpts::default(),
+            None,
+        )
+        .unwrap();
         assert_eq!(out, "");
     }
 
@@ -915,6 +931,7 @@ mod tests {
             &[row],
             listing::Format::Json,
             listing::RenderOpts::default(),
+            None,
         )
         .unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -941,6 +958,7 @@ mod tests {
             &[row],
             listing::Format::Json,
             listing::RenderOpts::default(),
+            None,
         )
         .unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();

@@ -1230,24 +1230,10 @@ fn list_rows(
     };
     match format {
         Format::Table => {
-            // Build the effective default LOCALLY (never mutate the `BL_DEFAULT` const):
-            // splice `"tags"` before `"title"` IFF a visible row is tagged. With
-            // `--columns` given, `select_columns` ignores `default` entirely (the user's
-            // order wins verbatim — tags shown iff requested, even all-empty).
-            let effective_default: Vec<&str> = if any_tagged {
-                BL_DEFAULT
-                    .iter()
-                    .flat_map(|&c| {
-                        if c == "title" {
-                            vec!["tags", "title"]
-                        } else {
-                            vec![c]
-                        }
-                    })
-                    .collect()
-            } else {
-                BL_DEFAULT.to_vec()
-            };
+            // Build the effective default (rule lives in listing::default_with_tags).
+            // --columns callers bypass: select_columns ignores default when an
+            // explicit list is supplied; tags shown iff requested, even all-empty.
+            let effective_default = listing::default_with_tags(BL_DEFAULT, any_tagged);
             let sel = listing::select_columns(&BL_COLUMNS, &effective_default, columns.as_deref())?;
             let table = listing::render_columns(&items, &sel, render);
             // Table: rows + footer to stdout; the cycle warning to stderr.

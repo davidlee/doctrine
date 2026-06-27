@@ -544,6 +544,26 @@ pub(crate) fn select_columns<'a, R>(
     }
 }
 
+/// Splice `tags` immediately before `title` in a default column set, IFF
+/// `any_tagged`. Returns an owned set (never mutates the caller's const).
+/// `--columns` callers bypass this: `select_columns` ignores `default` when an
+/// explicit list is supplied. Kinds whose default lacks `title` are returned
+/// unchanged (every `list` kind currently carries `title`).
+pub(crate) fn default_with_tags<'a>(base: &[&'a str], any_tagged: bool) -> Vec<&'a str> {
+    if !any_tagged {
+        return base.to_vec();
+    }
+    base.iter()
+        .flat_map(|&c| {
+            if c == "title" {
+                vec!["tags", "title"]
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
+}
+
 /// Header row + one cell-row per `R`, over [`render_table`]. Empty rows → `""`
 /// (header suppressed, SL-025 §5.5). Replaces every kind's bespoke table
 /// assembler.
@@ -1723,6 +1743,31 @@ mod tests {
     fn select_columns_valid_defaults_pass() {
         let result = select_columns(&CROW_COLUMNS, &["id"], None);
         assert!(result.is_ok());
+    }
+
+    // -- default_with_tags -------------------------------------------------
+
+    #[test]
+    fn default_with_tags_tagged_splices_before_title() {
+        let base = &["id", "kind", "status", "title"];
+        let result = super::default_with_tags(base, true);
+        assert_eq!(result, vec!["id", "kind", "status", "tags", "title"]);
+    }
+
+    #[test]
+    fn default_with_tags_untagged_returns_base_verbatim() {
+        let base = &["id", "kind", "status", "title"];
+        let result = super::default_with_tags(base, false);
+        assert_eq!(result, base.to_vec());
+    }
+
+    #[test]
+    fn default_with_tags_no_title_unchanged_regardless_of_any_tagged() {
+        let base = &["label", "count", "resolved"];
+        let result_true = super::default_with_tags(base, true);
+        let result_false = super::default_with_tags(base, false);
+        assert_eq!(result_true, base.to_vec());
+        assert_eq!(result_false, base.to_vec());
     }
 
     // -- RenderOpts --------------------------------------------------------

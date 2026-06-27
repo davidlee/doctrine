@@ -1075,7 +1075,7 @@ fn decorated_status(status: &str, rollup: Option<&crate::state::PhaseRollup>) ->
 /// cell values). Declaration order is what the unknown-column error lists.
 type SliceRowTuple = (Meta, Option<crate::state::PhaseRollup>);
 
-const SLICE_COLUMNS: [listing::Column<SliceRowTuple>; 5] = [
+const SLICE_COLUMNS: [listing::Column<SliceRowTuple>; 6] = [
     listing::Column {
         name: "id",
         header: "id",
@@ -1097,6 +1097,15 @@ const SLICE_COLUMNS: [listing::Column<SliceRowTuple>; 5] = [
         header: "phases",
         cell: |(_, r)| phases_cell(r.as_ref()),
         paint: listing::ColumnPaint::None,
+    },
+    listing::Column {
+        name: "tags",
+        header: "tags",
+        cell: |(m, _)| m.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |(m, _)| m.tags.clone(),
+            render: listing::paint_tag,
+        },
     },
     listing::Column {
         name: "slug",
@@ -1126,6 +1135,7 @@ struct SliceRow {
     status: String,
     slug: String,
     title: String,
+    tags: Vec<String>,
     phases: Option<PhasesJson>,
 }
 
@@ -1334,7 +1344,10 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
         .collect::<anyhow::Result<_>>()?;
     match format {
         Format::Table => {
-            let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, columns.as_deref())?;
+            let any_tagged = rows.iter().any(|(m, _)| !m.tags.is_empty());
+            let effective_default = listing::default_with_tags(SLICE_DEFAULT, any_tagged);
+            let sel =
+                listing::select_columns(&SLICE_COLUMNS, &effective_default, columns.as_deref())?;
             Ok(listing::render_columns(&rows, &sel, render))
         }
         Format::Json => listing::json_envelope("slice", &json_rows(&rows)),
@@ -1350,6 +1363,7 @@ fn json_rows(rows: &[(Meta, Option<crate::state::PhaseRollup>)]) -> Vec<SliceRow
             status: m.status.clone(),
             slug: m.slug.clone(),
             title: m.title.clone(),
+            tags: m.tags.clone(),
             phases: rollup.as_ref().map(|r| PhasesJson {
                 completed: r.completed,
                 total: r.total(),
@@ -4548,6 +4562,7 @@ mod tests {
         evidence: Vec<CoverageKey>,
     ) -> u32 {
         let doc = RecDoc {
+            tags: Vec::new(),
             id: 0,
             slug: format!("{move}-{}", req.to_lowercase()),
             title: format!("{move} {req}"),
@@ -4751,6 +4766,7 @@ mod tests {
                 owning_slice: Some("SL-001".to_owned()),
                 decision_ref: None,
             },
+            tags: Vec::new(),
             status_delta: vec![
                 StatusDelta {
                     requirement: "REQ-001".to_owned(),

@@ -55,6 +55,7 @@ struct GovRow {
     status: String,
     slug: String,
     title: String,
+    tags: Vec<String>,
 }
 
 /// The list rows as a string — the compute half of `run_list`, extracted so the
@@ -78,9 +79,12 @@ pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow:
     // One materialisation feeds both surfaces — governance's table and JSON
     // rows coincide (SL-037 A4: GovRow is all-String, id pre-prefixed).
     let rows = gov_rows(g, &metas);
+    let any_tagged = rows.iter().any(|r| !r.tags.is_empty());
     match format {
         Format::Table => {
-            let sel = listing::select_columns(&GOV_COLUMNS, GOV_DEFAULT, columns.as_deref())?;
+            let effective_default = listing::default_with_tags(GOV_DEFAULT, any_tagged);
+            let sel =
+                listing::select_columns(&GOV_COLUMNS, &effective_default, columns.as_deref())?;
             Ok(listing::render_columns(&rows, &sel, render))
         }
         Format::Json => listing::json_envelope(g.kind.stem, &rows),
@@ -104,7 +108,7 @@ fn key(g: &GovKind, m: &Meta) -> listing::FilterFields {
 /// `R = GovRow` — extractors are non-capturing, SL-037 D5; the prefixed id is
 /// already materialised in the row). Selection-token order: declaration order
 /// is what the unknown-column error lists.
-const GOV_COLUMNS: [listing::Column<GovRow>; 4] = [
+const GOV_COLUMNS: [listing::Column<GovRow>; 5] = [
     listing::Column {
         name: "id",
         header: "id",
@@ -118,6 +122,15 @@ const GOV_COLUMNS: [listing::Column<GovRow>; 4] = [
         header: "status",
         cell: |r| r.status.clone(),
         paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
+    },
+    listing::Column {
+        name: "tags",
+        header: "tags",
+        cell: |r| r.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |r| r.tags.clone(),
+            render: listing::paint_tag,
+        },
     },
     listing::Column {
         name: "slug",
@@ -147,6 +160,7 @@ fn gov_rows(g: &GovKind, metas: &[Meta]) -> Vec<GovRow> {
             status: m.status.clone(),
             slug: m.slug.clone(),
             title: m.title.clone(),
+            tags: m.tags.clone(),
         })
         .collect()
 }
@@ -913,7 +927,7 @@ mod tests {
         .to_string();
         assert!(err.contains("unknown column `bogus`"), "names it: {err}");
         assert!(
-            err.contains("id, status, slug, title"),
+            err.contains("id, status, tags, slug, title"),
             "lists the available set: {err}"
         );
     }
@@ -1059,12 +1073,16 @@ mod tests {
         // ADR
         assert_eq!(parse_entity_ref("ADR", "an ADR", "ADR-007").unwrap(), 7);
         assert_eq!(parse_entity_ref("ADR", "an ADR", "7").unwrap(), 7);
-        let err = parse_entity_ref("ADR", "an ADR", "nope").unwrap_err().to_string();
+        let err = parse_entity_ref("ADR", "an ADR", "nope")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("an ADR"), "error names the kind label: {err}");
         assert!(err.contains("ADR-007"), "error shows expected form: {err}");
         // policy
         assert_eq!(parse_entity_ref("POL", "a policy", "POL-001").unwrap(), 1);
-        let err = parse_entity_ref("POL", "a policy", "bad").unwrap_err().to_string();
+        let err = parse_entity_ref("POL", "a policy", "bad")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("a policy"), "{err}");
         // slice
         assert_eq!(parse_entity_ref("SL", "a slice", "SL-025").unwrap(), 25);
