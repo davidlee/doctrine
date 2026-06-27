@@ -6,7 +6,7 @@ slug = "dispatch-funnel-integrity"
 title = "Dispatch funnel integrity: hazard survey and correctness posture"
 status = "open"
 created = "2026-06-24"
-updated = "2026-06-26"
+updated = "2026-06-27"
 tags = []
 
 [relationships]
@@ -85,4 +85,12 @@ target = "SL-154"
 [[relation]]
 label = "related"
 target = "IMP-188"
+
+[[relation]]
+label = "related"
+target = "ISS-056"
+
+[[relation]]
+label = "related"
+target = "SL-157"
 
