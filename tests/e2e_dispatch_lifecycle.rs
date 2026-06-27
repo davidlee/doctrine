@@ -299,3 +299,257 @@ fn full_lifecycle_coordinate_to_integrate_preserves_main_and_deliverables() {
         "review/064 stays reviewable after the worktree is gone"
     );
 }
+
+// ── SL-165 PHASE-03: repair → close → integrate → status done (IMP-188 anchor)
+
+/// Full candidate lifecycle anchor: prepare-review → review_surface candidate →
+/// fix-now repair on the candidate branch → admit review_surface → close_target
+/// from candidate (PHASE-02 gate) → admit close_target → integrate → status done.
+/// Asserts the fix-now lands on trunk through the first-class path, not a manual
+/// fold or hand-FF.
+#[test]
+fn repair_to_close_to_integrate_to_status_done() {
+    let src = tempfile::tempdir().unwrap();
+    let root = src.path();
+    init_repo(root);
+    let trunk = git(root, &["rev-parse", "HEAD"]);
+    seed_completed_phases(root, 64, &["PHASE-01"]);
+
+    let holder = tempfile::tempdir().unwrap();
+    let coord = holder.path().join("coord");
+
+    // --- 1. Create coordination worktree --------------------------------------
+    let out = run(
+        root,
+        &[
+            "worktree",
+            "coordinate",
+            "--slice",
+            "64",
+            "--dir",
+            coord.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success(), "coordinate; stderr: {}", stderr(&out));
+
+    // --- 2. Land a phase's code + record its boundary ON the coord tree ---------
+    let code_tip = commit(&coord, "src/feature.rs", "fn f() {}\n", "PHASE-01 code");
+    let out = run(
+        &coord,
+        &[
+            "dispatch",
+            "record-boundary",
+            "--slice",
+            "64",
+            "--phase",
+            "PHASE-01",
+            "--code-start",
+            &trunk,
+            "--code-end",
+            &code_tip,
+            "-p",
+            coord.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success(), "record-boundary; stderr: {}", stderr(&out));
+    git(&coord, &["add", ".doctrine/dispatch/064"]);
+    git(&coord, &["commit", "-q", "-m", "PHASE-01 boundary ledger"]);
+
+    // --- 3. Prepare-review: create review/064 + journal rows -------------------
+    let out = run(
+        &coord,
+        &[
+            "dispatch",
+            "sync",
+            "--prepare-review",
+            "--slice",
+            "64",
+            "-p",
+            coord.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success(), "prepare-review; stderr: {}", stderr(&out));
+    assert!(ref_exists(root, "review/064"), "review/064 created");
+
+    // --- 4. Create review_surface candidate (--worktree) -----------------------
+    let out = run(
+        root,
+        &[
+            "dispatch",
+            "candidate",
+            "create",
+            "--slice",
+            "64",
+            "--label",
+            "review-001",
+            "--kind",
+            "audit",
+            "--role",
+            "review_surface",
+            "--payload",
+            "impl_bundle",
+            "--base",
+            "refs/heads/main",
+            "--source",
+            "refs/heads/review/064",
+            "--worktree",
+        ],
+    );
+    assert!(out.status.success(), "review_surface create; stderr: {}", stderr(&out));
+    let candidate_ref = "refs/heads/candidate/064/review-001";
+    assert!(ref_exists(root, candidate_ref), "candidate branch exists");
+
+    // --- 5. Commit a fix-now repair on the candidate branch --------------------
+    let candidate_worktree = holder.path().join("cand");
+    git(
+        root,
+        &[
+            "worktree",
+            "add",
+            "--force",
+            candidate_worktree.to_str().unwrap(),
+            candidate_ref,
+        ],
+    );
+    let fix_oid = commit(
+        &candidate_worktree,
+        "src/fix-now.rs",
+        "// audit fix-now: add missing null check\nfn guard(x: Option<i32>) -> i32 { x.unwrap_or(0) }\n",
+        "fix-now: add null guard",
+    );
+    // Candidates built from a worktree have their OWN index; the ref is advanced
+    // in the shared object db (and the worktree sees it on next checkout).
+    // Force-update the ref to the fix-now tip, which is the repaired content.
+    git(root, &["update-ref", candidate_ref, &fix_oid]);
+    let _ = git(root, &["worktree", "remove", "--force", candidate_worktree.to_str().unwrap()]);
+
+    // --- 6. Admit the review_surface -------------------------------------------
+    let out = run(
+        root,
+        &[
+            "dispatch",
+            "candidate",
+            "admit",
+            "--slice",
+            "64",
+            "--role",
+            "review_surface",
+            "--candidate",
+            candidate_ref,
+            "--review",
+            "RV-001",
+        ],
+    );
+    assert!(out.status.success(), "admit review_surface; stderr: {}", stderr(&out));
+
+    // --- 7. Create close_target sourced from the candidate (PHASE-02 gate) -----
+    let out = run(
+        root,
+        &[
+            "dispatch",
+            "candidate",
+            "create",
+            "--slice",
+            "64",
+            "--label",
+            "close-001",
+            "--kind",
+            "audit",
+            "--role",
+            "close_target",
+            "--payload",
+            "code",
+            "--base",
+            "refs/heads/main",
+            "--source",
+            candidate_ref,
+        ],
+    );
+    assert!(out.status.success(), "close_target from candidate; stderr: {}", stderr(&out));
+    let close_ref = "refs/heads/candidate/064/close-001";
+    assert!(ref_exists(root, close_ref), "close_target candidate exists");
+
+    // --- 8. Admit the close_target ---------------------------------------------
+    let out = run(
+        root,
+        &[
+            "dispatch",
+            "candidate",
+            "admit",
+            "--slice",
+            "64",
+            "--role",
+            "close_target",
+            "--candidate",
+            close_ref,
+            "--review",
+            "RV-001",
+        ],
+    );
+    assert!(out.status.success(), "admit close_target; stderr: {}", stderr(&out));
+
+    // --- 9. Integrate — land the repair on trunk ------------------------------
+    // Stage-2 runs from parent/root after the coordination worktree is removed
+    // (sync --help). Route through root so admitted runtime state is visible.
+    let out = run(
+        root,
+        &[
+            "dispatch",
+            "sync",
+            "--integrate",
+            "--slice",
+            "64",
+            "--trunk",
+            "refs/heads/main",
+            "-p",
+            root.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success(), "integrate; stderr: {}", stderr(&out));
+
+    // --- 10. Assert trunk carries the fix-now ----------------------------------
+    let trunk_tip = git(root, &["rev-parse", "refs/heads/main"]);
+    let trunk_tree = git(root, &["ls-tree", "-r", "--name-only", &trunk_tip]);
+    assert!(
+        trunk_tree.contains("src/fix-now.rs"),
+        "trunk tip tree must contain the fix-now file:\n{}",
+        trunk_tree
+    );
+
+    // --- 11. Assert slice status done passes natively --------------------------
+    // The integration gate checks: dispatched code integrated to trunk + no
+    // open blockers. When those hold, the reconcile→done transition succeeds.
+    // Transition through necessary intermediate states. The slice TOML is a
+    // prerequisite (the status verb reads authored slice metadata); it needs
+    // `status` + `updated` (the authored-TOML write keying).
+    let slice_toml = root.join(".doctrine/slice/064/slice-064.toml");
+    std::fs::write(
+        &slice_toml,
+        "id = 64\nslug = \"fixture\"\ntitle = \"fixture\"\nstatus = \"started\"\ncreated = \"2026-06-27\"\nupdated = \"2026-06-27\"\n\n[relationships]\nneeds = []\nafter = []\n",
+    )
+    .unwrap();
+    git(root, &["add", ".doctrine/slice/064/slice-064.toml"]);
+    git(root, &["commit", "-q", "-m", "add slice-064.toml for status transition"]);
+    for state in ["audit", "reconcile", "done"] {
+        let out = run(root, &["slice", "status", "64", state]);
+        assert!(
+            out.status.success(),
+            "slice status {}; stderr: {}",
+            state,
+            stderr(&out)
+        );
+    }
+
+    // --- 12. Assert no manual fold / hand-FF — the path is first-class --------
+    // The review/064 ref still exists (was NOT deleted — no manual fold).
+    assert!(
+        ref_exists(root, "review/064"),
+        "review/064 survives — no manual fold (branch -D review/064)"
+    );
+    // Trunk advanced past the prepare-review point (integration happened).
+    let main_tip = git(root, &["rev-parse", "refs/heads/main"]);
+    assert!(
+        main_tip != trunk,
+        "trunk advanced past the initial tip — integration ran, not a hand-FF standin"
+    );
+}
