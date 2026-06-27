@@ -14,38 +14,48 @@ ref   = "SL-166"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "Expected: current-state model of integrate matches code. Observed: design falsely claims both advance legs are FF-only today and that advance_pure_ref CAS-checks is_ancestor."
 detail = """design.md §2 (:29-33), §5.4 (:187-191), §10-A (:287-294) assert both advance legs are FF-only today and that advance_pure_ref "CAS-checks is_ancestor". CODE REFUTES: advance_pure_ref (src/dispatch.rs:1821-1849) is a plain git::update_ref_cas with NO is_ancestor call; plan_edge_row (src/dispatch.rs:1990-1998) and plan_candidate_edge_row (:2036-2053) are explicitly "Not ff-gated"; only plan_trunk_row (:1980-1987) and plan_candidate_trunk_row (:2020-2027) ff-gate, and at PLAN time, not advance. CONSEQUENCE: g3 is load-bearing on the --edge advance leg TODAY (not merely RFC-006 future insurance), and §5.5's claim that base=merge-base(new,cur) equals the CAS expected-old does not hold for the un-gated edge leg. The §10-A "g3 catches nothing the existing FF guards don't already block" rationale rests on a false current-state model. PENANCE: rewrite §2/§5.4/§5.5/§10-A to the true contract — checked-out refs FF-gated at advance (advance_checked_out:1863), trunk candidates FF-gated at plan, edge NOT FF-gated — and re-justify g3's present (not just future) value against it."""
+disposition = "design-wrong"
+response = "Design defect, corrected in §5.2. g2 now fails closed: config-key ABSENT is the only no-op; a set-but-unresolvable authoring-branch refuses setup with an explicit error. last_corpus_commit made tri-state (Err on unresolvable ref; Ok(None) only when the ref resolves but carries no .doctrine yet). R4 config-validate now also rejects an unresolvable authoring-branch; §9 adds setup_refused_when_authoring_branch_unresolvable."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "Expected: g2 (the PRIMARY corpus-loss guard) fails closed on a misconfigured authoring-branch. Observed: design degrades an unresolvable configured ref to a silent no-op."
 detail = """design.md §5.2 g2 (:139-154: "corpus_ref unresolvable or no .doctrine corpus yet => degrade to no-op") and R3/§10-B (:257-262, :295-301) collapse two distinct cases into one Ok(None) valve: config-key ABSENT (posture off, legitimately inert) and config-key SET-BUT-UNRESOLVABLE (typo, deleted/stale local ref). For a corpus-loss guard this is the wrong failure mode: a typo'd authoring-branch silently DISABLES g2 while the operator believes posture D4 is on — the exact silent-catastrophe shape (ISS-056) the slice exists to kill. R4's config-validate only checks authoring != deliver_to, not resolvability at guard time. PENANCE: config-key ABSENT is the only no-op; a SET-but-unresolvable authoring-branch must REFUSE setup with an explicit config/ref error (fail closed). last_corpus_commit must distinguish unresolvable-ref (error) from resolves-but-no-corpus (the genuine first-corpus no-op)."""
+disposition = "design-wrong"
+response = "False current-state model, corrected. §2 now states the FF property is non-uniform (advance_pure_ref plain CAS; plan_edge_row not ff-gated; only advance_checked_out and the trunk plan rows FF-gate). §5.4 and §5.5 rewritten: g3 is load-bearing on the un-gated --edge leg TODAY, base==CAS-expected-old holds only on FF legs. §10-A annotated as premise-corrected; ship decision stands and is strengthened. §9 adds non_ff_edge_advance_dropping_corpus_refused."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected: g2 strictness analysis names the true refusal/miss topologies. Observed: R3 overstates what the Ok(None) valve covers and omits a false-negative."
 detail = 'design.md §5.5 (:206-211), R3 (:257-259), §10-B (:295-301). The Ok(None) valve covers only "first dispatch / no corpus yet". Legitimate-but-unusual topologies still produce a HARD refusal that should proceed: rebased/divergent authoring history (corpus_tip not an ancestor of an equally-valid base), shallow/grafted clones (is_ancestor over a truncated graph, src/git.rs:991-1005), and multi-authoring-branch setups where the configured branch is not the sole corpus source. Separately, "corpus authored on the buffer but not on authoring-branch" is a FALSE NEGATIVE (g2 passes while newer corpus exists off the configured ref), not the false positive R3 implies. R3 conflates these. PENANCE: state the supported topology precisely (single linear append-mostly authoring ref) and mark the others explicitly unsupported, or narrow the rule to a resolvable singular corpus authority; do not claim Ok(None) covers unrelated/divergent-history cases — it does not.'
+disposition = "design-wrong"
+response = "Strictness analysis corrected in R3. Posture contract now explicitly a single linear append-mostly authoring ref; rebased/divergent, shallow/grafted, and multi-authoring-branch topologies named as unsupported (would hard-refuse), not rescued by Ok(None). Buffer-only corpus named a false negative, not a false positive. config-validate flags an authoring-branch whose history diverges from deliver_to; g3 backstops the advance regardless."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "major"
 title = """Expected: g1's guarded verb set is principled and self-consistent at design lock. Observed: §5.2 example contradicts the "trunk-mutating only" principle and OQ-3 leaves the set open."""
 detail = """design.md §5.2 (:116-120) calls g1 at "create --role close_target, integrate", but candidate create --role close_target writes a candidate ref and admit writes candidates.toml — NEITHER mutates the trunk/buffer (deliver_to). That contradicts the stated purpose "refuse trunk-mutating verbs while HEAD is on the buffer" and OQ-3 (:220-223) admits the lean ("guard only ref-mutating members") is unresolved. A guard whose protected command set is both internally inconsistent and explicitly open is not lock-ready on its contract. The exact CLI enumeration may defer to /plan, but the PRINCIPLE must be stated and the §5.2 example must match it. PENANCE: state g1's principle crisply (guard verbs that advance deliver_to: sync --integrate --trunk/--edge and the trunk-advancing candidate integrate path) and fix the §5.2 example so it does not list non-buffer-mutating verbs; resolve or scope OQ-3 to the verb-enumeration detail only."""
+disposition = "design-wrong"
+response = "g1 principle stated and §5.2 example corrected: guard only verbs that advance deliver_to/edge (sync --integrate --trunk/--edge and the candidate-active integrate path); candidate create --role close_target and admit explicitly excluded (mutate no integration ref). OQ-3 downgraded from open design question to a /plan enumeration detail (the principle resolves admit's exclusion)."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected: the authored slice scope and the locked design agree on g3's reference model. Observed: slice-166.md still describes g3 as absolute-against-corpus-tip (Model A) while the design locked Model B."
 detail = 'slice-166.md (:39-45, :53-56) describes g3 as "Absolute-referenced against the canonical corpus tip — not relative to the moving trunk tip" and posits a shared corpus-tip primitive consumed by g2 and g3 (OQ-8). The design (§7 D1 :227-230, §5.2 :156-170) LOCKED Model B: g3 is RELATIVE — a 3-way clobber check on base=merge-base(new,cur) with new==base ∧ cur≠base, with NO shared corpus-tip primitive (g2 absolute, g3 relative). This is an authored-artifact contradiction between scope and design. PENANCE (reconcile, fix-now): update slice-166.md §Scope g3 wording and the "shared primitive (OQ-8)" paragraph to the locked Model B split-reference, so the slice contract and design tell the same truth.'
+disposition = "fix-now"
+response = 'slice-166.md reconciled to locked Model B. g3 §Scope bullet now describes the relative 3-way merge-base(new,cur) check (new==base ∧ cur≠base), not an absolute corpus-tip comparison; the OQ-8 "shared primitive" paragraph rewritten to state g2 (absolute corpus tip) and g3 (relative merge-base) take different references and do not share one primitive, with the Model A rejection noted.'
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

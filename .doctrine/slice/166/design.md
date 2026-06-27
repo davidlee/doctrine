@@ -374,4 +374,39 @@ TDD red/green/refactor; behaviour-preservation gate on the existing suites.
   as a minor imprecision (a path is rarely a legit clobber on one ref but not the
   other); note in the verb help.
 
-(External `/inquisition` to follow before lock.)
+### External inquisition pass — RV-176 (codex / GPT-5.5, 2026-06-27)
+
+Five charges landed; the apex charge (D6) did **not**. Dispositions:
+
+- **F-2 (blocker → design-wrong, fixed).** §10-A's "both legs FF-only today" was
+  false witness: `advance_pure_ref` is plain CAS, `plan_edge_row` is not ff-gated.
+  g3 is **load-bearing on the `--edge` leg today**, not just RFC-006 insurance. §2,
+  §5.4, §5.5, §10-A, §9 corrected. Ship decision stands, strengthened.
+- **F-1 (blocker → design-wrong, fixed).** g2's degrade-to-no-op conflated
+  config-absent (legit) with config-set-but-unresolvable (a misconfig that silently
+  disabled the primary guard). Now **fail-closed**: a set-but-unresolvable
+  `authoring-branch` refuses setup with an explicit error; `last_corpus_commit` is
+  tri-state (§5.2, R4, §9).
+- **F-3 (major → design-wrong, fixed).** R3 overstated `Ok(None)` coverage. The
+  posture contract is now stated as a **single linear append-mostly authoring ref**;
+  rebased/shallow/multi-branch topologies are explicitly unsupported; buffer-only
+  corpus is named a false negative (R3).
+- **F-4 (major → design-wrong, fixed).** g1's verb set was internally inconsistent
+  (listed `create --role close_target`, which mutates no buffer). Principle now
+  stated: guard only verbs that advance `deliver_to`/`edge`; `create`/`admit`
+  excluded. OQ-3 downgraded to a /plan enumeration detail (§5.2, OQ-3).
+- **F-5 (minor → fix-now, reconciled).** `slice-166.md` still described g3 as
+  absolute (Model A); updated to the locked Model B split reference (slice §Scope,
+  §Shared-primitive).
+- **D6 (apex charge — NO heresy; design vindicated).** External reviewer confirms:
+  g3 *narrows acceptance* but does not relax or redefine ADR-012 D4's mutation
+  mechanics (FF-only, 3-arg CAS, no force, report-never-resolve). ADR-012 specifies
+  advancement *shapes*, not a guarantee every CAS-legal move is admitted. **No
+  ADR-012 Revision required.** (ADR-012 `adr-012.md` §Decision recovery contract.)
+- **Cleared lines (no heresy):** ADR-001 layering — `worktree::coordinate` does not
+  currently import `dispatch_config`; adding it does not close a cycle (config is a
+  leaf), and the values-not-loader guidance (§10) remains the safe build. g1 HEAD
+  locality — `current_branch` uses `symbolic-ref --short HEAD`, worktree-local,
+  correct. Raw-git boundary — honestly named as open (§8 R1), no false closure.
+
+All five findings verified terminal on RV-176. Design corrected; ready for lock.
