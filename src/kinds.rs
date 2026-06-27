@@ -28,13 +28,15 @@ pub(crate) const ASM: &str = "ASM";
 pub(crate) const DEC: &str = "DEC";
 pub(crate) const QUE: &str = "QUE";
 pub(crate) const CON: &str = "CON";
+pub(crate) const EVD: &str = "EVD";
+pub(crate) const HYP: &str = "HYP";
 
 /// Every governance kind — `supersedes`/`related` source-set + `governed_by` targets.
 pub(crate) const GOV: &[&str] = &[ADR, POL, STD];
 /// Every backlog item kind — they share one `relation_edges` accessor.
 pub(crate) const BACKLOG: &[&str] = &[ISS, IMP, CHR, RSK, IDE];
 /// Every knowledge-record kind.
-pub(crate) const RECORD: &[&str] = &[ASM, DEC, QUE, CON];
+pub(crate) const RECORD: &[&str] = &[ASM, DEC, QUE, CON, EVD, HYP];
 
 /// Membership predicate over [`RECORD`] — the single source for "is this a
 /// knowledge-record kind?" so adding/renaming a record kind edits RECORD,
@@ -51,6 +53,6 @@ mod tests {
     fn groupings_match_documented_membership() {
         assert_eq!(GOV, &[ADR, POL, STD]);
         assert_eq!(BACKLOG, &[ISS, IMP, CHR, RSK, IDE]);
-        assert_eq!(RECORD, &[ASM, DEC, QUE, CON]);
+        assert_eq!(RECORD, &[ASM, DEC, QUE, CON, EVD, HYP]);
     }
 }

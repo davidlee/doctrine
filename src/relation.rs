@@ -108,6 +108,14 @@ pub(crate) enum RelationLabel {
     /// validation + inbound-reciprocity naming (`inspect RFC-NNN` lists every REV
     /// that originates from it as `precursor of`).
     OriginatesFrom,
+    /// evidence → any record (EVD → ASM·DEC·QUE·CON·EVD·HYP). Epistemic
+    /// support — the evidence corroborates the target; inbound renders
+    /// `supported_by` (SL-159 PHASE-02).
+    Supports,
+    /// evidence → any record (EVD → ASM·DEC·QUE·CON·EVD·HYP). Epistemic
+    /// counter-evidence — the evidence challenges the target; inbound renders
+    /// `disputed_by` (SL-159 PHASE-02).
+    Disputes,
 }
 
 impl RelationLabel {
@@ -134,6 +142,8 @@ impl RelationLabel {
             RelationLabel::DecisionRef => "decision_ref",
             RelationLabel::Revises => "revises",
             RelationLabel::OriginatesFrom => "originates_from",
+            RelationLabel::Supports => "supports",
+            RelationLabel::Disputes => "disputes",
         }
     }
 
@@ -165,6 +175,8 @@ impl RelationLabel {
             "decision_ref" => RelationLabel::DecisionRef,
             "revises" => RelationLabel::Revises,
             "originates_from" => RelationLabel::OriginatesFrom,
+            "supports" => RelationLabel::Supports,
+            "disputes" => RelationLabel::Disputes,
             _ => return None,
         };
         // Defence-in-depth: the spelling must round-trip, so `name()` stays the single
@@ -229,8 +241,8 @@ use anyhow::Context;
 
 use crate::entity::Kind;
 use crate::kinds::{
-    ADR, ASM, BACKLOG, CHR, CM, CON, DEC, GOV, IDE, IMP, ISS, POL, PRD, QUE, REC, RECORD, REQ, REV,
-    RFC, RSK, RV, SL, SPEC, STD,
+    ADR, ASM, BACKLOG, CHR, CM, CON, DEC, EVD, GOV, HYP, IDE, IMP, ISS, POL, PRD, QUE, REC, RECORD,
+    REQ, REV, RFC, RSK, RV, SL, SPEC, STD,
 };
 
 /// What an outbound label's target ref is allowed to resolve to — the forward-edge
@@ -356,7 +368,9 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         // concerns — work → any numbered entity (aboutness/relevance). One wide
         // source-set row pinned from the live census: SL + RFC + the backlog kinds
         // + RECORD (ASM/DEC/QUE/CON — D6). Target AnyNumbered.
-        sources: &[SL, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON],
+        sources: &[
+            SL, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON, EVD, HYP,
+        ],
         label: RelationLabel::References,
         role: Some(Role::Concerns),
         inbound_name: "concerned by",
@@ -445,6 +459,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         inbound_name: "shaped_by",
         target: TargetSpec::Kinds(&[
             PRD, SPEC, REQ, SL, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, RFC, ASM, DEC, QUE, CON,
+            EVD, HYP,
         ]),
         tier: Tier::One,
         link: LinkPolicy::Writable,
@@ -460,9 +475,10 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
     },
     RelationRule {
         // SL-145: BACKLOG (ISS/IMP/CHR/RSK/IDE) widened in so a backlog item may be
-        // governed by an ADR/POL/STD. Target gate (Kinds(GOV)) unchanged.
+        // governed by an ADR/POL/STD. Target gate (Kinds(GOV)) unchanged. SL-159
+        // PHASE-02: EVD/HYP added so evidence/hypothesis records may be governed.
         sources: &[
-            SL, PRD, SPEC, CM, ASM, DEC, QUE, CON, ISS, IMP, CHR, RSK, IDE,
+            SL, PRD, SPEC, CM, ASM, DEC, QUE, CON, EVD, HYP, ISS, IMP, CHR, RSK, IDE,
         ],
         label: RelationLabel::GovernedBy,
         role: None,
@@ -572,6 +588,28 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         target: TargetSpec::Kinds(&[RFC]),
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
+    },
+    // supports (SL-159) — EVD → any record: the evidence corroborates the target.
+    // Inbound renders `supported_by`.
+    RelationRule {
+        sources: &[EVD],
+        label: RelationLabel::Supports,
+        role: None,
+        inbound_name: "supported_by",
+        target: TargetSpec::Kinds(RECORD),
+        tier: Tier::One,
+        link: LinkPolicy::Writable,
+    },
+    // disputes (SL-159) — EVD → any record: the evidence challenges the target.
+    // Inbound renders `disputed_by`.
+    RelationRule {
+        sources: &[EVD],
+        label: RelationLabel::Disputes,
+        role: None,
+        inbound_name: "disputed_by",
+        target: TargetSpec::Kinds(RECORD),
+        tier: Tier::One,
+        link: LinkPolicy::Writable,
     },
 ];
 
@@ -1307,6 +1345,8 @@ mod tests {
         assert_eq!(RelationLabel::OwningSlice.name(), "owning_slice");
         assert_eq!(RelationLabel::Drift.name(), "drift");
         assert_eq!(RelationLabel::DecisionRef.name(), "decision_ref");
+        assert_eq!(RelationLabel::Supports.name(), "supports");
+        assert_eq!(RelationLabel::Disputes.name(), "disputes");
     }
 
     #[test]
@@ -1420,11 +1460,14 @@ mod tests {
                 RelationLabel::References,
                 &[
                     "SL", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE", "CON",
+                    "EVD", "HYP",
                 ],
             ),
             (
                 RelationLabel::Supersedes,
-                &["SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON"],
+                &[
+                    "SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON", "EVD", "HYP",
+                ],
             ),
             (RelationLabel::DescendsFrom, &["SPEC"]),
             (RelationLabel::Parent, &["PRD", "SPEC"]),
@@ -1444,6 +1487,8 @@ mod tests {
             (RelationLabel::Shapes, RECORD),
             (RelationLabel::Spawns, RECORD),
             (RelationLabel::OriginatesFrom, &["REV"]),
+            (RelationLabel::Supports, &["EVD"]),
+            (RelationLabel::Disputes, &["EVD"]),
         ];
         for (label, want_prefixes) in expected {
             let mut got: Vec<&str> = RELATION_RULES
@@ -1483,6 +1528,10 @@ mod tests {
                     // SL-149: references is role-derived inbound — every references row's
                     // inbound differs from name() ("implemented by"/"scoped into"/"concerned by").
                     | RelationLabel::References
+                    // SL-159: supports/disputes inbound ("supported_by"/"disputed_by")
+                    // differ from name().
+                    | RelationLabel::Supports
+                    | RelationLabel::Disputes
             );
             if differs {
                 assert!(
@@ -1528,6 +1577,8 @@ mod tests {
             "governs",
             "consumed_by",
             "contextualized_by",
+            "supported_by",
+            "disputed_by",
         ];
         for r in RELATION_RULES {
             assert!(
@@ -1572,6 +1623,8 @@ mod tests {
             RelationLabel::DecisionRef,
             RelationLabel::Revises,
             RelationLabel::OriginatesFrom,
+            RelationLabel::Supports,
+            RelationLabel::Disputes,
         ];
         // ALL is declared in enum order; assert it is sorted (catches a mis-ordered
         // literal) and that it equals the table's distinct-label sequence.
@@ -1602,6 +1655,8 @@ mod tests {
             RelationLabel::Slices,
             RelationLabel::Related,
             RelationLabel::Drift,
+            RelationLabel::Supports,
+            RelationLabel::Disputes,
         ];
         for r in RELATION_RULES {
             let want = if tier_one.contains(&r.label) {
@@ -1748,8 +1803,8 @@ mod tests {
             assert_eq!(
                 got,
                 [
-                    "ADR", "ASM", "CHR", "CON", "DEC", "IDE", "IMP", "ISS", "POL", "PRD", "QUE",
-                    "REQ", "RFC", "RSK", "SL", "SPEC", "STD"
+                    "ADR", "ASM", "CHR", "CON", "DEC", "EVD", "HYP", "IDE", "IMP", "ISS", "POL",
+                    "PRD", "QUE", "REQ", "RFC", "RSK", "SL", "SPEC", "STD"
                 ]
             );
         } else {
@@ -1780,7 +1835,7 @@ mod tests {
         if let TargetSpec::Kinds(ks) = r.target {
             let mut got: Vec<&str> = ks.iter().copied().collect();
             got.sort_unstable();
-            assert_eq!(got, ["ASM", "CON", "DEC", "QUE"]);
+            assert_eq!(got, ["ASM", "CON", "DEC", "EVD", "HYP", "QUE"]);
         } else {
             panic!("record supersedes → Kinds(RECORD)");
         }
@@ -2255,6 +2310,9 @@ mod tests {
                     | RelationLabel::OriginatesFrom
                     // references has no role-None row; it is tested role-keyed above.
                     | RelationLabel::References
+                    // SL-159: supports/disputes inbound differs from name().
+                    | RelationLabel::Supports
+                    | RelationLabel::Disputes
             );
             if !inverted {
                 assert_eq!(
