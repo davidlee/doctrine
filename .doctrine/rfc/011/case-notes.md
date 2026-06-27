@@ -269,3 +269,13 @@ Three friction sources across the reconcile→close pass:
    detour, and the binding-capture warning is noise in this legitimate path.
 
 [SL-163 reconcile -> close @ 73k]
+
+[inquisition; SL-168-RV183]
+`doctrine review prime RV-183` aborts with `Is a directory (os error 21)` when a
+slice selector points at a directory (`tests/`). The selector fileset hasher
+(SL-147 PHASE-05) assumes file paths; a dir-valued design-target selector — a
+legitimate, common shape — kills the prime outright instead of skipping/walking
+it. Prime is "optimization, not gate" (review-ledger §2), so the inquisition
+proceeded uncached, but the failure is non-obvious and cost a help-read +
+retry to diagnose. Token cost: ~1 extra round-trip. Fix candidate: hasher should
+walk or skip dir selectors, not error.

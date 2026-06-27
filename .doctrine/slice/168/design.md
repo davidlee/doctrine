@@ -215,45 +215,80 @@ run_doctor(path):
   `entity`).
 - **Behaviour preservation.** Adapter'd sources (#2, #3) run their legacy fn
   unchanged. Native sources (#1, #4) must reproduce the legacy command's
-  byte-exact string output via the re-pointed render — guarded by the existing
-  goldens.
-- **ProseCite precision + resolver gating (F1, adversarial pass; corrected for
-  DEC dual-namespacing).** `integrity::KINDS` **includes the knowledge-record
-  kinds** (`DEC`/`ASM`/`QUE`/`CON`/`EVD`/`HYP` — `integrity.rs:23,129`), so a
-  2-part `DEC-001` cite *is* a real entity ref and ProseCite **should** validate
-  it. Two crash/precision hazards, both handled by classifying the token before
-  resolving:
-  1. **3-part `KIND-NNN-XX` cites** (`DEC-005-C`, `DEC-010-06`) are **external
-     the external decision register decision-log citations** — free text, never doctrine entities,
-     never renumbered, sprinkled through prose / comments / boot
-     (mem.pattern.entity.dec-prefix-dual-namespaced, SPEC-019 D8). They are also
-     **un-parseable** as canonical ids (`parse_canonical_ref` rsplit → `"C"`,
-     non-numeric → **bails**). → **Exclude any token with a second `-`+suffix.**
-     This is the real abort trigger, not the prefix.
-  2. **Genuinely-unknown prefixes** (a typo `FOO-1`) — `ensure_ref_resolves`
-     `bail!`s on a prefix outside `KINDS`. → Gate on `kind_by_prefix` first.
+  byte-exact string output via the re-pointed render — but the **safety net does
+  not yet exist** (RV-183 F-3): `validate`'s tests assert *substrings*
+  (`tests/e2e_integrity.rs` `.contains("corpus clean")` etc.), not byte-exact
+  output, and `memory validate` has **no output golden at all** (its only test
+  reference is an MCP tool-registry presence check). The native re-point is
+  therefore **gated on authoring true byte-exact goldens first, red** (D12); absent
+  that, the source stays adapter'd.
+- **ProseCite — candidate grammar, resolver gating, empirically-derived excludes
+  (F1 pass 1; F-1..F-5 RV-183, verified by `grep` over `.doctrine/**/*.md`, not
+  reasoned).** ProseCite inverts `scan_danglers`: extract every cite-shaped token
+  from authored `.md`, classify, flag the unresolved. Precision is the whole game.
 
-  Classification per candidate, after the lexical excludes below:
-  - token is 3-part (`KIND-NNN-XX`) → **skip** (external the external decision register cite);
-  - strict 2-part `KIND-NNN`, `kind_by_prefix(prefix) == None` → **skip** (not a
-    corpus kind; avoids the bail);
-  - strict 2-part, `Some` + entity dir missing → **`ProseCite` finding**
-    (dangling — correctly covers `DEC-NNN` and the rest of `KINDS`);
+  **Candidate grammar (load-bearing — RV-183 F-1).** `line_cites`
+  (`integrity.rs:623`) matches a *known needle* with alphanumeric-only boundaries
+  — `-` is **not** a boundary — so it whole-token-matches `DEC-005` *inside*
+  `DEC-005-C`. ProseCite needs a **new** scanner (not a reuse of that primitive)
+  that recognises the **maximal** hyphenated token `[A-Z]{2,}-[0-9]+(-[A-Za-z0-9]+)*`
+  *before* deciding 2-part vs 3-part — else "skip 3-part" never fires (a naive
+  `KIND-NNN` regex extracts the 2-part head and re-introduces the bug). Fenced
+  code blocks span lines, so the scanner carries fence state across lines (the
+  line-by-line `scan_danglers` loop cannot); inline code spans are line-local.
+
+  **Resolver gating (two bail-avoidance gates).**
+  1. **3-part `KIND-NNN-XX`** → **skip**. Two sub-shapes, both excluded:
+     the external decision register decision-log cites (`DEC-005-C` 519×, `DEC-010-06` 462× —
+     mem.pattern.entity.dec-prefix-dual-namespaced, SPEC-019 D8; un-parseable —
+     `parse_canonical_ref` rsplit → non-numeric *or* unknown-prefix bail) **and**,
+     the empirically-dominant case, `KIND-NNN-<word>` compound adjectives whose
+     2-part head *is* a real ref (`SL-048-style` 184×, `IMP-006-gated` 184×,
+     `ADR-006-references` 92×, `RSK-003-primary` 92×, `REQ-082-AC3` 46×).
+     **Accepted false-negative (RV-183 F-4):** a *dangling* 3-part head
+     (`SL-999-style`) is invisible to ProseCite. Advisory check; consciously taken.
+  2. **2-part, unknown prefix** (`FOO-1`, `PHASE-03`, `SHA-256`, `UTF-8`,
+     `ISO-8601`) → **skip** via `kind_by_prefix(prefix) == None` *before*
+     `ensure_ref_resolves` (which would `bail!`). This gate carries the bulk of
+     the exclusion load — every non-KINDS prefix in the corpus lands here.
+
+  **Classification per candidate, after lexical excludes:**
+  - maximal token is 3-part → **skip** (gate 1);
+  - strict 2-part, `kind_by_prefix == None` → **skip** (gate 2);
+  - strict 2-part, `Some` + entity dir missing → **`ProseCite` finding** (dangling
+    — covers `DEC-NNN` and the rest of `KINDS`);
   - strict 2-part, `Some` + dir present → resolved, no finding.
 
-  Lexical excludes (before classification): backtick-fenced code spans (inline
-  `` `KIND-NNN` `` and fenced blocks), `*-SENTINEL` tokens (`BOOT-SENTINEL`),
-  bare doc-local refs (`OQ-1`, `D1`, `R1` — doctrine's own doc-local decisions
-  use the bare `D1` form, never `DEC-`). ProseCite reuses the dir-probe but never
-  the bailing wrapper, and `is_disposable_prose` to skip runtime prose.
+  **Lexical excludes (before classification):** fenced + inline code spans,
+  `*-SENTINEL` tokens (`BOOT-SENTINEL`), bare doc-local refs (`OQ-1`, `D1`, `R1` —
+  doctrine's doc-local decisions use the bare `D1` form, never `DEC-`).
+
+  **Illustrative-example false positives — the largest empirical FP class
+  (RV-183 F-2, unmodeled by pass 1).** Committed, non-disposable prose carries
+  placeholder/example 2-part ids that resolve to nothing: `POL-123` in the shipped
+  reference doc `.doctrine/glossary.md`; `SL-999` in 9 files incl. 6 slice
+  `design.md`; `STD-002/003` in `slice/033/audit.md`; `SPEC-110/200` across
+  `slice/015` docs + a committed memory body; `REQ-999`, `CM-999`, `CHR-003`. As
+  pass 1 specified it (scan `.doctrine/**/*.md`, skip only handover+state),
+  ProseCite would flag ~20+ legitimate examples every run, drowning the signal.
+  **Scope decision (D11):** ProseCite's scan scope **diverges from `reseat`'s** —
+  it additionally skips the process-exhaust / historical tier (`audit.md`,
+  `inquisition.md`, `notes.md`, `research/**`) where hypothetical and
+  reseated-away ids cluster. Residual example noise in durable bodies
+  (slice/adr/spec/memory `.md`, e.g. the `glossary.md` `POL-123`) is an **accepted
+  v1 limitation** (R8); a precise example-detection heuristic is deferred (YAGNI).
+  `is_disposable_prose` stays as-is for `reseat`; ProseCite composes it with the
+  extra skip-set (RV-183 F-5).
+
   **Stale-memory note:** mem.pattern.entity.free-text-ref-not-forward-validated
-  (SL-042) still says "`DEC` is not a kind / `ensure_ref_resolves` errors on
-  `DEC`" — that predates SPEC-019 making `DEC-NNN` an entity; only the 3-part
+  (SL-042) still says "`DEC` is not a kind" — predates SPEC-019; only the 3-part
   form is free-text now.
 - **done-but-open terminal def + non-vacuous guard (F2, adversarial pass).**
-  `is_transition_terminal` (done **or** abandoned). Flag an open item **iff it
-  has ≥1 linked slice** (`targets_for(item, Slices)` non-empty) **and** every
-  linked slice is terminal → one `Lifecycle` finding worded "all slices
+  `is_transition_terminal` (done **or** abandoned). An item is **"open"** iff its
+  *own* status is non-terminal (`!is_transition_terminal(item.status)`) — a
+  closed/abandoned backlog item is never flagged (RV-183 F-6). Flag an open item
+  **iff it has ≥1 linked slice** (`targets_for(item, Slices)` non-empty) **and**
+  every linked slice is terminal → one `Lifecycle` finding worded "all slices
   terminal". The `≥1` guard is load-bearing: `targets_for` returns `[]` for a
   slice-less item, so "all (zero) slices terminal" is vacuously true and would
   falsely flag every normal slice-less backlog item. An all-abandoned item reads
@@ -306,12 +341,31 @@ plan/execution-time:
   follow-on backlog item.
 - **D10 — no `--check` subset flag in v1.** The unified report is the feature;
   checks are cheap. `--check`/`--verbose`/`--quiet` deferred (YAGNI).
+- **D11 — ProseCite scan scope diverges from `reseat`'s** (RV-183 F-2/F-5). Beyond
+  `is_disposable_prose` (handover + `.doctrine/state/`), ProseCite additionally
+  skips the process-exhaust / historical tier — `audit.md`, `inquisition.md`,
+  `notes.md`, `research/**` — where hypothetical and reseated-away ids cluster and
+  generate false positives. `reseat` keeps its narrower skip-set (it *wants* to
+  nag about real inbound cites); ProseCite composes the extra skip on top. Residual
+  example noise in durable bodies is an accepted limitation (R8). Alternative
+  (one shared skip predicate) rejected — the two callers have genuinely different
+  precision needs.
+- **D12 — native re-point is gated on byte-exact goldens authored first, red**
+  (RV-183 F-3). The pass-1 design assumed "existing goldens are the proof" of
+  byte-exact output for #1/#4; empirically they are not (`validate` substring-only,
+  `memory validate` golden-less). So a native re-point of #1 or #4 is admissible
+  **only after** a true byte-exact golden over that command's current output is
+  authored and green; otherwise the source ships adapter'd. Makes the
+  behaviour-preservation gate real instead of assumed.
 
 ## 8. Risks & Mitigations
 
 - **R1 — native re-point drifts a shipping command's golden** (#1 id-integrity,
   #4 memory). *Mitigation:* re-point through a render that reproduces byte-exact
-  output; existing goldens are the proof; fall back to adapter if drift is
+  output — but the existing goldens are **not** that proof (RV-183 F-3):
+  `validate` is substring-asserted (`tests/e2e_integrity.rs`), `memory validate`
+  has no output golden. So byte-exact goldens are **authored first, red** (D12) as
+  a precondition of each native re-point; fall back to adapter if drift is
   non-trivial.
 - **R2 — ProseCite false positives** on code spans / sentinels / doc-local refs.
   *Mitigation:* explicit exclusion set (§5.5) + dedicated unit tests per
@@ -337,6 +391,14 @@ plan/execution-time:
   (as `IllegalRows`, Error) and the raw-label scan (Warning). IMP-141 holds that
   raw labels resolve identically (valid, not illegal), so the sets are disjoint —
   pin it with a test asserting no edge appears in both categories.
+- **R8 — ProseCite illustrative-example noise** (RV-183 F-2). Placeholder/example
+  ids in committed durable prose (`POL-123` in `glossary.md`, `SL-999` across
+  slice designs) resolve to nothing and read as dangling. D11 narrows the scan
+  (skip the `audit.md`/`inquisition.md`/`notes.md`/`research/**` process-exhaust
+  tier) to kill the bulk; residual example noise in durable bodies is an
+  **accepted v1 limitation** — advisory severity bounds it, and a precise
+  example-detection heuristic is deferred (YAGNI). Re-evaluate if the noise floor
+  proves intolerable in practice.
 
 ## 9. Quality Engineering & Validation
 
@@ -348,8 +410,12 @@ plan/execution-time:
 - **Per-new-check unit tests:** ProseCite (one per exclusion class), done-but-open
   (done-only / abandoned-only / mixed / live-slice negative), `plan.toml` probe
   (malformed + symlink-skip), raw-label scan.
-- **Behaviour preservation:** existing `validate` / `spec validate` /
-  `memory validate` goldens stay green unchanged.
+- **Behaviour preservation:** `spec validate` (#3, adapter'd) runs its legacy fn
+  untouched, so its existing tests stay green unchanged. For the **native**
+  re-points there is no existing byte-exact golden to lean on (RV-183 F-3) —
+  `validate` (#1) is substring-asserted, `memory validate` (#4) has none — so this
+  slice **authors byte-exact goldens for #1 and #4 first, red** (D12), then
+  re-points onto them. Until those land, #1/#4 stay adapter'd.
 - **`just gate`** clean (clippy zero warnings, fmt).
 
 ### Phase sketch (pencil — authoritative plan is `/plan`)
@@ -390,9 +456,44 @@ bugs and five precision/honesty gaps.
 - **R6/R7 (risks added §8).** Per-check corpus re-walk (perf, → D9 defer);
   RawLabel/RelationIntegrity disjointness (pin with a test).
 
-### Open for external pass
+### Adversarial pass 2 (internal hostile, RV-183, 2026-06-27) — integrated
 
-Attack surface for a second (external) reviewer: ProseCite exclusion
-completeness (are there cite shapes beyond code-span/sentinel/doc-local?); the
+Inquisition (`design` facet, raiser `inquisitor`) on the dense surfaces the
+handover named. Findings verified **empirically** against the live corpus prose
+(`grep` over `.doctrine/**/*.md`) and the test suite, not reasoned. Six charges,
+all resolved on the ledger; design body corrected.
+
+- **F-1 (major → fixed §5.5).** ProseCite candidate-token grammar was undefined,
+  and the only existing tokenizer (`line_cites`, alphanumeric boundaries) would
+  whole-token-match `DEC-005` *inside* `DEC-005-C`, silently defeating the 3-part
+  exclusion. Specified a new scanner that recognises the **maximal** hyphenated
+  token before 2-part/3-part classification, plus cross-line fence state.
+- **F-2 (major → fixed §5.5/§8 R8/§7 D11).** The largest empirical false-positive
+  class — illustrative/placeholder ids in committed prose (`POL-123` in the
+  shipped `glossary.md`, `SL-999` in 9 files, `STD-002/003`, `SPEC-110/200`, …) —
+  was unmodeled; ProseCite would flag ~20+ legitimate examples per run. Narrowed
+  the scan scope (D11), recorded residual noise as an accepted limit (R8).
+- **F-3 (major → fixed §5.5/§8 R1/§9/§7 D12).** R1's "existing goldens are the
+  proof" of byte-exact native re-point is false: `validate` asserts substrings
+  (`.contains`), `memory validate` has **no** output golden. Gated the #1/#4
+  native re-point on authoring byte-exact goldens first, red (D12).
+- **F-4 (minor → fixed §5.5).** The 3-part rationale ("the external decision register decision-log
+  cites") was empirically wrong — the corpus is dominated by `KIND-NNN-<word>`
+  compound adjectives over real refs. Corrected the rationale; owned the dangling
+  3-part false-negative.
+- **F-5 (minor → fixed §5.3-via-D11/§5.5).** `is_disposable_prose` (built for
+  `reseat`) is too narrow for ProseCite's purpose; ProseCite now composes an extra
+  skip-set (D11) rather than re-using reseat's scope verbatim.
+- **F-6 (nit → fixed §5.5).** Defined the done-but-open "open item" predicate
+  (`!is_transition_terminal(item.status)`) so a closed/abandoned item is never
+  flagged. Underlying primitives (`is_transition_terminal`, `targets_for(Slices)`)
+  confirmed present.
+
+### Open for external pass (codex / GPT-5.5)
+
+Residual attack surface for the external reviewer: whether D11's scan-scope
+divergence is the right cut (vs. a sharper example-detection heuristic); the
 adapter/native boundary for #2/#3; whether `outbound_for` exposes `Raw` labels
-pre-resolution (P05 must verify the access path before relying on it).
+pre-resolution (P05 must verify the access path before relying on it); and
+whether D12's golden-first gate belongs in the design or is purely a plan
+sequencing constraint.

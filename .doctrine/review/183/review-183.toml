@@ -1,0 +1,70 @@
+id    = 183
+slug  = "inquisition-sl-168-doctor-design-prosecite-exclusion-completeness-native-golden-byte-exactness-done"
+title = "Inquisition: SL-168 doctor design — ProseCite exclusion completeness, native-golden byte-exactness, done-but-open guard"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-168"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "ProseCite candidate-token grammar undefined; existing whole-token primitive defeats the 3-part exclusion"
+detail = "Expected: 5.5 specifies the candidate-token grammar so 'exclude any token with a second dash+suffix' is implementable and test-pinned. Observed: 5.5 enumerates exclusion CLASSES but never the grammar that PRODUCES candidates. The only existing tokenizer, integrity::line_cites (integrity.rs:623), matches a known needle with alphanumeric-only boundaries — dash is NOT a boundary (before_ok/after_ok test is_ascii_alphanumeric) — so DEC-005 is a whole-token match INSIDE DEC-005-C (the trailing dash passes after_ok). A naive [A-Z]+dash[0-9]+ inversion likewise extracts the 2-part DEC-005 / SL-1000 prefix and the skip-3-part rule never fires. The rule is only implementable if the scanner first recognizes the MAXIMAL hyphenated token and excludes it BEFORE the 2-part match. Empirical corpus: 519x DEC-005-C, 462x DEC-010-06, plus thousands of SL-NNN-word compounds. Also unspecified: fenced code blocks span lines, but the existing scanner is line-by-line (scan_danglers, integrity.rs:596) — skipping triple-backtick fences needs cross-line state the primitive lacks. Penance: define the candidate grammar + fence-state handling in 5.5; pin with unit tests against DEC-005-C, DEC-010-06, SL-NNN-word, and a fenced block."
+disposition = "design-wrong"
+response = "Design defect, reconciled in design.md 5.5. Specified a new ProseCite scanner that recognises the maximal hyphenated token [A-Z]{2,}-[0-9]+(-[A-Za-z0-9]+)* before 2-part/3-part classification, plus cross-line fence state; pinned the test obligations (DEC-005-C, DEC-010-06, SL-NNN-word, fenced block). The pass-1 'reuse scan_danglers' framing is replaced with an explicit new-scanner requirement."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "ProseCite false-positive class unmodeled: illustrative/example ids in committed non-disposable prose"
+detail = "Expected: the exclusion set covers — or the design consciously accepts + documents — every false-positive class present in the LIVE corpus. Observed: the set (code-span / SENTINEL / doc-local / 3-part) omits the largest empirical FP class: illustrative/placeholder 2-part ids in committed, non-disposable .md. Probed against disk (prefix-to-dir, lstat), these resolve to NOTHING, yet ProseCite (scans .doctrine/**/*.md, skips only handover+state via is_disposable_prose) would flag each as dangling EVERY run: POL-123 in the SHIPPED reference doc .doctrine/glossary.md; SL-999 in 9 files incl. 6 slice design.md (090/099/136/050/072/092); STD-002 + STD-003 in slice/033/audit.md; SPEC-110 + SPEC-200 across slice/015 design+notes+audit+inquisition.md plus a committed memory body (memory/items/mem_019e97df.../memory.md); REQ-999, REQ-1234, CM-999, CHR-003. Advisory severity bounds CI impact, but a doctor crying wolf on ~20+ legitimate examples per run actively undermines the is-the-corpus-sound signal it exists to give. Penance: scope the scan (name the trees), add an illustrative-example exclusion, or consciously accept + DOCUMENT the noise in 5.5/8."
+disposition = "design-wrong"
+response = "Reconciled: design.md 5.5 now models the illustrative-example FP class with the empirical evidence, D11 narrows the scan scope (skip audit/inquisition/notes/research process-exhaust), and R8 records the residual durable-body example noise as an accepted v1 limitation. Advisory severity bounds CI impact."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "R1/5.5/9 misstate the byte-exact safety net for native re-points — it does not exist"
+detail = "Expected: the goldens R1 names as 'the proof' of byte-exact native re-point actually pin byte-exact output for #1 id-integrity and #4 memory. Observed: (a) validate's tests (tests/e2e_integrity.rs) assert via SUBSTRING .contains — .contains(corpus clean) line 95, .contains(dir 003 declares id 045) line 109, .contains(scanned SL) line 97 — never a byte-exact assert_eq! or snapshot on stdout. A native re-point could re-order, re-space, or re-title the summary and still pass. (b) memory validate has NO output golden at all: the sole memory_validate test reference (tests/e2e_mcp_server.rs:209) is an MCP tool-REGISTRY presence check (names.contains), not an output golden. Therefore 9's claim that existing memory validate goldens stay green unchanged guards a golden that does not exist, and R1's existing-goldens-are-the-proof is unfounded for BOTH native sources. The behaviour-preservation gate (AGENTS.md) is unguarded exactly where the design leans on it. Penance: author true byte-exact goldens for #1 and #4 FIRST (red) as a precondition of the native re-point — or drop the re-point and keep the legacy render untouched (adapter). Correct R1, 5.5, 9 to state the actual current verification basis."
+disposition = "design-wrong"
+response = "Reconciled: R1, 5.5 behaviour-preservation, 9, and new D12 now state the true verification basis — validate is substring-asserted, memory validate has no output golden — and gate the #1/#4 native re-point on authoring byte-exact goldens FIRST (red), else ship adapter'd. The behaviour-preservation gate is now real rather than assumed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "3-part exclusion rationale empirically false; silent false-negative unowned"
+detail = "Expected: the 5.5/F1 rationale matches the corpus, and accepted false-negatives are documented. Observed: 5.5/F1 frames 3-part tokens as 'external the external decision register decision-log citations (DEC-005-C)'. The corpus is in fact dominated by KIND-NNN-englishword compound adjectives whose leading 2-part is a REAL entity ref: SL-048-style (184x), IMP-006-gated (184x), SL-007-populated (138x), ADR-006-references (92x), RSK-003-primary (92x), REQ-082-AC3 (46x). Blanket-skipping 3-part is the right mechanical call, but (a) the stated REASON is wrong/incomplete — it covers only the DEC decision-log minority — and (b) it silently makes a dangling SL-999-style / REQ-999-AC3 invisible, an accepted false-negative the design never states. Penance: correct the rationale to the real shape distribution and explicitly own the false-negative."
+disposition = "design-wrong"
+response = "Reconciled: 5.5 gate-1 rationale corrected to the empirical shape distribution (KIND-NNN-word compound adjectives dominate, not DEC decision-log cites) and explicitly owns the dangling-3-part false-negative as consciously accepted for an advisory check."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "is_disposable_prose scope mismatched to ProseCite's purpose"
+detail = "Expected: ProseCite scans the prose tier where a dangling cite is actually actionable. Observed: ProseCite reuses integrity::is_disposable_prose (integrity.rs:609), which skips ONLY handover.md + .doctrine/state/. That predicate was authored for reseat. It does NOT skip audit.md, inquisition.md, notes.md, research/*.md, or committed memory bodies — process-exhaust and historical prose dense with hypothetical and reseated/removed ids (these are precisely the F-2 false-positive locations: slice/033/audit.md, slice/015/inquisition.md, a memory body). The reseat use-case and the doctor use-case may want different scopes. Penance: decide whether ProseCite's scan scope should diverge from reseat's, state it in 5.3/5.5, and pin it with a test."
+disposition = "design-wrong"
+response = "Reconciled via D11: ProseCite composes an extra skip-set on top of is_disposable_prose rather than reusing reseat's scope; reseat keeps its narrower predicate. Scope divergence stated in 5.5/D11, test obligation noted."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "done-but-open 'open' predicate undefined"
+detail = "Expected: 5.5 defines which backlog statuses count as 'open' for the done-but-open check. Observed: 5.5 says 'flag an OPEN item iff it has >=1 linked slice and every linked slice terminal' but never defines the item-open predicate. The >=1-slice guard, is_transition_terminal (lifecycle.rs:42, done+abandoned), and targets_for(item, Slices) (relation.rs:877) are all confirmed present and the vacuity reasoning is sound — only the item-open side is unspecified. Plan-level detail, but name it so the check cannot flag a closed/abandoned backlog item. Penance: state the open-item predicate in 5.5."
+disposition = "design-wrong"
+response = "Reconciled: 5.5 now defines the open-item predicate (!is_transition_terminal(item.status)) so a closed/abandoned backlog item is never flagged. Underlying primitives confirmed present (lifecycle.rs:42, relation.rs:877)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
