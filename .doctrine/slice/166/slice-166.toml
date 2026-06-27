@@ -25,15 +25,23 @@ target = "ISS-056"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/coordinate.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/git.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dispatch_config.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dtoml.rs"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
