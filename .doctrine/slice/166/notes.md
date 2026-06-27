@@ -207,3 +207,101 @@ suite, build — exit 0, zero warnings).
 
 **Phase order remaining:** PHASE-05 (enable posture in doctrine.toml + INV-2
 parity re-run + operator docs).
+
+## PHASE-05 — Enable posture + parity + docs — DONE (EX-1 blocked, see below)
+
+`just gate` green (exit 0, clippy `--workspace` zero warnings, fmt `--check`,
+full suite, build) with the docs in place. Docs commit SHA: see git log
+`doc(SL-166): PHASE-05 operator docs`.
+
+**What shipped (EX-3 docs)**
+- `--allow-corpus-clobber` clap help (`dispatch.rs:78`) sharpened to the design
+  §10 wording: the allowlist is **global across BOTH the `--trunk` and `--edge`
+  legs of a single integrate call** — one named path is permitted on either ref
+  it would clobber. (PHASE-02 already had a "global across legs" note; this nails
+  the "single integrate call" precision.)
+- `authoring_branch` field doc-comment (`dispatch_config.rs:50`) gained the
+  **design §8 R3 precondition**: single, linear, append-mostly authoring ref;
+  rebased/divergent history, shallow/grafted clones, multiple authoring branches
+  are UNSUPPORTED and hard-refuse setup; buffer-only corpus is a g2 false
+  negative (g3 backstops). This is the operator-facing surface — anyone setting
+  `authoring-branch` reads it here.
+- `install/doctrine.toml.example` gained a commented `authoring-branch` block
+  (the copy-to-configure surface) describing the posture, what it enables
+  (g1/g2), and the same R3 precondition.
+- config-validate surface left as-is: `validate_posture` already enforces R4
+  (authoring-branch ≠ deliver-to); R3 is a precondition not statically checkable
+  without git, so it lives in docs, not a new check.
+
+**EX-2 / VT-1 parity evidence (posture UNSET = INV-2)**
+- `cargo test --test e2e_dispatch_sync` → **42 passed, 0 failed** (holds the g3
+  e2e + the close-integration vt2/vt7 tests).
+- `cargo test --test e2e_dispatch_lifecycle` → **3 passed, 0 failed** (NOTE: the
+  plan/design name an `e2e_dispatch_close` target; it does not exist — the
+  close-integration tests live in `e2e_dispatch_sync` + `e2e_dispatch_lifecycle`.
+  `e2e_dispatch_lifecycle` is SL-165-dirty in the worktree; RUN unchanged, not
+  edited).
+- Both suites build their own temp-root fixtures with no `authoring-branch` ⇒
+  they ARE the posture-unset case. No e2e test reads the repo's own
+  `.doctrine/doctrine.toml` (grep: zero `authoring_branch` refs under `tests/`),
+  so enabling the posture in the live config cannot change any test — parity
+  holds regardless of EX-1's resolution.
+
+**VT-1 posture-ON coverage map (constructed-config tests — DRY, no new tests)**
+- g1 (posture-gated): `corpus_guard::tests::{g1_refuses_when_head_on_buffer,
+  g1_allows_on_authoring_branch, g1_inert_when_posture_unset,
+  g1_inert_when_authoring_equals_deliver_to, g1_inert_on_detached_head}`;
+  `dispatch::tests::{integrate_refused_when_head_on_buffer,
+  integrate_allowed_on_authoring_branch, g1_inert_when_posture_unset,
+  g1_guards_only_the_integrate_verb_entry}`.
+- g2 (posture-gated): `worktree::mod::tests::{ensure_base_corpus_fresh_*,
+  coordinate_refuses_create_when_base_predates_corpus}`;
+  `git::tests::{last_corpus_commit_returns_tip_when_corpus_exists,
+  _returns_none_when_ref_resolves_without_corpus, _errors_on_unresolvable_ref}`.
+- g3 (always-on, not posture-gated): `corpus_guard::tests::{phantom_deletion_is_
+  clobber, stale_revert_is_clobber, …}`; e2e
+  `integrate_edge_refuses_corpus_clobbering_advance` +
+  `integrate_edge_allowlist_permits_named_clobber`.
+- posture config parse/validate: `dispatch_config::tests::{parse_authoring_branch_
+  some, authoring_branch_defaults_none, validate_posture_*}`.
+
+**EX-1 — DEVIATION / BLOCKER (flagged for audit + VH-1 operator decision)**
+The plan EX-1 ("doctrine.toml sets `authoring-branch = refs/heads/edge` in a
+dedicated enabling commit") is **not achievable as written**, and the underlying
+intent collides with a later governance change:
+- The binary reads config ONLY from `.doctrine/doctrine.toml`
+  (`dtoml.rs:80 DOCTRINE_TOML`), **not** repo-root `doctrine.toml` — SL-146
+  (`a0acf0eb`, ISS-055) moved config there. A repo-root `doctrine.toml` would be
+  inert (never read).
+- BOTH `doctrine.toml` and `.doctrine/doctrine.toml` are **gitignored**
+  (`.gitignore:11` and the `.doctrine/*` rule with no config whitelist), and
+  `.doctrine/doctrine.toml` was **never tracked**. Project config is deliberately
+  environment-local post-SL-146.
+- The live repo's `.doctrine/doctrine.toml` (main worktree) currently sets only
+  `[priority]/[dispatch] claude-force-subprocess-dispatch/[reservation]`; no
+  `authoring-branch`, no `deliver-to` (so the edge/main split is still passed
+  ad-hoc via `--edge`, per design §2). The posture is genuinely undeclared.
+
+Therefore a "dedicated enabling commit" cannot be made without one of:
+  (a) un-ignore `.doctrine/doctrine.toml` (whitelist it) and commit the posture —
+      makes it reviewable/revertible per design intent, but REVERSES SL-146's
+      environment-local-config stance (a governance decision, needs operator/ADR);
+  (b) `git add -f` (fights the ignore; future edits need `-f`; brittle); or
+  (c) treat enablement as a RUNTIME operator edit (no commit) — the operator adds
+      the key to the live `.doctrine/doctrine.toml`; nothing tracked.
+Did NOT improvise any of these (ask-don't-infer; don't paper over). Recommend (c)
+for the immediate enablement + (a) only if the project wants a reviewable posture
+record. The exact runtime enablement the operator can apply:
+
+```toml
+# in <repo>/.doctrine/doctrine.toml
+[dispatch]
+authoring-branch = "refs/heads/edge"
+```
+
+**VH-1 items for the operator**
+- Decide the EX-1 config-tracking question (a/b/c above) and apply the chosen
+  enablement; confirm g1/g2 activate (e.g. `dispatch sync --integrate` while HEAD
+  is on `main` should now refuse with `REFUSE_ON_TRUNK`).
+- Eyeball the EX-3 wording: `dispatch_config.rs:50` doc-comment,
+  `dispatch.rs:78` clap help, `install/doctrine.toml.example` block.
