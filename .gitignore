@@ -8,6 +8,7 @@
 .dirge
 .mcp.json
 
+doctrine.toml
 
 *.tmp
 *.temp
