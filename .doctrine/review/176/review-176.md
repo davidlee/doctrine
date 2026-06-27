@@ -1,0 +1,59 @@
+# Review RV-176 — design of SL-166
+
+Adversarial-review ledger (ADR-007). Structured findings live in the sister
+ledger toml; this prose companion carries the reviewer's framing.
+
+## Brief
+
+External adversarial pass on `SL-166/design.md` (three dispatch corpus-loss
+guards g1/g2/g3), conducted before design lock. Internal pass already resolved
+its findings (design §10); this Inquisition re-tries the design intent with a
+hostile external reviewer (codex / GPT-5.5). The accused has confessed its own
+weak points in §10 — the Inquisition presses on them and hunts the unconfessed.
+
+**Doctrine the accused is held to.** ADR-012 (dispatch integration topology, esp.
+D4 FF-only/CAS contract), ADR-001 (module layering: leaf ← engine ← command, no
+cycles), ADR-006 (worktree posture / fork-base ladder), POL-002 (platform
+independence from host-project convention), STD-001 (no magic strings), the
+pure/imperative split, the behaviour-preservation gate, and the scope locked in
+RFC-005 §H6 OQ-7/8/9 + slice-166 Non-Goals.
+
+**Lines of interrogation.**
+
+1. **D6 (apex charge).** Does g3 — an *added refusal* to integrate when a leg
+   would clobber `.doctrine/**` — alter ADR-012 D4's FF-only / 3-arg-CAS
+   contract, demanding a mechanism-only ADR-012 Revision? Or is it purely
+   additive (refuse-more, relax-nothing)? The accused leans "additive, no
+   Revision" (§7 D6, §10). Press hardest: would a hostile reader see g3 as
+   *redefining* what a legal advance is — and thus the integration contract?
+
+2. **g3 `base = merge-base(new, cur)` correctness** across both legs — the
+   pure-ref (not-checked-out integration buffer, CAS-and-done) and the
+   checked-out (authoring ref, `merge --ff-only`) advance. Is the claim "a true
+   FF advance can never clobber" (design §5.4, §10-A) sound for *both* legs? Does
+   `merge-base(new,cur)` equal the leg's actual CAS expected-old (§5.5 assumption)?
+
+3. **g2-strict false-positive surface** beyond "promotion ritual not followed"
+   (§10-B accepts the strictness). Any *legitimate* topology — first dispatch
+   before any corpus, divergent corpus history, shallow/grafted clone, a corpus
+   commit on the buffer but not the authoring ref — where `is-ancestor(corpus_tip,
+   base)` refuses a setup that should proceed?
+
+4. **ADR-001 layering** — g2 makes `worktree::coordinate` reach `DispatchConfig`
+   / `dtoml`. Does that close an engine→config (or leaf→command) cycle? The
+   accused offers a values-not-loader escape (§10) — is it sufficient, or is the
+   edge direction itself heresy?
+
+5. **g1 HEAD resolution** — `current_branch(root)` must read the *invoking
+   worktree's* HEAD, not the common dir (§10). Verify against the existing
+   raw-evidence-ref guard (`dispatch.rs:1067`).
+
+6. **Scope discipline.** The raw-git boundary (manual `git merge` / `fetch
+   edge:main`) is a deliberate Non-Goal (slice §Non-Goals, design §8 R1). The
+   Inquisitor must NOT expand scope into it — but must confirm the design does
+   not *pretend* to close it (honest naming vs false closure).
+
+7. **Unconfessed heresy.** Magic strings (STD-001), silent error handling (the
+   `degrade-to-no-op` valves in g2 — do they swallow real failures?), the global
+   `--allow-corpus-clobber` across both legs (§10 accepts), OQ-3 (`admit` in the
+   g1 verb set), and any invariant left unstated or untested (§9).

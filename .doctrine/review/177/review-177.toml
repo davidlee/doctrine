@@ -1,0 +1,32 @@
+id    = 177
+slug  = "reconciliation-audit-of-sl-165-close-projection-candidate-source-gate"
+title = "Reconciliation audit of SL-165 — close-projection candidate-source gate"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-165"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "Refuse-matrix tests incomplete vs plan PHASE-02 VT-1/EX-2/EX-3 — INV-6 moved-ref ships untested"
+detail = "Expected (plan.toml PHASE-02 VT-1): '1 accept + the EX-2 refuse cases + the EX-3 moved-ref refusal, each asserting the design's bail message class.' EX-2 enumerates: no row; ambiguous (duplicate) row (INV-5); Conflicted-status source (INV-3); non-evidence/non-candidate chain hop; over-budget/cyclic (INV-4); scratch role; experiment-kind (INV-2). EX-3: moved-ref (INV-6). Observed (tests/e2e_dispatch_candidate.rs): only 3 new tests — accept, no-row, scratch-role. MISSING: ambiguous-row, Conflicted-status, non-evidence hop, over-budget/cyclic, experiment-kind, and the EX-3 moved-ref refusal. The INV-6 lineage binding (is_ancestor(merge_oid,source_oid)) — the RV-175 F-1 codex BLOCKER fix, the gate's content-security teeth — ships with ZERO refuse test. The gate logic for every branch is present and correct on read (src/dispatch.rs:805-1078), accept path + lifecycle anchor are green, but the security refuse branches are unverified against regression. This is a verification-completeness gap on a provenance/security gate, explicitly mandated by the plan."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "SPEC-022 REQ-316 contradicts REQ-317 — normative gate widening needs a Revision at reconcile"
+detail = "design.md §2/D4 + slice-165.md headline: REQ-316 ('Source provenance' — candidate create refuses any --source that is not a Verified journal row, no candidate exception) forbids exactly what REQ-317 mandates (source the close_target from refs/heads/candidate/<N>/<label>, the repaired candidate). The landed code conforms to REQ-317 (controlling intent) and widens REQ-316's gate. Per ADR-013 + design D4/Q3-A a normative FR gate-widening routes through a Revision (REV) + external review, NOT a quiet direct spec edit. This is the slice's known governance obligation. Observation confirmed; remediation is reconcile's job (author REV narrowing REQ-316 to admit the traced candidate-source exception; conformance-link SL-165 -> REQ-316/317). Carries OQ-2 (exact REQ-316 wording, settled at REV authoring) and OQ-3 (REQ-317 process-owner note, likely no change — IMP-130's mandate)."
+disposition = "verified"
+response = "Confirmed governance obligation; routes to the reconciliation brief, NOT an audit write. SPEC-022 REQ-316 must be narrowed (REV at reconcile) to admit the traced candidate-source close_target exception that REQ-317 mandates and the landed gate implements; conformance-link SL-165 -> REQ-316/REQ-317. Audit does not touch spec/governance — /reconcile authors the REV + external review (ADR-013, design D4/Q3-A)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
