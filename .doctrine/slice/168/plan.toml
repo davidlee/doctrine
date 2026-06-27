@@ -71,14 +71,16 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 finding leaf + from_lines landed." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "A pure memory-health fn is extracted from memory::run_validate (dangling relations, stale verify, draft expiry); run_validate re-points onto it but its byte-exact output is unchanged." },
-  { id = "EX-2", text = "#2/#3/#4 are each reachable as a findings callable the doctor consumes via from_lines (entity:None v1); the honesty caveat (F6) holds — adapter'd Error ids ride in `message`." },
-  { id = "EX-3", text = "No native re-point in this phase (D12): #1 and #4's legacy renders are untouched." },
-  { id = "EX-4", text = "Existing validate / spec validate / memory validate suites stay green unchanged (behaviour-preservation gate, AGENTS.md)." },
+  { id = "EX-1", text = "A byte-exact black-box golden over CURRENT `memory validate` output is authored FIRST (red), closing the F-3 gap before any code moves — the extraction below must not drift this output." },
+  { id = "EX-2", text = "A pure memory-health fn is extracted from memory::run_validate (dangling relations, stale verify, draft expiry); run_validate re-points onto it and the EX-1 golden stays green (byte-exact output unchanged)." },
+  { id = "EX-3", text = "#2/#3/#4 are each reachable as a findings callable the doctor consumes via from_lines (entity:None v1); the honesty caveat (F6) holds — adapter'd Error ids ride in `message`." },
+  { id = "EX-4", text = "No native RENDER re-point in this phase (D12): #1 and #4's shipping renders are untouched (the memory writeln! render stays; the extraction only sources its data from the new fn)." },
+  { id = "EX-5", text = "Existing validate / spec validate / memory validate suites stay green unchanged (behaviour-preservation gate, AGENTS.md)." },
 ]
 verification = [
-  { id = "VT-1", expects = "unit: extracted memory-health fn returns the same finding set the inline checks produced on a seeded dirty memory corpus." },
-  { id = "VT-2", expects = "existing memory/spec/relation suites pass unchanged." },
+  { id = "VT-1", expects = "byte-exact memory validate golden passes both before the extraction (legacy inline path) and after (sourced from the new fn) — zero drift." },
+  { id = "VT-2", expects = "unit: extracted memory-health fn returns the same finding set the inline checks produced on a seeded dirty memory corpus." },
+  { id = "VT-3", expects = "existing memory/spec/relation suites pass unchanged." },
   { id = "VA-1", expects = "review confirms no shipping render was re-pointed (adapter-only); legacy memory validate writeln! path intact." },
 ]
 specs        = []
@@ -198,15 +200,15 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-05 doctor wired + green; the adapter'd #1/#4 path is shipping." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "Byte-exact goldens authored over CURRENT validate + memory validate output FIRST (red before any re-point) — closing the F-3 gap (substring-only / absent)." },
+  { id = "EX-1", text = "Byte-exact golden over CURRENT `validate` output authored FIRST (red before the #1 re-point) — closing the substring-only half of the F-3 gap (the memory golden already exists from PHASE-02 EX-1)." },
   { id = "EX-2", text = "#1 IdIntegrity re-pointed to native Finding; validate's byte-exact output reproduced (new golden green)." },
-  { id = "EX-3", text = "#4 MemoryHealth render re-pointed to native; memory validate byte-exact output reproduced (new golden green) — OR adapter retained if drift non-trivial (R1), with rationale." },
+  { id = "EX-3", text = "#4 MemoryHealth render re-pointed to native; the PHASE-02 memory validate golden stays green — OR adapter retained if drift non-trivial (R1), with rationale." },
   { id = "EX-4", text = "All prior-phase goldens + superset invariant still green; just gate clean." },
 ]
 verification = [
   { id = "VT-1", expects = "new byte-exact golden over validate output passes both before (legacy path) and after (native re-point) — proving zero drift." },
-  { id = "VT-2", expects = "new byte-exact golden over memory validate output passes across the re-point (or adapter-retained justification recorded)." },
-  { id = "VA-1", expects = "review confirms goldens were authored BEFORE the re-point (D12 ordering) and the behaviour-preservation gate is now genuinely guarded." },
+  { id = "VT-2", expects = "the PHASE-02 memory validate golden passes across the #4 re-point (or adapter-retained justification recorded)." },
+  { id = "VA-1", expects = "review confirms each golden was authored BEFORE its re-point (D12 ordering) and the behaviour-preservation gate is now genuinely guarded." },
 ]
 specs        = []
 requirements = []
