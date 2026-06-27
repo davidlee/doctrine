@@ -1,0 +1,106 @@
+id    = 185
+slug  = "reconciliation-review-of-sl-168"
+title = "reconciliation review of SL-168"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-168"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "ADR-001 layering gate RED: finding/doctor_checks unclassified + registry→spec upward edge"
+detail = "architecture_layering_gate test FAILS on the impl bundle. Causes, all SL-168 artifacts: (1) new modules `finding` and `doctor_checks` are absent from .doctrine/adr/001/layering.toml → Unclassified; (2) registry::spec_fk_findings (PHASE-02, registry.rs:357) calls crate::spec::build_registry, but registry is classified leaf (out=0, 'pure index') and spec is command → UpwardEdge{registry→spec, Leaf→Command} + MixedUmbrella{registry reaches Command}, violating ADR-001 (leaf←engine←command). Design §5.1 intended the COMMAND-layer orchestrator to compose checks, not a leaf reaching up. Handover Open Item #1 flagged the classification gap (worker blocked by R-5 belt) but it was never landed, and the registry→spec edge was undetected. Fix: relocate spec_fk_findings into spec.rs (command, already owns build_registry) keeping registry pure, AND classify finding=leaf, doctor_checks=command in layering.toml. Expected: gate green. Observed: RED."
+disposition = "fix-now"
+response = "Confirmed real. Repair on the candidate before integration: relocate spec_fk_findings from registry.rs into spec.rs (command, already owns build_registry), restoring registry's out=0 leaf purity; classify finding=leaf and doctor_checks=command in .doctrine/adr/001/layering.toml. Re-run architecture_layering_gate to green. Left OPEN (blocker) until repaired."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "blocker"
+title = "memory_validate_byte_exact_golden RED: non-hermetic golden over live corpus (volatile commits-behind)"
+detail = "tests/e2e_memory_validate_golden.rs (the D12 safety net authored by PHASE-02 EX-1) FAILS. The test runs `memory validate` against the LIVE repo and asserts byte-equality with a hard-coded expected string containing live mem_* ids and a volatile field: 'verified_sha N commits behind HEAD'. Golden baked N=21; actual now N=20 (HEAD moved — SL-169 landed on main). The single-line diff is 21→20. The golden is brittle BY CONSTRUCTION: any commit to the corpus, any memory/relation change shifts the output, so it cannot serve as a stable behaviour-preservation proof — the very role D12 assigned it. Expected: stable green safety net. Observed: RED on an unrelated commit. Fix: make the golden hermetic (seed an isolated fixture corpus) OR normalise the volatile commits-behind count before comparison."
+disposition = "fix-now"
+response = "Confirmed real. Repair: make tests/e2e_memory_validate_golden.rs hermetic — seed an isolated fixture corpus, or normalise the volatile 'N commits behind HEAD' substring before byte-compare. A live-corpus byte-golden cannot be the stable D12 proof. Left OPEN (blocker) until repaired."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "blocker"
+title = "ProseCite (#8) scans whole repo, descends into nested worktrees → 827/966 false positives"
+detail = "prose_cite_findings globs root.join('**/*.md') — the WHOLE repo. Design §5.5/§7 D11 specified scanning the authored corpus '.doctrine/**/*.md'. The whole-repo glob descends into nested git worktrees that each hold a FULL repo copy: .dispatch/*/.doctrine/slice/*/design.md, .worktrees/*, .doctrine/state/dispatch/candidate/*. Measured on the live corpus: 966 ProseCite findings, of which 827 (86%) are nested-worktree duplicates (e.g. slice/092/design.md counted 6+ times across .dispatch/133-p02, .dispatch/141-p01..03, .dispatch/SL-093, SL-095). Anchoring to .doctrine/** collapses 966→139. is_disposable_prose_d11 skips .doctrine/state/ but NOT top-level .dispatch/ or .worktrees/. Fix: anchor the glob to root/.doctrine/**/*.md per design, and/or exclude nested-worktree roots. Expected: scan authored corpus only. Observed: 86% garbage from worktree copies."
+disposition = "fix-now"
+response = "Confirmed real. Repair: anchor prose_cite_findings glob to root/.doctrine/**/*.md per design D11, and/or exclude nested-worktree roots (.dispatch/, .worktrees/) in is_disposable_prose_d11. Verify ProseCite count drops from 966 to ~139 on the live corpus. Left OPEN (blocker) until repaired."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "ProseCite RFC-NNNN IETF collision: unmodeled false-positive class"
+detail = "The doctrine RFC kind prefix collides with real-world IETF RFC numbers cited in prose. ProseCite flags RFC-9110, RFC-7540, RFC-6265, RFC-9111 (HTTP/IETF RFCs in research + case-notes prose) as 'unresolved citations'. Unmodeled by design (R8 anticipated POL-123/SL-999 placeholder noise, not the RFC namespace collision). Within the 139 real-corpus residual after F-3 is fixed. Advisory severity bounds it. Disposition candidate: tolerated as an extension of R8's accepted-limitation, OR follow-up to add an RFC-range/heuristic exclude. Not a v1 blocker."
+disposition = "tolerated"
+response = "Accepted v1 limitation extending design R8. RFC kind prefix collides with IETF RFC numbers in advisory prose; advisory severity bounds the blast radius. After F-3 anchoring, this is a small residual within 139. A precise RFC-range/heuristic exclude is deferred (YAGNI). Optional follow-up backlog if noise proves intolerable."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "JSON output is a bare array, not listing::json_envelope (design §5.4 / plan PHASE-05 EX-3, F7)"
+detail = "commands/doctor.rs:51 emits serde_json::to_string_pretty(&findings) — a bare JSON array. Design §5.4 and plan PHASE-05 EX-3 mandated reusing listing::json_envelope (F7 verified row-generic specifically so doctor reuses it). Impl diverged to a bare array (pinned by test doctor_json_produces_valid_json_array). Self-consistent and tested, but a contract divergence from the locked design. Disposition: per-slice design reconcile (update 5.4 to bare-array) OR code fix to envelope."
+disposition = "verified"
+response = "Confirmed divergence from locked design §5.4 / plan EX-3 (F7). Routed to reconciliation brief (per-slice). Recommended direction: match the design — wrap in listing::json_envelope — for consistency with the rest of the CLI --json surface; reconcile decides envelope-vs-amend-design."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "JSON rows omit the 'severity' field (design §5.4 specifies category,severity,entity,message)"
+detail = "Finding derives Serialize over {category, entity, message} only — no severity. Design §5.4 specifies json rows with severity rendered from category.severity(). A machine consumer cannot filter by severity without re-deriving from category. Divergence from locked design. Disposition: add a severity field to the serialized row (small code fix) OR reconcile design 5.4."
+disposition = "verified"
+response = "Confirmed divergence from design §5.4. Routed to reconciliation brief (per-slice). Recommended: add severity to the serialized row (rendered from category.severity()) so machine consumers can filter; reconcile decides code-fix-vs-amend-design. Pairs with F-5."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "doctor_checks.rs (new 805-line module) absent from design §5.1 System Model"
+detail = "Design §5.1 names only two new files: src/finding.rs (leaf) and src/commands/doctor.rs (command composer). The implementation introduced a THIRD module, src/doctor_checks.rs (805 lines) holding the native RawLabel/TomlParse/ProseCite checks. Reasonable structurally (keeps run_doctor thin), but the design system model and the slice selectors never declared it (conformance: doctor_checks.rs = undeclared). Per-slice reconcile: update design §5.1 to include doctor_checks.rs and add it as a selector."
+disposition = "verified"
+response = "Confirmed. Routed to reconciliation brief (per-slice design edit): add src/doctor_checks.rs to design §5.1 System Model and add it as a slice selector. Structurally sound (keeps run_doctor thin); only the design record lags the implementation."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Selector hygiene: design-target selectors read-not-edited; fmt-churn undeclared"
+detail = "slice conformance leads: (a) UNDELIVERED design-target selectors hydrate.rs/relation.rs/lifecycle.rs/catalog/scan.rs/relation_graph.rs were READ (consumed as APIs) but not EDITED — they should be classified scope-relevant, not design-target (the RV-183 F-7 pass-3 selectors over-declared edit intent). (b) UNDECLARED edits to governance.rs/policy.rs/standard.rs are pure cargo-fmt churn in test modules, unrelated to the slice (scope noise). guard.rs/main.rs/spec.rs undeclared edits are legitimate Doctor wiring. Disposition: tolerated (selector hygiene; no behaviour impact) — optionally re-tag selectors during reconcile."
+disposition = "tolerated"
+response = "No behaviour impact. Selector over-declaration (hydrate/relation/lifecycle/scan/relation_graph as design-target when read-only) and fmt-churn in governance/policy/standard are hygiene, not defects. Optional reconcile cleanup: re-tag the read-only selectors scope-relevant; noted in brief, not gating."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Handover mischaracterises the architecture_layering_gate failure as pre-existing/unrelated"
+detail = "handover.md claims 'cargo test — 2716 pass, 0 fail (pre-existing architecture_layering_gate failure is unrelated)'. The failure explicitly names SL-168's own modules (Unclassified doctor_checks, Unclassified finding) and the SL-168-introduced registry→spec edge (see F-1). It is SL-168-caused and the '0 fail' claim is contradicted by two RED tests (F-1, F-2). Evidence-integrity note: a dispatch funnel reported green while two tests were red. Surfaced here so close does not inherit a false clean-bill."
+disposition = "tolerated"
+response = "handover.md is disposable runtime state — no authored artifact to correct. Recorded in the audit Synthesis so close does not inherit the false 'green' bill. The real signal (gate red, F-1/F-2) is captured as blockers; this note guards against the funnel's self-report being trusted over the test run."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "nit"
+title = "doctor_checks.rs module comments mis-number checks (#5/#6/#7 vs canonical #6/#7/#8)"
+detail = "doctor_checks.rs header comments label RawLabel '#5 catalog-scan check', TomlParse '#6', ProseCite '#7'. Canonical numbering (design §5.2 table, finding.rs Category order) is RawLabel #6, TomlParse #7, ProseCite #8 (#1-#4 are id/relation/specfk/memory, #5 is Lifecycle). Cosmetic comment drift only."
+disposition = "fix-now"
+response = "Trivial comment renumber in doctor_checks.rs (#5/#6/#7 → #6/#7/#8). Sweep into the F-1/F-3 repair pass on the candidate. Nit — does not gate."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

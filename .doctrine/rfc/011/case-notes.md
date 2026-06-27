@@ -279,3 +279,19 @@ it. Prime is "optimization, not gate" (review-ledger §2), so the inquisition
 proceeded uncached, but the failure is non-obvious and cost a help-read +
 retry to diagnose. Token cost: ~1 extra round-trip. Fix candidate: hasher should
 walk or skip dir selectors, not error.
+
+[/audit; SL-168-audit-2026-06-28]
+Candidate review-surface worktree (`dispatch candidate create --worktree`) does
+NOT carry gitignored derived embed assets — specifically `web/map/dist/` (the
+built map frontend, embedded via RustEmbed `#[folder="web/map/dist/"]` in
+src/map_server/assets.rs). With the folder absent, the RustEmbed derive degrades
+to a struct with no `get()` → `Assets::get` E0599, and the *whole binary +
+test bin* fail to compile. So a fresh audit worktree cannot build/test the slice
+out of the box; the auditor must manually `cp -r web/map/dist` from a provisioned
+tree first. Cost: a full failed build+test+clippy cycle and the investigation to
+distinguish env-gap from slice defect. Worktree provisioning (dispatch fork /
+candidate create) should hydrate gitignored derived embed roots, or the funnel
+should fail loudly with a provisioning hint rather than a deep E0599.
+Secondary: background Bash `${PIPESTATUS[0]}` after a `| tail`/`| grep` captures
+the filter's exit, not cargo's — the harness "exit 0" notifications were
+misleading; had to read the raw output to see the real compile failure.
