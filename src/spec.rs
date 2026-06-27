@@ -1539,7 +1539,7 @@ fn show_json(
 /// and tech-spec ids are stored canonical (the check-site needs no FK parsing);
 /// member edges are collected from **both** subtypes (products member requirements
 /// too), interaction edges from tech only (products have no `interactions.toml`).
-fn build_registry(root: &Path) -> anyhow::Result<Registry> {
+pub(crate) fn build_registry(root: &Path) -> anyhow::Result<Registry> {
     let mut reg = Registry::default();
 
     for id in entity::scan_ids(&requirement::tree_root(root))? {
@@ -1615,6 +1615,18 @@ fn build_registry(root: &Path) -> anyhow::Result<Registry> {
         }
     }
     Ok(reg)
+}
+
+/// Convenience entry point for the doctor (SL-168, #3 `SpecFk`): build a
+/// `Registry` and run all spec-FK integrity checks, returning plain strings for
+/// the `from_lines` adapter. Lives here, in the command tier, so the `registry`
+/// leaf stays pure (out=0, ADR-001) — the composition is the orchestrator's, not
+/// the index's (RV-185 F-1).
+pub(crate) fn spec_fk_findings(root: &Path) -> Vec<String> {
+    let Ok(reg) = build_registry(root) else {
+        return vec![];
+    };
+    reg.validate(None)
 }
 
 /// `doctrine spec validate [<spec-ref>]` — the FK-integrity pass (§5.4). Whole-

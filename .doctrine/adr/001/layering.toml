@@ -34,6 +34,7 @@ facet_write = "leaf"        # → fsutil (SL-113): shared facet read→mutate→
 fsutil = "leaf"             # out=0: filesystem utility — impure seam, no domain
 git = "leaf"                # out=0: git ops — impure seam, no domain
 globmatch = "leaf"          # → glob (external): shared glob_matches matcher (SL-147 PHASE-03)
+finding = "leaf"            # out=0: unified doctor Finding type — pure (SL-168 PHASE-01, ADR-001 D2)
 kinds = "leaf"              # out=0: entity-kind vocabulary — pure constants
 ledger = "leaf"             # out=0: review ledger types — pure
 lexical = "leaf"            # out=0: BM25/lexical engine — pure (no domain)
@@ -81,6 +82,7 @@ commands = "command"        # → catalog, integrity, map_server, mcp_server, ro
 concept_map = "command"     # → engine/leaf; concept-map entity-kind handler
 corpus = "command"          # → boot, git, install, memory, root; corpus install machinery
 dispatch = "command"        # → git, ledger, listing, root, slice, state, worktree; dispatch orchestrator
+doctor_checks = "command"   # → engine/leaf + catalog::scan, integrity; native doctor checks (SL-168 PHASE-03/04)
 governance = "command"      # → engine/leaf; doc: "Command-tier governance spine"
 install = "command"         # → boot, corpus, root, skills; install/bootstrap verb
 integrity = "command"       # → engine/leaf + adr, backlog, concept_map, knowledge, policy, rec, requirement, review, revision, slice, spec, standard; cross-kind integrity

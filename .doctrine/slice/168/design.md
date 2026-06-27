@@ -98,15 +98,29 @@ Key code facts (verified, notes.md source-map):
 
 ```
 src/finding.rs            NEW leaf    Finding, Category, Severity, from_lines
-                                      adapter, table render, JSON rows
+                                      adapter, table render, JSON rows (envelope)
+src/doctor_checks.rs      NEW command the three heavy NEW native checks:
+                                      raw_label / toml_parse / prose_cite
+                                      (reaches catalog::scan + integrity, so
+                                      command-tier; classified in layering.toml)
 src/commands/doctor.rs    NEW command run_doctor: resolve root once → run 8
                                       checks → collect Vec<Finding> → render
-                                      (table | --json) → exit
+                                      (table | --json envelope) → exit
   imports down into:
-    finding, integrity, registry, memory, backlog, relation_graph, catalog::scan
+    finding, integrity, registry, spec, memory, backlog, relation_graph,
+    doctor_checks (and clock for today())
 src/commands/cli.rs       EDIT        Command::Doctor variant + dispatch arm
 src/commands/mod.rs       EDIT        `pub(crate) mod doctor;`
+src/spec.rs               EDIT        spec_fk_findings composer (#3) lives here,
+                                      NOT in the registry leaf (ADR-001; RV-185 F-1)
 ```
+
+> **As-built note (RV-185 reconcile).** The three new native checks #6–#8
+> (RawLabel/TomlParse/ProseCite) live in a dedicated `src/doctor_checks.rs`
+> module rather than inline in `commands/doctor.rs`, keeping `run_doctor` a thin
+> orchestrator. The #3 SpecFk composer (`spec_fk_findings`) lives in the
+> command-tier `spec.rs`, not the `registry` leaf, so `registry` stays pure
+> (out=0) per ADR-001.
 
 `finding` is a leaf (imports neither clap nor `entity`); `integrity`,
 `registry`, `memory` return `finding::Finding` without a cycle. `doctor` is the

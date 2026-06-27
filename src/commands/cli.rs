@@ -479,6 +479,21 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Full corpus health scan — all eight checks.
+    ///
+    /// Runs id integrity, relation integrity, spec FK, memory health, lifecycle,
+    /// raw label, TOML parse, and prose citation checks over the corpus. Exits
+    /// non-zero on any error-severity finding.
+    Doctor {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+
+        /// Emit findings as a JSON array.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Renumber an entity's canonical id.
     ///
     /// ADR-006 D3 repair. Takes a canonical ref (`SL-031`), moves it to the next
@@ -724,6 +739,7 @@ static FAMILIES: &[Family] = &[
             "serve",
             "config",
             "validate",
+            "doctor",
             "check",
             "reseat",
             "export",
@@ -1165,6 +1181,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Worktree { command } => crate::worktree::dispatch(command),
         Command::Dispatch { command } => crate::dispatch::dispatch(command, color),
         Command::Validate { path } => crate::commands::validate::run_validate(path),
+        Command::Doctor { path, json } => crate::commands::doctor::run_doctor(path, json),
         Command::Reseat {
             reference,
             to,
@@ -1346,8 +1363,8 @@ mod tests {
             );
         }
 
-        // Census: 45 visible top-level commands (44 at SL-150 A1 + `check`, SL-163).
-        assert_eq!(visible.len(), 45, "expected 45 visible top-level commands");
+        // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168).
+        assert_eq!(visible.len(), 46, "expected 46 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

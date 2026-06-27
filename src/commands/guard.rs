@@ -306,6 +306,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         | Command::Search { .. }
         | Command::Relation { .. }
         | Command::Validate { .. }
+        | Command::Doctor { .. }
         | Command::Inspect { .. }
         | Command::Survey { .. }
         | Command::Next { .. }

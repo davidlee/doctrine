@@ -15,7 +15,6 @@
 //! out for free (a `PRD-*` target is simply absent from `tech_specs`).
 
 use std::collections::{BTreeMap, BTreeSet};
-
 /// One spec→requirement membership edge: a row of some spec's `members.toml`.
 pub(crate) struct MemberEdge {
     /// Canonical ref of the spec the row lives in (`PRD-NNN` / `SPEC-NNN`).

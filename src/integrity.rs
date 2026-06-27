@@ -358,17 +358,50 @@ fn scan_aliases(tree_root: &Path, stem: &str, prefix: &str) -> anyhow::Result<Ve
 /// findings (`relation_graph::validate_relations`) WITHOUT this engine module depending
 /// on `relation_graph` (which depends back on `integrity` — the cycle the split avoids).
 pub(crate) fn id_integrity_findings(root: &Path) -> anyhow::Result<Vec<String>> {
+    id_integrity_findings_native(root).map(|fs| fs.into_iter().map(|f| f.message).collect())
+}
+
+/// Native [#1 `IdIntegrity`] check — returns [`crate::finding::Finding`] directly (D12
+/// re-point). The per-kind `check_kind` rules plus schema-agnostic TOML parse
+/// diagnostics, each tagged with `Category::IdIntegrity` and best-effort entity
+/// extraction.
+pub(crate) fn id_integrity_findings_native(
+    root: &Path,
+) -> anyhow::Result<Vec<crate::finding::Finding>> {
+    use crate::finding::{Category, Finding as DoctorFinding};
     let mut findings = Vec::new();
     let mut diagnostics = Vec::new();
     for kind in KINDS {
-        findings.extend(
-            check_kind(&scan_kind(root, kind, &mut diagnostics)?)
-                .into_iter()
-                .map(|f| f.0),
-        );
+        let snap = scan_kind(root, kind, &mut diagnostics)?;
+        for f in check_kind(&snap) {
+            findings.push(DoctorFinding {
+                category: Category::IdIntegrity,
+                entity: extract_entity_id(&f.0, kind),
+                message: f.0.clone(),
+            });
+        }
     }
-    findings.append(&mut diagnostics);
+    for diag in diagnostics {
+        findings.push(DoctorFinding {
+            category: Category::IdIntegrity,
+            entity: None,
+            message: diag,
+        });
+    }
     Ok(findings)
+}
+
+/// Try to extract a canonical entity id (`PREFIX-NNN`) from a finding message.
+/// Best-effort: returns `None` when the message format does not carry the id
+/// in a recognisable `PREFIX-NNN:` prefix.
+fn extract_entity_id(msg: &str, kind: &KindRef) -> Option<String> {
+    let prefix = format!("{}-", kind.kind.prefix);
+    if let Some(rest) = msg.strip_prefix(&prefix)
+        && let Some(end) = rest.find(':')
+    {
+        return Some(format!("{}{}", prefix, &rest[..end]));
+    }
+    None
 }
 
 /// The roster of kinds `validate` scanned, for the summary line (so the memory
@@ -606,7 +639,7 @@ fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
 /// under the gitignored runtime state tree (`.doctrine/state/…`) and any
 /// `handover.md` (per-agent scratch, GITIGNORED). Authored prose — slice/adr/spec
 /// bodies, committed `memory.md` — is never disposable and stays in scope.
-fn is_disposable_prose(path: &Path) -> bool {
+pub(crate) fn is_disposable_prose(path: &Path) -> bool {
     if path.file_name().and_then(|n| n.to_str()) == Some("handover.md") {
         return true;
     }

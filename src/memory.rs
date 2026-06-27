@@ -3282,6 +3282,78 @@ pub(crate) fn run_verify(path: Option<PathBuf>, reference: &str, allow_dirty: bo
     Ok(())
 }
 
+/// Pure extraction of all memory-health checks — the data-producing half of
+/// `run_validate`. Takes pre-loaded state (no filesystem IO beyond the
+/// `git::commits_touching` call). Returns findings as strings for the adapter
+/// seam (SL-168 PHASE-02).
+pub(crate) fn memory_health_findings(root: &Path, memories: &[Memory], today: &str) -> Vec<String> {
+    let mut findings = Vec::new();
+    for memory in memories {
+        // Check 1: Dangling relations
+        for relation in &memory.relations {
+            if validate_relation_target(root, &relation.target).is_err() {
+                findings.push(format!(
+                    "{}: dangling: [[relation]] target \"{}\" not found",
+                    memory.uid, relation.target
+                ));
+            }
+        }
+        // Check 2: Stale verification
+        if !memory.anchor.verified_sha.is_empty()
+            && !memory.scope.paths.is_empty()
+            && let Some(commits_behind) = crate::git::commits_touching(
+                root,
+                &memory.scope.paths,
+                &memory.anchor.verified_sha,
+                "HEAD",
+            )
+            && commits_behind > 0
+        {
+            findings.push(format!(
+                "{}: stale: verified_sha {} commits behind HEAD on scoped paths",
+                memory.uid, commits_behind
+            ));
+        }
+        // Check 3: Draft expiry
+        if memory.status == Status::Draft
+            && !memory.review_by.is_empty()
+            && let Some(days) = crate::retrieve::days_between(&memory.review_by, today)
+            && days < 0
+        {
+            findings.push(format!(
+                "{}: expired: draft past review_by {} ({} days ago)",
+                memory.uid, memory.review_by, -days
+            ));
+        }
+    }
+    findings
+}
+
+/// Native [#4 `MemoryHealth`] — returns [`crate::finding::Finding`] directly (D12 re-point).
+/// Each finding message is tagged with `Category::MemoryHealth` and the best-effort
+/// entity extracted from the memory uid.
+pub(crate) fn memory_health_findings_native(
+    root: &Path,
+    memories: &[Memory],
+    today: &str,
+) -> Vec<crate::finding::Finding> {
+    use crate::finding::{Category, Finding as DoctorFinding};
+    let raw = memory_health_findings(root, memories, today);
+    raw.into_iter()
+        .map(|msg| {
+            let entity = memories
+                .iter()
+                .find(|m| msg.starts_with(&format!("{}: ", m.uid)))
+                .map(|m| format!("MEM-{}", m.uid));
+            DoctorFinding {
+                category: Category::MemoryHealth,
+                entity,
+                message: msg,
+            }
+        })
+        .collect()
+}
+
 /// `doctrine memory validate [REF]` — run advisory validation checks on memories.
 /// Three checks: dangling relations, stale verification, draft expiry.
 /// Exit 0 if clean, 1 if any warnings. Never writes to disk.
@@ -3302,58 +3374,14 @@ pub(crate) fn run_validate(
         collect_all(&root)?
     };
 
-    let mut warning_count = 0;
+    let findings = memory_health_findings(&root, &memories, &today);
+    let warning_count = findings.len();
 
-    for memory in &memories {
-        // Check 1: Dangling relations
-        for relation in &memory.relations {
-            if validate_relation_target(&root, &relation.target).is_err() {
-                writeln!(
-                    writer,
-                    "{}: dangling: [[relation]] target \"{}\" not found",
-                    memory.uid, relation.target
-                )?;
-                warning_count += 1;
-            }
-        }
-
-        // Check 2: Stale verification
-        if !memory.anchor.verified_sha.is_empty()
-            && !memory.scope.paths.is_empty()
-            && let Some(commits_behind) = crate::git::commits_touching(
-                &root,
-                &memory.scope.paths,
-                &memory.anchor.verified_sha,
-                "HEAD",
-            )
-            && commits_behind > 0
-        {
-            writeln!(
-                writer,
-                "{}: stale: verified_sha {} commits behind HEAD on scoped paths",
-                memory.uid, commits_behind
-            )?;
-            warning_count += 1;
-        }
-
-        // Check 3: Draft expiry
-        if memory.status == Status::Draft
-            && !memory.review_by.is_empty()
-            && let Some(days) = crate::retrieve::days_between(&memory.review_by, &today)
-            && days < 0
-        {
-            writeln!(
-                writer,
-                "{}: expired: draft past review_by {} ({} days ago)",
-                memory.uid, memory.review_by, -days
-            )?;
-            warning_count += 1;
-        }
+    for finding in &findings {
+        writeln!(writer, "{finding}")?;
     }
 
     if warning_count > 0 {
-        // Would normally exit(1) but clippy disallows std::process::exit
-        // The caller can handle the exit code based on this error
         bail!("validation warnings found");
     }
     Ok(())

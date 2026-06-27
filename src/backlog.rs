@@ -2119,6 +2119,76 @@ fn render_overrides(
 }
 
 // ---------------------------------------------------------------------------
+// Lifecycle findings (PHASE-03 of SL-168)
+// ---------------------------------------------------------------------------
+
+use crate::finding::{Category, Finding};
+use crate::lifecycle::is_transition_terminal;
+use crate::relation::{RelationLabel, targets_for};
+
+/// Flag non-terminal backlog items whose linked slices are ALL terminal.
+///
+/// For each open (non-terminal) backlog item that links to at least one slice,
+/// check whether every linked slice has reached a terminal lifecycle status
+/// (`done` or `abandoned`). If so, emit a Warning finding — the item may be
+/// ready to close.
+///
+/// **≥1 guard (F2):** items with ZERO linked slices are skipped, preventing
+/// a vacuous-truth false positive on a slice-less item.
+pub(crate) fn lifecycle_findings(root: &Path) -> Vec<Finding> {
+    let Ok(items) = read_all(root) else {
+        return Vec::new();
+    };
+
+    // Read all slice statuses for lookup.
+    let slice_metas: std::collections::BTreeMap<u32, String> =
+        crate::meta::read_metas(&root.join(".doctrine/slice"), "slice", "SL")
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| (m.id, m.status))
+            .collect();
+
+    let mut findings = Vec::new();
+
+    for item in &items {
+        // Only flag non-terminal backlog items.
+        if item.status.is_terminal() {
+            continue;
+        }
+
+        let slice_refs = targets_for(&item.tier1, RelationLabel::Slices);
+
+        // ≥1 guard: skip items with no linked slices (F2).
+        if slice_refs.is_empty() {
+            continue;
+        }
+
+        // Check if ALL linked slices are terminal.
+        let all_terminal = slice_refs.iter().all(|ref_str| {
+            if let Some(id_str) = ref_str.strip_prefix("SL-")
+                && let Ok(id) = id_str.parse::<u32>()
+            {
+                return slice_metas
+                    .get(&id)
+                    .is_some_and(|s| is_transition_terminal(s));
+            }
+            // Unparseable or unknown ref → not terminal (conservative).
+            false
+        });
+
+        if all_terminal {
+            findings.push(Finding {
+                category: Category::Lifecycle,
+                entity: Some(item.kind.canonical_id(item.id)),
+                message: format!("all linked slices terminal: {}", slice_refs.join(", ")),
+            });
+        }
+    }
+
+    findings
+}
+
+// ---------------------------------------------------------------------------
 // Test support (SL-026 PHASE-02)
 // ---------------------------------------------------------------------------
 
@@ -5033,5 +5103,145 @@ tags = []
         assert_eq!(all_lines.len(), 4);
         assert!(all_lines[0].contains("issue/001/backlog-001.toml"));
         assert!(all_lines[2].contains("improvement/001/backlog-001.toml"));
+    }
+
+    // ------------------------------------------------------------------
+    // Lifecycle findings tests (PHASE-03 of SL-168)
+    // ------------------------------------------------------------------
+
+    /// Seed a real backlog item with tier1 slices links.
+    fn seed_backlog_item(root: &Path, kind: ItemKind, id: u32, status: Status, slices: &[&str]) {
+        let name = format!("{id:03}");
+        let dir = root.join(kind.kind().dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut toml = format!(
+            "id = {id}\nslug = \"it{id:03}\"\ntitle = \"Item {id}\"\n\
+             kind = \"{}\"\nstatus = \"{}\"\n\
+             resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n",
+            kind.as_str(),
+            status.as_str(),
+        );
+        for s in slices {
+            toml.push_str(&format!(
+                "[[relation]]\nlabel = \"slices\"\ntarget = \"{s}\"\n"
+            ));
+        }
+        std::fs::write(dir.join(format!("backlog-{name}.toml")), toml).unwrap();
+        std::fs::write(
+            dir.join(format!("backlog-{name}.md")),
+            format!("# {}\n", kind.canonical_id(id)),
+        )
+        .unwrap();
+    }
+
+    /// Seed a real slice entity with the given status.
+    fn seed_slice_entity(root: &Path, id: u32, status: &str) {
+        let name = format!("{id:03}");
+        let dir = root.join(".doctrine/slice").join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("slice-{name}.toml")),
+            format!(
+                "id = {id}\nslug = \"s{id:03}\"\ntitle = \"Slice {id}\"\n\
+                 status = \"{status}\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("slice-{name}.md")), "scope\n").unwrap();
+    }
+
+    #[test]
+    fn lifecycle_done_only_slices_flag() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_backlog_item(root, ItemKind::Issue, 1, Status::Open, &["SL-001"]);
+        seed_slice_entity(root, 1, "done");
+        let findings = lifecycle_findings(root);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].category, Category::Lifecycle);
+        assert!(findings[0].entity.as_deref() == Some("ISS-001"));
+        assert!(findings[0].message.contains("SL-001"));
+    }
+
+    #[test]
+    fn lifecycle_abandoned_only_slices_flag() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_backlog_item(root, ItemKind::Issue, 1, Status::Open, &["SL-001"]);
+        seed_slice_entity(root, 1, "abandoned");
+        let findings = lifecycle_findings(root);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].category, Category::Lifecycle);
+    }
+
+    #[test]
+    fn lifecycle_mixed_terminal_flags() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_backlog_item(
+            root,
+            ItemKind::Issue,
+            1,
+            Status::Open,
+            &["SL-001", "SL-002"],
+        );
+        seed_slice_entity(root, 1, "done");
+        seed_slice_entity(root, 2, "abandoned");
+        let findings = lifecycle_findings(root);
+        assert_eq!(findings.len(), 1, "all terminal → flag");
+    }
+
+    #[test]
+    fn lifecycle_live_slice_no_flag() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_backlog_item(
+            root,
+            ItemKind::Issue,
+            1,
+            Status::Open,
+            &["SL-001", "SL-002"],
+        );
+        seed_slice_entity(root, 1, "done");
+        seed_slice_entity(root, 2, "started"); // live
+        let findings = lifecycle_findings(root);
+        assert!(findings.is_empty(), "live slice → no flag");
+    }
+
+    #[test]
+    fn lifecycle_sliceless_open_item_no_flag() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // Item with zero linked slices.
+        seed_backlog_item(root, ItemKind::Issue, 1, Status::Open, &[]);
+        let findings = lifecycle_findings(root);
+        assert!(
+            findings.is_empty(),
+            "≥1 guard: slice-less item must not flag"
+        );
+    }
+
+    #[test]
+    fn lifecycle_closed_item_no_flag() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // Closed item with terminal slices — must NOT flag.
+        seed_backlog_item(root, ItemKind::Issue, 1, Status::Closed, &["SL-001"]);
+        seed_slice_entity(root, 1, "done");
+        let findings = lifecycle_findings(root);
+        assert!(
+            findings.is_empty(),
+            "closed item must not flag (open predicate)"
+        );
+    }
+
+    #[test]
+    fn lifecycle_resolved_item_no_flag() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_backlog_item(root, ItemKind::Issue, 1, Status::Resolved, &["SL-001"]);
+        seed_slice_entity(root, 1, "done");
+        let findings = lifecycle_findings(root);
+        assert!(findings.is_empty(), "resolved item must not flag");
     }
 }
