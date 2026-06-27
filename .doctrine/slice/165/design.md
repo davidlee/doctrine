@@ -91,14 +91,20 @@ check_provenance(journal, candidates, slice3, role, source_ref):
 
 trace_candidate_provenance(ref, budget):
   budget > 0                       else bail "provenance chain too deep / cyclic"
-  row = candidates.rows.find(r.target_ref == ref)
-                                   else bail "source candidate {ref}: no recorded row"
+  row = exactly_one(candidates.rows where target_ref == ref)   # F1: count, not first-match
+                                   else bail "no recorded row" / "ambiguous candidate row for {ref}"
   row.status == Created            else bail "source candidate {ref} is {status:?}, not clean"
   next = row.source_ref
-  if   is_journaled_evidence_ref(next): → journaled gate on next (Verified)
+  if   is_journaled_evidence_ref(next): → FULL journaled gate (Verified + phase-hole)  # F3
   elif is_candidate_ref(next):          → trace_candidate_provenance(next, budget-1)
   else:                                 → bail "source candidate built from non-evidence {next}"
 ```
+
+The journaled base-case routes through the **existing** `check_provenance` journaled
+body — Verified-row check **and** the `phase/<N>-NN` earlier-failed-hole check — so a
+candidate tracing to a phase ref inherits the full gate, not a weakened subset (F3).
+Row match is **count-exact, fail-closed** on duplicates (F1), mirroring
+`trunk_integration`'s discipline (`ledger.rs:464` — "count, never first-match").
 
 ### 5.2 Interfaces & Contracts
 
@@ -146,9 +152,22 @@ No fold, no `branch -D review/<N>`, no hand-FF.
   review_surface / scratch keep the journaled-only refusal.
 - **INV-3 (status).** Only `CandidateStatus::Created` candidates qualify; a
   `Conflicted` (parked-at-base) candidate is refused. Fix-now commits do not mutate
-  `status`, so a repaired review_surface stays `Created`.
+  `status`, so a repaired review_surface stays `Created`. **Known v1 limitation (F2):**
+  a `--worktree` candidate that hit a conflict and was *hand-resolved + committed*
+  carries a valid tip but `status == Conflicted`, so it is refused — that hand-merge
+  has weaker provenance than a clean candidate; v1 requires re-creating it clean. See
+  OQ-4.
 - **INV-4 (termination).** Bounded `budget` (constant, 16) + recorded-chain walk
   cannot loop the gate; over-budget / cycle → refuse.
+- **INV-5 (count-exact, F1).** The `target_ref → row` resolution is fail-closed on
+  duplicates (exactly-one), never first-match.
+- **A-1 (lineage ≠ content review, F3).** The trace proves the source candidate's
+  *lineage root* is Verified journaled evidence. It does **not** prove every commit on
+  the source tip is reviewed — fix-now commits, and commits inherited through a traced
+  `scratch`/`experiment` candidate, ride above the recorded `merge_oid` and are
+  *untracked by provenance*. That content-trust is `admit`'s I3 (descends-from-merge)
+  **plus** the governing RV review — the same split the existing fix-now model already
+  relies on. Provenance gates lineage; review gates content.
 - **Edge:** chain hop to a non-evidence, non-candidate ref → refuse. Missing row →
   refuse. Superseded candidate row still resolvable by `target_ref`; status gate
   decides admissibility.
@@ -159,6 +178,8 @@ No fold, no `branch -D review/<N>`, no hand-FF.
 - **OQ-2.** Exact REQ-316 narrowed wording — settled at REV authoring (reconcile).
 - **OQ-3.** Does REQ-317's process-owner note (SPEC-021) need a companion tweak?
   Flag for reconcile; likely no (process guard is IMP-130's mandate).
+- **OQ-4 (F2).** Should a hand-resolved `Conflicted` candidate ever qualify as a
+  close_target source? v1: no (re-create clean). Revisit only if it bites in practice.
 
 ## 7. Decisions, Rationale & Alternatives
 

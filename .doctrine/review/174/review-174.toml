@@ -1,0 +1,40 @@
+id    = 174
+slug  = "sl-164-reconciliation-mcp-memory-write-tools-onboarding"
+title = "SL-164 reconciliation: MCP memory write tools + onboarding"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-164"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "minor"
+title = "Conformance: 3 undeclared touch-paths missing from design-target selectors"
+detail = """
+`doctrine slice conformance 164` reports 3 undeclared paths:
+- `install/boot-footer.md` — PHASE-03 boot footer update
+- `src/boot.rs` — PHASE-01 added `&mut io::stdout()` to 4 `run_record` call sites (2619, 2876, 2965, 3122)
+- `src/retrieve.rs` — PHASE-01 added `&mut io::stdout()` to `run_record` call site (2945)
+
+All three are legitimate touches documented in the design's impact table. The design-target selectors should be updated to include them."""
+disposition = "fix-now"
+response = "Add `install/boot-footer.md`, `src/boot.rs`, and `src/retrieve.rs` to the slice's design-target selectors. All three were documented in the design's impact table — the selectors lagged."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "Conformance: `.doctrine/boot-footer.md` declared as design-target but not touched"
+detail = "The design declared `.doctrine/boot-footer.md` as a design-target selector. But the actual authored source that was edited is `install/boot-footer.md` (the install-time source, which gets copied to `.doctrine/boot-footer.md` by `doctrine install`). The selector should point at the actual authored path: `install/boot-footer.md`."
+disposition = "fix-now"
+response = "Replace `.doctrine/boot-footer.md` selector with `install/boot-footer.md` — the install-time authored source that was actually edited."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

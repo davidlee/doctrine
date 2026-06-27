@@ -1,7 +1,7 @@
 id = 164
 slug = "mcp-memory-write-tools"
 title = "Wire memory write verbs into MCP server tools (record, verify, tag, status, edit)"
-status = "ready"
+status = "audit"
 created = "2026-06-27"
 updated = "2026-06-27"
 tags = []
