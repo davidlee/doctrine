@@ -1,0 +1,52 @@
+id    = 172
+slug  = "reconciliation-review-of-sl-159"
+title = "reconciliation review of SL-159"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-159"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Provenance closed enum lacks the mandated KNOWN drift-canary + VT"
+detail = "design.md §5.3 requires 'new closed enum Provenance ... + KNOWN drift-canary, mirroring Basis' and §9 lists 'Provenance known-set drift canary (new)' as a VT. knowledge.rs (review/159) defines Provenance with as_str but NO KNOWN const, NO clap::ValueEnum derive, and NO provenance_known_set_matches_variants test — unlike Basis/ConstraintSource/Confidence which all carry KNOWN + a VT-3 canary. Feature works + round-trips (gate green), but the mandated drift protection is absent: a future Provenance variant edit won't be caught. Acceptance criterion (VT-3 family) unmet."
+disposition = "fix-now"
+response = "Fixed on candidate/159/review-001 @830cd857: added Provenance KNOWN const + clap::ValueEnum derive + provenance_known_set_matches_variants VT-3 canary, mirroring Basis/ConstraintSource/Confidence. Gate green."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "validate_matrix has an unreachable Hypothesis arm, contradicting D7 (HYP not supersedable)"
+detail = "supersede.rs:supersede_policy returns None for HYP (D7), so commands/supersede.rs errors before validate_matrix runs. The added '(Hypothesis, Hypothesis|Decision|Constraint|Assumption)' matrix arm can never match at runtime — dead code that contradicts the design intent that HYP refuses supersession. EVD arm is correct (EVD is supersedable). Remove the Hypothesis arm."
+disposition = "fix-now"
+response = "Fixed on candidate/159/review-001 @830cd857: removed the unreachable Hypothesis arm from validate_matrix + unused import; added a comment noting HYP's supersede_policy=None (D7) makes it unreachable. EVD arm retained. Gate green."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "src/commands/superserde.rs: pre-existing dead-duplicate file received a stray SL-159 comment edit (undeclared touch)"
+detail = "conformance flags src/commands/superserde.rs as undeclared. It is a byte-near duplicate of src/commands/supersede.rs (only rustfmt line-wrap differs), pre-existing on main (introduced commit 98c75027 'wip'), NOT declared as a module in commands/mod.rs (only 'mod supersede'), and referenced nowhere — dead orphan. SL-159's four->six comment edit sprayed onto it too. The edit is inert (dead file), but the orphan is debt: a future grep/rename hits a phantom. Pre-existing, out of SL-159 design scope."
+disposition = "tolerated"
+response = "Pre-existing dead orphan (on main since 98c75027), out of SL-159 design scope. The stray four->six comment edit is inert (file is not a module, referenced nowhere). Tolerated for this slice; orphan deletion tracked as CHR-028."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Dispatch candidate worktree lacks generated web/map/dist/ → spurious gate failure"
+detail = "A fresh dispatch candidate worktree (cand-159-review-001) fails 'just check' with E0599 Assets::get not found in src/map_server/assets.rs — rust_embed's #[folder=web/map/dist/] is empty because web/map/dist/ is gitignored (.gitignore:71) generated npm output absent in a fresh fork. Copying dist/ from the main tree made the gate pass clean (exit 0). Not an SL-159 defect, but dispatch/worktree provisioning does not stage generated embed assets, so any in-worktree gate is unreliable for crates with RustEmbed folders. Infra gap."
+disposition = "follow-up"
+response = "Environmental dispatch/worktree infra gap, not an SL-159 code defect — fresh fork lacks gitignored generated web/map/dist/. Captured as IMP-187. Audit gate was validated by staging dist/ from the main tree (exit 0)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
