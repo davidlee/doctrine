@@ -27,8 +27,7 @@ pub(crate) const REFUSE_ON_TRUNK: &str = "refused: HEAD is on the integration bu
 
 /// Refusal prefix for g2 — a `dispatch setup` whose fork base predates the
 /// authored `.doctrine` corpus the authoring branch holds (SL-166 design §5.2).
-/// Consumed in PHASE-03.
-#[expect(dead_code, reason = "consumed by SL-166 PHASE-03 (g2)")]
+/// Consumed by `worktree::coordinate::ensure_base_corpus_fresh` (PHASE-03).
 pub(crate) const BASE_CORPUS_STALE: &str =
     "refused: fork base predates the authored .doctrine corpus";
 
