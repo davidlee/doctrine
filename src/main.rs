@@ -12,6 +12,7 @@ mod conduct;
 mod conformance;
 mod contentset;
 mod corpus;
+mod corpus_guard;
 mod coverage;
 mod coverage_scan;
 mod coverage_store;

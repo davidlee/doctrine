@@ -23,6 +23,7 @@ clock = "leaf"              # out=0: std-only time helpers
 conduct = "leaf"            # out=0: conduct.toml defaults — pure constants
 conformance = "leaf"        # out=0: path-conformance set algebra — pure (SL-147 PHASE-03)
 contentset = "leaf"         # out=0: content set wrapper — pure library
+corpus_guard = "leaf"       # out=0: SL-166 corpus-loss guard tokens + pathspec — pure constants
 dep_seq = "leaf"            # out=0: dependency-sequence data types — pure
 dispatch_config = "leaf"    # out=0: dispatch config defaults — pure
 dtoml = "leaf"              # → estimate, value, conduct, dispatch_config, install_config, verify; verify→coverage is engine but dtoml is a TOML wrapper (pure seam); baselined below

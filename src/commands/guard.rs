@@ -318,7 +318,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         Command::Link { .. } => Write("link"),
         Command::Config { command } => match command {
             ConfigCommand::Set { .. } | ConfigCommand::Unset { .. } => Write("config"),
-            ConfigCommand::Show { .. } | ConfigCommand::Get { .. } => Read,
+            ConfigCommand::Show { .. } | ConfigCommand::Get { .. } | ConfigCommand::Validate => {
+                Read
+            }
         },
         Command::Unlink { .. } => Write("unlink"),
         // Author a dep/seq edge into `[relationships]` — authored writes (SL-060 §5.4).

@@ -90,6 +90,12 @@ pub(crate) enum ConfigCommand {
     Get(ConfigGetArgs),
     /// Remove a configuration value
     Unset(ConfigUnsetArgs),
+    /// Validate the `[dispatch]` posture in doctrine.toml (SL-166).
+    ///
+    /// Refuses a buffered-trunk posture whose `authoring-branch` equals
+    /// `deliver_to` (design §8 R4). Inert when the posture is off. The
+    /// set-but-unresolvable-ref check (g2) arrives in a later phase.
+    Validate,
 }
 
 pub(crate) struct ConfigPath {
@@ -499,6 +505,17 @@ pub(crate) fn run_config_unset(root: &Path, args: &ConfigUnsetArgs) -> Result<()
     Ok(())
 }
 
+/// `doctrine config validate` — static `[dispatch]` posture coherence check
+/// (SL-166 design §8 R4). Loads the resolved config and refuses a posture whose
+/// `authoring-branch` equals `deliver_to`. Inert (Ok) when the posture is off.
+pub(crate) fn run_config_validate(root: &Path) -> Result<()> {
+    crate::dtoml::load_doctrine_toml(root)?
+        .dispatch
+        .validate_posture()?;
+    writeln!(std::io::stdout().lock(), "config: posture ok")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -668,5 +685,38 @@ mod tests {
 
         // 4. Unset non-existent (idempotent)
         run_config_unset(root, &unset_args2).unwrap();
+    }
+
+    // --- config validate (SL-166 PHASE-01) ---
+
+    fn write_doctrine_toml(body: &str) -> tempfile::TempDir {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".doctrine")).unwrap();
+        fs::write(dir.path().join(crate::dtoml::DOCTRINE_TOML), body).unwrap();
+        dir
+    }
+
+    #[test]
+    fn config_validate_rejects_authoring_equals_deliver_to() {
+        // deliver-to defaults to refs/heads/main; authoring-branch set equal.
+        let dir = write_doctrine_toml("[dispatch]\nauthoring-branch = \"refs/heads/main\"\n");
+        let err = run_config_validate(dir.path()).unwrap_err().to_string();
+        assert!(
+            err.contains("authoring-branch") && err.contains("deliver-to"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn config_validate_ok_when_posture_differs() {
+        let dir = write_doctrine_toml("[dispatch]\nauthoring-branch = \"refs/heads/edge\"\n");
+        run_config_validate(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn config_validate_ok_when_posture_unset() {
+        // No doctrine.toml at all → defaults → posture off → inert.
+        let dir = tempdir().unwrap();
+        run_config_validate(dir.path()).unwrap();
     }
 }

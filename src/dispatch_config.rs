@@ -47,6 +47,14 @@ pub(crate) struct DispatchConfig {
     /// commit-ish to fork *from*.
     #[serde(default = "default_deliver_to")]
     pub(crate) deliver_to: String,
+    /// The authoring branch — the source-of-truth ref where `.doctrine` content
+    /// is authored, ahead of `deliver_to`. Its presence declares the
+    /// buffered-trunk posture: `deliver_to` is a non-checked-out integration
+    /// buffer, promoted from this ref. Unset ⇒ single-branch posture; g1/g2
+    /// inert (INV-2). NOT the fork-base resolver (ADR-006 D3 ladder /
+    /// `DOCTRINE_TRUNK_REF`). SL-166 design §5.2.
+    #[serde(default)]
+    pub(crate) authoring_branch: Option<String>,
 }
 
 impl Default for DispatchConfig {
@@ -55,7 +63,26 @@ impl Default for DispatchConfig {
             preferred_subprocess_harness: SubprocessHarness::default(),
             claude_force_subprocess_dispatch: false,
             deliver_to: default_deliver_to(),
+            authoring_branch: None,
         }
+    }
+}
+
+impl DispatchConfig {
+    /// Static posture coherence check for `doctrine config validate` (SL-166
+    /// design §8 R4). Refuses a buffered-trunk posture whose `authoring-branch`
+    /// IS the integration buffer `deliver_to` — sitting on the buffer is exactly
+    /// what the posture forbids (g1). Inert when the posture is off
+    /// (`authoring-branch` absent). Pure; the set-but-unresolvable-ref check
+    /// (needs git) is g2's, added in SL-166 PHASE-03.
+    pub(crate) fn validate_posture(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.authoring_branch.as_deref() != Some(self.deliver_to.as_str()),
+            "config: authoring-branch must differ from deliver-to ({}) — the \
+             posture forbids advancing/sitting on the integration buffer",
+            self.deliver_to
+        );
+        Ok(())
     }
 }
 
@@ -148,5 +175,63 @@ mod tests {
     fn deliver_to_default_matches_serde_absent() {
         let absent: DispatchConfig = toml::from_str("").unwrap();
         assert_eq!(DispatchConfig::default().deliver_to, absent.deliver_to);
+    }
+
+    // --- authoring-branch / posture (SL-166 PHASE-01) ---
+
+    #[test]
+    fn parse_authoring_branch_some() {
+        let doc: DispatchConfig =
+            toml::from_str("authoring-branch = \"refs/heads/edge\"\n").unwrap();
+        assert_eq!(doc.authoring_branch.as_deref(), Some("refs/heads/edge"));
+    }
+
+    #[test]
+    fn authoring_branch_defaults_none() {
+        // Absent table and absent key both deserialize to None; the Rust Default
+        // agrees (EX-1).
+        assert_eq!(DispatchConfig::default().authoring_branch, None);
+        let empty: DispatchConfig = toml::from_str("").unwrap();
+        assert_eq!(empty.authoring_branch, None);
+        // [dispatch] present but key absent → None.
+        let other: DispatchConfig = toml::from_str("deliver-to = \"refs/heads/main\"\n").unwrap();
+        assert_eq!(other.authoring_branch, None);
+    }
+
+    #[test]
+    fn authoring_branch_default_matches_serde_absent() {
+        let absent: DispatchConfig = toml::from_str("").unwrap();
+        assert_eq!(
+            DispatchConfig::default().authoring_branch,
+            absent.authoring_branch
+        );
+    }
+
+    #[test]
+    fn validate_posture_rejects_authoring_equals_deliver_to() {
+        // R4: a posture whose authoring ref IS the integration buffer is a
+        // misconfiguration — `config validate` must refuse it.
+        let doc: DispatchConfig =
+            toml::from_str("authoring-branch = \"refs/heads/main\"\n").unwrap();
+        assert_eq!(doc.deliver_to, "refs/heads/main");
+        let err = doc.validate_posture().unwrap_err().to_string();
+        assert!(
+            err.contains("authoring-branch") && err.contains("deliver-to"),
+            "error names both refs: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_posture_ok_when_differs() {
+        let doc: DispatchConfig =
+            toml::from_str("authoring-branch = \"refs/heads/edge\"\n").unwrap();
+        assert!(doc.validate_posture().is_ok());
+    }
+
+    #[test]
+    fn validate_posture_ok_when_unset() {
+        // Posture off (key absent) ⇒ inert, no error.
+        let doc: DispatchConfig = toml::from_str("").unwrap();
+        assert!(doc.validate_posture().is_ok());
     }
 }
