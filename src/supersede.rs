@@ -54,7 +54,7 @@ pub(crate) fn supersede_policy(kind: &Kind) -> Option<SupersedePolicy> {
             carveout_field: "superseded_by",
             superseded_status: "obsolete",
         }),
-        "DEC" | "CON" => Some(SupersedePolicy {
+        "DEC" | "CON" | "EVD" => Some(SupersedePolicy {
             storage: StorageTarget::TypedArray {
                 field: "supersedes",
             },
@@ -73,15 +73,19 @@ pub(crate) fn supersede_policy(kind: &Kind) -> Option<SupersedePolicy> {
 /// - OLD decision → decision, constraint
 /// - OLD constraint → constraint, decision
 pub(crate) fn validate_matrix(new: RecordKind, old: RecordKind) -> bool {
-    use RecordKind::{Assumption, Constraint, Decision, Question};
+    use RecordKind::{Assumption, Constraint, Decision, Evidence, Question};
     #[expect(clippy::unnested_or_patterns, reason = "clear matrix representation")]
     {
+        // HYP is intentionally absent: `supersede_policy` returns `None` for HYP
+        // (D7 — a refuted hypothesis is terminal, not supersedable), so the
+        // command rejects HYP as NEW or OLD before this matrix is consulted.
         matches!(
             (old, new),
             (Assumption, Assumption | Decision | Constraint)
                 | (Question, Question | Decision | Constraint | Assumption)
                 | (Decision, Decision | Constraint)
                 | (Constraint, Constraint | Decision)
+                | (Evidence, Evidence | Decision | Constraint)
         )
     }
 }
@@ -181,6 +185,7 @@ mod tests {
             ("DEC", "superseded"),
             ("QUE", "obsolete"),
             ("CON", "superseded"),
+            ("EVD", "superseded"),
         ] {
             let kind = governance_kind(prefix);
             let policy = supersede_policy(kind).unwrap();

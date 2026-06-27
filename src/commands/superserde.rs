@@ -24,7 +24,7 @@ fn resolve_supersede_path(
 /// `doctrine supersede <NEW> <OLD>` (SL-062 §5.4) — the transactional, ADR-first
 /// supersession verb. One parse-once / hold-both / write-once transaction composing
 /// Cross-kind supersession for records + governance docs (`ADR` stays same-kind;
-/// the four record kinds `ASM`/`DEC`/`QUE`/`CON` ride the §6 matrix). Composes
+/// the six record kinds `ASM`/`DEC`/`QUE`/`CON`/`EVD`/`HYP` ride the §6 matrix). Composes
 /// the PHASE-02 pure cores (`dep_seq::apply_string_append` + `dep_seq::apply_status`)
 /// over docs parsed once and held in scope: `NEW.supersedes += OLD`,
 /// `OLD.superseded_by += NEW` (the single sanctioned reverse carve-out, ADR-004 §5),

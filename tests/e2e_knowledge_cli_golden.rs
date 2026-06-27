@@ -3,7 +3,7 @@
 //! Pins `knowledge new` / `show` / `list` / `status` at the CLI surface (byte-exact
 //! stdout + JSON + error text) over the BUILT binary — the
 //! `mem.pattern.testing.black-box-cli-golden` idiom, mirroring `e2e_adr_cli_golden.rs`.
-//! The four kinds share one kind-blind engine but diverge in prefix, status vocabulary,
+//! The six kinds share one kind-blind engine but diverge in prefix, status vocabulary,
 //! and typed `[facet]`; these goldens pin the read/write surface and the FR-002/FR-004
 //! prefix→kind routing + foreign-kind refuse.
 //!
@@ -188,7 +188,7 @@ fn knowledge_show_json_is_byte_exact() {
     // (`write!`, not `writeln!`). Absent optional facet fields render as `null`.
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"knowledge\",\n  \"knowledge\": {\n    \"body\": \"# body\\n\",\n    \"created\": \"2026-01-02\",\n    \"evidence\": {\n      \"contradicts\": [],\n      \"notes\": [\n        \"see the audit\"\n      ],\n      \"supports\": [\n        \"DEC-005-C\"\n      ]\n    },\n    \"facet\": {\n      \"basis\": \"observation\",\n      \"claim\": \"tokens expire in 1h\",\n      \"confidence\": \"high\",\n      \"invalidated_by\": null,\n      \"invalidated_on\": null,\n      \"validated_by\": null,\n      \"validated_on\": null,\n      \"validation_plan\": \"probe the IdP\"\n    },\n    \"id\": \"ASM-007\",\n    \"record_kind\": \"assumption\",\n    \"relationships\": {\n      \"governed_by\": [],\n      \"shapes\": [],\n      \"spawns\": []\n    },\n    \"slug\": \"token-expiry\",\n    \"status\": \"testing\",\n    \"tags\": [\n      \"auth\",\n      \"security\"\n    ],\n    \"title\": \"Token expiry\",\n    \"updated\": \"2026-01-03\"\n  }\n}"
+        "{\n  \"kind\": \"knowledge\",\n  \"knowledge\": {\n    \"body\": \"# body\\n\",\n    \"created\": \"2026-01-02\",\n    \"evidence\": {\n      \"contradicts\": [],\n      \"notes\": [\n        \"see the audit\"\n      ],\n      \"supports\": [\n        \"DEC-005-C\"\n      ]\n    },\n    \"facet\": {\n      \"basis\": \"observation\",\n      \"claim\": \"tokens expire in 1h\",\n      \"confidence\": \"high\",\n      \"invalidated_by\": null,\n      \"invalidated_on\": null,\n      \"validated_by\": null,\n      \"validated_on\": null,\n      \"validation_plan\": \"probe the IdP\"\n    },\n    \"id\": \"ASM-007\",\n    \"record_kind\": \"assumption\",\n    \"relationships\": {\n      \"disputes\": [],\n      \"governed_by\": [],\n      \"shapes\": [],\n      \"spawns\": [],\n      \"supports\": []\n    },\n    \"slug\": \"token-expiry\",\n    \"status\": \"testing\",\n    \"tags\": [\n      \"auth\",\n      \"security\"\n    ],\n    \"title\": \"Token expiry\",\n    \"updated\": \"2026-01-03\"\n  }\n}"
     );
 }
 
@@ -196,7 +196,7 @@ fn knowledge_show_json_is_byte_exact() {
 
 #[test]
 fn knowledge_show_routes_each_prefix_to_its_kind() {
-    // FR-004: ASM/DEC/QUE/CON each route `show` to the right tree. The four counters
+    // FR-004: ASM/DEC/QUE/CON/EVD/HYP each route `show` to the right tree. The six counters
     // are independent — id 1 in each kind is a distinct record.
     let dir = tmp();
     seed(
@@ -223,12 +223,26 @@ fn knowledge_show_routes_each_prefix_to_its_kind() {
         1,
         &minimal_toml(1, "c", "A C", "constraint", "active"),
     );
+    seed(
+        dir.path(),
+        "evidence",
+        1,
+        &minimal_toml(1, "e", "An E", "evidence", "captured"),
+    );
+    seed(
+        dir.path(),
+        "hypothesis",
+        1,
+        &minimal_toml(1, "h", "A H", "hypothesis", "proposed"),
+    );
 
     for (reference, kind, status) in [
         ("ASM-001", "assumption", "held"),
         ("DEC-001", "decision", "accepted"),
         ("QUE-001", "question", "open"),
         ("CON-001", "constraint", "active"),
+        ("EVD-001", "evidence", "captured"),
+        ("HYP-001", "hypothesis", "proposed"),
     ] {
         let out = run(dir.path(), &["show", reference]);
         assert!(out.status.success(), "{reference} stderr: {}", stderr(&out));
@@ -263,7 +277,7 @@ fn knowledge_show_unknown_prefix_errors() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: unknown record prefix `REQ` in `REQ-001` (expected ASM/DEC/QUE/CON)\n"
+        "Error: unknown record prefix `REQ` in `REQ-001` (expected ASM/DEC/QUE/CON/EVD/HYP)\n"
     );
 }
 
