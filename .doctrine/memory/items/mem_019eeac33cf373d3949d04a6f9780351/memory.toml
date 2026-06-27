@@ -52,3 +52,7 @@ target = "mem_019eec3285e471c287a0c3d74c235b25"
 label = "related"
 target = "CHR-020"
 
+[[relation]]
+label = "related"
+target = "RFC-011"
+
