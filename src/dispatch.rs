@@ -2138,7 +2138,8 @@ fn plan_phases(
             .strip_prefix("PHASE-")
             .unwrap_or(&boundary.phase);
         let code_tree = tree_of(root, &boundary.code_end_oid)?;
-        let phase_tree = git::filter_tree(root, &code_tree, &[".doctrine"])?;
+        let phase_tree =
+            git::filter_tree(root, &code_tree, &[crate::corpus_guard::DOCTRINE_PATHSPEC])?;
         let phase_commit =
             git::commit_tree(root, &phase_tree, &parent, &format!("phase({slice3}-{nn})"))?;
         planned.push(Planned {

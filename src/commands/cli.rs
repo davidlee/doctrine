@@ -1206,6 +1206,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 ConfigCommand::Unset(ref args) => {
                     crate::commands::config::run_config_unset(&root, args)
                 }
+                ConfigCommand::Validate => crate::commands::config::run_config_validate(&root),
             }
         }
         Command::Unlink {
