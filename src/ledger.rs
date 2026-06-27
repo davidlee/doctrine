@@ -51,6 +51,11 @@ pub(crate) enum LedgerStatus {
 pub(crate) struct Journal {
     #[serde(default, rename = "row")]
     pub rows: Vec<JournalRow>,
+    /// Operator g3 corpus-clobber allowlist recorded at integrate (SL-166 EX-4):
+    /// the `.doctrine/**` paths the orchestrator waved an advance through, an
+    /// audit trail on the committed journal. Call-global across both legs (§10).
+    #[serde(default)]
+    pub allowed_clobbers: Vec<String>,
 }
 
 /// One CAS projection row. The compare-and-swap is the native `update-ref
@@ -618,6 +623,7 @@ mod tests {
                 applied_new_oid: String::new(),
                 status: LedgerStatus::Pending,
             }],
+            allowed_clobbers: vec![".doctrine/keepme.toml".into()],
         };
         let text = journal.to_toml().expect("serialize");
         // Pin the on-disk vocab the downstream stages key on.
@@ -631,6 +637,8 @@ mod tests {
             text.contains("status = \"pending\""),
             "lowercase token: {text}"
         );
+        // SL-166 EX-4: the g3 allowlist audit trail round-trips on the journal.
+        assert!(text.contains("allowed_clobbers ="), "{text}");
         assert_eq!(Journal::parse(&text).expect("parse"), journal);
     }
 

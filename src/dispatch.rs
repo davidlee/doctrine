@@ -24,6 +24,7 @@ use anyhow::{Context as _, bail};
 use clap::Subcommand;
 
 use crate::boundary::{BoundaryRow, Provenance};
+use crate::corpus_guard;
 use crate::git::{self, MergeTree, RefCas, ZERO_OID};
 use crate::ledger::{
     Admission, Boundaries, CandidateKind, CandidatePayload, CandidateRole, CandidateRow,
@@ -73,6 +74,13 @@ pub(crate) enum DispatchCommand {
         /// bundle (e.g. `refs/heads/edge`). Absent ⇒ no aggregate written.
         #[arg(long, requires = "integrate")]
         edge: Option<String>,
+
+        /// Stage-2 g3 escape (SL-166): allow the advance to delete/revert this
+        /// authored `.doctrine/**` path even though the slice did not author the
+        /// change. Repeatable; applies globally across the `--trunk`/`--edge` legs.
+        /// Absent for a clobbered path ⇒ the advance is refused (fail-closed).
+        #[arg(long = "allow-corpus-clobber", requires = "integrate")]
+        allow_corpus_clobber: Vec<String>,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -311,6 +319,7 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
             show_journal_trunk_oid,
             trunk,
             edge,
+            allow_corpus_clobber,
             path,
             ..
         } => {
@@ -323,7 +332,8 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
                 // explicit `--trunk` still wins. `--integrate` is unchanged.
                 run_show_journal_trunk_oid(path, slice, trunk.as_deref())
             } else if integrate {
-                run_integrate(path, slice, trunk.as_deref(), edge.as_deref())
+                let allow: BTreeSet<String> = allow_corpus_clobber.into_iter().collect();
+                run_integrate(path, slice, trunk.as_deref(), edge.as_deref(), &allow)
             } else {
                 run_prepare_review(path, slice)
             }
@@ -575,9 +585,10 @@ pub(crate) fn run_integrate(
     slice: u32,
     trunk: Option<&str>,
     edge: Option<&str>,
+    allow: &BTreeSet<String>,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
-    integrate(&root, slice, trunk, edge)
+    integrate(&root, slice, trunk, edge, allow)
 }
 
 /// CLI entry — funnel-time recording: append a per-phase code boundary to
@@ -854,8 +865,10 @@ fn trace_candidate_provenance<'a>(
         row.status
     );
     anyhow::ensure!(
-        matches!(row.role, CandidateRole::ReviewSurface | CandidateRole::CloseTarget)
-            && row.kind == CandidateKind::Audit,
+        matches!(
+            row.role,
+            CandidateRole::ReviewSurface | CandidateRole::CloseTarget
+        ) && row.kind == CandidateKind::Audit,
         "candidate create: source candidate {ref_name} is role={:?}/kind={:?} — \
          only an audit review_surface (or chained close_target) may source a close_target",
         row.role,
@@ -1053,8 +1066,7 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
     let source_ref = resolve_source_ref(req, &slice3)?;
     let journal = read_ledger::<Journal>(root, &coord_ref, &slice3, "journal.toml")?;
     let mut ledger = read_candidates(root, req.slice)?;
-    let matched_row =
-        check_provenance(&journal, &ledger, &slice3, req.role, &source_ref)?;
+    let matched_row = check_provenance(&journal, &ledger, &slice3, req.role, &source_ref)?;
 
     // --- resolve source + base oids (the journal proved the source verified) -
     let source_oid = resolve_commit(root, &source_ref)?
@@ -1860,6 +1872,7 @@ fn integrate(
     slice: u32,
     trunk: Option<&str>,
     edge: Option<&str>,
+    allow: &BTreeSet<String>,
 ) -> anyhow::Result<()> {
     let slice3 = format!("{slice:03}");
     let coord_ref = format!("refs/heads/dispatch/{slice3}");
@@ -1920,9 +1933,15 @@ fn integrate(
         }
     }
 
+    // --- record the operator g3 corpus-clobber allowlist on the committed journal
+    //     (SL-166 EX-4): call-global across both legs (§10), an audit trail of
+    //     what the orchestrator waved through. Empty by default ⇒ g3 fail-closed.
+    journal.allowed_clobbers = allow.iter().cloned().collect();
+
     // --- journal the (possibly extended) intent onto the branch BEFORE any
     //     external ref mutation (EX-5, ADR-012 D4); advance every row idempotently
     //     — exact-CAS classification, worktree-aware mechanism (§2.2, EX-2..EX-5);
+    //     g3 (always-on) refuses a corpus-clobbering advance before the mutation;
     //     record applied status back. ---------------------------------------------
     let outcomes = with_journaled_projection(
         root,
@@ -1932,7 +1951,7 @@ fn integrate(
         &coord_ref,
         &mut journal,
         "journal: integrate",
-        advance_row,
+        |root, row| advance_row(root, row, allow),
     )?;
 
     report_integrate(&journal, &outcomes)
@@ -1945,7 +1964,11 @@ fn integrate(
 /// checkout state. A semantic refusal sets `row.status = Failed` and returns
 /// `Ok(RowOutcome::Refused)` (the post-loop recovery commit makes it durable, B3);
 /// `Err` is reserved for genuine plumbing failure.
-fn advance_row(root: &Path, row: &mut JournalRow) -> anyhow::Result<RowOutcome> {
+fn advance_row(
+    root: &Path,
+    row: &mut JournalRow,
+    allow: &BTreeSet<String>,
+) -> anyhow::Result<RowOutcome> {
     let actual = resolve_commit(root, &row.target_ref)?;
     let current = actual.as_deref().unwrap_or(ZERO_OID);
     let planned = row.planned_new_oid.clone();
@@ -1969,11 +1992,65 @@ fn advance_row(root: &Path, row: &mut JournalRow) -> anyhow::Result<RowOutcome> 
         });
     }
 
+    // g3 — the always-on 3-way corpus-clobber gate (SL-166 design §5.2/§5.5).
+    // Before the mutation, refuse an advance that would delete or revert authored
+    // `.doctrine/**` paths the live target holds. Inert when the target is absent
+    // (a creation holds nothing to clobber) and on a true fast-forward (planned
+    // descends current ⇒ base == current ⇒ empty changed-set). Load-bearing now on
+    // the un-gated `--edge` leg (RV-176 F-2); forward-insurance for RFC-006.
+    if current != ZERO_OID
+        && let Some(token) = corpus_clobber_refusal(root, &planned, current, allow)?
+    {
+        row.status = LedgerStatus::Failed;
+        return Ok(RowOutcome::Refused { token });
+    }
+
     // current == expected_old → a real advance. The ONLY place the mechanism
     // branches on checkout state.
     match git::worktree_for_ref(root, &row.target_ref)? {
         None => advance_pure_ref(root, row, &planned, &expected_old),
         Some(wt) => advance_checked_out(root, row, &wt, &planned, &expected_old),
+    }
+}
+
+/// g3 shell (SL-166 design §5.2): read the three trees and run the pure
+/// [`corpus_guard::corpus_clobber_check`] predicate. Returns the refusal token (a
+/// capped path list) when advancing the target from `cur` to `new` would clobber
+/// an unallowed authored `.doctrine` path, else `None`. `base = merge-base(new,
+/// cur)`, falling back to the empty tree when their histories are unrelated. All
+/// git I/O lives here (the impure shell); the predicate stays a pure leaf.
+fn corpus_clobber_refusal(
+    root: &Path,
+    new: &str,
+    cur: &str,
+    allow: &BTreeSet<String>,
+) -> anyhow::Result<Option<String>> {
+    let base = git::merge_base(root, new, cur)?.unwrap_or_else(|| git::EMPTY_TREE_OID.to_owned());
+    let changed = git::diff_doctrine_paths(root, &base, cur, corpus_guard::DOCTRINE_PATHSPEC)?;
+    if changed.is_empty() {
+        return Ok(None);
+    }
+    let readings = changed
+        .into_iter()
+        .map(|path| -> anyhow::Result<corpus_guard::ClobberReading> {
+            let base_oid = git::blob_oid_at(root, &base, &path)?;
+            let new_oid = git::blob_oid_at(root, new, &path)?;
+            Ok(corpus_guard::ClobberReading {
+                path,
+                base_oid,
+                new_oid,
+            })
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let clobbers = corpus_guard::corpus_clobber_check(&readings, allow);
+    if clobbers.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(format!(
+            "{} ({})",
+            corpus_guard::CORPUS_CLOBBER,
+            corpus_guard::render_clobbers(&clobbers, corpus_guard::CLOBBER_RENDER_CAP),
+        )))
     }
 }
 
@@ -2328,6 +2405,7 @@ fn pending_journal(planned: &[Planned]) -> Journal {
                 status: LedgerStatus::Pending,
             })
             .collect(),
+        allowed_clobbers: Vec::new(),
     }
 }
 
@@ -4136,10 +4214,16 @@ mod tests {
     fn verified_review_journal() -> Journal {
         Journal {
             rows: vec![jrow("refs/heads/review/200", LedgerStatus::Verified)],
+            ..Default::default()
         }
     }
 
-    fn trace_err(candidates: &Candidates, journal: &Journal, ref_name: &str, budget: u32) -> String {
+    fn trace_err(
+        candidates: &Candidates,
+        journal: &Journal,
+        ref_name: &str,
+        budget: u32,
+    ) -> String {
         let err = trace_candidate_provenance(candidates, journal, "200", ref_name, budget)
             .expect_err("trace should refuse");
         format!("{err}")
@@ -4336,6 +4420,7 @@ mod tests {
         };
         let journal = Journal {
             rows: vec![jrow("refs/heads/review/200", LedgerStatus::Pending)],
+            ..Default::default()
         };
         let err = trace_err(
             &candidates,
@@ -4353,7 +4438,10 @@ mod tests {
         assert!(is_journaled_evidence_ref("refs/heads/review/200", "200"));
         assert!(is_journaled_evidence_ref("refs/heads/phase/200-03", "200"));
         assert!(!is_journaled_evidence_ref("refs/heads/phase/200-xx", "200"));
-        assert!(!is_journaled_evidence_ref("refs/heads/candidate/200/x", "200"));
+        assert!(!is_journaled_evidence_ref(
+            "refs/heads/candidate/200/x",
+            "200"
+        ));
         assert!(is_candidate_ref("refs/heads/candidate/200/review-001"));
         assert!(!is_candidate_ref("refs/heads/review/200"));
     }
