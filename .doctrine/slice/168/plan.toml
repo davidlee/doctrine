@@ -1,0 +1,212 @@
+# Implementation plan for SL-168 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-168"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "finding leaf — contract, render, exit"
+objective = """
+Create the pure `src/finding.rs` leaf (design §5.2, D2; ADR-001 — imports neither
+clap nor entity). Defines `Severity{Error,Warning}`, `Category` (8 variants),
+`Category::severity()` (the single severity source, F5 — no per-finding field),
+`Finding{category, entity:Option<String>, message}`, and the `from_lines` adapter
+(F-? a-style bridge). Plus the doctor's render surface: grouped table (header per
+non-empty category + summary line; clean → "doctor: corpus clean") and the
+`--json` rows `{category, severity, entity, message}`. STD-001: category names,
+severity labels, summary templates are single-source named constants. Inert until
+PHASE-05 wires the command — pure leaf, fully unit-tested.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (RV-183 resolved, 11 findings terminal); slice at plan." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/finding.rs is a leaf: imports neither clap nor entity (ADR-001); `Severity`, `Category` (8 variants matching §5.2), `Finding{category, entity:Option<String>, message}`." },
+  { id = "EX-2", text = "`Category::severity(self)->Severity` is the sole severity source — no per-finding severity field (F5); render + exit derive from it." },
+  { id = "EX-3", text = "`Finding::from_lines(category, Vec<String>)->Vec<Finding>` wraps a legacy source with `entity:None`, one call per adapter'd source." },
+  { id = "EX-4", text = "Render: grouped table (header per non-empty category, summary line, clean→\"doctor: corpus clean\") + json rows `{category,severity,entity,message}` with severity from `category.severity()`." },
+  { id = "EX-5", text = "Category names, severity labels, summary-line templates are single-source named constants (STD-001)." },
+]
+verification = [
+  { id = "VT-1", expects = "unit: each Category maps to its documented Severity (8 cases); IdIntegrity/RelationIntegrity/SpecFk/MemoryHealth→Error, Lifecycle/RawLabel/TomlParse/ProseCite→Warning." },
+  { id = "VT-2", expects = "unit: from_lines(SpecFk, [\"a\",\"b\"]) yields 2 findings, entity=None, message preserved verbatim." },
+  { id = "VT-3", expects = "unit: render of an empty findings set emits the clean summary; a mixed set groups by category with one header each." },
+  { id = "VA-1", expects = "grep/arch test confirms finding.rs imports neither clap nor entity (leaf, ADR-001) and no magic strings (STD-001)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "existing sources callable as adapters (no native re-point)"
+objective = """
+Make the three legacy Error sources consumable by the doctor WITHOUT touching
+their shipping render (D12/F-8: adapter-first, native deferred to PHASE-06). #2
+RelationIntegrity via `relation_graph::validate_relations`, #3 SpecFk via
+`registry::Registry::validate` (build+validate), #4 MemoryHealth via a NEW pure
+fn extracted from `memory::run_validate` (extraction forced regardless, §5.2) but
+rendered through `from_lines` for now — the legacy `memory validate` command keeps
+its own writeln! buffer untouched. Each becomes a `Vec<String>`/`Vec<Finding>`
+callable the doctor composes; legacy commands run unchanged (behaviour-preserved).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 finding leaf + from_lines landed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A pure memory-health fn is extracted from memory::run_validate (dangling relations, stale verify, draft expiry); run_validate re-points onto it but its byte-exact output is unchanged." },
+  { id = "EX-2", text = "#2/#3/#4 are each reachable as a findings callable the doctor consumes via from_lines (entity:None v1); the honesty caveat (F6) holds — adapter'd Error ids ride in `message`." },
+  { id = "EX-3", text = "No native re-point in this phase (D12): #1 and #4's legacy renders are untouched." },
+  { id = "EX-4", text = "Existing validate / spec validate / memory validate suites stay green unchanged (behaviour-preservation gate, AGENTS.md)." },
+]
+verification = [
+  { id = "VT-1", expects = "unit: extracted memory-health fn returns the same finding set the inline checks produced on a seeded dirty memory corpus." },
+  { id = "VT-2", expects = "existing memory/spec/relation suites pass unchanged." },
+  { id = "VA-1", expects = "review confirms no shipping render was re-pointed (adapter-only); legacy memory validate writeln! path intact." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "three new native checks — Lifecycle, RawLabel, TomlParse"
+objective = """
+The three lighter new native checks (§5.2 #5/#6/#7). #5 Lifecycle (done-but-open):
+flag an OPEN item (`!is_transition_terminal(item.status)`, F-6) iff it has ≥1
+linked slice (`targets_for(item, Slices)` non-empty, F2/F3) AND every linked slice
+is terminal (`is_transition_terminal`, done+abandoned) → "all slices terminal".
+#6 RawLabel: mine `CatalogEdgeLabel::Raw` edges via the catalog graph (F-7 — NOT
+`RelationLabel::Raw`/`outbound_for`, which do not expose them); warning, disjoint
+from #2's IllegalRows (R7). #7 TomlParse: facet TOML diagnostics + a doctor-local
+`plan.toml` probe (skipping slug symlinks, R4) — entity-toml EXCLUDED (it is #1's,
+F-10/D6 — no double-report). All advisory (never break the build, D4).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 finding contract landed; PHASE-02 adapter seams exist for cross-check." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Lifecycle: open-item predicate = !is_transition_terminal(item.status); flagged iff ≥1 linked slice AND all linked slices terminal; the ≥1 guard prevents the vacuous-true flag on slice-less items (F2)." },
+  { id = "EX-2", text = "RawLabel sourced from CatalogEdgeLabel::Raw via the catalog graph (F-7); NO reference to a nonexistent RelationLabel::Raw; numbered-edge corruption path not triggered." },
+  { id = "EX-3", text = "RawLabel (Warning) and RelationIntegrity IllegalRows (Error) are disjoint — no edge appears in both (R7), pinned by test." },
+  { id = "EX-4", text = "TomlParse consumes facet diagnostics + plan.toml probe ONLY; entity-toml parse failures are excluded/deduped against #1 (F-10); plan.toml probe skips slug symlinks (R4) and never mutates." },
+]
+verification = [
+  { id = "VT-1", expects = "Lifecycle unit matrix: done-only / abandoned-only / mixed-terminal (flag) vs live-slice (no flag) vs slice-less open item (no flag, ≥1 guard) vs closed item (no flag, open predicate)." },
+  { id = "VT-2", expects = "RawLabel unit: a seeded catalog Raw() edge is reported as Warning; an IllegalRows edge is NOT in the RawLabel set (R7 disjointness)." },
+  { id = "VT-3", expects = "TomlParse unit: malformed facet toml → warning; malformed plan.toml → warning; malformed ENTITY toml → NOT in #7 (it is #1's); slug-symlink plan.toml not double-counted." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "ProseCite — the heavy precision check"
+objective = """
+The heaviest, most precision-critical check (§5.2 #8), split out per the sketch.
+A NEW scanner (NOT a reuse of line_cites, F-1) that recognises the MAXIMAL
+hyphenated token `[A-Z]{2,}-[0-9]+(-[A-Za-z0-9]+)*` before 2-part/3-part
+classification, carries cross-line fenced-code-block state, and applies the
+empirically-derived exclusion set: lexical excludes (fenced+inline code spans,
+*-SENTINEL, bare doc-local), gate-1 (3-part → skip, owning the dangling-3-part
+false-negative F-4), gate-2 (unknown prefix → skip via kind_by_prefix before the
+bailing ensure_ref_resolves), then dir-probe the strict 2-part remainder. Scan
+scope diverges from reseat (D11/F-5/F-9): skip handover+state PLUS audit.md,
+inquisition.md, notes.md, research/**, and .doctrine/review/**. Residual durable-
+body example noise accepted (R8).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 finding contract landed; kind_by_prefix / ensure_ref_resolves / dir-probe primitives available (integrity.rs)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "New maximal-token scanner: recognises KIND-NNN-XX as one token before 2/3-part classification (so 3-part exclusion fires); carries fenced-block state across lines (F-1)." },
+  { id = "EX-2", text = "Classification: 3-part→skip (F-4 false-negative owned); 2-part unknown-prefix→skip via kind_by_prefix BEFORE ensure_ref_resolves (no bail); strict 2-part Some+dir-missing→ProseCite finding; Some+dir-present→none." },
+  { id = "EX-3", text = "Lexical excludes applied pre-classification: fenced + inline code spans, *-SENTINEL, bare doc-local (OQ-1/D1/R1)." },
+  { id = "EX-4", text = "Scan scope = reseat's is_disposable_prose PLUS audit.md/inquisition.md/notes.md/research/**/.doctrine/review/** (D11); reseat's own scope unchanged (F-5)." },
+  { id = "EX-5", text = "Run over the real corpus emits no finding for the known illustrative ids in the now-skipped tier (POL-123 in glossary stays a documented residual, R8); advisory severity (D4)." },
+]
+verification = [
+  { id = "VT-1", expects = "unit per exclusion/handling class: code-span (inline+fenced), *-SENTINEL, doc-local, 3-part DEC-005-C, 3-part DEC-010-06, SL-NNN-word compound, unknown-prefix SHA-256/PHASE-03, dangling 2-part, resolved 2-part." },
+  { id = "VT-2", expects = "scanner test: DEC-005 is NOT extracted as a 2-part token from within DEC-005-C (maximal-token recognition, F-1)." },
+  { id = "VT-3", expects = "scope test: a fixture audit.md/inquisition.md/review-*.md containing a dangling ref produces NO ProseCite finding (D11 skip); a slice design.md dangling ref does." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Command::Doctor wiring + black-box goldens + superset"
+objective = """
+Wire the verb (design §5.1/§5.4): `Command::Doctor` variant + dispatch arm
+(cli.rs), `pub(crate) mod doctor;` (mod.rs), and `run_doctor` in
+src/commands/doctor.rs — resolve root once, run the 8 checks (adapter'd #1-#4 from
+PHASE-02, native #5-#8 from PHASE-03/04), collect Vec<Finding>, render table|json,
+exit (any Error→bail non-zero; warnings-only→Ok, D4). Black-box goldens over the
+built binary: seeded dirty corpus → pinned grouped table + --json envelope; clean
+→ exit 0 + "corpus clean". Superset invariant: doctor's IdIntegrity+
+RelationIntegrity rendered MESSAGE STRINGS == validate's lines on the same corpus
+(F4 — compare rendered messages, not structs; pins D8/§5.5).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 (adapters) + PHASE-03 + PHASE-04 (all 8 checks) landed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Command::Doctor variant + dispatch arm (cli.rs), mod doctor (mod.rs); run_doctor resolves root once and threads it to every check (no per-check re-resolution)." },
+  { id = "EX-2", text = "Exit: any Error-severity finding → bail (non-zero, like run_validate); warnings-only → Ok(0); empty corpus → exit 0 + clean summary + empty json rows (D4, §5.5)." },
+  { id = "EX-3", text = "json shape reuses listing::json_envelope<T:Serialize> (F7, row-generic); honesty caveat (F6) documented — adapter'd Error rows carry entity:null." },
+  { id = "EX-4", text = "Superset invariant test: set of rendered IdIntegrity+RelationIntegrity message strings == validate's finding lines on the same corpus (F4)." },
+]
+verification = [
+  { id = "VT-1", expects = "black-box golden: seeded dirty corpus → byte-exact grouped table + byte-exact --json envelope (built binary)." },
+  { id = "VT-2", expects = "black-box: clean corpus → exit 0 and 'doctor: corpus clean'; a seeded Error → non-zero; warnings-only → exit 0." },
+  { id = "VT-3", expects = "superset test: doctor's id+relation rendered messages equal validate's lines on one corpus (D8)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "D12 native re-point — goldens first, then #1/#4 native"
+objective = """
+The D12-gated native upgrade (F-3/F-8), LAST and only after its safety net exists.
+FIRST author true byte-exact goldens over the CURRENT output of `validate` (#1
+id-integrity — today only substring-asserted) and `memory validate` (#4 — today
+NO output golden), red against the live render. THEN re-point #1 and #4 onto
+native `Finding` and reproduce that byte-exact output via the re-pointed render;
+the new goldens are the proof. If drift is non-trivial, fall back to adapter
+(R1) — native is not mandatory, the v1-native declaration is already satisfied by
+#5-#8. Optionally fold a stale-memory fix (mem free-text-ref-not-forward-validated,
+SL-042) as a non-blocking side-task.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 doctor wired + green; the adapter'd #1/#4 path is shipping." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Byte-exact goldens authored over CURRENT validate + memory validate output FIRST (red before any re-point) — closing the F-3 gap (substring-only / absent)." },
+  { id = "EX-2", text = "#1 IdIntegrity re-pointed to native Finding; validate's byte-exact output reproduced (new golden green)." },
+  { id = "EX-3", text = "#4 MemoryHealth render re-pointed to native; memory validate byte-exact output reproduced (new golden green) — OR adapter retained if drift non-trivial (R1), with rationale." },
+  { id = "EX-4", text = "All prior-phase goldens + superset invariant still green; just gate clean." },
+]
+verification = [
+  { id = "VT-1", expects = "new byte-exact golden over validate output passes both before (legacy path) and after (native re-point) — proving zero drift." },
+  { id = "VT-2", expects = "new byte-exact golden over memory validate output passes across the re-point (or adapter-retained justification recorded)." },
+  { id = "VA-1", expects = "review confirms goldens were authored BEFORE the re-point (D12 ordering) and the behaviour-preservation gate is now genuinely guarded." },
+]
+specs        = []
+requirements = []
