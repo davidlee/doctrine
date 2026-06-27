@@ -1,0 +1,116 @@
+# Implementation plan for SL-165 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-165"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Provenance gate prep — behaviour-preserving"
+objective = """
+Reshape the provenance gate to receive the role and ledger it needs, without \
+changing any observed behaviour. Factor the journaled-evidence classifier into \
+one predicate (design §5.2 `is_journaled_evidence_ref` — `review/<N>` | \
+`phase/<N>-NN`), widen `check_provenance` to \
+`(journal, candidates, slice3, role, source_ref)`, move the `read_candidates` \
+read (`dispatch.rs:~922`) ahead of the sole provenance call (`:913`) and thread \
+the ledger through, update the sole caller `candidate_create`. No new accept/refuse \
+path — the journaled gate routes through the new predicate unchanged. The existing \
+suites are the proof (behaviour-preservation gate, AGENTS.md).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; RV-175 done (2 blockers integrated); gate located at dispatch.rs:805 with sole call site :913." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`check_provenance` signature widened to carry CandidateRole + &Candidates; sole caller updated; compiles." },
+  { id = "EX-2", text = "`is_journaled_evidence_ref(source_ref, slice3)` exists as the single classifier; the journaled base-case routes through it (no inline ref-shape duplication)." },
+  { id = "EX-3", text = "`read_candidates` moved ahead of the provenance call and threaded in; both remain pure dispatch/<N> object-db reads (REQ-318) — no working-tree read introduced." },
+]
+verification = [
+  { id = "VT-1", expects = "`tests/e2e_dispatch_candidate.rs` and `tests/e2e_dispatch_lifecycle.rs` pass UNCHANGED — behaviour preserved across the refactor." },
+  { id = "VT-2", expects = "`just gate` green; `cargo clippy` zero warnings." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Candidate-source close_target exception + lineage binding"
+objective = """
+Implement the conformance fix (design §5.1, D1–D5). Add private \
+`trace_candidate_provenance(candidates, journal, slice3, ref, budget)`: count-exact \
+`target_ref → row` resolution (INV-5, fail-closed on duplicates, mirrors \
+`ledger.rs:464`); status gate `Created` only (INV-3); role/kind gate \
+`row.role ∈ {review_surface, close_target} ∧ row.kind == audit` (INV-2/D3); recurse \
+on a candidate `source_ref`, terminate on a journaled `source_ref` by routing the \
+FULL existing journaled gate (Verified + phase-hole, F3); bounded `budget` named \
+constant = 16 (INV-4, OQ-1, STD-001 — no magic string). Branch into it from \
+`check_provenance` only when `role == close_target ∧ is_candidate_ref(source_ref)`. \
+Then INV-6 / D5 lineage binding in `candidate_create` AFTER `source_oid` resolves \
+(`dispatch.rs:~916`): require `row.merge_oid != "" ∧ is_ancestor(row.merge_oid, \
+source_oid)` — the source-side analog of admit's I3, binding resolved content (not \
+the ref name) to the verified-traced merge.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: signature widened, ledger threaded, suites green unchanged." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`candidate create --role close_target --source refs/heads/candidate/<N>/<label>` ACCEPTS a recorded candidate whose recorded chain traces to a Verified journaled evidence root; the no-ff merge tree carries the fix-now (INV-1)." },
+  { id = "EX-2", text = "Refused: no recorded row; ambiguous (duplicate) row; `Conflicted`-status source; non-evidence/non-candidate chain hop; over-budget/cyclic chain; `scratch` source role; `experiment`-kind source (INV-2/3/4/5)." },
+  { id = "EX-3", text = "Moved-ref refused (INV-6): a source ref repointed off its recorded `merge_oid` lineage is rejected post-resolve, even when the recorded chain itself is clean." },
+  { id = "EX-4", text = "Depth budget is a named constant (= 16), not a literal at the call site." },
+]
+verification = [
+  { id = "VT-1", expects = "Gate accept/refuse matrix in `tests/e2e_dispatch_candidate.rs`: 1 accept + the EX-2 refuse cases + the EX-3 moved-ref refusal, each asserting the design's bail message class." },
+  { id = "VT-2", expects = "Regression: close_target from `review/<N>` (journaled) still accepts; review_surface default create unaffected; the `phase/<N>-NN` earlier-failed-hole refusal still fires (F3 — full gate inherited, not a subset)." },
+  { id = "VT-3", expects = "`just gate` green; clippy zero warnings." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Lifecycle regression anchor — repair → close → integrate → status done"
+objective = """
+Land the end-to-end regression that fails under today's refusal and passes after \
+the gate (design §5.4, §9). One test in `tests/e2e_dispatch_lifecycle.rs`: \
+prepare-review (journaled `review/<N>`, Verified) → `candidate create --role \
+review_surface --source review/<N> --worktree`, commit a fix-now on its branch, \
+`admit --role review_surface` → `candidate create --role close_target --base \
+refs/heads/main --source refs/heads/candidate/<N>/review-001` (the path PHASE-02 \
+unlocked) → `admit --role close_target` → `integrate --trunk refs/heads/main` → \
+`slice status done`. Assert: trunk carries the fix-now; an honest journal trunk row \
+sits at the repaired tip; `status done` passes natively; no manual \
+fold / `branch -D review/<N>` / hand-FF anywhere in the path.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 gate landed: candidate-source close_target create accepts the traced path." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Full repair→close→integrate→`status done` test is green; it is red (refusal at close_target create, or silent fix-now drop) when run against the pre-PHASE-02 gate." },
+  { id = "EX-2", text = "Test asserts (a) trunk tip content includes the fix-now, (b) a journal trunk row exists at the repaired OID, (c) `slice status done` returns success without a manual journal dance." },
+]
+verification = [
+  { id = "VT-1", expects = "The lifecycle anchor test passes; demonstrated red against the old behaviour (commented red-anchor or staged commit) per the design's regression intent." },
+  { id = "VA-1", expects = "Agent confirms the closure-intent checklist (slice-165.md §Verification): single first-class command sequence, no manual fold/pre-FF dance in the exercised path." },
+]
+specs             = []
+requirements      = []
