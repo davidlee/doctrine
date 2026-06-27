@@ -62,3 +62,18 @@ which is non-ideal per the dispatch spec but produced correct results.
 
 ### Governance/spec (REV)
 - None — no governance or spec changes surfaced by this audit.
+
+## Reconciliation Outcome
+
+All findings were resolved in-audit with `fix-now` disposition. No writes needed.
+Reconcile pass complete — handoff to /close.
+
+### Direct edits applied
+- **F-1/F-2** — selectors updated in-audit: added `install/boot-footer.md`, `src/boot.rs`,
+  `src/retrieve.rs`; removed `.doctrine/boot-footer.md`. Conformance clean.
+
+### REVs completed
+- None needed.
+
+### Withdrawn / tolerated
+- None.
