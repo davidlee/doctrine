@@ -496,6 +496,7 @@ fn build_memory_key_map(root: &Path) -> BTreeMap<String, String> {
 mod tests {
     use super::*;
     use crate::catalog::test_helpers::*;
+    use crate::test_support::{SCHEMA_BACKLOG, SCHEMA_MEMORY};
 
     /// Seed the PHASE-03 fixture: SL-001 → REQ-005 (resolved), ADR-002 → ADR-001
     /// (resolved), SL-003 (no edges). Plus a backlog issue with drift free-text.
@@ -628,10 +629,10 @@ mod tests {
         write(
             root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            "schema = \"doctrine.backlog\"\nversion = 1\n\
+            &format!("schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
              id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
-             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n",
+             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n"),
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
 
@@ -798,7 +799,7 @@ mod tests {
         std::fs::write(
             items_dir.join("memory.toml"),
             format!(
-                "schema = \"doctrine.memory\"\nversion = 1\nmemory_uid = \"{uid}\"\ntitle = \"{title}\"\nstatus = \"active\"\nmemory_type = \"pattern\"\n{}",
+                "schema = \"{SCHEMA_MEMORY}\"\nversion = 1\nmemory_uid = \"{uid}\"\ntitle = \"{title}\"\nstatus = \"active\"\nmemory_type = \"pattern\"\n{}",
                 rels.concat()
             ),
         )

@@ -62,11 +62,12 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::SCHEMA_PLAN_OVERVIEW;
 
     #[test]
     fn plan_parse_reads_ordered_phases() {
-        let text = r#"
-            schema = "doctrine.plan.overview"
+        let text = format!(r#"
+            schema = "{SCHEMA_PLAN_OVERVIEW}"
             version = 1
             slice = "SL-004"
             [[phase]]
@@ -76,8 +77,8 @@ mod tests {
             [[phase]]
             id = "PHASE-02"
             name = "Second"
-        "#;
-        let plan = Plan::parse(text).unwrap();
+        "#);
+        let plan = Plan::parse(&text).unwrap();
         let ids: Vec<&str> = plan.phases.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids, vec!["PHASE-01", "PHASE-02"]);
         assert_eq!(plan.phases[0].objective, "do a");

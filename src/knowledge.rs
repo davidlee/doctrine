@@ -38,6 +38,8 @@ use crate::tomlfmt::toml_string;
 // `toml_array_inner` is spliced only by the test-only hand-emit render subtree
 // (production list-writes go via the template seed), so its import is `#[cfg(test)]`.
 #[cfg(test)]
+use crate::test_support::SCHEMA_KNOWLEDGE;
+#[cfg(test)]
 use crate::tomlfmt::toml_array_inner;
 
 /// The toml/md file stem — shared by all six kinds (`record-NNN.toml`). Distinct
@@ -768,7 +770,7 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
 #[cfg(test)]
 fn render_record_toml(record: &KnowledgeRecord) -> String {
     [
-        String::from("schema = \"doctrine.knowledge\"\nversion = 1\n\n"),
+        format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n"),
         format!("id = {}\n", record.id),
         format!("slug = {}\n", toml_string(&record.slug)),
         format!("title = {}\n", toml_string(&record.title)),
@@ -2060,7 +2062,7 @@ confidence = \"bogus\"
     /// layout exactly (F1 order, every field present, lists populated).
     fn populated_fixture(kind: RecordKind) -> String {
         let head = format!(
-            "schema = \"doctrine.knowledge\"\nversion = 1\n\nid = 7\nslug = \"token-expiry\"\ntitle = \"Token expiry\"\nrecord_kind = \"{}\"\nstatus = {}\ncreated = \"2026-06-08\"\nupdated = \"2026-06-09\"\ntags = [\"auth\", \"security\"]\n",
+            "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\nid = 7\nslug = \"token-expiry\"\ntitle = \"Token expiry\"\nrecord_kind = \"{}\"\nstatus = {}\ncreated = \"2026-06-08\"\nupdated = \"2026-06-09\"\ntags = [\"auth\", \"security\"]\n",
             kind.as_str(),
             toml_string(kind.default_status()),
         );
@@ -2257,8 +2259,8 @@ notes = []
     fn record_without_relation_block_has_empty_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-empty");
         let _ = std::fs::remove_dir_all(&root);
-        let record = "\
-schema = \"doctrine.knowledge\"
+        let record = format!("\
+schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
 id = 1
@@ -2276,8 +2278,8 @@ tags = []
 supports = []
 contradicts = []
 notes = []
-";
-        seed_record(&root, RecordKind::Assumption, 1, record);
+");
+        seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert!(r.tier1.is_empty(), "no [[relation]] block → empty tier1");
         let _ = std::fs::remove_dir_all(&root);
@@ -2287,8 +2289,8 @@ notes = []
     fn record_with_authored_relation_rows_populates_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-auth");
         let _ = std::fs::remove_dir_all(&root);
-        let record = "\
-schema = \"doctrine.knowledge\"
+        let record = format!("\
+schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
 id = 1
@@ -2318,8 +2320,8 @@ target = \"ISS-001\"
 [[relation]]
 label = \"governed_by\"
 target = \"ADR-001\"
-";
-        seed_record(&root, RecordKind::Assumption, 1, record);
+");
+        seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert_eq!(r.tier1.len(), 3);
         assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::Shapes);
@@ -2335,8 +2337,8 @@ target = \"ADR-001\"
     fn record_with_illegal_label_excludes_illegal_from_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-illegal");
         let _ = std::fs::remove_dir_all(&root);
-        let record = "\
-schema = \"doctrine.knowledge\"
+        let record = format!("\
+schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
 id = 1
@@ -2362,8 +2364,8 @@ target = \"SL-001\"
 [[relation]]
 label = \"shapes\"
 target = \"PRD-001\"
-";
-        seed_record(&root, RecordKind::Assumption, 1, record);
+");
+        seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert_eq!(
             r.tier1.len(),
@@ -2381,8 +2383,8 @@ target = \"PRD-001\"
     fn record_with_unknown_label_excludes_unknown_from_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-unknown");
         let _ = std::fs::remove_dir_all(&root);
-        let record = "\
-schema = \"doctrine.knowledge\"
+        let record = format!("\
+schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
 id = 1
@@ -2408,8 +2410,8 @@ target = \"X\"
 [[relation]]
 label = \"governed_by\"
 target = \"ADR-001\"
-";
-        seed_record(&root, RecordKind::Assumption, 1, record);
+");
+        seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert_eq!(
             r.tier1.len(),
@@ -2615,7 +2617,7 @@ target = \"ADR-001\"
 
     #[test]
     fn estimate_roundtrip_on_record() {
-        let toml = "schema = \"doctrine.knowledge\"\n\
+        let toml = format!("schema = \"{SCHEMA_KNOWLEDGE}\"\n\
                      version = 1\n\
                      id = 1\n\
                      slug = \"test\"\n\
@@ -2630,9 +2632,9 @@ target = \"ADR-001\"
                      [evidence]\n\
                      [estimate]\n\
                      lower = 3.0\n\
-                     upper = 3.0\n";
+                     upper = 3.0\n");
         // parse_entity_toml tolerates the unknown [estimate] table (no deny_unknown_fields).
-        let raw: RawRecordToml = crate::dtoml::parse_entity_toml(toml, "ASM", 1).unwrap();
+        let raw: RawRecordToml = crate::dtoml::parse_entity_toml(&toml, "ASM", 1).unwrap();
         assert_eq!(raw.id, 1);
         assert_eq!(raw.record_kind, RecordKind::Assumption);
         assert_eq!(raw.title, "Test");

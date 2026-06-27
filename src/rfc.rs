@@ -266,6 +266,7 @@ pub(crate) fn dispatch(cmd: RfcCommand, color: bool) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use crate::meta::Meta;
+    use crate::test_support::SCHEMA_RFC;
     use std::path::Path;
 
     // --- VT-1: render + round-trip ---
@@ -353,7 +354,7 @@ mod tests {
         let dir = root.join(RFC_DIR).join(&name);
         std::fs::create_dir_all(&dir).unwrap();
         let toml = format!(
-            "schema = \"doctrine.rfc\"\nversion = 1\n\n\
+            "schema = \"{SCHEMA_RFC}\"\nversion = 1\n\n\
              id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\n\
              status = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
         );

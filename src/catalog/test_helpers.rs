@@ -8,6 +8,8 @@
 use std::fs;
 use std::path::Path;
 
+use crate::test_support::SCHEMA_KNOWLEDGE;
+
 /// Write `root/<rel>` with `body`, creating parents.
 #[allow(dead_code)]
 pub(crate) fn write(root: &Path, rel: &str, body: &str) {
@@ -126,7 +128,7 @@ pub(crate) fn seed_knowledge(root: &Path, prefix: &str, id: u32, title: &str, st
         root,
         &format!(".doctrine/knowledge/{kind_dir}/{id:03}/record-{id:03}.toml"),
         &format!(
-            "schema = \"doctrine.knowledge\"\nversion = 1\nid = {id}\nslug = \"k{id}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\nrecord_kind = \"{kind_dir}\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n"
+            "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\nid = {id}\nslug = \"k{id}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\nrecord_kind = \"{kind_dir}\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n"
         ),
     );
     write(
