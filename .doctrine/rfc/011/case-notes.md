@@ -147,3 +147,23 @@ Token-inefficiency / incidental complexity during /audit of SL-166 (RV-180):
    blind on path-conformance and must defer it to a close-time re-run. The
    audit→land ordering means the strongest mechanical signal arrives after the
    audit verdict, not before it.
+
+[SL-166-rv180 audit complete @ 115k]
+
+
+## [/reconcile; SL-166-recon-a]
+
+Reconcile pass was clean — brief was fully structured (3 per-slice items, REV:None
+explicit), so zero re-derivation. Token cost ~all in reading the RV ledger
+(review_show returns the full 9-finding payload + brief + synthesis in one block —
+efficient) and the two target files.
+
+One incidental friction: the Read tool renders TOML escaped quotes (`\"`) WITHOUT
+the backslash, but the Edit tool matches raw file bytes (which DO contain `\"`).
+Editing an `EX-1` criterion line containing `\"refs/heads/edge\"` forced a
+defensive `sed | cat -A` re-read to confirm exact escaping before Edit would
+match. Minor (~1 extra tool call) but recurs on any TOML string-with-quotes edit.
+Mitigation a worker can't fix; flagging as a harness/Read-vs-Edit fidelity gap.
+
+No other inefficiency — the audit→reconcile seam held: discovery was complete,
+write surface was unambiguous, no /consult needed.
