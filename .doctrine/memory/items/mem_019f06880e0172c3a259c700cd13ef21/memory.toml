@@ -1,0 +1,51 @@
+memory_uid = "mem_019f06880e0172c3a259c700cd13ef21"
+memory_key = "mem.pattern.doctrine.shipped-skill-platform-independence"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Shipped skills carry no repo-local couplings"
+summary = "POL-002: authored skills under plugins/ ship to client projects; never load-bear on this repo's conventions or local entities."
+created = "2026-06-27"
+updated = "2026-06-27"
+
+[scope]
+paths = []
+globs = ["plugins/**"]
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b5af9392a4c18a3a77218e6a4fb8e061d1fff31d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f10cb2a52de0c6ab8bec7f47e1f46d707e5ccb50c507554864afcd38d891cde5"
+base_commit = "8de30671e00593863e14c54771feecc7b54d2819"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "policy"
+ref = "POL-002"
+
+[[source]]
+kind = "slice"
+ref = "SL-163"
+
