@@ -94,3 +94,30 @@ except one pre-existing, out-of-scope failure.
   must resolve this so the helper isn't double-applied.
 - Promote `edge → main` before integrating (the dispatch landing-zone ritual), then
   land the admitted candidate.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- `slice-169.toml` selectors: added 4 `design-target` rows — `src/commands/cli.rs`,
+  `src/mcp_server/tools.rs`, `src/reconcile.rs`, `tests/e2e_adr_cli_golden.rs`.
+  `slice conformance 169` now reports `undeclared (0)`. (RV-184 F-3)
+- `design.md` §Code-impact: added matching 4 rows so prose canon equals the
+  delivered edit set. (RV-184 F-3)
+
+### REVs completed
+- None. Brief surfaced no governance/spec finding; F-1/F-2 were fixed in audit
+  scope at `a842e5b6`, F-3 is per-slice metadata (above), F-4 is out-of-scope base
+  debt.
+
+### Withdrawn / tolerated
+- None. All 4 findings `verified`; remediation recorded here, dispositions
+  unchanged.
+
+### Deferred to /close (integration, not reconcile writes)
+- `undelivered (1) tests/e2e_list_conformance.rs`: F-2's parse-conformance test
+  landed in that exact file at `a842e5b6`. The cell is stale only because the
+  admitted candidate is not yet on `edge`/`main`; it self-resolves on integration.
+- Promote `edge → main`, resolve the duplicate PHASE-01 `c838bb71` (same
+  `listing::default_with_tags` helper the bundle carries), then land `a842e5b6`.
+
+Reconcile pass complete — handoff to /close.

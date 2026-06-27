@@ -74,6 +74,26 @@ intent = "design-target"
 selector = "src/backlog.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "RV-184 F-3: compile-necessary fallout — declared at reconcile"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+note = "RV-184 F-3: compile-necessary fallout — declared at reconcile"
+
+[[selector]]
+selector = "src/reconcile.rs"
+intent = "design-target"
+note = "RV-184 F-3: compile-necessary fallout — declared at reconcile"
+
+[[selector]]
+selector = "tests/e2e_adr_cli_golden.rs"
+intent = "design-target"
+note = "RV-184 F-3: compile-necessary fallout — declared at reconcile"
+
 [[relation]]
 label = "references"
 role = "scoped_from"

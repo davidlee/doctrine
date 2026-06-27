@@ -173,6 +173,10 @@ The `name` fields are already lowercase — only `header` changes.
 | `src/concept_map.rs` | Lowercase `header` fields in `CONCEPT_MAP_COLUMNS` |
 | `tests/e2e_list_columns_golden.rs` | Add `RelationRow`/`CensusRow` coverage; REC/review tag coverage |
 | `tests/e2e_list_conformance.rs` | Add relation/census to the parse-conformance matrix |
+| `src/commands/cli.rs` | Relation `--columns` dispatch wiring (compile-necessary fallout; declared at reconcile — RV-184 F-3) |
+| `src/mcp_server/tools.rs` | Rec `tags` field fallout (declared at reconcile — RV-184 F-3) |
+| `src/reconcile.rs` | Rec `tags` field fallout (declared at reconcile — RV-184 F-3) |
+| `tests/e2e_adr_cli_golden.rs` | ADR golden regen for default `tags` column (declared at reconcile — RV-184 F-3) |
 
 ---
 
