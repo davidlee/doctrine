@@ -16,8 +16,9 @@ orchestrator funnel."
    `cd` silently reverts under a jail, forking `main` not B).
 2. **Claude arm only:** `cd` into the coordination directory and park Bash cwd
    there for the full drive loop. The Agent tool's `isolation: worktree` forks off
-   the Bash cwd HEAD — this is how base==B is achieved (`mem_019ec65ecbc7`). Step
-   out to the session root only for authored writes (slice status, memory, audit).
+   the Bash cwd HEAD — base==B holds only if the cwd is parked at B before the
+   spawn (a mis-parked cwd forks the wrong base). Step out to the session root
+   only for authored writes (slice status, memory, audit).
 3. `dispatch plan-next --slice <N>` — find next actionable phase(s); plan parallel batches when file-disjoint
 4. Route to the correct arm:
    - Check `doctrine.toml` → `[dispatch]` → `claude-force-subprocess-dispatch`

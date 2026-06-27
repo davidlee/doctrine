@@ -106,7 +106,7 @@ not mutate a finding to `fixed`/`remediated`.
      finding: the registry was not recorded as phases landed; bootstrap with
      `doctrine slice record-delta <id> PHASE-NN --start <oid> --end <oid>` or note
      the partial coverage — never read a partial registry as clean.
-   - run the tests/checks the design and plan require, **plus `just check`**;
+   - run the tests/checks the design and plan require, **plus `doctrine check gate`**;
    - inspect observed behaviour against `design.md` and the phase `VT-` criteria;
    - note where behaviour and design diverge — each divergence is a finding.
 3. **Raise + dispose every finding** on the ledger per `review-ledger.md` §3–§4.

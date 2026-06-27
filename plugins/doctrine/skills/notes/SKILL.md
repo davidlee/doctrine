@@ -29,7 +29,7 @@ Be concise, but record:
     are still pending and why
   - if committed, whether they went out with code or separately when that
     matters for the next agent
-- whether the verification gate (`just check`) has run successfully since code
+- whether the verification gate (`doctrine check gate`) has run successfully since code
   was last modified, or: outstanding errors
 
 If the note identifies a reusable fact, pattern, or gotcha that would save a
