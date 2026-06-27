@@ -1,0 +1,50 @@
+memory_uid = "mem_019f096865017b8394c9ac82eeed23ff"
+memory_key = "mem.pattern.audit.distrust-dispatch-green-claim"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Re-run the suite in audit; distrust dispatch handover failure labels"
+summary = "Audit must re-run the full suite; dispatch handovers can misattribute self-caused golden regressions as environmental failures"
+created = "2026-06-27"
+updated = "2026-06-27"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["audit", "dispatch", "false-green"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "43e534c5f6655f0d13fcb901febe3bf0287d3bf3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "30517587861d95b8f47892f9f39d537797c4ec197496060d10cf65d1c2c9137b"
+base_commit = "5ccef644bf2268fa90b1d06663368d96530f9af4"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "rv"
+ref = "RV-184"
+
+[[source]]
+kind = "sl"
+ref = "SL-169"
+
