@@ -1101,6 +1101,43 @@ pub(crate) fn blob_oid_at(
     }
 }
 
+/// Tri-state base-corpus resolver for g2 (SL-166 design §5.2, EX-1): the last
+/// commit on `refish` that touches `pathspec` (the authored corpus floor the fork
+/// base must carry). **Fail-closed, three outcomes:**
+/// - **`Err`** — `refish` does not resolve (`rev-parse --verify <refish>^{commit}`
+///   non-zero). A *set-but-unresolvable* `authoring-branch` is a misconfiguration
+///   of the primary corpus-loss guard (typo / stale local ref) and MUST refuse
+///   setup, never silently disable g2 (RV-176 F-1, the ISS-056 silent-catastrophe
+///   shape). NOT routed through [`git_opt`], which folds non-zero to `None` and
+///   would re-collapse this case into the legitimate no-corpus one.
+/// - **`Ok(None)`** — `refish` resolves but carries no `pathspec` history yet (the
+///   legitimate first-corpus no-op; `rev-list -1` prints nothing).
+/// - **`Ok(Some(tip))`** — the commit oid of the most recent `pathspec`-touching
+///   commit reachable from `refish`.
+///
+/// `pathspec` is a param (not the `corpus_guard::DOCTRINE_PATHSPEC` constant
+/// inline) so this leaf seam stays off `corpus_guard` — mirrors
+/// [`diff_doctrine_paths`]. Explicit exit-code discipline throughout
+/// ([[mem.pattern.dispatch.project-off-pinned-fork-base-not-live-trunk-tip]]).
+pub(crate) fn last_corpus_commit(
+    root: &Path,
+    refish: &str,
+    pathspec: &str,
+) -> Result<Option<String>, CaptureError> {
+    // 1. Resolve-or-error — a non-zero exit is a misconfig, fail closed (NOT None).
+    let spec = format!("{refish}^{{commit}}");
+    let resolved = run_git(root, &["rev-parse", "--verify", &spec])?;
+    if !resolved.status.success() {
+        return Err(CaptureError::Git(format!(
+            "rev-parse --verify {spec}: {}",
+            String::from_utf8_lossy(&resolved.stderr).trim()
+        )));
+    }
+    // 2. Last commit touching the corpus — empty ⇒ resolves-but-no-corpus (None).
+    let tip = git_text(root, &["rev-list", "-1", refish, "--", pathspec])?;
+    Ok(if tip.is_empty() { None } else { Some(tip) })
+}
+
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
 /// `DOCTRINE_TRUNK_REF`, else `origin/HEAD`, `main`, `master` in turn. Each
 /// candidate is peeled with `rev-parse --verify --quiet <ref>^{commit}`; the
@@ -2114,7 +2151,8 @@ mod tests {
         AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, EMPTY_TREE_OID, Frame,
         REMOTE_NORMALIZER, RepoIdKind, RepoIdentity, WorktreeEntry, blob_oid_at, canonical_bytes,
         capture, checkout_state_id, commits_touching, diff_doctrine_paths, explicit_identity,
-        live_worktree_for_ref, normalize_remote_url, parse_worktree_for_ref, sha256,
+        last_corpus_commit, live_worktree_for_ref, normalize_remote_url, parse_worktree_for_ref,
+        sha256,
         worktree_for_ref,
     };
 
@@ -2570,6 +2608,39 @@ mod tests {
     fn blob_oid_at_errors_on_bad_treeish() {
         let (repo, _base, _cur) = doctrine_fixture();
         assert!(blob_oid_at(repo.path(), "deadbeef", ".doctrine/a.toml").is_err());
+    }
+
+    // --- g2 base-corpus tri-state seam (SL-166 PHASE-03, EX-1) ---------------
+
+    #[test]
+    fn last_corpus_commit_returns_tip_when_corpus_exists() {
+        let repo = ScratchRepo::new();
+        repo.commit("src/x.rs", "code", "non-corpus");
+        let corpus = repo.commit(".doctrine/a.toml", "v1", "corpus");
+        // The last commit touching `.doctrine` is the corpus commit, not HEAD's
+        // later non-corpus tip — so add one and confirm rev-list -1 walks back.
+        repo.commit("src/y.rs", "more", "after-corpus");
+        let tip = last_corpus_commit(repo.path(), "main", ".doctrine").expect("resolve");
+        assert_eq!(tip.as_deref(), Some(corpus.as_str()));
+    }
+
+    #[test]
+    fn last_corpus_commit_returns_none_when_ref_resolves_without_corpus() {
+        let repo = ScratchRepo::new();
+        repo.commit("src/x.rs", "code", "no corpus here");
+        // Ref resolves, but no `.doctrine` history yet — the legitimate
+        // first-corpus no-op (Ok(None)), distinct from an unresolvable ref.
+        let tip = last_corpus_commit(repo.path(), "main", ".doctrine").expect("resolve");
+        assert_eq!(tip, None);
+    }
+
+    #[test]
+    fn last_corpus_commit_errors_on_unresolvable_ref() {
+        let repo = ScratchRepo::new();
+        repo.commit(".doctrine/a.toml", "v1", "corpus");
+        // A set-but-unresolvable ref is a misconfiguration of the primary
+        // corpus-loss guard — fail closed (Err), never silently Ok(None).
+        assert!(last_corpus_commit(repo.path(), "refs/heads/ghost", ".doctrine").is_err());
     }
 
     #[test]
