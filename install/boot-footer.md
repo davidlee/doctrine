@@ -7,9 +7,8 @@
      else they should do on every session start.
      Keep it short. -->
 
-Immediately on beginning your NEXT TURN, use /retrieving-memory skill
-to retrieve and read the following two memories:
-
-/retrieving-memory `mem.signpost.doctrine.overview`
-/retrieving-memory `mem.signpost.project.orientation`
+Immediately on beginning your NEXT TURN:
+If the MCP `doctrine_onboard` tool is available, call it to get onboarding context
+in a single call. Otherwise, use /retrieving-memory skill to retrieve
+`mem.signpost.doctrine.overview` and `mem.signpost.project.orientation`.
 

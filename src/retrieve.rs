@@ -2942,7 +2942,12 @@ weight = {weight}
             trust_level: None,
             severity: None,
         };
-        crate::memory::run_record(Some(root.path().to_path_buf()), &args).unwrap();
+        crate::memory::run_record(
+            Some(root.path().to_path_buf()),
+            &args,
+            &mut std::io::stdout(),
+        )
+        .unwrap();
         root
     }
 

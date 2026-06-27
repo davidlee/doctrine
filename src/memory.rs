@@ -499,6 +499,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 repo: repo.as_deref(),
                 global,
             },
+            &mut io::stdout(),
         ),
         MemoryCommand::Show {
             reference,
@@ -680,7 +681,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                     Some(command)
                 },
             };
-            run_edit(path, &reference, &fields)
+            run_edit(path, &reference, &fields, &mut io::stdout())
         }
         MemoryCommand::Paths {
             refs,
@@ -1630,7 +1631,11 @@ pub(crate) struct RecordArgs<'a> {
 /// `doctrine memory record` — capture the born frame + scope, mint a uid, scaffold
 /// `items/<uid>/`, and (iff a key) create the transactional `<key> -> <uid>` alias.
 /// Non-idempotent by design (design § 5.5): each call mints a fresh uid.
-pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result<()> {
+pub(crate) fn run_record(
+    path: Option<PathBuf>,
+    args: &RecordArgs<'_>,
+    writer: &mut impl Write,
+) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let title = args.title.trim();
     if title.is_empty() {
@@ -1723,10 +1728,9 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result
     let out = entity::materialise_named(&root, target_dir, &uid, &fileset)
         .context("Failed to record memory")?;
 
-    let mut stdout = io::stdout();
     match &key {
-        Some(k) => writeln!(stdout, "Recorded memory {uid} ({k}): {}", out.dir.display())?,
-        None => writeln!(stdout, "Recorded memory {uid}: {}", out.dir.display())?,
+        Some(k) => writeln!(writer, "Recorded memory {uid} ({k}): {}", out.dir.display())?,
+        None => writeln!(writer, "Recorded memory {uid}: {}", out.dir.display())?,
     }
 
     // SL-035: a freshly-recorded `thread` scaffolds `unverified`, so thread_expiry
@@ -3849,6 +3853,7 @@ pub(crate) fn run_edit(
     path: Option<PathBuf>,
     reference: &str,
     fields: &EditFields,
+    writer: &mut impl Write,
 ) -> anyhow::Result<()> {
     if !fields.has_any() {
         anyhow::bail!("`memory edit` requires at least one flag");
@@ -3870,7 +3875,7 @@ pub(crate) fn run_edit(
             .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     }
 
-    writeln!(io::stdout(), "Edited memory {reference}")?;
+    writeln!(writer, "Edited memory {reference}")?;
     Ok(())
 }
 
@@ -5245,6 +5250,7 @@ to = "mem_018e000000000000000000000000000b"
                 Some("CLI delegates."),
                 &["Cli".to_string(), "cli".to_string()], // dedup/lowercase exercised
             ),
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -5277,6 +5283,7 @@ to = "mem_018e000000000000000000000000000b"
                 None,
                 &[],
             ),
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -5310,6 +5317,7 @@ to = "mem_018e000000000000000000000000000b"
                 None,
                 &[],
             ),
+            &mut io::stdout(),
         )
         .unwrap_err();
         assert!(err.to_string().contains("Failed to record memory"));
@@ -5332,6 +5340,7 @@ to = "mem_018e000000000000000000000000000b"
         let err = run_record(
             Some(root.path().to_path_buf()),
             &record_args("   ", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap_err();
         assert!(err.to_string().contains("Title must not be empty"));
@@ -5428,6 +5437,7 @@ to = "mem_018e000000000000000000000000000b"
                 repo: None,
                 global: false,
             },
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -5477,6 +5487,7 @@ to = "mem_018e000000000000000000000000000b"
                 repo: Some("github.com/org/repo"),
                 global: false,
             },
+            &mut io::stdout(),
         )
         .unwrap_err();
         assert!(err.to_string().contains("no git anchor"), "{err}");
@@ -5495,6 +5506,7 @@ to = "mem_018e000000000000000000000000000b"
         run_record(
             Some(repo.path.clone()),
             &record_args("Bare", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
         assert_eq!(repo.parsed_sole_memory().anchor.kind, AnchorKind::Commit);
@@ -5511,6 +5523,7 @@ to = "mem_018e000000000000000000000000000b"
         run_record(
             Some(repo.path.clone()),
             &record_args("Dirty", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -5602,6 +5615,7 @@ to = "mem_018e000000000000000000000000000b"
                 repo: Some(hostile),
                 global: false,
             },
+            &mut io::stdout(),
         )
         .unwrap();
         let m = repo.parsed_sole_memory();
@@ -5643,6 +5657,7 @@ to = "mem_018e000000000000000000000000000b"
                 repo: None,
                 global: true,
             },
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -5707,6 +5722,7 @@ to = "mem_018e000000000000000000000000000b"
                 repo: None,
                 global: false,
             },
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -5836,6 +5852,7 @@ to = "mem_018e000000000000000000000000000b"
         run_record(
             Some(repo.path.clone()),
             &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -5908,6 +5925,7 @@ to = "mem_018e000000000000000000000000000b"
         run_record(
             Some(repo.path.clone()),
             &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
         let before = fs::read_to_string(sole_toml(&repo.path)).unwrap();
@@ -5930,6 +5948,7 @@ to = "mem_018e000000000000000000000000000b"
         run_record(
             Some(root.path().to_path_buf()),
             &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
         run_verify(
@@ -5954,6 +5973,7 @@ to = "mem_018e000000000000000000000000000b"
         run_record(
             Some(repo.path.clone()),
             &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
         let toml_path = sole_toml(&repo.path);
@@ -6407,6 +6427,7 @@ to = "mem_018e000000000000000000000000000b"
                 Some("body"),
                 &[],
             ),
+            &mut io::stdout(),
         )
         .unwrap();
         let items = items_dir(root.path());
@@ -6479,6 +6500,7 @@ to = "mem_018e000000000000000000000000000b"
         run_record(
             Some(root.path().to_path_buf()),
             &record_args("T", MemoryType::Fact, None, Status::Active, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
         let items = items_dir(root.path());
@@ -6551,11 +6573,13 @@ to = "mem_018e000000000000000000000000000b"
                 Some("first body"),
                 &["cli".to_owned()],
             ),
+            &mut io::stdout(),
         )
         .unwrap();
         run_record(
             Some(root.path().to_path_buf()),
             &record_args("Second", MemoryType::Fact, None, Status::Draft, None, &[]),
+            &mut io::stdout(),
         )
         .unwrap();
         let items = items_dir(root.path());
@@ -7927,7 +7951,8 @@ weight = 0
                 trust_level: None,
                 severity: None,
             };
-            crate::memory::run_record(Some(root.path().to_path_buf()), &args).unwrap();
+            crate::memory::run_record(Some(root.path().to_path_buf()), &args, &mut io::stdout())
+                .unwrap();
         }
         root
     }
@@ -8752,6 +8777,7 @@ verified_sha = ""
                 None,
                 &[],
             ),
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -8812,6 +8838,7 @@ verified_sha = ""
                 None,
                 &[],
             ),
+            &mut io::stdout(),
         )
         .unwrap();
         repo.git(&["add", "-A"]);
@@ -8850,6 +8877,7 @@ verified_sha = ""
                 None,
                 &[],
             ),
+            &mut io::stdout(),
         )
         .unwrap();
         repo.git(&["add", "-A"]);
@@ -9000,7 +9028,7 @@ verified_sha = ""
             trust_level: None,
             severity: None,
         };
-        run_record(Some(root.path().to_path_buf()), &args).unwrap();
+        run_record(Some(root.path().to_path_buf()), &args, &mut io::stdout()).unwrap();
         root
     }
 

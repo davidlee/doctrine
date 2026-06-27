@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 14 tools: 10 review + 4 memory (`memory_find`, `memory_retrieve`, `memory_show`,
-//! `memory_list`). Each review tool calls the matching `review::run_*` function,
+//! 18 tools: 10 review + 8 memory (`memory_find`, `memory_retrieve`, `memory_show`,
+//! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`).
+//! Each review tool calls the matching `review::run_*` function,
 //! maps errors through `ReviewError` variant identity (design D8, §5), and
-//! returns JSON text. Memory tools are defined but wired in PHASE-04.
+//! returns JSON text.
 
 use super::protocol::{
     Id, JsonRpcRequest, JsonRpcResponse, McpTool, McpToolResult, ToolsListResult,
@@ -13,6 +14,7 @@ use crate::memory;
 use crate::retrieve;
 use crate::review::{self, NewArgs, PrimeArgs, ReviewOutput};
 use anyhow::Context;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::Path;
 use std::str::FromStr;
@@ -272,6 +274,61 @@ fn tools() -> Vec<McpTool> {
                     "reference": { "type": "string", "description": "Optional memory reference by uid or key; omit to validate all memories" },
                     "path": { "type": "string", "description": "Explicit project root (default: auto-detect)" }
                 },
+                "required": []
+            }),
+        },
+        McpTool {
+            name: "memory_record".to_owned(),
+            description: "Record a new memory. High-frequency write verb — captures git anchor, mints a v7 uid, scaffolds item dir. `--global` suppresses the anchor capture (repo-empty orientation master). Returns confirmation with uid and path.\n\nReturns: {\"Recorded\": { uid: \"mem_...\", canonical_path: string }}".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "title":       { "type": "string", "description": "Memory title (required)" },
+                    "memory_type": { "type": "string", "enum": ["concept","fact","pattern","signpost","system","thread"], "description": "Memory kind (required)" },
+                    "key":         { "type": "string", "description": "Optional durable key (e.g. mem.pattern.cli.skinny)" },
+                    "summary":     { "type": "string", "description": "One-line summary" },
+                    "trust_level": { "type": "string", "enum": ["high","medium","low"], "description": "Trust level (default: medium)" },
+                    "severity":    { "type": "string", "enum": ["high","medium","low"], "description": "Severity (default: medium)" },
+                    "tags":        { "type": "array", "items": { "type": "string" }, "description": "Tags" },
+                    "paths":       { "type": "array", "items": { "type": "string" }, "description": "File path scopes" },
+                    "globs":       { "type": "array", "items": { "type": "string" }, "description": "Glob scopes" },
+                    "commands":    { "type": "array", "items": { "type": "string" }, "description": "Command scopes" },
+                    "lifespan":    { "type": "string", "enum": ["semantic","episodic","procedural","working","identity"], "description": "Lifespan threshold" },
+                    "status":      { "type": "string", "enum": ["active","draft","superseded","retracted","archived","quarantined"], "description": "Initial status (default: active)" },
+                    "repo":        { "type": "string", "description": "Explicit repo identity override" },
+                    "global":      { "type": "boolean", "description": "Record as global orientation master" }
+                },
+                "required": ["title", "memory_type"]
+            }),
+        },
+        McpTool {
+            name: "memory_edit".to_owned(),
+            description: "Edit a memory's mutable fields (title, summary, status, lifespan, review_by, trust, severity, key if unset, and scopes). `reference` resolves by uid or key. At least one field must be provided beyond `reference`.\n\nReturns: {\"Edited\": string }".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "reference":  { "type": "string", "description": "Memory reference: uid or key (required)" },
+                    "title":      { "type": "string", "description": "New title" },
+                    "summary":    { "type": "string", "description": "New summary" },
+                    "status":     { "type": "string", "enum": ["active","draft","superseded","retracted","archived","quarantined"] },
+                    "lifespan":   { "type": "string", "enum": ["semantic","episodic","procedural","working","identity"] },
+                    "review_by":  { "type": "string" },
+                    "trust":      { "type": "string", "enum": ["high","medium","low"] },
+                    "severity":   { "type": "string", "enum": ["high","medium","low"] },
+                    "key":        { "type": "string", "description": "Set key (only if none exists — immutable once set)" },
+                    "path_scope": { "type": "array", "items": { "type": "string" } },
+                    "glob":       { "type": "array", "items": { "type": "string" } },
+                    "command":    { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["reference"]
+            }),
+        },
+        McpTool {
+            name: "doctrine_onboard".to_owned(),
+            description: "Returns self-describing onboarding context: CLI→MCP tool mappings and two bundled onboarding memories (`mem.signpost.doctrine.overview`, `mem.signpost.project.orientation`). MCP agents should call this instead of running `/retrieving-memory` for the signpost pair.\n\nReturns: markdown text block with mapping table + memory bodies".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
                 "required": []
             }),
         },
@@ -732,6 +789,108 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 Err(e) => Err(e),
             }
         }
+        "memory_record" => {
+            #[derive(Deserialize)]
+            struct RecordParams {
+                title: String,
+                memory_type: String,
+                key: Option<String>,
+                summary: Option<String>,
+                trust_level: Option<String>,
+                severity: Option<String>,
+                tags: Option<Vec<String>>,
+                paths: Option<Vec<String>>,
+                globs: Option<Vec<String>>,
+                commands: Option<Vec<String>>,
+                lifespan: Option<String>,
+                status: Option<String>,
+                repo: Option<String>,
+                global: Option<bool>,
+            }
+            let p: RecordParams = serde_json::from_value(arguments)
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            let memory_type = crate::memory::MemoryType::parse(&p.memory_type)
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))?;
+            let args = crate::memory::RecordArgs {
+                title: &p.title,
+                memory_type,
+                key: p.key.as_deref(),
+                summary: p.summary.as_deref(),
+                trust_level: p.trust_level.as_deref(),
+                severity: p.severity.as_deref(),
+                tags: &p.tags.unwrap_or_default(),
+                paths: &p.paths.unwrap_or_default(),
+                globs: &p.globs.unwrap_or_default(),
+                commands: &p.commands.unwrap_or_default(),
+                lifespan: p
+                    .lifespan
+                    .as_deref()
+                    .map(crate::memory::Lifespan::from_str)
+                    .transpose()
+                    .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))?,
+                status: p
+                    .status
+                    .as_deref()
+                    .map(crate::memory::Status::parse)
+                    .transpose()
+                    .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))?
+                    .unwrap_or(crate::memory::Status::Active),
+                repo: p.repo.as_deref(),
+                global: p.global.unwrap_or(false),
+                review_by: None,
+                sources: &[],
+            };
+            let mut buf = Vec::new();
+            crate::memory::run_record(Some(root.to_path_buf()), &args, &mut buf)
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            let raw = String::from_utf8(buf)?;
+            // Parse uid and path from "Recorded memory <uid>[(<key>)]: <path>" output
+            let output = raw.trim();
+            let colon_idx = output.rfind(':').unwrap_or(output.len());
+            let uid_part = &output[..colon_idx];
+            let path_part = output[colon_idx + 1..].trim();
+            let uid = uid_part.split_whitespace().nth(2).unwrap_or("unknown");
+            Ok(serde_json::to_string_pretty(
+                &json!({"Recorded": {"uid": uid, "canonical_path": path_part}}),
+            )?)
+        }
+        "memory_edit" => {
+            #[derive(Deserialize)]
+            struct EditParams {
+                reference: String,
+                title: Option<String>,
+                summary: Option<String>,
+                status: Option<String>,
+                lifespan: Option<String>,
+                review_by: Option<String>,
+                trust: Option<String>,
+                severity: Option<String>,
+                key: Option<String>,
+                path_scope: Option<Vec<String>>,
+                glob: Option<Vec<String>>,
+                command: Option<Vec<String>>,
+            }
+            let p: EditParams = serde_json::from_value(arguments)
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            let fields = crate::memory::EditFields {
+                title: p.title,
+                summary: p.summary,
+                status: p.status,
+                lifespan: p.lifespan,
+                review_by: p.review_by,
+                trust: p.trust,
+                severity: p.severity,
+                key: p.key,
+                path_scope: p.path_scope,
+                glob: p.glob,
+                command: p.command,
+            };
+            let mut buf = Vec::new();
+            crate::memory::run_edit(Some(root.to_path_buf()), &p.reference, &fields, &mut buf)
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            Ok(String::from_utf8(buf)?)
+        }
+        "doctrine_onboard" => render_onboard(root),
         _ => anyhow::bail!("Tool not found: {name}"),
     }
 }
@@ -1025,6 +1184,57 @@ fn map_review_error(id: Option<Id>, err: &anyhow::Error) -> JsonRpcResponse {
     )
 }
 
+// ── render_onboard helper ────────────────────────────────────────────────
+
+/// Static CLI→MCP mapping table rendered by `doctrine_onboard`.
+const ONBOARD_MAPPING_TABLE: &str = "\
+# Doctrine MCP Onboarding
+
+## CLI → MCP Tool Mapping
+When MCP tools are available, use these tools instead of CLI commands:
+
+| CLI command | MCP tool | Notes |
+|---|---|---|
+| `doctrine review new` | `review_new` | |
+| `doctrine review list` | `review_list` | |
+| `doctrine review show <ref>` | `review_show` | `reference` param |
+| `doctrine review raise` | `review_raise` | |
+| `doctrine review dispose` | `review_dispose` | |
+| `doctrine review verify` | `review_verify` | |
+| `doctrine review contest` | `review_contest` | |
+| `doctrine review withdraw` | `review_withdraw` | |
+| `doctrine review status` | `review_status` | |
+| `doctrine review prime` | `review_prime` | |
+| `doctrine memory find` | `memory_find` | |
+| `doctrine memory retrieve` | `memory_retrieve` | |
+| `doctrine memory show <ref>` | `memory_show` | `reference` param |
+| `doctrine memory list` | `memory_list` | |
+| `doctrine memory validate` | `memory_validate` | |
+| `doctrine memory record` | `memory_record` | |
+| `doctrine memory edit` | `memory_edit` | |
+";
+
+/// Render the `doctrine_onboard` markdown: mapping table + 2 bundled onboarding memories.
+fn render_onboard(root: &Path) -> anyhow::Result<String> {
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(ONBOARD_MAPPING_TABLE.to_owned());
+    parts.push("\n## Onboarding Memories\n".to_owned());
+    for key in &[
+        "mem.signpost.doctrine.overview",
+        "mem.signpost.project.orientation",
+    ] {
+        let mut buf = Vec::new();
+        // Use retrieve_reference — if a memory isn't found, just skip it silently
+        match crate::retrieve::retrieve_reference(&mut buf, root, key, false, None) {
+            Ok(()) => parts.push(String::from_utf8(buf)?),
+            Err(_) => parts.push(format!(
+                "\n(memory {key} not found — use /retrieving-memory)\n"
+            )),
+        }
+    }
+    Ok(parts.concat())
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1057,9 +1267,9 @@ mod tests {
     // VT-3: tool list response contains exactly 10 tools with correct names
 
     #[test]
-    fn tool_list_has_14_tools() {
+    fn tool_list_has_18_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 15);
+        assert_eq!(list.tools.len(), 18);
     }
 
     #[test]
@@ -1081,6 +1291,9 @@ mod tests {
         assert!(names.contains(&"memory_show"));
         assert!(names.contains(&"memory_list"));
         assert!(names.contains(&"memory_validate"));
+        assert!(names.contains(&"memory_record"));
+        assert!(names.contains(&"memory_edit"));
+        assert!(names.contains(&"doctrine_onboard"));
     }
 
     // ISS-033: review_list must accept its advertised (all-optional) arg shapes —
@@ -1394,7 +1607,7 @@ mod tests {
         let resp = dispatch(&req, &root);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 15);
+        assert_eq!(tools.len(), 18);
     }
 
     #[test]
@@ -1408,6 +1621,49 @@ mod tests {
         );
         let resp = dispatch(&req, &root);
         let err = resp.error.unwrap();
+        assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn memory_record_invalid_type_returns_32602() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req(
+            "memory_record",
+            json!({
+                "title": "test",
+                "memory_type": "nonexistent"
+            }),
+        );
+        let resp = dispatch(&req, &root);
+        let err = resp.error.expect("should have error");
+        assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn memory_edit_no_reference_returns_32602() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req(
+            "memory_edit",
+            json!({
+                "title": "new title"
+            }),
+        );
+        let resp = dispatch(&req, &root);
+        let err = resp.error.expect("should have error");
+        assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn memory_edit_no_flags_returns_32602() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req(
+            "memory_edit",
+            json!({
+                "reference": "mem_nonexistent"
+            }),
+        );
+        let resp = dispatch(&req, &root);
+        let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
     }
 
