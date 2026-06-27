@@ -215,6 +215,17 @@ pub(crate) enum Command {
         command: crate::commands::coverage::CoverageCommand,
     },
 
+    /// Proxy-run a project-declared check command by cadence (SL-163).
+    ///
+    /// Resolves the argv from the owned `[verification]` config
+    /// (`quick`/`commit`/`gate`) and proxy-executes it — inherited stdio, no
+    /// timeout, the child's exit code forwarded. Informs from `just check`/`just
+    /// gate` defaults; never carries a host convention as correctness (POL-002).
+    Check {
+        #[command(subcommand)]
+        command: crate::commands::check::CheckCommand,
+    },
+
     /// Read-only cross-kind relation view.
     ///
     /// Shows one entity's authored outbound relations, derived inbound relations,
@@ -713,6 +724,7 @@ static FAMILIES: &[Family] = &[
             "serve",
             "config",
             "validate",
+            "check",
             "reseat",
             "export",
             "reservation",
@@ -1045,6 +1057,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             },
         ),
         Command::Coverage { command } => crate::commands::coverage::dispatch(command, color),
+        Command::Check { command } => crate::commands::check::dispatch(command),
         Command::Inspect {
             id,
             format,
@@ -1324,8 +1337,8 @@ mod tests {
             );
         }
 
-        // The slice's stated census: 44 visible top-level commands (A1).
-        assert_eq!(visible.len(), 44, "expected 44 visible top-level commands");
+        // Census: 45 visible top-level commands (44 at SL-150 A1 + `check`, SL-163).
+        assert_eq!(visible.len(), 45, "expected 45 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

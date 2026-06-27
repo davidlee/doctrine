@@ -311,6 +311,11 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         | Command::Next { .. }
         | Command::Blockers { .. }
         | Command::Explain { .. }
+        // The check proxy writes NO authored doctrine state; a proxied command
+        // that mutates source (e.g. `cargo fmt`) is a worker-legal source delta,
+        // not an authored write — and a worker running `check gate` to verify its
+        // fork is the intended use, so Read is correct AND necessary (SL-163 §5.3).
+        | Command::Check { .. }
         | Command::Status { .. } => Read,
         // Mutates the canonical-id triple — an authored write (D2/D6).
         Command::Reseat { .. } => Write("reseat"),

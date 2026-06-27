@@ -1,7 +1,7 @@
 id = 163
 slug = "check-command-proxy"
 title = "check command proxy verb"
-status = "ready"
+status = "audit"
 created = "2026-06-27"
 updated = "2026-06-27"
 tags = []

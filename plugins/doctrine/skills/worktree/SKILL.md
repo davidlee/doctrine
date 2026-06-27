@@ -189,8 +189,8 @@ improvise past it.
   the **orchestrator's** guard at import time, worker-mode OFF — not the worker's.
   A HEAD-stationarity compare, not a merge-base (C-V).
 - **Baseline-verify (D9).** After creation, run the project's regenerate-and-verify
-  command **inside the fork** and gate handoff on green (this repo: `just check`).
-  The command is **project-provided** — never a hardcoded `cargo …`. An unbuildable
+  command **inside the fork** and gate handoff on green (this repo: `doctrine
+  check gate`). The command is **project-provided** — never a hardcoded `cargo …`. An unbuildable
   fork is fixed in provisioning, **never handed off**.
 
 ## Worker mode (the funnel half)
@@ -216,7 +216,7 @@ regardless.
    `.doctrine/` authored trees, runtime state, or memory — an import touching them
    is rejected (report+halt).
 2. **Verify.** Run the **orchestrator-supplied** verify command (passed in the
-   worker prompt — not assumed `just check`). A red verify is reported back; the
+   worker prompt — not assumed `doctrine check gate`). A red verify is reported back; the
    worker does not commit a red delta.
 3. **Commit exactly one `S`.** `git add -A && git commit` — raw git, **not** a
    doctrine verb (so `DOCTRINE_WORKER=1` does not refuse it, D2a). `S` is the

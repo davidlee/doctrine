@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+pub(crate) mod check;
 pub(crate) mod cli;
 pub(crate) mod config;
 pub(crate) mod coverage;

@@ -47,8 +47,9 @@ Inputs:
     before improvising past it.
 11. Keep the runtime phase sheet current as work progresses — never record progress in
     authored `plan.toml` / `plan.md` (the storage rule).
-12. Before declaring the phase ready, run the verification gate — `just check`
-    (lint + test + format) — and review the touched subsystems and notes once
+12. Before declaring the phase ready, run the verification gate — `doctrine
+    check gate` (lint + test + format) — and review the touched subsystems and
+    notes once
     more for missed memory-capture candidates.
 13. When exit criteria (`EX-`) and verification (`VT-`, plus any agent/human
     `VA-`/`VH-` modes) are satisfied, flip the
