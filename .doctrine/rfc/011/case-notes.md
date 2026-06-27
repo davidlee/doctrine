@@ -232,3 +232,38 @@ Two friction sources, both cost retries / a user round-trip:
    worktree, now audit it." A one-line pointer in /audit ("if the slice lives
    on a branch/worktree, land it on the parent tree before opening the RV —
    review verbs refuse forks, IMP-024") would have saved the whole detour.
+
+[SL-163 ? -> audit @ 140k]
+
+
+[/reconcile + /close SL-163; reconcile-close-sl163 @ ~70k]
+Three friction sources across the reconcile→close pass:
+
+1. Stale boot signpost: `doctrine paths SL-163` (listed verbatim under boot's
+   "useful commands" as `doctrine paths SL-123`) errors `unrecognized
+   subcommand 'paths'`. No such verb. First instinct for "list slice files"
+   wastes a call; recovered via `find .doctrine -name '*163*'`. Either the
+   snapshot recipe is stale or the verb was renamed/removed without updating
+   the signpost agents are told to trust.
+
+2. id-form rejection AGAIN at close (dup of IMP-189 / prior audit note):
+   `slice phases SL-163` and `slice status SL-163` → `invalid digit found in
+   string`. Recurs every lifecycle verb first-reach; the prior audit note
+   already flagged it, this pass re-paid ~1 call. Confirms the friction is
+   per-session-recurring, not one-and-done — the fix (bare-vs-prefixed parse
+   error message, or accept both) keeps earning.
+
+3. Solo slice reaches /close with runtime phase status never flipped. Rollup
+   showed `0/2` / both sheets `planned` though the work was implemented AND
+   audited faithful (RV-181 verified, just check green). Solo (non-dispatch)
+   implementation never moved phases planned→in_progress→completed in runtime
+   state, so close's "confirm X/X complete rollup" pre-check fails on a slice
+   that is substantively done. Cost: ~4 investigation calls (where does phase
+   state live? why 0/2? which verb flips it?) then a manual
+   `slice phase 163 PHASE-0N --status completed` per phase — each emitting a
+   `phase-binding capture skipped … no code_start_oid stamped` warning because
+   the phase never entered in_progress under the binding. The close skill body
+   assumes phases arrive pre-flipped (the /execute path); it offers no recipe
+   for "solo slice, audited-done, runtime phase status stale → reconcile the
+   rollup before transition." A one-line pointer in /close would save the
+   detour, and the binding-capture warning is noise in this legitimate path.
