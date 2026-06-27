@@ -2,6 +2,8 @@ mod? doctrine '.doctrine/doctrine.just'
 
 default: lint test install
 
+quick: fmt lint test
+
 # doctrine + skills reinstall; idempotent
 reinstall:
   doctrine install -y
