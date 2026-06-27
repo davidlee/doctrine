@@ -1,0 +1,98 @@
+id = 168
+slug = "doctor"
+title = "Unified corpus health doctor verb"
+status = "design"
+created = "2026-06-27"
+updated = "2026-06-27"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/doctor.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/integrity.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/registry.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation_graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/finding.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/doctor.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+
+[[relation]]
+label = "related"
+target = "IMP-121"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "SPEC-004"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "SPEC-013"
+
+[[relation]]
+label = "related"
+target = "IMP-141"
+
+[[relation]]
+label = "related"
+target = "IMP-176"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
