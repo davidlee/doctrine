@@ -267,3 +267,5 @@ Three friction sources across the reconcile→close pass:
    for "solo slice, audited-done, runtime phase status stale → reconcile the
    rollup before transition." A one-line pointer in /close would save the
    detour, and the binding-capture warning is noise in this legitimate path.
+
+[SL-163 reconcile -> close @ 73k]
