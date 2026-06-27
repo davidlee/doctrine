@@ -2152,8 +2152,7 @@ mod tests {
         REMOTE_NORMALIZER, RepoIdKind, RepoIdentity, WorktreeEntry, blob_oid_at, canonical_bytes,
         capture, checkout_state_id, commits_touching, diff_doctrine_paths, explicit_identity,
         last_corpus_commit, live_worktree_for_ref, normalize_remote_url, parse_worktree_for_ref,
-        sha256,
-        worktree_for_ref,
+        sha256, worktree_for_ref,
     };
 
     /// Render canonical bytes as a `String` for readable assertions (canonical

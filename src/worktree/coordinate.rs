@@ -108,10 +108,51 @@ pub(crate) fn base_has_slice_plan(root: &Path, base: &str, slice: u32) -> anyhow
     Ok(listing.is_some_and(|out| !out.is_empty()))
 }
 
+/// g2 (SL-166 design §5.2): refuse `coordinate()` setup when the fork `base`
+/// predates the authoring branch's `.doctrine` corpus tip — the silent
+/// corpus-deletion shape (ISS-056) where a fork off a stale base later promotes a
+/// corpus-less tree over the authored one. Tri-state, fail-closed:
+/// - `authoring_branch` **None** (posture off) ⇒ inert `Ok(())`.
+/// - ref resolves but carries **no corpus yet** (`last_corpus_commit` `Ok(None)`,
+///   the first-corpus case) ⇒ inert `Ok(())`.
+/// - ref **set-but-unresolvable** ⇒ `Err` (a misconfig of the primary guard MUST
+///   refuse, never silently disable g2 — RV-176 F-1).
+/// - corpus tip **not an ancestor** of `base` ⇒ `Err(BASE_CORPUS_STALE)`.
+///
+/// Threaded the resolved `authoring_branch` *value* (not the config loader) to
+/// keep `worktree::coordinate` off `dispatch_config`/`dtoml` (ADR-001, VA-1).
+pub(crate) fn ensure_base_corpus_fresh(
+    root: &Path,
+    authoring_branch: Option<&str>,
+    base: &str,
+) -> anyhow::Result<()> {
+    let Some(corpus_ref) = authoring_branch else {
+        return Ok(());
+    };
+    if let Some(corpus_tip) =
+        git::last_corpus_commit(root, corpus_ref, crate::corpus_guard::DOCTRINE_PATHSPEC)?
+    {
+        anyhow::ensure!(
+            git::is_ancestor(root, &corpus_tip, base)?,
+            "{}: base {base} predates corpus tip {corpus_tip} on {corpus_ref} — promote \
+             the base first (`git fetch . {corpus_ref}:<trunk>`), never fork the stale base",
+            crate::corpus_guard::BASE_CORPUS_STALE,
+        );
+    }
+    Ok(())
+}
+
 /// Pure-ish core: form the dispatch coordination worktree, provision it, and
 /// regenerate the runtime phase sheets. Returns the abbreviated dispatch tip.
-/// No stdout/stderr — I/O lives in [`run_coordinate`].
-pub(crate) fn coordinate(root: &Path, slice: u32, dir: &Path) -> anyhow::Result<CoordOutcome> {
+/// No stdout/stderr — I/O lives in [`run_coordinate`]. `authoring_branch` is the
+/// resolved `[dispatch] authoring-branch` *value* (ADR-001/VA-1: values, not the
+/// loader) driving the g2 base-corpus gate ([`ensure_base_corpus_fresh`]).
+pub(crate) fn coordinate(
+    root: &Path,
+    slice: u32,
+    dir: &Path,
+    authoring_branch: Option<&str>,
+) -> anyhow::Result<CoordOutcome> {
     let branch = format!("dispatch/{slice:03}");
 
     // --- Step 1 refusal (pre-add: leave NO worktree) ---
@@ -165,6 +206,9 @@ pub(crate) fn coordinate(root: &Path, slice: u32, dir: &Path) -> anyhow::Result<
                      that carries it (e.g. DOCTRINE_TRUNK_REF=main)"
                 );
             }
+            // g2 (SL-166): refuse a fork base that predates the authoring corpus,
+            // BEFORE the fork — so a stale base never mints a worktree (EX-2).
+            ensure_base_corpus_fresh(root, authoring_branch, &trunk)?;
             git::git_text(
                 root,
                 &[
@@ -232,7 +276,12 @@ pub(crate) fn coordinate(root: &Path, slice: u32, dir: &Path) -> anyhow::Result<
 ///
 /// Orchestrator-classed; refused under worker-mode by `worker_guard` (EX-4) — the
 /// marker-present / `DOCTRINE_WORKER` refusals ride the SAME guard as `fork`.
-pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> anyhow::Result<()> {
+pub(crate) fn run_coordinate(
+    path: Option<PathBuf>,
+    slice: u32,
+    dir: &Path,
+    authoring_branch: Option<&str>,
+) -> anyhow::Result<()> {
     let repo = root::find(path, &root::default_markers())?;
     let branch = format!("dispatch/{slice:03}");
 
@@ -249,7 +298,7 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
     )?
     .is_some();
 
-    let _outcome = coordinate(&repo, slice, dir)?;
+    let _outcome = coordinate(&repo, slice, dir, authoring_branch)?;
 
     // --- human status on stderr; stdout stays empty (machine-clean, mirrors `fork`) ---
     let verb = if branch_existed { "resumed" } else { "created" };

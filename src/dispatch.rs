@@ -503,8 +503,12 @@ pub(crate) fn run_setup(
         anyhow::bail!("plan for SL-{slice:03} has no phases; add phases to plan.toml first");
     }
 
-    // Delegate to the extracted pure-ish core.
-    let outcome = crate::worktree::coordinate(&root, slice, dir)?;
+    // Delegate to the extracted pure-ish core; thread the resolved g2
+    // authoring-branch VALUE (ADR-001/VA-1: value, not the loader).
+    let authoring = crate::dtoml::load_doctrine_toml(&root)?
+        .dispatch
+        .authoring_branch;
+    let outcome = crate::worktree::coordinate(&root, slice, dir, authoring.as_deref())?;
 
     // Emit the dispatch env contract on stdout (4 KEY=value lines).
     let dispatch_ref = format!("refs/heads/dispatch/{slice:03}");
