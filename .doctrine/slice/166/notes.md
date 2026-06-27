@@ -123,3 +123,87 @@ validate path — out of scope, flag only if a reviewer demands belt-and-braces.
 
 **Phase order remaining:** PHASE-04 (g1, dispatch-shell verb guard) → PHASE-05
 (enable posture + INV-2 parity + docs).
+
+## PHASE-04 — g1 refuse trunk-mutating verbs on a buffer checkout — DONE
+
+Commits on the fork `slice/SL-166-corpus-loss-guards` (see SHAs in the audit
+handover). `just gate` green (clippy `--workspace`, fmt `--check`, full test
+suite, build — exit 0, zero warnings).
+
+**What shipped**
+- `corpus_guard::on_integration_buffer(current, authoring, deliver_to) -> bool`
+  — the pure g1 predicate (leaf): inert when `authoring` is `None` OR
+  `authoring == deliver_to` (defensively inert on a misconfigured posture, EX-3);
+  else refuses iff `current` is the short name of `deliver_to`.
+- `corpus_guard::short_branch_name(refish)` — strips the single-source
+  `REFS_HEADS_PREFIX` (`refs/heads/`) const; the form `symbolic-ref --short HEAD`
+  reports. Reused by the predicate and the shell refusal message (DRY, STD-001).
+- `dispatch::guard_not_on_integration_ref(root, cfg)` — the shell guard: reads the
+  worktree-local HEAD via the existing `current_branch(root)` (`symbolic-ref
+  --quiet --short HEAD`, EX-2 — same seam the raw-evidence-ref guard at
+  `dispatch.rs:1048` uses), runs the pure predicate, and `bail!`s with
+  `REFUSE_ON_TRUNK` naming the buffer ref + the `git fetch . <authoring>:<buffer>`
+  (not `checkout`) recovery.
+- Wired at the head of `run_integrate` (the verb entry, EX-1 — earliest/cheapest
+  per design §5.4), AFTER `root::find`, loading `cfg` via
+  `crate::dtoml::load_doctrine_toml(&root)?.dispatch`. ONE call site covers BOTH
+  the `--trunk`/`--edge` legs and the candidate-active legs (they all land in the
+  single `integrate()`; `run_integrate` is its sole caller).
+- Dropped `REFUSE_ON_TRUNK`'s `#[expect(dead_code)]` (now consumed) — same move g2
+  did for `BASE_CORPUS_STALE`.
+
+**g1 verb-set enumeration (EX-1 / VA-1, confirmed against `dispatch.rs`)**
+- GUARDED — `sync --integrate` (`DispatchCommand::Sync { integrate, .. }`
+  → `run_integrate` `dispatch.rs:587`): the guard fires before `integrate()`
+  `:1874`, which is the SOLE landing for both the legacy `--trunk`/`--edge`
+  advance legs (`plan_trunk_row`/`plan_edge_row`) AND the candidate-active legs
+  (`plan_candidate_trunk_row`/`plan_candidate_edge_row`, inner branches at
+  `:1909-1924`). `integrate()`'s only caller is `run_integrate`, so one guard call
+  is the complete cover.
+- EXCLUDED (correct — F-4 / OQ-3, advance no integration ref):
+  - `candidate create` (`candidate_create` `dispatch.rs:1037`) — writes a
+    `candidate/*` ref + row, not the buffer.
+  - `candidate admit` (`run_candidate_admit` `dispatch.rs:1273`) — writes
+    `candidates.toml`, advances no ref.
+  - `sync --prepare-review`, `--show-journal-trunk-oid`, `setup`, `refresh-base`,
+    `record-boundary`, `plan-next`, `status`, `deliver-to`, `arm-spawn` — none
+    advance `deliver_to`/`edge`.
+  The `g1_guards_only_the_integrate_verb_entry` test pins this (exactly one
+  production call site; candidate fns assert-free) so the set can't silently drift.
+
+**Design-as-built (decisions)**
+- **D-P4a: pure predicate in the leaf.** Followed the PHASE-02/03 layering split
+  ([[mem.pattern.safety.resolve-every-ref-before-pure-compare]]): the decision
+  (`on_integration_buffer`) is a pure `corpus_guard` leaf; the shell does only the
+  HEAD read + message interpolation. The predicate is small but earns the leaf for
+  testability + DRY with the EX-3 inert conditions.
+- **D-P4b: g1 inert on `authoring == deliver_to`** (beyond design §5.2's bare
+  `Some(_)` check). `validate_posture` rejects that config, but g1 may run on
+  unvalidated config, so it stays defensively inert (EX-3 literal: "unset OR ==
+  deliver_to"). No deviation — strengthens the snippet.
+- **Call site = `run_integrate`, not `integrate`.** Keeps `integrate()` posture-
+  free so existing e2e/unit suites that call it with HEAD on `main` stay green
+  unchanged (INV-2). Posture is unset in those fixtures ⇒ inert regardless; the
+  placement is the clean seam. No deviation from "verb entry" — `run_integrate` IS
+  the CLI verb entry.
+
+**VT/EX coverage map**
+- EX-1 (verb-set) → `dispatch::tests::g1_guards_only_the_integrate_verb_entry`.
+- EX-2 (worktree-local HEAD) → `integrate_refused_when_head_on_buffer` /
+  `integrate_allowed_on_authoring_branch` (drive the real `symbolic-ref` seam over
+  a temp repo with HEAD on `main` vs a checked-out `edge`).
+- EX-3 (inert conditions + refusal wording) → `corpus_guard::tests::g1_inert_*`
+  (`_when_posture_unset`, `_when_authoring_equals_deliver_to`, `_on_detached_head`)
+  + the refused test's message assertions (names buffer ref + fetch-not-checkout).
+- VT-1 (refuse on buffer) → `corpus_guard::tests::g1_refuses_when_head_on_buffer`
+  (unit) + `dispatch::tests::integrate_refused_when_head_on_buffer` (shell+git).
+- VT-2 (allowed on authoring / inert unset) →
+  `corpus_guard::tests::g1_allows_on_authoring_branch` +
+  `dispatch::tests::{integrate_allowed_on_authoring_branch,g1_inert_when_posture_unset}`.
+- VA-1 (verb-set audit) → `g1_guards_only_the_integrate_verb_entry` (a test, not
+  just a grep — pins the enumeration in CI).
+- Behaviour-preservation (INV-2): existing dispatch suites green unchanged; the
+  guard short-circuits to `Ok` when `authoring-branch` is unset (fixtures' case).
+
+**Phase order remaining:** PHASE-05 (enable posture in doctrine.toml + INV-2
+parity re-run + operator docs).
