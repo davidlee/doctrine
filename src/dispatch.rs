@@ -795,6 +795,126 @@ fn role_token(role: CandidateRole) -> &'static str {
     }
 }
 
+/// Single classifier for a journaled-evidence source ref: `review/<slice>` or
+/// `phase/<slice>-NN`. The one source of truth for "is this source a journaled
+/// evidence ref", so the provenance base-case (and, later, the recursion step)
+/// agree — no inline ref-shape duplication.
+fn is_journaled_evidence_ref(source_ref: &str, slice3: &str) -> bool {
+    source_ref == format!("refs/heads/review/{slice3}")
+        || source_ref
+            .strip_prefix(&format!("refs/heads/phase/{slice3}-"))
+            .and_then(|nn| nn.parse::<u32>().ok())
+            .is_some()
+}
+
+/// Depth budget for candidate-provenance chain tracing (INV-4, OQ-1).
+/// Named constant per STD-001 — never a literal at the call site.
+const CANDIDATE_PROVENANCE_DEPTH_BUDGET: u32 = 16;
+
+/// Single classifier for a candidate ref: `refs/heads/candidate/<N>/<label>`.
+fn is_candidate_ref(source_ref: &str) -> bool {
+    source_ref.starts_with("refs/heads/candidate/")
+}
+
+/// Walk the recorded-candidate chain from `ref_name` to a Verified journaled
+/// evidence root (design §5.1, INV-1..5). Count-exact `target_ref` match (fail-
+/// closed on duplicates, mirrors `ledger.rs:464`); status gate `Created` only;
+/// role/kind gate `review_surface | close_target` + `audit`; recurse on a
+/// candidate `source_ref`; terminate on a journaled `source_ref` by routing the
+/// FULL existing journaled gate (Verified + phase-hole, F3). Bounded by
+/// `budget` (INV-4). Returns the matched candidate row so the caller can bind
+/// lineage (INV-6) without a second lookup.
+fn trace_candidate_provenance<'a>(
+    candidates: &'a Candidates,
+    journal: &Journal,
+    slice3: &str,
+    ref_name: &str,
+    budget: u32,
+) -> anyhow::Result<&'a CandidateRow> {
+    if budget == 0 {
+        bail!(
+            "candidate create: provenance chain too deep or cyclic — \
+             budget exhausted at {ref_name}"
+        );
+    }
+    // Count-exact match — fail-closed on duplicates (INV-5).
+    let mut rows = candidates.rows.iter().filter(|r| r.target_ref == ref_name);
+    let row = rows.next().with_context(|| {
+        format!("candidate create: no recorded candidate row for source {ref_name}")
+    })?;
+    if rows.next().is_some() {
+        bail!(
+            "candidate create: ambiguous candidate row for {ref_name} — \
+             multiple rows share the same target_ref"
+        );
+    }
+    anyhow::ensure!(
+        row.status == CandidateStatus::Created,
+        "candidate create: source candidate {ref_name} is {:?}, not clean (must be Created)",
+        row.status
+    );
+    anyhow::ensure!(
+        matches!(row.role, CandidateRole::ReviewSurface | CandidateRole::CloseTarget)
+            && row.kind == CandidateKind::Audit,
+        "candidate create: source candidate {ref_name} is role={:?}/kind={:?} — \
+         only an audit review_surface (or chained close_target) may source a close_target",
+        row.role,
+        row.kind
+    );
+    let next = &row.source_ref;
+    if is_journaled_evidence_ref(next, slice3) {
+        // Terminate at journaled evidence — run the FULL existing gate
+        // (Verified + phase-hole, F3 — not a weakened subset).
+        let jrow = journal
+            .rows
+            .iter()
+            .find(|r| r.target_ref == *next)
+            .with_context(|| {
+                format!(
+                    "candidate create: no prepare-review journal row for source {next} — \
+                     run `dispatch sync --prepare-review` first"
+                )
+            })?;
+        anyhow::ensure!(
+            jrow.status == LedgerStatus::Verified,
+            "candidate create: source {next} is not verified (status {:?}) — \
+             no verified evidence to build a candidate from",
+            jrow.status
+        );
+        // Phase-chain integrity: a close target built off phase/<slice>-NN must
+        // have no earlier failed phase row.
+        let prefix = format!("refs/heads/phase/{slice3}-");
+        if let Some(nn) = next
+            .strip_prefix(&prefix)
+            .and_then(|nn| nn.parse::<u32>().ok())
+        {
+            for r in &journal.rows {
+                if let Some(other) = r
+                    .target_ref
+                    .strip_prefix(&prefix)
+                    .and_then(|n| n.parse::<u32>().ok())
+                    && other < nn
+                    && r.status == LedgerStatus::Failed
+                {
+                    bail!(
+                        "candidate create: an earlier phase row {} failed — the phase chain \
+                         below {next} has an unresolved hole",
+                        r.target_ref
+                    );
+                }
+            }
+        }
+        Ok(row)
+    } else if is_candidate_ref(next) {
+        trace_candidate_provenance(candidates, journal, slice3, next, budget - 1)
+    } else {
+        bail!(
+            "candidate create: source candidate built from non-evidence {next} — \
+             the recorded chain must terminate at a journaled evidence ref"
+        )
+    }
+}
+
 /// EX-1 provenance: the candidate's source ref must correspond to a journal
 /// prepare-review row whose `status == Verified`. For a `phase/<slice>-NN` source
 /// (a `code` close target) additionally refuse when an EARLIER non-empty
@@ -802,48 +922,70 @@ fn role_token(role: CandidateRole) -> &'static str {
 /// not actually carry verified prior code. Reads the journal from the
 /// coordination branch tip (object db). Refuses (no writes) before any verified
 /// evidence exists.
-fn check_provenance(journal: &Journal, slice3: &str, source_ref: &str) -> anyhow::Result<()> {
-    let row = journal
-        .rows
-        .iter()
-        .find(|r| r.target_ref == source_ref)
-        .with_context(|| {
-            format!(
-                "candidate create: no prepare-review journal row for source {source_ref} — \
-                 run `dispatch sync --prepare-review` first"
-            )
-        })?;
-    anyhow::ensure!(
-        row.status == LedgerStatus::Verified,
-        "candidate create: source {source_ref} is not verified (status {:?}) — \
-         no verified evidence to build a candidate from",
-        row.status
-    );
+fn check_provenance<'a>(
+    journal: &Journal,
+    candidates: &'a Candidates,
+    slice3: &str,
+    role: CandidateRole,
+    source_ref: &str,
+) -> anyhow::Result<Option<&'a CandidateRow>> {
+    if is_journaled_evidence_ref(source_ref, slice3) {
+        let row = journal
+            .rows
+            .iter()
+            .find(|r| r.target_ref == source_ref)
+            .with_context(|| {
+                format!(
+                    "candidate create: no prepare-review journal row for source {source_ref} — \
+                     run `dispatch sync --prepare-review` first"
+                )
+            })?;
+        anyhow::ensure!(
+            row.status == LedgerStatus::Verified,
+            "candidate create: source {source_ref} is not verified (status {:?}) — \
+             no verified evidence to build a candidate from",
+            row.status
+        );
 
-    // Phase-chain integrity: a close target built off phase/<slice>-NN must have
-    // no earlier failed phase row (an unresolved hole below the selected phase).
-    let prefix = format!("refs/heads/phase/{slice3}-");
-    if let Some(nn) = source_ref
-        .strip_prefix(&prefix)
-        .and_then(|nn| nn.parse::<u32>().ok())
-    {
-        for r in &journal.rows {
-            if let Some(other) = r
-                .target_ref
-                .strip_prefix(&prefix)
-                .and_then(|n| n.parse::<u32>().ok())
-                && other < nn
-                && r.status == LedgerStatus::Failed
-            {
-                bail!(
-                    "candidate create: an earlier phase row {} failed — the phase chain \
-                     below {source_ref} has an unresolved hole",
-                    r.target_ref
-                );
+        // Phase-chain integrity: a close target built off phase/<slice>-NN must have
+        // no earlier failed phase row (an unresolved hole below the selected phase).
+        let prefix = format!("refs/heads/phase/{slice3}-");
+        if let Some(nn) = source_ref
+            .strip_prefix(&prefix)
+            .and_then(|nn| nn.parse::<u32>().ok())
+        {
+            for r in &journal.rows {
+                if let Some(other) = r
+                    .target_ref
+                    .strip_prefix(&prefix)
+                    .and_then(|n| n.parse::<u32>().ok())
+                    && other < nn
+                    && r.status == LedgerStatus::Failed
+                {
+                    bail!(
+                        "candidate create: an earlier phase row {} failed — the phase chain \
+                         below {source_ref} has an unresolved hole",
+                        r.target_ref
+                    );
+                }
             }
         }
+        Ok(None)
+    } else if role == CandidateRole::CloseTarget && is_candidate_ref(source_ref) {
+        let row = trace_candidate_provenance(
+            candidates,
+            journal,
+            slice3,
+            source_ref,
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        )?;
+        Ok(Some(row))
+    } else {
+        bail!(
+            "candidate create: no prepare-review journal row for source {source_ref} — \
+             run `dispatch sync --prepare-review` first"
+        )
     }
-    Ok(())
 }
 
 /// The no-`--worktree` content-conflict abort message (design §3.3). Pure. When
@@ -910,7 +1052,9 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
     //     or write) — refuse before verified evidence exists, by ref NAME -------
     let source_ref = resolve_source_ref(req, &slice3)?;
     let journal = read_ledger::<Journal>(root, &coord_ref, &slice3, "journal.toml")?;
-    check_provenance(&journal, &slice3, &source_ref)?;
+    let mut ledger = read_candidates(root, req.slice)?;
+    let matched_row =
+        check_provenance(&journal, &ledger, &slice3, req.role, &source_ref)?;
 
     // --- resolve source + base oids (the journal proved the source verified) -
     let source_oid = resolve_commit(root, &source_ref)?
@@ -918,8 +1062,26 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
     let base_oid = resolve_commit(root, &req.base)?
         .with_context(|| format!("candidate create: base {} does not resolve", req.base))?;
 
+    // --- INV-6 lineage binding (RV-175 F-1): for a candidate source, the
+    //     live source_oid MUST descend from the recorded merge_oid — binding
+    //     resolved CONTENT (not just the ref name) to the verified-traced
+    //     provenance. Source-side analog of admit's I3. -------------------------
+    if let Some(row) = matched_row {
+        anyhow::ensure!(
+            !row.merge_oid.is_empty(),
+            "candidate create: source candidate {source_ref} has an empty merge_oid — cannot verify lineage"
+        );
+        anyhow::ensure!(
+            git::is_ancestor(root, &row.merge_oid, &source_oid)?,
+            "candidate create: source candidate {} tip {} does not descend from its recorded \
+             merge {} — the ref moved off its provenance lineage",
+            source_ref,
+            source_oid,
+            row.merge_oid
+        );
+    }
+
     // --- EX-2 supersession: a fresh row links to a prior candidate id --------
-    let mut ledger = read_candidates(root, req.slice)?;
     let supersedes = match &req.supersedes {
         Some(prior) => {
             anyhow::ensure!(
@@ -3909,5 +4071,289 @@ mod tests {
     #[test]
     fn guard_empty_registry_is_silent() {
         assert!(missing_committed_funnel_phases(&[], &committed_set(&["PHASE-01"])).is_empty(),);
+    }
+
+    // --- SL-165 PHASE-02: trace_candidate_provenance refuse matrix (INV-2..5) --
+    //
+    // The git-dependent INV-6 lineage binding (is_ancestor of the live tip onto
+    // the recorded merge) is exercised end-to-end in
+    // `tests/e2e_dispatch_candidate.rs::close_target_from_moved_candidate_ref_refuses`.
+    // The structural refuse branches below are pure over (Candidates, Journal):
+    // hand-crafting an ambiguous / cyclic / non-evidence ledger through the CLI
+    // is impractical, so they are unit-covered against the design's bail classes.
+
+    /// Build a candidate row with the fields the trace reads; the rest are inert.
+    fn cand_row(
+        target_ref: &str,
+        source_ref: &str,
+        role: CandidateRole,
+        kind: CandidateKind,
+        status: CandidateStatus,
+    ) -> CandidateRow {
+        CandidateRow {
+            id: format!("cand-{target_ref}"),
+            label: "l".into(),
+            kind,
+            role,
+            payload: CandidatePayload::ImplBundle,
+            target_ref: target_ref.into(),
+            source_ref: source_ref.into(),
+            source_oid: "0".repeat(40),
+            base_ref: "refs/heads/main".into(),
+            base_oid: "0".repeat(40),
+            merge_oid: "0".repeat(40),
+            status,
+            supersedes: String::new(),
+            reason: String::new(),
+            created_by: "test".into(),
+            created_at: "2026-01-01".into(),
+        }
+    }
+
+    fn jrow(target_ref: &str, status: LedgerStatus) -> JournalRow {
+        JournalRow {
+            source_oid: "0".repeat(40),
+            target_ref: target_ref.into(),
+            expected_old_oid: "0".repeat(40),
+            planned_new_oid: "0".repeat(40),
+            applied_new_oid: String::new(),
+            status,
+        }
+    }
+
+    /// A clean review_surface candidate sourced from a Verified `review/200`.
+    fn audit_surface_row() -> CandidateRow {
+        cand_row(
+            "refs/heads/candidate/200/review-001",
+            "refs/heads/review/200",
+            CandidateRole::ReviewSurface,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        )
+    }
+
+    fn verified_review_journal() -> Journal {
+        Journal {
+            rows: vec![jrow("refs/heads/review/200", LedgerStatus::Verified)],
+        }
+    }
+
+    fn trace_err(candidates: &Candidates, journal: &Journal, ref_name: &str, budget: u32) -> String {
+        let err = trace_candidate_provenance(candidates, journal, "200", ref_name, budget)
+            .expect_err("trace should refuse");
+        format!("{err}")
+    }
+
+    // INV-1: a clean audit review_surface tracing to Verified journaled evidence
+    // is accepted — the recursion's terminal base case.
+    #[test]
+    fn trace_accepts_audit_surface_to_verified_root() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row()],
+            ..Default::default()
+        };
+        let row = trace_candidate_provenance(
+            &candidates,
+            &verified_review_journal(),
+            "200",
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        )
+        .expect("clean audit surface should trace to the verified root");
+        assert_eq!(row.target_ref, "refs/heads/candidate/200/review-001");
+    }
+
+    // INV-4: an exhausted budget refuses (the over-deep / cyclic guard).
+    #[test]
+    fn trace_over_budget_refuses() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row()],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            0,
+        );
+        assert!(err.contains("too deep or cyclic"), "got: {err}");
+    }
+
+    // INV-4: a cyclic chain (A→B→A) exhausts the budget rather than looping.
+    #[test]
+    fn trace_cyclic_chain_refuses() {
+        let a = cand_row(
+            "refs/heads/candidate/200/a",
+            "refs/heads/candidate/200/b",
+            CandidateRole::CloseTarget,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        );
+        let b = cand_row(
+            "refs/heads/candidate/200/b",
+            "refs/heads/candidate/200/a",
+            CandidateRole::CloseTarget,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        );
+        let candidates = Candidates {
+            rows: vec![a, b],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &Journal::default(),
+            "refs/heads/candidate/200/a",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("too deep or cyclic"), "got: {err}");
+    }
+
+    // INV-5: two rows sharing a target_ref are fail-closed, never first-match.
+    #[test]
+    fn trace_ambiguous_row_refuses() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row(), audit_surface_row()],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("ambiguous candidate row"), "got: {err}");
+    }
+
+    // A source ref naming no recorded row is refused.
+    #[test]
+    fn trace_missing_row_refuses() {
+        let candidates = Candidates::default();
+        let err = trace_err(
+            &candidates,
+            &Journal::default(),
+            "refs/heads/candidate/200/ghost",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("no recorded candidate row"), "got: {err}");
+    }
+
+    // INV-3: only a `Created` source candidate qualifies — a `Conflicted`
+    // (parked-at-base) candidate is refused as not clean.
+    #[test]
+    fn trace_conflicted_status_refuses() {
+        let mut row = audit_surface_row();
+        row.status = CandidateStatus::Conflicted;
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("not clean"), "got: {err}");
+    }
+
+    // INV-2: an `experiment`-kind source is refused even when its role would
+    // otherwise pass — only `audit` content may source a close_target.
+    #[test]
+    fn trace_experiment_kind_refuses() {
+        let mut row = audit_surface_row();
+        row.kind = CandidateKind::Experiment;
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(
+            err.contains("kind=Experiment") || err.contains("only an audit review_surface"),
+            "got: {err}"
+        );
+    }
+
+    // INV-2: a `scratch`-role source is refused (mirrors the e2e scratch case at
+    // the pure layer, asserting the bail class).
+    #[test]
+    fn trace_scratch_role_refuses() {
+        let mut row = audit_surface_row();
+        row.role = CandidateRole::Scratch;
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(
+            err.contains("role=Scratch") || err.contains("only an audit review_surface"),
+            "got: {err}"
+        );
+    }
+
+    // The recorded chain must terminate at journaled evidence: a hop to a ref
+    // that is neither a candidate nor journaled evidence is refused.
+    #[test]
+    fn trace_non_evidence_hop_refuses() {
+        let row = cand_row(
+            "refs/heads/candidate/200/review-001",
+            "refs/heads/feature/random",
+            CandidateRole::ReviewSurface,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        );
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &Journal::default(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("non-evidence"), "got: {err}");
+    }
+
+    // F3: the journaled base case runs the FULL existing gate — an UNVERIFIED
+    // journal row at the chain root is refused, not silently accepted.
+    #[test]
+    fn trace_unverified_journal_root_refuses() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row()],
+            ..Default::default()
+        };
+        let journal = Journal {
+            rows: vec![jrow("refs/heads/review/200", LedgerStatus::Pending)],
+        };
+        let err = trace_err(
+            &candidates,
+            &journal,
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("not verified"), "got: {err}");
+    }
+
+    // The journaled/candidate classifiers are the single source of truth for the
+    // base-case vs recursion-step split (design §5.2).
+    #[test]
+    fn ref_classifiers_agree() {
+        assert!(is_journaled_evidence_ref("refs/heads/review/200", "200"));
+        assert!(is_journaled_evidence_ref("refs/heads/phase/200-03", "200"));
+        assert!(!is_journaled_evidence_ref("refs/heads/phase/200-xx", "200"));
+        assert!(!is_journaled_evidence_ref("refs/heads/candidate/200/x", "200"));
+        assert!(is_candidate_ref("refs/heads/candidate/200/review-001"));
+        assert!(!is_candidate_ref("refs/heads/review/200"));
     }
 }
