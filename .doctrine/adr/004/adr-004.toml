@@ -6,7 +6,7 @@ slug = "relations-stored-outbound-only-reciprocity-is-derived"
 title = "Relations stored outbound-only; reciprocity is derived"
 status = "superseded"
 created = "2026-06-07"
-updated = "2026-06-26"
+updated = "2026-06-27"
 
 [relationships]
 # The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
