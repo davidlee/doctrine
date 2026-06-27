@@ -301,7 +301,15 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             path,
         } => run_fork(path, &base, &branch, &dir, worker),
         WorktreeCommand::CreateFork => run_create_fork(),
-        WorktreeCommand::Coordinate { slice, dir, path } => run_coordinate(path, slice, &dir),
+        WorktreeCommand::Coordinate { slice, dir, path } => {
+            // Resolve the g2 authoring-branch VALUE here (command tier) — not in
+            // coordinate.rs, which must stay off the config loader (ADR-001/VA-1).
+            let repo = crate::root::find(path.clone(), &crate::root::default_markers())?;
+            let authoring = crate::dtoml::load_doctrine_toml(&repo)?
+                .dispatch
+                .authoring_branch;
+            run_coordinate(path, slice, &dir, authoring.as_deref())
+        }
         WorktreeCommand::Import { base, fork, path } => run_import(path, &base, &fork),
         WorktreeCommand::Land { fork, path } => run_land(path, &fork),
         WorktreeCommand::Gc {
@@ -337,6 +345,7 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    use super::coordinate::ensure_base_corpus_fresh;
     use super::test_helpers::{git, init_repo};
     use super::*;
     use glob::Pattern;
@@ -778,7 +787,7 @@ mod tests {
         let repo = init_repo(&tmp.path().join("src"));
         let dir = tmp.path().join("coord");
 
-        let Err(err) = coordinate(&repo, 127, &dir) else {
+        let Err(err) = coordinate(&repo, 127, &dir, None) else {
             panic!("must refuse: base predates plan");
         };
         let msg = format!("{err:#}");
@@ -794,6 +803,103 @@ mod tests {
             !dir.exists(),
             "no worktree dir is created on the early bail"
         );
+    }
+
+    // --- SL-166 PHASE-03: g2 base-corpus freshness (VT-1/2/3) ---------------
+
+    /// Fixture: `main` carries `.doctrine/a.toml` (corpus C0); branch `edge` adds
+    /// `.doctrine/b.toml` (corpus C1, a commit `main` lacks). Returns the root,
+    /// left checked out on `main`.
+    fn corpus_repo() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = init_repo(&tmp.path().join("src"));
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::write(root.join(".doctrine/a.toml"), "v1").unwrap();
+        git(&root, &["add", "."]);
+        git(&root, &["commit", "-q", "-m", "corpus C0"]);
+        git(&root, &["checkout", "-q", "-b", "edge"]);
+        std::fs::write(root.join(".doctrine/b.toml"), "v1").unwrap();
+        git(&root, &["add", "."]);
+        git(&root, &["commit", "-q", "-m", "corpus C1"]);
+        git(&root, &["checkout", "-q", "main"]);
+        (tmp, root)
+    }
+
+    #[test]
+    fn ensure_base_corpus_fresh_refuses_when_base_predates_corpus() {
+        // VT-1: base `main` lacks edge's corpus tip C1 ⇒ refuse (fail-closed).
+        let (_tmp, root) = corpus_repo();
+        let Err(err) = ensure_base_corpus_fresh(&root, Some("edge"), "main") else {
+            panic!("must refuse: main predates edge's corpus");
+        };
+        assert!(
+            format!("{err:#}").contains(crate::corpus_guard::BASE_CORPUS_STALE),
+            "refusal carries BASE_CORPUS_STALE; got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn ensure_base_corpus_fresh_ok_when_base_carries_corpus() {
+        // VT-2: base `edge` carries its own corpus tip ⇒ ancestor holds ⇒ ok.
+        let (_tmp, root) = corpus_repo();
+        ensure_base_corpus_fresh(&root, Some("edge"), "edge").expect("edge carries its corpus");
+    }
+
+    #[test]
+    fn ensure_base_corpus_fresh_noop_when_authoring_unset() {
+        // VT-2: posture off (None) ⇒ inert regardless of base.
+        let (_tmp, root) = corpus_repo();
+        ensure_base_corpus_fresh(&root, None, "main").expect("posture off ⇒ no-op");
+    }
+
+    #[test]
+    fn ensure_base_corpus_fresh_noop_when_no_corpus_yet() {
+        // VT-2: ref resolves but carries no `.doctrine` history ⇒ Ok(None) ⇒ inert.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = init_repo(&tmp.path().join("src")); // `main`: just "seed", no corpus.
+        ensure_base_corpus_fresh(&root, Some("main"), "main").expect("no corpus yet ⇒ no-op");
+    }
+
+    #[test]
+    fn ensure_base_corpus_fresh_refuses_when_authoring_unresolvable() {
+        // VT-3: set-but-unresolvable ref ⇒ explicit error, NOT a silent no-op (F-1).
+        let tmp = tempfile::tempdir().unwrap();
+        let root = init_repo(&tmp.path().join("src"));
+        assert!(
+            ensure_base_corpus_fresh(&root, Some("refs/heads/ghost"), "main").is_err(),
+            "an unresolvable authoring ref must fail closed"
+        );
+    }
+
+    #[test]
+    fn coordinate_refuses_create_when_base_predates_corpus() {
+        // VT-1 (coordinate wiring): the gate fires after base_has_slice_plan and
+        // BEFORE `worktree add` — refusal carries BASE_CORPUS_STALE and NO
+        // worktree dir is created (refuses before the fork, EX-2).
+        let (_tmp, root) = corpus_repo();
+        // main must ALSO carry the slice plan so base_has_slice_plan passes and we
+        // reach the g2 gate; edge then adds a corpus commit main lacks.
+        std::fs::create_dir_all(root.join(".doctrine/slice/127")).unwrap();
+        std::fs::write(root.join(".doctrine/slice/127/plan.toml"), "schema=1").unwrap();
+        git(&root, &["add", "."]);
+        git(&root, &["commit", "-q", "-m", "plan on main"]);
+        // edge re-forks from the new main tip + an extra corpus commit.
+        git(&root, &["checkout", "-q", "-B", "edge"]);
+        std::fs::write(root.join(".doctrine/c.toml"), "v1").unwrap();
+        git(&root, &["add", "."]);
+        git(&root, &["commit", "-q", "-m", "corpus C2 on edge only"]);
+        git(&root, &["checkout", "-q", "main"]);
+        let dir = root.parent().unwrap().join("coord");
+
+        let Err(err) = coordinate(&root, 127, &dir, Some("edge")) else {
+            panic!("must refuse: base predates edge corpus");
+        };
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains(crate::corpus_guard::BASE_CORPUS_STALE),
+            "refusal carries BASE_CORPUS_STALE; got: {msg}"
+        );
+        assert!(!dir.exists(), "no worktree dir created on the g2 bail");
     }
 
     // --- SL-056 PHASE-10: classify_stamp pure arms (T2) ---
