@@ -30,7 +30,7 @@ Inputs:
      slice leaves behind (risks / issues / chores) is captured as backlog items
      with `backlog new` (the work / knowledge / decision boundary:
      `using-doctrine.md`), or consciously rejected.
-   - `just check` is green.
+   - `doctrine check gate` is green.
 2. **Spec-coherence gate — confirm reconciliation is complete before `done`:**
    Before the terminal transition, verify every item from the audit's
    reconciliation brief is resolved through one of four paths:
