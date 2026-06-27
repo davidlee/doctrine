@@ -1,8 +1,8 @@
 # doctrine.toml — OPTIONAL project conduct config (reference template).
 #
-# This is a reference example, not a live config. To use it: copy it to your
-# PROJECT ROOT as `doctrine.toml` (NOT under `.doctrine/` — it is root-level
-# user config, the structured sibling of governance.md, not a doctrine entity)
+# This is a reference example, not a live config. To use it: place it at
+# `.doctrine/doctrine.toml` — the single canonical home for project-local
+# config (ISS-055).
 # and uncomment the table below. With NO file present, the baked defaults shown
 # here are in force, so adopting this is purely opt-in.
 #

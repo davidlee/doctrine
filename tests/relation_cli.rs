@@ -48,7 +48,7 @@ fn stderr(out: &Output) -> String {
 /// Seed a minimal project root with doctrine.toml.
 fn seed_project(root: &Path) {
     fs::create_dir_all(root.join(".doctrine")).unwrap();
-    fs::write(root.join("doctrine.toml"), "").unwrap();
+    fs::write(root.join(common::DOCTRINE_TOML), "").unwrap();
 }
 
 /// Seed a slice entity with given [[relation]] edges.

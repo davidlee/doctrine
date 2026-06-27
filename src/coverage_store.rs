@@ -197,7 +197,7 @@ pub(crate) fn withdrawal_line(key: &CoverageKey, status: CoverageStatus) -> Stri
 /// propagates (the [`load`] absent-file precedent). The ONE `doctrine.toml`
 /// reader shared by the verifier and the record handler (T6 DRY).
 pub(crate) fn load_config(root: &Path) -> Result<VerificationConfig> {
-    let path = root.join("doctrine.toml");
+    let path = root.join(crate::dtoml::DOCTRINE_TOML);
     match fs::read_to_string(&path) {
         Ok(text) => Ok(crate::dtoml::parse(&text)?.verification),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(VerificationConfig::default()),

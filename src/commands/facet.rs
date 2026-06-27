@@ -360,7 +360,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join(".project"), "").unwrap();
         std::fs::create_dir_all(tmp.path().join(".doctrine")).unwrap();
-        std::fs::write(tmp.path().join("doctrine.toml"), "").unwrap();
+        std::fs::write(tmp.path().join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         let root = tmp.path().to_path_buf();
         (tmp, root)
     }
@@ -575,7 +575,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         // Seed an entity with [estimate] present.
         let padded = "118";
         let dir = root.join(".doctrine/slice").join(padded);
@@ -606,7 +606,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         // Seed an entity WITHOUT [estimate] — simulating clear.
         let padded = "118";
         let dir = root.join(".doctrine/slice").join(padded);

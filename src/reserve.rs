@@ -620,7 +620,9 @@ mod tests {
 
         /// Write a `doctrine.toml` with a `[reservation]` table into clone `i`.
         fn write_config(&self, i: usize, body: &str) {
-            std::fs::write(self.clone(i).join("doctrine.toml"), body).unwrap();
+            let path = self.clone(i).join(crate::dtoml::DOCTRINE_TOML);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, body).unwrap();
         }
     }
 

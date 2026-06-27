@@ -441,7 +441,7 @@ pub(crate) fn scan_catalog(root: &Path, mode: ScanMode) -> anyhow::Result<Catalo
 /// propagates (`?`) and EVERY other read error (permission/I-O) is returned as
 /// `Err` — never silently defaulted.
 fn resolve_units(root: &Path) -> anyhow::Result<Units> {
-    let cfg = match std::fs::read_to_string(root.join("doctrine.toml")) {
+    let cfg = match std::fs::read_to_string(root.join(crate::dtoml::DOCTRINE_TOML)) {
         Ok(text) => crate::dtoml::parse(&text)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => crate::dtoml::DoctrineToml::default(),
         Err(e) => return Err(e.into()),
@@ -629,10 +629,12 @@ mod tests {
         write(
             root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            &format!("schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
+            &format!(
+                "schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
              id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
-             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n"),
+             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n"
+            ),
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
 
@@ -1052,7 +1054,7 @@ mod tests {
         let root = dir.path();
         write(
             root,
-            "doctrine.toml",
+            crate::dtoml::DOCTRINE_TOML,
             "[estimation]\nunit = \"story_points\"\n[value]\nunit = \"gold\"\n",
         );
         let units = resolve_units(root).unwrap();
@@ -1062,7 +1064,7 @@ mod tests {
         // Present file but no unit keys → defaults.
         let dir2 = tmp();
         let root2 = dir2.path();
-        write(root2, "doctrine.toml", "[conduct]\n");
+        write(root2, crate::dtoml::DOCTRINE_TOML, "[conduct]\n");
         let units2 = resolve_units(root2).unwrap();
         assert_eq!(units2.estimation, "espresso_shots");
         assert_eq!(units2.value, "magic_beans");
@@ -1083,7 +1085,11 @@ mod tests {
         // Parse error → Err, NOT a silent default.
         let dir2 = tmp();
         let root2 = dir2.path();
-        write(root2, "doctrine.toml", "this is not [valid toml\n");
+        write(
+            root2,
+            crate::dtoml::DOCTRINE_TOML,
+            "this is not [valid toml\n",
+        );
         assert!(
             resolve_units(root2).is_err(),
             "a parse error must propagate, not default"
@@ -1093,7 +1099,9 @@ mod tests {
         // so the read fails with a kind other than NotFound.
         let dir3 = tmp();
         let root3 = dir3.path();
-        std::fs::create_dir(root3.join("doctrine.toml")).unwrap();
+        let p = root3.join(crate::dtoml::DOCTRINE_TOML);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::create_dir(&p).unwrap();
         assert!(
             resolve_units(root3).is_err(),
             "a non-NotFound read error must propagate, not default"

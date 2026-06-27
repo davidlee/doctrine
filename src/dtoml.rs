@@ -75,9 +75,9 @@ pub(crate) fn parse_entity_toml<T: serde::de::DeserializeOwned>(
     toml::from_str(text).with_context(|| format!("{prefix}-{id:03}: TOML parse failed"))
 }
 
-/// The project config filename at the repo root (the structured sibling of
-/// `governance.md`), NOT a `.doctrine/` entity.
-pub(crate) const DOCTRINE_TOML: &str = "doctrine.toml";
+/// The project config filename — lives under `.doctrine/`, the single
+/// canonical home for project-local config (ISS-055).
+pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";
 
 /// Read the raw `doctrine.toml` body at `root` (IMPURE shell seam) — `None` when
 /// the file is absent (a genuine read error still surfaces). The single file-read
