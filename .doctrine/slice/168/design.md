@@ -217,18 +217,39 @@ run_doctor(path):
   unchanged. Native sources (#1, #4) must reproduce the legacy command's
   byte-exact string output via the re-pointed render — guarded by the existing
   goldens.
-- **ProseCite precision + resolver gating (F1, adversarial pass).** Exclude:
-  backtick-fenced code spans (inline `` `KIND-NNN` `` and fenced blocks),
-  `*-SENTINEL` tokens (e.g. `BOOT-SENTINEL`), and doc-local bare refs (`OQ-1`,
-  `D1`, `R1`). **Do NOT call `ensure_ref_resolves` blindly** — it `bail!`s on a
-  prefix outside `KINDS` (e.g. `DEC-005`, a free-text decision ref), which would
-  abort the whole doctor run (mem.pattern.entity.free-text-ref-not-forward-validated).
-  Instead: for each candidate `KIND-NNN`, gate on `kind_by_prefix(prefix)` —
-  - `None` (prefix ∉ `KINDS`, e.g. `DEC`) → **skip**, it is not a corpus ref;
-  - `Some` + entity dir missing → **`ProseCite` finding** (dangling cite);
-  - `Some` + dir present → resolved, no finding.
-  This means ProseCite reuses the dir-probe but never the bailing wrapper. Reuse
-  `is_disposable_prose` to skip runtime prose.
+- **ProseCite precision + resolver gating (F1, adversarial pass; corrected for
+  DEC dual-namespacing).** `integrity::KINDS` **includes the knowledge-record
+  kinds** (`DEC`/`ASM`/`QUE`/`CON`/`EVD`/`HYP` — `integrity.rs:23,129`), so a
+  2-part `DEC-001` cite *is* a real entity ref and ProseCite **should** validate
+  it. Two crash/precision hazards, both handled by classifying the token before
+  resolving:
+  1. **3-part `KIND-NNN-XX` cites** (`DEC-005-C`, `DEC-010-06`) are **external
+     the external decision register decision-log citations** — free text, never doctrine entities,
+     never renumbered, sprinkled through prose / comments / boot
+     (mem.pattern.entity.dec-prefix-dual-namespaced, SPEC-019 D8). They are also
+     **un-parseable** as canonical ids (`parse_canonical_ref` rsplit → `"C"`,
+     non-numeric → **bails**). → **Exclude any token with a second `-`+suffix.**
+     This is the real abort trigger, not the prefix.
+  2. **Genuinely-unknown prefixes** (a typo `FOO-1`) — `ensure_ref_resolves`
+     `bail!`s on a prefix outside `KINDS`. → Gate on `kind_by_prefix` first.
+
+  Classification per candidate, after the lexical excludes below:
+  - token is 3-part (`KIND-NNN-XX`) → **skip** (external the external decision register cite);
+  - strict 2-part `KIND-NNN`, `kind_by_prefix(prefix) == None` → **skip** (not a
+    corpus kind; avoids the bail);
+  - strict 2-part, `Some` + entity dir missing → **`ProseCite` finding**
+    (dangling — correctly covers `DEC-NNN` and the rest of `KINDS`);
+  - strict 2-part, `Some` + dir present → resolved, no finding.
+
+  Lexical excludes (before classification): backtick-fenced code spans (inline
+  `` `KIND-NNN` `` and fenced blocks), `*-SENTINEL` tokens (`BOOT-SENTINEL`),
+  bare doc-local refs (`OQ-1`, `D1`, `R1` — doctrine's own doc-local decisions
+  use the bare `D1` form, never `DEC-`). ProseCite reuses the dir-probe but never
+  the bailing wrapper, and `is_disposable_prose` to skip runtime prose.
+  **Stale-memory note:** mem.pattern.entity.free-text-ref-not-forward-validated
+  (SL-042) still says "`DEC` is not a kind / `ensure_ref_resolves` errors on
+  `DEC`" — that predates SPEC-019 making `DEC-NNN` an entity; only the 3-part
+  form is free-text now.
 - **done-but-open terminal def + non-vacuous guard (F2, adversarial pass).**
   `is_transition_terminal` (done **or** abandoned). Flag an open item **iff it
   has ≥1 linked slice** (`targets_for(item, Slices)` non-empty) **and** every
@@ -346,9 +367,14 @@ is `/plan`'s call.
 Verified three load-bearing assumptions against source; found two correctness
 bugs and five precision/honesty gaps.
 
-- **F1 (bug, fixed §5.5).** ProseCite must **not** call `ensure_ref_resolves`
-  blindly — it `bail!`s on a non-`KINDS` prefix (`DEC-005`), aborting the run.
-  Gate on `kind_by_prefix` first; skip non-corpus prefixes, dir-probe the rest.
+- **F1 (bug, fixed §5.5; corrected by user re DEC).** ProseCite must classify a
+  cite token before resolving. `integrity::KINDS` **includes** record kinds, so
+  `DEC-001` (2-part) is a real entity cite to validate — not skip. The genuine
+  crash triggers are (a) **3-part `DEC-005-C`** the external decision register cites (un-parseable →
+  `parse_canonical_ref` bails) and (b) truly-unknown prefixes (`ensure_ref_resolves`
+  bails). Fix: exclude 3-part tokens; gate 2-part on `kind_by_prefix`; dir-probe
+  the rest. Added the 3-part exclusion class (dual-namespace,
+  mem.pattern.entity.dec-prefix-dual-namespaced) that pass 1 missed.
 - **F2 (bug, fixed §5.5).** done-but-open is vacuously true for slice-less items
   (`targets_for → []`). Added the `≥1 linked slice` guard.
 - **F3 (verified OK).** Item→slice edge is the outbound `RelationLabel::Slices`
