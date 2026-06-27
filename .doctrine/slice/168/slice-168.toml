@@ -66,6 +66,21 @@ intent = "design-target"
 selector = "src/commands/mod.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/catalog/hydrate.rs"
+intent = "design-target"
+note = "pass-3 (RV-183 F-7): #6 raw-label seam = CatalogEdgeLabel::Raw (hydrate.rs); read_block/IllegalRows (relation.rs); done-but-open terminal (lifecycle.rs)"
+
+[[selector]]
+selector = "src/relation.rs"
+intent = "design-target"
+note = "pass-3 (RV-183 F-7): #6 raw-label seam = CatalogEdgeLabel::Raw (hydrate.rs); read_block/IllegalRows (relation.rs); done-but-open terminal (lifecycle.rs)"
+
+[[selector]]
+selector = "src/lifecycle.rs"
+intent = "design-target"
+note = "pass-3 (RV-183 F-7): #6 raw-label seam = CatalogEdgeLabel::Raw (hydrate.rs); read_block/IllegalRows (relation.rs); done-but-open terminal (lifecycle.rs)"
+
 [[relation]]
 label = "related"
 target = "IMP-121"
