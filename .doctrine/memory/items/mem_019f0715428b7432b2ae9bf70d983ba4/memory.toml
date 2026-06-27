@@ -1,0 +1,43 @@
+memory_uid = "mem_019f0715428b7432b2ae9bf70d983ba4"
+memory_key = "mem.pattern.dispatch.prewarm-fork-target-reflink"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Pre-warm dispatch worker fork target via reflink copy"
+summary = "Per-worktree in-tree target = cold build per fork; reflink-copy main target into the fork before spawn to beat the subprocess timeout"
+created = "2026-06-27"
+updated = "2026-06-27"
+
+[scope]
+paths = ["src/dispatch.rs"]
+globs = []
+commands = ["doctrine worktree fork", "doctrine dispatch"]
+tags = ["dispatch", "worktree", "performance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "19855d2eadb135627b64e6a825095f3ed8e2933c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "73e609d26987103679a8810c9fcbaeea365739adcd46238ae478e3187d1f4e28"
+base_commit = "051b3e1aa6ed8f0974aff72725efe0e30cd6146b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
