@@ -315,7 +315,7 @@ impl Confidence {
 }
 
 /// How evidence was obtained. Closed set, kebab serde; optional.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Provenance {
     Inspection,
@@ -334,6 +334,11 @@ impl Provenance {
             Provenance::Citation => "citation",
         }
     }
+
+    /// The known-set — the drift-canary authority (VT-3), its only consumer.
+    #[cfg(test)]
+    pub(crate) const KNOWN: &'static [&'static str] =
+        &["inspection", "experiment", "reproduction", "citation"];
 }
 
 /// The basis an assumption rests on (assumption facet only). Closed set, kebab
@@ -1896,7 +1901,7 @@ mod tests {
         assert!(!is_hidden(RecordKind::Decision, "accepted"));
     }
 
-    // --- VT-3: three facet-enum drift canaries (variant set == known-set) ---
+    // --- VT-3: four facet-enum drift canaries (variant set == known-set) ---
 
     #[test]
     fn confidence_known_set_matches_variants() {
@@ -1925,6 +1930,17 @@ mod tests {
             .map(|v| v.as_str())
             .collect();
         let known: BTreeSet<&str> = ConstraintSource::KNOWN.iter().copied().collect();
+        assert_eq!(variants, known);
+    }
+
+    #[test]
+    fn provenance_known_set_matches_variants() {
+        use clap::ValueEnum;
+        let variants: BTreeSet<&str> = Provenance::value_variants()
+            .iter()
+            .map(|v| v.as_str())
+            .collect();
+        let known: BTreeSet<&str> = Provenance::KNOWN.iter().copied().collect();
         assert_eq!(variants, known);
     }
 
