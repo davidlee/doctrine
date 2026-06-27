@@ -56,7 +56,7 @@ owo-colors.workspace = true
 # `default-features = false` build never activated. terminal::size() is not feature-
 # gated, so OFF keeps zero new compiled weight (single crossterm v0.29.0 in the lock).
 crossterm = { version = "0.29", default-features = false }
-cordage = { path = "crates/cordage", version = "0.1.5" }
+cordage = { path = "crates/cordage", version = "0.2.0" }
 webbrowser = "1"
 
 [dev-dependencies]
