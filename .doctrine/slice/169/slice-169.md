@@ -67,13 +67,16 @@ in the shared read machinery that SL-025's uniform CLI surface left behind:
    root-level storage are already generic — only the read wiring and the
    gating prefix set need extension.
 
-**Affected surface:** `src/listing.rs` (the kind-blind read spine — unchanged
-except possibly the column-render path if relation/census need a new shape),
-`src/commands/relation.rs` (add `--columns` flatten), per-kind column-definition
-sites (`src/commands/slice.rs`, `adr.rs`, `policy.rs`, `standard.rs`, `spec.rs`,
-`rfc.rs`, `knowledge.rs`, `revision.rs`, `rec.rs`, `review.rs` — each gets a
-`tags` column entry and optionally a default-column insertion), `src/commands/
-tag.rs` (extend `TAGGABLE` prefix set), REC/review `show`/JSON surfaces.
+**Affected surface:** `src/listing.rs` (the kind-blind read spine — gains the
+shared `default_with_tags` splice helper), `src/commands/relation.rs` (add
+`--columns` flatten) threading through `src/relation_query.rs`, per-kind
+column-definition sites — top-level `src/{slice,governance,spec,rfc,knowledge,
+revision,rec,review}.rs` (adr/policy/standard share `src/governance.rs`); each
+gets a `tags` column entry and the conditional default. `src/backlog.rs` is
+refactored onto the shared helper (its inline splice is the prototype).
+`src/tag.rs` extends the `TAGGABLE` prefix set (`src/commands/tag.rs` reads it
+at the write gate). REC/review `show`/JSON surfaces. `src/concept_map.rs` header
+casing.
 
 **Conformance guard:** `tests/e2e_list_conformance.rs` and
 `tests/e2e_list_columns_golden.rs` — the existing matrix/net must be extended

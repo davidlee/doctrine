@@ -20,11 +20,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/listing.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/list_helpers.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_list_conformance.rs"
@@ -33,58 +29,6 @@ intent = "design-target"
 [[selector]]
 selector = "tests/e2e_list_columns_golden.rs"
 intent = "design-target"
-
-[[selector]]
-selector = "src/commands/slice.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/adr.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/policy.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/standard.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/spec.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/rfc.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/knowledge.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/revision.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/rec.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/review.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/backlog.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/memory.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/concept_map.rs"
-intent = "scope-relevant"
 
 [[selector]]
 selector = "src/concept_map.rs"
@@ -128,6 +72,10 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/tag.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/backlog.rs"
 intent = "design-target"
 
 [[relation]]

@@ -49,29 +49,51 @@ listing::Column {
 The per-kind row structs must carry `tags: Vec<String>` — verify each already
 does (most read from `Meta.tags` which SL-136 unified to root-level storage).
 
-### D3: Tags in default columns — conditional (show iff any row tagged)
+### D3: Tags in default columns — conditional (show iff any row tagged), via one shared helper
 
-Following `backlog.rs` lines 1207–1242: tags column is **conditionally visible**
-by default — spliced into the effective default set only when at least one
-displayed row carries non-empty tags. `--columns` with an explicit column list
-bypasses the conditional logic entirely (user's order wins, tags shown iff
-requested).
+Tags column is **conditionally visible** by default — spliced into the effective
+default set only when at least one displayed row carries non-empty tags.
+`--columns` with an explicit list bypasses this entirely (`select_columns`
+ignores `default` when an explicit list is given — user's order wins, tags shown
+iff requested).
 
-For each kind's list dispatch, before `select_columns`:
+**No parallel implementation (CLAUDE.md DRY).** `backlog.rs:1237–1250` already
+encodes this splice inline. Replicating that ~6-line `flat_map` into 8 more kinds
+is forbidden duplication. Instead, lift the rule into **one** helper in
+`listing.rs` and route every site — including the existing backlog one — through
+it:
+
 ```rust
-let any_tagged = rows.iter().any(|r| !r.tags.is_empty());
-let effective_default: Vec<&str> = if any_tagged {
-    // insert "tags" before "title"
-    DEFAULT.iter().flat_map(|c| if *c == "title" { vec!["tags", "title"] } else { vec![*c] }).collect()
-} else {
-    DEFAULT.to_vec()
-};
+/// Splice `tags` immediately before `title` in a default column set, IFF
+/// `any_tagged`. Returns an owned set (never mutates the caller's const).
+/// `--columns` callers bypass this: `select_columns` ignores `default` when an
+/// explicit list is supplied. Kinds whose default lacks `title` are unaffected
+/// (every `list` kind currently carries `title`).
+pub(crate) fn default_with_tags<'a>(base: &[&'a str], any_tagged: bool) -> Vec<&'a str> {
+    if !any_tagged {
+        return base.to_vec();
+    }
+    base.iter()
+        .flat_map(|&c| if c == "title" { vec!["tags", "title"] } else { vec![c] })
+        .collect()
+}
 ```
 
+Each kind's list dispatch then collapses to two lines:
+```rust
+let any_tagged = rows.iter().any(|r| !r.tags.is_empty());
+let effective_default = listing::default_with_tags(DEFAULT, any_tagged);
+let sel = listing::select_columns(&KIND_COLUMNS, &effective_default, columns.as_deref())?;
+```
+
+**Refactor-first:** rewrite `backlog.rs` onto `default_with_tags` in the same
+change (its inline block is the prototype, not a second implementation). Its
+existing goldens are the behaviour-preservation proof — they must stay green
+unchanged through the refactor.
+
 Affects: `slice`, `governance` (adr/policy/standard), `spec`, `rfc`,
-`knowledge`, `revision`. `backlog`, `memory`, and `concept-map` already have
-tags in their defaults (memory/concept-map are always-on; backlog is
-conditional — no change needed).
+`knowledge`, `revision`, plus the `backlog` refactor. `memory` and `concept-map`
+are always-on (no conditional) — untouched by D3.
 
 ### D4: REC and review tag surfaces + taggable set
 
@@ -112,8 +134,10 @@ The `name` fields are already lowercase — only `header` changes.
 
 | File | Change |
 |---|---|
-| `src/commands/relation.rs` | Add `--columns` to `List` and `Census`; thread through |
-| `src/relation_query.rs` | Refactor `render_list_table`/`render_census_table` to accept `Option<&str>` columns |
+| `src/listing.rs` | Add `default_with_tags` helper (D3 — single source of the splice rule) |
+| `src/backlog.rs` | Refactor inline splice (1237–1250) onto `default_with_tags`; goldens stay green |
+| `src/commands/relation.rs` | Add `--columns` to `List` and `Census`; thread through pub `render_list`/`render_census` |
+| `src/relation_query.rs` | Thread `Option<&str>` columns through pub `render_list`/`render_census` into the private table helpers |
 | `src/slice.rs` | Add `tags` column + conditional default |
 | `src/governance.rs` | Add `tags` column + conditional default; verify `FilterFields.tags` wired |
 | `src/spec.rs` | Add `tags` column + conditional default |
