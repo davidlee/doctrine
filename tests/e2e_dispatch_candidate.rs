@@ -2022,3 +2022,52 @@ fn close_target_from_scratch_candidate_refuses() {
         stderr
     );
 }
+
+/// PHASE-02 EX-3 refuse (INV-6): a source candidate ref repointed off its
+/// recorded `merge_oid` lineage is rejected post-resolve — even though the
+/// recorded chain itself is clean. The source-side analog of admit's I3; the
+/// RV-175 F-1 blocker fix. Pairs with the pure refuse-matrix unit tests in
+/// `src/dispatch.rs` (ambiguous / cyclic / non-evidence / status / kind).
+#[test]
+fn close_target_from_moved_candidate_ref_refuses() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let dir = tmp.path();
+    bootstrap_slice(dir, 203);
+    // A clean review_surface candidate — its branch sits at the recorded merge.
+    let cr = candidate_create(
+        dir,
+        203,
+        "review-001",
+        "review_surface",
+        "impl_bundle",
+        "refs/heads/review/203",
+        &["--worktree"],
+    );
+    assert!(cr.status.success(), "{cr:?}");
+    // Move the candidate ref off its lineage: repoint at main, which does NOT
+    // descend from the recorded merge (the merge descends from main, not the
+    // reverse), so the INV-6 is_ancestor(merge_oid, tip) check fails.
+    let main_oid = git(dir, &["rev-parse", "refs/heads/main"]);
+    git(
+        dir,
+        &["update-ref", "refs/heads/candidate/203/review-001", &main_oid],
+    );
+    // close_target from the moved ref must refuse on the lineage binding.
+    let ct = candidate_create(
+        dir,
+        203,
+        "close-001",
+        "close_target",
+        "code",
+        "refs/heads/candidate/203/review-001",
+        &[],
+    );
+    assert!(!ct.status.success(), "moved ref should refuse: {ct:?}");
+    let stderr = String::from_utf8_lossy(&ct.stderr);
+    assert!(
+        stderr.contains("moved off its provenance lineage")
+            || stderr.contains("does not descend from its recorded"),
+        "expected lineage-binding refusal: {}",
+        stderr
+    );
+}

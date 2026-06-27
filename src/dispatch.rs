@@ -4072,4 +4072,288 @@ mod tests {
     fn guard_empty_registry_is_silent() {
         assert!(missing_committed_funnel_phases(&[], &committed_set(&["PHASE-01"])).is_empty(),);
     }
+
+    // --- SL-165 PHASE-02: trace_candidate_provenance refuse matrix (INV-2..5) --
+    //
+    // The git-dependent INV-6 lineage binding (is_ancestor of the live tip onto
+    // the recorded merge) is exercised end-to-end in
+    // `tests/e2e_dispatch_candidate.rs::close_target_from_moved_candidate_ref_refuses`.
+    // The structural refuse branches below are pure over (Candidates, Journal):
+    // hand-crafting an ambiguous / cyclic / non-evidence ledger through the CLI
+    // is impractical, so they are unit-covered against the design's bail classes.
+
+    /// Build a candidate row with the fields the trace reads; the rest are inert.
+    fn cand_row(
+        target_ref: &str,
+        source_ref: &str,
+        role: CandidateRole,
+        kind: CandidateKind,
+        status: CandidateStatus,
+    ) -> CandidateRow {
+        CandidateRow {
+            id: format!("cand-{target_ref}"),
+            label: "l".into(),
+            kind,
+            role,
+            payload: CandidatePayload::ImplBundle,
+            target_ref: target_ref.into(),
+            source_ref: source_ref.into(),
+            source_oid: "0".repeat(40),
+            base_ref: "refs/heads/main".into(),
+            base_oid: "0".repeat(40),
+            merge_oid: "0".repeat(40),
+            status,
+            supersedes: String::new(),
+            reason: String::new(),
+            created_by: "test".into(),
+            created_at: "2026-01-01".into(),
+        }
+    }
+
+    fn jrow(target_ref: &str, status: LedgerStatus) -> JournalRow {
+        JournalRow {
+            source_oid: "0".repeat(40),
+            target_ref: target_ref.into(),
+            expected_old_oid: "0".repeat(40),
+            planned_new_oid: "0".repeat(40),
+            applied_new_oid: String::new(),
+            status,
+        }
+    }
+
+    /// A clean review_surface candidate sourced from a Verified `review/200`.
+    fn audit_surface_row() -> CandidateRow {
+        cand_row(
+            "refs/heads/candidate/200/review-001",
+            "refs/heads/review/200",
+            CandidateRole::ReviewSurface,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        )
+    }
+
+    fn verified_review_journal() -> Journal {
+        Journal {
+            rows: vec![jrow("refs/heads/review/200", LedgerStatus::Verified)],
+        }
+    }
+
+    fn trace_err(candidates: &Candidates, journal: &Journal, ref_name: &str, budget: u32) -> String {
+        let err = trace_candidate_provenance(candidates, journal, "200", ref_name, budget)
+            .expect_err("trace should refuse");
+        format!("{err}")
+    }
+
+    // INV-1: a clean audit review_surface tracing to Verified journaled evidence
+    // is accepted — the recursion's terminal base case.
+    #[test]
+    fn trace_accepts_audit_surface_to_verified_root() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row()],
+            ..Default::default()
+        };
+        let row = trace_candidate_provenance(
+            &candidates,
+            &verified_review_journal(),
+            "200",
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        )
+        .expect("clean audit surface should trace to the verified root");
+        assert_eq!(row.target_ref, "refs/heads/candidate/200/review-001");
+    }
+
+    // INV-4: an exhausted budget refuses (the over-deep / cyclic guard).
+    #[test]
+    fn trace_over_budget_refuses() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row()],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            0,
+        );
+        assert!(err.contains("too deep or cyclic"), "got: {err}");
+    }
+
+    // INV-4: a cyclic chain (A→B→A) exhausts the budget rather than looping.
+    #[test]
+    fn trace_cyclic_chain_refuses() {
+        let a = cand_row(
+            "refs/heads/candidate/200/a",
+            "refs/heads/candidate/200/b",
+            CandidateRole::CloseTarget,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        );
+        let b = cand_row(
+            "refs/heads/candidate/200/b",
+            "refs/heads/candidate/200/a",
+            CandidateRole::CloseTarget,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        );
+        let candidates = Candidates {
+            rows: vec![a, b],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &Journal::default(),
+            "refs/heads/candidate/200/a",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("too deep or cyclic"), "got: {err}");
+    }
+
+    // INV-5: two rows sharing a target_ref are fail-closed, never first-match.
+    #[test]
+    fn trace_ambiguous_row_refuses() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row(), audit_surface_row()],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("ambiguous candidate row"), "got: {err}");
+    }
+
+    // A source ref naming no recorded row is refused.
+    #[test]
+    fn trace_missing_row_refuses() {
+        let candidates = Candidates::default();
+        let err = trace_err(
+            &candidates,
+            &Journal::default(),
+            "refs/heads/candidate/200/ghost",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("no recorded candidate row"), "got: {err}");
+    }
+
+    // INV-3: only a `Created` source candidate qualifies — a `Conflicted`
+    // (parked-at-base) candidate is refused as not clean.
+    #[test]
+    fn trace_conflicted_status_refuses() {
+        let mut row = audit_surface_row();
+        row.status = CandidateStatus::Conflicted;
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("not clean"), "got: {err}");
+    }
+
+    // INV-2: an `experiment`-kind source is refused even when its role would
+    // otherwise pass — only `audit` content may source a close_target.
+    #[test]
+    fn trace_experiment_kind_refuses() {
+        let mut row = audit_surface_row();
+        row.kind = CandidateKind::Experiment;
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(
+            err.contains("kind=Experiment") || err.contains("only an audit review_surface"),
+            "got: {err}"
+        );
+    }
+
+    // INV-2: a `scratch`-role source is refused (mirrors the e2e scratch case at
+    // the pure layer, asserting the bail class).
+    #[test]
+    fn trace_scratch_role_refuses() {
+        let mut row = audit_surface_row();
+        row.role = CandidateRole::Scratch;
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &verified_review_journal(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(
+            err.contains("role=Scratch") || err.contains("only an audit review_surface"),
+            "got: {err}"
+        );
+    }
+
+    // The recorded chain must terminate at journaled evidence: a hop to a ref
+    // that is neither a candidate nor journaled evidence is refused.
+    #[test]
+    fn trace_non_evidence_hop_refuses() {
+        let row = cand_row(
+            "refs/heads/candidate/200/review-001",
+            "refs/heads/feature/random",
+            CandidateRole::ReviewSurface,
+            CandidateKind::Audit,
+            CandidateStatus::Created,
+        );
+        let candidates = Candidates {
+            rows: vec![row],
+            ..Default::default()
+        };
+        let err = trace_err(
+            &candidates,
+            &Journal::default(),
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("non-evidence"), "got: {err}");
+    }
+
+    // F3: the journaled base case runs the FULL existing gate — an UNVERIFIED
+    // journal row at the chain root is refused, not silently accepted.
+    #[test]
+    fn trace_unverified_journal_root_refuses() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row()],
+            ..Default::default()
+        };
+        let journal = Journal {
+            rows: vec![jrow("refs/heads/review/200", LedgerStatus::Pending)],
+        };
+        let err = trace_err(
+            &candidates,
+            &journal,
+            "refs/heads/candidate/200/review-001",
+            CANDIDATE_PROVENANCE_DEPTH_BUDGET,
+        );
+        assert!(err.contains("not verified"), "got: {err}");
+    }
+
+    // The journaled/candidate classifiers are the single source of truth for the
+    // base-case vs recursion-step split (design §5.2).
+    #[test]
+    fn ref_classifiers_agree() {
+        assert!(is_journaled_evidence_ref("refs/heads/review/200", "200"));
+        assert!(is_journaled_evidence_ref("refs/heads/phase/200-03", "200"));
+        assert!(!is_journaled_evidence_ref("refs/heads/phase/200-xx", "200"));
+        assert!(!is_journaled_evidence_ref("refs/heads/candidate/200/x", "200"));
+        assert!(is_candidate_ref("refs/heads/candidate/200/review-001"));
+        assert!(!is_candidate_ref("refs/heads/review/200"));
+    }
 }
