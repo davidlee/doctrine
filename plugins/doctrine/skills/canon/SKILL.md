@@ -15,12 +15,15 @@ see [[mem.fact.doctrine.cli-source-of-truth]].
 
 - `CLAUDE.md`, `AGENTS.md` — standing instructions and conventions. Project
   conventions are documented in [[mem.pattern.doctrine.conventions]].
-- `.doctrine/adr/` — project-global ADRs (authored; status lives in
-  `adr-nnn.toml`). List them: `doctrine adr list`. Read the relevant bodies.
-- `.doctrine/spec/tech/` — authoritative technical specs (the *how*).
+- project governance - list each of these; read any which are potentially relevant 
+  in full, with `doctrine <kind> show <id>`:
+  - `doctrine spec list` - specs describing product intent / technical architecture
+  - `doctrine adr list` - architecture decision records 
+  - `doctrine policy list` - policies 
+  - `doctrine standard list` - standards of practice
 - the governing slice's `design.md` — canon for *this* change's design intent.
 
-For subsystem-level truth (gotchas, patterns, invariants tied to files or
+For implementation truth (gotchas, patterns, invariants tied to files or
 commands), `/retrieve-memory` rather than rediscovering it.
 
 **Read entities tier-aware — via `show`, never a single raw file.** The storage
@@ -29,13 +32,6 @@ rule + read-via-`show` discipline are resident in the boot digest and detailed i
 [[mem.concept.doctrine.storage-model]]; storage tiers: authored, runtime,
 derived — see [[mem.fact.doctrine.storage-tiers]]. Reading one tier and
 concluding "empty" is false witness.
-
-The boot snapshot you are reading (`@.doctrine/state/boot.md`) was inlined
-at session start. If you just edited governance (`governance.md`, an ADR, a
-memory) and need *this* context to reflect it, run `doctrine boot` to regenerate
-the snapshot, **then** `/clear` or restart — regenerate THEN clear. `doctrine
-boot` alone cannot refresh an already-inlined prefix, and `/clear` alone serves
-the pre-edit snapshot.
 
 ## The mortal sins
 
