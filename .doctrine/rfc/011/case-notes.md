@@ -167,3 +167,19 @@ Mitigation a worker can't fix; flagging as a harness/Read-vs-Edit fidelity gap.
 
 No other inefficiency — the audit→reconcile seam held: discovery was complete,
 write surface was unambiguous, no /consult needed.
+
+## [/close; SL-166-close-a]
+
+Close pre-checks surfaced real token cost in one place: the per-phase completion
+state. `slice list` showed 2/5 because phases 03/04/05 were executed+completed in
+the FORK worktree's own gitignored runtime state, which never propagates to the
+primary tree. Reconstructing this took ~4 investigative tool calls (slice list →
+phase sheets → per-phase status grep) before the picture was clear. The fork-solo
+execution model leaves the primary's runtime phase rollup stale by design, but the
+close skill's "confirm X/X complete" pre-check gives no hint that a stale sub-X/X
+rollup is the EXPECTED pre-land state vs. genuinely-incomplete work — an agent must
+already know the fork-runtime split to avoid mis-reading 2/5 as dropped phases.
+
+Second: `slice status <ID>` has no bare query form (it is a setter requiring
+<STATE>), so there is no cheap "what lifecycle state + phase rollup" one-liner;
+status comes via `slice list | grep`. Minor friction, recurs every close.
