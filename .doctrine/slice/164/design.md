@@ -100,8 +100,11 @@
         paths: &p.paths.unwrap_or_default(),
         globs: &p.globs.unwrap_or_default(),
         commands: &p.commands.unwrap_or_default(),
-        lifespan: parse_optional_lifespan(p.lifespan.as_deref())?,
-        status: parse_optional_status(p.status.as_deref())?,
+        lifespan: p.lifespan.as_deref().map(Lifespan::from_str).transpose()
+            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))?,
+        status: p.status.as_deref().map(Status::parse).transpose()
+            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))?
+            .unwrap_or(Status::Active),
         repo: p.repo.as_deref(),
         global: p.global.unwrap_or(false),
         review_by: None,
@@ -109,14 +112,14 @@
     };
     let mut buf = Vec::new();
     memory::run_record(Some(root.to_path_buf()), &args, &mut buf)
-        .context("invalid arguments")?;
+        .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
     Ok(String::from_utf8(buf)?)
 }
 ```
 
 Argument errors from `run_record` (e.g. "Title must not be empty") are wrapped with
-`"invalid arguments"` via `.context()`, so `map_review_error` branch 2 maps them to
-`-32602`. `RecordArgs` borrows `&str` slices from `RecordParams` — both live to the
+`"invalid arguments: {e:#}"` via `.map_err()`, so `map_review_error` branch 2
+(`msg.starts_with("invalid arguments:")`, line 925) maps them to `-32602`. `RecordArgs` borrows `&str` slices from `RecordParams` — both live to the
 end of the match arm, so lifetimes are sound.
 
 ### Response
@@ -186,13 +189,13 @@ Returns the `run_record` confirmation message captured from the writer buffer:
     };
     let mut buf = Vec::new();
     memory::run_edit(Some(root.to_path_buf()), &p.reference, &fields, &mut buf)
-        .context("invalid arguments")?;
+        .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
     Ok(String::from_utf8(buf)?)
 }
 ```
 
 Argument errors (e.g. "key already set", empty title) are wrapped with
-`"invalid arguments"` via `.context()` → mapped to `-32602`.
+`"invalid arguments: {e:#}"` via `.map_err()` → mapped to `-32602`.
 ```
 
 ### Response
@@ -287,14 +290,17 @@ pub(crate) fn run_edit(path: Option<PathBuf>, reference: &str, fields: &EditFiel
 
 ### New signatures
 ```rust
-pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>, writer: &mut dyn Write) -> Result<()>
-pub(crate) fn run_edit(path: Option<PathBuf>, reference: &str, fields: &EditFields, writer: &mut dyn Write) -> anyhow::Result<()>
+pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>, writer: &mut impl Write) -> Result<()>
+pub(crate) fn run_edit(path: Option<PathBuf>, reference: &str, fields: &EditFields, writer: &mut impl Write) -> anyhow::Result<()>
 ```
 
 ### Changes
 - `run_record`: replace `let mut stdout = io::stdout()` with `writer`; replace `writeln!(stdout, ...)` with `writeln!(writer, ...)`
 - `run_edit`: replace `writeln!(io::stdout(), ...)` with `writeln!(writer, ...)`
 - CLI call site (`src/memory.rs` ~line 482): pass `&mut io::stdout()`
+- All test callers gain `&mut io::stdout()` (or a `Vec::new()` sink) to stay green:
+  `src/boot.rs` ×4 (2619, 2876, 2965, 3122), `src/retrieve.rs` ×3, `src/memory.rs` ~28 tests
+- `run_edit` single CLI call site (`src/memory.rs` ~line 683): pass `&mut io::stdout()`
 
 Follows the existing pattern of `run_show`, `run_list`, `run_validate` which already
 accept `writer: &mut impl Write`.
@@ -321,8 +327,9 @@ time by the existing `FOOTER_REL` constant path.
 
 ### VT-2 (tools/list count)
 - E2E (`tests/e2e_mcp_server.rs`): `15` → `18`
-- Unit (`tools.rs` test module): `15` → `18` in `tool_list_has_14_tools()`,
-  `tools_list_response_structure()`
+- Unit (`tools.rs` test module): `15` → `18` in `tool_list_has_14_tools()` (renamed to
+  `tool_list_has_18_tools`), `tools_list_response_structure()`
+- Module-doc header (`tools.rs` line 4): correct tool counts (15→18, 5→7 memory)
 - Name assertions: add `memory_record`, `memory_edit`, `doctrine_onboard`
 
 ### New E2E tests
@@ -341,10 +348,21 @@ time by the existing `FOOTER_REL` constant path.
 
 | Path | Change |
 |---|---|
-| `src/mcp_server/tools.rs` | +3 `McpTool` definitions, +3 `call_tool` match arms, `doctrine_onboard` renderer, VT counts 15→18, memory arg-error wrapper |
-| `src/memory.rs` | Add `writer: &mut dyn Write` to `run_record` + `run_edit` signatures, update call sites |
+| `src/mcp_server/tools.rs` | +3 `McpTool` definitions, +3 `call_tool` match arms, `doctrine_onboard` renderer, VT counts 15→18, test rename, module-doc header fix, memory arg-error wrapper |
+| `src/memory.rs` | Add `writer: &mut impl Write` to `run_record` + `run_edit` signatures, update ~36 call sites (CLI + boot.rs ×4 + retrieve.rs ×3 + ~28 tests) |
+| `src/boot.rs` | Pass `&mut io::stdout()` to `run_record` at 4 test call sites |
+| `src/retrieve.rs` | Pass `&mut io::stdout()` to `run_record` at 3 call sites |
 | `tests/e2e_mcp_server.rs` | VT-2 count update, name assertions, 3 new round-trip tests |
 | `.doctrine/boot-footer.md` | MCP-first onboarding instruction with fallback |
 
 ## Remaining open questions
-None — all design decisions resolved.
+### Tolerated divergence
+- `run_record` emits advisory notices to `stderr` (e.g. linked-worktree warning,
+  thread-hidden notice). These are off the JSON-RPC stdio channel and not captured
+  in the MCP response — identical to CLI behaviour, just not forwarded through MCP.
+
+### Retrievability edge-case
+- `doctrine_onboard` uses `retrieve::retrieve_reference` which runs holdback checks.
+  If a signpost memory is ever held back or stale, `doctrine_onboard` silently emits
+  less than the full onboarding bundle. Mitigation: the signpost memories are
+  `medium` trust (above the `low` holdback floor) and reference-stale (no anchor).
