@@ -21,6 +21,8 @@ use crate::tomlfmt::toml_string;
 
 use std::str::FromStr;
 
+use anyhow::Context;
+
 use clap::Subcommand;
 
 // ---------------------------------------------------------------------------
@@ -74,6 +76,7 @@ pub(crate) enum AdrCommand {
     /// Set an ADR's status (edit-preserving; a no-op if unchanged).
     Status {
         /// ADR id (numeric).
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// New status (required): proposed|accepted|rejected|superseded|deprecated.
@@ -279,6 +282,23 @@ pub(crate) fn run_show(
 }
 
 /// `doctrine adr status` — bind the concrete `AdrStatus` enum at the boundary,
+/// Parse an ADR reference — accepts both `ADR-007` and bare `7`.
+pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
+    let digits = reference
+        .strip_prefix("ADR-")
+        .or_else(|| reference.strip_prefix("adr-"))
+        .unwrap_or(reference);
+    digits
+        .parse::<u32>()
+        .with_context(|| format!("not an ADR reference: `{reference}` (expected `ADR-007` or `7`)"))
+}
+
+/// Clap `value_parser` wrapper for [`parse_ref`].
+fn parse_cli_id(s: &str) -> Result<u32, String> {
+    parse_ref(s).map_err(|e| format!("{e:#}"))
+}
+
+/// `doctrine adr status` — bind the concrete `AdrStatus` enum at the boundary,
 /// delegate the edit-preserving transition to the spine, then print. The clock is
 /// read here and passed in (the pure/imperative split).
 pub(crate) fn run_status(
@@ -424,5 +444,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let err = run_new(Some(dir.path().to_path_buf()), Some("!!!".into()), None).unwrap_err();
         assert!(err.to_string().contains("pass --slug"));
+    }
+
+    // --- parse_ref ---
+
+    #[test]
+    fn parse_ref_accepts_prefixed_padded_and_bare_ids() {
+        assert_eq!(parse_ref("ADR-007").unwrap(), 7);
+        assert_eq!(parse_ref("adr-7").unwrap(), 7);
+        assert_eq!(parse_ref("7").unwrap(), 7);
+        assert_eq!(parse_ref("007").unwrap(), 7);
+        assert!(parse_ref("nope").is_err());
     }
 }

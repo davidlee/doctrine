@@ -154,6 +154,22 @@ pub(crate) fn run_show(
     governance::run_show(&POLICY_KIND, path, reference, format)
 }
 
+/// Parse a policy reference — accepts both `POL-007` and bare `7`.
+pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
+    let digits = reference
+        .strip_prefix("POL-")
+        .or_else(|| reference.strip_prefix("pol-"))
+        .unwrap_or(reference);
+    digits.parse::<u32>().with_context(|| {
+        format!("not a policy reference: `{reference}` (expected `POL-007` or `7`)")
+    })
+}
+
+/// Clap `value_parser` wrapper for [`parse_ref`].
+fn parse_cli_id(s: &str) -> Result<u32, String> {
+    parse_ref(s).map_err(|e| format!("{e:#}"))
+}
+
 /// `doctrine policy status` — bind the concrete `PolicyStatus` enum at the
 /// boundary, delegate the edit-preserving transition to the spine, then print.
 /// The clock is read here and passed in (the pure/imperative split).
@@ -191,6 +207,7 @@ pub(crate) fn run_status(
 use std::str::FromStr;
 
 use crate::CommonListArgs;
+use anyhow::Context;
 use clap::Subcommand;
 
 #[derive(Subcommand)]
@@ -222,6 +239,7 @@ pub(crate) enum PolicyCommand {
     },
     /// Set a policy's status (edit-preserving; a no-op if unchanged).
     Status {
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
         #[arg(long)]
         status: PolicyStatus,
@@ -413,5 +431,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let err = run_new(Some(dir.path().to_path_buf()), Some("!!!".into()), None).unwrap_err();
         assert!(err.to_string().contains("pass --slug"));
+    }
+
+    // --- parse_ref ---
+
+    #[test]
+    fn parse_ref_accepts_prefixed_padded_and_bare_ids() {
+        assert_eq!(parse_ref("POL-007").unwrap(), 7);
+        assert_eq!(parse_ref("pol-7").unwrap(), 7);
+        assert_eq!(parse_ref("7").unwrap(), 7);
+        assert_eq!(parse_ref("007").unwrap(), 7);
+        assert!(parse_ref("nope").is_err());
     }
 }

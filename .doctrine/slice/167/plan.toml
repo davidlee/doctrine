@@ -1,0 +1,34 @@
+# Implementation plan for SL-167 — the authored, durable phase plan.
+
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-167"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = ["IMP-189"]
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Add parse_ref + parse_cli_id to ADR, policy, standard, RFC; wire value_parser; tests"
+objective = "Accept both canonical (PREFIX-NNN) and bare (NNN) ids on `adr|policy|standard|rfc status` verbs."
+
+entrance_criteria = [
+  { id = "EN-1", text = "Design approved; slice fix already committed and tested for reference" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All four status verbs accept both SL-NNN and bare NNN" },
+  { id = "EX-2", text = "All four modules have parse_ref tests (prefixed, bare, padded, invalid)" },
+  { id = "EX-3", text = "Existing CLI split tests pass unchanged" },
+  { id = "EX-4", text = "cargo clippy --workspace zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test passes all new + existing tests" },
+  { id = "VT-2", expects = "Manual: `doctrine adr|policy|standard|rfc status ADR-001|POL-001|STD-001|RFC-011 <valid-status>` parses without 'invalid digit' error" },
+]
+specs             = []
+requirements      = []

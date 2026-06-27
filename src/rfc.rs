@@ -139,6 +139,22 @@ pub(crate) fn run_show(
     governance::run_show(&RFC_KIND, path, reference, format)
 }
 
+/// Parse an RFC reference — accepts both `RFC-007` and bare `7`.
+pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
+    let digits = reference
+        .strip_prefix("RFC-")
+        .or_else(|| reference.strip_prefix("rfc-"))
+        .unwrap_or(reference);
+    digits
+        .parse::<u32>()
+        .with_context(|| format!("not an RFC reference: `{reference}` (expected `RFC-007` or `7`)"))
+}
+
+/// Clap `value_parser` wrapper for [`parse_ref`].
+fn parse_cli_id(s: &str) -> Result<u32, String> {
+    parse_ref(s).map_err(|e| format!("{e:#}"))
+}
+
 /// `doctrine rfc status` — bind the concrete `RfcStatus` enum at the boundary,
 /// delegate the edit-preserving transition to the spine, then print.
 pub(crate) fn run_status(
@@ -173,6 +189,7 @@ pub(crate) fn run_status(
 use std::str::FromStr;
 
 use crate::CommonListArgs;
+use anyhow::Context;
 use clap::Subcommand;
 
 #[derive(Subcommand)]
@@ -204,6 +221,7 @@ pub(crate) enum RfcCommand {
     },
     /// Set an RFC's status.
     Status {
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
         #[arg(long)]
         status: RfcStatus,
@@ -600,5 +618,16 @@ mod tests {
                 "known status `{s}` accepted by --status"
             );
         }
+    }
+
+    // --- parse_ref ---
+
+    #[test]
+    fn parse_ref_accepts_prefixed_padded_and_bare_ids() {
+        assert_eq!(parse_ref("RFC-011").unwrap(), 11);
+        assert_eq!(parse_ref("rfc-11").unwrap(), 11);
+        assert_eq!(parse_ref("11").unwrap(), 11);
+        assert_eq!(parse_ref("011").unwrap(), 11);
+        assert!(parse_ref("nope").is_err());
     }
 }
