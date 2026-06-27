@@ -1,0 +1,17 @@
+[[entry]]
+slice = "SL-165"
+requirement = "REQ-316"
+contributing_change = "SL-165"
+mode = "VA"
+status = "verified"
+git_anchor = "5efe2437fce918772768adc01110e558cfe6eb4e"
+attested_date = "2026-06-27"
+
+[[entry]]
+slice = "SL-165"
+requirement = "REQ-317"
+contributing_change = "SL-165"
+mode = "VA"
+status = "verified"
+git_anchor = "5efe2437fce918772768adc01110e558cfe6eb4e"
+attested_date = "2026-06-27"

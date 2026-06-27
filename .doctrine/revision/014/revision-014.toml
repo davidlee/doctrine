@@ -1,8 +1,8 @@
 id      = 14
 slug    = "reconcile-sl-165"
 title   = "reconcile SL-165"
-status = "started"
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-06-27"
 tags    = []
 
