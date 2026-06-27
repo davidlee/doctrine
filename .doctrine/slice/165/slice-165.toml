@@ -1,0 +1,62 @@
+id = 165
+slug = "close-projection-fixnow-path"
+title = "Close-projection path for audit fix-now repairs"
+status = "design"
+created = "2026-06-27"
+updated = "2026-06-27"
+tags = ["area:close", "area:dispatch", "area:reconciliation"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/dispatch_config.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_dispatch_candidate.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_dispatch_sync.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_dispatch_lifecycle.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "references"
+role = "scoped_from"
+target = "IMP-188"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-012"
+
+[[relation]]
+label = "related"
+target = "IMP-130"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "SPEC-022"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
