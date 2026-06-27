@@ -200,6 +200,18 @@ const PARTITION: &[KindPartition] = &[
         gating: &["active"],
         terminal: &["waived", "superseded", "retired"],
     },
+    KindPartition {
+        prefix: kinds::EVD,
+        workable: &[],
+        gating: &["captured", "disputed"],
+        terminal: &["confirmed", "retracted", "superseded"],
+    },
+    KindPartition {
+        prefix: kinds::HYP,
+        workable: &[],
+        gating: &["proposed"],
+        terminal: &["confirmed", "refuted"],
+    },
 ];
 
 /// The shared backlog workable set (the five backlog prefixes partition identically).
@@ -445,6 +457,40 @@ mod tests {
         );
         assert_eq!(
             status_class(&knowledge::CONSTRAINT_KIND, Some("retired")),
+            StatusClass::Terminal
+        );
+        // EVD
+        assert_eq!(
+            status_class(&knowledge::EVIDENCE_KIND, Some("captured")),
+            StatusClass::Gating
+        );
+        assert_eq!(
+            status_class(&knowledge::EVIDENCE_KIND, Some("disputed")),
+            StatusClass::Gating
+        );
+        assert_eq!(
+            status_class(&knowledge::EVIDENCE_KIND, Some("confirmed")),
+            StatusClass::Terminal
+        );
+        assert_eq!(
+            status_class(&knowledge::EVIDENCE_KIND, Some("retracted")),
+            StatusClass::Terminal
+        );
+        assert_eq!(
+            status_class(&knowledge::EVIDENCE_KIND, Some("superseded")),
+            StatusClass::Terminal
+        );
+        // HYP
+        assert_eq!(
+            status_class(&knowledge::HYPOTHESIS_KIND, Some("proposed")),
+            StatusClass::Gating
+        );
+        assert_eq!(
+            status_class(&knowledge::HYPOTHESIS_KIND, Some("confirmed")),
+            StatusClass::Terminal
+        );
+        assert_eq!(
+            status_class(&knowledge::HYPOTHESIS_KIND, Some("refuted")),
             StatusClass::Terminal
         );
     }
