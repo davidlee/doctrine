@@ -59,11 +59,19 @@ exception the gate implements. Settles design OQ-2 (exact wording).
 > `Verified` stage-1 prepare-review journal row — a candidate may only be built
 > from verified evidence — **with one exception for close-target repair propagation
 > (REQ-317):** a `close_target` create may source a recorded `candidate/<N>/<label>`
-> whose role is an `audit` `review_surface` or a chained `close_target`, when the
-> candidate chain traces (bounded recursion, depth ≤ 16) to a `Verified`
-> journaled-evidence root. `scratch` and `experiment` sources are refused. The
-> exception binds by lineage, not name: the resolved `source_oid` must descend from
-> the source row's recorded `merge_oid`, so a moved ref cannot launder unrelated
-> history (INV-6). A `phase/<N>-NN` (code) close-target additionally refuses when an
-> **earlier** non-empty phase row failed (an unresolved hole below the selected
-> phase).
+> row, provided that row has `kind = audit` and `role ∈ {review_surface,
+> close_target}` (`scratch` and `experiment` sources are refused) and `status =
+> Created` (a clean-merge row; a hand-resolved `Conflicted` row is refused — a
+> documented v1 limitation). The source `target_ref` must resolve to **exactly one**
+> recorded candidate row — a count-exact, fail-closed match (duplicates refused).
+> The candidate chain is then traced by bounded recursion (depth ≤ 16); each hop
+> applies the same row gate, and the chain must terminate at a `Verified`
+> journaled-evidence root (`review/<N>` or `phase/<N>-NN`) validated through the
+> *full* journaled gate — including the phase-hole refusal below when that root is a
+> `phase/<N>-NN` ref. The exception binds by lineage, not name: the resolved
+> `source_oid` must descend from the source row's recorded `merge_oid`, so a moved
+> ref cannot launder unrelated history (INV-6).
+>
+> A `phase/<N>-NN` (code) close-target — whether named directly as the source or
+> reached as the traced chain root — additionally refuses when an **earlier**
+> non-empty phase row failed (an unresolved hole below the selected phase).

@@ -103,3 +103,44 @@ it routes to reconcile as a Revision (below).
   non-goal here).
 - **RFC-005 placement (slice OQ-4, deferred)** — note the close-projection hazard
   (H2-adjacent) at reconcile; do **not** rewrite the RFC here.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- None. Per the brief, `design.md` matched the landed gate (every invariant traced
+  to source) and `plan.toml` PHASE-02 VT-1 was satisfied by the audit fix-now. No
+  per-slice prose drift to reconcile.
+
+### REVs completed
+- **REV-014** (`reconcile-sl-165`): `done` — covers RV-177 **F-2** (the SPEC-022
+  REQ-316 ⊥ REQ-317 contradiction). One `modify REQ-316` row, applied and
+  manually landed: the **Source provenance** clause is narrowed to admit the traced
+  candidate-source `close_target` exception the landed gate implements (settles
+  design OQ-2 wording). Faithful to `trace_candidate_provenance` /
+  `check_provenance` on candidate tip `e7d2ebaa` — `kind=audit` ∧ `role ∈
+  {review_surface, close_target}` per hop, `status=Created` (INV-3), count-exact row
+  match (INV-5), bounded recursion depth ≤ 16 (INV-4), Verified journaled-root via
+  the full gate incl. phase-hole (INV-1), `merge_oid` lineage binding (INV-6).
+  External adversarial review per ADR-013 / design D4/Q3-A: codex (GPT-5.5) —
+  REQUEST-CHANGES on pass 1 (4 under-described teeth), APPROVE on pass 2 after the
+  wording was corrected against source. Rationale + before/after in revision-014.md.
+- **REQ-317**: already `active`; now satisfied by the substrate (no status row
+  needed). Conformance recorded: `coverage record` SL-165 → REQ-316 + REQ-317 (VA),
+  per design R3. Slice conformance algebra clean (3/3).
+
+### Assessed — no change
+- **OQ-3** (REQ-317 SPEC-021 process-owner note): no companion tweak. REQ-317
+  already scopes the operator obligation to SPEC-021 and fixes only the substrate
+  fact; SL-165 implemented exactly that path. The audit-time guard is IMP-130's
+  mandate, a non-goal here.
+- **RFC-005** (slice OQ-4, deferred): close-projection of a candidate-sourced repair
+  noted as an H2-adjacent hazard for the RFC author. RFC **not** edited in this pass.
+
+### Withdrawn / tolerated
+- **F-1**: `verified` — remediated in audit (fix-now: 12 unit + 1 e2e moved-ref;
+  PHASE-02 VT-1 satisfied). No reconcile write.
+- **F-2 standing tolerations** (carried from §Synthesis): OQ-4/INV-3 hand-resolved
+  `Conflicted` refusal and A-1 content-vs-lineage trust — both documented v1
+  limitations, named in the narrowed REQ-316 prose, not silent gaps.
+
+Reconcile pass complete — handoff to `/close`.
