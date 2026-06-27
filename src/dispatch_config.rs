@@ -53,6 +53,14 @@ pub(crate) struct DispatchConfig {
     /// buffer, promoted from this ref. Unset ⇒ single-branch posture; g1/g2
     /// inert (INV-2). NOT the fork-base resolver (ADR-006 D3 ladder /
     /// `DOCTRINE_TRUNK_REF`). SL-166 design §5.2.
+    ///
+    /// Precondition (design §8 R3): the posture assumes a SINGLE, LINEAR,
+    /// append-mostly authoring ref promoted to the buffer. g2's freshness gate
+    /// is `is-ancestor(corpus_tip, base)`, correct only when the corpus advances
+    /// monotonically on this one branch. Rebased/divergent authoring history,
+    /// shallow/grafted clones, and multiple authoring branches are UNSUPPORTED
+    /// and hard-refuse setup; corpus authored on the buffer but not on this ref
+    /// is a g2 false negative (g3 still backstops the advance regardless).
     #[serde(default)]
     pub(crate) authoring_branch: Option<String>,
 }
