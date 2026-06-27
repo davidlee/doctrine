@@ -19,11 +19,19 @@ selector = "tests/e2e_mcp_server.rs"
 intent = "design-target"
 
 [[selector]]
-selector = ".doctrine/boot-footer.md"
+selector = "src/memory.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/memory.rs"
+selector = "install/boot-footer.md"
+intent = "design-target"
+
+[[selector]]
+selector = "src/boot.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/retrieve.rs"
 intent = "design-target"
 
 [[relation]]
