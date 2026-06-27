@@ -31,7 +31,9 @@ merged edge (g3 + seam + layering tests pass with concurrent work integrated).
   doc), and the shell `dispatch::corpus_clobber_refusal` does the merge-base /
   diff / blob reads. g2 (PHASE-03) and g1 (PHASE-04) likewise have pure predicates
   — keep their I/O in the shell, predicates in `corpus_guard` (leaf), so the
-  ADR-001 gate stays green. See [[mem.pattern.dispatch.g3-pure-predicate-shell-io]].
+  ADR-001 gate stays green. This is the general
+  [[mem.pattern.safety.resolve-every-ref-before-pure-compare]] principle (impure
+  shell resolves git readings; pure leaf compares) applied to g3.
 
 **EX-4 minor deviation** — design says "recorded on the integrate journal **row**";
 the allowlist is call-global across both legs (§10), so it is recorded once on the
