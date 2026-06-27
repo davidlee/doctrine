@@ -21,18 +21,30 @@ the thread through `run_relation_list`/`run_relation_census` to the
 
 ### D2: `tags` column in per-kind `COLUMNS` arrays
 
-For every taggable kind whose `COLUMNS` array lacks a `tags` entry:
+**Dispatch topology (verified).** Column sites are NOT one-per-kind. `adr`,
+`policy`, `standard`, and `rfc` all route `list` through `governance::run_list`
+over the shared `GOV_COLUMNS`/`GovRow` — **one** site serves four kinds.
+`adr.rs`/`policy.rs`/`standard.rs`/`rfc.rs` carry no column model and need no
+tags edit. The distinct column sites in scope:
 
-| Kind | File | Constant |
-|---|---|---|
-| slice | `src/slice.rs` | `SLICE_COLUMNS` |
-| adr/policy/standard | `src/governance.rs` | `GOV_COLUMNS` |
-| spec | `src/spec.rs` | spec columns |
-| rfc | `src/rfc.rs` | RFC columns |
-| knowledge | `src/knowledge.rs` | knowledge columns |
+| Column site | File | Constant | Kinds served | Row type | Row carries `tags`? |
+|---|---|---|---|---|---|
+| governance | `src/governance.rs` | `GOV_COLUMNS` | adr, policy, standard, rfc | `GovRow` | ✅ yes |
+| slice | `src/slice.rs` | `SLICE_COLUMNS` | slice | `SliceRowTuple` | ❌ add field |
+| spec | `src/spec.rs` | `SPEC_COLUMNS` | spec | `SpecListRow` | ❌ add field |
+| knowledge | `src/knowledge.rs` | `KN_COLUMNS` | knowledge | `KnowledgeRecord` | ✅ yes |
+| revision | `src/revision.rs` | `REV_COLUMNS` | revision | `ListRow` | ✅ yes (column already present) |
+| rec | `src/rec.rs` | `REC_COLUMNS` | rec | `ListRow` | ❌ add field |
+| review | `src/review.rs` | `REVIEW_COLUMNS` | review | `ListRow` | ❌ add field |
 
-Each gets a `listing::Column` entry using `paint_tag` (following `backlog.rs`
-line 1086–1095):
+Where the row type lacks `tags: Vec<String>` (slice, spec, rec, review) the
+field is added first, populated from the unified root-level `tags` (SL-136). The
+extractor (`Meta.tags` / equivalent) is generic — the work is the struct field +
+its construction site, not new storage. `revision` already renders `tags` (D2 no
+column change; D3 only).
+
+Each new column gets a `listing::Column` entry using `paint_tag` (following
+`backlog.rs` line 1086–1095):
 
 ```rust
 listing::Column {
@@ -91,9 +103,10 @@ change (its inline block is the prototype, not a second implementation). Its
 existing goldens are the behaviour-preservation proof — they must stay green
 unchanged through the refactor.
 
-Affects: `slice`, `governance` (adr/policy/standard), `spec`, `rfc`,
-`knowledge`, `revision`, plus the `backlog` refactor. `memory` and `concept-map`
-are always-on (no conditional) — untouched by D3.
+Affects the 7 column sites of D2: `governance::run_list` (covers adr/policy/
+standard/rfc in one edit), `slice`, `spec`, `knowledge`, `revision`, `rec`,
+`review` — plus the `backlog` refactor. `memory` and `concept-map` are always-on
+(no conditional) — untouched by D3.
 
 ### D4: REC and review tag surfaces + taggable set
 
@@ -138,14 +151,13 @@ The `name` fields are already lowercase — only `header` changes.
 | `src/backlog.rs` | Refactor inline splice (1237–1250) onto `default_with_tags`; goldens stay green |
 | `src/commands/relation.rs` | Add `--columns` to `List` and `Census`; thread through pub `render_list`/`render_census` |
 | `src/relation_query.rs` | Thread `Option<&str>` columns through pub `render_list`/`render_census` into the private table helpers |
-| `src/slice.rs` | Add `tags` column + conditional default |
-| `src/governance.rs` | Add `tags` column + conditional default; verify `FilterFields.tags` wired |
-| `src/spec.rs` | Add `tags` column + conditional default |
-| `src/rfc.rs` | Add `tags` column + conditional default |
-| `src/knowledge.rs` | Add `tags` column + conditional default |
+| `src/governance.rs` | Add `tags` to `GOV_COLUMNS` + conditional default in `governance::run_list` — covers adr/policy/standard/rfc in one edit (rfc.rs/adr.rs/policy.rs/standard.rs untouched) |
+| `src/slice.rs` | Add `tags` field to `SliceRowTuple` + `tags` column + conditional default |
+| `src/spec.rs` | Add `tags` field to `SpecListRow` + `tags` column + conditional default |
+| `src/knowledge.rs` | Add `tags` column + conditional default (`KnowledgeRecord.tags` already present) |
 | `src/revision.rs` | Add conditional default for `tags` (column already exists) |
-| `src/rec.rs` | Add `tags` column + conditional default + show/JSON wire |
-| `src/review.rs` | Add `tags` column + conditional default + show/JSON wire |
+| `src/rec.rs` | Add `tags` field to `ListRow` + `tags` column + conditional default + show/JSON wire |
+| `src/review.rs` | Add `tags` field to `ListRow` + `tags` column + conditional default + show/JSON wire |
 | `src/tag.rs` | Add `"REC"`, `"RV"` to `TAGGABLE` |
 | `src/concept_map.rs` | Lowercase `header` fields in `CONCEPT_MAP_COLUMNS` |
 | `tests/e2e_list_columns_golden.rs` | Add `RelationRow`/`CensusRow` coverage; REC/review tag coverage |

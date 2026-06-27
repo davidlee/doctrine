@@ -51,10 +51,6 @@ selector = "src/spec.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/rfc.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/knowledge.rs"
 intent = "design-target"
 

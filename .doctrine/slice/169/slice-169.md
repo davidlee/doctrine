@@ -69,10 +69,11 @@ in the shared read machinery that SL-025's uniform CLI surface left behind:
 
 **Affected surface:** `src/listing.rs` (the kind-blind read spine — gains the
 shared `default_with_tags` splice helper), `src/commands/relation.rs` (add
-`--columns` flatten) threading through `src/relation_query.rs`, per-kind
-column-definition sites — top-level `src/{slice,governance,spec,rfc,knowledge,
-revision,rec,review}.rs` (adr/policy/standard share `src/governance.rs`); each
-gets a `tags` column entry and the conditional default. `src/backlog.rs` is
+`--columns` flatten) threading through `src/relation_query.rs`, the 7 actual
+column-definition sites — `src/governance.rs` (serves adr/policy/standard/**rfc**
+via `governance::run_list`), `src/{slice,spec,knowledge,revision,rec,review}.rs`;
+each gets a `tags` column entry and the conditional default. `slice`/`spec`/`rec`/
+`review` row types also need a `tags` field added first. `src/backlog.rs` is
 refactored onto the shared helper (its inline splice is the prototype).
 `src/tag.rs` extends the `TAGGABLE` prefix set (`src/commands/tag.rs` reads it
 at the write gate). REC/review `show`/JSON surfaces. `src/concept_map.rs` header
