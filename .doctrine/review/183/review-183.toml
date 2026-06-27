@@ -66,5 +66,50 @@ detail = "Expected: 5.5 defines which backlog statuses count as 'open' for the d
 disposition = "design-wrong"
 response = "Reconciled: 5.5 now defines the open-item predicate (!is_transition_terminal(item.status)) so a closed/abandoned backlog item is never flagged. Underlying primitives confirmed present (lifecycle.rs:42, relation.rs:877)."
 
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Check #6 RawLabel seam is fiction — names a nonexistent type and the wrong API (external/codex)"
+detail = "Expected: the source seam named for check #6 RawLabel exists and exposes raw labels. Observed (verified): RelationLabel (src/relation.rs:45) has NO Raw variant; the real carrier is CatalogEdgeLabel::Raw(String) (src/catalog/hydrate.rs:46, for pre-migration/free-text/memory edges). relation_graph::outbound_for / tier1_edges DROP off-table rows (relation_graph.rs:331-332), and a Raw label on a numbered edge is treated as catalog corruption -> panic (relation_graph.rs:378-380). So design 2 ('relation_graph carries RelationLabel::Raw(String)'), 5.2 #6 seam ('relation_graph Raw labels via outbound_for'), and 5.4 raw_label_findings are all mis-specified. IMP-141 clarifies the 173 raw edges (156 related, 17 descends_from) are catalog-graph Raw() labels that 'resolve the same way' (valid, not illegal) -> sourced from the catalog hydrate/graph path, NOT relation_graph::outbound_for, and disjoint from #2's IllegalRows (R7 holds). This is exactly the access-path the pass-1 open-question flagged for P05; the answer is negative for outbound_for. Penance: re-specify #6 against CatalogEdgeLabel::Raw via the catalog graph; correct 2, 5.2, 5.4; keep R7's disjointness test."
+disposition = "design-wrong"
+response = "Verified true against source. Reconciled: design 2/5.2 #6/5.4 now name CatalogEdgeLabel::Raw via the catalog graph and explicitly reject RelationLabel::Raw + outbound_for. IMP-141's 173 edges confirmed catalog raw labels that resolve identically -> R7 disjointness preserved. Answers the P05 open question negatively for outbound_for."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "D12 contradicts 5.2 v1-path and the phase sketch on #1/#4 native vs adapter (external/codex)"
+detail = "Expected: the new D12 golden-first gate is consistent with the rest of the design. Observed: 5.2 table marks #1 IdIntegrity and #4 MemoryHealth as 'native' in v1, but D12 (added in pass 2) says a native re-point is admissible ONLY after byte-exact goldens land, else the source ships adapter'd; and the 9 phase sketch schedules 'wire id-integrity native' (P02) BEFORE the golden/black-box phase (P04). Internal contradiction, not mere plan detail. Penance: make 5.2's #1/#4 v1 path conditional (adapter initially; native only after the D12 golden precondition), and reorder the phase sketch so byte-exact golden authoring precedes any native re-point. State it explicitly."
+disposition = "design-wrong"
+response = "Verified self-inflicted by the D12 pass-2 edit. Reconciled: 5.2 #1/#4 v1 path is now 'adapter -> native after D12'; v1-native declaration satisfied by the four new checks; phase sketch reordered (P05 authors byte-exact goldens, THEN re-points native)."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "major"
+title = "D11 forgot the review ledger tree — re-imports the same example noise it tried to suppress (external/codex)"
+detail = "Expected: D11's process-exhaust scan-skip covers ALL the historical/adversarial exhaust tier. Observed: D11 skips audit.md/inquisition.md/notes.md/research/** but NOT .doctrine/review/**. Review ledgers are the same class and are dense with placeholder example ids — ironically THIS review: .doctrine/review/183/review-183.md cites POL-123, and review-183.toml records SL-999, SPEC-110, REQ-1234 as examples. As specified (scan .doctrine/**/*.md), ProseCite re-imports review-ledger example noise through a door D11 left open. Penance: add .doctrine/review/** to the ProseCite skip-set in 5.5/D11/R8 (review-NNN.md prose is process-exhaust, not durable canon)."
+disposition = "design-wrong"
+response = "Verified — review-183 itself proves the noise. Reconciled: .doctrine/review/** added to the D11 ProseCite skip-set in 5.5/D11. Review ledgers are adversarial exhaust, not durable canon."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "major"
+title = "#7 TomlParse double-reports malformed numbered-entity TOML already covered by #1, with conflicting severity (external/codex)"
+detail = "Expected: #7 TomlParse adds ONE new warning class without duplicating #1. Observed: malformed numbered-entity TOML is ALREADY an Error finding in id_integrity #1 — scan_kind pushes '{PREFIX}-{id}: TOML parse failed: {e}' (src/integrity.rs:299, surfaced via id_integrity_findings). scan_entities independently emits CatalogDiagnostic{severity:Error} on the same failed entity read (src/catalog/scan.rs:191-209), which #7 consumes. So one broken entity becomes both IdIntegrity/Error AND TomlParse/Warning — incoherent duplicate with conflicting severity. Penance: scope #7 to the surfaces #1 does NOT cover — facet TOML (estimate/value/risk, scan.rs:323) and the plan.toml probe — and exclude/dedup the entity-level catalog parse diagnostics that overlap #1. State the scoping in 5.2/5.3."
+disposition = "design-wrong"
+response = "Verified: integrity.rs:299 (#1 Error) and scan.rs:191 (CatalogDiagnostic Error) both fire on a malformed entity toml. Reconciled: 5.2 #7/5.3/D6 scope TomlParse to facet TOML + plan.toml only; entity-toml parse errors are #1's, deduped out of #7."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "D8 cites the wrong check number for the superset pin (external/codex)"
+detail = "Expected: D8, the rationale pin for the doctor-superset-of-validate invariant, names the correct check. Observed: 5.2 defines #2 = RelationIntegrity and #8 = ProseCite, but D8 says 'add check #8 RelationIntegrity'. Wrong number on the load-bearing decision. Penance: correct D8 prose to '#2 RelationIntegrity'."
+disposition = "design-wrong"
+response = "Verified typo on a load-bearing decision. Reconciled: D8 and the 4 'hence check #N' reference now say #2 RelationIntegrity."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

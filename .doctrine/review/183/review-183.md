@@ -74,3 +74,29 @@ plan sequencing.
 advisory check.
 
 > **HERESIS URITOR; DOCTRINA MANET**
+
+### Addendum — external pass (codex / GPT-5.5), F-7..F-11
+
+The external inquisitor earned its keep: five fresh heresies the internal passes
+missed, every one verified against source before the design was touched (per the
+trust-but-verify writ — two of codex's claims re-specified load-bearing seams, so
+blind acceptance was forbidden).
+
+- **The raw-label seam was outright fiction (F-7).** Pass 1 confessed an open
+  doubt ("does `outbound_for` expose `Raw` labels?"); codex closed it — `no`. The
+  named type `RelationLabel::Raw` does not exist; `outbound_for` *drops* off-table
+  rows; a Raw label on a numbered edge *panics* as corruption. The real carrier is
+  `CatalogEdgeLabel::Raw` in the catalog graph (IMP-141's 173 edges). Re-specified.
+- **My own pass-2 penance bred a contradiction (F-8).** The D12 golden-gate I added
+  fought §5.2's "native" v1-path and a sketch that wired native before the goldens.
+  Reconciled to adapter-first / native-after-golden, sketch reordered.
+- **D11 left a door open (F-9):** it forgot `.doctrine/review/**` — and *this very
+  ledger* would have re-imported `POL-123`/`SL-999` example noise through it.
+- **#7 double-reported entity TOML already owned by #1 (F-10);** scoped to facets +
+  `plan.toml`. **D8 cited the wrong check number (F-11);** corrected.
+
+Eleven charges total across three passes, zero blockers, all terminal. The design
+now tells the truth about its seams, its verification basis, and its scope. Fit to
+lock on the User's word.
+
+> **HERESIS URITOR; DOCTRINA MANET**
