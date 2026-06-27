@@ -123,17 +123,21 @@ pub(crate) enum Category {
 
 pub(crate) struct Finding {
     pub category: Category,
-    pub severity: Severity,       // derivable from category; carried for filtering
     pub entity: Option<String>,   // canonical id when known; None for adapter'd /
                                   // corpus-level findings
     pub message: String,
+}
+
+impl Category {
+    /// Severity is a pure function of category — single source, no per-finding
+    /// field to drift (F5, adversarial pass). Render/exit derive from this.
+    pub fn severity(self) -> Severity;
 }
 
 impl Finding {
     /// The a-style adapter bridge: wrap a legacy `Vec<String>` source with no
     /// per-finding entity. One call per adapter'd source.
     pub fn from_lines(category: Category, lines: Vec<String>) -> Vec<Finding>;
-    // severity is fixed by category (Category::severity()).
 }
 ```
 
@@ -191,32 +195,48 @@ run_doctor(path):
 
 - **Default output:** grouped table — a header per non-empty category, findings
   beneath, then a summary line. Clean corpus → `doctor: corpus clean`.
-- **`--json`:** `listing::json_envelope` with rows `{category, severity, entity,
-  message}`.
+- **`--json`:** `listing::json_envelope<T: Serialize>(kind, rows)` (verified
+  row-generic) with rows `{category, severity, entity, message}` (severity
+  rendered from `category.severity()`). **Honesty caveat (F6):** `entity` is
+  populated only for native sources (#1, #4–#8); adapter'd sources (#2
+  RelationIntegrity, #3 SpecFk — both Error) carry the id inside `message` with
+  `entity: null`. So machine-filtering by `entity` is partial in v1 until those
+  sources go native.
 - **Exit code:** any `Error`-severity finding → `anyhow::bail!` (non-zero, like
   `run_validate`); warnings-only → `Ok(())`.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - **Doctor ⊇ validate.** Checks #1+#2 are exactly what `validate` runs, so doctor
-  is a strict superset. Invariant pinned by a test asserting doctor's id+relation
-  findings equal `validate`'s on the same corpus.
+  is a strict superset. Invariant pinned by a test asserting the **set of rendered
+  message strings** from doctor's `IdIntegrity`+`RelationIntegrity` findings
+  equals `validate`'s finding lines on the same corpus (F4: compare rendered
+  messages, not `Finding` structs — adapter'd vs native carry different
+  `entity`).
 - **Behaviour preservation.** Adapter'd sources (#2, #3) run their legacy fn
   unchanged. Native sources (#1, #4) must reproduce the legacy command's
   byte-exact string output via the re-pointed render — guarded by the existing
   goldens.
-- **ProseCite precision (edge-dense).** Exclude: backtick-fenced code spans
-  (inline `` `KIND-NNN` `` and fenced blocks), `*-SENTINEL` tokens
-  (e.g. `BOOT-SENTINEL`), and doc-local bare refs (`OQ-1`, `D1`, `R1`). Resolve
-  each surviving `KIND-NNN` via `integrity::ensure_ref_resolves`; only refs to
-  numbered kinds in `KINDS` resolve — a cite to a non-entity token is a finding
-  only if it *looks* like a canonical ref. Reuse `is_disposable_prose` to skip
-  runtime prose.
-- **done-but-open terminal def.** `is_transition_terminal` (done **or**
-  abandoned). An open item all of whose linked slices are terminal → one
-  `Lifecycle` finding worded "all slices terminal" (so an all-abandoned item
-  reads as "stuck — re-slice or close", not "complete"). Advisory; never
-  auto-closes.
+- **ProseCite precision + resolver gating (F1, adversarial pass).** Exclude:
+  backtick-fenced code spans (inline `` `KIND-NNN` `` and fenced blocks),
+  `*-SENTINEL` tokens (e.g. `BOOT-SENTINEL`), and doc-local bare refs (`OQ-1`,
+  `D1`, `R1`). **Do NOT call `ensure_ref_resolves` blindly** — it `bail!`s on a
+  prefix outside `KINDS` (e.g. `DEC-005`, a free-text decision ref), which would
+  abort the whole doctor run (mem.pattern.entity.free-text-ref-not-forward-validated).
+  Instead: for each candidate `KIND-NNN`, gate on `kind_by_prefix(prefix)` —
+  - `None` (prefix ∉ `KINDS`, e.g. `DEC`) → **skip**, it is not a corpus ref;
+  - `Some` + entity dir missing → **`ProseCite` finding** (dangling cite);
+  - `Some` + dir present → resolved, no finding.
+  This means ProseCite reuses the dir-probe but never the bailing wrapper. Reuse
+  `is_disposable_prose` to skip runtime prose.
+- **done-but-open terminal def + non-vacuous guard (F2, adversarial pass).**
+  `is_transition_terminal` (done **or** abandoned). Flag an open item **iff it
+  has ≥1 linked slice** (`targets_for(item, Slices)` non-empty) **and** every
+  linked slice is terminal → one `Lifecycle` finding worded "all slices
+  terminal". The `≥1` guard is load-bearing: `targets_for` returns `[]` for a
+  slice-less item, so "all (zero) slices terminal" is vacuously true and would
+  falsely flag every normal slice-less backlog item. An all-abandoned item reads
+  as "stuck — re-slice or close", not "complete". Advisory; never auto-closes.
 - **Empty corpus / no findings** → exit 0, clean summary, empty `--json` rows.
 
 ## 6. Open Questions & Unknowns
@@ -285,6 +305,17 @@ plan/execution-time:
   a future kind missing from `KINDS` silently escapes id-integrity. Out of scope
   here (doctor inherits the existing guard), but noted so it is not assumed
   closed.
+- **R6 — no shared corpus snapshot; each check re-walks** (adversarial pass).
+  "Root resolved once" saves root-finding, not the 8 independent corpus walks
+  (`build_registry`, catalog scan, `collect_all`, the dir probes). Acceptable v1
+  (corpus is small), but this is exactly why D9 **defers** the `validate` removal
+  until doctor's speed is measured. A shared-snapshot refactor is future work, not
+  v1.
+- **R7 — RawLabel vs RelationIntegrity double-report** (adversarial pass). A
+  `Raw()`-labelled edge must not be reported by *both* `validate_relations`
+  (as `IllegalRows`, Error) and the raw-label scan (Warning). IMP-141 holds that
+  raw labels resolve identically (valid, not illegal), so the sets are disjoint —
+  pin it with a test asserting no edge appears in both categories.
 
 ## 9. Quality Engineering & Validation
 
@@ -310,5 +341,32 @@ is `/plan`'s call.
 
 ## 10. Review Notes
 
-(Adversarial pass pending — §6/§7 are the attack surface: ProseCite precision,
-the native/adapter boundary, and the doctor⊇validate invariant.)
+### Adversarial pass 1 (self, 2026-06-27) — integrated
+
+Verified three load-bearing assumptions against source; found two correctness
+bugs and five precision/honesty gaps.
+
+- **F1 (bug, fixed §5.5).** ProseCite must **not** call `ensure_ref_resolves`
+  blindly — it `bail!`s on a non-`KINDS` prefix (`DEC-005`), aborting the run.
+  Gate on `kind_by_prefix` first; skip non-corpus prefixes, dir-probe the rest.
+- **F2 (bug, fixed §5.5).** done-but-open is vacuously true for slice-less items
+  (`targets_for → []`). Added the `≥1 linked slice` guard.
+- **F3 (verified OK).** Item→slice edge is the outbound `RelationLabel::Slices`
+  label; `targets_for(item.tier1, Slices)` is correct (`backlog.rs:1392`).
+- **F4 (tightened §5.5).** Superset invariant compares **rendered message
+  strings**, not `Finding` structs (adapter'd vs native differ on `entity`).
+- **F5 (simplified §5.2).** Dropped the redundant `severity` struct field;
+  `Category::severity()` is the single source.
+- **F6 (honesty, §5.4).** JSON `entity` filtering is partial in v1 — adapter'd
+  Error sources (#2, #3) carry the id in `message`, `entity: null`.
+- **F7 (verified OK).** `json_envelope<T: Serialize>` is row-generic
+  (`listing.rs:871`) — doctor reuses it; no bespoke envelope needed.
+- **R6/R7 (risks added §8).** Per-check corpus re-walk (perf, → D9 defer);
+  RawLabel/RelationIntegrity disjointness (pin with a test).
+
+### Open for external pass
+
+Attack surface for a second (external) reviewer: ProseCite exclusion
+completeness (are there cite shapes beyond code-span/sentinel/doc-local?); the
+adapter/native boundary for #2/#3; whether `outbound_for` exposes `Raw` labels
+pre-resolution (P05 must verify the access path before relying on it).
