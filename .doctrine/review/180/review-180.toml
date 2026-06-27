@@ -1,0 +1,97 @@
+id    = 180
+slug  = "audit-sl-166-dispatch-corpus-loss-guards-g1g2g3"
+title = "Audit: SL-166 dispatch corpus-loss guards (g1/g2/g3)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-166"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = 'PHASE-05 EX-1 enablement mechanism: design specifies an impossible "dedicated commit"'
+detail = '''Expected (plan PHASE-05 EX-1, plan.toml:150; design §5.3): "doctrine.toml sets `authoring-branch = \"refs/heads/edge\"` in a dedicated enabling commit." Observed: SL-146 (a0acf0eb, ISS-055, merged same day the design was written) moved config to `.doctrine/doctrine.toml`, which is confirmed untracked AND gitignored (`git check-ignore` hits; `git ls-files` empty). A "dedicated enabling commit" is therefore impossible — the file is never tracked. Posture was instead armed by an operator runtime edit (authoring-branch = refs/heads/edge on the live primary-tree config; `config validate` → ok). The guard itself is correct and armed; only the criterion's enablement *mechanism* is stale. Canon (plan EX-1 + design §5.3) must be amended to the post-SL-146 env-local config model: enablement is operator config, not a commit.'''
+disposition = "verified"
+response = "Observation confirmed: enablement-via-tracked-commit is impossible post-SL-146 (config gitignored+untracked). The guard is correct and armed (operator runtime edit, config validate ok); the design/plan criterion is the stale artifact. Remediation delegated to /reconcile → Reconciliation Brief / Per-slice direct edit: amend plan PHASE-05 EX-1 (plan.toml:150) and design §5.3 to the post-SL-146 env-local config model (enablement is operator config, not a commit). No governance/spec edit — ADR-012 unaffected."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-05 EX-2 names a phantom test target e2e_dispatch_close"
+detail = """Expected (plan PHASE-05 EX-2, plan.toml:151): "e2e_dispatch_sync / e2e_dispatch_close re-run UNCHANGED with authoring-branch unset → green (INV-2 parity)." Observed: no `e2e_dispatch_close` target exists (`ls tests/` shows only e2e_dispatch_sync.rs + e2e_dispatch_lifecycle.rs). The close-integration coverage lives in e2e_dispatch_sync + e2e_dispatch_lifecycle. INV-2 parity was actually proven against the real suites (worktree posture-off, `just check` green). Criterion's test-target name is wrong; reconcile by correcting EX-2 to name the real targets."""
+disposition = "verified"
+response = "Observation confirmed: e2e_dispatch_close does not exist. Remediation delegated to /reconcile → Reconciliation Brief / Per-slice direct edit: correct plan PHASE-05 EX-2 (plan.toml:151) to name the real targets e2e_dispatch_sync + e2e_dispatch_lifecycle. The INV-2 parity the criterion gates was genuinely satisfied against those suites (worktree posture-off, just check green)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-04 D-P4a: g1 built as pure-predicate + thin shell, not design §5.2's inline snippet"
+detail = "Expected (design §5.2 snippet): inline shell guard at run_integrate. Observed: pure predicate `corpus_guard::on_integration_buffer` (corpus_guard.rs:123-135) + thin shell `guard_not_on_integration_ref` (dispatch.rs:614-637, called at dispatch.rs:602). Matches the PHASE-02/03 leaf+shell pattern and honours ADR-001 (corpus_guard imports only std). The design snippet was illustrative; the as-built strengthens layering. No contradiction."
+disposition = "aligned"
+response = "The leaf+thin-shell split is the correct as-built — it honours ADR-001 (corpus_guard imports only std) and matches the PHASE-02/03 pattern. The design §5.2 inline snippet was illustrative, not normative. No canon change required; the synthesis records the snippet as illustrative so a future reader does not read it as a contract."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "PHASE-04 D-P4b: g1 also inert when authoring == deliver_to"
+detail = 'Design §5.2 snippet only checks Some(_). Observed: corpus_guard.rs:131-133 returns false (inert) when authoring == deliver_to. This matches plan PHASE-04 EX-3 literal ("Inert when authoring-branch is unset or == deliver_to") — so it is conformant to the criterion, defensive against misconfiguration, and strengthens rather than contradicts the design.'
+disposition = "aligned"
+response = 'Conformant to plan PHASE-04 EX-3 ("inert when unset or == deliver_to"). The == deliver_to inert leg is defensive against misconfiguration and matches the criterion, not just the §5.2 Some(_) snippet. No change.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "PHASE-03 D-T2a: only authoring_branch threads into coordinate(), not the deliver_to pair EX-4 mentions"
+detail = """Expected (plan PHASE-03 EX-4, plan.toml:99): "coordinate() receives resolved authoring_branch/deliver_to values." Observed: g2 (`ensure_base_corpus_fresh`) uses only authoring_branch; deliver_to is not threaded because g2 does not need it (it asks "is the fork base fresh?", not a deliver comparison). Threading an unused deliver_to would be a dead parameter. EX-4's pairing was anticipatory; the minimal as-built is correct. The import-direction invariant EX-4 also guards (no engine→config cycle, ADR-001) holds."""
+disposition = "aligned"
+response = "g2 legitimately needs only authoring_branch; deliver_to is not a g2 input. The minimal single-value thread is correct — threading an unused pair would be a dead parameter. EX-4's import-direction invariant (no engine→config cycle, ADR-001) holds. EX-4's deliver_to mention was anticipatory; no code change. Optional plan-prose tidy noted but below the reconcile threshold."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "PHASE-03 D-T1a: last_corpus_commit is 3-arg (pathspec param) vs the 2-arg plan/design signature"
+detail = "Expected (plan PHASE-03 EX-1, plan.toml:96): `last_corpus_commit(root, ref)` tri-state. Observed (git.rs:1122-1126): `(root, refish, pathspec) -> Result<Option<String>, CaptureError>` — the extra pathspec param keeps git.rs off corpus_guard and generalises the seam. The substantive contract EX-1 specifies (tri-state: unresolvable→Err, resolves-no-corpus→Ok(None), else Ok(Some(tip))) is met exactly (git tests confirm all three legs). Signature prose is illustrative; behaviour conforms."
+disposition = "aligned"
+response = "The tri-state contract EX-1 specifies (Err / Ok(None) / Ok(Some(tip))) is met exactly — git tests confirm all three legs. The extra pathspec param generalises the seam and keeps git.rs off corpus_guard (layering). Signature arity in the criterion is illustrative; behaviour conforms. No change."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "PHASE-03: config-validate ref check (design §5.2 R4 belt-and-braces) deliberately not built"
+detail = 'Design §5.2:178 suggested "additionally" a config-validate-time ref check (R4 belt-and-braces). Observed: not built — it would require git/disk in the pure config-validate path (config.rs:511 → dispatch_config.rs:86-94 validate_posture is pure, zero git I/O), violating the pure/imperative split. The shipped protection is the setup-time fail-closed gate (g2, VT-3), which is the load-bearing deliverable. The omission is principled; canon (design §5.2 R4) should record it as intentionally not-built rather than leave it as an unmet "additionally".'
+disposition = "verified"
+response = 'Observation confirmed: the §5.2 R4 config-validate ref check is not built, and correctly so — it would put git/disk in the pure validate path (validate_posture is pure). The setup-time g2 gate (VT-3) is the load-bearing protection. Remediation delegated to /reconcile → Reconciliation Brief / Per-slice direct edit: amend design §5.2 R4 to record the config-validate ref check as intentionally not-built (pure/imperative split), so canon does not read as carrying an unmet "additionally". No governance edit.'
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "PHASE-02 EX-4: --allow-corpus-clobber allowlist is call-global, not per-row"
+detail = 'Plan PHASE-02 EX-4 (plan.toml:68) says the allowlist is "recorded on the integrate journal row." Observed: recorded call-global on the Journal manifest (`journal.allowed_clobbers`, dispatch.rs:1984; ledger.rs:58) — global across both advance legs; JournalRow carries no per-row allowlist (ledger.rs:65-79). This is the documented design §10 behaviour, and PHASE-05 EX-3 docs explicitly ship the "global-across-legs imprecision" note. The as-built matches the accepted design; only the plan EX-4 "row" wording is loose. Substance met.'
+disposition = "aligned"
+response = """The call-global allowlist is the accepted design §10 behaviour, and PHASE-05 EX-3 docs ship the global-across-legs imprecision note explicitly. The as-built matches the design; only plan EX-4's "journal row" wording is loose. Substance (recorded on the journal, threads from repeatable --allow-corpus-clobber, absent ⇒ fail-closed) is met. Below the reconcile threshold."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Conformance incomplete: PHASE-05 source-delta unbound (expected pre-land state)"
+detail = '`doctrine slice conformance 166` reports "incomplete — partial coverage: completed phase PHASE-05 has no recorded source-delta row." Cause: the fork (03+04+05) is intentionally unlanded on edge; source-deltas bind at land via the F-6 ritual (`slice record-delta --start 5e185148 --end 09ee705f`, run from primary after `worktree land`). This is the expected pre-land state, not dropped work — fork tip 09ee705f carries all phase commits. Carry as a mandatory close-time binding step; mechanical path-conformance cannot be machine-verified until the deltas are recorded at land.'
+disposition = "tolerated"
+response = "Accepted pre-land state, not dropped work: the fork (03+04+05) is intentionally unlanded; source-deltas bind at land via the F-6 ritual. Carried as a MANDATORY close-time step — after `worktree land --fork slice/SL-166-corpus-loss-guards --no-ff` (from primary), bind with `slice record-delta --start 5e185148 --end 09ee705f` (or per-phase ranges) since the --no-ff merge tip refuses auto-bind. Mechanical path-conformance is unverifiable until then; re-run `slice conformance 166` post-bind at close. Recorded in synthesis as a standing close gate."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
