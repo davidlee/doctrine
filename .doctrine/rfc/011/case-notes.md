@@ -103,3 +103,47 @@ Captured during informal subagent-orchestration of SL-166 PHASE-04/05
 
 [SL-166 P3-5 C drive complete @ 148k]
 
+
+[audit; SL-166-rv180]
+Token-inefficiency / incidental complexity during /audit of SL-166 (RV-180):
+
+1. CLI id-form inconsistency wasted a call: `slice conformance SL-166` errors
+   "invalid digit found in string" (wants bare `166`), but `slice show SL-166`
+   accepts the prefixed canonical id. Same session, adjacent verbs, opposite
+   id-form rules. The boot guardrail says "cite the durable prefixed id
+   everywhere" — but half the CLI surface rejects it. Had to retry with `166`.
+
+2. No read-only "current lifecycle state" affordance on `slice status`: the verb
+   is transition-only (`slice status <ID> <STATE>` required), so `slice status
+   166` errors on a missing positional instead of printing state. Discovering the
+   legal states + current state needed a `--help` round-trip.
+
+3. Closure-seam two-hop surprise: handover said "parked for /audit", but the
+   slice was in `started`, and `slice status 166 reconcile` refused
+   ("reachable only across the closure seam → reconcile from audit"). Had to
+   flip started→audit→reconcile as two explicit hops. The /audit skill never
+   states it must first advance started→audit; an agent reading only the skill
+   would not know the lifecycle hop is its job.
+
+4. review-ledger.md path not resolvable from the advertised skill base dir: the
+   /audit skill says "read review-ledger.md" and the skill base was
+   `/home/david/doctrine-edge/doctrine/skills/audit`, but the file is not there —
+   had to `find /` to locate it (`install/review-ledger.md` + the installed
+   `.doctrine/review-ledger.md`). A relative pointer that doesn't resolve costs a
+   search.
+
+5. Direct tension between two authoritative instructions: the prior agent's
+   handover said "run /audit from the worktree so it reads the fresh handover",
+   but review-ledger.md §6 says "review verbs refuse a worktree/fork-resolved
+   root — drive from the parent tree." Resolved by reading the handover content
+   once (cheap) and driving all ledger verbs from primary — but reconciling the
+   contradiction cost reasoning tokens. The handover's "run from worktree"
+   premise was simply wrong for the ledger half of the work.
+
+6. Pre-land audit friction: `slice conformance` returns "incomplete" because the
+   fork is unlanded and source-deltas bind at land. So the one mechanical
+   drift-signal the audit skill leans on (undeclared/undelivered/conformant
+   algebra) is unavailable for the whole pre-land audit window — the audit runs
+   blind on path-conformance and must defer it to a close-time re-run. The
+   audit→land ordering means the strongest mechanical signal arrives after the
+   audit verdict, not before it.
