@@ -2133,6 +2133,7 @@ mod tests {
     use super::*;
     use crate::lifecycle::is_transition_terminal;
     use crate::meta::Meta;
+    use crate::test_support::SCHEMA_PLAN_OVERVIEW;
 
     fn meta(id: u32, status: &str, slug: &str, title: &str) -> Meta {
         Meta {
@@ -2430,7 +2431,7 @@ mod tests {
         assert!(!body.contains("{{ref}}"));
         // it is valid TOML carrying the plan.overview shape
         let doc: toml::Value = toml::from_str(&body).unwrap();
-        assert_eq!(doc["schema"].as_str(), Some("doctrine.plan.overview"));
+        assert_eq!(doc["schema"].as_str(), Some(SCHEMA_PLAN_OVERVIEW));
         assert_eq!(doc["version"].as_integer(), Some(1));
         assert_eq!(doc["phase"][0]["id"].as_str(), Some("PHASE-01"));
     }

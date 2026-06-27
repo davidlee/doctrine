@@ -541,6 +541,7 @@ pub(crate) fn run_paths(
 mod tests {
     use super::*;
     use crate::adr::{ADR_KIND, AdrStatus};
+    use crate::test_support::SCHEMA_ADR;
 
     fn adr_root(root: &Path) -> PathBuf {
         root.join(ADR_KIND.kind.dir)
@@ -992,7 +993,7 @@ mod tests {
         let dir = adr_root(root).join(&name);
         fs::create_dir_all(&dir).unwrap();
         let toml = format!(
-            "schema = \"doctrine.adr\"\nversion = 1\n\nid = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
+            "schema = \"{SCHEMA_ADR}\"\nversion = 1\n\nid = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
         );
         fs::write(dir.join(format!("adr-{name}.toml")), toml).unwrap();
     }

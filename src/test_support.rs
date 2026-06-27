@@ -15,6 +15,15 @@
 
 use std::path::PathBuf;
 
+/// Doctrine entity schema keys — single-source per STD-001.
+pub(crate) const SCHEMA_BACKLOG: &str = "doctrine.backlog";
+pub(crate) const SCHEMA_KNOWLEDGE: &str = "doctrine.knowledge";
+pub(crate) const SCHEMA_ADR: &str = "doctrine.adr";
+pub(crate) const SCHEMA_RFC: &str = "doctrine.rfc";
+pub(crate) const SCHEMA_MEMORY: &str = "doctrine.memory";
+pub(crate) const SCHEMA_PLAN: &str = "doctrine.plan";
+pub(crate) const SCHEMA_PLAN_OVERVIEW: &str = "doctrine.plan.overview";
+
 /// The repo root, resolved at runtime. Prefers cargo's runtime `CARGO_MANIFEST_DIR`
 /// (set to the invoking tree); falls back to walking up from the CWD to the directory
 /// holding `Cargo.toml`, for the rare non-cargo-driven run.

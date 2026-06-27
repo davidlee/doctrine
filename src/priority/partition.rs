@@ -260,6 +260,7 @@ mod tests {
     use crate::{
         adr, backlog, knowledge, policy, requirement, review, revision, slice, spec, standard,
     };
+    use crate::test_support::SCHEMA_KNOWLEDGE;
     use std::collections::BTreeSet;
 
     /// Look up a partition entry by prefix (test helper).
@@ -587,10 +588,10 @@ mod tests {
         std::fs::create_dir_all(&que_dir).unwrap();
         std::fs::write(
             que_dir.join("record-001.toml"),
-            "schema = \"doctrine.knowledge\"\nversion = 1\n\
+            format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\
              id = 1\nslug = \"q1\"\ntitle = \"Q1\"\n\
              record_kind = \"question\"\nstatus = \"open\"\n\
-             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n",
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n"),
         )
         .unwrap();
         std::fs::write(que_dir.join("record-001.md"), "open question\n").unwrap();
@@ -600,10 +601,10 @@ mod tests {
         std::fs::create_dir_all(&que2_dir).unwrap();
         std::fs::write(
             que2_dir.join("record-002.toml"),
-            "schema = \"doctrine.knowledge\"\nversion = 1\n\
+            format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\
              id = 2\nslug = \"q2\"\ntitle = \"Q2\"\n\
              record_kind = \"question\"\nstatus = \"answered\"\n\
-             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n",
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n"),
         )
         .unwrap();
         std::fs::write(que2_dir.join("record-002.md"), "answered question\n").unwrap();

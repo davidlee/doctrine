@@ -496,6 +496,7 @@ pub(crate) fn scan_memory_entities(
 mod tests {
     use super::*;
     use crate::catalog::test_helpers::*;
+    use crate::test_support::SCHEMA_BACKLOG;
 
     /// Seed the shared multi-kind fixture: SL-001, SL-003, ADR-002, REQ-005.
     /// ≥3 entities spanning ≥2 KINDS entries with id gaps.
@@ -643,10 +644,10 @@ mod tests {
         write(
             root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            "schema = \"doctrine.backlog\"\nversion = 1\n\
+            &format!("schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
              id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
-             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n",
+             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n"),
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
 

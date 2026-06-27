@@ -89,7 +89,7 @@ pub fn discover_units(src_dir: &Path) -> BTreeSet<String> {
 /// hold for its first line:
 /// - starts with `#[cfg(test)]`
 fn skip_cfg_test_file(path: &Path, stem: &str) -> bool {
-    if stem == "test_helpers" {
+    if stem == "test_helpers" || stem == "test_support" {
         return true;
     }
 
@@ -312,6 +312,9 @@ impl CratePathCollector {
 
 impl<'ast> syn::visit::Visit<'ast> for CratePathCollector {
     fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
+        if self.skip_cfg_test && Self::has_cfg_test(&node.attrs) {
+            return;
+        }
         self.collect_use_paths_from_item_use(node);
         if self.recursive {
             syn::visit::visit_item_use(self, node);
