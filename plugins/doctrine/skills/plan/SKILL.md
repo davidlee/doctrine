@@ -44,16 +44,17 @@ Inputs:
     this order, with these boundaries. Honour the storage rule: **no queried or
     derived data in `plan.md`**; the structured criteria live in `plan.toml`, and
     runtime progress lives under `.doctrine/state/`, never here.
-6.  Materialise phase tracking: `doctrine slice phases <ID>` creates the per-phase
-    sheets in the state tree from `plan.toml`. `--prune` removes orphan tracking
-    whose plan phase is gone (destructive — only when you meant to drop a phase).
-7.  Consider the finished plan critically: what's under-specified, assumed, ambiguous,
+6.  Commit.
+7.  Consider plan critically: what's under-specified, assumed, ambiguous,
     oversized, optimistic, requires verification, or presents implementation risk?
     For each of these, decide what new information is needed, or what mitigations
     to put in place. Ground the plan in known details of the implementation.
 8.  Plan the revision; print a summary of it for the user. Then work through it.
-9.  Revise the plan; summarise what changed.
-10. Hand off to `/phase-plan` to expand the next phase's runtime phase sheet
+9.  Revise the plan; commit again. Summarise what changed.
+10.  Materialise phase tracking: `doctrine slice phases <ID>` creates the per-phase
+    sheets in the state tree from `plan.toml`. `--prune` removes orphan tracking
+    whose plan phase is gone (destructive — only when you meant to drop a phase).
+11. Hand off to `/phase-plan` to expand the next phase's runtime phase sheet
     just before execution — then `/execute`. Do this only after slice scope, `design.md`, and
     the plan tell the same story. Record the lifecycle move on handoff:
    `doctrine slice status <id> ready` (bare number).
