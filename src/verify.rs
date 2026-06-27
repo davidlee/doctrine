@@ -436,7 +436,10 @@ mod tests {
         .unwrap()
         .verification;
         assert_eq!(cfg.quick, Some(vec!["echo".to_owned(), "q".to_owned()]));
-        assert_eq!(cfg.commit, Some(vec!["just".to_owned(), "check".to_owned()]));
+        assert_eq!(
+            cfg.commit,
+            Some(vec!["just".to_owned(), "check".to_owned()])
+        );
         assert_eq!(cfg.gate, Some(vec!["just".to_owned(), "gate".to_owned()]));
     }
 
@@ -481,7 +484,10 @@ mod tests {
             Some(vec!["make", "ci"]),
             Some(vec!["nix", "flake", "check"]),
         );
-        assert_eq!(resolve_check(&cfg, CheckKind::Quick), run(&["cargo", "test"]));
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Quick),
+            run(&["cargo", "test"])
+        );
         assert_eq!(resolve_check(&cfg, CheckKind::Commit), run(&["make", "ci"]));
         assert_eq!(
             resolve_check(&cfg, CheckKind::Gate),
