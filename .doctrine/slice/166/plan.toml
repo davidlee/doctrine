@@ -1,0 +1,159 @@
+# Implementation plan for SL-166 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-166"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Posture config + named constants"
+objective = """
+Add the optional `[dispatch] authoring-branch` field (design §5.2) and the named
+constants (STD-001) the guards refuse with. Foundation for g1/g2; inert on its
+own (no guard wired yet → existing behaviour byte-identical, INV-2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (RV-176 resolved); slice at plan." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "DispatchConfig carries `authoring_branch: Option<String>` (TOML `authoring-branch`), `#[serde(default)]` None; absent table and absent key both deserialize to None." },
+  { id = "EX-2", text = "Refusal tokens (REFUSE_ON_TRUNK, BASE_CORPUS_STALE, CORPUS_CLOBBER) and the `.doctrine` pathspec are named constants — no magic strings (STD-001)." },
+  { id = "EX-3", text = "`config validate` rejects a posture where `authoring-branch` == `deliver_to` (R4); inert when the key is absent." },
+  { id = "EX-4", text = "Existing dispatch_config + config-validate suites stay green unchanged (behaviour-preservation)." },
+]
+verification = [
+  { id = "VT-1", expects = "parse test: `authoring-branch = \"refs/heads/edge\"` → Some; empty table → None; default config → None." },
+  { id = "VT-2", expects = "config-validate test: authoring-branch == deliver_to → error; differs → ok; unset → ok." },
+  { id = "VA-1", expects = "grep confirms the three refusal tokens and the pathspec resolve to single-source named constants." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "g3 — 3-way corpus-clobber gate (always-on)"
+objective = """
+Add `corpus_clobber_check(root, base, new, cur, allow)` (design §5.2 g3, pure-ish
+over injected tree readings) plus its git seams, wire it into `advance_row` per
+leg before the mutation with base = merge-base(new, cur), and thread the repeated
+`--allow-corpus-clobber <path>` CLI arg through integrate onto the journal row.
+Always-on (no posture gate). Closes the live, un-gated `--edge` advance leg
+(RV-176 F-2) and pre-insures RFC-006's non-FF integrate.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 constants landed (CORPUS_CLOBBER, pathspec)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "git seams added (not via git_opt — explicit exit-code handling): a `.doctrine/**` changed-path diff (base→cur) and per-path blob-at-tree read, on a bare-repo test substrate." },
+  { id = "EX-2", text = "`corpus_clobber_check` flags exactly the paths where `new==base ∧ cur≠base` minus the allowlist; pure predicate over injected readings." },
+  { id = "EX-3", text = "Wired in `advance_row` for BOTH legs (pure-ref + checked-out), before the CAS/ff mutation, with base = merge-base(new, cur); fail-closed when a clobber is unallowed." },
+  { id = "EX-4", text = "`--allow-corpus-clobber <path>` (repeatable) threads into `allow` and is recorded on the integrate journal row; absent ⇒ fail-closed." },
+  { id = "EX-5", text = "Catastrophe-path cost bounded: one batched diff, rendered clobber list capped with a logged \"+N more\" (R2)." },
+]
+verification = [
+  { id = "VT-1", expects = "advance_refused_on_phantom_corpus_deletion (new=absent, base=absent, cur=present → clobber)." },
+  { id = "VT-2", expects = "advance_refused_on_stale_revert (new=old, base=old, cur=edit → clobber)." },
+  { id = "VT-3", expects = "non_ff_edge_advance_dropping_corpus_refused — the live un-gated --edge leg (new not descending cur, drops a .doctrine path → g3 bites today)." },
+  { id = "VT-4", expects = "ff_advance_never_clobbers (new descends cur → base==cur → ok)." },
+  { id = "VT-5", expects = "authored_doctrine_delta_allowed (new≠base → ok); allowlist_lets_named_path_through; unnamed_path_still_refused_with_partial_allowlist." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "g2 — base-corpus freshness at setup (fail-closed)"
+objective = """
+Add the tri-state `last_corpus_commit` git seam (Err on unresolvable ref; Ok(None)
+when the ref resolves but carries no `.doctrine` yet; Ok(Some(tip)) otherwise) and
+extend the `coordinate()` Create leg with the `is-ancestor(corpus_tip, base)` gate
+(design §5.2 g2). Fail-closed on a set-but-unresolvable `authoring-branch` (RV-176
+F-1). Respect ADR-001 layering: pass resolved config VALUES into coordinate, not
+the loader.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 config field + BASE_CORPUS_STALE constant landed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`last_corpus_commit(root, ref)` is tri-state with explicit exit-code handling (NOT git_opt): unresolvable ref → Err; resolves-no-corpus → Ok(None); else Ok(Some(tip))." },
+  { id = "EX-2", text = "coordinate() Create leg gates `ensure!(is_ancestor(corpus_tip, base))` after base_has_slice_plan, before `worktree add`; refuses before the fork (no worktree created)." },
+  { id = "EX-3", text = "Posture-off (key absent) ⇒ g2 no-op; set-but-unresolvable ⇒ explicit refusal, NOT a silent no-op (F-1)." },
+  { id = "EX-4", text = "coordinate() receives resolved authoring_branch/deliver_to values, not the config loader — no engine→config cycle (ADR-001); confirm import direction." },
+]
+verification = [
+  { id = "VT-1", expects = "setup_refused_when_base_predates_corpus (SL-164 shape: base lacks corpus the authoring ref has → refuse, no worktree)." },
+  { id = "VT-2", expects = "setup_ok_when_base_carries_corpus; g2_noop_when_authoring_unset; g2_noop_when_no_corpus_yet (ref resolves, no .doctrine history)." },
+  { id = "VT-3", expects = "setup_refused_when_authoring_branch_unresolvable (set-but-bad ref → explicit error, fail-closed)." },
+  { id = "VA-1", expects = "module-graph check: worktree::coordinate does not import dispatch_config/dtoml loader; only resolved values cross the seam (ADR-001)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "g1 — refuse trunk-mutating verbs on a buffer checkout"
+objective = """
+Add `guard_not_on_integration_ref(root, cfg)` (design §5.2 g1) at the head of the
+verbs that advance `deliver_to`/`edge` — `sync --integrate` (and its
+candidate-active path). Inert unless `authoring-branch` is set and differs from
+`deliver_to`. Reuse the worktree-local HEAD read (`symbolic-ref --short HEAD`).
+Exclude `candidate create`/`admit` (mutate no integration ref — OQ-3 resolved).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 config field + REFUSE_ON_TRUNK constant landed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "g1 called at the head of exactly the verbs that advance deliver_to/edge (integrate + candidate-active integrate); enumeration confirmed against dispatch.rs (OQ-3); create/admit NOT guarded." },
+  { id = "EX-2", text = "HEAD read is worktree-local (invoking cwd worktree, not the common dir), reusing the existing symbolic-ref --short HEAD pattern (dispatch.rs:1067)." },
+  { id = "EX-3", text = "Inert when `authoring-branch` is unset or == deliver_to; refusal names the buffer ref and the fetch-not-checkout recovery." },
+]
+verification = [
+  { id = "VT-1", expects = "integrate_refused_when_head_on_buffer (posture on, HEAD==deliver_to → refuse)." },
+  { id = "VT-2", expects = "integrate_allowed_on_authoring_branch (HEAD==authoring → ok, the safe leg); g1_inert_when_posture_unset (single-branch parity)." },
+  { id = "VA-1", expects = "verb-set audit: g1 guards only ref-advancing integrate members; candidate create/admit confirmed unguarded." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Enable posture + parity + docs"
+objective = """
+Enable the buffered-trunk posture for this repo (`[dispatch] authoring-branch =
+\"refs/heads/edge\"` in doctrine.toml, a separate enabling commit, design §5.3),
+re-run the existing dispatch suites with the posture both unset and set to prove
+INV-2 parity, and document the operator-facing contract (verb help for the global
+`--allow-corpus-clobber`, the single-linear-authoring-ref posture precondition).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "g1/g2/g3 (PHASE-02..04) landed and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine.toml sets `authoring-branch = \"refs/heads/edge\"` in a dedicated enabling commit." },
+  { id = "EX-2", text = "e2e_dispatch_sync / e2e_dispatch_close re-run UNCHANGED with authoring-branch unset → green (INV-2 parity)." },
+  { id = "EX-3", text = "Verb help notes the global-across-legs `--allow-corpus-clobber` imprecision (§10) and the single-linear-authoring-ref posture contract (R3)." },
+]
+verification = [
+  { id = "VT-1", expects = "full dispatch suite green with posture unset (parity) AND with posture set on this repo's edge/main split." },
+  { id = "VH-1", expects = "operator confirms the enabling commit + posture contract docs read correctly before close." },
+]
+specs        = []
+requirements = []
