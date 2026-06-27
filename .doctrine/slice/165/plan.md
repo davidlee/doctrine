@@ -44,10 +44,12 @@ against the right oracle.
 
 - **PHASE-03 (anchor).** The headline regression: the IMP-188 reproduction made
   first-class — repair → close → integrate → `status done` with no manual fold or
-  pre-FF dance. It is the test that, per the slice's closure intent, must fail under
-  the old silent-drop/refusal behaviour and pass after the gate. Distinct test home
-  (`e2e_dispatch_lifecycle.rs`) and distinct oracle (the closure-intent checklist),
-  so it stands as its own phase rather than riding PHASE-02's gate matrix.
+  pre-FF dance. The red/green proof of the gated step belongs to PHASE-02 (its
+  accept case is red before the gate, green after); PHASE-03 does not manufacture a
+  second red — it is the *forward integration lock* over the whole sequence, with a
+  distinct test home (`e2e_dispatch_lifecycle.rs`) and a distinct oracle (the
+  closure-intent checklist), so it stands as its own phase rather than riding
+  PHASE-02's gate matrix.
 
 ## Notes
 

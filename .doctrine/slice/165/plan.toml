@@ -42,10 +42,10 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "`check_provenance` signature widened to carry CandidateRole + &Candidates; sole caller updated; compiles." },
   { id = "EX-2", text = "`is_journaled_evidence_ref(source_ref, slice3)` exists as the single classifier; the journaled base-case routes through it (no inline ref-shape duplication)." },
-  { id = "EX-3", text = "`read_candidates` moved ahead of the provenance call and threaded in; both remain pure dispatch/<N> object-db reads (REQ-318) — no working-tree read introduced." },
+  { id = "EX-3", text = "`read_candidates` moved ahead of the provenance call and threaded in; both remain pure dispatch/<N> object-db reads (REQ-318) — no working-tree read introduced. Refusal ORDERING preserved: the provenance refusal still fires before the supersession check (:922-932), so no caller observes a reordered error." },
 ]
 verification = [
-  { id = "VT-1", expects = "`tests/e2e_dispatch_candidate.rs` and `tests/e2e_dispatch_lifecycle.rs` pass UNCHANGED — behaviour preserved across the refactor." },
+  { id = "VT-1", expects = "`tests/e2e_dispatch_candidate.rs` and `tests/e2e_dispatch_lifecycle.rs` pass UNCHANGED — behaviour preserved across the refactor, refusal order included." },
   { id = "VT-2", expects = "`just gate` green; `cargo clippy` zero warnings." },
 ]
 specs             = []
@@ -63,11 +63,17 @@ Implement the conformance fix (design §5.1, D1–D5). Add private \
 on a candidate `source_ref`, terminate on a journaled `source_ref` by routing the \
 FULL existing journaled gate (Verified + phase-hole, F3); bounded `budget` named \
 constant = 16 (INV-4, OQ-1, STD-001 — no magic string). Branch into it from \
-`check_provenance` only when `role == close_target ∧ is_candidate_ref(source_ref)`. \
+`check_provenance` only when `role == close_target ∧ is_candidate_ref(source_ref)` \
+(factor `is_candidate_ref` — `refs/heads/candidate/<N>/` — alongside the journaled \
+predicate so the branch condition has a single source of truth). \
 Then INV-6 / D5 lineage binding in `candidate_create` AFTER `source_oid` resolves \
 (`dispatch.rs:~916`): require `row.merge_oid != "" ∧ is_ancestor(row.merge_oid, \
 source_oid)` — the source-side analog of admit's I3, binding resolved content (not \
-the ref name) to the verified-traced merge.
+the ref name) to the verified-traced merge. The matched `row.merge_oid` must reach \
+the :916 binding site: decide here whether the candidate trace RETURNS the matched \
+row (signature `-> Result<Option<CandidateRow>>` on the candidate path) or \
+`candidate_create` re-looks-up the row post-resolve — pick one explicitly, do not \
+match `target_ref` twice with divergent logic.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 landed: signature widened, ledger threaded, suites green unchanged." },
@@ -90,8 +96,11 @@ requirements      = []
 id        = "PHASE-03"
 name      = "Lifecycle regression anchor — repair → close → integrate → status done"
 objective = """
-Land the end-to-end regression that fails under today's refusal and passes after \
-the gate (design §5.4, §9). One test in `tests/e2e_dispatch_lifecycle.rs`: \
+Land the end-to-end regression anchor for the IMP-188 reproduction (design §5.4, \
+§9). The red/green proof lives in PHASE-02 (the accept case is red before the gate, \
+green after); this phase is the forward INTEGRATION anchor — it exercises the whole \
+sequence and locks it against future regression, not a manufactured red. \
+One test in `tests/e2e_dispatch_lifecycle.rs`: \
 prepare-review (journaled `review/<N>`, Verified) → `candidate create --role \
 review_surface --source review/<N> --worktree`, commit a fix-now on its branch, \
 `admit --role review_surface` → `candidate create --role close_target --base \
@@ -105,11 +114,11 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 gate landed: candidate-source close_target create accepts the traced path." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "Full repair→close→integrate→`status done` test is green; it is red (refusal at close_target create, or silent fix-now drop) when run against the pre-PHASE-02 gate." },
+  { id = "EX-1", text = "Full repair→close→integrate→`status done` test is green end-to-end through a single first-class command sequence." },
   { id = "EX-2", text = "Test asserts (a) trunk tip content includes the fix-now, (b) a journal trunk row exists at the repaired OID, (c) `slice status done` returns success without a manual journal dance." },
 ]
 verification = [
-  { id = "VT-1", expects = "The lifecycle anchor test passes; demonstrated red against the old behaviour (commented red-anchor or staged commit) per the design's regression intent." },
+  { id = "VT-1", expects = "The lifecycle anchor test passes. (Red/green for the gated step is owned by PHASE-02's accept-case matrix; this test is the integration lock, not a separate red anchor.)" },
   { id = "VA-1", expects = "Agent confirms the closure-intent checklist (slice-165.md §Verification): single first-class command sequence, no manual fold/pre-FF dance in the exercised path." },
 ]
 specs             = []
