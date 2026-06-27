@@ -167,7 +167,7 @@ fn vt1_initialize_handshake() {
     kill(child);
 }
 
-// ── VT-2: tools/list returns 14 tools ────────────────────────────────────
+// ── VT-2: tools/list returns 18 tools ────────────────────────────────────
 
 #[test]
 fn vt2_tools_list() {
@@ -188,7 +188,7 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 15, "expected 15 tools, got {tools:?}");
+    assert_eq!(tools.len(), 18, "expected 18 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -207,6 +207,9 @@ fn vt2_tools_list() {
         "memory_show",
         "memory_list",
         "memory_validate",
+        "memory_record",
+        "memory_edit",
+        "doctrine_onboard",
     ] {
         assert!(
             names.contains(expected),
@@ -940,6 +943,145 @@ fn memory_retrieve_reference_to_held_back_memory_returns_error() {
             .unwrap_or("")
             .contains("held back"),
         "expected held-back message, got {resp:?}"
+    );
+
+    kill(child);
+}
+
+// ── SL-164 PHASE-02: memory_record / memory_edit / doctrine_onboard ───
+
+#[test]
+fn e2e_memory_record_and_show_roundtrip() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/memory/shipped")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let title = format!("e2e-record-test-{}", std::process::id());
+
+    // Record new memory
+    let params = tools_call_params(
+        "memory_record",
+        serde_json::json!({
+            "title": &title,
+            "memory_type": "fact",
+            "summary": "E2E test record summary"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_record: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    assert!(text.contains("Recorded"), "expected Recorded in: {text}");
+    let out: Value = serde_json::from_str(text).expect("parse record JSON");
+    let uid = out["Recorded"]["uid"].as_str().expect("uid").to_owned();
+
+    // Now show it
+    let params = tools_call_params("memory_show", serde_json::json!({"reference": &uid}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_show: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    let out: Value = serde_json::from_str(text).expect("parse show JSON");
+    assert_eq!(out["memory"]["uid"], uid);
+    assert_eq!(out["memory"]["title"], title);
+
+    kill(child);
+}
+
+#[test]
+fn e2e_memory_edit_roundtrip() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/memory/shipped")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    // Record a test memory
+    let params = tools_call_params(
+        "memory_record",
+        serde_json::json!({
+            "title": "Pre-edit Title",
+            "memory_type": "fact"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_record: {resp:?}");
+    let text = tool_result_text(&resp);
+    let out: Value = serde_json::from_str(text).expect("parse record JSON");
+    let uid = out["Recorded"]["uid"].as_str().expect("uid").to_owned();
+
+    // Edit the title
+    let new_title = format!("Edited-{}", std::process::id());
+    let params = tools_call_params(
+        "memory_edit",
+        serde_json::json!({
+            "reference": &uid,
+            "title": &new_title
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_edit: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    assert!(text.contains("Edited memory"), "expected Edited: {text}");
+
+    // Verify via memory_show
+    let params = tools_call_params("memory_show", serde_json::json!({"reference": &uid}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_show: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    let out: Value = serde_json::from_str(text).expect("parse show JSON");
+    assert_eq!(out["memory"]["title"], new_title, "title should be edited");
+
+    kill(child);
+}
+
+#[test]
+fn e2e_onboard_returns_non_empty() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/memory/shipped")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let params = tools_call_params("doctrine_onboard", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "doctrine_onboard: {resp:?}");
+
+    let text = tool_result_text(&resp);
+    assert!(
+        !text.is_empty(),
+        "doctrine_onboard should return non-empty markdown"
+    );
+    assert!(
+        text.contains("# Doctrine MCP Onboarding"),
+        "should contain onboarding header: {text}"
+    );
+    assert!(
+        text.contains("CLI → MCP Tool Mapping"),
+        "should contain mapping table: {text}"
+    );
+    assert!(
+        text.contains("Onboarding Memories"),
+        "should contain onboarding memories section: {text}"
     );
 
     kill(child);

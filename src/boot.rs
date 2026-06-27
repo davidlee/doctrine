@@ -2636,6 +2636,7 @@ world";
                 repo: None,
                 global: false,
             },
+            &mut io::stdout(),
         )
         .unwrap();
 
@@ -2893,6 +2894,7 @@ world";
                     repo: None,
                     global: false,
                 },
+                &mut io::stdout(),
             )
             .unwrap();
         };
@@ -2982,6 +2984,7 @@ world";
                     repo: None,
                     global: false,
                 },
+                &mut io::stdout(),
             )
             .unwrap();
         };
@@ -3139,6 +3142,7 @@ world";
                 repo: None,
                 global: false,
             },
+            &mut io::stdout(),
         )
         .unwrap();
 
