@@ -1572,7 +1572,7 @@ fn show_journal_trunk_oid_explicit_trunk_overrides_config() {
             .success()
     );
     std::fs::write(
-        dir.join("doctrine.toml"),
+        dir.join(common::DOCTRINE_TOML),
         "[dispatch]\ndeliver-to = \"refs/heads/other\"\n",
     )
     .unwrap();
@@ -1603,7 +1603,7 @@ fn dispatch_deliver_to_prints_default_and_override() {
     assert_eq!(stdout(&out).trim(), "refs/heads/main");
 
     std::fs::write(
-        dir.join("doctrine.toml"),
+        dir.join(common::DOCTRINE_TOML),
         "[dispatch]\ndeliver-to = \"refs/heads/release\"\n",
     )
     .unwrap();
@@ -1730,7 +1730,7 @@ fn vt2_close_integration_honours_deliver_to_override() {
             .success()
     );
     // Redirect the delivery ref away from main via project config.
-    let cfg = dir.join("doctrine.toml");
+    let cfg = dir.join(common::DOCTRINE_TOML);
     let mut body = std::fs::read_to_string(&cfg).unwrap_or_default();
     body.push_str("\n[dispatch]\ndeliver-to = \"refs/heads/other\"\n");
     std::fs::write(&cfg, body).unwrap();

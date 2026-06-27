@@ -311,7 +311,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         // Seed a slice as source
         seed_sl_toml(root, 1);
         // Seed a question record as target
@@ -330,7 +330,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         seed_sl_toml(root, 1);
         // Seed an ADR as target (governance)
         seed_adr_toml(root, 1);
@@ -349,7 +349,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         seed_record_toml(root, "question", "QUE", 1, "open");
         seed_sl_toml(root, 1);
 
@@ -370,7 +370,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         seed_sl_toml(root, 1);
         seed_record_toml(root, "question", "QUE", 1, "open");
 
@@ -394,7 +394,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         seed_sl_toml(root, 1);
         // QUE starts answered (terminal)
         seed_record_toml(root, "question", "QUE", 1, "answered");

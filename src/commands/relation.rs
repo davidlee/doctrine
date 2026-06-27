@@ -411,7 +411,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         std::fs::create_dir_all(root.join(".doctrine")).unwrap();
-        std::fs::write(root.join("doctrine.toml"), "").unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
         seed_adr_toml(root, 1);
         seed_adr_toml(root, 2);
 

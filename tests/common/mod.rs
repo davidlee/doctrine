@@ -13,3 +13,7 @@
 mod test_support;
 
 pub(crate) use test_support::{doctrine_bin, repo_root};
+
+/// Canonical config path — mirrors `src/dtoml::DOCTRINE_TOML` (which
+/// integration tests can't import from a binary-only crate).
+pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";

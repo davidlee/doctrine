@@ -644,10 +644,12 @@ mod tests {
         write(
             root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            &format!("schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
+            &format!(
+                "schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
              id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
-             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n"),
+             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n"
+            ),
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
 

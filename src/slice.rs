@@ -3775,8 +3775,10 @@ mod tests {
         // A root doctrine.toml [conduct] override is read by the shell and folds
         // into resolve (T5: an override is reflected in the posture).
         let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join(crate::dtoml::DOCTRINE_TOML);
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
         fs::write(
-            dir.path().join(crate::dtoml::DOCTRINE_TOML),
+            &config,
             "[conduct]\ndefault-actor = \"agent\"\n[conduct.ready]\nautonomy = \"gate\"\n",
         )
         .unwrap();
@@ -3790,11 +3792,9 @@ mod tests {
         // A genuinely malformed file surfaces an error (not silent) — but the
         // FSM gates are untouched (this is the conduct read, advisory only).
         let dir = tempfile::tempdir().unwrap();
-        fs::write(
-            dir.path().join(crate::dtoml::DOCTRINE_TOML),
-            "[conduct\nbroken =",
-        )
-        .unwrap();
+        let config = dir.path().join(crate::dtoml::DOCTRINE_TOML);
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        fs::write(&config, "[conduct\nbroken =").unwrap();
         assert!(load_conduct(dir.path()).is_err());
     }
 
@@ -3813,8 +3813,10 @@ mod tests {
         let root = dir.path();
 
         // doctrine.toml with custom estimation config
+        let config = root.join(crate::dtoml::DOCTRINE_TOML);
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
         fs::write(
-            root.join("doctrine.toml"),
+            &config,
             "[estimation]\nunit = \"story_points\"\nlower_confidence = 0.1\nupper_confidence = 0.9\n",
         )
         .unwrap();
@@ -3868,7 +3870,9 @@ mod tests {
         let root = dir.path();
 
         // Malformed TOML — missing `=`
-        fs::write(root.join("doctrine.toml"), "[estimation\nunit = broken").unwrap();
+        let config = root.join(crate::dtoml::DOCTRINE_TOML);
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        fs::write(&config, "[estimation\nunit = broken").unwrap();
 
         // A valid slice must exist so it's the doctrine.toml that fails
         let sr = slice_root(root);

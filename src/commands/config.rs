@@ -291,7 +291,7 @@ pub(crate) fn run_config_set(root: &Path, args: &ConfigSetArgs) -> Result<()> {
         _ => anyhow::bail!("Unknown config key: {key}"),
     };
 
-    let config_path = root.join(".doctrine/doctrine.toml");
+    let config_path = root.join(crate::dtoml::DOCTRINE_TOML);
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -421,7 +421,7 @@ pub(crate) fn run_config_unset(root: &Path, args: &ConfigUnsetArgs) -> Result<()
         _ => anyhow::bail!("Unknown or invalid config key: {key}"),
     }
 
-    let config_path = root.join(".doctrine/doctrine.toml");
+    let config_path = root.join(crate::dtoml::DOCTRINE_TOML);
     if !config_path.exists() {
         writeln!(std::io::stdout().lock(), "{key} is not set")?;
         return Ok(());
@@ -510,7 +510,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let config_dir = dir.path().join(".doctrine");
         fs::create_dir_all(&config_dir).unwrap();
-        fs::write(config_dir.join("doctrine.toml"), toml_content).unwrap();
+        fs::write(dir.path().join(crate::dtoml::DOCTRINE_TOML), toml_content).unwrap();
         dir
     }
 
@@ -576,7 +576,7 @@ mod tests {
         };
         run_config_set(root, &args).unwrap();
 
-        let config_file = root.join(".doctrine/doctrine.toml");
+        let config_file = root.join(crate::dtoml::DOCTRINE_TOML);
         let content = fs::read_to_string(&config_file).unwrap();
         assert!(content.contains("[priority.coefficients]"));
         assert!(content.contains("value = 5.5"));
@@ -648,7 +648,7 @@ mod tests {
         };
         run_config_unset(root, &unset_args).unwrap();
 
-        let config_file = root.join(".doctrine/doctrine.toml");
+        let config_file = root.join(crate::dtoml::DOCTRINE_TOML);
         let content = fs::read_to_string(&config_file).unwrap();
         assert!(!content.contains("value = 5.5"));
         assert!(!content.contains("[priority.coefficients]")); // Table should be cleaned up

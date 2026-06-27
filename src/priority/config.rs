@@ -110,7 +110,7 @@ pub(crate) fn load(root: &Path) -> PriorityConfig {
 }
 
 pub(crate) fn read_priority_table(root: &Path) -> Option<toml::Table> {
-    let text = std::fs::read_to_string(root.join(".doctrine/doctrine.toml")).ok()?;
+    let text = std::fs::read_to_string(root.join(crate::dtoml::DOCTRINE_TOML)).ok()?;
     let raw: toml::Value = text.parse().ok()?;
     raw.get("priority")?.as_table().cloned()
 }
@@ -224,7 +224,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let config_dir = dir.path().join(".doctrine");
         fs::create_dir_all(&config_dir).unwrap();
-        fs::write(config_dir.join("doctrine.toml"), body).unwrap();
+        fs::write(dir.path().join(crate::dtoml::DOCTRINE_TOML), body).unwrap();
         load(dir.path())
     }
 

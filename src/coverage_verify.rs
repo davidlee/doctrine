@@ -539,7 +539,9 @@ mod tests {
 
     /// Write a `doctrine.toml` with a 1-second timeout so the timeout VT is fast.
     fn write_doctrine_toml(root: &Path, body: &str) {
-        std::fs::write(root.join("doctrine.toml"), body).unwrap();
+        let path = root.join(crate::dtoml::DOCTRINE_TOML);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, body).unwrap();
     }
 
     fn status_of(file: &CoverageFile, req: &str) -> CoverageStatus {
