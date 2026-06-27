@@ -44,12 +44,13 @@ pub(crate) enum CheckCommand {
 }
 
 impl CheckCommand {
-    /// The `-p/--path` override for this invocation.
-    fn path(&self) -> Option<PathBuf> {
+    /// The `-p/--path` override for this invocation (consumes — the dispatcher
+    /// owns the command and needs nothing else from it).
+    fn path(self) -> Option<PathBuf> {
         match self {
             CheckCommand::Quick { path }
             | CheckCommand::Commit { path }
-            | CheckCommand::Gate { path } => path.clone(),
+            | CheckCommand::Gate { path } => path,
         }
     }
 }
@@ -68,12 +69,13 @@ impl From<&CheckCommand> for CheckKind {
 /// act: print + exit-0 the owned no-op, error toward the key on an empty override,
 /// or proxy-spawn the resolved argv (diverging via [`run_proxy`]).
 pub(crate) fn dispatch(cmd: CheckCommand) -> anyhow::Result<()> {
+    use std::io::Write;
+    let kind = CheckKind::from(&cmd);
     let root = crate::root::find(cmd.path(), &crate::root::default_markers())?;
     let cfg = crate::coverage_store::load_config(&root)?;
-    let kind = CheckKind::from(&cmd);
     match crate::verify::resolve_check(&cfg, kind) {
         CheckPlan::Noop(note) => {
-            println!("{note}");
+            writeln!(std::io::stdout(), "{note}")?;
             // Owned no-op: doctrine exits 0 itself — no child spawned (CR-F3).
             #[expect(
                 clippy::disallowed_methods,

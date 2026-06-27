@@ -724,6 +724,7 @@ static FAMILIES: &[Family] = &[
             "serve",
             "config",
             "validate",
+            "check",
             "reseat",
             "export",
             "reservation",
@@ -1336,8 +1337,8 @@ mod tests {
             );
         }
 
-        // The slice's stated census: 44 visible top-level commands (A1).
-        assert_eq!(visible.len(), 44, "expected 44 visible top-level commands");
+        // Census: 45 visible top-level commands (44 at SL-150 A1 + `check`, SL-163).
+        assert_eq!(visible.len(), 45, "expected 45 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the
