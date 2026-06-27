@@ -141,13 +141,7 @@ pub(crate) fn run_show(
 
 /// Parse an RFC reference — accepts both `RFC-007` and bare `7`.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    let digits = reference
-        .strip_prefix("RFC-")
-        .or_else(|| reference.strip_prefix("rfc-"))
-        .unwrap_or(reference);
-    digits
-        .parse::<u32>()
-        .with_context(|| format!("not an RFC reference: `{reference}` (expected `RFC-007` or `7`)"))
+    governance::parse_entity_ref("RFC", "an RFC", reference)
 }
 
 /// Clap `value_parser` wrapper for [`parse_ref`].
@@ -189,7 +183,6 @@ pub(crate) fn run_status(
 use std::str::FromStr;
 
 use crate::CommonListArgs;
-use anyhow::Context;
 use clap::Subcommand;
 
 #[derive(Subcommand)]

@@ -1423,13 +1423,7 @@ struct Gate {
 /// Parse a slice reference — `SL-025`, `sl-25`, or the bare id `25` — to its
 /// numeric id. The prefix is optional and case-insensitive; the id may be padded.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    let digits = reference
-        .strip_prefix("SL-")
-        .or_else(|| reference.strip_prefix("sl-"))
-        .unwrap_or(reference);
-    digits.parse::<u32>().with_context(|| {
-        format!("not a slice reference: `{reference}` (expected `SL-025` or `25`)")
-    })
+    crate::governance::parse_entity_ref("SL", "a slice", reference)
 }
 
 /// Clap `value_parser` wrapper for [`parse_ref`] — accepts both `SL-NNN` and bare
