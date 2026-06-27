@@ -64,3 +64,62 @@ This is the known [[mem.pattern.audit.fork-land-unbound-source-delta]].
 (enable posture + INV-2 parity). g3 was sequenced first because it is
 posture-independent and load-bearing today on the un-gated `--edge` leg
 ([[mem.fact.dispatch.edge-advance-leg-not-ff-gated]]).
+
+## PHASE-03 — g2 base-corpus freshness at setup (fail-closed) — DONE
+
+Commits on the fork `slice/SL-166-corpus-loss-guards`: `d99afd53` (seam + 3
+tests), `d14dde98` (gate + wiring + 5+2 tests). `just gate` green (clippy
+`--workspace`, fmt, full test suite, build). NOT yet landed on edge.
+
+**What shipped**
+- `git::last_corpus_commit(root, refish, pathspec)` — tri-state corpus-tip seam
+  (`git.rs`): `rev-parse --verify <refish>^{commit}` non-zero ⇒ **Err** (set-but-
+  unresolvable = fail-closed, F-1); else `rev-list -1 <refish> -- <pathspec>` →
+  empty ⇒ **Ok(None)** (resolves-no-corpus), else **Ok(Some(tip))**. Explicit
+  exit-code (NOT `git_opt`); `pathspec` a PARAM (keeps git.rs leaf off corpus_guard).
+- `worktree::coordinate::ensure_base_corpus_fresh(root, authoring_branch, base)`
+  — the g2 shell check: None ⇒ inert; Ok(None) ⇒ inert; corpus tip not an
+  ancestor of base ⇒ `Err(BASE_CORPUS_STALE)`. Called in `coordinate()` Create
+  leg AFTER `base_has_slice_plan`, BEFORE `worktree add` with `base = trunk` —
+  refuses before the fork, no worktree minted (EX-2/EX-3).
+- Threading: `coordinate()`/`run_coordinate()` gained `authoring_branch: Option<&str>`.
+  Resolved at command tier (`dispatch.rs` setup + `worktree/mod.rs` Coordinate
+  dispatch, both `load_doctrine_toml(&root)?.dispatch.authoring_branch`).
+  `coordinate.rs` imports NO `dtoml`/`dispatch_config` — VA-1 module-graph clean,
+  layering gate green (worktree→dtoml is command→leaf, downward).
+- Dropped `BASE_CORPUS_STALE`'s `#[expect(dead_code)]` (now consumed).
+
+**Design-as-built (decisions, flag for audit)**
+- **D-T2a single-value thread.** EX-4 says "resolved authoring_branch/**deliver_to**
+  values"; g2's gate uses only `authoring_branch` + `base` (design §5.2 g2 snippet),
+  so only `authoring_branch` crosses into `coordinate()`. `deliver_to` is consumed
+  by g1 in the dispatch SHELL (PHASE-04), not coordinate. Minor EX-4 wording
+  deviation — trivially extensible if audit wants the pair threaded.
+- **D-T1a pathspec param.** EX-1 writes `last_corpus_commit(root, ref)` (2-arg);
+  built 3-arg with `pathspec` to keep git.rs off `corpus_guard` — mirrors PHASE-02's
+  `diff_doctrine_paths`. Same layering-faithful split as the g3 predicate
+  ([[mem.pattern.safety.resolve-every-ref-before-pure-compare]]).
+- **g2 vs g3 are absolute/relative (Model B, locked):** g2 here uses
+  `is_ancestor(corpus_tip, base)` (absolute corpus floor); g3 uses
+  `merge-base(new, cur)` (relative). They do NOT share a primitive — confirmed
+  as-built, no accidental coupling.
+
+**Config-validate ref check (design §5.2:178 "additionally") NOT in PHASE-03** —
+no VT covers it; setup-time fail-closed (VT-3) is the PHASE-03 deliverable. The
+validate-time resolution check would need git in the (currently pure) config
+validate path — out of scope, flag only if a reviewer demands belt-and-braces.
+
+**VT/EX coverage map** (`src/worktree/mod.rs` tests + `src/git.rs` tests)
+- EX-1 → `last_corpus_commit_returns_tip_when_corpus_exists` /
+  `_returns_none_when_ref_resolves_without_corpus` / `_errors_on_unresolvable_ref`.
+- VT-1 → `ensure_base_corpus_fresh_refuses_when_base_predates_corpus` +
+  `coordinate_refuses_create_when_base_predates_corpus` (wiring: no worktree dir).
+- VT-2 → `_ok_when_base_carries_corpus`, `_noop_when_authoring_unset`,
+  `_noop_when_no_corpus_yet`.
+- VT-3 → `_refuses_when_authoring_unresolvable`.
+- VA-1 → `grep` (coordinate.rs config-free) + `architecture_layering_gate` green.
+- Behaviour-preservation: existing `coordinate_refuses_create_when_base_lacks_the_slice_plan`
+  updated only for the new `None` 4th arg; still green.
+
+**Phase order remaining:** PHASE-04 (g1, dispatch-shell verb guard) → PHASE-05
+(enable posture + INV-2 parity + docs).
