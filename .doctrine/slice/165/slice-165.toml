@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/dispatch_config.rs"
@@ -20,7 +20,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "tests/e2e_dispatch_candidate.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_dispatch_sync.rs"
@@ -28,7 +28,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "tests/e2e_dispatch_lifecycle.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[relation]]
 label = "references"
