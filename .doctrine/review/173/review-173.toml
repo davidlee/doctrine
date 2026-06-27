@@ -77,7 +77,7 @@ response = "Accepted as standing note. stderr notice is advisory and off the JSO
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "withdrawn"
 severity = "nit"
 title = "reach-local smoke probe"
 detail = "Probe that reach=local in root doctrine.toml suppresses the remote reservation error. Withdrawn immediately."
