@@ -152,6 +152,7 @@ pub(crate) enum SliceCommand {
     /// Scaffold a design-doc sibling into an existing slice.
     Design {
         /// Slice id to attach the design doc to.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Explicit project root (default: auto-detect).
@@ -162,6 +163,7 @@ pub(crate) enum SliceCommand {
     /// Scaffold an implementation plan (plan.toml + plan.md) into a slice.
     Plan {
         /// Slice id to attach the plan to.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Explicit project root (default: auto-detect).
@@ -172,6 +174,7 @@ pub(crate) enum SliceCommand {
     /// Materialise phase tracking from a slice's plan into the state tree.
     Phases {
         /// Slice id whose plan declares the phases.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Remove orphan tracking whose plan phase is gone (destructive).
@@ -186,6 +189,7 @@ pub(crate) enum SliceCommand {
     /// Scaffold a durable notes.md scratchpad into a slice (on-demand).
     Notes {
         /// Slice id to attach the notes file to.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Explicit project root (default: auto-detect).
@@ -196,6 +200,7 @@ pub(crate) enum SliceCommand {
     /// Record a phase status transition into its runtime tracking.
     Phase {
         /// Slice id owning the phase.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Canonical phase id, e.g. PHASE-01.
@@ -220,6 +225,7 @@ pub(crate) enum SliceCommand {
     /// a terminal status (done / abandoned).
     Status {
         /// Slice id to transition.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Target lifecycle state.
@@ -292,6 +298,7 @@ pub(crate) enum SliceCommand {
     /// clean diff when the registry is unavailable or incomplete (fail-closed).
     Conformance {
         /// Slice id, e.g. 147.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Explicit project root (default: auto-detect).
@@ -307,6 +314,7 @@ pub(crate) enum SliceCommand {
     /// linked/coordination worktree.
     RecordDelta {
         /// Slice id owning the phase, e.g. 147.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Canonical phase id, e.g. PHASE-01.
@@ -1421,6 +1429,15 @@ pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
         .unwrap_or(reference);
     digits.parse::<u32>().with_context(|| {
         format!("not a slice reference: `{reference}` (expected `SL-025` or `25`)")
+    })
+}
+
+/// Clap `value_parser` wrapper for [`parse_ref`] — accepts both `SL-NNN` and bare
+/// numbers, with a clap-compatible `Result<u32, String>` signature.
+fn parse_cli_id(s: &str) -> Result<u32, String> {
+    parse_ref(s).map_err(|e| {
+        // Strip the anyhow wrapper noise for a clean clap error.
+        format!("{e:#}")
     })
 }
 
