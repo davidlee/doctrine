@@ -1179,6 +1179,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 unresolved,
                 format,
                 json,
+                columns,
                 path,
             } => crate::commands::relation::run_relation_list(
                 path,
@@ -1189,13 +1190,21 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 unresolved,
                 format,
                 json,
+                columns.as_deref(),
             ),
             crate::commands::relation::RelationCommand::Census {
                 include_memory,
                 format,
                 json,
+                columns,
                 path,
-            } => crate::commands::relation::run_relation_census(path, include_memory, format, json),
+            } => crate::commands::relation::run_relation_census(
+                path,
+                include_memory,
+                format,
+                json,
+                columns.as_deref(),
+            ),
         },
         Command::Link {
             source,

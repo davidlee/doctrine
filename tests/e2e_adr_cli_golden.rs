@@ -302,9 +302,9 @@ fn adr_list_table_default_hides_and_sorts_byte_exact() {
     // Slug-free default (SL-037 D4) — `--columns …,slug` reveals it.
     assert_eq!(
         stdout(&out),
-        "id      │ status   │ title\n\
-         ADR-001 │ accepted │ Use Rust\n\
-         ADR-002 │ proposed │ Adopt CI\n"
+        "id      │ status   │ tags │ title\n\
+         ADR-001 │ accepted │ lang │ Use Rust\n\
+         ADR-002 │ proposed │      │ Adopt CI\n"
     );
 }
 
@@ -317,7 +317,7 @@ fn adr_list_json_default_is_the_shared_envelope_byte_exact() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"adr\",\n  \"rows\": [\n    {\n      \"id\": \"ADR-001\",\n      \"slug\": \"use-rust\",\n      \"status\": \"accepted\",\n      \"title\": \"Use Rust\"\n    },\n    {\n      \"id\": \"ADR-002\",\n      \"slug\": \"adopt-ci\",\n      \"status\": \"proposed\",\n      \"title\": \"Adopt CI\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"adr\",\n  \"rows\": [\n    {\n      \"id\": \"ADR-001\",\n      \"slug\": \"use-rust\",\n      \"status\": \"accepted\",\n      \"tags\": [\n        \"lang\"\n      ],\n      \"title\": \"Use Rust\"\n    },\n    {\n      \"id\": \"ADR-002\",\n      \"slug\": \"adopt-ci\",\n      \"status\": \"proposed\",\n      \"tags\": [],\n      \"title\": \"Adopt CI\"\n    }\n  ]\n}"
     );
 }
 
@@ -330,9 +330,9 @@ fn adr_list_all_reveals_the_hidden_row() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ status   │ title\n\
-         ADR-001 │ accepted │ Use Rust\n\
-         ADR-002 │ proposed │ Adopt CI\n\
-         ADR-003 │ rejected │ Old Idea\n"
+        "id      │ status   │ tags │ title\n\
+         ADR-001 │ accepted │ lang │ Use Rust\n\
+         ADR-002 │ proposed │      │ Adopt CI\n\
+         ADR-003 │ rejected │      │ Old Idea\n"
     );
 }

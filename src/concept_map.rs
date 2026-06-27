@@ -1312,19 +1312,19 @@ fn key(m: &Meta) -> listing::FilterFields {
 const CONCEPT_MAP_COLUMNS: &[listing::Column<ConceptMapRow>] = &[
     listing::Column {
         name: "id",
-        header: "ID",
+        header: "id",
         cell: |r: &ConceptMapRow| crate::listing::canonical_id("CM", r.id),
         paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "status",
-        header: "Status",
+        header: "status",
         cell: |r: &ConceptMapRow| r.status.clone(),
         paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "tags",
-        header: "Tags",
+        header: "tags",
         cell: |r: &ConceptMapRow| r.tags.join(", "),
         paint: listing::ColumnPaint::PerToken {
             split: |r: &ConceptMapRow| r.tags.clone(),
@@ -1333,13 +1333,13 @@ const CONCEPT_MAP_COLUMNS: &[listing::Column<ConceptMapRow>] = &[
     },
     listing::Column {
         name: "slug",
-        header: "Slug",
+        header: "slug",
         cell: |r: &ConceptMapRow| r.slug.clone(),
         paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "title",
-        header: "Title",
+        header: "title",
         cell: |r: &ConceptMapRow| r.title.clone(),
         paint: listing::ColumnPaint::None,
     },

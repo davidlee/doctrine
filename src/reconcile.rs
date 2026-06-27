@@ -164,6 +164,7 @@ fn compose_status_rec(
             to: written.as_str().to_owned(),
         }],
         evidence_ref: evidence,
+        tags: Vec::new(),
     }
 }
 
@@ -182,6 +183,7 @@ fn compose_redesign_rec(req: &str, slice: &str, evidence: Vec<CoverageKey>) -> R
         },
         status_delta: Vec::new(),
         evidence_ref: evidence,
+        tags: Vec::new(),
     }
 }
 

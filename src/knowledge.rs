@@ -1420,7 +1420,7 @@ struct RecordRow {
 /// `R = KnowledgeRecord` — non-capturing extractors, the prefixed id materialised in
 /// the cell from the record's own kind+id). Declaration order is what the
 /// unknown-column error lists.
-const KN_COLUMNS: [listing::Column<KnowledgeRecord>; 5] = [
+const KN_COLUMNS: [listing::Column<KnowledgeRecord>; 6] = [
     listing::Column {
         name: "id",
         header: "id",
@@ -1440,6 +1440,15 @@ const KN_COLUMNS: [listing::Column<KnowledgeRecord>; 5] = [
         header: "status",
         cell: |r| r.status.clone(),
         paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
+    },
+    listing::Column {
+        name: "tags",
+        header: "tags",
+        cell: |r| r.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |r| r.tags.clone(),
+            render: listing::paint_tag,
+        },
     },
     listing::Column {
         name: "slug",
@@ -1521,7 +1530,9 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     records.sort_by_key(|r| (kind_ordinal(r.record_kind), r.id));
     match format {
         Format::Table => {
-            let sel = listing::select_columns(&KN_COLUMNS, KN_DEFAULT, columns.as_deref())?;
+            let any_tagged = records.iter().any(|r| !r.tags.is_empty());
+            let effective_default = listing::default_with_tags(KN_DEFAULT, any_tagged);
+            let sel = listing::select_columns(&KN_COLUMNS, &effective_default, columns.as_deref())?;
             Ok(listing::render_columns(&records, &sel, render))
         }
         Format::Json => listing::json_envelope("knowledge", &json_rows(&records)),

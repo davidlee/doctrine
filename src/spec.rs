@@ -1728,6 +1728,7 @@ struct SpecRow {
     subtype: &'static str,
     status: String,
     slug: String,
+    tags: Vec<String>,
     members: usize,
 }
 
@@ -1743,6 +1744,7 @@ struct SpecListRow {
     status: String,
     slug: String,
     title: String,
+    tags: Vec<String>,
     members: usize,
 }
 
@@ -1752,7 +1754,7 @@ struct SpecListRow {
 /// selector name is `members` — the one place header ≠ name in spec (the `#` is
 /// shell-hostile as a token, design §4). Declaration order is what the
 /// unknown-column error lists.
-const SPEC_COLUMNS: [listing::Column<SpecListRow>; 5] = [
+const SPEC_COLUMNS: [listing::Column<SpecListRow>; 6] = [
     listing::Column {
         name: "id",
         header: "id",
@@ -1766,6 +1768,15 @@ const SPEC_COLUMNS: [listing::Column<SpecListRow>; 5] = [
         header: "status",
         cell: |r| r.status.clone(),
         paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
+    },
+    listing::Column {
+        name: "tags",
+        header: "tags",
+        cell: |r| r.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |r| r.tags.clone(),
+            render: listing::paint_tag,
+        },
     },
     listing::Column {
         name: "slug",
@@ -1801,6 +1812,7 @@ fn spec_list_rows(subtype: SpecSubtype, rows: &[(Meta, usize)]) -> Vec<SpecListR
             status: m.status.clone(),
             slug: m.slug.clone(),
             title: m.title.clone(),
+            tags: m.tags.clone(),
             members: *count,
         })
         .collect()
@@ -1828,17 +1840,25 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
     let (filter, format) = listing::build(args)?;
     match format {
         Format::Table => {
-            // Resolve the selection ONCE (R3), then render it per non-empty block
-            // so the per-subtype labelled-block layout survives the column lift.
-            let sel = listing::select_columns(&SPEC_COLUMNS, SPEC_DEFAULT, columns.as_deref())?;
-            let mut blocks = Vec::new();
+            // Pre-collect blocks so we can scan all rows for any_tagged (the
+            // effective default depends on the cross-subtype union, R3).
+            let mut blocks_data: Vec<(SpecSubtype, Vec<SpecListRow>)> = Vec::new();
             for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
                 let block_rows = spec_list_rows(subtype, &subtype_rows(root, subtype, &filter)?);
-                // Omit the empty subtype block entirely (R3) — the label line must be
-                // suppressed too, not just the (already-empty) grid.
                 if block_rows.is_empty() {
                     continue;
                 }
+                blocks_data.push((subtype, block_rows));
+            }
+            let any_tagged = blocks_data
+                .iter()
+                .flat_map(|(_, rows)| rows.iter())
+                .any(|r| !r.tags.is_empty());
+            let effective_default = listing::default_with_tags(SPEC_DEFAULT, any_tagged);
+            let sel =
+                listing::select_columns(&SPEC_COLUMNS, &effective_default, columns.as_deref())?;
+            let mut blocks = Vec::new();
+            for (subtype, block_rows) in blocks_data {
                 blocks.push(format!(
                     "{}\n{}",
                     subtype.label(),
@@ -1856,6 +1876,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
                         subtype: subtype.label(),
                         status: m.status,
                         slug: m.slug,
+                        tags: m.tags.clone(),
                         members: count,
                     });
                 }

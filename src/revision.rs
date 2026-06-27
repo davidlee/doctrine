@@ -1456,6 +1456,7 @@ fn compose_apply_rec(req: &str, prior: ReqStatus, written: ReqStatus) -> crate::
             to: written.as_str().to_owned(),
         }],
         evidence_ref: Vec::new(),
+        tags: Vec::new(),
     }
 }
 

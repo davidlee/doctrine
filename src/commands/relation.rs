@@ -161,6 +161,10 @@ pub(crate) enum RelationCommand {
         #[arg(long)]
         json: bool,
 
+        /// Select and order visible columns.
+        #[arg(long, value_delimiter = ',')]
+        columns: Option<Vec<String>>,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -180,6 +184,10 @@ pub(crate) enum RelationCommand {
         #[arg(long)]
         json: bool,
 
+        /// Select and order visible columns.
+        #[arg(long, value_delimiter = ',')]
+        columns: Option<Vec<String>>,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -190,7 +198,7 @@ pub(crate) enum RelationCommand {
 /// policy, project & render, print to stdout.
 #[expect(
     clippy::too_many_arguments,
-    reason = "clap dispatch flatten — 8 fields from subcommand"
+    reason = "clap dispatch flatten — 9 fields from subcommand"
 )]
 pub(crate) fn run_relation_list(
     path: Option<PathBuf>,
@@ -201,6 +209,7 @@ pub(crate) fn run_relation_list(
     unresolved: bool,
     format: Option<Format>,
     json: bool,
+    columns: Option<&[String]>,
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
@@ -228,7 +237,7 @@ pub(crate) fn run_relation_list(
     };
 
     let rows = crate::relation_query::project_list(&catalog, &filter);
-    let out = crate::relation_query::render_list(&rows, resolved_format, opts)?;
+    let out = crate::relation_query::render_list(&rows, resolved_format, opts, columns)?;
     write!(std::io::stdout(), "{out}")?;
     Ok(())
 }
@@ -240,6 +249,7 @@ pub(crate) fn run_relation_census(
     include_memory: bool,
     format: Option<Format>,
     json: bool,
+    columns: Option<&[String]>,
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
@@ -259,7 +269,7 @@ pub(crate) fn run_relation_census(
     };
 
     let rows = crate::relation_query::project_census(&catalog, include_memory);
-    let out = crate::relation_query::render_census(&rows, resolved_format, opts)?;
+    let out = crate::relation_query::render_census(&rows, resolved_format, opts, columns)?;
     write!(std::io::stdout(), "{out}")?;
     Ok(())
 }

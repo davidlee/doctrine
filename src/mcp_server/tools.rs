@@ -1462,6 +1462,7 @@ mod tests {
             awaiting: "none".to_owned(),
             facet: "f".to_owned(),
             target: "t".to_owned(),
+            tags: Vec::new(),
             title: "x".to_owned(),
         }
     }

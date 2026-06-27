@@ -436,7 +436,7 @@ fn unknown_column_errors_with_the_uniform_available_set() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: unknown column `bogus` (available: id, status, slug, title)\n"
+        "Error: unknown column `bogus` (available: id, status, tags, slug, title)\n"
     );
 }
 
@@ -468,7 +468,7 @@ fn slice_list_json_is_byte_exact() {
     // phases is STRUCTURED (null here — untracked), never the rendered `—` cell.
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"slice\",\n  \"rows\": [\n    {\n      \"id\": \"SL-009\",\n      \"phases\": null,\n      \"slug\": \"status-rollup\",\n      \"status\": \"proposed\",\n      \"title\": \"Status rollup\"\n    },\n    {\n      \"id\": \"SL-025\",\n      \"phases\": null,\n      \"slug\": \"listing-spine\",\n      \"status\": \"started\",\n      \"title\": \"Listing spine\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"slice\",\n  \"rows\": [\n    {\n      \"id\": \"SL-009\",\n      \"phases\": null,\n      \"slug\": \"status-rollup\",\n      \"status\": \"proposed\",\n      \"tags\": [],\n      \"title\": \"Status rollup\"\n    },\n    {\n      \"id\": \"SL-025\",\n      \"phases\": null,\n      \"slug\": \"listing-spine\",\n      \"status\": \"started\",\n      \"tags\": [],\n      \"title\": \"Listing spine\"\n    }\n  ]\n}"
     );
 }
 
@@ -482,7 +482,7 @@ fn spec_list_json_is_byte_exact() {
     // stays an INT (not the rendered cell, D2).
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"spec\",\n  \"rows\": [\n    {\n      \"id\": \"PRD-003\",\n      \"members\": 0,\n      \"slug\": \"onboarding\",\n      \"status\": \"draft\",\n      \"subtype\": \"product\"\n    },\n    {\n      \"id\": \"PRD-007\",\n      \"members\": 2,\n      \"slug\": \"billing\",\n      \"status\": \"active\",\n      \"subtype\": \"product\"\n    },\n    {\n      \"id\": \"SPEC-002\",\n      \"members\": 3,\n      \"slug\": \"auth-spine\",\n      \"status\": \"active\",\n      \"subtype\": \"tech\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"spec\",\n  \"rows\": [\n    {\n      \"id\": \"PRD-003\",\n      \"members\": 0,\n      \"slug\": \"onboarding\",\n      \"status\": \"draft\",\n      \"subtype\": \"product\",\n      \"tags\": []\n    },\n    {\n      \"id\": \"PRD-007\",\n      \"members\": 2,\n      \"slug\": \"billing\",\n      \"status\": \"active\",\n      \"subtype\": \"product\",\n      \"tags\": []\n    },\n    {\n      \"id\": \"SPEC-002\",\n      \"members\": 3,\n      \"slug\": \"auth-spine\",\n      \"status\": \"active\",\n      \"subtype\": \"tech\",\n      \"tags\": []\n    }\n  ]\n}"
     );
 }
 
@@ -494,7 +494,7 @@ fn policy_list_json_is_byte_exact() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"policy\",\n  \"rows\": [\n    {\n      \"id\": \"POL-002\",\n      \"slug\": \"branch-naming\",\n      \"status\": \"draft\",\n      \"title\": \"Branch naming\"\n    },\n    {\n      \"id\": \"POL-004\",\n      \"slug\": \"commit-style\",\n      \"status\": \"required\",\n      \"title\": \"Commit style\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"policy\",\n  \"rows\": [\n    {\n      \"id\": \"POL-002\",\n      \"slug\": \"branch-naming\",\n      \"status\": \"draft\",\n      \"tags\": [],\n      \"title\": \"Branch naming\"\n    },\n    {\n      \"id\": \"POL-004\",\n      \"slug\": \"commit-style\",\n      \"status\": \"required\",\n      \"tags\": [],\n      \"title\": \"Commit style\"\n    }\n  ]\n}"
     );
 }
 
