@@ -1,0 +1,34 @@
+id    = 181
+slug  = "sl-163-audit-check-command-proxy-verb-conformance-reconciliation"
+title = "SL-163 audit: check command proxy verb — conformance reconciliation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-163"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Undeclared scope: tests/e2e_skills_dispatch_shrinkage.rs deleted, not in design §9"
+detail = "Conformance reports the deletion as undeclared (no design-target selector covers it). Design §9 'Quality Engineering & Validation' enumerates the test surface (new e2e_check_proxy + e2e_no_shipped_couplings, extended verify.rs unit tests) but never declares removing the SL-085 dispatch-skill line-count guard. The deletion is deliberate and user-approved (commit eccc75fc: 'brittle line-count cap fought the scrub — per user — net hazard vs worth'): the uid scrub + sweep shift dispatch/SKILL.md line counts, and the SL-085 cap is brittle. Observation: the deletion is correct in substance but undeclared in canon, and it silently retires SL-085's dispatch-skill-shrink invariant guard. Expected: design §9 records the test removal + the consciously-abandoned shrink-guard. Observed: design §9 silent."
+disposition = "verified — delegated to reconcile (per-slice)"
+response = "Observation confirmed. The deletion is substantively correct and user-approved (brittle SL-085 line-count cap fought the uid/sweep scrub; net hazard > worth), so no code change. Remediation is canon truthfulness only: /reconcile records the test removal and the consciously-abandoned dispatch-skill shrink-guard in design.md §9. Per-slice direct edit — audit does not author it (reconcile is sole writer of reconciled truth). Non-blocking (minor)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "slice-163.md §3 stale vs locked design D6/CR-F4 (worktree sites mis-framed as phase gates)"
+detail = "slice-163.md Scope item 3 reads: 'rewrite the six just check occurrences ... to doctrine check gate (mapped by cadence — all six are phase/close-boundary sites; D6)'. This is the pre-CR-F4 framing. Locked design §7 D6 + CR-F4 split the six into (a) 4 genuine instruction-rewrites (execute/close/audit/notes → gate) and (b) 2 worktree illustrative-example sites (worktree:192/:219) that are NOT fixed gates — only the example token updates; project-provided / orchestrator-supplied caller-control semantics are preserved. The implementation correctly followed the DESIGN (verified: worktree/SKILL.md keeps 'project-provided — never a hardcoded cargo …' and 'not assumed'). The defect is the slice scope prose: 'all six are phase/close-boundary sites' contradicts the locked design and would mislead a future reader into thinking the worktree sites are fixed gates. Expected: slice §3 reflects D6's two-treatment split. Observed: flattened to six phase gates."
+disposition = "verified — delegated to reconcile (per-slice)"
+response = "Observation confirmed: slice-163.md §3 ('all six are phase/close-boundary sites') is stale against locked design D6/CR-F4. Implementation is correct (followed the design's two-treatment split; worktree caller-control semantics preserved). Defect is slice-scope prose only. /reconcile updates slice-163.md §3 to D6's split (4 instruction-rewrites + 2 illustrative worktree sites). Per-slice direct edit. Non-blocking (minor)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

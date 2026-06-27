@@ -207,3 +207,28 @@ args errors `Needed a single revision` even when both resolve individually —
 cost one redundant re-run. Harness/git, not a doctrine surface.
 
 [SL-155-close reconcile -> close agent @ 141k]
+
+[/audit SL-163; audit-sl163 @ ~60k]
+Two friction sources, both cost retries / a user round-trip:
+
+1. CLI id-form inconsistency. `doctrine slice conformance SL-163` (prefixed,
+   the form boot/AGENTS mandate everywhere in prose/commits) errors `invalid
+   digit found in string` — the verb wants a BARE `163`. Same for `slice
+   status`/`record-delta`. But `review new --target` wants prefixed `SL-163`.
+   An agent fresh off the "always cite the prefixed canonical id" rule pays 2
+   failed calls discovering which verbs are bare-only. The error is also
+   opaque (a parse-int failure, not "expected bare slice number"). Cost: ~2
+   redundant invocations each time a lifecycle/slice verb is first reached.
+
+2. Review-on-worktree refusal has no upstream signpost. The /audit skill body
+   never warns that review verbs refuse a worktree fork (IMP-024) — that
+   constraint lives only in review-ledger.md §6 (parent-tree caveat), read
+   late. When a slice was developed in an isolated worktree (the normal case
+   for code slices), the audit cannot create its RV there; the slice code +
+   lifecycle status live only on the branch while review state must live on
+   the parent tree (edge). Resolving the split (promote branch -> edge so the
+   parent tree carries code + `audit` status before the RV opens) required a
+   user consult — the skill offers no recipe for "slice was built in a
+   worktree, now audit it." A one-line pointer in /audit ("if the slice lives
+   on a branch/worktree, land it on the parent tree before opening the RV —
+   review verbs refuse forks, IMP-024") would have saved the whole detour.
