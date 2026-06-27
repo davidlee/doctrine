@@ -24,7 +24,7 @@ use crate::listing::{Column, ColumnPaint, Format, RenderOpts, render_columns};
 
 const DEFAULT_SEARCH_KINDS: &[&str] = &[
     "SL", "ADR", "PRD", "SPEC", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE",
-    "CON",
+    "CON", "EVD", "HYP",
 ];
 
 const GROUP_ALIASES: &[(&str, &[&str])] = &[
@@ -36,7 +36,7 @@ const GROUP_ALIASES: &[(&str, &[&str])] = &[
         "all",
         &[
             "SL", "ADR", "PRD", "SPEC", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "REQ", "RV",
-            "REC", "REV", "CM", "POL", "STD", "ASM", "DEC", "QUE", "CON",
+            "REC", "REV", "CM", "POL", "STD", "ASM", "DEC", "QUE", "CON", "EVD", "HYP",
         ],
     ),
 ];

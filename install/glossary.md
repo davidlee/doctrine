@@ -21,6 +21,13 @@ The kinds below group into a small set of durable entities + typed facets.
 | policy                       | POL-123  |        |
 | standard                     | STD-123  |        |
 | architecture decision record | ADR-001  |        |
+| **knowledge records**         | --       |        |
+| assumption                   | ASM-001  |   y    |
+| decision                     | DEC-001  |   y    |
+| question                     | QUE-001  |   y    |
+| constraint                   | CON-001  |   y    |
+| evidence                     | EVD-001  |   y    |
+| hypothesis                   | HYP-001  |   y    |
 | **backlog**                  | --       |        |
 | issue                        | ISS-001  |   y    |
 | improvement                  | IMP-001  |   y    |
@@ -64,6 +71,25 @@ sheet *file* is `phase-01.md` (lowercase).
 
 `VT`/`VA`/`VH` are the three verification modes — pick by *who/what* confirms the
 criterion. Non-retroactive: existing `VT-` criteria stay valid as "by test."
+
+## knowledge record lifecycle vocabulary
+
+Each knowledge record kind carries a status vocabulary:
+
+| kind       | status vocabulary |
+|------------|-------------------|
+| assumption | `pending \| proven \| disproven \| withdrawn` |
+| decision   | `pending \| active \| superseded \| withdrawn` |
+| question   | `open \| answered \| settled \| withdrawn` |
+| constraint | `active \| relaxed \| removed \| withdrawn` |
+| evidence   | `captured \| disputed \| confirmed \| retracted \| superseded` |
+| hypothesis | `proposed \| confirmed \| refuted` |
+
+Evidence (`EVD`) and hypothesis (`HYP`) records may be linked to other knowledge
+records via `supports` / `disputes` evidentiary edges (`doctrine link EVD-1
+supports DEC-2`). An EVD's `confirmed` status is deliberately non-terminal — it
+can be reopened or superseded by subsequent evidence. A HYP's `confirmed` means
+the hypothesis is supported by evidence; `refuted` means it has been falsified.
 
 ## directory layout
 

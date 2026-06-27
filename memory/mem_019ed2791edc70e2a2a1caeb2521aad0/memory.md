@@ -15,9 +15,24 @@ long-lived project truths.
   `open | answered | settled | withdrawn`.
 - **constraint** (`CON-NNN`) — an observable limit or boundary. Status:
   `active | relaxed | removed | withdrawn`.
+- **evidence** (`EVD-NNN`) — a captured datum with provenance that supports
+  or disputes other records. Status: `captured | disputed | confirmed |
+  retracted | superseded`. `confirmed` is deliberately non-terminal — it can
+  be reopened or superseded by subsequent evidence.
+- **hypothesis** (`HYP-NNN`) — a testable proposed answer to a question.
+  Status: `proposed | confirmed | refuted`.
 
 Each kind carries a `[facet]` table (kind-specific structured data) and an
 `[evidence]` array (links to backing sources).
+
+## Evidentiary edges
+
+Evidence (`EVD`) and hypothesis (`HYP`) records can be linked to other
+knowledge records through the `supports` and `disputes` relation edges,
+authored via `doctrine link EVD-1 supports DEC-2`. These edges trace
+provenance — which evidence supports or disputes which epistemic claim.
+EVD's `confirmed` status is deliberately non-terminal: it can be reopened
+or superseded by subsequent evidence.
 
 ## CLI
 

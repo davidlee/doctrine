@@ -19,7 +19,9 @@ use anyhow::{Context, bail};
 use crate::adr::ADR_KIND;
 use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
 use crate::concept_map::CONCEPT_MAP_KIND;
-use crate::knowledge::{ASSUMPTION_KIND, CONSTRAINT_KIND, DECISION_KIND, QUESTION_KIND};
+use crate::knowledge::{
+    ASSUMPTION_KIND, CONSTRAINT_KIND, DECISION_KIND, EVIDENCE_KIND, HYPOTHESIS_KIND, QUESTION_KIND,
+};
 use crate::policy::POLICY_KIND;
 use crate::rec::REC_KIND;
 use crate::requirement::REQUIREMENT_KIND;
@@ -113,7 +115,7 @@ pub(crate) const KINDS: &[KindRef] = &[
         kind: &REC_KIND,
         state_dir: None,
     },
-    // Knowledge records (SL-059) — four numbered kinds over one engine, each its
+    // Knowledge records (SL-059) — six numbered kinds over one engine, each its
     // own tree + reservation namespace. Status-ful (scanned via the standard
     // `meta::Meta` path), one shared `record-NNN.{toml,md}` stem, no runtime state
     // tree. Their `outbound_for` arm (`relation_graph.rs`, L7) co-lands so the
@@ -133,6 +135,14 @@ pub(crate) const KINDS: &[KindRef] = &[
     },
     KindRef {
         kind: &CONSTRAINT_KIND,
+        state_dir: None,
+    },
+    KindRef {
+        kind: &EVIDENCE_KIND,
+        state_dir: None,
+    },
+    KindRef {
+        kind: &HYPOTHESIS_KIND,
         state_dir: None,
     },
     KindRef {
@@ -812,17 +822,17 @@ mod tests {
 
     #[test]
     fn kinds_table_covers_the_numbered_kinds() {
-        assert_eq!(KINDS.len(), 21, "add/remove a KindRef row? bump this count");
+        assert_eq!(KINDS.len(), 23, "add/remove a KindRef row? bump this count");
         let prefixes: Vec<_> = KINDS.iter().map(|k| k.kind.prefix).collect();
         assert_eq!(
             prefixes,
             [
                 "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE",
-                "RV", "REC", "ASM", "DEC", "QUE", "CON", "CM", "REV", "RFC"
+                "RV", "REC", "ASM", "DEC", "QUE", "CON", "EVD", "HYP", "CM", "REV", "RFC"
             ]
         );
         // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
-        // REC (SL-042) is status-less but stateless — no runtime tree. The four
+        // REC (SL-042) is status-less but stateless — no runtime tree. The six
         // knowledge kinds (SL-059) are status-ful but stateless — no runtime tree.
         let stateful: Vec<_> = KINDS
             .iter()
@@ -834,8 +844,8 @@ mod tests {
 
     #[test]
     fn kinds_prefixes_are_corpus_wide_disjoint() {
-        // NF-002 / F-A6: every numbered-kind prefix is distinct — the four SL-059
-        // additions (ASM/DEC/QUE/CON) collide with NO existing corpus prefix. A
+        // NF-002 / F-A6: every numbered-kind prefix is distinct — the six SL-059
+        // additions (ASM/DEC/QUE/CON/EVD/HYP) collide with NO existing corpus prefix. A
         // duplicate prefix here would route two kinds to one namespace.
         use std::collections::BTreeSet;
         let prefixes: Vec<_> = KINDS.iter().map(|k| k.kind.prefix).collect();
