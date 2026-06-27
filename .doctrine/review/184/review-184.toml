@@ -1,0 +1,52 @@
+id    = 184
+slug  = "sl-169-reconciliation-audit-columnstags-read-surface"
+title = "SL-169 reconciliation audit — columns/tags read-surface"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-169"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Test suite red: standard list golden not updated for default tags column"
+detail = "Expected: full suite green (behaviour-preservation gate). Observed: 3 e2e_standard_cli_golden tests fail (standard_list_table_default_hides_and_sorts_byte_exact, _all_reveals_the_hidden_row, _json_default_is_the_shared_envelope_byte_exact). The default 'tags' column added to the governance/GovKind list dispatch (governance.rs) now renders for 'standard list' because fixture STD-001 carries tag 'style' — actual 'id│status│tags│title' vs golden 'id│status│title'. The adr golden WAS updated (bundle stat) but the standard golden was missed. Dispatch handover misclassified these as 'pre-existing DOCTRINE_WORKER marker' failures; they are SL-169 regressions (2681 tests, 4 fail = 3 standard + 1 SL-168 corpus; no DOCTRINE_WORKER failures exist). Surface audited: candidate/169/review-001 (5544ba94, no-ff merge of review/169 bundle 57cf3d3f onto main)."
+disposition = "fix-now"
+response = "Fixed on candidate/169/review-001 (a842e5b6): updated the 3 e2e_standard_cli_golden expectations (table default, --all, --json) to the new default-tags-column shape (tags col present because STD-001 carries tag 'style'), mirroring the adr golden the bundle already updated. Full suite re-run: only the pre-existing SL-168 corpus test fails; the 3 standard goldens now pass."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "VT-1 partially undelivered: conformance matrix lacks relation/census"
+detail = "Expected (design.md:175 'tests/e2e_list_conformance.rs — Add relation/census to the parse-conformance matrix'; plan.toml VT-1; slice-169.md:82 conformance guard): relation + census added to the parse-conformance matrix. Observed: tests/e2e_list_conformance.rs untouched by SL-169 (last edit SL-162 b87cbd1c); matrix has no relation/census rows. Conformance algebra flags it as the sole 'undelivered' design-target selector. VT-1's columns-golden half is satisfied (e2e_list_columns_golden +RelationRow/CensusRow, 11 pass); the conformance-matrix half is not."
+disposition = "fix-now"
+response = "Delivered on candidate/169/review-001 (a842e5b6): added relation_list_and_census_accept_columns to e2e_list_conformance.rs. relation list/census do not ride the CommonListArgs spine, so a focused --columns parse-conformance test is the correct shape (not SPINE_KINDS rows, which would wrongly demand all spine flags parse). VT-1 conformance-matrix half now satisfied alongside the columns-golden half."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "design-target selectors under-declared the tags-field blast radius"
+detail = "Conformance 'undeclared' (4): src/commands/cli.rs (wires relation columns arg), src/mcp_server/tools.rs + src/reconcile.rs (tags: Vec::new() — compile-necessary fallout of Rec struct gaining a tags field, scope #5), tests/e2e_adr_cli_golden.rs (adr golden update). All four edits are correct and necessary; the design-target selectors simply did not enumerate them. No code defect — selector completeness only."
+disposition = "aligned"
+response = "No change. The 4 undeclared edits (cli.rs columns wiring; mcp_server/tools.rs + reconcile.rs tags:Vec::new(); e2e_adr_cli_golden.rs) are all correct and necessary fallout of the Rec tags field + relation columns arg. Design-target selector completeness is advisory; recording the gap is sufficient."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Pre-existing base fmt debt fails cargo fmt --check (out of SL-169 scope)"
+detail = "cargo fmt --check on the candidate flags src/policy.rs:435, src/standard.rs:450, src/governance.rs (parse_ref/parse_entity_ref test reflow) — NONE of SL-169's 18 bundle files. The violation pre-exists on main; SL-169 did not introduce it and SL-169's own code is fmt-clean. The edge working tree already carries the uncommitted fmt fix; it should be committed independently of SL-169. Clippy is clean."
+disposition = "tolerated"
+response = "Out of SL-169 scope. The cargo fmt --check violation in policy.rs/standard.rs/governance.rs (parse_ref tests) pre-exists on main; none of SL-169's 18 files are flagged and SL-169's own code is fmt-clean. The edge working tree already carries the uncommitted fix — commit it independently of SL-169."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
