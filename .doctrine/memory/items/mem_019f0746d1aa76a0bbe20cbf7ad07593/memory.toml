@@ -1,0 +1,51 @@
+memory_uid = "mem_019f0746d1aa76a0bbe20cbf7ad07593"
+memory_key = "mem.fact.dispatch.edge-advance-leg-not-ff-gated"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Dispatch integrate --edge advance leg is not FF-gated"
+summary = "Dispatch integrate --edge advance leg is NOT FF-gated: advance_pure_ref is plain CAS, plan_edge_row not ff-gated — only checked-out/trunk legs FF-gate."
+created = "2026-06-27"
+updated = "2026-06-27"
+
+[scope]
+paths = ["src/dispatch.rs"]
+globs = ["src/dispatch*.rs"]
+commands = ["doctrine sync", "doctrine dispatch"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "6c08e5382b3cc1194216885ab1cdc324e6ecd337"
+tree = "eac089341393d052abd92c23b7284ddebeae566c"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "6c08e5382b3cc1194216885ab1cdc324e6ecd337"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-176"
+
+[[source]]
+kind = "slice"
+ref = "SL-166"
+
