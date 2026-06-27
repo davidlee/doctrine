@@ -1,7 +1,7 @@
 id = 169
 slug = "columns-and-tags-surface"
 title = "Wire --columns on relation list/census + tags in --columns + default tags column for all taggable kinds"
-status = "reconcile"
+status = "done"
 created = "2026-06-27"
 updated = "2026-06-27"
 tags = []
