@@ -183,3 +183,25 @@ already know the fork-runtime split to avoid mis-reading 2/5 as dropped phases.
 Second: `slice status <ID>` has no bare query form (it is a setter requiring
 <STATE>), so there is no cheap "what lifecycle state + phase rollup" one-liner;
 status comes via `slice list | grep`. Minor friction, recurs every close.
+
+## [/close; SL-166-close-b]
+
+Detour during close: an orphan case-note stub `[SL-166 audit - ]` (an empty
+entry header, no body — present in the working tree from session start, then
+re-appeared after I committed) made the tree unclean, so `worktree land`
+fail-closed with `land-refused: tree-unclean`. Cost: a diff → diagnose →
+complete-the-stub → commit cycle (~3 tool calls) before the land could proceed.
+
+Two compounding factors worth flagging for RFC-011:
+1. The instrumentation directive itself (append a `[skill; id]` header per skill
+   use) is prone to leaving half-written empty headers if an entry is started
+   but not filled — and any such fragment then blocks the land gate. The
+   instrumentation tax can directly obstruct the workflow it instruments.
+2. `worktree land`'s clean-tree precondition is whole-tree, so an unrelated
+   dirty file (instrumentation notes, another agent's fmt reflow) blocks a
+   land that touches entirely disjoint paths. Correct fail-closed posture, but
+   the coupling means shared-tree noise serializes landings.
+
+Minor git ergonomics (not doctrine): `git rev-parse --short <A> <B>` with two
+args errors `Needed a single revision` even when both resolve individually —
+cost one redundant re-run. Harness/git, not a doctrine surface.
