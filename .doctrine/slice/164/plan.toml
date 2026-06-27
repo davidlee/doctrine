@@ -1,0 +1,23 @@
+[[phase]]
+id = "PHASE-01"
+name = "Engine writer parameter"
+objective = "Add `writer: &mut impl Write` parameter to `run_record` and `run_edit`. Update all ~36 call sites to pass `&mut io::stdout()` (or a Vec sink in upcoming MCP dispatch). Existing test suites stay green — behaviour-preservation gate."
+entrance_criteria = ["EN-1: design locked; all RV-173 findings verified and penance applied"]
+exit_criteria = ["EX-1: `run_record` and `run_edit` signatures accept `writer: &mut impl Write`", "EX-2: All call sites compile: CLI (memory.rs ~line 482, ~line 683), boot.rs ×4, retrieve.rs ×3, memory.rs ~28 tests", "EX-3: `just check` passes (zero clippy warnings)", "EX-4: Existing test suites pass unchanged"]
+verification = ["VT-1: `cargo test` — all existing tests pass", "VT-2: `cargo clippy` — zero warnings"]
+
+[[phase]]
+id = "PHASE-02"
+name = "MCP memory write + onboard tools"
+objective = "Add `memory_record`, `memory_edit`, and `doctrine_onboard` MCP tools. Wire tool definitions (JSON Schema) and `call_tool` dispatch. Update VT-2 counts (15→18) and name assertions. Add E2E round-trip and unit tests."
+entrance_criteria = ["EN-1: PHASE-01 complete — engine writer param landed"]
+exit_criteria = ["EX-1: `tools()` returns 18 tools with correct JSON Schema definitions", "EX-2: `call_tool()` dispatches `memory_record`, `memory_edit`, `doctrine_onboard` to correct engine functions", "EX-3: Argument errors from `run_record`/`run_edit` map to -32602", "EX-4: `doctrine_onboard` returns markdown with mapping table + 2 memory bodies", "EX-5: Unit tests pass: tool counts, schema validation, error mapping", "EX-6: E2E round-trip tests pass: record+show, edit, onboard non-empty"]
+verification = ["VT-1: `cargo test` — existing + new tests all pass", "VT-2: `cargo clippy` — zero warnings", "VA-1: `doctrine_onboard` markdown output reviewed for correctness (agent)", "VT-3: `memory_record` with invalid memory_type → -32602", "VT-4: `memory_edit` with no reference → -32602", "VT-5: `memory_edit` with no flags → -32602", "VT-6: E2E: `memory_record` + `memory_show` round-trip", "VT-7: E2E: `memory_edit` round-trip", "VT-8: E2E: `doctrine_onboard` returns non-empty text"]
+
+[[phase]]
+id = "PHASE-03"
+name = "Boot footer and cleanup"
+objective = "Update `.doctrine/boot-footer.md` to MCP-first instruction with fallback. Rename stale test `tool_list_has_14_tools` → `tool_list_has_18_tools`. Fix `tools.rs:4` module-doc header to correct tool counts (18 tools, 7 memory)."
+entrance_criteria = ["EN-1: PHASE-02 complete — all 3 MCP tools landed"]
+exit_criteria = ["EX-1: `.doctrine/boot-footer.md` updated with MCP-first instruction", "EX-2: Test `tool_list_has_14_tools` renamed to `tool_list_has_18_tools`", "EX-3: `tools.rs:4` module-doc header reads '18 tools: 10 review + 8 memory' (7 memory read/write + onboard)", "EX-4: `just check` passes"]
+verification = ["VT-1: `cargo test` passes", "VT-2: `cargo clippy` zero warnings", "VH-1: Human review of boot-footer.md wording"]
