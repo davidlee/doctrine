@@ -1,7 +1,7 @@
 id = 165
 slug = "close-projection-fixnow-path"
 title = "Close-projection path for audit fix-now repairs"
-status = "reconcile"
+status = "done"
 created = "2026-06-27"
 updated = "2026-06-27"
 tags = ["area:close", "area:dispatch", "area:reconciliation"]
