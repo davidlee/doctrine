@@ -1,7 +1,7 @@
 id = 166
 slug = "dispatch-corpus-loss-guards"
 title = "Dispatch corpus-loss guards"
-status = "plan"
+status = "ready"
 created = "2026-06-27"
 updated = "2026-06-27"
 tags = []
