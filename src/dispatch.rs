@@ -592,7 +592,46 @@ pub(crate) fn run_integrate(
     allow: &BTreeSet<String>,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
+    // g1 (SL-166 design §5.4): refuse at the verb entry — the earliest, cheapest
+    // point, before any ref work — when HEAD sits on the integration buffer under
+    // the buffered-trunk posture. This single call covers BOTH the `--trunk`/
+    // `--edge` and candidate-active legs, which all land in `integrate()`.
+    let cfg = crate::dtoml::load_doctrine_toml(&root)?.dispatch;
+    guard_not_on_integration_ref(&root, &cfg)?;
     integrate(&root, slice, trunk, edge, allow)
+}
+
+/// g1 (SL-166 design §5.2, EX-1..3) — refuse a trunk-mutating dispatch verb
+/// invoked while HEAD sits on the integration buffer (`deliver_to`). The HEAD read
+/// is worktree-local (`symbolic-ref --short HEAD` via [`current_branch`], the
+/// invoking cwd worktree's branch — EX-2), the same seam the raw-evidence-ref
+/// guard uses. Inert unless the buffered-trunk posture is on (`authoring-branch`
+/// set and ≠ `deliver_to`, EX-3); the decision is the pure
+/// [`corpus_guard::on_integration_buffer`] predicate. The refusal names the buffer
+/// ref and the `fetch`-not-`checkout` promotion recovery.
+fn guard_not_on_integration_ref(
+    root: &Path,
+    cfg: &crate::dispatch_config::DispatchConfig,
+) -> anyhow::Result<()> {
+    let current = current_branch(root)?;
+    if corpus_guard::on_integration_buffer(
+        current.as_deref(),
+        cfg.authoring_branch.as_deref(),
+        &cfg.deliver_to,
+    ) {
+        // Posture is on here (predicate true ⇒ authoring is Some), so unwrap is
+        // total; default only as a belt-and-braces non-panic.
+        let authoring = cfg.authoring_branch.as_deref().unwrap_or_default();
+        let buffer = corpus_guard::short_branch_name(&cfg.deliver_to);
+        bail!(
+            "{} `{}` — the primary must stay on `{authoring}`. Restore \
+             (`git checkout {authoring}`) and promote via \
+             `git fetch . {authoring}:{buffer}`, never `checkout {buffer}`.",
+            corpus_guard::REFUSE_ON_TRUNK,
+            cfg.deliver_to,
+        );
+    }
+    Ok(())
 }
 
 /// CLI entry — funnel-time recording: append a per-phase code boundary to
@@ -4448,5 +4487,108 @@ mod tests {
         ));
         assert!(is_candidate_ref("refs/heads/candidate/200/review-001"));
         assert!(!is_candidate_ref("refs/heads/review/200"));
+    }
+
+    // --- g1: guard_not_on_integration_ref (PHASE-04) -----------------------
+
+    /// Build a posture config with the given authoring branch (deliver_to keeps
+    /// its `refs/heads/main` default — the buffer in these fixtures).
+    fn posture_cfg(authoring: Option<&str>) -> crate::dispatch_config::DispatchConfig {
+        crate::dispatch_config::DispatchConfig {
+            authoring_branch: authoring.map(str::to_owned),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn integrate_refused_when_head_on_buffer() {
+        // VT-1: posture on (authoring=edge), HEAD on the buffer `main` ⇒ refuse,
+        // naming the buffer ref and the fetch-not-checkout recovery.
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path()); // HEAD on `main` (== deliver_to short name)
+        let cfg = posture_cfg(Some("refs/heads/edge"));
+        let err = guard_not_on_integration_ref(src.path(), &cfg).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains(corpus_guard::REFUSE_ON_TRUNK),
+            "names the g1 token: {msg}"
+        );
+        assert!(
+            msg.contains("refs/heads/main"),
+            "names the buffer ref: {msg}"
+        );
+        assert!(
+            msg.contains("git fetch . refs/heads/edge:main")
+                && msg.contains("never `checkout main`"),
+            "names the fetch-not-checkout recovery: {msg}"
+        );
+    }
+
+    #[test]
+    fn integrate_allowed_on_authoring_branch() {
+        // VT-2: posture on, HEAD on the authoring branch `edge` ⇒ the safe leg, Ok.
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        git(src.path(), &["checkout", "-q", "-b", "edge"]);
+        let cfg = posture_cfg(Some("refs/heads/edge"));
+        assert!(guard_not_on_integration_ref(src.path(), &cfg).is_ok());
+    }
+
+    #[test]
+    fn g1_inert_when_posture_unset() {
+        // VT-2: single-branch parity (INV-2) — authoring-branch unset ⇒ inert even
+        // with HEAD on the buffer `main`.
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let cfg = posture_cfg(None);
+        assert!(guard_not_on_integration_ref(src.path(), &cfg).is_ok());
+    }
+
+    #[test]
+    fn g1_guards_only_the_integrate_verb_entry() {
+        // VA-1 verb-set audit (design F-4 / OQ-3): g1 has exactly ONE call site,
+        // at the `run_integrate` verb entry — the sole landing for the
+        // `--trunk`/`--edge` and candidate-active legs that advance an integration
+        // ref. `candidate create` / `candidate admit` advance no integration ref
+        // and MUST stay unguarded. This pins the enumeration so no future edit can
+        // silently widen or narrow it without tripping the test.
+        // Scope to PRODUCTION source only — exclude this test module, which names
+        // the symbol in its own assertions.
+        let this = include_str!("dispatch.rs");
+        let prod = this
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source before the test module");
+        let call_sites = prod
+            .lines()
+            .filter(|l| {
+                l.contains("guard_not_on_integration_ref(")
+                    && !l.contains("fn guard_not_on_integration_ref")
+                    && !l.trim_start().starts_with("//")
+                    && !l.trim_start().starts_with("///")
+            })
+            .count();
+        assert_eq!(
+            call_sites, 1,
+            "exactly one g1 call site (the integrate verb)"
+        );
+        // The one call site is in run_integrate, right after the config load.
+        assert!(
+            prod.contains(
+                "let cfg = crate::dtoml::load_doctrine_toml(&root)?.dispatch;\n    guard_not_on_integration_ref(&root, &cfg)?;"
+            ),
+            "the g1 call site is run_integrate's verb entry"
+        );
+        // And neither candidate path references it (create/admit are excluded).
+        for fn_name in ["fn candidate_create", "fn run_candidate_admit"] {
+            let body_start = prod.find(fn_name).expect("candidate fn present");
+            let after = &prod[body_start..];
+            // Scope to a generous window covering the fn body.
+            let window = &after[..after.len().min(6000)];
+            assert!(
+                !window.contains("guard_not_on_integration_ref("),
+                "{fn_name} must not call g1 (advances no integration ref)"
+            );
+        }
     }
 }
