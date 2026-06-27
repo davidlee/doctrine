@@ -155,6 +155,43 @@ fn columns_flag_is_accepted_on_memory_list() {
 }
 
 #[test]
+fn relation_list_and_census_accept_columns() {
+    // SL-169 D1: `relation list` and `relation census` are the two `list`-family
+    // subcommands that joined the `--columns` projection contract (SPEC-013). They
+    // do NOT ride the `CommonListArgs` spine (bespoke arg sets: source/label/state,
+    // include-memory), so they are proven here as a focused parse-conformance pair
+    // rather than as `SPINE_KINDS` rows. Per-column select/order is pinned byte-exact
+    // in `tests/e2e_list_columns_golden.rs` (RelationRow/CensusRow blocks); here we
+    // only prove the new `--columns` grammar parses + succeeds on an empty root.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    let relation = |extra: &[&str]| -> Output {
+        Command::new(bin())
+            .arg("relation")
+            .args(extra)
+            .arg("-p")
+            .arg(dir)
+            .output()
+            .expect("spawn doctrine")
+    };
+
+    let out = relation(&["list", "--columns", "source,label,state"]);
+    assert!(
+        out.status.success(),
+        "relation list --columns must parse + succeed (SL-169 D1); stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let out = relation(&["census", "--columns", "label,count"]);
+    assert!(
+        out.status.success(),
+        "relation census --columns must parse + succeed (SL-169 D1); stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
 fn the_filter_x_json_canonical_combination_parses_on_every_kind() {
     // The exact invocation the design names (§9 / R5 / A-4):
     //   `<kind> list --filter x --json`

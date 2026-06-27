@@ -304,9 +304,9 @@ fn standard_list_table_default_hides_and_sorts_byte_exact() {
     // Slug-free default (SL-037 D4) — `--columns …,slug` reveals it.
     assert_eq!(
         stdout(&out),
-        "id      │ status   │ title\n\
-         STD-001 │ default  │ Two-space indent\n\
-         STD-002 │ required │ Tabs bad\n"
+        "id      │ status   │ tags  │ title\n\
+         STD-001 │ default  │ style │ Two-space indent\n\
+         STD-002 │ required │       │ Tabs bad\n"
     );
 }
 
@@ -319,7 +319,7 @@ fn standard_list_json_default_is_the_shared_envelope_byte_exact() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"standard\",\n  \"rows\": [\n    {\n      \"id\": \"STD-001\",\n      \"slug\": \"two-space-indent\",\n      \"status\": \"default\",\n      \"title\": \"Two-space indent\"\n    },\n    {\n      \"id\": \"STD-002\",\n      \"slug\": \"tabs-bad\",\n      \"status\": \"required\",\n      \"title\": \"Tabs bad\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"standard\",\n  \"rows\": [\n    {\n      \"id\": \"STD-001\",\n      \"slug\": \"two-space-indent\",\n      \"status\": \"default\",\n      \"tags\": [\n        \"style\"\n      ],\n      \"title\": \"Two-space indent\"\n    },\n    {\n      \"id\": \"STD-002\",\n      \"slug\": \"tabs-bad\",\n      \"status\": \"required\",\n      \"tags\": [],\n      \"title\": \"Tabs bad\"\n    }\n  ]\n}"
     );
 }
 
@@ -332,9 +332,9 @@ fn standard_list_all_reveals_the_hidden_row() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ status   │ title\n\
-         STD-001 │ default  │ Two-space indent\n\
-         STD-002 │ required │ Tabs bad\n\
-         STD-003 │ retired  │ Old Rule\n"
+        "id      │ status   │ tags  │ title\n\
+         STD-001 │ default  │ style │ Two-space indent\n\
+         STD-002 │ required │       │ Tabs bad\n\
+         STD-003 │ retired  │       │ Old Rule\n"
     );
 }
