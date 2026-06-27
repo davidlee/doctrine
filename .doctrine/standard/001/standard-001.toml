@@ -1,0 +1,16 @@
+schema = "doctrine.standard"
+version = 1
+
+id = 1
+slug = "no-magic-strings-single-source-named-constants"
+title = "No magic strings — single-source named constants"
+status = "required"
+created = "2026-06-27"
+updated = "2026-06-27"
+tags = ["config", "magic-strings", "tech-debt"]
+
+[relationships]
+# The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
+# SL-048). Author them with `doctrine link STD-NNN supersedes|related <target>`.
+superseded_by = []   # reverse link is derived
+
