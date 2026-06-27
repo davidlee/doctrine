@@ -14,7 +14,7 @@ ref   = "SL-164"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Dispatch invokes phantom helpers parse_optional_status / parse_optional_lifespan that exist nowhere"
 detail = "EXPECTED: the design.md § memory_record dispatch (lines 103-104) should call functions that exist, or the § Engine change section should declare them as new code. OBSERVED: `parse_optional_status(...)` and `parse_optional_lifespan(...)` appear in the dispatch but `grep -rn parse_optional_status|parse_optional_lifespan src/` returns ZERO hits. The design explicitly states 'No new error enum needed' and the Engine-change section lists ONLY the writer-param addition — it never authorises these helpers. The sanctioned parsers already breathe: Status::parse (src/memory.rs:798) and Lifespan parse (~737), plus MemoryType::parse. PENANCE: delete the phantom helpers; reuse the existing Status/Lifespan parse seams (CLAUDE.md: no parallel implementation, write less code). The CLI builds these fields via clap (memory.rs:482-501) — the MCP arm must parse the strings through the SAME enum parsers, not invented wrappers."
@@ -23,7 +23,7 @@ response = "Confirmed defect in design.md. Replace parse_optional_status/parse_o
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "RecordArgs.status is non-optional Status (default Active); design constructs it as Option via parse_optional_status"
 detail = "EXPECTED: dispatch must build `status: Status` (RecordArgs field is `status: Status`, src/memory.rs:1610; default Active per the JSON schema). OBSERVED: design line 104 writes `status: parse_optional_status(p.status.as_deref())?` — symmetric with the genuinely-Option `lifespan: Option<Lifespan>` field (memory.rs:1609). A 'parse_optional' returning Option<Status> is a type mismatch against the non-Option field and will not compile. PENANCE: status must resolve to a concrete Status — `p.status.as_deref().map(Status::parse).transpose()?.unwrap_or(Status::Active)` — distinct from lifespan's genuinely-optional handling. The design treats two differently-typed fields identically."
@@ -32,7 +32,7 @@ response = "Confirmed. status must resolve to concrete Status (default Active) v
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = """context("invalid arguments") cannot satisfy map_review_error's starts_with("invalid arguments:") gate; run_record/run_edit errors map to -32603 not -32602"""
 detail = """EXPECTED: argument-level errors from run_record/run_edit map to -32602 (design § Error mapping, and VTs: 'memory_edit with no flags returns -32602', 'memory_record invalid/empty title -32602'). OBSERVED: map_review_error (src/mcp_server/tools.rs:917,925) does `let msg = err.to_string(); if msg.starts_with("invalid arguments:")`. anyhow's to_string() yields ONLY the top context. The design wraps run_record/run_edit errors with `.context("invalid arguments")` (NO colon) — to_string() = 'invalid arguments', which fails starts_with('invalid arguments:') and falls through to -32603. Thus 'memory_edit with no flags' (run_edit bail at memory.rs:3854) maps to -32603 — its own VT would FAIL. (The from_value/MemoryType::parse paths use `anyhow!("invalid arguments: {e:#}")` WITH colon and are correct.) PENANCE: use `.context("invalid arguments:")` with the colon, or wrap via `map_err(|e| anyhow!("invalid arguments: {e:#}"))` matching the parse-error path. The design's claim 'so they hit branch 2' is false as written."""
@@ -41,7 +41,7 @@ response = """Confirmed against map_review_error (tools.rs:917,925). Change .con
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "writer param on run_record breaks ~35 callers; impact table conceals all but one and omits src/boot.rs"
 detail = "EXPECTED: § Code impact summary + § Engine change must enumerate every caller broken by adding `writer: &mut dyn Write` to run_record, per AGENTS.md behaviour-preservation gate (existing suites must stay green). OBSERVED: design line 297 names only 'CLI call site (src/memory.rs ~line 482)' — singular. But run_record has many callers: src/boot.rs:2619, 2876, 2965, 3122 (4 test sites), src/retrieve.rs:2945, and ~28 in src/memory.rs tests (5238, 5270, 5303, ...). The impact table (lines 342-347) lists only memory.rs and omits src/boot.rs and retrieve.rs entirely. An executor following the table breaks the build. (run_edit is accurate — sole caller memory.rs:683.) Also the cited 'line 482' is misleading: 482 is the CLI dispatch arm, not run_record's def (1633). PENANCE: enumerate all run_record callers; add src/boot.rs + src/retrieve.rs to the impact table; state that all test callers gain `&mut io::stdout()` (or a sink) to keep suites green."
@@ -50,7 +50,7 @@ response = "Confirmed. Enumerate all run_record callers (boot.rs x4, retrieve.rs
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Signature uses dyn Write but design claims to follow the impl Write pattern of run_show/run_list"
 detail = "EXPECTED: consistency with the cited pattern. Design line 299-300 says 'Follows the existing pattern of run_show, run_list, run_validate which already accept writer: &mut impl Write.' OBSERVED: the prescribed new signatures (lines 290-291) use `writer: &mut dyn Write`, NOT `impl Write`. retrieve_reference (retrieve.rs:928), run_show, run_list all use `&mut impl Write`. Both compile, but the design contradicts the very pattern it cites. PENANCE: use `&mut impl Write` to match the established seam (CLAUDE.md DRY / naming consistency); dyn adds vtable indirection for no benefit here."
@@ -59,7 +59,7 @@ response = "Confirmed. Change prescribed signatures to &mut impl Write to match 
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Design bumps tool counts to 18 but leaves the lying test name tool_list_has_14_tools and the stale module-doc header out of scope"
 detail = "EXPECTED: § Verification impact should correct the misnamed artifacts it touches. OBSERVED: design line 325 says update '15 -> 18 in tool_list_has_14_tools()' — the function NAME claims 14 while it already asserts 15 (tools.rs:1060-1062) and will assert 18; the name becomes a third distinct lie. The module doc header (src/mcp_server/tools.rs:4) reads '14 tools: 10 review + 4 memory' — already wrong (15 tools, 5 memory) and absent from the impact table; after this slice it should read 18 tools / 7 memory. PENANCE: rename the test to its true count and fix the tools.rs:4 module-doc header as part of the VT-2 update; do not propagate a misnamed relic."
@@ -68,12 +68,19 @@ response = "Confirmed. VT-2 update must rename tool_list_has_14_tools to its tru
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "run_record stderr notice silently dropped from the MCP response; design captures only the stdout writer"
 detail = "EXPECTED: note where output diverges from CLI. OBSERVED: run_record also emits an advisory `notice` to io::stderr() (src/memory.rs ~line 105 within run_record). The design routes only the stdout confirmation through the writer buffer; the stderr notice is not captured and vanishes from the MCP response. Acceptable (advisory only, and stderr is off the JSON-RPC stdio channel) but undocumented. PENANCE: note the dropped notice in the design, or fold it into the buffer if agents should see it."
 disposition = "tolerated"
 response = "Accepted as standing note. stderr notice is advisory and off the JSON-RPC channel; dropping it from the MCP response is tolerable. Design should note the divergence in a sentence."
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "nit"
+title = "reach-local smoke probe"
+detail = "Probe that reach=local in root doctrine.toml suppresses the remote reservation error. Withdrawn immediately."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
