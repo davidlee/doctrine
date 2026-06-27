@@ -39,10 +39,13 @@ Three mechanism-level guards, layered (defense-in-depth), sharing one primitive.
 - **g3 — corpus-shrink refusal at the ref-advance.** Refuse a funnel advance that
   drops authored `.doctrine/**` paths the slice did not itself author. Applies to
   **both the `--edge` and `--trunk` advance legs** (the corpus lives on `edge`, so
-  the edge leg is where it bites). **Absolute-referenced** against the canonical
-  corpus tip — *not* relative to the moving trunk tip, which is blind once trunk is
-  already gutted. Invariant: *the authored corpus is append-mostly; no funnel op may
-  advance a ref to a tree that shrinks it.*
+  the edge leg is where it bites). **Relative 3-way reference (Model B, locked in
+  design §7 D1):** a per-leg clobber check over `base = merge-base(new, cur)` —
+  flag any `.doctrine/**` path where `new == base ∧ cur ≠ base` (the advance would
+  revert/delete a change `cur` holds). *Not* an absolute corpus-tip comparison: g3
+  asks "does *this advance* shrink the corpus?", a different question from g2's
+  "is the *fork base* fresh?". Invariant: *the authored corpus is append-mostly; no
+  funnel op may advance a ref to a tree that shrinks it.*
 - **g1 — refuse trunk-mutating dispatch verbs on a trunk checkout.** If a
   trunk-mutating dispatch/integrate verb's own HEAD is on the trunk branch (`main`),
   **refuse** with a loud, instructive diagnostic (restore to `edge`; promote via
@@ -50,10 +53,15 @@ Three mechanism-level guards, layered (defense-in-depth), sharing one primitive.
   hard mechanism refusal; closes the agent-induced R1 window at the verb. Verb set
   TBD in `/design` (OQ-9 steer: all trunk-mutating verbs, not just integrate).
 
-**Shared primitive (OQ-8).** The canonical **corpus tip** = the highest commit on
-the edge lineage that touches `.doctrine/**`, resolved at runtime. Not
-`origin/edge` (network-dependent, may lag), not a hand-maintained marker ref
-(drifts). g2 and g3 both consume it — build once.
+**Reference model (OQ-8, RESOLVED → design §7 D1 Model B).** g2 and g3 take
+*different* references — they ask different questions, so they do **not** share one
+primitive. **g2 (absolute):** the **corpus tip** = the highest commit on the
+`authoring-branch` lineage that touches `.doctrine/**` (`rev-list -1 <ref> --
+.doctrine`), resolved at runtime — not `origin/edge` (network-dependent, may lag),
+not a hand-maintained marker ref (drifts). **g3 (relative):** `merge-base(new, cur)`
+per advance leg. Model A (one corpus-tip for both) was rejected — it false-positives
+on a buffer that legitimately lags the authoring branch and couples g3 to the
+promotion ritual.
 
 **Closure intent.** Each guard fail-closes on a constructed corpus-shrinking /
 stale-base / trunk-checkout scenario, proven by integration tests that replay the

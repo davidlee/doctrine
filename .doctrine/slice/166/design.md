@@ -28,9 +28,17 @@ Governed by **ADR-012** (dispatch integration topology). Source: **ISS-056**.
   carries the slice's *own plan*, nothing about the broader corpus.
 - **Advance legs.** `integrate` (`dispatch.rs:1696`) → `advance_row` (`:1786`)
   branches on `worktree_for_ref`: `advance_pure_ref` (`:1821`, the not-checked-out
-  integration ref — CAS-and-done post-SL-157) and `advance_checked_out` (`:1856`,
-  the checked-out authoring ref — `merge --ff-only`, the safe atomic leg). Both are
-  **FF-only and blind to `.doctrine/**` content regression**.
+  integration ref — **plain `update_ref_cas`, CAS-and-done post-SL-157**) and
+  `advance_checked_out` (`:1856`, the checked-out authoring ref — `merge --ff-only`
+  under an `is_ancestor` gate, the safe atomic leg). **The FF property is NOT
+  uniform.** Only `advance_checked_out` enforces FF at advance time (`is_ancestor`,
+  `:1863`); `advance_pure_ref` does **no** runtime ancestry check. Whether a pure-ref
+  advance is FF rests entirely on *planning*: `plan_trunk_row` (`:1980`) /
+  `plan_candidate_trunk_row` (`:2020`) FF-gate at plan time, but `plan_edge_row`
+  (`:1990`) and `plan_candidate_edge_row` (`:2036`) are **explicitly "Not ff-gated"**
+  (a standing aggregate of local work — CAS guards concurrency, not ancestry). So the
+  `--edge` advance leg can today advance to a tree that is **not** a descendant of the
+  current edge tip, and every leg is blind to `.doctrine/**` content regression.
 - **Projection.** Phase trees filter `.doctrine` entirely
   (`filter_tree([".doctrine"])`, `dispatch.rs:~2141`); the orchestrator authors
   `.doctrine` deltas separately (ADR-012 bucket routing). So in a healthy advance
@@ -114,9 +122,13 @@ pub(crate) authoring_branch: Option<String>,   // TOML: authoring-branch
 ```
 
 **g1 — `guard_not_on_integration_ref(root, cfg) -> Result<()>`** (new, dispatch
-shell). Called at the head of the ref-advancing verbs: `sync --integrate` and the
-trunk-advancing `candidate` paths (`create --role close_target`, `integrate`; see
-OQ-3 on `admit`). Inert unless `authoring_branch` is set and differs from
+shell). **Principle (F-4): guard exactly the verbs that *advance `deliver_to`* (or
+the aggregate `edge`) — i.e. that mutate a ref the buffered-trunk posture says must
+not be sat on.** That is `sync --integrate` (with `--trunk` / `--edge`) and its
+candidate-active equivalent. It does **not** include `candidate create
+--role close_target` (writes a *candidate* ref, not the buffer) or `candidate admit`
+(writes `candidates.toml`, advances no ref) — those mutate no integration ref and
+are out of g1's principle. Inert unless `authoring_branch` is set and differs from
 `deliver_to`.
 
 ```
@@ -137,21 +149,34 @@ never `checkout <buffer>`."*
 
 ```
 if let Some(corpus_ref) = cfg.authoring_branch {
-    if let Some(corpus_tip) = git::last_corpus_commit(root, &corpus_ref)? {   // rev-list -1 <ref> -- .doctrine
+    let corpus_tip = git::last_corpus_commit(root, &corpus_ref)?;            // resolve-or-error; None ⇒ no corpus yet
+    if let Some(corpus_tip) = corpus_tip {
         anyhow::ensure!(
             git::is_ancestor(root, &corpus_tip, &base)?,                      // base carries the corpus
             BASE_CORPUS_STALE, …                                             // names corpus_tip, base, fix
         );
     }
-    // corpus_ref unresolvable or no .doctrine corpus yet ⇒ degrade to no-op
+    // corpus_ref RESOLVES but touches no .doctrine yet ⇒ degrade to no-op (first-corpus case)
 }
 ```
 
-`last_corpus_commit` (new `git.rs` seam): `rev-list -1 <ref> -- .doctrine`,
-`Ok(None)` when the ref is unresolvable or touches no corpus — distinct from a
-usage error (mirror `is_ancestor`'s explicit exit-code handling; do **not** route
-through `git_opt`, which conflates exit 1 with 128 —
-[[mem.pattern.dispatch.project-off-pinned-fork-base-not-live-trunk-tip]]).
+**Fail closed on misconfiguration (F-1).** The posture-off no-op is keyed on the
+config *key being absent* (handled by the `let Some(corpus_ref)` arm), **not** on
+the configured ref failing to resolve. A *set-but-unresolvable* `authoring-branch`
+(typo, deleted/stale local ref) is a misconfiguration of the primary corpus-loss
+guard — it must **refuse setup with an explicit config/ref error**, never silently
+disable g2 while the operator believes the posture is on (that is the ISS-056
+silent-catastrophe shape). So `last_corpus_commit` is tri-state, not bi-state:
+
+`last_corpus_commit(root, ref)` (new `git.rs` seam): first `rev-parse --verify
+<ref>^{commit}` — **`Err` if the configured ref does not resolve** (fail-closed);
+then `rev-list -1 <ref> -- .doctrine` — `Ok(Some(tip))` if the corpus exists, else
+`Ok(None)` (ref resolves, no `.doctrine` history yet — the legitimate first-corpus
+no-op). Do **not** route through `git_opt`, which conflates exit 1 with 128 and
+would re-collapse the two cases — mirror `is_ancestor`'s explicit exit-code handling
+([[mem.pattern.dispatch.project-off-pinned-fork-base-not-live-trunk-tip]]). A
+`config validate` check (R4) additionally rejects an unresolvable `authoring-branch`
+ahead of setup.
 
 **g3 — `corpus_clobber_check(root, base, new, cur, allow) -> Result<()>`** (new,
 pure-ish over injected tree readings). Called in `advance_row` per leg, *before*
@@ -184,11 +209,16 @@ integrate journal row. Fail-closed when absent.
 - **g1** fires at verb entry — earliest, cheapest, before any ref work.
 - **g2** fires at `coordinate()` Create — before the fork, so a stale base never
   spawns a corpus-less bundle (fail-closed, no rollback path entered, like ISS-036).
-- **g3** fires per advance leg, before the mutation. A true `merge --ff-only`
-  advance can never clobber (new descends cur ⇒ new already carries cur's
-  `.doctrine` changes), so g3 is **inert on FF advances** and only bites on a
-  non-FF / tree-replacing advance — exactly where silent loss lives (a hand merge,
-  or RFC-006's future non-FF integrate). Defense-in-depth today, load-bearing then.
+- **g3** fires per advance leg, before the mutation. A true FF advance can never
+  clobber (`new` descends `cur` ⇒ `base = merge-base(new, cur) = cur` ⇒ no path has
+  `cur ≠ base`), so g3 is **inert wherever FF is actually enforced**: the
+  `advance_checked_out` leg (FF-gated at `:1863`) and the trunk projection legs
+  (FF-gated at plan time). But g3 is **load-bearing today on the `--edge` leg**,
+  which is *not* FF-gated (§2): a non-descendant edge advance whose tree drops a
+  `.doctrine/**` path the slice did not author is exactly the silent-loss shape, and
+  only g3 catches it. It is *additionally* forward-insurance for RFC-006's future
+  non-FF trunk integrate. **Correction to the internal pass (§10-A):** g3's present
+  value is not merely "make INV-1 explicit" — it closes a live un-gated edge-leg path.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -206,9 +236,15 @@ integrate journal row. Fail-closed when absent.
 - **Edge: g2 vs legitimately-lagging buffer.** Per the pre-dispatch ritual the base
   == promoted authoring branch, so `is-ancestor(corpus_tip, base)` holds; it trips
   precisely when promotion landed the buffer behind the corpus (ISS-056).
-- **Assumption.** g3's `cur` is the *live* target ref tree at advance time; its base
-  is `merge-base(new, cur)` — not the pinned fork base (those differ when the ref
-  moved). Verified against the leg's actual CAS expected-old.
+- **Assumption.** g3's `cur` is the *live* target ref tree at advance time (`==` the
+  leg's CAS `expected_old`, since `advance_row` only advances when
+  `current == expected_old`, `dispatch.rs:1799`); its base is `merge-base(new, cur)` —
+  not the pinned fork base (those differ when the ref moved). On an FF-gated leg
+  `new` descends `cur`, so `base == cur` and g3 is inert. On the **un-gated `--edge`
+  leg** `new` (the `review/<slice>` tip) need not descend `cur`, so `base` may be a
+  strict ancestor of `cur` — and that gap is precisely where a corpus-shrinking edge
+  advance is caught. So `base == CAS-expected-old` holds **only on the FF legs**, not
+  universally; the un-gated edge leg is the case g3 exists to cover.
 
 ## 6. Open Questions & Unknowns
 
@@ -217,10 +253,12 @@ integrate journal row. Fail-closed when absent.
   of scope (§8).
 - **OQ-2 (deferred).** Raw-destructive-git pre-merge/pre-commit hook class — the
   only thing on the manual-merge step; separate concern (§8).
-- **OQ-3 (design-time, resolve in /plan).** Does the trunk-advancing `candidate`
-  set for g1 include `admit` (which advances no ref, only records an OID)? Lean:
-  guard only the ref-mutating members; confirm against `dispatch.rs` candidate arms
-  during phase-planning.
+- **OQ-3 (RESOLVED at design; CLI enumeration confirmed in /plan).** g1's
+  *principle* is settled (§5.2 F-4): guard only verbs that advance `deliver_to` /
+  `edge`. By that principle `admit` (records an OID, advances no ref) and `candidate
+  create` are **excluded**. What remains for /plan is the mechanical confirmation of
+  the exact `sync`/`integrate`/candidate-active arm set against `dispatch.rs` — an
+  enumeration detail, not an open design question.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -254,9 +292,21 @@ integrate journal row. Fail-closed when absent.
   comparisons. *Mitigation:* batch via one `diff --name-only`; short-circuit/cap the
   rendered list with a logged "+N more". The expensive case is the one we refuse
   anyway; the normal path (empty delta) is ~free.
-- **R3 — g2 false-positive under unusual promotion topologies.** A project whose
-  authoring branch and buffer share no `.doctrine` history. *Mitigation:* degrade to
-  no-op on `Ok(None)`; document the posture contract; g3 still backstops.
+- **R3 — g2 strictness under non-linear topologies (F-3).** g2's contract is a
+  **single, linear, append-mostly authoring ref**: `is-ancestor(corpus_tip, base)`
+  is correct precisely when the corpus advances monotonically on one branch and the
+  base is a promotion of it. The `Ok(None)` valve covers **only** the no-corpus-yet
+  case; it does **not** rescue these, which are explicitly *unsupported* under the
+  posture and would hard-refuse setup: (a) **rebased / divergent authoring history**
+  — `corpus_tip` is not an ancestor of an equally-valid post-rebase base; (b)
+  **shallow / grafted clones** — `is_ancestor` over a truncated graph can answer
+  false; (c) **multiple authoring branches** — the configured ref is not the sole
+  corpus source. Conversely, **corpus authored on the buffer but not on
+  `authoring-branch`** is a g2 **false negative** (g2 passes while newer corpus lives
+  off the configured ref), not a false positive — the single-authority contract is
+  what rules it out. *Mitigation:* document the single-linear-authoring-ref contract
+  as a posture precondition; `config validate` flags an `authoring-branch` whose
+  history diverges from `deliver_to`; g3 still backstops the advance regardless.
 - **R4 — posture misconfiguration.** `authoring-branch` set wrong (e.g. == the
   buffer). *Mitigation:* g1's `≠ deliver_to` guard; a `config validate` check that
   the two differ when the posture is on.
@@ -271,10 +321,14 @@ TDD red/green/refactor; behaviour-preservation gate on the existing suites.
 - **g2.** `setup_refused_when_base_predates_corpus` (the SL-164 shape: base lacks
   corpus the authoring ref has → refuse, no worktree created);
   `setup_ok_when_base_carries_corpus`; `g2_noop_when_authoring_unset`;
-  `g2_noop_when_no_corpus_yet`.
+  `g2_noop_when_no_corpus_yet` (ref resolves, no `.doctrine` history);
+  `setup_refused_when_authoring_branch_unresolvable` (F-1: set-but-bad ref → explicit
+  error, fail-closed, NOT a silent no-op).
 - **g3.** `advance_refused_on_phantom_corpus_deletion` (new=absent, base=absent,
   cur=present → clobber); `advance_refused_on_stale_revert` (new=old, base=old,
-  cur=edit → clobber); `ff_advance_never_clobbers` (new descends cur → ok);
+  cur=edit → clobber); `non_ff_edge_advance_dropping_corpus_refused` (F-2: the live
+  un-gated `--edge` leg — `new` not descending `cur`, drops a `.doctrine` path → g3
+  bites today); `ff_advance_never_clobbers` (new descends cur → ok);
   `authored_doctrine_delta_allowed` (new≠base → ok); `allowlist_lets_named_path_through`;
   `unnamed_path_still_refused_with_partial_allowlist`.
 - **Parity.** Re-run `e2e_dispatch_sync` / `e2e_dispatch_close` unchanged with
@@ -284,14 +338,17 @@ TDD red/green/refactor; behaviour-preservation gate on the existing suites.
 
 ### Internal adversarial pass (2026-06-27)
 
-- **A — g3's present value is contingent (RESOLVED: ship).** Both advance legs are
-  FF-only today (`advance_pure_ref` CAS-checks `is_ancestor`; `advance_checked_out`
-  is `merge --ff-only`), and a true FF advance cannot clobber (new descends cur).
-  So g3 catches nothing the existing FF guards don't already block — its present
-  value is forward-insurance for RFC-006's non-FF integrate plus making INV-1
-  explicit + tested. **Decision: ship g3 in this slice** (User, 2026-06-27) — the
-  ~1-phase cost is a decent payoff to have the corpus safety net *land before* the
-  non-FF capability it protects, rather than as an easily-forgotten prerequisite.
+- **A — g3's present value (RESOLVED: ship; PREMISE CORRECTED by external pass
+  F-2).** The internal pass asserted both advance legs are FF-only today
+  (`advance_pure_ref` CAS-checks `is_ancestor`) so g3 catches nothing today and is
+  pure forward-insurance. **That premise is false** (RV-176 F-2): `advance_pure_ref`
+  (`dispatch.rs:1821`) is a plain `update_ref_cas` with no ancestry check, and
+  `plan_edge_row` (`:1990`) is explicitly *not* ff-gated — so the `--edge` leg is
+  **not** FF-only today and g3 is **load-bearing now**, not merely later (see the
+  corrected §2 / §5.4 / §5.5). The **ship decision stands and is strengthened**
+  (User, 2026-06-27): g3 closes a live un-gated edge-leg corpus-shrink path *and*
+  pre-insures RFC-006's non-FF integrate; the ~1-phase cost lands the safety net
+  before, not after, the capability it protects.
 - **B — g2-strict enforces promote-before-setup (RESOLVED: accept).**
   `is-ancestor(corpus_tip, base)` refuses setup whenever the authoring branch holds
   an un-promoted `.doctrine` commit, i.e. it mandates the `fetch <authoring>:<buffer>`
