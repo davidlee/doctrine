@@ -14,10 +14,12 @@ ref   = "SL-165"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Refuse-matrix tests incomplete vs plan PHASE-02 VT-1/EX-2/EX-3 — INV-6 moved-ref ships untested"
 detail = "Expected (plan.toml PHASE-02 VT-1): '1 accept + the EX-2 refuse cases + the EX-3 moved-ref refusal, each asserting the design's bail message class.' EX-2 enumerates: no row; ambiguous (duplicate) row (INV-5); Conflicted-status source (INV-3); non-evidence/non-candidate chain hop; over-budget/cyclic (INV-4); scratch role; experiment-kind (INV-2). EX-3: moved-ref (INV-6). Observed (tests/e2e_dispatch_candidate.rs): only 3 new tests — accept, no-row, scratch-role. MISSING: ambiguous-row, Conflicted-status, non-evidence hop, over-budget/cyclic, experiment-kind, and the EX-3 moved-ref refusal. The INV-6 lineage binding (is_ancestor(merge_oid,source_oid)) — the RV-175 F-1 codex BLOCKER fix, the gate's content-security teeth — ships with ZERO refuse test. The gate logic for every branch is present and correct on read (src/dispatch.rs:805-1078), accept path + lifecycle anchor are green, but the security refuse branches are unverified against regression. This is a verification-completeness gap on a provenance/security gate, explicitly mandated by the plan."
+disposition = "fix-now"
+response = "Fixed in audit. Added 12 pure unit tests over trace_candidate_provenance (over-budget/cyclic INV-4, ambiguous INV-5, Conflicted INV-3, experiment-kind + scratch INV-2, non-evidence hop, missing row, unverified journaled root F3, accept base case, ref classifiers) + 1 e2e moved-ref refusal exercising the INV-6 lineage binding (RV-175 F-1 blocker) end-to-end. Landed on the review_surface candidate candidate/165/review-001 (commit e7d2ebaa), admitted at the repaired tip against RV-177. Test-only additive — no src logic touched. Green: dispatch unit 48/48, candidate e2e 28/28, lifecycle 3/3, clippy zero warnings. Plan PHASE-02 VT-1/EX-2/EX-3 now satisfied."
 
 [[finding]]
 id = "F-2"
