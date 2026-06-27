@@ -282,4 +282,39 @@ TDD red/green/refactor; behaviour-preservation gate on the existing suites.
 
 ## 10. Review Notes
 
-(Adversarial pass + integration to follow before lock.)
+### Internal adversarial pass (2026-06-27)
+
+- **A — g3's present value is contingent (RESOLVED: ship).** Both advance legs are
+  FF-only today (`advance_pure_ref` CAS-checks `is_ancestor`; `advance_checked_out`
+  is `merge --ff-only`), and a true FF advance cannot clobber (new descends cur).
+  So g3 catches nothing the existing FF guards don't already block — its present
+  value is forward-insurance for RFC-006's non-FF integrate plus making INV-1
+  explicit + tested. **Decision: ship g3 in this slice** (User, 2026-06-27) — the
+  ~1-phase cost is a decent payoff to have the corpus safety net *land before* the
+  non-FF capability it protects, rather than as an easily-forgotten prerequisite.
+- **B — g2-strict enforces promote-before-setup (RESOLVED: accept).**
+  `is-ancestor(corpus_tip, base)` refuses setup whenever the authoring branch holds
+  an un-promoted `.doctrine` commit, i.e. it mandates the `fetch <authoring>:<buffer>`
+  promotion before every `dispatch setup`. **Accepted** (User) as deliberate ritual
+  enforcement — skipping that promotion *is* the ISS-056 precondition. Document the
+  constraint in the refusal text; the degrade-to-no-op valve (unset posture / no
+  corpus) bounds it.
+- **g1 reads the invoking worktree's HEAD.** `current_branch(root)` must resolve the
+  *cwd worktree's* HEAD (as the existing raw-evidence-ref guard at `dispatch.rs:1067`
+  already does), not the common dir — verify in /plan.
+- **D6 — ADR-012 Revision check.** g3 *adds* a refusal to integrate; it does not
+  change D4's FF-only/CAS contract (still FF-only, still 3-arg CAS, no force, no
+  auto-resolve). Lean: additive gate, no Revision. **Flag for the external pass to
+  confirm** — if a hostile reviewer reads g3 as altering the integration contract,
+  route a mechanism-only ADR-012 Revision at reconcile.
+- **ADR-001 layering — g2 threading `DispatchConfig` into `coordinate()`.**
+  `worktree::coordinate` must reach `dtoml`/`dispatch_config` without forming a
+  cycle (engine→config). Confirm the edge direction in /plan; if it would close a
+  cycle, pass the resolved `authoring_branch`/`deliver_to` *values* in rather than
+  the loader.
+- **`--allow-corpus-clobber` is global across both integrate legs.** One allowlist
+  applies to the `--trunk` and `--edge` advances in a single integrate call. Accepted
+  as a minor imprecision (a path is rarely a legit clobber on one ref but not the
+  other); note in the verb help.
+
+(External `/inquisition` to follow before lock.)
