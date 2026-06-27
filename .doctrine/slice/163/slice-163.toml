@@ -12,15 +12,15 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/commands/check.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/cli.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/verify.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/dtoml.rs"
@@ -29,6 +29,46 @@ intent = "scope-relevant"
 [[selector]]
 selector = "plugins/doctrine/skills/**/SKILL.md"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/notes/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/audit/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/close/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/execute/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/worktree/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_check_proxy.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_no_shipped_couplings.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
