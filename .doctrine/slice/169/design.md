@@ -119,9 +119,20 @@ entry and conditional default following D2/D3. `rec show` and `--json` must
 render tags.
 
 **Read wiring for review:** Review list is special (derived status, findings
-count, await state). Add `tags` column with conditional default. `review show`
-already renders a structured findings list — add `tags` to the metadata
-header. `review show --json` must include `tags` in the `review` object.
+count, await state) but still dispatches through `select_columns(&REVIEW_COLUMNS,
+REVIEW_DEFAULT, …)` (`review.rs:1698`) — the conditional default threads through
+`default_with_tags` identically to every other site; the derived columns are
+orthogonal. `review show` already renders a structured findings list — add `tags`
+to the metadata header. For `--json`: `show_json` emits `{ "kind":"review",
+"review": ShowJson{ …flatten ReviewDoc, status, awaiting }, "body" }`
+(`review.rs:1612`). `tags` rides the flattened `ReviewDoc`, so the field appears
+inside the `review` object once `ReviewDoc` carries+serialises root-level `tags`:
+
+```json
+{ "kind": "review",
+  "review": { "id": 183, "tags": ["governance"], "status": "open", "awaiting": "author", … },
+  "body": "…" }
+```
 
 **Test impact:** Extend e2e goldens to cover REC/review tag read surfaces.
 
@@ -167,8 +178,14 @@ The `name` fields are already lowercase — only `header` changes.
 
 ## Verification
 
-- Every existing list golden must stay green unchanged (behaviour-preservation
-  gate for kinds not being modified).
+- **Behaviour-preservation, stated precisely.** Goldens for unmodified kinds
+  (`memory`, `concept-map` data rows, requirements) stay byte-identical. For the
+  7 modified column sites the conditional gate is the safety argument: an
+  *untagged* fixture corpus produces byte-identical output (tags column never
+  splices), so only goldens whose fixtures carry tagged rows regenerate — and
+  those regenerate intentionally to show the new column. The backlog refactor
+  (D3) must leave its goldens green unchanged (proof the helper is behaviour-
+  equal to the inline splice).
 - New goldens: `relation list --columns`, `relation census --columns`, each
   kind's `list` with tags default (tagged + untagged cases), each kind's
   `show`/`--json` with tags.
