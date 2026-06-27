@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "doctrine boot"
+            "command": "doctrine boot --emit"
           }
         ],
         "matcher": "startup|clear"
