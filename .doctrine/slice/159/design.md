@@ -96,9 +96,10 @@ Adding EVD/HYP now touches **two tiers** of sites:
 - **`src/search.rs`** — the flat "all" list (`:38`, mixed superset) gains EVD/HYP.
 - **`src/tag.rs`** — `TAGGABLE` list gains EVD/HYP (the
   `record_kinds_are_taggable` test auto-validates after).
-- **`tests/e2e_knowledge_cli_golden.rs`, `tests/e2e_memory_anchoring.rs`** — e2e
-  goldens pinned to the kind catalog (catalog listing + help strings shift with +2
-  kinds).
+- **`tests/e2e_knowledge_cli_golden.rs`** — e2e golden pinned to the kind catalog
+  (catalog listing + help strings shift with +2 kinds). (`e2e_memory_anchoring.rs`
+  was over-predicted here — it references no kind catalog; RV-172 confirmed it needed
+  no change.)
 - **`install/templates/knowledge-evidence.toml`, `…-hypothesis.toml`** — two new
   seed templates.
 - **Docs / shipped memory** — `using-doctrine.md`, glossary,
@@ -330,8 +331,9 @@ revised VTs:
   EVD-1` the `disputes` edge — in both table and JSON.
 - **search/tag reach the new kinds (codex F3):** `search` finds an EVD/HYP body;
   `tag` sets/clears a tag on each — the hardcoded prefix groups now include them.
-- **e2e goldens (codex F6):** `e2e_knowledge_cli_golden.rs` + `e2e_memory_anchoring.rs`
-  updated for the 6-kind catalog (+EVD/HYP listing + help strings).
+- **e2e goldens (codex F6):** `e2e_knowledge_cli_golden.rs` updated for the 6-kind
+  catalog (+EVD/HYP listing + help strings). (`e2e_memory_anchoring.rs` over-predicted —
+  no kind-catalog coupling; RV-172 confirmed untouched.)
 
 **Tests that flip by design (consumer revision, not regression):** the prefix-count
 pin (4→6), the `RecordKind::ALL` arity, `relation.rs` hardcoded vectors + the
