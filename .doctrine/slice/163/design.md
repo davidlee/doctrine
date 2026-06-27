@@ -126,8 +126,12 @@ Quick, Commit, Gate }` (`From<CheckCommand> for CheckKind`).
 
 ### 5.3 Data, State & Ownership
 
-- `check` **reads** config; **writes nothing** to doctrine state (authored /
-  runtime / derived). `guard::write_class(Command::Check{..}) => Read`.
+- `check` writes **no authored doctrine state** → `guard::write_class(
+  Command::Check{..}) => Read` (pass-through under worker-mode). The guard gates
+  *doctrine-mediated authored writes*, not filesystem mutation: a proxied command
+  that mutates source (e.g. `cargo fmt`) is a **worker-legal source delta**, not
+  an authored write — and a dispatch worker running `doctrine check gate` to
+  verify its fork is the intended use, so `Read` is both correct and *necessary*.
 - The child process owns its own stdout/stderr (inherited fds). `doctrine` owns
   only the spawn + the forwarded exit code.
 - No new config reader — rides `coverage_store::load_config`. The three new
@@ -235,4 +239,33 @@ All resolved in design conversation:
 
 ## 10. Review Notes
 
-(Internal adversarial pass + external codex review recorded here.)
+### Internal adversarial pass
+
+- **A1 — `Read` classification vs source-mutating proxied commands.** `check` can
+  spawn `cargo fmt` (mutates the tree) yet is `Read`. *Resolved:* `write_class`
+  guards doctrine-mediated **authored** writes under worker-mode, not filesystem
+  mutation. Source mutation is a worker-legal source delta; `Read` is correct and
+  necessary (workers run `doctrine check gate` to verify forks). §5.3 reworded.
+- **A2 — two enums (`CheckCommand`, `CheckKind`).** Intentional layering, not a
+  parallel impl: the `verify` leaf must not depend on `clap` (ADR-001), so `cli`
+  owns the clap-derive `CheckCommand` and bridges via `From` to the leaf
+  `CheckKind`. Documented at §5.2.
+- **A3 — `commit` default `just check` vs this repo's "`just gate` before every
+  commit" (AGENTS.md).** Intentional: defaults follow the user's stated three-tier
+  cadence (edit/commit/phase), not AGENTS.md's two-tier habit; defaults only
+  *inform* (POL-002) and are client-overridable.
+- **A4 — `quick`/`commit` have no shipped-skill caller post-sweep.** YAGNI tension
+  considered, overridden by explicit user practice ("in practice I often end up
+  with 3"). The verb is a general altitude surface invoked directly per client
+  `AGENTS.md`, not only skill-internal. All six skill sites are phase-boundary →
+  `gate` (D6).
+- **A5 — no timeout.** A hung proxied check hangs the agent. Accepted: identical
+  to running the command directly; the harness interrupts. A configurable timeout
+  is a possible follow-up, out of scope (the VT 300s cap stays VT-only).
+- **A6 — `run_proxy` diverges (`process::exit`); `dispatch` returns `Ok` only on
+  the never-taken success path, `Err` on spawn failure.** Accepted proxy shape;
+  implementer guards against a clippy unreachable lint.
+
+### External review
+
+(codex pass recorded here.)
