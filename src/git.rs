@@ -1040,6 +1040,67 @@ pub(crate) fn merge_base(root: &Path, a: &str, b: &str) -> Result<Option<String>
     }
 }
 
+/// The `pathspec`-scoped paths that differ between tree-ishes `base` and `cur`
+/// (`git diff --name-only <base> <cur> -- <pathspec>`) — the g3 changed-set
+/// (SL-166 design §5.2, EX-1). One batched diff bounds the catastrophe-path cost
+/// (R2): no per-blob reads here. Explicit exit-code handling — exit 0 ⇒ parse the
+/// NUL-free line list (plain `diff` without `--exit-code` exits 0 whether or not
+/// paths differ); any other exit is a usage/spawn failure and errors, NOT routed
+/// through [`git_opt`] (which would mask a bad tree-ish as "no changes" and let a
+/// corpus-shrinking advance through). An absent side is the caller's
+/// [`EMPTY_TREE_OID`] substitution (a None `merge-base`), a valid diff operand.
+pub(crate) fn diff_doctrine_paths(
+    root: &Path,
+    base: &str,
+    cur: &str,
+    pathspec: &str,
+) -> Result<Vec<String>, CaptureError> {
+    let output = run_git(root, &["diff", "--name-only", base, cur, "--", pathspec])?;
+    match output.status.code() {
+        Some(0) => {
+            let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+                CaptureError::Git(format!("diff --name-only {base} {cur}: non-utf8 output"))
+            })?;
+            Ok(text.lines().map(str::to_owned).collect())
+        }
+        _ => Err(CaptureError::Git(format!(
+            "diff --name-only {base} {cur} -- {pathspec}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
+/// The blob oid at `path` in tree-ish `treeish` (`git ls-tree <treeish> --
+/// <path>`), `None` when the path is absent from that tree (SL-166 design §5.2 g3
+/// per-path read, EX-1). `ls-tree` exits 0 for a present OR absent path — an
+/// absent path yields empty output (`Ok(None)`), a present one a single
+/// `<mode> <type> <oid>\t<path>` line whose third field is the oid. A non-zero
+/// exit (a bad tree-ish) errors — the explicit-exit-code discipline that keeps an
+/// invalid tree from being silently read as an absent blob (which would compare
+/// equal to another absent read and FALSE-pass/false-clobber a corpus advance).
+/// Compares by oid, not content, so the catastrophe path stays cheap (R2). An
+/// empty `treeish` ([`EMPTY_TREE_OID`]) is a valid, content-free operand.
+pub(crate) fn blob_oid_at(
+    root: &Path,
+    treeish: &str,
+    path: &str,
+) -> Result<Option<String>, CaptureError> {
+    let output = run_git(root, &["ls-tree", treeish, "--", path])?;
+    match output.status.code() {
+        Some(0) => {
+            let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+                CaptureError::Git(format!("ls-tree {treeish} -- {path}: non-utf8 output"))
+            })?;
+            // `<mode> <type> <oid>\t<path>`; empty ⇒ path absent from the tree.
+            Ok(text.split_whitespace().nth(2).map(str::to_owned))
+        }
+        _ => Err(CaptureError::Git(format!(
+            "ls-tree {treeish} -- {path}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
 /// `DOCTRINE_TRUNK_REF`, else `origin/HEAD`, `main`, `master` in turn. Each
 /// candidate is peeled with `rev-parse --verify --quiet <ref>^{commit}`; the
@@ -2050,10 +2111,11 @@ mod tests {
     use std::process::Command;
 
     use super::{
-        AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, Frame, REMOTE_NORMALIZER,
-        RepoIdKind, RepoIdentity, WorktreeEntry, canonical_bytes, capture, checkout_state_id,
-        commits_touching, explicit_identity, live_worktree_for_ref, normalize_remote_url,
-        parse_worktree_for_ref, sha256, worktree_for_ref,
+        AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, EMPTY_TREE_OID, Frame,
+        REMOTE_NORMALIZER, RepoIdKind, RepoIdentity, WorktreeEntry, blob_oid_at, canonical_bytes,
+        capture, checkout_state_id, commits_touching, diff_doctrine_paths, explicit_identity,
+        live_worktree_for_ref, normalize_remote_url, parse_worktree_for_ref, sha256,
+        worktree_for_ref,
     };
 
     /// Render canonical bytes as a `String` for readable assertions (canonical
@@ -2435,6 +2497,79 @@ mod tests {
             frame.checkout_state_id.is_empty(),
             "clean tree carries no checkout_state_id"
         );
+    }
+
+    // --- g3 corpus-clobber seams (SL-166 PHASE-02, EX-1) ---------------------
+
+    /// Fixture: a `base` commit with `.doctrine/a.toml`, then a `cur` commit that
+    /// adds `.doctrine/b.toml` and a non-doctrine `src/x.rs`. Returns `(base,
+    /// cur)` commit shas (valid tree-ishes for diff / ls-tree).
+    fn doctrine_fixture() -> (ScratchRepo, String, String) {
+        let repo = ScratchRepo::new();
+        let base = repo.commit(".doctrine/a.toml", "v1", "base");
+        repo.write(".doctrine/b.toml", "new");
+        repo.write("src/x.rs", "code");
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-m", "cur"]);
+        let cur = repo.git(&["rev-parse", "HEAD"]);
+        (repo, base, cur)
+    }
+
+    #[test]
+    fn diff_doctrine_paths_lists_only_changed_doctrine_paths() {
+        let (repo, base, cur) = doctrine_fixture();
+        // a.toml unchanged, b.toml added, src/x.rs added but pathspec-excluded.
+        let changed = diff_doctrine_paths(repo.path(), &base, &cur, ".doctrine").expect("diff");
+        assert_eq!(changed, [".doctrine/b.toml"]);
+    }
+
+    #[test]
+    fn diff_doctrine_paths_against_empty_tree_lists_all() {
+        let (repo, _base, cur) = doctrine_fixture();
+        let mut changed =
+            diff_doctrine_paths(repo.path(), EMPTY_TREE_OID, &cur, ".doctrine").expect("diff");
+        changed.sort();
+        assert_eq!(changed, [".doctrine/a.toml", ".doctrine/b.toml"]);
+    }
+
+    #[test]
+    fn diff_doctrine_paths_errors_on_bad_treeish() {
+        let (repo, _base, cur) = doctrine_fixture();
+        // A bad operand must error, never be masked as "no changes" (fail-closed).
+        assert!(diff_doctrine_paths(repo.path(), "deadbeef", &cur, ".doctrine").is_err());
+    }
+
+    #[test]
+    fn blob_oid_at_reads_present_absent_and_empty_tree() {
+        let (repo, base, cur) = doctrine_fixture();
+        assert!(
+            blob_oid_at(repo.path(), &cur, ".doctrine/a.toml")
+                .expect("read")
+                .is_some()
+        );
+        assert!(
+            blob_oid_at(repo.path(), &cur, ".doctrine/missing.toml")
+                .expect("read")
+                .is_none()
+        );
+        // The empty tree is a valid, content-free operand.
+        assert!(
+            blob_oid_at(repo.path(), EMPTY_TREE_OID, ".doctrine/a.toml")
+                .expect("read")
+                .is_none()
+        );
+        // Unchanged content ⇒ identical blob oid (git is content-addressed): the
+        // g3 `new == base` equality the predicate relies on.
+        assert_eq!(
+            blob_oid_at(repo.path(), &base, ".doctrine/a.toml").expect("base"),
+            blob_oid_at(repo.path(), &cur, ".doctrine/a.toml").expect("cur"),
+        );
+    }
+
+    #[test]
+    fn blob_oid_at_errors_on_bad_treeish() {
+        let (repo, _base, _cur) = doctrine_fixture();
+        assert!(blob_oid_at(repo.path(), "deadbeef", ".doctrine/a.toml").is_err());
     }
 
     #[test]
