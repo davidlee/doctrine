@@ -1,0 +1,150 @@
+id = 169
+slug = "columns-and-tags-surface"
+title = "Wire --columns on relation list/census + tags in --columns + default tags column for all taggable kinds"
+status = "design"
+created = "2026-06-27"
+updated = "2026-06-27"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/commands/relation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/tag.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/listing.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/list_helpers.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_list_conformance.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_list_columns_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/slice.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/adr.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/policy.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/standard.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/spec.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/rfc.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/knowledge.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/revision.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/rec.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/review.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/backlog.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/memory.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/concept_map.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/concept_map.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation_query.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/governance.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/rfc.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/knowledge.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/revision.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/rec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/tag.rs"
+intent = "design-target"
+
+[[relation]]
+label = "references"
+role = "scoped_from"
+target = "IMP-133"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-144"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
