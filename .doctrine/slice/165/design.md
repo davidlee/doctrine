@@ -91,19 +91,40 @@ check_provenance(journal, candidates, slice3, role, source_ref):
 
 trace_candidate_provenance(ref, budget):
   budget > 0                       else bail "provenance chain too deep / cyclic"
-  row = exactly_one(candidates.rows where target_ref == ref)   # F1: count, not first-match
+  row = exactly_one(candidates.rows where target_ref == ref)   # RV-175 F-1: count, not first-match
                                    else bail "no recorded row" / "ambiguous candidate row for {ref}"
   row.status == Created            else bail "source candidate {ref} is {status:?}, not clean"
+  row.role ∈ {review_surface, close_target} ∧ row.kind == audit                 # RV-175 F-2
+                                   else bail "source candidate {ref} is role={role}/kind={kind} — \
+                                             only an audit review_surface (or chained close_target) may source a close_target"
   next = row.source_ref
   if   is_journaled_evidence_ref(next): → FULL journaled gate (Verified + phase-hole)  # F3
   elif is_candidate_ref(next):          → trace_candidate_provenance(next, budget-1)
   else:                                 → bail "source candidate built from non-evidence {next}"
 ```
 
+**Lineage binding (RV-175 F-1 — INV-6).** The trace above proves the *recorded row*
+chains to verified evidence, but a `candidate/<N>/<label>` ref can be **moved** after its
+row was recorded. So `candidate_create` resolves `source_oid` (the live tip) and, for a
+candidate source, additionally requires:
+
+```
+row.merge_oid != ""  ∧  git::is_ancestor(row.merge_oid, source_oid)
+  else bail "source candidate {ref} tip {source_oid} does not descend from its recorded
+             merge {merge_oid} — the ref moved off its provenance lineage"
+```
+
+This is the **source-side analog of admit's I3** (`dispatch.rs:1180`): it binds the
+*resolved content* (not just the ref name) to the verified-traced merge, so only the
+recorded candidate **plus commits layered on top** (the fix-now) can ride — never an
+unrelated history the ref was repointed at. Sequencing: name/chain trace runs pre-resolve
+(by ref name, EX-1 discipline); the lineage binding runs right after `source_oid` resolves
+(`dispatch.rs:~916`), before the merge.
+
 The journaled base-case routes through the **existing** `check_provenance` journaled
 body — Verified-row check **and** the `phase/<N>-NN` earlier-failed-hole check — so a
 candidate tracing to a phase ref inherits the full gate, not a weakened subset (F3).
-Row match is **count-exact, fail-closed** on duplicates (F1), mirroring
+Row match is **count-exact, fail-closed** on duplicates (F-1), mirroring
 `trunk_integration`'s discipline (`ledger.rs:464` — "count, never first-match").
 
 ### 5.2 Interfaces & Contracts
@@ -115,7 +136,11 @@ Row match is **count-exact, fail-closed** on duplicates (F1), mirroring
   `review/<slice>` or `phase/<slice>-NN`. Single source of truth so base-case and
   recursion-step agree (no classifier drift).
 - `fn trace_candidate_provenance(candidates, journal, slice3, ref, budget) ->
-  anyhow::Result<()>` — new private helper.
+  anyhow::Result<()>` — new private helper (name/chain trace, pre-resolve).
+- **Lineage binding (INV-6)** lives in `candidate_create` *after* `source_oid` resolves
+  (`dispatch.rs:~916`), not in the pre-resolve trace: `is_ancestor(row.merge_oid,
+  source_oid)`. Keeps the by-name EX-1 discipline for the trace, binds content once the
+  oid is known. (Requires the matched `row` — fetch it once and thread it, or re-lookup.)
 - No CLI surface change: `candidate create --role close_target --source
   refs/heads/candidate/<N>/<label>` is the unchanged invocation that now succeeds.
 
@@ -148,8 +173,13 @@ No fold, no `branch -D review/<N>`, no hand-FF.
 
 - **INV-1 (root preserved).** Every accepted chain terminates at a Verified
   journaled evidence ref. REQ-316's invariant holds transitively.
-- **INV-2 (scope).** Only `role == close_target` unlocks the candidate exception;
-  review_surface / scratch keep the journaled-only refusal.
+- **INV-2 (scope, RV-175 F-2).** Two gates: the *destination* role must be
+  `close_target` to unlock the candidate exception; and the *source* candidate's
+  `row.role ∈ {review_surface, close_target}` with `row.kind == audit`. A `scratch`
+  source, or any `experiment`-kind candidate, is refused — REQ-317's source is "the
+  repaired candidate" (a review_surface); chained close_targets are the only other
+  legitimate source. review_surface / scratch *destinations* keep the journaled-only
+  refusal.
 - **INV-3 (status).** Only `CandidateStatus::Created` candidates qualify; a
   `Conflicted` (parked-at-base) candidate is refused. Fix-now commits do not mutate
   `status`, so a repaired review_surface stays `Created`. **Known v1 limitation (F2):**
@@ -159,15 +189,21 @@ No fold, no `branch -D review/<N>`, no hand-FF.
   OQ-4.
 - **INV-4 (termination).** Bounded `budget` (constant, 16) + recorded-chain walk
   cannot loop the gate; over-budget / cycle → refuse.
-- **INV-5 (count-exact, F1).** The `target_ref → row` resolution is fail-closed on
+- **INV-5 (count-exact, F-1).** The `target_ref → row` resolution is fail-closed on
   duplicates (exactly-one), never first-match.
-- **A-1 (lineage ≠ content review, F3).** The trace proves the source candidate's
-  *lineage root* is Verified journaled evidence. It does **not** prove every commit on
-  the source tip is reviewed — fix-now commits, and commits inherited through a traced
-  `scratch`/`experiment` candidate, ride above the recorded `merge_oid` and are
-  *untracked by provenance*. That content-trust is `admit`'s I3 (descends-from-merge)
-  **plus** the governing RV review — the same split the existing fix-now model already
-  relies on. Provenance gates lineage; review gates content.
+- **INV-6 (lineage binding, RV-175 F-1).** For a candidate source, the live
+  `source_oid` must satisfy `is_ancestor(row.merge_oid, source_oid)` (and `merge_oid`
+  non-empty). The resolved content — not merely the ref name — is bound to the
+  verified-traced recorded merge; a ref repointed at unrelated history is refused. The
+  source-side analog of admit's I3.
+- **A-1 (lineage ≠ content review, F3, narrowed by F-2).** The trace + INV-6 prove the
+  source tip = the recorded candidate (lineage-rooted at Verified evidence) **plus
+  commits layered above its merge** — the fix-now. Those layered commits are *untracked
+  by provenance*; their content-trust is admit's I3 + the governing RV review of the
+  audited `review_surface`. Provenance gates lineage; review gates content. With F-2,
+  the source is always an audited `review_surface` (or chained close_target), so the
+  "content" is the reviewed audit surface — **not** arbitrary `scratch`/`experiment`
+  work (that earlier over-broad claim is struck).
 - **Edge:** chain hop to a non-evidence, non-candidate ref → refuse. Missing row →
   refuse. Superseded candidate row still resolvable by `target_ref`; status gate
   decides admissibility.
@@ -192,7 +228,13 @@ No fold, no `branch -D review/<N>`, no hand-FF.
   actually terminates there, however many candidate hops intervene. *Alt rejected:*
   single-hop (under-powered once candidates chain); trust-merge-lineage (a malformed
   orphan row passes).
-- **D3 — close_target-scoped exception.** Matches REQ-317; minimal blast radius.
+- **D3 — close_target-scoped, audited-source exception (RV-175 F-2).** Destination must
+  be `close_target`; source must be an `audit` `review_surface` (REQ-317's "repaired
+  candidate") or a chained `close_target`. `scratch` / `experiment` sources refused.
+  Matches REQ-317; minimal blast radius; no experiment content rides the repair path.
+- **D5 — lineage binding over name trust (RV-175 F-1).** The gate binds the resolved
+  `source_oid` to the recorded `merge_oid` (INV-6), not just the ref name — a moved ref
+  cannot launder unrelated history through a recorded row.
 - **D4 — Spec edit via REV at reconcile (Q3-A).** REQ-316 is a normative FR; widening
   its gate is governance → Revision + external review, not a quiet direct edit.
   Implement the conforming code now (REQ-317 is the controlling intent); author the
@@ -218,7 +260,8 @@ non-FF auto-merge (RFC-006); OQ-5 checkout-independent integrate (SL-157).
 - **Accept:** close_target from a recorded candidate tracing `review/<N>` (Verified) →
   create succeeds; merge tree carries the fix-now.
 - **Refuse:** no row · `Conflicted` candidate · non-evidence chain hop · over-depth /
-  cyclic.
+  cyclic · **moved-ref (INV-6):** source ref repointed off its recorded `merge_oid`
+  lineage (F-1) · **role/kind (F-2):** `scratch` source · `experiment`-kind source.
 - **Regression:** close_target from `review/<N>` (journaled) still works; review_surface
   default works; phase-hole refusal intact.
 - **Lifecycle (anchor):** full repair→close→integrate→`status done`; the test fails
@@ -247,6 +290,18 @@ non-FF auto-merge (RFC-006); OQ-5 checkout-independent integrate (SL-157).
 (`:2008`), `candidate_admit` I3 pin (`:1180`), `trunk_integration` done-gate
 (`ledger.rs:438`). SPEC-022 REQ-316 ⊥ REQ-317 contradiction confirmed verbatim.
 
-**Residual for external pass:** confirm the narrowed REQ-316 gate preserves "no
-candidate from unverified evidence" (INV-1) and that A-1's lineage/content split is the
-intended trust boundary.
+**External pass — codex (GPT) via RV-175, two blockers, both fix-now integrated:**
+
+- **RV-175 F-1 — name-trust, not content-trust.** The trace blessed only the ref name +
+  recorded row; the *live* `source_oid` (resolved post-gate, `dispatch.rs:916`) was never
+  bound to the recorded `merge_oid`, so a moved candidate ref could merge unrelated
+  history onto the close_target. → **INV-6 / D5:** `is_ancestor(row.merge_oid, source_oid)`
+  in `candidate_create` post-resolve (source-side analog of admit I3). §5.1, §5.2.
+- **RV-175 F-2 — exception too broad.** Any source candidate role (incl. `scratch`/
+  `experiment`) could source a close_target — wider than REQ-317's "repaired candidate"
+  (review_surface). A-1 even blessed it. → **INV-2 / D3:** source restricted to
+  `{review_surface, close_target}` + `kind == audit`; A-1's scratch/experiment-ride claim
+  struck. §5.1, §5.5.
+
+Both holes were in a *provenance* gate — shipping either would have undermined the
+slice's purpose. Resolved on the ledger (RV-175, both verified).

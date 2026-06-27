@@ -1,0 +1,34 @@
+id    = 175
+slug  = "inquisition-sl-165-close-target-candidate-source-provenance-gate"
+title = "Inquisition: SL-165 close_target candidate-source provenance gate"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-165"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected the gate to bind the resolved source tip to verified lineage; observed it blesses only the ref name + recorded row, then merges an unchecked live tip"
+detail = "design.md 5.1 (trace_candidate_provenance) validates only target_ref match, status==Created, and the recorded row.source_ref chain. It never binds the LIVE source_oid (resolved at candidate_create dispatch.rs:916, after the gate) to the recorded candidate merge_oid. A candidate/<N>/<label> ref moved to unrelated commits passes the trace by name yet contributes arbitrary content to the close_target merge (parents = base + live source_oid). admit I3 (dispatch.rs:1180) only validates the close_target OWN merge, not the source candidate lineage. The provenance gate thus fails to prove content provenance — the slice whole purpose. Penance: for a candidate source require row.merge_oid nonempty AND is_ancestor(row.merge_oid, source_oid) before create proceeds (source-side analog of admit I3); resolve source_oid before the binding check. Add as INV-6."
+disposition = "fix-now"
+response = "Concur — a provenance gate that binds only the ref name is hollow. Adding INV-6: for a candidate source, candidate_create resolves source_oid then requires row.merge_oid nonempty AND git::is_ancestor(row.merge_oid, source_oid) — the live source tip must descend from the recorded (verified-traced) candidate merge. Source-side analog of admit I3 (dispatch.rs:1180). Closes the moved-ref / unrelated-commits hole."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected the source-candidate exception to admit only REQ-317 repaired candidate (review_surface); observed it accepts ANY candidate role incl scratch/experiment"
+detail = "design.md 5.1 gates only on role==close_target of the DESTINATION; the SOURCE candidate role is unconstrained — close_target --source candidate/<N>/scratch-001 would pass. A-1 (5.5) explicitly blesses traced scratch/experiment content riding through. REQ-317 describes sourcing from the repaired candidate = a review_surface. CandidateRole (ledger.rs) is review_surface|close_target|scratch; scratch is the experiment vehicle, refused only at admit (dispatch.rs:1123), not as a source here. This lets unreviewed experiment content reach trunk under the repair banner, wider than the spec we are conforming to. Penance: narrow the source to row.role in {review_surface, close_target}; refuse scratch/experiment-kind sources. Strike A-1 scratch/experiment-ride claim."
+disposition = "fix-now"
+response = "Concur — A-1's scratch/experiment-ride claim was the heresy; it deviates from REQ-317 (the repaired candidate = review_surface). Narrowing: trace requires row.role in {review_surface, close_target} AND row.kind == audit; scratch / experiment sources refused. Strike A-1's ride-through; restate as: provenance proves lineage root, content is the audited review_surface surface (+ chained close_targets), trusted by the admitting RV."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
