@@ -208,7 +208,7 @@ suite, build — exit 0, zero warnings).
 **Phase order remaining:** PHASE-05 (enable posture in doctrine.toml + INV-2
 parity re-run + operator docs).
 
-## PHASE-05 — Enable posture + parity + docs — DONE (EX-1 blocked, see below)
+## PHASE-05 — Enable posture + parity + docs — DONE (EX-1 resolved via runtime edit, see resolution)
 
 `just gate` green (exit 0, clippy `--workspace` zero warnings, fmt `--check`,
 full suite, build) with the docs in place. Docs commit SHA: see git log
@@ -305,3 +305,30 @@ authoring-branch = "refs/heads/edge"
   is on `main` should now refuse with `REFUSE_ON_TRUNK`).
 - Eyeball the EX-3 wording: `dispatch_config.rs:50` doc-comment,
   `dispatch.rs:78` clap help, `install/doctrine.toml.example` block.
+
+**EX-1 RESOLUTION (operator decision, 2026-06-27).** Operator chose option (c) —
+**runtime enablement, no commit** (honours SL-146's environment-local config
+stance; does NOT reverse it). Applied to the live main-worktree
+`.doctrine/doctrine.toml`:
+
+```toml
+[dispatch]
+claude-force-subprocess-dispatch = true
+authoring-branch = "refs/heads/edge"     # SL-166 posture: authoring=edge, buffer=main (deliver-to default)
+```
+
+Verified with the SL-166 binary: `doctrine config validate` → `config: posture
+ok` (authoring ≠ deliver, R4 satisfied). Posture is now ARMED on this repo:
+g1 refuses trunk-mutating verbs run with HEAD on `main`; g2 refuses setup from a
+base predating the corpus tip. The primary stays on `edge` (= authoring branch =
+safe leg), so g1 is correctly inert there — the "stay on edge" etiquette is now
+mechanically backed.
+
+**For audit:** EX-1's literal wording ("dedicated enabling *commit*") is
+reconciled as written-against-a-pre-SL-146 model — enablement is config, and
+config is untracked/env-local post-SL-146, so there is no commit to point to.
+The slice ships the *capability* (config field + guards + example block in
+`install/doctrine.toml.example`); enablement is an operator runtime action. The
+design §5.3 "separate commit" line should be amended at reconcile to reflect the
+post-SL-146 config model (a design-coherence finding — two same-day slices with a
+contract overlap). VH-1's docs-eyeball remains for the operator.
