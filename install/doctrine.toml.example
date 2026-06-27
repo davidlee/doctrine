@@ -82,3 +82,14 @@
 # # The trunk delivery ref dispatch advances to / the close-integration
 # # gate checks against. Defaults to refs/heads/main.
 # deliver-to = "refs/heads/main"
+# # Buffered-trunk posture (SL-166). The source-of-truth ref where `.doctrine`
+# # content is authored, ahead of `deliver-to`. Setting it declares that
+# # `deliver-to` is a non-checked-out integration buffer promoted from this ref,
+# # and ENABLES the corpus-loss guards g1 (refuse trunk-mutating verbs while HEAD
+# # is on the buffer) and g2 (refuse setup when the fork base predates the
+# # corpus). Unset (default) ⇒ single-branch posture, g1/g2 inert; g3 (the
+# # 3-way clobber gate) protects regardless. Must differ from `deliver-to`.
+# # PRECONDITION: a single, linear, append-mostly authoring ref promoted to the
+# # buffer. Rebased/divergent history, shallow/grafted clones, and multiple
+# # authoring branches are UNSUPPORTED and hard-refuse setup.
+# authoring-branch = "refs/heads/edge"
