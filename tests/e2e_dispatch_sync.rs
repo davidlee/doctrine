@@ -828,6 +828,114 @@ fn integrate_trunk_refuses_non_fast_forward() {
     );
 }
 
+// SL-166 g3 — the always-on 3-way corpus-clobber gate on the (un-gated) `--edge`
+// advance leg (design §5.2/§5.5, RV-176 F-2). `edge` carries the review bundle
+// PLUS an extra authored `.doctrine` path the bundle lacks; advancing edge back
+// onto the bundle would silently DELETE that path (the ISS-056 shape). g3 refuses
+// before the CAS unless the path is allowlisted.
+
+/// Point `edge` at `review/064 + one extra .doctrine file`, leaving HEAD on main.
+/// Returns `(review_tip, edge_tip)` — edge_tip is a strict descendant of review.
+fn edge_with_extra_corpus(dir: &Path) -> (String, String) {
+    let review = git(dir, &["rev-parse", "review/064"]);
+    git(dir, &["branch", "edge", &review]);
+    git(dir, &["checkout", "-q", "edge"]);
+    let edge_tip = commit(
+        dir,
+        ".doctrine/keepme.toml",
+        "keep",
+        "corpus the bundle lacks",
+    );
+    git(dir, &["checkout", "-q", "main"]);
+    (review, edge_tip)
+}
+
+/// VT-3: the live un-gated `--edge` leg — advancing edge onto a bundle that drops
+/// an authored `.doctrine` path it holds is refused, fail-closed, edge unmoved.
+#[test]
+fn integrate_edge_refuses_corpus_clobbering_advance() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let (_review, edge_tip) = edge_with_extra_corpus(dir);
+
+    let out = integrate(dir, &["--edge", "refs/heads/edge"]);
+    assert!(
+        !out.status.success(),
+        "g3 refuses a corpus-clobbering edge advance; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("clobber") && stderr(&out).contains(".doctrine/keepme.toml"),
+        "refusal names the clobbered path: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "edge"]),
+        edge_tip,
+        "edge left unmoved (fail-closed before the CAS)"
+    );
+}
+
+/// EX-4: `--allow-corpus-clobber <path>` waves the named clobber through; the edge
+/// advance then proceeds and the ref moves to the review bundle.
+#[test]
+fn integrate_edge_allowlist_permits_named_clobber() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let (review, _edge_tip) = edge_with_extra_corpus(dir);
+
+    let out = integrate(
+        dir,
+        &[
+            "--edge",
+            "refs/heads/edge",
+            "--allow-corpus-clobber",
+            ".doctrine/keepme.toml",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "allowlisted clobber proceeds; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "edge"]),
+        review,
+        "edge advanced to the review bundle"
+    );
+}
+
+/// VT-4 / INV-2 parity: a fast-forward edge advance (edge is an ancestor of the
+/// bundle ⇒ base == cur ⇒ empty changed-set) is never clobbered — g3 is inert,
+/// the advance proceeds exactly as before.
+#[test]
+fn integrate_edge_fast_forward_advance_is_unaffected_by_g3() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let review = git(dir, &["rev-parse", "review/064"]);
+    // `edge` at the trunk base — an ancestor of the review bundle ⇒ ff advance.
+    let base = git(dir, &["rev-parse", "main"]);
+    git(dir, &["branch", "edge", &base]);
+
+    let out = integrate(dir, &["--edge", "refs/heads/edge"]);
+    assert!(
+        out.status.success(),
+        "ff edge advance passes g3 untouched; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "edge"]),
+        review,
+        "edge fast-forwarded to the review bundle"
+    );
+}
+
 /// RV-030 F-1: a foreign commit landing on trunk BETWEEN coordinate and
 /// prepare-review must NOT reparent the projection. Stage-1 projects off the
 /// pinned fork-point `merge-base(dispatch/064, trunk)`, not the live trunk tip —
