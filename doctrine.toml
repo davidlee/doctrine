@@ -1,2 +1,7 @@
 [dispatch]
 claude-force-subprocess-dispatch = true
+
+[reservation]
+# Single-tree id claims (local mkdir is the claim). Opt out of remote
+# coordination — origin is the jail's ssh-disabled shim, so `auto` hard-errors.
+reach = "local"
