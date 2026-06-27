@@ -67,15 +67,18 @@ correctness (POL-002 Scope explicitly blesses this repo keeping `just gate`).
 ### 5.1 System Model
 
 ```
-doctrine check {quick|commit|gate}
+doctrine check {quick|commit|gate} [-p PATH]
         │
    cli.rs::dispatch ──► commands/check.rs::dispatch
-        │                   │ root::find ──► coverage_store::load_config (THE reader)
-        │                   │ verify::resolve_check(cfg, kind) ── PURE ──► argv
+        │                   │ root::find(cmd.path()) ──► coverage_store::load_config (THE reader)
+        │                   │ verify::resolve_check(cfg, kind) ── PURE ──► CheckPlan
         │                   ▼
-        │              run_proxy(root, argv): spawn (inherit stdio) ─► wait ─► process::exit(code)
+        │              match plan:
+        │                Noop(note)  ─► println + exit 0           (owned; no spawn)
+        │                Empty(kind) ─► keyed error
+        │                Run(argv)   ─► run_proxy: spawn (inherit stdio) ─► wait ─► exit 128+signo|code
         ▼
-   guard.rs::write_class ──► Read   (writes no doctrine state)
+   guard.rs::write_class ──► Read   (writes no authored doctrine state)
 ```
 
 ### 5.2 Interfaces & Contracts
@@ -99,30 +102,52 @@ quick:  Option<Vec<String>>,
 commit: Option<Vec<String>>,
 gate:   Option<Vec<String>>,
 
-// named defaults (STD-001):
-const DEFAULT_QUICK:  &[&str] = &["echo", "doctrine check quick: no [verification].quick set — skipping"];
-const DEFAULT_COMMIT: &[&str] = &["just", "check"];
-const DEFAULT_GATE:   &[&str] = &["just", "gate"];
+// named defaults (STD-001). `quick` has NO argv default — its unconfigured path
+// is an OWNED no-op (CR-F3), so no host binary is named there.
+const DEFAULT_COMMIT:   &[&str] = &["just", "check"];
+const DEFAULT_GATE:     &[&str] = &["just", "gate"];
+const QUICK_UNSET_NOTE: &str    = "doctrine check quick: no [verification].quick set — skipping";
 
 pub(crate) enum CheckKind { Quick, Commit, Gate }
 
-/// PURE, total: configured override → else the kind's baked default argv.
-pub(crate) fn resolve_check(cfg: &VerificationConfig, kind: CheckKind) -> Vec<String>;
+/// What the shell should do for a kind. The `Noop` arm keeps the `quick`
+/// unconfigured path OWNED — doctrine prints + exits 0 itself, never proxies a
+/// host `echo` (CR-F3, POL-002). `Empty` carries a configured-but-empty override
+/// (CR-F2) so the shell errors toward the key instead of spawning nothing.
+pub(crate) enum CheckPlan {
+    Run(Vec<String>),   // spawn this argv
+    Noop(&'static str), // print note, exit 0 — NO spawn (quick, unconfigured)
+    Empty(CheckKind),   // override is `[]` — keyed error, never an empty spawn
+}
+
+/// PURE, total over (cfg, kind):
+///   override Some(v) non-empty → Run(v)
+///   override Some([])          → Empty(kind)            (CR-F2)
+///   override None, Quick       → Noop(QUICK_UNSET_NOTE) (CR-F3, owned)
+///   override None, Commit      → Run(DEFAULT_COMMIT)
+///   override None, Gate        → Run(DEFAULT_GATE)
+pub(crate) fn resolve_check(cfg: &VerificationConfig, kind: CheckKind) -> CheckPlan;
 ```
 
 **`commands/check.rs` (impure shell):**
 
 ```rust
 pub(crate) fn dispatch(cmd: CheckCommand) -> anyhow::Result<()> {
-    let root = crate::root::find(None, &crate::root::default_markers())?;
+    let root = crate::root::find(cmd.path(), &crate::root::default_markers())?; // -p/--path (CR-F6)
     let cfg  = crate::coverage_store::load_config(&root)?;   // the ONE reader (DRY)
-    let argv = crate::verify::resolve_check(&cfg, cmd.into());
-    run_proxy(&root, &argv)                                  // diverges via process::exit
+    match crate::verify::resolve_check(&cfg, cmd.into()) {
+        CheckPlan::Noop(note)  => { println!("{note}"); std::process::exit(0) }
+        CheckPlan::Empty(kind) => anyhow::bail!(
+            "[verification].{} is empty — set a non-empty argv in .doctrine/doctrine.toml",
+            kind.key()),
+        CheckPlan::Run(argv)   => run_proxy(&root, &argv),  // diverges via process::exit
+    }
 }
 ```
 
 **`cli.rs`:** `Command::Check { command: CheckCommand }`; `enum CheckCommand {
-Quick, Commit, Gate }` (`From<CheckCommand> for CheckKind`).
+Quick { path }, Commit { path }, Gate { path } }` each carrying `-p/--path`
+(CR-F6), with `path()` and `From<CheckCommand> for CheckKind` accessors.
 
 ### 5.3 Data, State & Ownership
 
@@ -140,31 +165,48 @@ Quick, Commit, Gate }` (`From<CheckCommand> for CheckKind`).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-`run_proxy(root, argv)`:
+`run_proxy(root, argv)` — only ever reached with a non-empty `argv` (the `Empty`
+/ `Noop` arms are handled in `dispatch` before this point):
 
-1. `argv.split_first()` → `(program, args)`; empty argv is unreachable (defaults
-   are non-empty) but guarded → keyed error.
-2. `Command::new(program).args(args).current_dir(root)` — **inherit** stdout /
+1. `Command::new(program).args(args).current_dir(root)` — **inherit** stdout /
    stderr / stdin (live stream; *not* piped — opposite of `run_argv`). **No
    timeout** (interactive dev gate, not a capped VT run).
-3. `.spawn()`:
+2. `.spawn()`:
    - `Err(ENOENT)` (default `just` absent on a client) → actionable error
      naming the owned key: *"`<program>` not found — set `[verification].<kind>`
      in `.doctrine/doctrine.toml`"* (OQ-3 → D3).
    - other spawn error → propagated with context.
-4. `child.wait()` → `std::process::exit(status.code().unwrap_or(1))`. Diverges;
-   never returns to `cli::dispatch`. (`process::exit` is safe — stdio is
-   inherited, nothing buffered/owned to flush. Proxy precedent: rtk.)
+3. `child.wait()` → `std::process::exit(exit_code(status))`. Diverges; never
+   returns to `cli::dispatch`. (`process::exit` is safe — stdio is inherited,
+   nothing buffered/owned to flush. Proxy precedent: rtk.)
+
+```rust
+// True exit forwarding (CR-F5): a signal-killed child re-exits 128+signo (shell
+// convention), not a flattened `1`. Unix-only branch; doctrine targets linux/nixos.
+fn exit_code(status: ExitStatus) -> i32 {
+    if let Some(code) = status.code() { return code; }
+    #[cfg(unix)] { use std::os::unix::process::ExitStatusExt;
+        status.signal().map(|s| 128 + s).unwrap_or(1) }
+    #[cfg(not(unix))] { 1 }
+}
+```
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - **INV-1** `command` (VT base) resolution is byte-for-byte unchanged → VT
   behaviour-preservation. The three new fields are read **only** by
   `resolve_check`, never by `verify::resolve`.
-- **INV-2** `resolve_check` is total (every kind yields a non-empty argv).
-- **EDGE** child killed by signal (`code() == None`) → exit `1`.
-- **EDGE** `quick` unconfigured → informative-echo no-op, exit 0 (never fails a
-  per-edit hook).
+- **INV-2** `resolve_check` is total — every (cfg, kind) yields a `CheckPlan`. A
+  `Run` argv is non-empty **by construction** (defaults are non-empty; a
+  configured `[]` routes to `Empty(kind)`, never `Run([])` — CR-F2). `run_proxy`
+  therefore never sees an empty argv.
+- **EDGE** configured override `[]` → `Empty(kind)` → keyed error (not a silent
+  no-op, not an empty spawn).
+- **EDGE** child killed by signal (`code() == None`) → exit `128 + signo` on unix
+  (CR-F5); `1` on non-unix.
+- **EDGE** `quick` unconfigured → **owned** no-op: doctrine prints `QUICK_UNSET_
+  NOTE` and exits 0 with **no** child spawn (CR-F3); never fails a per-edit hook,
+  never load-bears on a host `echo`.
 - **ASSUMPTION** `.agents/` is generated, gitignored; only `plugins/**` is
   authored (verified via `git ls-files`).
 
@@ -200,12 +242,24 @@ All resolved in design conversation:
   never fail unconfigured; the echo tells the dev *why* nothing ran.
 - **D5 — inherit stdio, no timeout.** A dev gate streams live and may legitimately
   run long; do **not** ride `run_argv`'s pipe+capture+cap path (wrong posture).
-- **D6 — sweep maps by cadence → all six sites to `gate`.** They are all
-  phase/close-boundary instructions. On *this* repo this swaps `just check` →
-  `just gate`; that aligns the skills with this repo's own stated "`just gate`
-  before every commit" rule, and the argv is client-configured regardless.
-  `quick`/`commit` ship as configured altitudes with no shipped-skill caller
-  (they are the inner-loop cadences documented in client `AGENTS.md`).
+- **D6 — sweep maps by cadence, with TWO treatments (refined per CR-F4).** Not a
+  blind grep-replace — the six `just check` sites split:
+  - **(a) Instruction rewrites → `doctrine check gate`** (4 sites): `execute:50`,
+    `close:33`, `audit:109`, `notes:32`. These genuinely *are* phase/close-boundary
+    gate instructions; the agent should run the gate. On this repo this swaps
+    `just check` → `just gate`, aligning the skills with this repo's own "`just
+    gate` before every commit" rule (argv client-configured regardless).
+  - **(b) Illustrative-example updates, semantics PRESERVED** (2 worktree sites):
+    `worktree:192` ("this repo: `just check`") and `worktree:219` ("not assumed
+    `just check`"). These are **not** fixed-gate instructions — :192 keeps "run
+    the **project-provided** regenerate-and-verify command, never a hardcoded
+    `cargo …`" and :219 keeps "the worker runs the **orchestrator-supplied**
+    verify command." Only the illustrative `just check` token is updated to
+    `doctrine check gate` as the *example*; the don't-hardcode / caller-control
+    semantics are untouched. (CR-F4 flagged that flattening these to a fixed gate
+    would erase intentional dispatch caller-control — rejected.)
+  - `quick`/`commit` ship as configured altitudes with no shipped-skill caller
+    (the inner-loop cadences documented in client `AGENTS.md`, not these skills).
 
 ## 8. Risks & Mitigations
 
@@ -218,19 +272,32 @@ All resolved in design conversation:
   *Mitigation:* reconcile slice scope to the actual six `just check` sites.
 - **R4 — new `[verification]` keys break VT parse.** *Mitigation:* INV-1 +
   existing `VerificationConfig` round-trip unit tests stay green unchanged.
+- **R5 — typed keys flip unknown→parse-error for a differently-typed client key**
+  (CR-F1). Claiming `quick`/`commit`/`gate` as typed `Option<Vec<String>>` means a
+  client that *happened* to carry e.g. `quick = "cargo test"` under `[verification]`
+  would flip from silently-ignored to a hard parse error across all config-reading
+  commands. *Disposition:* **accepted / moot** — no client projects exist yet
+  (single-repo reality), and `[verification]` is a doctrine-**owned** table so
+  claiming names is legitimate. Revisit if/when external clients adopt (a
+  tolerant-parse or `deny_unknown_fields`-aware migration note).
 
 ## 9. Quality Engineering & Validation
 
-- **Unit (`verify.rs`, pure):** `resolve_check` — override-present and
-  absent-default, × {`quick`, `commit`, `gate`} (6 cases). Asserts the exact argv
-  (incl. the informative-echo default).
+- **Unit (`verify.rs`, pure):** `resolve_check` — for each of {`quick`, `commit`,
+  `gate`}: override-present → `Run(override)`; override-absent → the kind's plan
+  (`Quick`→`Noop`, `Commit`/`Gate`→`Run(default)`); **override `[]` → `Empty(kind)`**
+  (CR-F2). Asserts exact plan/argv. `CheckPlan` is pure-returned, so the owned
+  no-op and the empty-error are unit-covered without spawning.
 - **Unit (`verify.rs`):** existing `VerificationConfig` parse tests extended —
   the three new keys deserialize; an absent table still yields all-`None`;
   `command` unchanged (INV-1).
-- **E2E (`tests/e2e_check_proxy.rs`, new):** built binary against a temp root.
-  `[verification].gate = ["sh","-c","exit 7"]` → assert **exit 7** + streamed
-  child output; a bogus program → assert error **names the key**. (Covers
-  `process::exit` forwarding, untestable in-process — the `e2e_*` precedent.)
+- **E2E (`tests/e2e_check_proxy.rs`, new):** built binary against a temp root
+  (via `-p/--path`). (i) `[verification].gate = ["sh","-c","exit 7"]` → assert
+  **exit 7** + streamed child output; (ii) bogus program → assert error **names
+  the key**; (iii) **signal case** `["sh","-c","kill -TERM $$"]` → assert exit
+  **143** (`128+SIGTERM`, CR-F5); (iv) `quick` unconfigured → assert exit 0 +
+  the note on stdout + **no** child spawned. (Covers `process::exit` forwarding,
+  untestable in-process — the `e2e_*` precedent.)
 - **Shipped-surface guard (`tests/e2e_no_shipped_couplings.rs`, new):** scans
   `plugins/**` — no `just check` / `just gate`, no bare `mem_…` uid. Rides the
   `e2e_no_baked_paths.rs` pattern (needles assembled from fragments so the guard
@@ -266,6 +333,22 @@ All resolved in design conversation:
   the never-taken success path, `Err` on spawn failure.** Accepted proxy shape;
   implementer guards against a clippy unreachable lint.
 
-### External review
+### External review (codex / GPT-5.5, hostile pass)
 
-(codex pass recorded here.)
+Six findings; all legitimate, all integrated:
+
+- **CR-F1 (MAJOR) — typed keys flip unknown→parse-error.** → **accepted/moot**:
+  no clients yet, owned table. Recorded as R5 (§8).
+- **CR-F2 (MAJOR) — INV-2 false; `quick = []` empty override reachable.** → fixed:
+  `CheckPlan::Empty(kind)` → keyed error; INV-2 reworded; unit + edge added.
+- **CR-F3 (MAJOR) — `echo` no-op still load-bears on host `echo` (POL-002).** →
+  fixed: `quick` unconfigured is an **owned** `CheckPlan::Noop` (doctrine prints +
+  exits 0, no spawn). No host binary named on the default path.
+- **CR-F4 (MAJOR) — D6 sweep grep-driven; worktree:192/:219 aren't fixed gates.**
+  → fixed: D6 split into (a) 4 instruction-rewrites and (b) 2 worktree
+  illustrative-example updates that preserve project-provided / orchestrator-
+  supplied caller-control semantics.
+- **CR-F5 (MAJOR) — signal death squashed to `1`, not forwarded.** → fixed:
+  `exit_code()` returns `128 + signo` on unix; e2e signal case (exit 143) added.
+- **CR-F6 (MINOR) — `-p/--path` unspecified.** → fixed: each `CheckCommand`
+  variant carries `-p/--path`, threaded to `root::find`; aids e2e temp-root.
