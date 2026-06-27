@@ -302,6 +302,11 @@ All resolved in design conversation:
   `plugins/**` — no `just check` / `just gate`, no bare `mem_…` uid. Rides the
   `e2e_no_baked_paths.rs` pattern (needles assembled from fragments so the guard
   does not self-match).
+- **Removed (`tests/e2e_skills_dispatch_shrinkage.rs`):** SL-085's dispatch-skill
+  line-count shrink-guard is deleted as part of this slice. Rationale: the brittle
+  line-count cap fought the uid/sweep scrub (net hazard > worth; user-approved). The
+  SL-085 shrink-guard invariant is consciously abandoned — no replacement guard owed:
+  `e2e_no_shipped_couplings` guards the *coupling*, not line counts.
 - **Gate:** `just gate` green on this repo.
 
 ## 10. Review Notes

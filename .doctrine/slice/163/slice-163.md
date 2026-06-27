@@ -50,10 +50,14 @@ What changes, and why:
    existing `[verification]` table (`.doctrine/doctrine.toml`); the VT `command`
    key is frozen (D1, INV-1). Rides the single shared `dtoml` reader (no parallel
    parser).
-3. **Skill sweep (`just`)** — rewrite the six `just check` occurrences in the
-   five authored skills (`plugins/doctrine/skills/{execute,close,audit,worktree,
-   notes}/SKILL.md`) to `doctrine check gate` (mapped by cadence — all six are
-   phase/close-boundary sites; D6).
+3. **Skill sweep (`just`)** — D6's two-treatment split across the six `just check`
+   occurrences in five authored skills (`plugins/doctrine/skills/{execute,close,
+   audit,worktree,notes}/SKILL.md`):
+   - **4 instruction rewrites** (`execute`/`close`/`audit`/`notes`) → `doctrine
+     check gate` — phase/close-boundary gate sites.
+   - **2 worktree illustrative-example token updates** — token-only edits that
+     preserve project-provided / orchestrator-supplied caller-control semantics
+     (CR-F4); not rewritten to a fixed gate call.
 4. **Skill scrub (uid)** — remove/replace the dangling `mem_019ec65ecbc7`
    citation in `dispatch/SKILL.md` with portable prose (no repo-local uid).
 5. **Re-embed + reinstall** — `cargo build` re-bakes the RustEmbed asset;
