@@ -1796,3 +1796,229 @@ fn e2e_dispatch_candidate_integrate_edge_without_admission_refuses() {
         "no silent raw-ref fallback — the edge ref was not created"
     );
 }
+
+// ── SL-165 PHASE-02: candidate-source close_target provenance gate ──────────
+
+/// Minimal bootstrap: init git, create dispatch setup + prepare-review for a
+/// given slice.
+fn bootstrap_slice(dir: &Path, slice_num: u32) {
+    let slice_str = format!("{slice_num:03}");
+    let plan_dir = dir.join(format!(".doctrine/slice/{slice_str}"));
+    std::fs::create_dir_all(&plan_dir).unwrap();
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-q", "-b", "main"]);
+    git(dir, &["config", "user.email", "t@example.com"]);
+    git(dir, &["config", "user.name", "Test"]);
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
+    git(dir, &["add", ".gitignore"]);
+    let _main = commit(dir, "trunk.txt", "trunk", "initial");
+    // Seeded phases for completeness gate.
+    let pdir = dir.join(format!(".doctrine/state/slice/{slice_str}/phases"));
+    std::fs::create_dir_all(&pdir).unwrap();
+    std::fs::write(
+        pdir.join("phase-01.toml"),
+        "status = \"completed\"\n",
+    ).unwrap();
+    // Source-delta registry — prepare-review requires it for each completed phase.
+    let main_oid = git(dir, &["rev-parse", "HEAD"]);
+    let boundaries_reg = format!(
+        "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"{main_oid}\"\ncode_end_oid = \"{main_oid}\"\nprovenance = \"manual\"\n"
+    );
+    let reg_dir = dir.join(format!(".doctrine/state/slice/{slice_str}"));
+    std::fs::create_dir_all(&reg_dir).unwrap();
+    std::fs::write(reg_dir.join("boundaries.toml"), boundaries_reg).unwrap();
+    // Minimal plan — `dispatch setup` requires it.
+    let plan = format!(
+        r#"schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-{slice_num}"
+[specs]
+primary       = []
+collaborators = []
+[requirements]
+targets      = []
+dependencies = []
+[[phase]]
+id        = "PHASE-01"
+name      = "bootstrap"
+objective = "boilerplate"
+entrance_criteria = []
+exit_criteria = []
+verification = []
+specs             = []
+requirements      = []
+"#
+    );
+    std::fs::write(plan_dir.join("plan.toml"), plan).unwrap();
+    git(dir, &["add", ".doctrine/slice/"]);
+    git(dir, &["commit", "-q", "-m", "plan"]);
+    // dispatch setup needs --dir (coordination worktree dir).
+    let worktree_dir = dir.join(format!("dispatch-{slice_str}"));
+    let setup_dir_str = worktree_dir.to_str().unwrap();
+    let dispatch = run(
+        dir,
+        None,
+        &[
+            "dispatch",
+            "setup",
+            "--slice",
+            &slice_str,
+            "--dir",
+            setup_dir_str,
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(dispatch.status.success(), "{dispatch:?}");
+    commit(dir, "src.txt", "code", "phase-01 work");
+    // prepare-review
+    let pr = run(
+        dir,
+        None,
+        &[
+            "dispatch",
+            "sync",
+            "--prepare-review",
+            "--slice",
+            &slice_str,
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(pr.status.success(), "{pr:?}");
+}
+
+/// Create a candidate. Wraps [`run`] so caller can assert success/failure.
+fn candidate_create(
+    dir: &Path,
+    slice_num: u32,
+    label: &str,
+    role: &str,
+    payload: &str,
+    source: &str,
+    extra: &[&str],
+) -> Output {
+    let slice_str = format!("{slice_num:03}");
+    let mut args = vec![
+        "dispatch",
+        "candidate",
+        "create",
+        "--slice",
+        &slice_str,
+        "--label",
+        label,
+        "--kind",
+        "audit",
+        "--role",
+        role,
+        "--payload",
+        payload,
+        "--base",
+        "refs/heads/main",
+        "--source",
+        source,
+    ];
+    args.extend_from_slice(extra);
+    args.push("-p");
+    args.push(dir.to_str().unwrap());
+    run(dir, None, &args)
+}
+
+/// PHASE-02 EX-1 accept: close_target from a recorded review_surface candidate
+/// that traces to Verified journaled evidence succeeds.
+#[test]
+fn close_target_from_candidate_review_surface_accepts() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let dir = tmp.path();
+    bootstrap_slice(dir, 200);
+    // Create a review_surface candidate from the journaled review/200.
+    let cr = candidate_create(
+        dir,
+        200,
+        "review-001",
+        "review_surface",
+        "impl_bundle",
+        "refs/heads/review/200",
+        &["--worktree"],
+    );
+    assert!(cr.status.success(), "{cr:?}");
+    // Now create a close_target sourced from THAT candidate — the new path.
+    let ct = candidate_create(
+        dir,
+        200,
+        "close-001",
+        "close_target",
+        "code",
+        "refs/heads/candidate/200/review-001",
+        &[],
+    );
+    assert!(
+        ct.status.success(),
+        "close_target from candidate review_surface should accept: {:?}",
+        ct
+    );
+}
+
+/// PHASE-02 EX-2 refuse: no recorded candidate row for the named source ref.
+#[test]
+fn close_target_from_unknown_candidate_refuses() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let dir = tmp.path();
+    bootstrap_slice(dir, 201);
+    // Source names a candidate that was never created.
+    let ct = candidate_create(
+        dir,
+        201,
+        "close-001",
+        "close_target",
+        "code",
+        "refs/heads/candidate/201/nope",
+        &[],
+    );
+    assert!(!ct.status.success(), "unknown candidate should refuse");
+    let stderr = String::from_utf8_lossy(&ct.stderr);
+    assert!(
+        stderr.contains("no recorded candidate row"),
+        "expected 'no recorded candidate row': {}",
+        stderr
+    );
+}
+
+/// PHASE-02 EX-2 refuse: scratch source refused for close_target.
+#[test]
+fn close_target_from_scratch_candidate_refuses() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let dir = tmp.path();
+    bootstrap_slice(dir, 202);
+    // Create a scratch candidate (role=scratch, sourced from review/202).
+    let scr = candidate_create(
+        dir,
+        202,
+        "scratch-001",
+        "scratch",
+        "code",
+        "refs/heads/review/202",
+        &[],
+    );
+    assert!(scr.status.success(), "{scr:?}");
+    // Attempt close_target sourced from scratch — must refuse (INV-2).
+    let ct = candidate_create(
+        dir,
+        202,
+        "close-001",
+        "close_target",
+        "code",
+        "refs/heads/candidate/202/scratch-001",
+        &[],
+    );
+    assert!(
+        !ct.status.success(),
+        "scratch source should refuse for close_target"
+    );
+    let stderr = String::from_utf8_lossy(&ct.stderr);
+    assert!(
+        stderr.contains("role=Scratch") || stderr.contains("only an audit review_surface"),
+        "expected role/kind refusal: {}",
+        stderr
+    );
+}
