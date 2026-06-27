@@ -6,7 +6,8 @@ slug = "thesis-graph-value-consumption-surfaces"
 title = "Thesis: graph value is gated on consumption surfaces"
 status = "open"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-06-27"
+tags = []
 
 [relationships]
 # RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).

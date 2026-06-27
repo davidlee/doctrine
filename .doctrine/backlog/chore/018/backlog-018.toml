@@ -5,10 +5,10 @@ id = 18
 slug = "sl-115-test-module-relocation"
 title = "Move main.rs test module (~1200 LOC) to tests/cli_verification.rs"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-21"
-updated = "2026-06-24"
+updated = "2026-06-27"
 tags = ["area:cli", "area:testing"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

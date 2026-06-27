@@ -7,7 +7,7 @@ title = "Gating locus: role on shapes (M-Pr) vs distinct gates axis (M-E)"
 record_kind = "question"
 status = "open"
 created = "2026-06-26"
-updated = "2026-06-26"
+updated = "2026-06-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

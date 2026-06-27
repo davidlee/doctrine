@@ -7,7 +7,7 @@ title = "Slices"
 status = "active"
 kind = "product"
 category = "change-management"
-tags = ["slice", "change-bundle", "lifecycle", "scope"]
+tags = []
 responsibilities = [
   "Name a unit of intentional change before code moves — what changes, why, what it touches, and what done looks like.",
   "Hold the declarative change contract (the what/whether) distinct from the design (the how) and from runtime progress.",

@@ -6,7 +6,8 @@ slug = "module-layering"
 title = "Module layering: leaf ← engine ← command, no cycles"
 status = "accepted"
 created = "2026-06-05"
-updated = "2026-06-08"
+updated = "2026-06-27"
+tags = []
 
 [relationships]
 # The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,

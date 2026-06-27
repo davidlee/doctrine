@@ -3,7 +3,8 @@ slug = "uniform-cli-surface"
 title = "Uniform DRY CLI surface: shared list/show/filter/render contract"
 status = "done"
 created = "2026-06-08"
-updated = "2026-06-09"
+updated = "2026-06-27"
+tags = []
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
