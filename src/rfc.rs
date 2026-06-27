@@ -628,6 +628,7 @@ mod tests {
         assert_eq!(parse_ref("rfc-11").unwrap(), 11);
         assert_eq!(parse_ref("11").unwrap(), 11);
         assert_eq!(parse_ref("011").unwrap(), 11);
-        assert!(parse_ref("nope").is_err());
+        let err = parse_ref("nope").unwrap_err().to_string();
+        assert!(err.contains("RFC"), "error should name RFC kind: {err}");
     }
 }

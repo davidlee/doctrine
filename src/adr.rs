@@ -281,7 +281,6 @@ pub(crate) fn run_show(
     governance::run_show(&ADR_KIND, path, reference, format)
 }
 
-/// `doctrine adr status` — bind the concrete `AdrStatus` enum at the boundary,
 /// Parse an ADR reference — accepts both `ADR-007` and bare `7`.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
     let digits = reference
@@ -454,6 +453,7 @@ mod tests {
         assert_eq!(parse_ref("adr-7").unwrap(), 7);
         assert_eq!(parse_ref("7").unwrap(), 7);
         assert_eq!(parse_ref("007").unwrap(), 7);
-        assert!(parse_ref("nope").is_err());
+        let err = parse_ref("nope").unwrap_err().to_string();
+        assert!(err.contains("ADR"), "error should name ADR kind: {err}");
     }
 }

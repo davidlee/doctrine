@@ -441,6 +441,7 @@ mod tests {
         assert_eq!(parse_ref("pol-7").unwrap(), 7);
         assert_eq!(parse_ref("7").unwrap(), 7);
         assert_eq!(parse_ref("007").unwrap(), 7);
-        assert!(parse_ref("nope").is_err());
+        let err = parse_ref("nope").unwrap_err().to_string();
+        assert!(err.contains("policy"), "error should name policy kind: {err}");
     }
 }
