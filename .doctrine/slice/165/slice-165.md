@@ -25,40 +25,44 @@ F-1/F-2), 2026-06-27. From IMP-188.
 
 ## Scope & Objectives
 
-Provide a **first-class path** that lands the RV-admitted reconciled truth (the
-fix-now-bearing candidate tip) onto trunk + records an honest journal trunk row,
-without a manual dance and without silently dropping the repair.
+Make the substrate **conform to SPEC-022 REQ-317** (D1), which already mandates the
+path: a `close_target` sourced from the repaired candidate
+(`--source refs/heads/candidate/<N>/<label>`). The implementation refuses it today —
+`check_provenance` demands a journaled source. Design `/design` locked the fix (see
+`design.md`):
 
-The candidate mechanisms (design picks — likely 1 or 2, with 3 as a complementary
-guard):
+- **Extend `check_provenance`** to accept a recorded `candidate/<N>/<label>` source
+  for a `close_target` create, tracing the candidate chain (bounded recursion) to a
+  Verified journaled-evidence root (**provenance model A**). The existing
+  admit-by-OID + FF-only `integrate --trunk` machinery is unchanged and already
+  lands the admitted (repaired) tip + writes an honest journal trunk row.
 
-1. **Source `close_target` from the admitted `review_surface` OID** — let
-   `candidate create --role close_target` accept the RV-pinned admitted candidate
-   tip directly, bypassing the prepare-review-row gate on the close axis. Most
-   direct (the admitted OID *is* the reconciled truth); keeps `review/<slice>`
-   immutable.
-2. **Auto-fold at close** — `sync --integrate` (or a close pre-step) detects
-   candidate-only commits ahead of journaled `review/<slice>` and folds them into
-   the journal (mechanises `mem_019ee369`).
-3. **Audit-time guard/route** (complementary, root-prevention) — warn/refuse when
-   a fix-now commit lands on the candidate branch rather than `dispatch/<slice>`,
-   steering the repair onto the coordination tip so it flows through
-   prepare-review natively.
+This collapses the original three-mechanism menu to **one surgical conformance fix**.
+Auto-fold and the audit-time guard are now non-goals (below).
+
+**Headline discovery:** SPEC-022 is internally contradictory — **REQ-316**
+(journaled-only provenance) forbids the `--source` that **REQ-317** mandates. SL-165
+reconciles both REQs via a **Revision (REV) at reconcile** (the slice's known
+governance obligation).
 
 In scope:
-- The chosen mechanism on the dispatch candidate / integrate surface.
-- Honest journal trunk row at the correct (repaired) tip so `slice status done`
-  passes natively.
-- Tests proving close-after-fix-now lands the repair (regression for the silent
-  drop).
+- `check_provenance` extension on the dispatch candidate surface (`src/dispatch.rs`).
+- Honest journal trunk row at the repaired tip so `slice status done` passes
+  natively (already provided by integrate once the close_target is admitted).
+- Tests: gate accept/refuse matrix + full repair→close→integrate→`status done`
+  lifecycle (regression anchor for the silent drop / refusal).
+- Spec reconciliation REQ-316/317 — authored via REV at reconcile, not in code commits.
 
 ## Non-Goals
 
 - **The operator drift *detector*** — owned by **IMP-130** (warn on
   `review_surface` candidate drift before `/close --source`, land in SPEC-021 /
-  skills). SL-165 supplies the *landing path*; IMP-130 supplies the *guard*. If
-  mechanism #3 is taken, it coordinates with IMP-130 (one detector, not two) —
-  but SL-165 does not re-implement the detector.
+  skills). SL-165 supplies the *landing path*; IMP-130 supplies the *guard*. Not
+  re-implemented here.
+- **Auto-fold at integrate** (original mechanism #2) — rejected as anti-doctrinal:
+  it contradicts admit-by-OID's explicit-operator-choice philosophy (REQ-316).
+- **Audit-time guard/route** (original mechanism #3) — IMP-130's mandate, not this
+  slice.
 - **Non-FF auto-merge** of a moved trunk (RFC-006 territory; reverses ADR-012
   D2/D4 FF-only). SL-165 preserves FF-only.
 - The OQ-5 checkout-independent integrate rewrite (SL-157) — disjoint mechanism.
@@ -67,24 +71,29 @@ In scope:
 
 ## Affected Surface (coarse — `/design` refines)
 
-- `dispatch candidate create` / `admit` provenance gate (SL-068 candidate layer).
-- `dispatch sync --integrate` projection + journal trunk row write.
-- Possibly `/close` + `/audit` SKILL.md (mechanism #3 routing).
+- `src/dispatch.rs` — `check_provenance` (+ new `trace_candidate_provenance`,
+  `is_journaled_evidence_ref` predicate); `candidate_create` read-ordering.
+- Tests: `tests/e2e_dispatch_candidate.rs`, `tests/e2e_dispatch_lifecycle.rs`.
+- `.doctrine/spec/tech/022/**` — REQ-316/317 reconciliation, via REV at reconcile.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 (governance altitude).** Mechanism #1 changes candidate provenance
-  semantics (close_target may source a non-journaled admitted OID) → touches
-  **SPEC-022 REQ-317** + SL-068; likely a **Revision**, not mechanism-only.
-  Mechanism #2 brushes the journal-projection contract. `/design` must decide the
-  altitude and whether a REV/RFC is required.
-- **OQ-2 (IMP-130 boundary).** Confirm at design: SL-165 = path, IMP-130 =
-  detector, disjoint. Mechanism #3 must not fork the detector.
-- **OQ-3 (`review/<slice>` immutability).** Mechanism #1 keeps the reviewed bundle
-  immutable; the fold (#2) rewrites it. Design states the chosen semantics
-  explicitly.
-- **OQ-4 (RFC-005 placement).** Standalone vs folded into RFC-005's survey as a
-  named close-projection hazard.
+Design decisions locked (`design.md` §7): model A · bounded recursion · close_target-
+scoped · `status==Created` gate · spec via REV. The original scoping OQs resolved:
+
+- **OQ-1 (governance altitude) → resolved.** Largely dissolved: the code is
+  *conformance* to the controlling REQ-317. The residual REQ-316 narrow (a normative
+  gate widening) routes through a **Revision at reconcile** (design D4 / Q3-A).
+- **OQ-2 (IMP-130 boundary) → resolved.** SL-165 = path; IMP-130 = detector; disjoint.
+  The audit-time guard is a non-goal here.
+- **OQ-3 (`review/<slice>` immutability) → resolved.** Model A keeps the reviewed
+  bundle immutable (no fold). Auto-fold rejected as anti-doctrinal.
+- **OQ-4 (RFC-005 placement) → deferred.** Note as a close-projection hazard
+  (H2-adjacent) at reconcile; do not rewrite the RFC here.
+
+Carried design-level OQs (see `design.md` §6): depth-budget constant (cosmetic);
+exact REQ-316 wording (REV authoring); hand-resolved-`Conflicted` source (v1: refuse,
+OQ-4 there).
 
 ## Verification / Closure Intent
 

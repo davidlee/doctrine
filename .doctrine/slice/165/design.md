@@ -229,4 +229,24 @@ non-FF auto-merge (RFC-006); OQ-5 checkout-independent integrate (SL-157).
 
 ## 10. Review Notes
 
-(adversarial pass pending)
+**Internal adversarial pass (self), integrated:**
+
+- **F1 — ambiguous row match.** First-match `find` on `target_ref` is unsafe under
+  supersession/label reuse. → INV-5: count-exact, fail-closed (mirrors
+  `trunk_integration`, `ledger.rs:464`). Integrated §5.1, §5.5.
+- **F2 — `status==Created` over-refuses** a hand-resolved `Conflicted` candidate.
+  → Kept Created-only for v1 (weaker hand-merge provenance), named as a limitation
+  (INV-3) + OQ-4. Not a silent gap.
+- **F3 — lineage ≠ content review.** Trace proves the lineage root only; tip commits
+  (fix-now, traced scratch/experiment) are content-trusted downstream by admit-I3 + RV.
+  → A-1 added; journaled base-case clarified to run the FULL existing gate
+  (Verified + phase-hole), not a subset.
+
+**Verified against source (not the map agent):** `check_provenance` gate
+(`dispatch.rs:805/913`), `plan_candidate_trunk_row` direct admitted-OID projection
+(`:2008`), `candidate_admit` I3 pin (`:1180`), `trunk_integration` done-gate
+(`ledger.rs:438`). SPEC-022 REQ-316 ⊥ REQ-317 contradiction confirmed verbatim.
+
+**Residual for external pass:** confirm the narrowed REQ-316 gate preserves "no
+candidate from unverified evidence" (INV-1) and that A-1's lineage/content split is the
+intended trust boundary.
