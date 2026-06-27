@@ -43,6 +43,16 @@ pub(crate) struct VerificationConfig {
     timeout_secs: Option<u64>,
     /// Named base argvs a [`VtCheck::alias`] resolves against.
     aliases: BTreeMap<String, Vec<String>>,
+    /// Override argv for `doctrine check quick` (per-edit cadence). Absent ⇒ an
+    /// OWNED no-op ([`CheckPlan::Noop`]) — never a host binary (CR-F3, POL-002).
+    /// Read ONLY by [`resolve_check`], never by [`resolve`] (INV-1).
+    quick: Option<Vec<String>>,
+    /// Override argv for `doctrine check commit` (per-commit cadence). Absent ⇒
+    /// [`DEFAULT_COMMIT`]. Read ONLY by [`resolve_check`] (INV-1).
+    commit: Option<Vec<String>>,
+    /// Override argv for `doctrine check gate` (end-of-phase cadence). Absent ⇒
+    /// [`DEFAULT_GATE`]. Read ONLY by [`resolve_check`] (INV-1).
+    gate: Option<Vec<String>>,
 }
 
 impl VerificationConfig {
@@ -105,6 +115,84 @@ pub(crate) fn resolve(cfg: &VerificationConfig, check: &VtCheck) -> Result<Resol
         .unwrap_or(MatchSource::Stdout);
 
     Ok(Resolved { argv, source })
+}
+
+// --- `doctrine check` cadence resolution (SL-163) ----------------------------
+//
+// A SEPARATE concern from VT-evidence [`resolve`] above: the dev-check verb reads
+// the three override fields and NONE of the VT machinery (INV-1). Named defaults
+// are pure data (STD-001) — they INFORM, they never gate (POL-002).
+
+/// The baked argv for `doctrine check commit` when `[verification].commit` is
+/// absent. Pure data — a host convention that *informs* (POL-002), client-overridable.
+const DEFAULT_COMMIT: &[&str] = &["just", "check"];
+/// The baked argv for `doctrine check gate` when `[verification].gate` is absent.
+const DEFAULT_GATE: &[&str] = &["just", "gate"];
+/// What the `quick` shell prints on the owned no-op path (unconfigured quick).
+const QUICK_UNSET_NOTE: &str = "doctrine check quick: no [verification].quick set — skipping";
+
+/// The three check cadences. clap-free (ADR-001 / A2) — the CLI `CheckCommand`
+/// bridges to this leaf via `From` in the shell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CheckKind {
+    Quick,
+    Commit,
+    Gate,
+}
+
+impl CheckKind {
+    /// The owned `[verification]` config key for this cadence — the SINGLE source
+    /// of the kind's spelling (STD-001), used by the `Empty` keyed error.
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            CheckKind::Quick => "quick",
+            CheckKind::Commit => "commit",
+            CheckKind::Gate => "gate",
+        }
+    }
+}
+
+/// What the shell should do for a cadence. The `Noop` arm keeps the unconfigured
+/// `quick` path OWNED — doctrine prints + exits 0 itself, never proxies a host
+/// `echo` (CR-F3, POL-002). `Empty` carries a configured-but-empty override (CR-F2)
+/// so the shell errors toward the key instead of spawning nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CheckPlan {
+    /// Spawn this argv (non-empty by construction — INV-2).
+    Run(Vec<String>),
+    /// Print this note, exit 0 — NO spawn (unconfigured quick).
+    Noop(&'static str),
+    /// The override is `[]` — keyed error, never an empty spawn.
+    Empty(CheckKind),
+}
+
+/// Resolve a [`CheckKind`] against a [`VerificationConfig`] into a [`CheckPlan`]
+/// (PURE, total over `(cfg, kind)` — INV-2). Precedence:
+///   override `Some(v)` non-empty → `Run(v)`
+///   override `Some([])`          → `Empty(kind)`            (CR-F2)
+///   override `None`, Quick       → `Noop(QUICK_UNSET_NOTE)` (CR-F3, owned)
+///   override `None`, Commit      → `Run(DEFAULT_COMMIT)`
+///   override `None`, Gate        → `Run(DEFAULT_GATE)`
+pub(crate) fn resolve_check(cfg: &VerificationConfig, kind: CheckKind) -> CheckPlan {
+    let override_argv = match kind {
+        CheckKind::Quick => &cfg.quick,
+        CheckKind::Commit => &cfg.commit,
+        CheckKind::Gate => &cfg.gate,
+    };
+    match override_argv {
+        Some(argv) if argv.is_empty() => CheckPlan::Empty(kind),
+        Some(argv) => CheckPlan::Run(argv.clone()),
+        None => match kind {
+            CheckKind::Quick => CheckPlan::Noop(QUICK_UNSET_NOTE),
+            CheckKind::Commit => CheckPlan::Run(owned(DEFAULT_COMMIT)),
+            CheckKind::Gate => CheckPlan::Run(owned(DEFAULT_GATE)),
+        },
+    }
+}
+
+/// `&[&str]` default literal → an owned argv.
+fn owned(argv: &[&str]) -> Vec<String> {
+    argv.iter().map(|s| (*s).to_owned()).collect()
 }
 
 #[cfg(test)]
@@ -333,5 +421,113 @@ mod tests {
         };
         let check = vtcheck(None, None, vec![], None);
         assert_eq!(resolve(&cfg, &check).unwrap().source, MatchSource::Stdout);
+    }
+
+    // --- SL-163 VT-2: the three check keys deserialize; INV-1 untouched --------
+
+    #[test]
+    fn check_override_keys_deserialize_on_verification_config() {
+        let cfg = crate::dtoml::parse(
+            "[verification]\n\
+             quick  = [\"echo\", \"q\"]\n\
+             commit = [\"just\", \"check\"]\n\
+             gate   = [\"just\", \"gate\"]\n",
+        )
+        .unwrap()
+        .verification;
+        assert_eq!(cfg.quick, Some(vec!["echo".to_owned(), "q".to_owned()]));
+        assert_eq!(cfg.commit, Some(vec!["just".to_owned(), "check".to_owned()]));
+        assert_eq!(cfg.gate, Some(vec!["just".to_owned(), "gate".to_owned()]));
+    }
+
+    #[test]
+    fn absent_table_yields_all_none_check_overrides() {
+        // INV-1: an absent [verification] still defaults — the three new fields
+        // are None, the existing `command` path is unperturbed.
+        let cfg = crate::dtoml::parse("title = \"unrelated\"\n")
+            .unwrap()
+            .verification;
+        assert_eq!(cfg.quick, None);
+        assert_eq!(cfg.commit, None);
+        assert_eq!(cfg.gate, None);
+        assert_eq!(cfg.command, None);
+    }
+
+    // --- SL-163 VT-1: resolve_check truth table -------------------------------
+
+    /// A `VerificationConfig` carrying just the three override fields under test.
+    fn cfg_with(
+        quick: Option<Vec<&str>>,
+        commit: Option<Vec<&str>>,
+        gate: Option<Vec<&str>>,
+    ) -> VerificationConfig {
+        let own = |o: Option<Vec<&str>>| o.map(|v| v.into_iter().map(str::to_owned).collect());
+        VerificationConfig {
+            quick: own(quick),
+            commit: own(commit),
+            gate: own(gate),
+            ..Default::default()
+        }
+    }
+
+    fn run(argv: &[&str]) -> CheckPlan {
+        CheckPlan::Run(argv.iter().map(|s| (*s).to_owned()).collect())
+    }
+
+    #[test]
+    fn resolve_check_override_present_runs_it_verbatim() {
+        let cfg = cfg_with(
+            Some(vec!["cargo", "test"]),
+            Some(vec!["make", "ci"]),
+            Some(vec!["nix", "flake", "check"]),
+        );
+        assert_eq!(resolve_check(&cfg, CheckKind::Quick), run(&["cargo", "test"]));
+        assert_eq!(resolve_check(&cfg, CheckKind::Commit), run(&["make", "ci"]));
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Gate),
+            run(&["nix", "flake", "check"])
+        );
+    }
+
+    #[test]
+    fn resolve_check_unconfigured_quick_is_owned_noop() {
+        let cfg = cfg_with(None, None, None);
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Quick),
+            CheckPlan::Noop(QUICK_UNSET_NOTE)
+        );
+    }
+
+    #[test]
+    fn resolve_check_unconfigured_commit_and_gate_use_defaults() {
+        let cfg = cfg_with(None, None, None);
+        assert_eq!(resolve_check(&cfg, CheckKind::Commit), run(DEFAULT_COMMIT));
+        assert_eq!(resolve_check(&cfg, CheckKind::Gate), run(DEFAULT_GATE));
+    }
+
+    #[test]
+    fn resolve_check_empty_override_routes_to_keyed_error_not_run() {
+        // CR-F2 / EDGE: a configured `[]` is Empty(kind), never Run([]) — for
+        // every cadence, including quick (whose unconfigured path is Noop).
+        let cfg = cfg_with(Some(vec![]), Some(vec![]), Some(vec![]));
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Quick),
+            CheckPlan::Empty(CheckKind::Quick)
+        );
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Commit),
+            CheckPlan::Empty(CheckKind::Commit)
+        );
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Gate),
+            CheckPlan::Empty(CheckKind::Gate)
+        );
+    }
+
+    #[test]
+    fn check_kind_key_is_the_config_key_spelling() {
+        assert_eq!(CheckKind::Quick.key(), "quick");
+        assert_eq!(CheckKind::Commit.key(), "commit");
+        assert_eq!(CheckKind::Gate.key(), "gate");
     }
 }

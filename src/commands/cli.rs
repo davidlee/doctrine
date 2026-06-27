@@ -215,6 +215,17 @@ pub(crate) enum Command {
         command: crate::commands::coverage::CoverageCommand,
     },
 
+    /// Proxy-run a project-declared check command by cadence (SL-163).
+    ///
+    /// Resolves the argv from the owned `[verification]` config
+    /// (`quick`/`commit`/`gate`) and proxy-executes it — inherited stdio, no
+    /// timeout, the child's exit code forwarded. Informs from `just check`/`just
+    /// gate` defaults; never carries a host convention as correctness (POL-002).
+    Check {
+        #[command(subcommand)]
+        command: crate::commands::check::CheckCommand,
+    },
+
     /// Read-only cross-kind relation view.
     ///
     /// Shows one entity's authored outbound relations, derived inbound relations,
@@ -1045,6 +1056,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             },
         ),
         Command::Coverage { command } => crate::commands::coverage::dispatch(command, color),
+        Command::Check { command } => crate::commands::check::dispatch(command),
         Command::Inspect {
             id,
             format,
