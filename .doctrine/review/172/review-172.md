@@ -97,3 +97,32 @@ The reconciled truth is the admitted candidate `cand-159-review-001` @ `830cd857
 (base `main` / source `review/159` + the F-1/F-2 repair commit). Land it on `main`
 via the dispatch integration path (`dispatch sync --integrate --trunk
 refs/heads/main`, per AGENTS.md), then promote to `edge`.
+
+## Reconciliation Outcome
+
+Reconcile pass complete. The brief was **write-noop on mandatory items** — zero
+governance/spec findings (no REV surface), and the two real findings (F-1, F-2)
+were already repaired on the admitted candidate `830cd857`. All four findings
+terminal (`verified`; F-3 tolerated, F-4 follow-up).
+
+### Direct edits applied
+- `design.md` §3 (line 99) and §9 (line 333): dropped the over-prediction that
+  `tests/e2e_memory_anchoring.rs` is catalog-coupled — it references no kind catalog;
+  RV-172 confirmed it needed no change. (Optional design-accuracy note from the brief;
+  applied in place.) The companion "three→four canaries" note needed no edit — the
+  prose already reads "facet-enum drift canaries (+ a new `Provenance` one)".
+
+### REVs completed
+- **None.** No governance/spec finding → no REV surface for this slice.
+
+### Withdrawn / tolerated
+- RV-172 F-3 (`superserde.rs` dead orphan): tolerated, out of slice scope; deletion
+  tracked as **CHR-028** (filed, open).
+- RV-172 F-4 (dispatch worktree embed-asset gap): follow-up, environmental not an
+  SL-159 defect; tracked as **IMP-187** (filed, open).
+
+### Handoff to /close
+Reconciled truth = candidate `cand-159-review-001` @ `830cd857`. Integration to
+trunk (edge→main, `dispatch sync --integrate`, main→edge) is the close step's final
+landing — not performed here. The `design.md` direct edit above sits on `edge` and
+rides edge→main at close (candidate does not touch `design.md`; no conflict).
