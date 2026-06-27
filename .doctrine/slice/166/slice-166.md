@@ -87,11 +87,14 @@ deletion survives any funnel path the slice guards.
 
 ## Summary
 
-Three layered, mechanism-level guards (g2 setup base-freshness, g3 absolute
-corpus-shrink refusal, g1 refuse-on-trunk-checkout) over a shared runtime
-corpus-tip primitive, closing the doctrine-verb-mediated paths by which a
-stale-base dispatch bundle silently deletes the authored corpus. Raw-git and
-promotion-verb gaps are explicitly deferred.
+Three layered, mechanism-level guards (g2 setup base-freshness, g3 3-way
+corpus-clobber refusal, g1 refuse-on-trunk-checkout) under a **split reference
+model (Model B, §Scope / design §7 D1):** g2 is absolute (the corpus tip), g3 is
+relative (a per-leg 3-way over `merge-base(new, cur)`) — they ask different
+questions, so they do **not** share one primitive. Together they close the
+doctrine-verb-mediated paths by which a stale-base dispatch bundle silently
+deletes the authored corpus. Raw-git and promotion-verb gaps are explicitly
+deferred.
 
 ## Follow-Ups
 
