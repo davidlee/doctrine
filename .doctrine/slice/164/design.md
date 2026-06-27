@@ -109,13 +109,15 @@
     };
     let mut buf = Vec::new();
     memory::run_record(Some(root.to_path_buf()), &args, &mut buf)
-        .map_err(|e| wrap_memory_arg_error(e))?;
+        .context("invalid arguments")?;
     Ok(String::from_utf8(buf)?)
 }
 ```
 
-`RecordArgs` borrows `&str` slices from `RecordParams` — both live to the end of the
-match arm, so lifetimes are sound.
+Argument errors from `run_record` (e.g. "Title must not be empty") are wrapped with
+`"invalid arguments"` via `.context()`, so `map_review_error` branch 2 maps them to
+`-32602`. `RecordArgs` borrows `&str` slices from `RecordParams` — both live to the
+end of the match arm, so lifetimes are sound.
 
 ### Response
 Returns the `run_record` confirmation message captured from the writer buffer:
@@ -184,9 +186,13 @@ Returns the `run_record` confirmation message captured from the writer buffer:
     };
     let mut buf = Vec::new();
     memory::run_edit(Some(root.to_path_buf()), &p.reference, &fields, &mut buf)
-        .map_err(|e| wrap_memory_arg_error(e))?;
+        .context("invalid arguments")?;
     Ok(String::from_utf8(buf)?)
 }
+```
+
+Argument errors (e.g. "key already set", empty title) are wrapped with
+`"invalid arguments"` via `.context()` → mapped to `-32602`.
 ```
 
 ### Response
@@ -243,30 +249,28 @@ When MCP tools are available, use these tools instead of CLI commands:
 ... body resolved from memory store ...
 ```
 
-Rendered using the same framed-text-block format as `memory_retrieve`.
+Rendered using `retrieve::retrieve_reference` — the same path the `memory_retrieve`
+MCP handler uses. Each memory body is rendered as a framed text block with the
+`=== MEMORY (key) ===` header, then the body.
 
 ### Implementation
 
 ```rust
 fn render_onboard(root: &Path) -> anyhow::Result<String> {
     let mut parts: Vec<String> = Vec::new();
-
-    // Section 1: static mapping table
     parts.push(ONBOARD_MAPPING_TABLE.to_owned());
-
-    // Section 2: bundled memory bodies, resolved via existing resolution
     parts.push("\n## Onboarding Memories\n".to_owned());
     for key in &["mem.signpost.doctrine.overview", "mem.signpost.project.orientation"] {
-        let memory = resolve_onboard_memory(root, key)?;
-        parts.push(format!("=== MEMORY ({key}) ===\n{memory}\n"));
+        let mut buf = Vec::new();
+        retrieve::retrieve_reference(&mut buf, root, key, false, None)?;
+        parts.push(String::from_utf8(buf)?);
     }
-
     Ok(parts.concat())
 }
 ```
 
-Memory resolution uses the existing `collect_all` + `resolve_memory_from_all` path —
-no new engine code.
+Reuses `retrieve::retrieve_reference` (the same renderer as `memory_retrieve`). No new
+engine code.
 
 The `doctrine_onboard` tool appears in its own mapping table row (`doctrine onboard` →
 `doctrine_onboard`) so agents discover it self-referentially.
