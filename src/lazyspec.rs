@@ -1335,8 +1335,8 @@ mod tests {
 mod loader_tests {
     use super::*;
     use crate::catalog::test_helpers::{seed_adr, seed_requirement, seed_slice, seed_spec};
-    use crate::test_support::SCHEMA_PLAN;
     use crate::spec::SpecSubtype;
+    use crate::test_support::SCHEMA_PLAN;
 
     /// SL-026 PHASE-03 exit: `load_corpus` over a tree built ENTIRELY by the
     /// PHASE-02 seed helpers yields a `Corpus` whose entities + outbound edges match
@@ -1541,8 +1541,10 @@ mod loader_tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("plan.toml"),
-            format!("schema = \"{SCHEMA_PLAN}\"\nversion = 1\n\
-             [[phase]]\nid = \"PHASE-01\"\nname = \"p\"\nobjective = \"o\"\n"),
+            format!(
+                "schema = \"{SCHEMA_PLAN}\"\nversion = 1\n\
+             [[phase]]\nid = \"PHASE-01\"\nname = \"p\"\nobjective = \"o\"\n"
+            ),
         )
         .unwrap();
         std::fs::write(dir.join("plan.md"), "plan body\n").unwrap();

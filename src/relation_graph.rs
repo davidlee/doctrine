@@ -1504,7 +1504,8 @@ mod tests {
         write(
             &root,
             ".doctrine/knowledge/assumption/001/record-001.toml",
-            &format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
+            &format!(
+                "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
              id = 1\nslug = \"a\"\ntitle = \"A\"\n\
              record_kind = \"assumption\"\nstatus = \"held\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
@@ -1518,7 +1519,8 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(
             &root,
@@ -2255,7 +2257,8 @@ mod tests {
         write(
             &root,
             ".doctrine/knowledge/assumption/001/record-001.toml",
-            &format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
+            &format!(
+                "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
              id = 1\nslug = \"a\"\ntitle = \"A\"\n\
              record_kind = \"assumption\"\nstatus = \"held\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
@@ -2269,7 +2272,8 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(
             &root,
@@ -2296,7 +2300,8 @@ mod tests {
         write(
             &root,
             ".doctrine/knowledge/decision/001/record-001.toml",
-            &format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
+            &format!(
+                "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
              id = 1\nslug = \"d\"\ntitle = \"D\"\n\
              record_kind = \"decision\"\nstatus = \"proposed\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
@@ -2310,7 +2315,8 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(
             &root,
@@ -2331,7 +2337,8 @@ mod tests {
         write(
             &root,
             ".doctrine/knowledge/question/001/record-001.toml",
-            &format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
+            &format!(
+                "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
              id = 1\nslug = \"q\"\ntitle = \"Q\"\n\
              record_kind = \"question\"\nstatus = \"open\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
@@ -2344,7 +2351,8 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(
             &root,
@@ -2365,7 +2373,8 @@ mod tests {
         write(
             &root,
             ".doctrine/knowledge/constraint/001/record-001.toml",
-            &format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
+            &format!(
+                "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
              id = 1\nslug = \"c\"\ntitle = \"C\"\n\
              record_kind = \"constraint\"\nstatus = \"active\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
@@ -2378,7 +2387,8 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(
             &root,
@@ -2399,7 +2409,8 @@ mod tests {
         write(
             &root,
             ".doctrine/knowledge/evidence/001/record-001.toml",
-            &format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
+            &format!(
+                "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
              id = 1\nslug = \"e\"\ntitle = \"E\"\n\
              record_kind = \"evidence\"\nstatus = \"captured\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
@@ -2413,7 +2424,8 @@ mod tests {
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
              [[relation]]\nlabel = \"supports\"\ntarget = \"ASM-001\"\n\
              [[relation]]\nlabel = \"disputes\"\ntarget = \"HYP-001\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(
             &root,
@@ -2434,7 +2446,8 @@ mod tests {
         write(
             &root,
             ".doctrine/knowledge/hypothesis/001/record-001.toml",
-            &format!("schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
+            &format!(
+                "schema = \"{SCHEMA_KNOWLEDGE}\"\nversion = 1\n\n\
              id = 1\nslug = \"h\"\ntitle = \"H\"\n\
              record_kind = \"hypothesis\"\nstatus = \"proposed\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
@@ -2446,7 +2459,8 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(
             &root,
@@ -2493,11 +2507,13 @@ mod tests {
         write(
             root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            &format!("schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
+            &format!(
+                "schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
              id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n\
-             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n"),
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n"
+            ),
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
         // SL-002 carries a HAND-EDITED illegal row: a slice cannot author `descends_from`
@@ -2563,10 +2579,12 @@ mod tests {
         write(
             root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            &format!("schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
+            &format!(
+                "schema = \"{SCHEMA_BACKLOG}\"\nversion = 1\n\
              id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"SPEC-018\"\n"),
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"SPEC-018\"\n"
+            ),
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
         // Seed the well-formed references(implements) target and the governed_by target so

@@ -3050,7 +3050,9 @@ mod tests {
         seed_plan(
             src.path(),
             85,
-            &format!("schema = \"{SCHEMA_PLAN_OVERVIEW}\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n"),
+            &format!(
+                "schema = \"{SCHEMA_PLAN_OVERVIEW}\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n"
+            ),
         );
         // Non-Claude arm with an outside-root coord dir: outside isolation is
         // legitimate (ADR-008), so the placement guard must NOT fire.
@@ -3092,7 +3094,9 @@ mod tests {
         seed_plan(
             src.path(),
             85,
-            &format!("schema = \"{SCHEMA_PLAN_OVERVIEW}\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n"),
+            &format!(
+                "schema = \"{SCHEMA_PLAN_OVERVIEW}\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n"
+            ),
         );
         // Outside-root coord dir + Claude harness → fail closed before any work.
         let holder = tempfile::tempdir().unwrap();
@@ -3121,7 +3125,9 @@ mod tests {
         seed_plan(
             src.path(),
             85,
-            &format!("schema = \"{SCHEMA_PLAN_OVERVIEW}\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n"),
+            &format!(
+                "schema = \"{SCHEMA_PLAN_OVERVIEW}\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n"
+            ),
         );
         // Inside-root coord dir is the safe convention; the guard must pass even
         // under the Claude harness.
