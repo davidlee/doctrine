@@ -66,7 +66,8 @@ mod tests {
 
     #[test]
     fn plan_parse_reads_ordered_phases() {
-        let text = format!(r#"
+        let text = format!(
+            r#"
             schema = "{SCHEMA_PLAN_OVERVIEW}"
             version = 1
             slice = "SL-004"
@@ -77,7 +78,8 @@ mod tests {
             [[phase]]
             id = "PHASE-02"
             name = "Second"
-        "#);
+        "#
+        );
         let plan = Plan::parse(&text).unwrap();
         let ids: Vec<&str> = plan.phases.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids, vec!["PHASE-01", "PHASE-02"]);

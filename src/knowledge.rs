@@ -2259,7 +2259,8 @@ notes = []
     fn record_without_relation_block_has_empty_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-empty");
         let _ = std::fs::remove_dir_all(&root);
-        let record = format!("\
+        let record = format!(
+            "\
 schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
@@ -2278,7 +2279,8 @@ tags = []
 supports = []
 contradicts = []
 notes = []
-");
+"
+        );
         seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert!(r.tier1.is_empty(), "no [[relation]] block → empty tier1");
@@ -2289,7 +2291,8 @@ notes = []
     fn record_with_authored_relation_rows_populates_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-auth");
         let _ = std::fs::remove_dir_all(&root);
-        let record = format!("\
+        let record = format!(
+            "\
 schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
@@ -2320,7 +2323,8 @@ target = \"ISS-001\"
 [[relation]]
 label = \"governed_by\"
 target = \"ADR-001\"
-");
+"
+        );
         seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert_eq!(r.tier1.len(), 3);
@@ -2337,7 +2341,8 @@ target = \"ADR-001\"
     fn record_with_illegal_label_excludes_illegal_from_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-illegal");
         let _ = std::fs::remove_dir_all(&root);
-        let record = format!("\
+        let record = format!(
+            "\
 schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
@@ -2364,7 +2369,8 @@ target = \"SL-001\"
 [[relation]]
 label = \"shapes\"
 target = \"PRD-001\"
-");
+"
+        );
         seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert_eq!(
@@ -2383,7 +2389,8 @@ target = \"PRD-001\"
     fn record_with_unknown_label_excludes_unknown_from_tier1() {
         let root = std::env::temp_dir().join("doctrine-sl096-pt1-unknown");
         let _ = std::fs::remove_dir_all(&root);
-        let record = format!("\
+        let record = format!(
+            "\
 schema = \"{SCHEMA_KNOWLEDGE}\"
 version = 1
 
@@ -2410,7 +2417,8 @@ target = \"X\"
 [[relation]]
 label = \"governed_by\"
 target = \"ADR-001\"
-");
+"
+        );
         seed_record(&root, RecordKind::Assumption, 1, &record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
         assert_eq!(
@@ -2617,7 +2625,8 @@ target = \"ADR-001\"
 
     #[test]
     fn estimate_roundtrip_on_record() {
-        let toml = format!("schema = \"{SCHEMA_KNOWLEDGE}\"\n\
+        let toml = format!(
+            "schema = \"{SCHEMA_KNOWLEDGE}\"\n\
                      version = 1\n\
                      id = 1\n\
                      slug = \"test\"\n\
@@ -2632,7 +2641,8 @@ target = \"ADR-001\"
                      [evidence]\n\
                      [estimate]\n\
                      lower = 3.0\n\
-                     upper = 3.0\n");
+                     upper = 3.0\n"
+        );
         // parse_entity_toml tolerates the unknown [estimate] table (no deny_unknown_fields).
         let raw: RawRecordToml = crate::dtoml::parse_entity_toml(&toml, "ASM", 1).unwrap();
         assert_eq!(raw.id, 1);
