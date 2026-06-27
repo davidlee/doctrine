@@ -351,7 +351,11 @@ fn repair_to_close_to_integrate_to_status_done() {
             coord.to_str().unwrap(),
         ],
     );
-    assert!(out.status.success(), "record-boundary; stderr: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "record-boundary; stderr: {}",
+        stderr(&out)
+    );
     git(&coord, &["add", ".doctrine/dispatch/064"]);
     git(&coord, &["commit", "-q", "-m", "PHASE-01 boundary ledger"]);
 
@@ -368,7 +372,11 @@ fn repair_to_close_to_integrate_to_status_done() {
             coord.to_str().unwrap(),
         ],
     );
-    assert!(out.status.success(), "prepare-review; stderr: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "prepare-review; stderr: {}",
+        stderr(&out)
+    );
     assert!(ref_exists(root, "review/064"), "review/064 created");
 
     // --- 4. Create review_surface candidate (--worktree) -----------------------
@@ -395,7 +403,11 @@ fn repair_to_close_to_integrate_to_status_done() {
             "--worktree",
         ],
     );
-    assert!(out.status.success(), "review_surface create; stderr: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "review_surface create; stderr: {}",
+        stderr(&out)
+    );
     let candidate_ref = "refs/heads/candidate/064/review-001";
     assert!(ref_exists(root, candidate_ref), "candidate branch exists");
 
@@ -421,7 +433,15 @@ fn repair_to_close_to_integrate_to_status_done() {
     // in the shared object db (and the worktree sees it on next checkout).
     // Force-update the ref to the fix-now tip, which is the repaired content.
     git(root, &["update-ref", candidate_ref, &fix_oid]);
-    let _ = git(root, &["worktree", "remove", "--force", candidate_worktree.to_str().unwrap()]);
+    let _ = git(
+        root,
+        &[
+            "worktree",
+            "remove",
+            "--force",
+            candidate_worktree.to_str().unwrap(),
+        ],
+    );
 
     // --- 6. Admit the review_surface -------------------------------------------
     let out = run(
@@ -440,7 +460,11 @@ fn repair_to_close_to_integrate_to_status_done() {
             "RV-001",
         ],
     );
-    assert!(out.status.success(), "admit review_surface; stderr: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "admit review_surface; stderr: {}",
+        stderr(&out)
+    );
 
     // --- 7. Create close_target sourced from the candidate (PHASE-02 gate) -----
     let out = run(
@@ -465,7 +489,11 @@ fn repair_to_close_to_integrate_to_status_done() {
             candidate_ref,
         ],
     );
-    assert!(out.status.success(), "close_target from candidate; stderr: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "close_target from candidate; stderr: {}",
+        stderr(&out)
+    );
     let close_ref = "refs/heads/candidate/064/close-001";
     assert!(ref_exists(root, close_ref), "close_target candidate exists");
 
@@ -486,7 +514,11 @@ fn repair_to_close_to_integrate_to_status_done() {
             "RV-001",
         ],
     );
-    assert!(out.status.success(), "admit close_target; stderr: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "admit close_target; stderr: {}",
+        stderr(&out)
+    );
 
     // --- 9. Integrate — land the repair on trunk ------------------------------
     // Stage-2 runs from parent/root after the coordination worktree is removed
@@ -529,7 +561,15 @@ fn repair_to_close_to_integrate_to_status_done() {
     )
     .unwrap();
     git(root, &["add", ".doctrine/slice/064/slice-064.toml"]);
-    git(root, &["commit", "-q", "-m", "add slice-064.toml for status transition"]);
+    git(
+        root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "add slice-064.toml for status transition",
+        ],
+    );
     for state in ["audit", "reconcile", "done"] {
         let out = run(root, &["slice", "status", "64", state]);
         assert!(
