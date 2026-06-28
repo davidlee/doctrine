@@ -395,7 +395,8 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         role: None,
         inbound_name: "superseded by",
         target: TargetSpec::SameKind,
-        tier: Tier::One,
+        // ADR-010 Amendment: governance supersedes stays typed (LifecycleOnly).
+        tier: Tier::Typed,
         link: LinkPolicy::LifecycleOnly,
     },
     RelationRule {
@@ -1660,7 +1661,12 @@ mod tests {
         ];
         for r in RELATION_RULES {
             let want = if tier_one.contains(&r.label) {
-                Tier::One
+                // ADR-010 Amendment: governance supersedes stays typed (LifecycleOnly).
+                if r.label == RelationLabel::Supersedes && r.sources == GOV {
+                    Tier::Typed
+                } else {
+                    Tier::One
+                }
             } else {
                 Tier::Typed
             };

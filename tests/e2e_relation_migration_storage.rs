@@ -464,7 +464,12 @@ fn assert_slice_shape(label: &str, text: &str) {
 /// (SL-136) — asserted via root-position grep (outside `[relationships]`).
 fn assert_governance_shape(label: &str, text: &str) {
     let v = line_view(text);
-    assert_no_migrated_key_left(Path::new(label), &v, &["related", "supersedes"]);
+    // ADR-010: supersedes stays typed; only related migrated to [[relation]].
+    assert_no_migrated_key_left(Path::new(label), &v, &["related"]);
+    assert!(
+        v.relationships_keys.iter().any(|k| k == "supersedes"),
+        "{label}: governance template must keep `supersedes` typed in [relationships]:\n{text}"
+    );
     assert!(
         v.relationships_keys.iter().any(|k| k == "superseded_by"),
         "{label}: governance template must keep `superseded_by` typed in [relationships]:\n{text}"

@@ -311,16 +311,18 @@ fn validate_flags_a_torn_supersession_state() {
 
     // Hand-induce the torn state the NEW-then-OLD write order would leave on a crash:
     // NEW.supersedes ∋ OLD, but OLD.superseded_by NOT yet written.
+    // ADR-010 Amendment: supersedes stays typed, not in [[relation]].
     let new = adr_path(root, 2);
-    let new_torn = fs::read_to_string(&new).unwrap()
-        + "\n[[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-001\"\n";
-    fs::write(&new, &new_torn).unwrap();
+    let new_toml = fs::read_to_string(&new)
+        .unwrap()
+        .replace("supersedes    = []", "supersedes    = [\"ADR-001\"]");
+    fs::write(&new, &new_toml).unwrap();
 
     let out = run(root, &["validate"]);
-    assert!(!out.status.success(), "torn state fails validate");
     let report = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(!out.status.success(), "torn state fails validate: {report}");
     assert!(
         report.contains("supersession drift"),
-        "validate flags the torn supersession (not the verb):\n{report}"
+        "validate flags the torn supersession (not the verb): {report}"
     );
 }

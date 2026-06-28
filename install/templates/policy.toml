@@ -10,7 +10,7 @@ updated = "{{date}}"
 tags = []
 
 [relationships]
-# The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
-# SL-048). Author them with `doctrine link POL-NNN supersedes|related <target>`.
+# `supersedes` stays typed — author with `doctrine supersede POL-NNN <previous>`.
+# `related` edges are uniform `[[relation]]` rows — author with `doctrine link POL-NNN related <target>`.
+supersedes    = []
 superseded_by = []   # reverse link is derived
-

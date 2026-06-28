@@ -182,6 +182,8 @@ fn gov_rows(g: &GovKind, metas: &[Meta]) -> Vec<GovRow> {
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
 struct Relationships {
     #[serde(default)]
+    supersedes: Vec<String>,
+    #[serde(default)]
     superseded_by: Vec<String>,
 }
 
@@ -271,17 +273,9 @@ pub(crate) fn supersession_pair(
     root: &Path,
     id: u32,
 ) -> anyhow::Result<(Vec<String>, Vec<String>)> {
-    use crate::relation::{RelationDoc, RelationLabel, read_block};
-    let (doc, toml_text, _body) = read_doc(g, root, id)?;
-    let relation_doc: RelationDoc = toml::from_str(&toml_text)
-        .with_context(|| format!("failed to parse relations for {} {id}", g.kind.stem))?;
-    let (edges, _illegal) = read_block(&g.kind, &relation_doc);
-    let supersedes = edges
-        .into_iter()
-        .filter(|e| e.label == RelationLabel::Supersedes)
-        .map(|e| e.target)
-        .collect();
-    Ok((supersedes, doc.relationships.superseded_by))
+    let (doc, _toml_text, _body) = read_doc(g, root, id)?;
+    // ADR-010 Amendment: governance supersedes stays typed, never migrated to [[relation]].
+    Ok((doc.relationships.supersedes, doc.relationships.superseded_by))
 }
 
 /// A governance entity's authored outbound relations (SL-046 §5.2). Emits
@@ -319,7 +313,6 @@ pub(crate) fn relation_edges(
 fn format_show(
     g: &GovKind,
     doc: &Doc,
-    supersedes: &[String],
     related: &[String],
     body: &str,
 ) -> String {
@@ -336,14 +329,14 @@ fn format_show(
     ));
 
     let rel = &doc.relationships;
-    if !supersedes.is_empty()
+    if !rel.supersedes.is_empty()
         || !rel.superseded_by.is_empty()
         || !related.is_empty()
         || !doc.tags.is_empty()
     {
         parts.push("\nrelationships:\n".to_string());
         for (label, refs) in [
-            ("supersedes", &supersedes.to_vec()),
+            ("supersedes", &rel.supersedes),
             ("superseded_by", &rel.superseded_by),
             ("related", &related.to_vec()),
             ("tags", &doc.tags),
@@ -377,7 +370,6 @@ fn format_show(
 fn show_json(
     g: &GovKind,
     doc: &Doc,
-    supersedes: &[String],
     related: &[String],
     body: &str,
 ) -> anyhow::Result<String> {
@@ -394,7 +386,7 @@ fn show_json(
         .get_mut("relationships")
         .and_then(serde_json::Value::as_object_mut)
     {
-        rel.insert("supersedes".to_string(), serde_json::json!(supersedes));
+        // supersedes is now typed (ADR-010 Amendment) — already serialized via doc.
         rel.insert("related".to_string(), serde_json::json!(related));
     }
     map.insert(g.kind.stem.to_string(), doc_value);
@@ -509,13 +501,8 @@ pub(crate) fn run_show(
     let id = parse_ref(g, reference)?;
     let (doc, toml_text, body) = read_doc(g, &root, id)?;
 
-    // SL-095 (D4): both `supersedes` and `related` now come from tier1_edges.
+    // ADR-010 Amendment: supersedes stays typed; related comes from [[relation]].
     let edges = crate::relation::tier1_edges(&g.kind, &toml_text)?;
-    let supersedes: Vec<String> = edges
-        .iter()
-        .filter(|e| e.label == RelationLabel::Supersedes)
-        .map(|e| e.target.clone())
-        .collect();
     let related: Vec<String> = edges
         .iter()
         .filter(|e| e.label == RelationLabel::Related)
@@ -523,8 +510,8 @@ pub(crate) fn run_show(
         .collect();
 
     let out = match format {
-        Format::Table => format_show(g, &doc, &supersedes, &related, &body),
-        Format::Json => show_json(g, &doc, &supersedes, &related, &body)?,
+        Format::Table => format_show(g, &doc, &related, &body),
+        Format::Json => show_json(g, &doc, &related, &body)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -1126,17 +1113,15 @@ mod tests {
             updated: "2026-06-08".into(),
             tags: vec!["lang".into()],
             relationships: Relationships {
+                supersedes: vec!["ADR-003".to_string()],
                 superseded_by: vec![],
             },
         };
-        // SL-048: `related` is now passed in (read from `[[relation]]`), not a field.
-        // SL-095: `supersedes` is now also passed in.
-        let supersedes = vec!["ADR-003".to_string()];
+        // related is read from [[relation]] rows; supersedes stays typed (ADR-010).
         let related = vec!["ADR-004".to_string()];
         let out = format_show(
             &ADR_KIND,
             &doc,
-            &supersedes,
             &related,
             "# ADR-007: Use Rust\n\nbody.\n",
         );
@@ -1165,15 +1150,14 @@ mod tests {
         .unwrap();
         let (doc, _toml_text, body) = read_doc(&ADR_KIND, root, 1).unwrap();
 
-        let out = show_json(&ADR_KIND, &doc, &[], &[], &body).unwrap();
+        let out = show_json(&ADR_KIND, &doc, &[], &body).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(parsed["kind"], "adr");
         assert_eq!(parsed["adr"]["id"], 1);
         assert_eq!(parsed["adr"]["slug"], "use-rust");
         assert_eq!(parsed["adr"]["status"], "proposed");
-        // OQ-2: relationships are included (toml-as-data is faithful). SL-048: the
-        // `related` axis is reconstructed from `[[relation]]` and spliced back in.
-        // SL-095: `supersedes` is also spliced back in.
+        // supersedes is typed (ADR-010) — serialized from doc.relationships.
+        // related is reconstructed from [[relation]] and spliced back in.
         assert!(parsed["adr"]["relationships"]["supersedes"].is_array());
         assert!(parsed["adr"]["relationships"]["related"].is_array());
         assert!(
@@ -1293,7 +1277,8 @@ mod tests {
         // toml_edit preserved the inert table and its hand-authored comments.
         assert!(body.contains("[relationships]"));
         assert!(body.contains("`doctrine supersede") || body.contains("doctrine link ADR"));
-        assert!(!body.contains("supersedes    = []"));
+        // ADR-010: supersedes stays typed — preserved by set_status.
+        assert!(body.contains("supersedes    = []"));
     }
 
     // --- the I5 no-op guard — an unchanged status writes nothing ---

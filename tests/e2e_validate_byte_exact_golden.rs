@@ -34,8 +34,7 @@ fn validate_byte_exact_golden() {
     // This is the byte-exact golden — ANY change to validate output will fail this test.
     let expected = concat!(
         "validate: scanned SL, ADR, POL, STD, PRD, SPEC, REQ, ISS, IMP, CHR, RSK, IDE, RV, REC, ASM, DEC, QUE, CON, EVD, HYP, CM, REV, RFC\n",
-        "  ADR-004: lists `ADR-012` in `superseded_by` but `ADR-012` does not `supersede` it (supersession drift)\n",
-        "Error: validate: 1 finding(s)",
+        "validate: corpus clean",
     );
 
     // Normalize newlines for cross-platform comparison

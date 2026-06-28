@@ -10,7 +10,7 @@ updated = "{{date}}"
 tags = []
 
 [relationships]
-# Author `supersedes` edges with `doctrine supersede ADR-NNN <previous>`.
+# `supersedes` stays typed — author with `doctrine supersede ADR-NNN <previous>`.
 # `related` edges are uniform `[[relation]]` rows — author with `doctrine link ADR-NNN related <target>`.
+supersedes    = []
 superseded_by = []   # set on the old ADR by F1; reverse link is derived
-
