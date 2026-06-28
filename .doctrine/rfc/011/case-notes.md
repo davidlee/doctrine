@@ -311,3 +311,28 @@ noise. An audit that dispositions "gratuitous fmt churn" should first confirm th
 trunk file is fmt-clean under the gating toolchain, else it inverts the fix.
 
 [justfile fix; 2026-06-28-A] — trivial justfile edit, no incidental complexity.
+
+[dispatch; SL-173-close]
+Agent-arm WorktreeCreate hook absent (no `.pi/hooks/` directory) — the agent arm's
+`isolation: worktree` spawned the worker in an un-isolated main tree rather than a
+fork at the explicit base. The base guard caught it (dirty tree + not-isolated),
+preventing a wrong-base write. Had to switch to subprocess arm.
+Token cost: ~3 rounds diagnosing the isolation failure, reading pi SDK docs
+(no hook docs there either), and switching arms.
+
+[dispatch; SL-173-worker-timeout]
+Pi subprocess arm worker hit 300s timeout during final commit text generation
+on deepseek-v4-pro. The commit had already succeeded (the `git commit` bash call
+returned), but the model was still rendering the hand-back report text when
+timeout killed the RPC pipe. The commit survived and was importable.
+Token cost: ~2 rounds verifying the commit existed and wasn't orphaned.
+
+[dispatch; SL-173-record-delta]
+`doctrine slice record-delta` expects bare numeric id (173), not canonical
+(SL-173). First attempt with SL-173 failed. The `--help` text says `<ID>` but
+actual behaviour requires un-prefixed number. Token cost: 1 round.
+
+[reconcile; SL-173-noop]
+No-op reconcile pass works cleanly when all findings are tolerated/withdrawn.
+The reconcile skill's no-op gate is well-documented — append outcome and hand
+off. No friction points.
