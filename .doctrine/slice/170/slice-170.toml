@@ -110,6 +110,16 @@ selector = "src/worktree/mod.rs"
 intent = "scope-relevant"
 note = "PHASE-02 incidental: [verification].regression config key (verify.rs, D2); mod decl (main.rs); marker_present re-export (worktree/mod.rs, F-1). All additive/mechanical."
 
+[[selector]]
+selector = "src/slice.rs"
+intent = "scope-relevant"
+note = "PHASE-03 incidental: slice verify-vt CLI wiring (SliceCommand::VerifyVt + run_verify_vt + guard Read-class); layering.toml registers vtgate=leaf. Additive/mechanical."
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "scope-relevant"
+note = "PHASE-03 incidental: slice verify-vt CLI wiring (SliceCommand::VerifyVt + run_verify_vt + guard Read-class); layering.toml registers vtgate=leaf. Additive/mechanical."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
