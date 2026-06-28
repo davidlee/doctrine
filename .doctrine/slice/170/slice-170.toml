@@ -22,7 +22,7 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/dispatch.rs"
 intent = "design-target"
-note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+note = "Undelivered by D2 (design §5.4): conclude = /dispatch skill cadence, no dispatch.rs verb; prepare_review fold rejected (git-tree reads, ADR-001). Decided, not dropped."
 
 [[selector]]
 selector = "src/commands/coverage.rs"

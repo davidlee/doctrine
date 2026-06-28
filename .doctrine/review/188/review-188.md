@@ -114,3 +114,32 @@ no REV surface. F-1/F-2/F-5 need no write.
 
 ### Governance/spec (REV)
 - None.
+
+## Reconciliation Outcome
+
+Two per-slice direct edits applied (user-approved 2026-06-28); no governance/spec
+surface, so no REV. All five findings remain `verified` (terminal); remediation
+recorded here, not by mutating dispositions.
+
+### Direct edits applied
+- **F-3** — annotated the `src/dispatch.rs` design-target selector
+  (`slice selector note 170 src/dispatch.rs …`) with the D2 rationale (conclude =
+  `/dispatch` skill cadence, no dispatch.rs verb; prepare_review fold rejected).
+  The conformance `undelivered` cell now reads as decided, not dropped.
+- **F-4** — added the `/plan` authoring-discipline sub-bullet to
+  `plugins/doctrine/skills/plan/SKILL.md` (populate `test_file` + `keywords` on VT
+  rows so `verify-vt` can gate them; `patterns` as optional shape escalation; raw
+  substring, POL-002). Completes the declared Affected-surface item and closes
+  design §8 R2's forward-adoption mitigation. Edited the source under `plugins/`,
+  not the gitignored `.doctrine/skills/` projection.
+
+### REVs completed
+- None (no governance/spec changes).
+
+### Withdrawn / tolerated
+- **F-1** (aligned) — undeclared conformance cells are benign byproducts; no write.
+- **F-2** (tolerated) — slice-172 undeclared is shared-edge interleave; no SL-170
+  remediation possible; rationale in finding disposition.
+- **F-5** (aligned) — VH-1 S6 legibility human-confirmed; no write.
+
+Reconcile pass complete — handoff to /close.

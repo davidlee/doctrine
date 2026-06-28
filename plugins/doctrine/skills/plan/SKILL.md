@@ -37,6 +37,13 @@ Inputs:
       agent, `VH-n` by human — use `VA`/`VH` when a test cannot judge the
       criterion, so it is still checked downstream rather than silently skipped.
       These ids are local to the phase and equally immutable.
+    - For each `VT-n` row, populate the structured mandate so the S3 gate can
+      check it: `test_file` (path that must exist) + `keywords` (raw substrings
+      that must appear in it). `doctrine slice verify-vt <id>` gates every VT
+      carrying a mandate; one lacking it renders `UNCHECKABLE` (visible,
+      non-halting) at the dispatch handover. Optional `patterns` are line-anchored
+      regex for a stronger language-agnostic shape assertion. Matching is raw
+      substring — no host-language comment/string stripping (POL-002).
     - `specs` / `requirements` stay empty in v1 (no registry yet). When a slice
       does carry relations, they are written with `doctrine link` (not typed keys
       here) — see `using-doctrine.md` § Relating entities.
