@@ -354,7 +354,8 @@ fn backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes() {
         for label in &v.relation_labels {
             assert!(
                 // SL-149 PHASE-05: backlog specs collapsed into references(concerns).
-                ["slices", "references", "drift", "related"].contains(&label.as_str()),
+                ["slices", "references", "drift", "related", "governed_by"]
+                    .contains(&label.as_str()),
                 "{}: unexpected backlog [[relation]] label `{label}` (dep/seq axes \
                  needs/after/triggers must stay typed)",
                 f.display()
