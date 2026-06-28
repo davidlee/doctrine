@@ -1,0 +1,61 @@
+id    = 190
+slug  = "sl-171-audit-next-read-surface-facet-columns-pagination"
+title = "SL-171 audit — next read-surface (facet columns + pagination)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-171"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Undeclared edit e2e_priority_golden.rs: expected design-sanctioned golden update + VT-5, observed exactly that"
+detail = """conformance flags tests/e2e_priority_golden.rs as undeclared (not in any design-target selector — selectors are the 8 src paths only). Content: (a) next_human golden rewritten from old `[id,kind,status,score,unblocks,title]` to new default `[id,status,score,estimate,value,title]` with `·` absent cells; (b) VT-5 negative assertions that estimate/value/tags keys do NOT appear in `next --json`. Design §10 F4 explicitly sanctions updating next's own goldens ("this slice updates them — next is this slice's own surface"); §7 VT-5 mandates the negative key assertion. Undeclared status is the expected artifact of test files living outside src selectors, not scope creep."""
+disposition = "aligned"
+response = """Aligned — not scope creep. The next_human golden is this slice's own surface; design §10 F4 explicitly sanctions updating it, and §7 VT-5 mandates the negative-key assertion that estimate/value/tags do not leak into `next --json`. Independently re-verified on the review surface: e2e_priority_golden 17 passed incl. next_human + next_json goldens. "Undeclared" is the expected artifact of test files sitting outside the src-only design-target selectors, not a missed design update."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Undeclared edit e2e_estimate_non_blocking.rs: expected NF-001 allowlist extension for facet exposure, observed exactly that"
+detail = """conformance flags tests/e2e_estimate_non_blocking.rs as undeclared. Content: ALLOWLIST extended with priority/view.rs + priority/render.rs, commented "SL-171 PHASE-01: next facet columns route EstimateFacet/ValueFacet through view+render (design EX-3/EX-5) — sanctioned exposure." This is the NF-001 facet-allowlist tripwire PHASE-01's worker tripped (and misreported green over); the orchestrator caught it on coord-tree verify and completed the allowlist. EX-3 carries facets through NodeAttr→NextRow→render and EX-5 renders them via format_bound — so the two modules legitimately reference the facet types and MUST be allowlisted. Correct remediation, design-sanctioned."""
+disposition = "aligned"
+response = "Aligned — required by the design, correctly remediated. EX-3 carries EntityFacets through NodeAttr→NextRow and EX-5 renders estimate/value via format_bound, so priority/view.rs + priority/render.rs legitimately reference the facet types and must join the NF-001 allowlist. This is the tripwire PHASE-01's worker tripped (and misreported green over); the orchestrator caught it on coord-tree verify and completed the allowlist — the surface ended correct. Re-verified: e2e_estimate_non_blocking 2 passed on the review surface. Undeclared status = test file outside src selectors."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "PHASE-02 pagination: expected automated VT coverage at the next surface, observed none"
+detail = "plan PHASE-02 names VT-1 (footer wording + --offset/--page equivalence), VT-2 (--limit 0 all-rows no-footer + --limit 0 --offset N no-panic + --page 0 / --limit 0 --page N errors), VT-4 (offset>total → empty body + offset-branch footer), VT-5 (D7 visible-slice tags gate across pages). Observed: ZERO new tests exercise `next` pagination. render.rs `#[cfg(test)]` covers PHASE-01 VT-1..4 only; the golden covers PHASE-01 VT-2/VT-5. format_truncation_notice is covered transitively by the unchanged retrieve goldens (satisfies PHASE-02 VT-3 behaviour-preservation), but next's own wiring — the `limit != 0 && shown < total` footer guard, the CLI page→offset resolution + --page validation, the D7 visible-slice any_tagged, the offset.min(total) slice — is unexercised. A regression there would pass CI. Severity major not blocker: advisory read-surface, simple logic, footer fn itself tested; but a named verification basis is unmet."
+disposition = "fix-now"
+response = "Fixed in audit scope on the candidate repair surface (candidate/171/review-001 commit 47123c58). Added 11 tests covering the previously-unexercised PHASE-02 paths: 7 next_human unit tests (footer wording + offset→page math, --limit 0 uncapped no-footer/no-panic incl. with --offset N, offset>total branch, D7 per-visible-page tags gate + --columns override) and 4 black-box CLI cases (--limit footer, --page==--offset resolution, --page 0 + --limit 0 --page N validation errors). Result: render unit 19 passed (was 12), e2e_priority_golden 21 passed (was 17), cargo clippy clean, cargo fmt clean. The named PHASE-02 verification basis (VT-1/2/4/5) now has real coverage; VT-3 behaviour-preservation already held via the unchanged retrieve goldens."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Plan VTs lack structured mandates: expected a mechanical verify-vt signal, observed all 10 VTs UNCHECKABLE"
+detail = """`slice verify-vt SL-171` reports all 10 VTs (5×PHASE-01, 5×PHASE-02) UNCHECKABLE — "no structured mandate". plan.toml VTs are prose-only `expects = "..."`; they carry no test_file/keywords the gate can match against the source tree. Non-halting (INV-4) so the conclude S6 gate exited 0, but the S3 coverage signal is dead: the gate could neither confirm PHASE-01's genuinely-strong coverage nor flag PHASE-02's gap (F-3). Two facets: (a) per-slice — plan.toml could be backfilled with structured mandates so verify-vt confirms; (b) systemic — the /plan skill does not author structured VT mandates, so verify-vt is inert across the project. This is a plan-authoring gap, not a code defect."""
+disposition = "tolerated"
+response = "Tolerated for SL-171 with rationale; systemic fix tracked. The UNCHECKABLE verify-vt result is a plan-authoring/tooling gap, not a code defect — the real coverage exists and was confirmed independently (PHASE-01: render unit VT-1..4 + goldens green; PHASE-02: the audit added the missing pagination tests under F-3). Backfilling SL-171's plan.toml with structured mandates retroactively has marginal value (user decision: backlog systemic only), so it is consciously left prose-only. The project-wide fix — the /plan skill authoring structured VT mandates so verify-vt has signal — is captured as IMP-209."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "design.md status line stale: expected locked/reconciled, observed 'drafted (pre-lock)'"
+detail = "design.md line 3 reads `Status: drafted (pre-lock). Governs design intent for SL-171; the plan is downstream.` The design was locked (plan.toml + phases authored), both phases implemented and dispatched, and the slice is now in audit status — so the pre-lock self-annotation is stale prose drift. Per-slice design-truth fix; belongs to reconcile's direct-edit surface, not a code change."
+disposition = "verified"
+response = """Observation confirmed; remediation delegated to /reconcile as a per-slice direct edit (see Reconciliation Brief). Reconcile should update design.md's status line from "drafted (pre-lock)" to reflect the locked-and-implemented state. Pure prose-truth fix, no code or governance impact."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
