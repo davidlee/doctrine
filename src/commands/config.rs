@@ -10,7 +10,7 @@ use std::path::Path;
 
 use crate::fsutil;
 use crate::priority::config::{
-    PriorityConfig, clamp_dep, clamp_general, load_from_table, read_priority_table,
+    PriorityConfig, clamp_dep, clamp_general, clamp_skew, load_from_table, read_priority_table,
 };
 
 #[derive(Debug, Args)]
@@ -203,6 +203,22 @@ fn gather_entries(raw_table: &toml::Table, effective: &PriorityConfig) -> Vec<Co
         1.0,
     );
 
+    // estimate
+    add_entry(
+        &mut entries,
+        "estimate.skew",
+        get_raw(raw_table, &["estimate", "skew"]),
+        effective.estimate.skew,
+        0.65,
+    );
+    add_entry(
+        &mut entries,
+        "estimate.margin",
+        get_raw(raw_table, &["estimate", "margin"]),
+        effective.estimate.margin,
+        1.0,
+    );
+
     // kind_weights
     let mut kinds: std::collections::BTreeSet<_> = effective.kind_weights.keys().collect();
     if let Some(raw_kinds) = raw_table
@@ -292,6 +308,8 @@ pub(crate) fn run_config_set(root: &Path, args: &ConfigSetArgs) -> Result<()> {
         [c, f] if c == "coefficients" && f == "risk" => (clamp_general(args.value, 2.0), 2.0),
         [c, f] if c == "consequence" && f == "dep_coeff" => (clamp_dep(args.value), 0.5),
         [c, f] if c == "consequence" && f == "ref_coeff" => (clamp_general(args.value, 1.0), 1.0),
+        [c, f] if c == "estimate" && f == "skew" => (clamp_skew(args.value), 0.65),
+        [c, f] if c == "estimate" && f == "margin" => (clamp_general(args.value, 1.0), 1.0),
         [c, _] if c == "kind_weights" => (clamp_general(args.value, 1.0), 1.0),
         [c, _] if c == "tag_coefficients" => (clamp_general(args.value, 1.0), 1.0),
         _ => anyhow::bail!("Unknown config key: {key}"),
@@ -383,6 +401,8 @@ pub(crate) fn run_config_get(root: &Path, args: &ConfigGetArgs) -> Result<()> {
         [c, f] if c == "coefficients" && f == "risk" => Some(effective.coefficients.risk),
         [c, f] if c == "consequence" && f == "dep_coeff" => Some(effective.consequence.dep_coeff),
         [c, f] if c == "consequence" && f == "ref_coeff" => Some(effective.consequence.ref_coeff),
+        [c, f] if c == "estimate" && f == "skew" => Some(effective.estimate.skew),
+        [c, f] if c == "estimate" && f == "margin" => Some(effective.estimate.margin),
         [c, k] if c == "kind_weights" => Some(effective.kind_weight(k)),
         [c, t] if c == "tag_coefficients" => Some(effective.tag_coeff(t)),
         _ => None,
@@ -422,6 +442,7 @@ pub(crate) fn run_config_unset(root: &Path, args: &ConfigUnsetArgs) -> Result<()
     match path.components.as_slice() {
         [c, f] if c == "coefficients" && (f == "value" || f == "risk") => {}
         [c, f] if c == "consequence" && (f == "dep_coeff" || f == "ref_coeff") => {}
+        [c, f] if c == "estimate" && (f == "skew" || f == "margin") => {}
         [c, _] if c == "kind_weights" => {}
         [c, _] if c == "tag_coefficients" => {}
         _ => anyhow::bail!("Unknown or invalid config key: {key}"),
@@ -718,5 +739,148 @@ mod tests {
         // No doctrine.toml at all → defaults → posture off → inert.
         let dir = tempdir().unwrap();
         run_config_validate(dir.path()).unwrap();
+    }
+
+    // --- estimate.skew / estimate.margin (SL-172 PHASE-03) ---
+
+    /// VT-1: on a default project, `get estimate.skew` returns the effective default 0.65.
+    #[test]
+    fn estimate_get_skew_default() {
+        let dir = tempdir().unwrap();
+
+        // The get logic resolves through load_from_table; test the effective value.
+        let raw_table = read_priority_table(dir.path()).unwrap_or_default();
+        let effective = load_from_table(&raw_table);
+        assert!((effective.estimate.skew - 0.65).abs() < f64::EPSILON);
+
+        // Also test via get's match arm logic: should yield Some(effective.estimate.skew)
+        let path = ConfigPath::parse("estimate.skew");
+        let val = match path.components.as_slice() {
+            [c, f] if c == "estimate" && f == "skew" => Some(effective.estimate.skew),
+            _ => None,
+        };
+        assert_eq!(val, Some(0.65));
+    }
+
+    /// VT-2: `set estimate.margin 2` then `get estimate.margin` returns 2.0;
+    /// `show` output contains both an `estimate.skew` and an `estimate.margin` row.
+    #[test]
+    fn estimate_set_get_show() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // Set estimate.margin
+        let set_args = ConfigSetArgs {
+            priority: true,
+            key: "estimate.margin".to_string(),
+            value: 2.0,
+            tag: None,
+        };
+        run_config_set(root, &set_args).unwrap();
+
+        // Get estimate.margin → should be 2.0
+        let raw_table = read_priority_table(root).unwrap_or_default();
+        let effective = load_from_table(&raw_table);
+        assert!((effective.estimate.margin - 2.0).abs() < f64::EPSILON);
+        assert!((effective.estimate.skew - 0.65).abs() < f64::EPSILON);
+
+        // show: entries should contain both estimate.skew and estimate.margin
+        let entries = gather_entries(&raw_table, &effective);
+        let skew_entry = entries.iter().find(|e| e.key == "estimate.skew").unwrap();
+        assert_eq!(skew_entry.effective, 0.65);
+        assert_eq!(skew_entry.annotation, Some("default".to_string()));
+        let margin_entry = entries.iter().find(|e| e.key == "estimate.margin").unwrap();
+        assert_eq!(margin_entry.effective, 2.0);
+        // raw was set, so annotation should not be "default" (it's set explicitly)
+        assert!(margin_entry.annotation.is_none());
+    }
+
+    /// VT-3: after setting it, `unset estimate.skew` reverts the effective value to 0.65.
+    #[test]
+    fn estimate_unset_reverts_default() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // Set estimate.skew
+        run_config_set(
+            root,
+            &ConfigSetArgs {
+                priority: true,
+                key: "estimate.skew".to_string(),
+                value: 0.9,
+                tag: None,
+            },
+        )
+        .unwrap();
+
+        // Verify it's set
+        let raw = read_priority_table(root).unwrap_or_default();
+        let eff = load_from_table(&raw);
+        assert!((eff.estimate.skew - 0.9).abs() < f64::EPSILON);
+
+        // Unset
+        run_config_unset(
+            root,
+            &ConfigUnsetArgs {
+                priority: true,
+                key: "estimate.skew".to_string(),
+                tag: None,
+            },
+        )
+        .unwrap();
+
+        // Re-read: should be back to default
+        let raw2 = read_priority_table(root).unwrap_or_default();
+        let eff2 = load_from_table(&raw2);
+        assert!((eff2.estimate.skew - 0.65).abs() < f64::EPSILON);
+    }
+
+    /// Guard: genuinely unknown keys still error "Unknown config key".
+    #[test]
+    fn estimate_unknown_keys_error() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // get
+        let err = run_config_get(
+            root,
+            &ConfigGetArgs {
+                priority: true,
+                key: "estimate.bogus".to_string(),
+                tag: None,
+                raw: false,
+                json: false,
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("Unknown config key"), "{err}");
+
+        // set
+        let err2 = run_config_set(
+            root,
+            &ConfigSetArgs {
+                priority: true,
+                key: "nonsense.key".to_string(),
+                value: 1.0,
+                tag: None,
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err2.contains("Unknown config key"), "{err2}");
+
+        // unset
+        let err3 = run_config_unset(
+            root,
+            &ConfigUnsetArgs {
+                priority: true,
+                key: "estimate.bogus".to_string(),
+                tag: None,
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err3.contains("Unknown"), "{err3}");
     }
 }

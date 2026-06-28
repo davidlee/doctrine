@@ -801,9 +801,9 @@ mod tests {
 
     // ── SL-133 dedicated helpers + ordering proofs (VT-5 / VT-7 / VA-1) ───
 
-    /// Seed an open backlog issue with an explicit `[value]` over a fixed estimate mid
-    /// of 5.0 (lower 0, upper 10), plus optional `needs`/`after` relationship lines.
-    /// `value` of `v` ⇒ base = value_coeff(1.0) · v · 1.0 / 5.0 = v/5.
+    /// Seed an open backlog issue with an explicit `[value]` over a fixed estimate
+    /// (lower 0, upper 10), plus optional `needs`/`after` relationship lines.
+    /// `value` of `v` ⇒ base = value_coeff(1.0) · v · 1.0 / est_cost (6.5) = v/6.5.
     fn seed_valued(root: &Path, id: u32, value: f64, rel_lines: &str) {
         write(
             root,
@@ -876,9 +876,11 @@ mod tests {
             prefix: "RSK",
             id: 2,
         };
-        // RSK-001's leverage = 0.5 · (base(ISS-010) + 0) = 0.5 · 20 = 10.
+        // RSK-001's leverage = 0.5 · (base(ISS-010) + 0)
+        //   base(ISS-010) = 100.0 / 6.5 ≈ 15.384615385
+        //   leverage = 0.5 · 15.3846... ≈ 7.692307692
         assert!(
-            (channels::score(&g, rsk1) - 10.0).abs() < 1e-9,
+            (channels::score(&g, rsk1) - 100.0 / 13.0).abs() < 1e-9,
             "RSK-001 leverages the one high-value dependent: got {}",
             channels::score(&g, rsk1)
         );
@@ -916,18 +918,20 @@ mod tests {
 
         let g = build(root).unwrap();
         let k = |id| EntityKey { prefix: "ISS", id };
-        // leverage(ISS-002) = 0.5·(base(ISS-003)+0) = 0.5·40 = 20.
-        // leverage(ISS-001) = 0.5·(base(ISS-002)+leverage(ISS-002)) = 0.5·(0+20) = 10.
+        // leverage(ISS-002) = 0.5·(base(ISS-003)+0) = 0.5·(200/6.5) = 100/6.5
+        //   = 1000/65 ≈ 15.384615385
+        // leverage(ISS-001) = 0.5·(base(ISS-002)+leverage(ISS-002))
+        //   = 0.5·(0 + 100/6.5) = 50/6.5 ≈ 7.692307692
         let deep = channels::score(&g, k(1));
-        // leverage(ISS-010) = 0.5·(base(ISS-011)+0) = 0.5·2 = 1.
+        // leverage(ISS-010) = 0.5·(base(ISS-011)+0) = 0.5·(10/6.5) = 5/6.5 ≈ 0.769230769
         let shallow = channels::score(&g, k(10));
         assert!(
-            (deep - 10.0).abs() < 1e-9,
-            "deep blocker recursive leverage = 10: got {deep}"
+            (deep - 50.0 / 6.5).abs() < 1e-9,
+            "deep blocker recursive leverage = 50/6.5: got {deep}"
         );
         assert!(
-            (shallow - 1.0).abs() < 1e-9,
-            "shallow blocker leverage = 1: got {shallow}"
+            (shallow - 5.0 / 6.5).abs() < 1e-9,
+            "shallow blocker leverage = 5/6.5: got {shallow}"
         );
         let ids = survey_ids(root);
         let pd = ids.iter().position(|x| x == "ISS-001").unwrap();
@@ -1056,12 +1060,16 @@ mod tests {
     fn va1_explain_exposes_full_score_breakdown() {
         let dir = tmp();
         let root = dir.path();
-        // ISS-001 value 50 over mid 5 → base 10; one dependent ISS-002 (value 100, base
-        // 20) needs it → leverage(ISS-001) = 0.5·20 = 10. No referencers → optionality 0.
+        // ISS-001 value 50 over est_cost 6.5 → base 50/6.5 ≈ 7.6923;
+        // one dependent ISS-002 (value 100, base 100/6.5 ≈ 15.3846) needs it
+        // → leverage(ISS-001) = 0.5·15.3846 ≈ 7.6923. No referencers → optionality 0.
         seed_valued(root, 1, 50.0, "");
         seed_valued(root, 2, 100.0, "needs = [\"ISS-001\"]\n");
 
         let ex = explain(root, "ISS-001").unwrap();
+        // base = value_dim = 50/6.5 (no risk); leverage = 0.5 * 100/6.5 = 50/6.5
+        let expected_base = 50.0 / 6.5;
+        let expected_lev = 50.0 / 6.5;
         match ex.score {
             ReasonKind::Score {
                 base,
@@ -1071,21 +1079,28 @@ mod tests {
                 optionality,
                 total,
             } => {
-                assert!((base - 10.0).abs() < 1e-9, "base 10");
-                assert!((value_dim - 10.0).abs() < 1e-9, "value_dim 10");
+                assert!((base - expected_base).abs() < 1e-9, "base = 50/6.5");
+                assert!(
+                    (value_dim - expected_base).abs() < 1e-9,
+                    "value_dim = 50/6.5"
+                );
                 assert!(risk_dim.abs() < 1e-9, "risk_dim 0");
-                assert!((leverage - 10.0).abs() < 1e-9, "leverage 10");
+                assert!((leverage - expected_lev).abs() < 1e-9, "leverage = 50/6.5");
                 assert!(optionality.abs() < 1e-9, "optionality 0");
-                assert!((total - 20.0).abs() < 1e-9, "total = base + leverage = 20");
+                assert!(
+                    (total - (expected_base + expected_lev)).abs() < 1e-9,
+                    "total = base+lev"
+                );
             }
             other => panic!("explain score must be a Score reason, got {other:?}"),
         }
         // Human render reads the breakdown line correctly.
+        let expected_total = expected_base + expected_lev;
         let human = crate::priority::render::explain_human(&ex);
         assert!(
-            human.contains(
-                "score: 20.0 (base 10.0 [value 10.0, risk 0.0], leverage 10.0, optionality 0.0)"
-            ),
+            human.contains(&format!(
+                "score: {expected_total:.1} (base {expected_base:.1} [value {expected_base:.1}, risk 0.0], leverage {expected_lev:.1}, optionality 0.0)"
+            )),
             "human explain renders the full breakdown: {human}"
         );
     }

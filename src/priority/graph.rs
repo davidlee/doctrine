@@ -40,6 +40,7 @@ use cordage::{
 
 use crate::facet::EntityFacets;
 use crate::priority::config;
+use crate::priority::partition::{self, StatusClass};
 use crate::projection::Projection;
 use crate::relation::RelationLabel;
 use crate::relation_graph::{self, EntityKey};
@@ -67,11 +68,44 @@ impl BaseScore {
     }
 }
 
+// ── est_cost helpers (SL-172 §5.1/§5.4) ────────────────────────────────────
+
+/// The floor epsilon — guards against division by zero. Hoisted here so both
+/// [`base_score`] and [`floor_eps`] share a single source (STD-001).
+const EPSILON: f64 = 1e-12;
+
+/// Floor to `EPSILON` if the value dips below it — protects division in
+/// `value_dim` from zero-cost estimates.
+fn floor_eps(x: f64) -> f64 {
+    if x < EPSILON { EPSILON } else { x }
+}
+
+/// Context carried into every per-node `est_cost` call — the bare-item anchor
+/// (the maximum `upper` among non-terminal estimated items + `margin`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CostCtx {
+    pub(crate) absent: f64,
+}
+
+/// Compute the effective cost of an estimate per the β-skewed model (SL-172 §5.1):
+/// - With present bounds: `lower + β·(upper − lower)`, floored to `EPSILON`.
+/// - Bare (no bounds): the context's `absent` anchor (≥ 1.0), already floored.
+fn est_cost(bounds: Option<(f64, f64)>, ctx: CostCtx, ec: &config::EstimateCost) -> f64 {
+    match bounds {
+        Some((lower, upper)) => floor_eps(lower + ec.skew * (upper - lower)),
+        None => ctx.absent,
+    }
+}
+
 /// Pure base-score computation per entity (design §5.1). Returns the SPLIT
 /// `BaseScore` so `explain` can surface `value_dim` / `risk_dim`. No IO.
-fn base_score(f: &EntityFacets, kind: &entity::Kind, cfg: &config::PriorityConfig) -> BaseScore {
-    const EPSILON: f64 = 1e-12;
-    // value_dim = coefficients.value × value × kind_weight(kind) × tag_term / estimate_midpoint
+fn base_score(
+    f: &EntityFacets,
+    kind: &entity::Kind,
+    cfg: &config::PriorityConfig,
+    ctx: CostCtx,
+) -> BaseScore {
+    // value_dim = coefficients.value × value × kind_weight(kind) × tag_term / est_cost
     // tag_term = (1.0 + Σ(coeff - 1.0)).max(0.0): identity base for absent tags,
     // each configured tag pushes the multiplier by its excess over default.
     // Default coeff (1.0) → delta 0 → no effect. Floor at zero prevents a
@@ -79,15 +113,13 @@ fn base_score(f: &EntityFacets, kind: &entity::Kind, cfg: &config::PriorityConfi
     let tag_term = (1.0 + f.tags.iter().map(|t| cfg.tag_coeff(t) - 1.0).sum::<f64>()).max(0.0);
     let value_dim = {
         let raw = if let Some(ref v) = f.value {
-            let est_mid = match f.estimate {
-                Some(ref e) => {
-                    let m = f64::midpoint(e.lower, e.upper);
-                    if m < EPSILON { EPSILON } else { m }
-                }
-                None => 1.0,
-            };
+            let cost = est_cost(
+                f.estimate.as_ref().map(|e| (e.lower, e.upper)),
+                ctx,
+                &cfg.estimate,
+            );
             let kw = cfg.kind_weight(kind.prefix);
-            cfg.coefficients.value * v.value * kw * tag_term / est_mid
+            cfg.coefficients.value * v.value * kw * tag_term / cost
         } else {
             0.0
         };
@@ -224,7 +256,23 @@ pub(crate) fn build_from(
     //      actionability_block_from (D4).
     let cfg = config::load(root);
 
-    // 2b. Base pre-pass — compute `base_score` per node from its OWN facets + config +
+    // 2b. Anchor fold (SL-172 §5.4): max upper among non-terminal estimated items.
+    //      If none, fall back to 1.0 (empty-corpus fallback). Terminals (closed/done)
+    //      must NOT inflate bare-item cost — their large upper is irrelevant.
+    let max_upper = scanned
+        .iter()
+        .filter(|entity| {
+            partition::status_class(entity.kind, entity.status.as_deref()) != StatusClass::Terminal
+        })
+        .filter_map(|entity| entity.estimate.as_ref().map(|e| e.upper))
+        .max_by(f64::total_cmp);
+    let absent = match max_upper {
+        Some(mu) => mu + cfg.estimate.margin,
+        None => 1.0,
+    };
+    let ctx = CostCtx { absent };
+
+    // 2c. Base pre-pass — compute `base_score` per node from its OWN facets + config +
     //      kind (pure, per-node, graph-free). Runs before mint because it feeds the
     //      tiebreaker (SL-133 §5.4 step 2/3). Carried onto `NodeAttr.base_score` at 3c
     //      and read by the consequence post-pass.
@@ -240,6 +288,7 @@ pub(crate) fn build_from(
                 },
                 entity.kind,
                 &cfg,
+                ctx,
             );
             (entity.key, base)
         })
@@ -847,12 +896,10 @@ mod tests {
     fn mint_order_base_desc_then_canonical_asc_and_permutation_invariant() {
         let dir = tmp();
         let root = dir.path();
-        // Three issues with DIFFERENT base scores (value facet over a fixed estimate
-        // mid of 5.0): ISS-001 value 5 → base 1.0; ISS-002 value 25 → base 5.0;
-        // ISS-003 value 15 → base 3.0. Mint order is base.total() DESC, ties by id ASC:
-        // ISS-002 (5.0) < ISS-003 (3.0) < ISS-001 (1.0) by NodeId. Crucially the
-        // consequence/edge topology does NOT enter mint (I3) — none of these author a
-        // work/lineage edge onto another, so only base ranks them.
+        // Three issues with DIFFERENT base scores (value facet over est_cost=6.5):
+        // ISS-001 value 5 → base 5/6.5; ISS-002 value 25 → base 25/6.5;
+        // ISS-003 value 15 → base 15/6.5. Mint order is base.total() DESC, ties by id ASC.
+        // Crucially the consequence/edge topology does NOT enter mint (I3).
         seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 10.0", "value = 5.0", "");
         seed_issue_with_facets(root, 2, "", "lower = 0.0\nupper = 10.0", "value = 25.0", "");
         seed_issue_with_facets(root, 3, "", "lower = 0.0\nupper = 10.0", "value = 15.0", "");
@@ -864,11 +911,11 @@ mod tests {
         let n3 = pg.projection.resolve(key("ISS", 3)).unwrap();
         assert!(
             n2 < n3,
-            "ISS-002 (base 5.0) mints before ISS-003 (base 3.0)"
+            "ISS-002 (base 25/6.5) mints before ISS-003 (base 15/6.5)"
         );
         assert!(
             n3 < n1,
-            "ISS-003 (base 3.0) mints before ISS-001 (base 1.0)"
+            "ISS-003 (base 15/6.5) mints before ISS-001 (base 5/6.5)"
         );
 
         // Permutation invariance: re-seed the same corpus in a DIFFERENT authoring order
@@ -921,7 +968,7 @@ mod tests {
         let n2 = pg.projection.resolve(key("ISS", 2)).unwrap();
         assert!(
             n2 < n1,
-            "ISS-002 (base 5.0) mints before the heavily-referenced ISS-001 (base 0) — mint is base-only (I3)"
+            "ISS-002 (base 25/6.5≈3.846) mints before the heavily-referenced ISS-001 (base 0) — mint is base-only (I3)"
         );
         // The post-pass still credits ISS-001's optionality (two slices reference it,
         // both base 0 here → optionality 0), proving score is a separate display tier.
@@ -985,9 +1032,9 @@ mod tests {
         // but an entity that authors none contributes none.) A FACETED issue references
         // REQ-005 via the `requirements` consequence label, so the resolved ref edge is
         // observable through REQ-005's post-pass OPTIONALITY (ref_coeff · base(referrer)).
-        // A faceted ISS-001 (base = value 25 / mid 5 = 5.0) references ISS-002 via the
+        // A faceted ISS-001 (base = value 25 / est_cost 6.5 ≈ 3.846) references ISS-002 via the
         // `slices` consequence label; ISS-002's one-hop optionality is
-        // ref_coeff(1.0) · base(ISS-001) = 5.0 when the ref edge resolved. SL-001/SL-002
+        // ref_coeff(1.0) · base(ISS-001) ≈ 3.846 when the ref edge resolved. SL-001/SL-002
         // author NO needs/after — their dep/seq axes are empty (no panic, no edge).
         seed_issue_with_facets(
             root,
@@ -1013,7 +1060,7 @@ mod tests {
         assert_eq!(pg.graph.in_edges(pg.dep_overlay, sl2).count(), 0);
         // The resolvable `slices` ref edge landed: ISS-002's optionality reflects it.
         assert!(
-            (pg.optionality.get(&key("ISS", 2)).copied().unwrap_or(0.0) - 5.0).abs() < 1e-9,
+            (pg.optionality.get(&key("ISS", 2)).copied().unwrap_or(0.0) - 25.0 / 6.5).abs() < 1e-9,
             "resolvable consequence ref produces its edge (witnessed via optionality)"
         );
     }
@@ -1152,13 +1199,20 @@ mod tests {
         );
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0(value coeff) * 10.0 * 1.0(kind_weight, default) * 1.0(Σtag) / 5.0(mid)
-        //          = 2.0
+        // value_dim = 1.0(value coeff) * 10.0 * 1.0(kind_weight) * 1.0(Σtag) / est_cost
+        //   est_cost = lower + β·(upper-lower) = 2.0 + 0.65*(8.0-2.0) = 5.9
+        //   value_dim = 10.0 / 5.9 ≈ 1.694915254
         // risk_dim  = 2.0(risk coeff) * 12(exposure: high=3 × critical=4)
         //          = 24.0
-        assert!((bs.value_dim - 2.0).abs() < 1e-9, "value_dim should be 2.0");
+        assert!(
+            (bs.value_dim - 10.0 / 5.9).abs() < 1e-9,
+            "value_dim should be 10/5.9"
+        );
         assert!((bs.risk_dim - 24.0).abs() < 1e-9, "risk_dim should be 24.0");
-        assert!((bs.total() - 26.0).abs() < 1e-9, "total should be 26.0");
+        assert!(
+            (bs.total() - (10.0 / 5.9 + 24.0)).abs() < 1e-9,
+            "total should be 10/5.9 + 24"
+        );
     }
 
     #[test]
@@ -1168,11 +1222,17 @@ mod tests {
         seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 2.0", "value = 5.0", "");
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0 * 5.0 / ((0+2)/2 → EPSILON because < EPSILON) = 5.0 / 1e-12 ≈ 5e12
-        // Actually: mid = (0+2)/2 = 1.0. So value_dim = 5.0 / 1.0 = 5.0
-        assert!((bs.value_dim - 5.0).abs() < 1e-9, "value_dim should be 5.0");
+        // est_cost = lower + β·(upper-lower) = 0.0 + 0.65*(2.0-0.0) = 1.3
+        // value_dim = 1.0 * 5.0 / 1.3 ≈ 3.846153846
+        assert!(
+            (bs.value_dim - 5.0 / 1.3).abs() < 1e-9,
+            "value_dim should be 5.0/1.3"
+        );
         assert!((bs.risk_dim - 0.0).abs() < 1e-9, "risk_dim should be 0");
-        assert!((bs.total() - 5.0).abs() < 1e-9, "total should be 5.0");
+        assert!(
+            (bs.total() - 5.0 / 1.3).abs() < 1e-9,
+            "total should be 5.0/1.3"
+        );
     }
 
     #[test]
@@ -1208,9 +1268,11 @@ mod tests {
     }
 
     #[test]
-    fn base_score_absent_estimate_uses_midpoint_one() {
+    fn base_score_bare_item_empty_corpus_fallback_cost_one() {
         let dir = tmp();
         let root = dir.path();
+        // A lone bare item — no estimate anywhere in the corpus → absent = 1.0 (empty fallback).
+        // est_cost = absent = 1.0; value_dim = 1.0 * 3.0 / 1.0 = 3.0.
         seed_issue_with_facets(
             root,
             1,
@@ -1221,7 +1283,6 @@ mod tests {
         );
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0 * 3.0 / 1.0 = 3.0
         assert!((bs.value_dim - 3.0).abs() < 1e-9, "value_dim should be 3.0");
     }
 
@@ -1237,7 +1298,7 @@ mod tests {
         seed_issue_with_facets(root, 1, "needs = [\"ISS-002\"]\n", "", "value = 10.0", "");
         seed_issue_with_facets(root, 2, "", "", "value = 3.0", "");
         let pg = build(root).unwrap();
-        // ISS-002 base = 3.0, ISS-001 base = 10.0
+        // ISS-002 base = 3.0, ISS-001 base = 10.0 (both bare, absent=1.0)
         // ISS-002 is prereq (src of dep edge B→A); out_edges(dep_overlay, ISS-002) = {ISS-001}
         // ISS-001 has no dependents → leverage(ISS-001) = 0
         // leverage(ISS-002) = 0.5 * (base(ISS-001) + 0) = 5.0
@@ -1611,8 +1672,13 @@ mod tests {
         seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 10.0", "value = 10.0", "");
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0 * 10.0 * 1.0 * 1.0 / 5.0 = 2.0
-        assert!((bs.value_dim - 2.0).abs() < 1e-9, "empty tags → identity");
+        // value_dim = 1.0 * 10.0 * 1.0 * 1.0 / est_cost
+        //   est_cost = 0.0 + 0.65*(10.0-0.0) = 6.5
+        //          = 10.0 / 6.5 ≈ 1.538461538
+        assert!(
+            (bs.value_dim - 10.0 / 6.5).abs() < 1e-9,
+            "empty tags → identity"
+        );
     }
 
     #[test]
@@ -1635,9 +1701,11 @@ mod tests {
         );
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0 * 10.0 * 1.0 * 2.0 / 5.0 = 4.0
+        // value_dim = 1.0 * 10.0 * 1.0 * 2.0 / est_cost
+        //   est_cost = 0.0 + 0.65*(10.0-0.0) = 6.5
+        //          = 20.0 / 6.5 ≈ 3.076923077
         assert!(
-            (bs.value_dim - 4.0).abs() < 1e-9,
+            (bs.value_dim - 20.0 / 6.5).abs() < 1e-9,
             "tag coeff 2.0 doubles value_dim"
         );
     }
@@ -1662,10 +1730,12 @@ mod tests {
         );
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0 * 6.0 * 1.0 * 2.5 / 3.0 = 5.0
+        // value_dim = 1.0 * 6.0 * 1.0 * 2.5 / est_cost
+        //   est_cost = 2.0 + 0.65*(4.0-2.0) = 3.3
+        //          = 15.0 / 3.3 ≈ 4.545454545
         assert!(
-            (bs.value_dim - 5.0).abs() < 1e-9,
-            "tag_term 2.5 → value_dim = 5.0"
+            (bs.value_dim - 15.0 / 3.3).abs() < 1e-9,
+            "tag_term 2.5 → value_dim = 15.0/3.3"
         );
     }
 
@@ -1689,9 +1759,11 @@ mod tests {
         );
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0 * 20.0 * 1.0 * 0.5 / 5.0 = 2.0
+        // value_dim = 1.0 * 20.0 * 1.0 * 0.5 / est_cost
+        //   est_cost = 0.0 + 0.65*(10.0-0.0) = 6.5
+        //          = 10.0 / 6.5 ≈ 1.538461538
         assert!(
-            (bs.value_dim - 2.0).abs() < 1e-9,
+            (bs.value_dim - 10.0 / 6.5).abs() < 1e-9,
             "demoting tag halves value_dim"
         );
     }
@@ -1716,7 +1788,7 @@ mod tests {
         );
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        // value_dim = 1.0 * 10.0 * 1.0 * 0.0 / 5.0 = 0.0
+        // value_dim = 1.0 * 10.0 * 1.0 * 0.0 / 6.5 = 0.0 (tag_term floors at 0)
         assert!(
             (bs.value_dim - 0.0).abs() < 1e-9,
             "multi-demote floors at zero, not negative"
