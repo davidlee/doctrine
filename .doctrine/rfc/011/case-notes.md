@@ -439,3 +439,25 @@ Friction encountered during SL-171 two-phase pi-arm dispatch:
 - Plan VTs carry prose `expects` only (no structured `test_file`/`keywords`) → verify-vt
   reports every VT UNCHECKABLE. Non-halting, but the S3 gate provides zero real coverage
   signal for this slice.
+
+[audit; SL-171-audit-rv190]
+- Independent S3 verification of a dispatched slice required building the review
+  surface in a fresh `git worktree`, which fails to compile: `web/map/dist/` is a
+  gitignored built frontend artifact, so RustEmbed `#[folder=web/map/dist/]` over a
+  missing dir drops `Assets::get` → E0599 in map_server (unrelated to the slice
+  under audit). Cost: one full doomed compile + diagnosis before recognising it as
+  environmental. Fix: `cp -r` the dist from the main tree into the worktree. The
+  corpus already had memories for this (worktree-embed-gate, worker-fork-missing-
+  gitignored-embed, coord-worktree-missing-build-artifacts) — but the audit skill
+  doesn't surface them at the "build the review surface" step, so I rediscovered it.
+  Candidate fix: audit/dispatch worktree provisioning should auto-copy gitignored
+  build artifacts, or the skill should signpost the provision step.
+- `git checkout review/171 -- ` (path-limited read of a ref into a fresh tree) with a
+  shell-dropped empty pathspec silently switched the PRIMARY worktree off `edge` —
+  the one move AGENTS.md forbids hardest. Caught via `git worktree list`. Inspecting
+  a ref should never risk a branch switch; reaching for `git show`/`git diff <ref>`
+  or a dedicated worktree avoids it.
+- verify-vt returned all 10 VTs UNCHECKABLE (prose-only plan VTs). The conclude S6
+  gate exited 0 on a dead signal — it neither confirmed PHASE-01's strong coverage
+  nor flagged PHASE-02's genuine test gap. The gap was only found by hand-reading the
+  diff for added test fns. A green-but-inert gate is a token/attention trap. (→ IMP-209)
