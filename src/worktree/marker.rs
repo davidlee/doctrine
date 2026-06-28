@@ -264,6 +264,18 @@ pub(crate) fn run_marker_clear(path: Option<PathBuf>, operator: bool) -> anyhow:
 mod tests {
     use super::*;
 
+    /// These tests assert env-UNSET behaviour. Under `DOCTRINE_WORKER=1` (the
+    /// dispatch worker gate, e.g. a subagent running the gate) the env leg
+    /// dominates `run_marker_clear`/`env_worker_set`, so they are inapplicable —
+    /// skip rather than fail. The env-SET path has its own coverage.
+    fn skip_under_worker() -> bool {
+        if env_worker_set() {
+            eprintln!("skipping: DOCTRINE_WORKER set — env-unset test inapplicable");
+            return true;
+        }
+        false
+    }
+
     // --- SL-056 PHASE-05 T1: describe_mode truth table (the single source) ---
 
     #[test]
@@ -345,6 +357,9 @@ mod tests {
 
     #[test]
     fn env_worker_set_reads_the_env_flag() {
+        if skip_under_worker() {
+            return;
+        }
         assert!(
             !env_worker_set(),
             "DOCTRINE_WORKER should not be set in the test harness"
@@ -355,6 +370,9 @@ mod tests {
 
     #[test]
     fn run_marker_clear_refuses_without_operator_in_linked_worktree() {
+        if skip_under_worker() {
+            return;
+        }
         // Create a linked worktree, mark it, try to clear without `--operator`.
         let tmp = tempfile::tempdir().unwrap();
         let primary = super::super::test_helpers::init_repo(&tmp.path().join("src"));
@@ -382,6 +400,9 @@ mod tests {
 
     #[test]
     fn run_marker_clear_with_operator_clears_in_linked_worktree() {
+        if skip_under_worker() {
+            return;
+        }
         let tmp = tempfile::tempdir().unwrap();
         let primary = super::super::test_helpers::init_repo(&tmp.path().join("src"));
         let fork = tmp.path().join("fork");
