@@ -1,0 +1,95 @@
+# Release: build prebuilt macOS doctrine binaries on a version tag and attach
+# them to the GitHub Release. Sidesteps the `cargo install` `-liconv` link
+# failure by shipping binaries that need no local compile (SL-174).
+#
+# The embed-integrity gate (scripts/smoke.sh, PHASE-01) runs on each built
+# artifact BEFORE upload — a broken-embed binary never reaches a user (§5.4).
+#
+# Asset contract (§5.2), depended on by install.sh + cargo-binstall (PHASE-03):
+#   doctrine-<triple>.tar.gz  (contains a single `doctrine` executable)
+#   doctrine-<triple>.tar.gz.sha256
+# The version is the release tag; asset names carry the triple only.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# action-gh-release needs write access to create/append the Release.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14 # arm64 runner — native
+            rosetta: false
+          - target: x86_64-apple-darwin
+            os: macos-14 # cross-compiled on arm64; x86 smoke runs under Rosetta
+            rosetta: true
+          # FALLBACK (EX-4): if the x86_64 cross-link re-enters the iconv failure
+          # domain on the arm64 runner (R3-amended), disable the x86 leg above
+          # and enable this native macos-13 (Intel) leg instead — same steps,
+          # native compile, no Rosetta:
+          # - target: x86_64-apple-darwin
+          #   os: macos-13
+          #   rosetta: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      # dtolnay/rust-toolchain pins by channel (@stable), not a version tag —
+      # that is its supported pinning model. Adds the cross target.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # MUST precede cargo: generates web/map/dist so rust-embed embeds the map.
+      # A plain cargo build would ship a broken map embed (the dominant risk R1).
+      - name: Build web assets
+        run: just web-build
+
+      - name: Build doctrine
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # x86_64 binary can't execute natively on the arm64 runner; Rosetta
+      # translates it so the smoke gate can actually run the shipped bytes.
+      - name: Install Rosetta (x86 smoke)
+        if: ${{ matrix.rosetta }}
+        run: softwareupdate --install-rosetta --agree-to-license
+
+      # Embed-integrity gate on the real artifact (--version, install/ embed,
+      # web/map/dist map embed). Non-zero here fails the job → no upload.
+      - name: Smoke test artifact
+        run: ./scripts/smoke.sh target/${{ matrix.target }}/release/doctrine
+
+      # Package: a single `doctrine` executable per the §5.2 contract, plus a
+      # detached sha256 checksum (install.sh / manual download verify against it).
+      - name: Package
+        run: |
+          set -eu
+          asset="doctrine-${{ matrix.target }}.tar.gz"
+          tar -czf "$asset" -C "target/${{ matrix.target }}/release" doctrine
+          shasum -a 256 "$asset" > "$asset.sha256"
+          ls -l "$asset" "$asset.sha256"
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            doctrine-${{ matrix.target }}.tar.gz
+            doctrine-${{ matrix.target }}.tar.gz.sha256
