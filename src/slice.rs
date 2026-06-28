@@ -332,6 +332,23 @@ pub(crate) enum SliceCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// S3 VT existence/shape gate (SL-170): judge every VT-mode verification
+    /// criterion in the slice's `plan.toml` against its structured mandate
+    /// (`test_file` / `keywords` / `patterns`). Prints a per-phase verdict
+    /// summary and exits non-zero iff any `Fail`; `Uncheckable` and `Waived` are
+    /// visible, distinct, and non-halting (INV-4). Reads only the authored
+    /// `plan.toml` + the mandated source files — never the disposable phase
+    /// sheet (INV-3).
+    VerifyVt {
+        /// Slice id whose plan VT criteria to gate, e.g. 170.
+        #[arg(value_parser = parse_cli_id)]
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
@@ -405,6 +422,7 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             end,
             path,
         } => run_record_delta(path, id, &phase, &start, &end),
+        SliceCommand::VerifyVt { id, path } => run_verify_vt(path, id),
     }
 }
 
@@ -685,6 +703,33 @@ pub(crate) fn run_phases(path: Option<PathBuf>, id: u32, prune: bool) -> anyhow:
     }
     if report.created.is_empty() && report.orphan.is_empty() && report.pruned.is_empty() {
         writeln!(out, "Phases up to date.")?;
+    }
+    Ok(())
+}
+
+/// `doctrine slice verify-vt <id>` — the S3 VT existence/shape gate (SL-170).
+/// Reads the authored `plan.toml`, judges every VT-mode criterion against its
+/// structured mandate via the pure [`crate::vtgate`] core (mandated files read
+/// relative to the project root), prints the verdict summary, and exits non-zero
+/// iff any `Fail` (INV-4). `Uncheckable` / `Waived` are visible but non-halting.
+/// Reads only authored plan + mandated source — never the phase sheet (INV-3).
+pub(crate) fn run_verify_vt(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    let plan = read_plan(&slice_root, id)?;
+    // The injected reader resolves each mandated `test_file` against the project
+    // root; a missing file reads as `None` → the pure core renders it a `Fail`.
+    let read_file = |rel: &str| fs::read_to_string(root.join(rel)).ok();
+    let reports = crate::vtgate::check_phases(&plan, &read_file);
+    write!(io::stdout(), "{}", crate::vtgate::render_summary(&reports))?;
+    if crate::vtgate::has_failure(&reports) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "verify-vt forwards its gate verdict as the terminal exit code (INV-4)"
+        )]
+        {
+            std::process::exit(1);
+        }
     }
     Ok(())
 }

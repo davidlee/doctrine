@@ -86,12 +86,19 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/vtgate.rs (pure) exposes VtVerdict::{ Pass, Fail { reason }, Uncheckable, Waived { reason } }, check_vt(vt, read_file: &impl Fn(&str)->Option<String>) -> VtVerdict, check_phases(plan, read_file) -> Vec<PhaseVtReport>, render_summary(&[PhaseVtReport]) -> String. read_file injected (purity); no disk in this module." },
-  { id = "EX-2", text = "check_vt order: waived short-circuits first → Waived { reason }; only VT-mode rows are gated (VA/VH parsed, never gated); keywords with no test_file → Uncheckable (A1); missing file → Fail; keyword absent from the COMMENT-STRIPPED source → Fail (codex F-3 — comment / dead-string / echoed-criterion bait does not satisfy); optional patterns = line-anchored regex (the stronger-shape escalation)." },
+  { id = "EX-2", text = "check_vt order: waived short-circuits first → Waived { reason }; only VT-mode rows are gated (VA/VH parsed, never gated); keywords with no test_file → Uncheckable (A1); missing file → Fail; keyword absent from the RAW source → Fail. NO comment/string stripping — comment/string syntax is host-language convention and a gate stripping it would load-bear correctness on the host language (POL-002, /consult Option D — supersedes codex F-3 comment-strip; the dead-string/comment-bait case is adversarial, out of the omission threat model). Optional patterns = line-anchored regex, the language-agnostic stronger-shape escalation." },
   { id = "EX-3", text = "`doctrine slice verify-vt <id>` reads plan.toml + fs-reads mandated files, prints render_summary, exits non-zero iff any Fail; Uncheckable and Waived are visible, distinct, NON-halting (INV-4). The gate reads only authored plan.toml + git, never the disposable phase sheet (INV-3). Verdict glyphs/labels are named constants (STD-001)." },
 ]
 verification = [
   { id = "VT-1", expects = "check_vt four-verdict unit (src/vtgate.rs): Pass; Fail-absent-file; Fail-missing-keyword; Uncheckable (keywords, no test_file — A1); Waived short-circuit (returns Waived before any fs read).", test_file = "src/vtgate.rs", keywords = ["VtVerdict", "Uncheckable", "Waived", "check_vt"] },
-  { id = "VT-2", expects = "Comment-bait (codex F-3): a test_file holding a mandated keyword ONLY inside a // comment, a /* block */, or a dead string → Fail (comment-stripped match), not Pass.", test_file = "src/vtgate.rs", keywords = ["strip", "comment"] },
+  # VT-2 RE-AUTHORED (SL-170 PHASE-03 /consult, Option D — supersedes codex F-3
+  # comment-strip). Id immutable; expects/keywords rewritten per the escape valve.
+  # POL-002: comment/string syntax is host-LANGUAGE convention; a gate stripping
+  # it would load-bear correctness on the host's language. So matching is plain
+  # RAW substring; the dead-string/comment-bait case is ADVERSARIAL, out of the
+  # OMISSION threat model (design §5.2). `patterns` is the language-agnostic
+  # stronger-shape escalation. See notes.md "PHASE-03 — F-3 walked back (POL-002)".
+  { id = "VT-2", expects = "Matching strength (Option D / POL-002): keywords match as plain RAW substrings — NO host-language comment/string stripping; the optional `patterns` line-anchored regex is the language-agnostic stronger-shape escalation (Pass when the shape is present, Fail when absent). Unit asserts the patterns escalation Fails on an absent shape and Passes on a present one.", test_file = "src/vtgate.rs", keywords = ["patterns", "Regex"] },
   { id = "VT-3", expects = "Non-gated paths: a phase with only VA/VH criteria → no VT lines; empty plan / no VT criteria → empty report, exit zero (design §5.5 edges).", test_file = "src/vtgate.rs", keywords = ["check_phases"] },
   { id = "VT-4", expects = "e2e + SL-169 replay (b): verify-vt over a fixture plan + fixture test files mixing Pass/Fail/Uncheckable/Waived → exit non-zero (the Fail), report lists all four with reasons; a VT { test_file = \"tests/e2e_list_conformance.rs\", keywords = [\"relation\",\"census\"] } against a tree missing the conformance matrix → Fail (missing keyword) → halt.", test_file = "tests/e2e_slice_verify_vt.rs", keywords = ["verify-vt", "relation", "census", "Uncheckable", "Waived"] },
 ]

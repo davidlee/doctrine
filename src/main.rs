@@ -84,6 +84,7 @@ mod tomlfmt;
 mod tty;
 mod value;
 mod verify;
+mod vtgate;
 mod worktree;
 
 use std::io::Write;

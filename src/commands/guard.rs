@@ -84,6 +84,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::slice::SliceCommand::List { .. }
             | crate::slice::SliceCommand::Show { .. }
             | crate::slice::SliceCommand::Conformance { .. }
+            | crate::slice::SliceCommand::VerifyVt { .. }
             | crate::slice::SliceCommand::Paths { .. } => Read,
             crate::slice::SliceCommand::Selector { .. } => Write("slice selector"),
         },

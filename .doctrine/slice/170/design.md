@@ -188,8 +188,8 @@ struct VerificationCriterion {
     id: String,                                  // "VT-1" — mode by prefix
     #[serde(default)] expects:  String,          // free-text, untouched
     #[serde(default)] test_file: Option<String>, // P2 structured mandate
-    #[serde(default)] keywords:  Vec<String>,    // P2: must appear in code (comment-stripped)
-    #[serde(default)] patterns:  Vec<String>,    // P2 optional: line-anchored regex (stronger shape, F-3)
+    #[serde(default)] keywords:  Vec<String>,    // P2: must appear in test_file (raw substring; POL-002)
+    #[serde(default)] patterns:  Vec<String>,    // P2 optional: line-anchored regex (language-agnostic shape escalation)
     #[serde(default)] waived:    bool,           // escape valve
     #[serde(default)] waived_reason: Option<String>,
 }
@@ -197,8 +197,8 @@ struct VerificationCriterion {
 enum VtVerdict { Pass, Fail { reason: String }, Uncheckable, Waived { reason: String } }
 
 // read_file injected (purity). waived checked first. VA/VH parsed but not gated.
-// Matching is over COMMENT-STRIPPED source (codex F-3): a keyword in a comment /
-// dead string / the criterion's own echoed text does NOT satisfy the mandate.
+// Matching is plain RAW substring (Option D / POL-002 — see below). `patterns`
+// is the optional language-agnostic stronger-shape escalation.
 fn check_vt(vt: &VerificationCriterion, read_file: &impl Fn(&str) -> Option<String>) -> VtVerdict;
 fn check_phases(plan: &Plan, read_file: &impl Fn(&str) -> Option<String>) -> Vec<PhaseVtReport>;
 fn render_summary(report: &[PhaseVtReport]) -> String;
@@ -207,16 +207,29 @@ fn render_summary(report: &[PhaseVtReport]) -> String;
 Every plan field is `#[serde(default)]` → legacy plans parse with the new fields
 defaulted; the existing `Plan::parse` tests stay green unchanged.
 
-**S3 matching strength & threat model (codex F-3).** `keywords` is checked against a
-**comment-stripped** view of `test_file` (strip line `//` and block `/* */`; a coarse
-strip suffices), so comment/dead-string bait does not satisfy a mandate. `patterns`
-(optional) is line-anchored regex for authors wanting to assert a specific shape
-(e.g. `^\s*\("relation",.*census`). **Threat model is explicit:** the gate defends
-against worker *omission* (a weak model skipping mandated work — the SL-169 failure
-mode), **not** an adversarial worker deliberately planting bait. If the worker were
-adversarial the whole dispatch trust model fails upstream of this gate (ADR-012). So
-substring-on-code is the proportionate floor; `patterns` is the escalation. Semantic
-correctness of the assertion remains a non-goal.
+**S3 matching strength & threat model (Option D / POL-002 — supersedes codex F-3
+comment-strip; revised SL-170 PHASE-03 `/consult`).** `keywords` is checked as a
+plain **raw substring** of `test_file` — **no comment or string-literal stripping.**
+Comment syntax (`//` Rust, `#` Python, …) and string-literal syntax are host-LANGUAGE
+conventions; a gate that stripped them would load-bear correctness on the host's
+language — barred by **POL-002** (no platform mechanism depends on a host convention).
+`patterns` (optional) is line-anchored regex for authors wanting to assert a specific
+shape (e.g. `^\s*\("relation",.*census`) — itself language-agnostic, a regex the
+author owns. **Threat model is explicit:** the gate defends against worker *omission*
+(a weak model skipping mandated work — the SL-169 failure mode), **not** an
+adversarial worker deliberately planting bait (a keyword hidden in a comment / dead
+string — exactly what comment-stripping would defend, and exactly the adversarial
+case §5.2 declares out of scope). If the worker were adversarial the whole dispatch
+trust model fails upstream of this gate (ADR-012). So raw substring is the
+proportionate, language-agnostic floor; `patterns` is the escalation. **Accepted
+weakness** (documented): a keyword present only in a comment satisfies the mandate —
+tolerable, since it still catches genuine omission (keyword absent entirely) and the
+bait that would beat it is out of the threat model. **Why F-3 was walked back:**
+comment/string-stripping (a) violated POL-002 and (b) false-failed legitimate e2e
+mandates that reference CLI tokens as string literals (`cmd.arg("check")`) and output
+assertions as `stdout.contains("…")` — breaking the slice's own zero-false-fail
+mandate. Surfaced by dogfooding `verify-vt 170` against PHASE-02's completed e2e.
+Semantic correctness of the assertion remains a non-goal.
 
 **CLI surfaces:**
 
@@ -457,8 +470,11 @@ becomes reachable (via IDE-008 / SL-057), 20 steps down the road.
   duration / tmp path / hash) normalises to the same sig → `persistent`, no flap.
 - **S1 fingerprint cache (codex F-2):** capture under fingerprint X then `diff` under
   fingerprint Y → cache miss → re-capture (no carry-forward poisoning).
-- **S3 comment-bait (codex F-3):** a `test_file` containing a mandated keyword *only*
-  in a comment / dead string → `Fail` (comment-stripped match), not `Pass`.
+- **S3 string-arg keyword (Option D, ex codex F-3):** a `test_file` referencing a
+  mandated keyword as a string literal (`cmd.arg("check")`) or output assertion
+  (`stdout.contains("…")`) → `Pass` (plain raw substring; no host-language stripping,
+  POL-002). A `patterns` line-anchored regex Fails when the mandated shape is absent.
+  (Comment/dead-string *bait* is adversarial → out of the omission threat model.)
 - **e2e (hermetic fixtures, SL-168 F-2):** inject a failing test into a delta →
   `check regression diff` exits non-zero with it in `new`; a pre-existing failure at
   B → lands in `persistent`, exit zero. `verify-vt` over a fixture plan + fixture
@@ -508,8 +524,12 @@ becomes reachable (via IDE-008 / SL-057), 20 steps down the road.
   reused forever. Fixed: cache key `(sha, run-fingerprint)`; refuse carry-forward on
   mismatch (INV-8).
 - **F-3 (MAJOR) — `contains` is gameable.** Comment/dead-string bait satisfies a
-  keyword. Fixed: comment-stripped matching + explicit threat model (worker omission,
-  not adversary) + optional anchored `patterns`.
+  keyword. Originally fixed with comment-stripped matching; **WALKED BACK at PHASE-03
+  (`/consult`, Option D):** comment/string-stripping is host-language-specific (POL-002
+  heresy) AND false-failed legitimate e2e mandates referencing CLI tokens as string
+  literals. Now: plain raw substring (the proportionate floor for the *omission* threat
+  model — bait is adversarial, out of scope) + optional anchored `patterns` (the
+  language-agnostic shape escalation). See §5.2 matching-strength block.
 - **F-4 (MAJOR) — waiver vs projection seam.** `prepare_review` projects the committed
   object graph (only `boundaries.toml` spliced), so a working-fs waiver is judged by
   the gate but not projected to review. Fixed: waiver committed onto `dispatch/<slice>`;

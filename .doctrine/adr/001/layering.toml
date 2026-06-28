@@ -51,6 +51,7 @@ tomlfmt = "leaf"            # out=0: TOML formatting helpers — pure
 tty = "leaf"                # out=0: terminal width/color — impure seam
 value = "leaf"              # out=0: value facet types — pure
 regression = "leaf"         # out=0: SL-170 S1 pure failure-set diff — parse/diff/render, no IO
+vtgate = "leaf"             # out=0: SL-170 S3 pure VT existence/shape gate — check/render, no IO
 
 # ── engine (15) ──────────────────────────────────────────────────────────
 # Import engines + leaves; do NOT import command modules. Core domain model,
