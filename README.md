@@ -35,9 +35,37 @@ software engineering with LLM agents.
 
 ## Installation
 
+**Prebuilt binary (macOS, no Rust toolchain) — recommended:**
+
+``` zsh
+# latest release (rolling):
+curl -fsSL https://raw.githubusercontent.com/davidlee/doctrine/main/install.sh | sh
+
+# or pin to a release tag for reproducibility:
+curl -fsSL https://raw.githubusercontent.com/davidlee/doctrine/v0.8.1/install.sh | sh
+```
+
+Installs to `~/.local/bin` (override with `DOCTRINE_BIN_DIR`); choose a version
+with `DOCTRINE_VERSION`. The script checksum-verifies what it downloads — read it
+before piping to a shell. macOS arm64 + x86_64; Linux is a follow-up.
+
+**Or with [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) (prebuilt, no compile):**
+
+``` zsh
+cargo binstall doctrine
+```
+
+**Or `cargo install` (compiles from source; needs a Rust toolchain — may hit the
+`-liconv` link error on some macOS toolchains, which the prebuilt paths above
+sidestep):**
+
 ``` zsh
 cargo install doctrine
+```
 
+Then bootstrap a project:
+
+``` zsh
 cd my_project || mkdir my_project
 
 doctrine install                  # prompts to confirm; or use --dry-run | --yes

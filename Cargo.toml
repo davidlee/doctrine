@@ -26,6 +26,15 @@ include = [
   "/LICENSE-MIT",
 ]
 
+# cargo-binstall: fetch the prebuilt release asset instead of compiling (SL-174).
+# Asset names are the §5.2 contract shared with install.sh + release.yml — change
+# all three together (R2). `{ target }` is the rustc triple, matching the
+# release.yml tarball names; the archive holds a single `doctrine` executable.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/doctrine-{ target }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "doctrine"
+
 [dependencies]
 anyhow.workspace = true
 thiserror.workspace = true

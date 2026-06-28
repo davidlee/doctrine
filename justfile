@@ -122,6 +122,8 @@ release-check: gate nix-build
 # Pass an explicit X.Y.Z or a level: `just release 0.6.0` / `just release minor`.
 # Refuses a dirty Cargo.toml/Cargo.lock so the commit is the bump alone. Tags
 # locally; push and `just publish` stay manual.
+# NB: pushing the `v*` tag triggers .github/workflows/release.yml, which builds
+# and publishes the prebuilt macOS binaries to the GitHub Release (SL-174).
 # Cut a release: bump version, run the pre-release gate, commit + tag the chore.
 release bump: readme-index
   #!/usr/bin/env bash
@@ -138,6 +140,7 @@ release bump: readme-index
   git commit -m "chore: v${version}"
   git tag "v${version}"
   echo "released v${version} (committed + tagged) — push with: git push && git push --tags"
+  echo "  (pushing the tag triggers release.yml → prebuilt macOS binaries on the GitHub Release)"
 
 # crates.io release; requires token in ENV.
 # --allow-dirty: web/map/dist is gitignored (by choice) but force-included in the
