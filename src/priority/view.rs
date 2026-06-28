@@ -130,6 +130,12 @@ pub(crate) struct NextRow {
     pub(crate) reasons: Vec<ReasonKind>,
     pub(crate) blockers: Vec<String>,
     pub(crate) blocking: Vec<String>,
+    /// Authored estimate facet (SL-171 PHASE-01) — `None` when no estimate authored.
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    /// Authored value facet (SL-171 PHASE-01) — `None` when no value authored.
+    pub(crate) value: Option<crate::value::ValueFacet>,
+    /// Authored tags (SL-171 PHASE-01) — empty when no tags authored.
+    pub(crate) tags: Vec<String>,
 }
 
 /// The `blockers <ID>` result (design §5.4 / REQ-073) — the node's direct (or

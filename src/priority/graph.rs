@@ -148,6 +148,10 @@ pub(crate) struct NodeAttr {
     /// pre-pass and consumed by the consequence post-pass (PHASE-04) and later
     /// the mint order (PHASE-05).
     pub(crate) base_score: BaseScore,
+    /// The entity's authored facets (estimate/value/risk/tags) — carried so the
+    /// surface shell projects them into view rows without recomputation
+    /// (SL-171 PHASE-01, D2).
+    pub(crate) facets: EntityFacets,
 }
 
 /// The assembled priority graph (design §5.2). The cordage `Graph`, the
@@ -345,6 +349,8 @@ pub(crate) fn build_from(
     // 3c. Per-node attributes — RAW authored status verbatim, kind, promoted, and the
     //     `base_score` computed in the 2b pre-pass (reused, not recomputed). Only a
     //     backlog item can be `promoted`; every other kind is never promoted.
+    //     Facets (estimate/value/risk/tags) are captured here from the scan so the
+    //     surface shell projects them into view rows without recomputation (SL-171 D2).
     let mut attrs: BTreeMap<EntityKey, NodeAttr> = BTreeMap::new();
     for entity in scanned {
         let base = base_by_key.get(&entity.key).copied().unwrap_or(BaseScore {
@@ -361,6 +367,12 @@ pub(crate) fn build_from(
                     .is_some_and(|(_ds, promoted)| *promoted),
                 title: entity.title.clone(),
                 base_score: base,
+                facets: EntityFacets {
+                    estimate: entity.estimate.clone(),
+                    value: entity.value.clone(),
+                    risk: entity.risk.clone(),
+                    tags: entity.tags.clone(),
+                },
             },
         );
     }
