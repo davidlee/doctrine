@@ -42,3 +42,9 @@ No phase ordering question arises (single phase). The ordering machinery
   point at any kind (`SL-169`), not just backlog prefixes.
 - Behaviour-preservation gate: no existing `backlog`/`listing` suite changes —
   the new tests are additive; the shared listing axes and ordering are untouched.
+- Test seam is proven and ready: `test_support::Fixture { rels: Some(RelLit {
+  needs, after, .. }) }` already seeds edge-bearing items; existing tests call
+  `list_rows` directly (the deterministic String-returning compute boundary).
+  Adding the `after`/`needs` params to `list_rows` ripples to its existing test
+  call sites (the wrapper near the bottom of the test module + direct callers) —
+  pass `&[]` there. Mechanical, expected, not a behaviour change.
