@@ -68,6 +68,31 @@ fn default_ref_coeff() -> f64 {
     1.0
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub(crate) struct EstimateCost {
+    #[serde(default = "default_skew")]
+    pub(crate) skew: f64,
+    #[serde(default = "default_margin")]
+    pub(crate) margin: f64,
+}
+
+impl Default for EstimateCost {
+    fn default() -> Self {
+        Self {
+            skew: 0.65,
+            margin: 1.0,
+        }
+    }
+}
+
+fn default_skew() -> f64 {
+    0.65
+}
+fn default_margin() -> f64 {
+    1.0
+}
+
 // ── top-level config ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -81,6 +106,8 @@ pub(crate) struct PriorityConfig {
     pub(crate) tag_coefficients: BTreeMap<String, f64>,
     #[serde(default)]
     pub(crate) consequence: ConsequenceCoeffs,
+    #[serde(default)]
+    pub(crate) estimate: EstimateCost,
 }
 
 // ── accessors ─────────────────────────────────────────────────────────────
@@ -125,6 +152,10 @@ pub(crate) fn load_from_table(table: &toml::value::Table) -> PriorityConfig {
     if let Some(t) = table.get("consequence").and_then(|v| v.as_table()) {
         cfg.consequence.dep_coeff = f64_or(t, "dep_coeff", 0.5);
         cfg.consequence.ref_coeff = f64_or(t, "ref_coeff", 1.0);
+    }
+    if let Some(t) = table.get("estimate").and_then(|v| v.as_table()) {
+        cfg.estimate.skew = f64_or(t, "skew", 0.65);
+        cfg.estimate.margin = f64_or(t, "margin", 1.0);
     }
     if let Some(t) = table.get("kind_weights").and_then(|v| v.as_table()) {
         for (k, v) in t {
@@ -173,6 +204,10 @@ fn clamp(mut cfg: PriorityConfig) -> PriorityConfig {
     // dep_coeff: (0, 1]
     cfg.consequence.dep_coeff = clamp_dep(cfg.consequence.dep_coeff);
 
+    // estimate: skew → [0.0, 1.0]; margin → non-negative (reuse clamp_general)
+    cfg.estimate.skew = clamp_skew(cfg.estimate.skew);
+    cfg.estimate.margin = clamp_general(cfg.estimate.margin, 1.0);
+
     // kind_weights and tag_coefficients: clamp each value
     for v in cfg.kind_weights.values_mut() {
         *v = clamp_general(*v, 1.0);
@@ -204,6 +239,20 @@ pub(crate) fn clamp_dep(value: f64) -> f64 {
         return 0.5;
     }
     if value <= 0.0 {
+        return 0.0;
+    }
+    if value > 1.0 {
+        return 1.0;
+    }
+    value
+}
+
+/// Skew clamp (estimate): non-finite → fallback (0.65); < 0 → 0.0; > 1 → 1.0.
+pub(crate) fn clamp_skew(value: f64) -> f64 {
+    if !value.is_finite() {
+        return 0.65;
+    }
+    if value < 0.0 {
         return 0.0;
     }
     if value > 1.0 {
@@ -375,5 +424,46 @@ mod tests {
     fn tag_coeff_present_key_returns_stored() {
         let cfg = load_from("[priority]\ntag_coefficients = { \"area:risk\" = 2.0 }\n");
         assert_eq!(cfg.tag_coeff("area:risk"), 2.0);
+    }
+
+    // ---- estimate sub-table (SL-172) ----
+
+    /// VT-1: absent file AND a `[priority]` with no `estimate` sub-table ⇒ defaults.
+    #[test]
+    fn estimate_absent_uses_defaults() {
+        let cfg = load_from("[priority]\ncoefficients = { value = 3.0 }\n");
+        assert_eq!(cfg.estimate.skew, 0.65);
+        assert_eq!(cfg.estimate.margin, 1.0);
+
+        let dir = tempfile::tempdir().unwrap();
+        let cfg2 = load(dir.path());
+        assert_eq!(cfg2.estimate.skew, 0.65);
+        assert_eq!(cfg2.estimate.margin, 1.0);
+    }
+
+    /// VT-2: clamps — out-of-range, negative, NaN/inf → safe defaults.
+    #[test]
+    fn estimate_clamps_values() {
+        // skew > 1 → 1.0; margin < 0 → 0.0
+        let cfg = load_from("[priority]\nestimate = { skew = 1.5, margin = -3 }\n");
+        assert_eq!(cfg.estimate.skew, 1.0);
+        assert_eq!(cfg.estimate.margin, 0.0);
+
+        // skew < 0 → 0.0
+        let cfg2 = load_from("[priority]\nestimate = { skew = -0.2 }\n");
+        assert_eq!(cfg2.estimate.skew, 0.0);
+
+        // NaN/inf → field defaults
+        let cfg3 = load_from("[priority]\nestimate = { skew = nan, margin = inf }\n");
+        assert_eq!(cfg3.estimate.skew, 0.65);
+        assert_eq!(cfg3.estimate.margin, 1.0);
+    }
+
+    /// VT-3: round-trip — valid in-range values survive.
+    #[test]
+    fn estimate_roundtrip_valid_values() {
+        let cfg = load_from("[priority]\nestimate = { skew = 0.7, margin = 2 }\n");
+        assert_eq!(cfg.estimate.skew, 0.7);
+        assert_eq!(cfg.estimate.margin, 2.0);
     }
 }
