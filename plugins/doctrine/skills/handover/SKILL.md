@@ -30,6 +30,10 @@ Handover for a phase:
 - [ ] Read the just-completed `state/.../phases/phase-NN.md` (findings,
       hand-forward) and the slice `notes.md` for durable decisions.
 - [ ] Confirm the next phase's scope from `plan.toml` (EX/VT are authoritative).
+- [ ] **At a dispatch conclude (SL-170 S6):** embed the `slice verify-vt <id>` VT
+      summary block **and** a one-line S1 regression status (from the verify
+      beat's `check regression diff`) in the packet — surfacing any
+      `UNCHECKABLE` / `WAIVED` / `Fail` gap at handover, not at audit.
 - [ ] record any information worth durably persisting in `notes.md`, or as appropriate.
 - [ ] Emit the sections below into `handover.md`
 - [ ] Print instructions (with path to `handover.md`) addressed to the next agent

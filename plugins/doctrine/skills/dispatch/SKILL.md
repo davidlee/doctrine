@@ -31,7 +31,8 @@ orchestrator funnel."
    Then spawn worker(s) per the chosen arm's template.
 5. Funnel the batch (import → verify → branch-point → one commit → record)
 6. Repeat from new HEAD until all phases done
-7. Conclude: `dispatch sync --prepare-review` → remove coord worktree → audit
+7. Conclude: `slice verify-vt <id>` (VT gate, coord tree) → on green
+   `dispatch sync --prepare-review` → remove coord worktree → audit
 
 ## The funnel (per batch)
 
@@ -90,9 +91,25 @@ context so each conflict is one phase's delta. Conflicts there report-and-halt f
 manual resolve in the coord tree — never auto-merged.
 
 ## Conclude
-When all phases land: `dispatch sync --prepare-review` → remove coordination worktree
-directory (KEEP the refs) → `slice status <id> audit` → `/audit` from parent/root.
-Stage-2 integrate is `/close`'s job, post-audit — never land code pre-audit.
+When all phases land, run the conclude cadence **in the coord tree, before it is
+removed** (SL-170 S3/S6): `slice verify-vt <id>` → on green
+`dispatch sync --prepare-review` → remove coordination worktree directory (KEEP
+the refs) → `slice status <id> audit` → `/audit` from parent/root. Stage-2
+integrate is `/close`'s job, post-audit — never land code pre-audit.
+
+`slice verify-vt <id>` is the **VT existence/shape gate** (S3): it reads the coord
+tree's `plan.toml` and checks every `VT`-mode criterion's mandated `test_file` +
+`keywords`. A `Fail` exits non-zero and **HALTS handover** — do not prepare-review
+past it; `/consult` → revise-or-waive the authored plan (never self-relax a
+mandate), then re-run. `Uncheckable` / `Waived` are visible but non-halting. The
+fs reader suffices here because the orchestrator (sole writer) has committed any
+mid-dispatch waiver onto `dispatch/<slice>`, so the coord working tree == the
+committed graph `prepare-review` projects (INV-6).
+
+**Embed at handover (S6):** carry the `verify-vt` VT summary block **and** a
+one-line S1 regression status (lifted from the verify beat's `check regression
+diff`) into the conclude output and the `/handover` packet — so a gap (incl.
+`UNCHECKABLE` / `WAIVED`, rendered distinctly) is visible at handover, not at audit.
 
 `prepare-review` is the **enforced** conformance beat (ISS-052): before projecting
 refs it commits the boundaries ledger, **derives** the registry from that committed

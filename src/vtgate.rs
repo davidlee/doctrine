@@ -414,7 +414,9 @@ mod tests {
     // ---- render --------------------------------------------------------------
 
     #[test]
-    fn render_distinguishes_waived_and_uncheckable() {
+    fn render_surfaces_all_four_verdicts() {
+        // VT-1 (S6): every verdict — Pass / Fail / Uncheckable / Waived — renders,
+        // each reason surfaced, the latter two distinctly from Pass/Fail.
         let reports = vec![PhaseVtReport {
             phase_id: "PHASE-01".to_string(),
             lines: vec![
@@ -424,10 +426,16 @@ mod tests {
                 },
                 VtLine {
                     id: "VT-2".to_string(),
-                    verdict: VtVerdict::Uncheckable,
+                    verdict: VtVerdict::Fail {
+                        reason: "test_file missing.rs not found".to_string(),
+                    },
                 },
                 VtLine {
                     id: "VT-3".to_string(),
+                    verdict: VtVerdict::Uncheckable,
+                },
+                VtLine {
+                    id: "VT-4".to_string(),
                     verdict: VtVerdict::Waived {
                         reason: "infeasible".to_string(),
                     },
@@ -435,9 +443,12 @@ mod tests {
             ],
         }];
         let out = render_summary(&reports);
-        assert!(out.contains(LABEL_WAIVED));
+        assert!(out.contains(LABEL_PASS));
+        assert!(out.contains(LABEL_FAIL));
         assert!(out.contains(LABEL_UNCHECKABLE));
-        assert!(out.contains("infeasible"));
+        assert!(out.contains(LABEL_WAIVED));
+        assert!(out.contains("missing.rs"), "the Fail reason must surface");
+        assert!(out.contains("infeasible"), "the Waived reason must surface");
     }
 
     #[test]
