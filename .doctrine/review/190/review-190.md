@@ -97,3 +97,25 @@ discipline, not leaked into the bundle.
   base `main`, source `review/171` + the F-3 test commit). `/close` integrates from
   the admitted candidate, not raw `review/171` — the pagination tests live only on
   the candidate tip.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md line 3: status `drafted (pre-lock)` → `locked; both phases
+  implemented + dispatched, slice in reconcile` (RV-190 F-5). Pure prose-truth
+  fix, no code/governance impact.
+
+### REVs completed
+- None. Brief carried no governance/spec item; F-4's systemic remediation is
+  tracked as backlog IMP-209, not a REV.
+
+### Withdrawn / tolerated
+- RV-190 F-1, F-2: verified — aligned (design-sanctioned undeclared test edits,
+  golden §10 F4 + NF-001 allowlist EX-3/EX-5). No write needed.
+- RV-190 F-3: verified — fix-now remediated in audit scope on candidate
+  cand-171-review-001 @ 47123c58 (11 pagination tests). Integration pulls from
+  the admitted candidate (see Integration note); not a reconcile write.
+- RV-190 F-4: tolerated — verify-vt inert (prose-only plan VTs); systemic fix
+  = IMP-209. SL-171 plan left prose-only by user decision.
+
+Reconcile pass complete — handoff to /close.

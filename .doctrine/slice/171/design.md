@@ -1,6 +1,6 @@
 # SL-171 — design: `doctrine next` read-surface improvements
 
-Status: drafted (pre-lock). Governs design intent for SL-171; the plan is downstream.
+Status: locked; both phases implemented + dispatched, slice in reconcile. Governs design intent for SL-171; the plan is downstream.
 
 ## 1. Purpose & framing
 
