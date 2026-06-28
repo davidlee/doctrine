@@ -1,0 +1,52 @@
+id    = 189
+slug  = "reconciliation-review-of-sl-172"
+title = "reconciliation review of SL-172"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-172"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "est_cost signature deviates from design §5.2 (Option<&EstimateFacet> → Option<(f64,f64)>, ctx by-value)"
+detail = "Expected (design.md §5.2 L117): `fn est_cost(est: Option<&EstimateFacet>, ctx: &CostCtx, ec: &config::EstimateCost) -> f64`. Observed (graph.rs:93): `fn est_cost(bounds: Option<(f64, f64)>, ctx: CostCtx, ec: &config::EstimateCost) -> f64`. The param became plain bounds `(lower, upper)` instead of a facet ref, and `ctx` is passed by value (Copy struct). Deliberate deviation: the design signature names `EstimateFacet` inside graph.rs's cost fn, which trips the authored NF-001 non-blocking tripwire (graph.rs must not name facet types — facets route through the local `EntityFacets` struct; the caller destructures bounds before the call). Implementation is correct and honours NF-001; the design signature is stale. The design author did not cross-check §5.2 against the NF-001 tripwire."
+disposition = "verified"
+response = "Observation confirmed. Implementation is correct and is the one that honours NF-001; the design §5.2 signature is the stale artifact. No code change. Remediation delegated to /reconcile (per-slice direct edit) — amend design.md §5.2 to `fn est_cost(bounds: Option<(f64,f64)>, ctx: CostCtx, ec: &config::EstimateCost) -> f64` and note the NF-001 rationale for the bounds-tuple param. See Reconciliation Brief → Per-slice."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "design over-declared 2 e2e goldens as deliberate-recompute targets; neither moved"
+detail = """design.md §307-308 declares `tests/e2e_priority_golden.rs` and `tests/e2e_priority_cross_kind.rs` as design-targets that "recompute (deliberate, reviewed)". slice conformance reports both as **undelivered** (declared selector, no recorded source-delta). git confirms dispatch/172 touches zero test files. Running both on the candidate impl bundle: **green unchanged** (β=0.65 default does not move these fixtures' asserted scores/order — value-free or non-estimate-bearing items). So the code is correct; the design's prediction that these goldens would recompute is inaccurate. Canon (design.md) over-declares a deliberate change that never occurred."""
+disposition = "verified"
+response = 'Observation confirmed. Code correct (goldens green unchanged); design prediction inaccurate. No code change. Remediation delegated to /reconcile (per-slice direct edit) — correct design.md §307-308 to record that `e2e_priority_golden` / `e2e_priority_cross_kind` were declared targets but did not move (verify-unchanged), demoting them from "deliberate recompute". See Reconciliation Brief → Per-slice.'
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "owed governance amendments unwritten: ADR-015 §1+§2+§4 + SPEC-020 REQ-310/FR-011 deferral lift"
+detail = "The slice scope itself routes a governance amendment through REV: the cost model rewrites ADR-015 §1 (`value_dim` cost term), §2, §4, and lifts SPEC-020 REQ-310 / FR-011's v1 aggregation-deferral. Observed: implementation landed (skew + bare anchor live in graph.rs), but ADR-015 still describes `est_cost = midpoint` and SPEC-020 still carries the v1 deferral — canon currently contradicts shipped behaviour. This is owed, planned reconcile-surface work (REV), not a code defect. Recorded here so the reconciliation brief carries it. NOT a blocker: the REV is reconcile's job, written after audit→reconcile; blocking would deadlock the transition."
+disposition = "verified"
+response = "Observation confirmed. Owed governance, not a defect; remediation is reconcile's REV write surface (audit must not write governance). Delegated to /reconcile — REV modifying ADR-015 §1+§2+§4 to the skew + bare-anchor cost model, and lifting SPEC-020 REQ-310 / FR-011's v1 aggregation deferral. Authorized by the slice scope. See Reconciliation Brief → Governance/spec (REV)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "cost-model + config invariants verified green (INV-1/2/3, clamps, surface parity)"
+detail = "Positive-evidence anchor. est_cost implements design: skew `lower + β(upper−lower)`, bare anchor `max_upper(corpus) + margin`, empty-corpus → 1.0 fallback. max_upper computed in the scan pre-pass and threaded as a CostCtx input — no corpus read inside the pure scoring fn (pure/imperative split held). INV-1 (β=0.5 ≡ legacy midpoint), INV-2 (anchor dominance, non-terminal), INV-3 (floor_eps, no div-by-zero) covered by named unit tests. config.rs clamps skew∈[0,1], margin≥0, defaults 0.65/1.0; `config show/set/get/unset` reach both keys. Full suite green (2755 + integration, 0 failed), clippy --workspace zero warnings. No change needed."
+disposition = "aligned"
+response = "Behaviour matches design; invariants hold; suite + clippy green. No follow-up."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

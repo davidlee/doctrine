@@ -378,3 +378,15 @@ the next auditor skips the rediscovery. Minor: system doctrine binary predates
 this slice's `verify-vt` verb — had to switch to ./target/debug (expected for a
 slice that adds a verb, but a one-line "dogfood via build target" hint in the
 audit handover would save the failed call).
+
+[audit; SL-172-RV-189-audit]
+Candidate-worktree provisioning gap. `dispatch candidate create --worktree`
+produces a fresh worktree that lacks gitignored build inputs — here
+`web/map/dist/` (RustEmbed `#[folder]` for map_server). The bin fails to compile
+(`Assets::get` not found) until the assets are copied in, so the audit suite
+run is blocked on a manual `cp -r web/map/dist <cand>/web/map/dist` before
+`just check`. Token cost: a full failed-compile cycle + diagnosis before the
+real audit work could start. The candidate-create provisioning step should
+seed (symlink/copy) gitignored build artifacts the bin embeds, or the audit
+skill should document the copy-in as a known pre-step for slices that don't
+themselves touch web assets.
