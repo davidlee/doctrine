@@ -412,3 +412,30 @@ only the worker tree; `--dev/--proc/--tmpfs /tmp`; `--die-with-parent`. No token
 friction worth flagging — riskiest assumption (nested userns) was discharged by
 one 8-line probe before any file was written. Residual unknown deferred to live
 dispatch: whether pi needs a writable $HOME dot-dir beyond --session-dir.
+
+[dispatch (pi/subprocess arm); SL-171-drive-2026-06-28]
+Friction encountered during SL-171 two-phase pi-arm dispatch:
+- pi-spawn.sh shipped committed-broken (line-17 `}m -rf "$D"` syntax error, fbade28c) —
+  `bash -n` fails; cost a halt + user confirm + fix-commit before any spawn could run.
+- pi-spawn-confined.sh (D-B3 spike) had two latent bugs that only surface in-jail:
+  (1) relative `$D` → `bwrap --bind` can't mkdir mountpoint under `--ro-bind / /`
+      (needs absolute path); (2) `--ro-bind / /` starves pi's `~/.pi` config → pi can't
+      write its runtime lock → ships wrong (Google) key to OpenAI → 401. Needed
+      `--bind $HOME/.pi` rw. Both cost a failed spawn + log-dig each.
+- Confined arm CANNOT let the worker self-commit: a linked worktree's git object store
+  lives in the main tree's `.git` (ro-bound), so `git commit` fails RO. Worker did all
+  the work but left it uncommitted; orchestrator had to import the WORKING-TREE diff
+  (`git diff B -- src | git apply --index`) instead of cherry-picking a commit. This is
+  a structural property of the confined arm, not a one-off — worth a skill note.
+- Worker self-reports unreliable: PHASE-01 worker claimed "green except 3 pre-existing
+  worktree::marker failures" but (a) missed a real NF-001 allowlist tripwire failure it
+  caused, and (b) the "3 marker failures" were its own DOCTRINE_WORKER=1 env (later fixed
+  on trunk b02d2ff5). Orchestrator coord-tree verify is the only trustworthy gate.
+- Orchestrator verify footgun: `cargo test 2>&1 | tail -40` truncates a 3366-test run to
+  the last 40 lines — hid the true pass/fail picture; had to re-run with full capture to a
+  file + grep all `test result:` lines. Don't tail-pipe the verify.
+- Installed `~/.cargo/bin/doctrine` is stale (lacks `slice verify-vt`); had to fall back to
+  the coord tree's freshly-built `./target/debug/doctrine` for the conclude VT gate.
+- Plan VTs carry prose `expects` only (no structured `test_file`/`keywords`) → verify-vt
+  reports every VT UNCHECKABLE. Non-halting, but the S3 gate provides zero real coverage
+  signal for this slice.
