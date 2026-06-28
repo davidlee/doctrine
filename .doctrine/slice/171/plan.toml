@@ -1,0 +1,85 @@
+# Implementation plan for SL-171 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-171"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Facet columns and --columns projection"
+objective = """
+Surface authored estimate/value/tags facets as `next` columns, wire the SL-037
+`--columns` projection, and retire the redundant `unblocks` column. Carries
+facet data through graph → view → surface so the renderer reads it (never
+recomputes — the SL-047 render-source-of-truth invariant). No pagination yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; SL-171 implements SPEC-001; EstimateFacet/ValueFacet/EntityFacets exist (SL-132)." },
+  { id = "EN-2", text = "listing::select_columns, default_with_tags, paint_tag, render_columns are available (SL-037/SL-053)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "NEXT_COLS = [id, kind, status, score, estimate, value, tags, title] (size 8); the `unblocks` column is removed entirely and not selectable." },
+  { id = "EX-2", text = "NEXT_DEFAULT = [id, status, score, estimate, value, title]; effective default = default_with_tags(NEXT_DEFAULT, any_tagged); `kind` is selectable-only." },
+  { id = "EX-3", text = "NodeAttr carries `facets: EntityFacets` (populated at graph build 3c from the scanned entity); NextRow carries render-subset estimate/value/tags; surface::next() projects from NodeAttr.facets." },
+  { id = "EX-4", text = "`--columns` is wired on the Next CLI variant → run_next → next_human via select_columns; unknown column → clean error listing the available set." },
+  { id = "EX-5", text = "Facet cells are compact, unitless, pure fn(&NextRow)->String: estimate `{lower}-{upper}` (en-dash), value `{:.1}`, tags joined (paint_tag), absent -> listing::ABSENT_CELL (= U+00B7 middle dot, a new named const, STD-001)." },
+  { id = "EX-6", text = "`next --json` output is byte-identical to pre-slice — the new NextRow fields do not leak into next_json." },
+]
+verification = [
+  { id = "VT-1", expects = "`next --columns id,score` emits exactly headers id,score; `--columns bogus` errors with the available-set message (select_columns UX)." },
+  { id = "VT-2", expects = "Default headers are id,status,score,estimate,value,title when no row tagged; `kind` and `unblocks` absent; `--columns unblocks` errors (no such column)." },
+  { id = "VT-3", expects = "The tags column appears iff a surfaced row is tagged (default_with_tags); hidden when none tagged; `--columns tags` forces it even all-empty." },
+  { id = "VT-4", expects = "Faceted row renders estimate `3.2-4.8` and value `5.0`; a bare row renders the ABSENT_CELL in both; over a seeded fixture graph." },
+  { id = "VT-5", expects = "Golden: `next --json` is byte-identical to the pre-slice payload (still carries `blocking`; no estimate/value/tags fields)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pagination: --limit / --offset / --page + shared truncation footer"
+objective = """
+Add `next` pagination mirroring `memory` (--limit default 20, --offset, --page
+sugar), with a truncation footer shown only when results are clipped. Lift
+`format_truncation_notice` from retrieve.rs to shared `listing` so both surfaces
+share one footer fn. Guard the --limit 0 (uncapped) path against the footer's
+division-by-zero.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green: the column model + facet carriage have landed and `next` renders the new default." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "format_truncation_notice lives in src/listing.rs (pub(crate), signature `(shown, total, offset, page_size) -> String`); retrieve.rs's two call sites re-point to it; the local copy is deleted." },
+  { id = "EX-2", text = "The Next CLI variant gains --limit (default 20), --offset (default 0), --page (Option<usize>, conflicts_with offset); page->offset resolves at the CLI layer (offset = (page-1)*page_size, page_size = limit) mirroring memory." },
+  { id = "EX-3", text = "run_next + next_human thread limit/offset; the visible slice is rows[offset.min(total)..] capped by limit; ordering is unchanged (slice after sort)." },
+  { id = "EX-4", text = "Footer is table-mode only and guarded by `limit != 0 && shown < total` — `--limit 0` (uncapped) never foots and never divides by zero, even with `--offset N>0`." },
+  { id = "EX-5", text = "`--page 0` errors; `--limit 0 --page N` errors (`--page requires a positive --limit`). --json ignores limit/offset/page (full set, no footer)." },
+  { id = "EX-6", text = "any_tagged (the default_with_tags gate) is computed over the FULL result set before the offset/limit slice (D7) — the tags column's presence is stable across pages." },
+]
+verification = [
+  { id = "VT-1", expects = "`next --limit 2` shows 2 rows + footer `2 of N; use --page 2 ...`; `--offset 2` and `--page 2` produce the equivalent page." },
+  { id = "VT-5", expects = "Page-stable tags column: with exactly one tagged row in a multi-page set, the tags column is present on every page (or absent on every page if --columns omits it) — never per-page flicker (D7)." },
+  { id = "VT-2", expects = "`--limit 0` shows all rows with no footer; `--limit 0 --offset N` shows rows[N..] with no footer and no panic (F1 guard); `--limit 0 --page 2` errors; `--page 0` errors." },
+  { id = "VT-3", expects = "Behaviour-preservation: the existing retrieve/find/memory-list truncation goldens stay green UNCHANGED after the lift (pure move)." },
+  { id = "VT-4", expects = "`offset > total` (with limit>0) -> empty body + the `offset >= total` footer branch (`reduce --offset or --page`)." },
+]
+specs        = []
+requirements = []

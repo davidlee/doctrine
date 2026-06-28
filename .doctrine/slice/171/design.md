@@ -86,7 +86,9 @@ title   Alternate(TITLE_*)     r.title
 `tags` column rides the house convention verbatim (backlog/knowledge/concept_map):
 `cell` and `split` agree byte-for-byte stripped of ANSI; `default_with_tags(NEXT_DEFAULT, any_tagged)`
 splices `tags` before `title` iff any surfaced row is tagged; `--columns` bypasses
-the splice (explicit list wins). `any_tagged = rows.iter().any(|r| !r.tags.is_empty())`.
+the splice (explicit list wins). `any_tagged = rows.iter().any(|r| !r.tags.is_empty())`
+is computed over the **full** result set, **before** the pagination slice (D7) — so
+the `tags` column's presence is stable across pages, never flickering per-page.
 
 Cell formatting is a pure non-capturing `fn(&NextRow)->String` — no config, no unit.
 The `·` middle-dot is the listing absent-value convention. **No shared const for it
@@ -135,6 +137,9 @@ column projection (the listing precedent: `--columns`/`--limit` are table-only).
 - **D4** compact unitless cells (no `format_show` reuse — altitude + closure mismatch).
 - **D5** `kind` demoted to selectable-only (redundant with id prefix).
 - **D6** `--json` unchanged.
+- **D7** `any_tagged` (the `default_with_tags` gate) is computed over the full
+  result set, before the offset/limit slice — `tags` column presence is page-stable
+  (surfaced at planning; no per-page flicker).
 
 ## 7. Verification alignment
 
