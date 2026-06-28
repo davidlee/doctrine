@@ -63,6 +63,10 @@ IDE only) is **wrong** here. Uppercasing the input first absorbs case
 (`kind_by_prefix` is case-sensitive); `canonical_id`'s `{id:03}` absorbs padding.
 Thus `--after imp-0194`, `IMP-194`, `IMP-0194` all match a stored `IMP-194`.
 
+`norm_ref` is applied to **both** sides — query refs and stored `to`/`needs` —
+so it also absorbs variance an author wrote into the edge itself (e.g. a stored
+lowercase `imp-194`), not just on the query.
+
 This honors the scope's real intent — **no existence resolution**, so a
 dangling/deleted ref still matches — while dropping the brittle raw-string
 equality. The two are separable: normalization does no disk access.
@@ -103,6 +107,9 @@ No change to `src/listing.rs`, `src/dep_seq.rs`, JSON shape, or ordering.
 Unit tests on `list_rows` (the pure compute half):
 
 - `--after IMP-194 --all` retains only items with that `after` edge.
+- **Negative**: an item with an edge to `A` is excluded by `--after B`.
+- Membership invariant under a `--by sequence` cycle-degrade: the degrade
+  changes only ordering, not the filtered set.
 - **Normalization**: `--after imp-0194` matches a stored `IMP-194`.
 - Cross-kind: `--needs SL-169` matches a `needs` ref of `SL-169`.
 - `--after` AND `--status` AND-compose.
