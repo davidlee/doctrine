@@ -21,12 +21,64 @@ dependencies = []
 # are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
 # reference forms): EN-1 entry, EX-1 exit, and verification by mode —
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
 [[phase]]
 id        = "PHASE-01"
-name      = ""
-objective = ""
-entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
-exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
-specs             = []           # per-phase narrowing of the plan's specs
-requirements      = []
+name      = "Estimate cost config knobs"
+objective = "Add the [priority.estimate] { skew, margin } config sub-table to PriorityConfig with defaults 0.65 / 1.0 and fail-safe clamps (skew ∈ [0,1], margin ≥ 0). No scoring behaviour change yet — the knobs land before their consumer (PHASE-02). (design §5.2, D3)"
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §5.2 config block is locked; PriorityConfig + load_from_table + clamp exist as the integration seam (current state)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "EstimateCost { skew: f64, margin: f64 } exists on PriorityConfig with Default { 0.65, 1.0 }, parsed from [priority.estimate] in load_from_table via the existing f64_or path." },
+  { id = "EX-2", text = "clamp() enforces skew → [0.0, 1.0] and margin → max(0.0); NaN/inf route to the field default via the existing clamp path. doctrine check gate is green." },
+]
+verification = [
+  { id = "VT-1", expects = "Absent file / absent [priority.estimate] section ⇒ defaults skew=0.65, margin=1.0." },
+  { id = "VT-2", expects = "skew clamps to the unit interval (1.5 → 1.0, -0.2 → 0.0); margin clamps non-negative (-3 → 0.0); NaN/inf → default." },
+  { id = "VT-3", expects = "Well-formed values round-trip (skew=0.7, margin=2 → read back as 0.7 / 2.0)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Skewed est_cost and non-terminal bare anchor"
+objective = "Replace the inline midpoint divisor with a pure est_cost: estimated → lower + β·(upper−lower); bare → max_upper(non-terminal corpus) + margin; empty → 1.0. Compute the anchor in build_from before the base pre-pass and thread CostCtx into base_score. Migrate the midpoint-coupled tests and recompute the priority goldens. (design §5.1, §5.4, INV-1..4, D2/D4)"
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — EstimateCost { skew, margin } is available on PriorityConfig." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "est_cost(), floor_eps(), and CostCtx exist (graph.rs); base_score takes &CostCtx and computes value_dim over est_cost; the inline `est_mid` midpoint match is removed." },
+  { id = "EX-2", text = "build_from folds max_upper over scanned entities where partition::status_class(kind, status) != Terminal, before the 2b base pre-pass; absent = max_upper + margin, or 1.0 when no non-terminal estimate exists. Mint order remains computed before the graph." },
+  { id = "EX-3", text = "Midpoint-coupled assertions (graph.rs base_score_* incl. ~:1142-1175, and surface.rs explain va1) are migrated to skewed est_cost; e2e_priority_golden + e2e_priority_cross_kind fixtures are recomputed and their deltas reviewed. doctrine check gate is green." },
+]
+verification = [
+  { id = "VT-1", expects = "INV-1: β = 0.5 ⇒ est_cost == midpoint(lower, upper) exactly (legacy equivalence) for a representative estimate." },
+  { id = "VT-2", expects = "β = 0.65 pulls est_cost toward upper (e.g. lower=0, upper=10 → 6.5), lowering value_dim vs legacy." },
+  { id = "VT-3", expects = "INV-2: with margin > 0, a bare value-item's est_cost ≥ every non-terminal estimated item's est_cost (anchor dominance; asserted ≥)." },
+  { id = "VT-4", expects = "F3: a Terminal (closed) item with a huge upper does NOT change a live bare item's score — the anchor folds non-terminal only." },
+  { id = "VT-5", expects = "Empty corpus (no non-terminal estimate anywhere) ⇒ a bare item falls back to est_cost = 1.0." },
+  { id = "VT-6", expects = "INV-3: non-positive bounds (lower + β·span ≤ 0) floor to EPSILON; no div-by-zero and no NaN escapes value_dim (is_finite guard holds)." },
+  { id = "VH-1", expects = "Recomputed priority goldens reviewed for direction: bare value-items sink below estimated peers; estimated items' relative order is stable under a β-only change." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Config CLI surface for the estimate knobs"
+objective = "Extend the first-party `doctrine config show/set/get/unset` to recognise estimate.skew / estimate.margin, so the operator surface matches the authorable schema (codex F4, D6). Unknown-key handling for other keys is unchanged."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the keys exist on PriorityConfig and round-trip through load." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "config show lists estimate.skew and estimate.margin (effective + raw); set/get/unset accept both through the existing validated path; rejection of genuinely unknown keys is preserved. doctrine check gate is green." },
+]
+verification = [
+  { id = "VT-1", expects = "`config get estimate.skew` on a default project returns the effective default 0.65." },
+  { id = "VT-2", expects = "`config set estimate.margin 2` then `get` returns 2; `show` renders both estimate rows." },
+  { id = "VT-3", expects = "`config unset estimate.skew` reverts it to the 0.65 default." },
+]
+specs        = []
+requirements = []
