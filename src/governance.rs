@@ -275,7 +275,10 @@ pub(crate) fn supersession_pair(
 ) -> anyhow::Result<(Vec<String>, Vec<String>)> {
     let (doc, _toml_text, _body) = read_doc(g, root, id)?;
     // ADR-010 Amendment: governance supersedes stays typed, never migrated to [[relation]].
-    Ok((doc.relationships.supersedes, doc.relationships.superseded_by))
+    Ok((
+        doc.relationships.supersedes,
+        doc.relationships.superseded_by,
+    ))
 }
 
 /// A governance entity's authored outbound relations (SL-046 §5.2). Emits
@@ -310,12 +313,7 @@ pub(crate) fn relation_edges(
 ///
 /// SL-095 PHASE-02: `supersedes` is now passed in like `related` (read from
 /// `[[relation]]`), not a field on `Doc`.
-fn format_show(
-    g: &GovKind,
-    doc: &Doc,
-    related: &[String],
-    body: &str,
-) -> String {
+fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
         "{} — {}\n",
@@ -367,12 +365,7 @@ fn format_show(
 ///
 /// SL-095 PHASE-02: `supersedes` is now passed in like `related` (read from
 /// `[[relation]]`), not a field on `Doc`, and spliced back in.
-fn show_json(
-    g: &GovKind,
-    doc: &Doc,
-    related: &[String],
-    body: &str,
-) -> anyhow::Result<String> {
+fn show_json(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> anyhow::Result<String> {
     let mut map = serde_json::Map::new();
     map.insert(
         "kind".to_string(),
@@ -1119,12 +1112,7 @@ mod tests {
         };
         // related is read from [[relation]] rows; supersedes stays typed (ADR-010).
         let related = vec!["ADR-004".to_string()];
-        let out = format_show(
-            &ADR_KIND,
-            &doc,
-            &related,
-            "# ADR-007: Use Rust\n\nbody.\n",
-        );
+        let out = format_show(&ADR_KIND, &doc, &related, "# ADR-007: Use Rust\n\nbody.\n");
         assert!(out.contains("ADR-007 — Use Rust"), "identity: {out}");
         assert!(out.contains("use-rust · accepted"), "flat fields: {out}");
         assert!(out.contains("created 2026-06-01 · updated 2026-06-08"));
