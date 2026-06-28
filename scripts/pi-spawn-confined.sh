@@ -25,6 +25,11 @@ DOCTRINE=~/.cargo/bin/doctrine
 # Fork is orchestrator-classed: run it from the orchestrator root, never from a
 # worker-stamped worktree (else `worktree fork` resolves to worker-mode + refuses).
 cd "$ROOT" || { echo "cd ROOT failed"; exit 1; }
+# bwrap --bind/--chdir require an ABSOLUTE path: under `--ro-bind / /` it cannot
+# mkdir a relative mountpoint against the read-only new root. Absolutize $D
+# (relative dirs are resolved against $ROOT) so callers keep the pi-spawn.sh
+# relative-dir convention.
+case "$D" in /*) ;; *) D="$ROOT/$D" ;; esac
 rm -rf "$D"
 
 "$DOCTRINE" worktree fork --base "$B" --branch "$BR" --dir "$D" --worker ||
@@ -58,6 +63,7 @@ timeout "$BACKSTOP" \
   bwrap \
     --ro-bind / / \
     --dev /dev --proc /proc --tmpfs /tmp \
+    --bind "$HOME/.pi" "$HOME/.pi" \
     --bind "$D" "$D" \
     --chdir "$D" \
     --die-with-parent \
