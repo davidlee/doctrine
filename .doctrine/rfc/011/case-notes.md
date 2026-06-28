@@ -403,3 +403,12 @@ aggregation into the facet schema. Required a user round-trip to pick reading A-
 flag when a "lift" interacts with an existing caller-side delegation, so reconcile
 doesn't rediscover the fork. Also hit a transient `.git/index.lock` (concurrent agent) —
 one retry cleared it.
+
+[route+spike; imp004-dB3-bwrap]
+D-B3 confinement spike was low-friction. Nested bwrap inside the outer NixOS
+jail Just Worked (unpriv userns nesting allowed; bwrap 0.11.2). The whole
+confinement is ~12 lines: `--ro-bind / /` then `--bind "$D" "$D"` re-grants rw to
+only the worker tree; `--dev/--proc/--tmpfs /tmp`; `--die-with-parent`. No token
+friction worth flagging — riskiest assumption (nested userns) was discharged by
+one 8-line probe before any file was written. Residual unknown deferred to live
+dispatch: whether pi needs a writable $HOME dot-dir beyond --session-dir.

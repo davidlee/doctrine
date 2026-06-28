@@ -46,3 +46,36 @@ Two axes of this footgun, observed directly:
 
 See memories `mem.fact.build.rebuild-stale-skips-test-binaries` (axis #2) and
 `mem.fact.testing.runtime-manifest-dir` (axis #1, the CHR-014 fix).
+
+## D-B3 spike result (2026-06-28) — VIABLE
+
+Confinement is cheap and works. Nested bwrap inside the outer NixOS jail is
+permitted (unprivileged userns nesting; bwrap 0.11.2). Mechanism, ~12 lines
+wrapping only the worker's `pi` exec (the orchestrator-classed fork stays
+unconfined in `$ROOT`):
+
+```
+bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp \
+      --bind "$D" "$D" --chdir "$D" --die-with-parent \
+      --setenv DOCTRINE_WORKER 1 pi …
+```
+
+`--ro-bind / /` makes the whole fs read-only; `--bind "$D" "$D"` re-grants rw to
+only the worker tree (its in-tree `target/` rides along — covers D-B1's build dir
+for free). `OUT`/`PI_FIFO` are host-`/tmp` fds opened by the spawning shell
+before bwrap execs, so the inner `--tmpfs /tmp` does not sever them.
+
+Verified against worktree stand-ins: worker can write `$D` + `$D/.pi-session`;
+writes to `.doctrine/`, the main tree, and sibling worktrees all fail
+`Read-only file system`; `git` + `doctrine` still run from the ro `/nix/store`.
+
+Landed as `scripts/pi-spawn-confined.sh` — a copy of `pi-spawn.sh` (the live
+script left untouched while in active dispatch use). Promote into `pi-spawn.sh`
+once the live run frees it.
+
+Residual unknown, deferred to live dispatch (per "not exercised until /dispatch
+runs on doctrine"): whether `pi` needs a writable `$HOME` dot-dir beyond
+`--session-dir` (mitigated with `--no-extensions --no-skills --no-themes
+--offline`). Contingency: bind a `--tmpfs` at the specific dot-path if so — do
+NOT tmpfs `$HOME` wholesale (would mask the ro `~/.cargo/bin/doctrine`).
+Discharges ADR-006 D2b at the OS level.
