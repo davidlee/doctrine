@@ -1,0 +1,117 @@
+# Implementation plan for SL-170 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-170"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+#
+# DOGFOOD (design §9): SL-170's own VT rows are the first to carry the P2
+# structured `test_file`/`keywords` fields landed in PHASE-01. They are inert
+# (serde-ignored) until PHASE-01 merges, then `verify-vt` reads them — this very
+# plan is the first thing the S3 gate judges, verify-vt-clean at conclude.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Plan VT model lift + structured P2 fields"
+objective = "Lift entrance_criteria / exit_criteria / verification out of plan.rs serde-drop into the parsed PlanPhase model, and add the P2 structured mandate fields (test_file / keywords / patterns / waived / waived_reason) to the verification row. Every new field is additive #[serde(default)] so legacy plans parse unchanged. This is the shared substrate PHASE-03 (and downstream IDE-008) reads; no dependency, file-disjoint from PHASE-02."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-170 design.md is locked (2 adversarial passes integrated); §5.2 names the PlanPhase / Criterion / VerificationCriterion shape." },
+  { id = "EN-2", text = "plan.rs::PlanPhase currently serde-drops entrance_criteria/exit_criteria/verification (design §2) — the behaviour-preservation baseline is the green Plan::parse suite." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "PlanPhase parses entrance_criteria: Vec<Criterion>, exit_criteria: Vec<Criterion>, verification: Vec<VerificationCriterion>; Criterion = { id, #[serde(default)] text }. Every added field is #[serde(default)]." },
+  { id = "EX-2", text = "VerificationCriterion = { id, #[serde(default)] expects, #[serde(default)] test_file: Option<String>, #[serde(default)] keywords: Vec<String>, #[serde(default)] patterns: Vec<String>, #[serde(default)] waived: bool, #[serde(default)] waived_reason: Option<String> }. Mode (VT/VA/VH) stays encoded in the id prefix — no separate field." },
+  { id = "EX-3", text = "The existing Plan::parse suite passes UNEDITED (behaviour-preservation gate, design §3) — legacy plans with no EN/EX/VT and no structured fields round-trip to defaulted empties." },
+]
+verification = [
+  { id = "VT-1", expects = "Round-trip unit (src/plan.rs): a plan.toml carrying EN/EX/VT rows incl. test_file/keywords/patterns/waived parses into a fully populated PlanPhase; a legacy row { id, expects } parses with the structured fields defaulted.", test_file = "src/plan.rs", keywords = ["entrance_criteria", "verification", "test_file", "keywords", "waived"] },
+  { id = "VT-2", expects = "Behaviour-preservation: the pre-existing Plan::parse tests pass with no edits (the proof the additive lift broke nothing)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "S1 regression baseline-diff (pure core + check command)"
+objective = "Add src/regression.rs (pure leaf): parse_failures / diff / render_delta over full-suite failure-sets keyed by an opaque finding-key plus a volatility-stripped signature. Wire the thin shell as `doctrine check regression {capture,diff}` (sibling to check quick|commit|gate) and record the funnel cadence in the dispatch SKILL. General classifier, test-extractor wired now (D4). File-disjoint from PHASE-01/03 — parallelizable under dispatch; no plan-model dependency."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §5.2 (S1 interfaces) + §5.4 (funnel cadence) locked; ADR-001 layering (pure leaf, IO in shell) and ADR-012 (orchestrator-side, coord tree) govern." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/regression.rs (pure) exposes Failure { key, sig }, FailureSet::{ Obtained(BTreeMap<String,String>), Unobtainable { why } }, RegressionDelta { new, changed, fixed, persistent }, parse_failures(&str) -> FailureSet (section-aware over cargo `failures:` blocks, target-qualified keys — A2), diff(&FailureSet, &FailureSet) -> Result<RegressionDelta>, render_delta(&RegressionDelta, &str) -> String. No clock/rng/git/disk in this module." },
+  { id = "EX-2", text = "diff semantics: new = current\\baseline; changed = key in both, sig differs; fixed = baseline\\current; persistent = key in both, SAME sig. diff returns Err when EITHER side is Unobtainable — never a silent ∅ (INV-5). The volatile-token normaliser (addresses, durations, tmp paths, hashes) is pinned against captured fixtures." },
+  { id = "EX-3", text = "`doctrine check regression capture --base <B>` runs the test suite on the coord tree @ B and writes the failure-set to .doctrine/state/regression/baseline-<sha>-<fp>; no-op on cache hit. Cache key = (tree-sha, run-fingerprint), run-fingerprint = hash of { suite argv, test-selection/filter state e.g. DOCTRINE_WORKER, worker-marker state, doctrine-bin provenance } — carry-forward refused on fingerprint mismatch (INV-8)." },
+  { id = "EX-4", text = "`doctrine check regression diff --base <B>` runs the suite @ S, loads baseline-<B>, prints render_delta, and exits non-zero iff (new ∪ changed) ≠ ∅ (INV-7 — NOT new alone). B is the funnel's live pre-spawn HEAD, never the registry code_start_oid (INV-2). capture and diff use an identical invocation + filter state (INV-1)." },
+  { id = "EX-5", text = "plugins/doctrine/skills/dispatch/SKILL.md records the funnel cadence: pre-spawn `capture --base B`; verify `diff --base B` (halt on new ∪ changed); on green persist the diff's current-set as baseline-<B'> (carry-forward). The orchestrator normalises filter state (clears the worker marker, forces a real rebuild) before both runs (INV-1, R5)." },
+]
+verification = [
+  { id = "VT-1", expects = "diff partition unit (src/regression.rs): new / changed / fixed / persistent; empty-both → green; full overlap same-sig → all-persistent → green; env-mask case baseline{embed_fail,X} vs current{embed_fail,X,new_fail} → new={new_fail} only.", test_file = "src/regression.rs", keywords = ["RegressionDelta", "persistent", "changed", "Unobtainable"] },
+  { id = "VT-2", expects = "parse_failures over captured cargo `failures:` output fixtures (hermetic strings, SL-168 F-2 — not live runs); section-aware keys disambiguate same-named tests across target binaries (A2)." },
+  { id = "VT-3", expects = "Unobtainable path (INV-5): a non-completing / unparseable run → FailureSet::Unobtainable → diff returns Err → non-zero, NOT a green ∅. Explicit test." },
+  { id = "VT-4", expects = "Changed-failure (codex F-1, INV-7): same key with differing sig → changed → halt; same key + same sig → persistent → green. Crafted-sig unit." },
+  { id = "VT-5", expects = "Signature stability: a failure whose only diff is a volatile token (address/duration/tmp path/hash) normalises to the same sig → persistent, no flap." },
+  { id = "VT-6", expects = "Fingerprint cache (codex F-2, INV-8): capture under fingerprint X then diff under fingerprint Y → cache miss → honest re-capture, no carry-forward poisoning." },
+  { id = "VT-7", expects = "e2e + SL-169 replay (a): inject a failing test into a delta → `check regression diff` exits non-zero with it in `new`; a pre-existing failure at B → lands in persistent, exit zero. Reconstructs the e2e_standard_cli_golden regression that shipped as env.", test_file = "tests/e2e_check_regression.rs", keywords = ["check", "regression", "diff", "new", "persistent"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "S3 VT existence/shape gate (vtgate + verify-vt)"
+objective = "Add src/vtgate.rs (pure leaf): check_vt / check_phases / render_summary over the PHASE-01 plan VT model, with the four verdicts Pass / Fail / Uncheckable / Waived and comment-stripped keyword matching (codex F-3). Wire `doctrine slice verify-vt <id>` as the gate. Threat model is worker OMISSION, not an adversary; semantic judgement is a non-goal. Depends on PHASE-01 (reads the lifted VT model)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged: PlanPhase carries verification with structured test_file/keywords/patterns/waived fields." },
+  { id = "EN-2", text = "Design §5.2 (S3 interfaces, matching strength & threat model) + §5.5 (verdict invariants) locked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/vtgate.rs (pure) exposes VtVerdict::{ Pass, Fail { reason }, Uncheckable, Waived { reason } }, check_vt(vt, read_file: &impl Fn(&str)->Option<String>) -> VtVerdict, check_phases(plan, read_file) -> Vec<PhaseVtReport>, render_summary(&[PhaseVtReport]) -> String. read_file injected (purity); no disk in this module." },
+  { id = "EX-2", text = "check_vt order: waived short-circuits first → Waived { reason }; only VT-mode rows are gated (VA/VH parsed, never gated); keywords with no test_file → Uncheckable (A1); missing file → Fail; keyword absent from the COMMENT-STRIPPED source → Fail (codex F-3 — comment / dead-string / echoed-criterion bait does not satisfy); optional patterns = line-anchored regex (the stronger-shape escalation)." },
+  { id = "EX-3", text = "`doctrine slice verify-vt <id>` reads plan.toml + fs-reads mandated files, prints render_summary, exits non-zero iff any Fail; Uncheckable and Waived are visible, distinct, NON-halting (INV-4). The gate reads only authored plan.toml + git, never the disposable phase sheet (INV-3). Verdict glyphs/labels are named constants (STD-001)." },
+]
+verification = [
+  { id = "VT-1", expects = "check_vt four-verdict unit (src/vtgate.rs): Pass; Fail-absent-file; Fail-missing-keyword; Uncheckable (keywords, no test_file — A1); Waived short-circuit (returns Waived before any fs read).", test_file = "src/vtgate.rs", keywords = ["VtVerdict", "Uncheckable", "Waived", "check_vt"] },
+  { id = "VT-2", expects = "Comment-bait (codex F-3): a test_file holding a mandated keyword ONLY inside a // comment, a /* block */, or a dead string → Fail (comment-stripped match), not Pass." },
+  { id = "VT-3", expects = "Non-gated paths: a phase with only VA/VH criteria → no VT lines; empty plan / no VT criteria → empty report, exit zero (design §5.5 edges)." },
+  { id = "VT-4", expects = "e2e + SL-169 replay (b): verify-vt over a fixture plan + fixture test files mixing Pass/Fail/Uncheckable/Waived → exit non-zero (the Fail), report lists all four with reasons; a VT { test_file = \"tests/e2e_list_conformance.rs\", keywords = [\"relation\",\"census\"] } against a tree missing the conformance matrix → Fail (missing keyword) → halt.", test_file = "tests/e2e_slice_verify_vt.rs", keywords = ["verify-vt", "relation", "census", "Uncheckable", "Waived"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "S6 VT-status summary at conclude / handover"
+objective = "Surface S3's verdict as a per-phase VT summary at the dispatch conclude/handover step — the human-readable read-surface that makes gaps visible at handover, not at audit. Wire dispatch conclude to run verify-vt in the coord tree BEFORE the worktree is removed; embed render_summary (+ a one-line S1 status) in the conclude output and the /handover skill message. Light surface phase; depends on PHASE-03."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 merged: vtgate::render_summary and `slice verify-vt` available." },
+  { id = "EN-2", text = "Design §5.4 (cadence + two-tree caveat, INV-6) locked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch conclude invokes verify-vt (render_summary) in the coord tree on the cadence verify-vt → on green prepare-review → remove worktree (design §5.4) — BEFORE coord worktree removal; a Fail exits non-zero and halts handover. The fs reader suffices at conclude because, absent a mid-dispatch waiver, the coord plan.toml == the authored plan." },
+  { id = "EX-2", text = "The conclude output and the /handover SKILL.md message embed render_summary plus a one-line S1 regression status; WAIVED and UNCHECKABLE render distinctly from Pass/Fail (named constants, STD-001)." },
+  { id = "EX-3", text = "INV-6 honoured as a recorded cadence rule: a mid-dispatch waiver must be COMMITTED onto dispatch/<slice> by the orchestrator (sole writer) before the gate — a working-fs-only waiver is forbidden. (The un-skippable prepare_review committed-graph reader stays a deferred follow-up; the injected-reader seam is built for it.)" },
+]
+verification = [
+  { id = "VT-1", expects = "render_summary unit (src/vtgate.rs) over a mixed report: Pass/Fail/Uncheckable/Waived all render; the waived reason is surfaced; UNCHECKABLE is visually distinct.", test_file = "src/vtgate.rs", keywords = ["render_summary", "WAIVED", "UNCHECKABLE"] },
+  { id = "VT-2", expects = "e2e: the dispatch conclude/handover surface emits the VT summary block (a Fail halts handover non-zero; a clean plan passes with the block shown).", test_file = "tests/e2e_dispatch_verify_vt.rs", keywords = ["conclude", "verify-vt", "VT"] },
+  { id = "VH-1", expects = "Human read of a real conclude/handover output confirms the VT block is legible and the WAIVED/UNCHECKABLE distinction is clear at a glance (the S6 value is human-facing legibility)." },
+]
+specs        = []
+requirements = []

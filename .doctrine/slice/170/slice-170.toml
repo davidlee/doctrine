@@ -80,6 +80,11 @@ selector = "tests/e2e_slice_verify_vt.rs"
 intent = "design-target"
 note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
 
+[[selector]]
+selector = "tests/e2e_dispatch_verify_vt.rs"
+intent = "design-target"
+note = "SL-170 PHASE-04 S6 conclude/handover VT-summary e2e (design §5.4). predicted name; adjust at impl."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
