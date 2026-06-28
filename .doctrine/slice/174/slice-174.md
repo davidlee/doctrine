@@ -59,16 +59,17 @@ hermetic binary.
   on download. May need an install path that strips quarantine, or accept the
   one-time user override. Decide at design.
 
-## Open Questions
+## Open Questions (resolved at design — see design.md §7)
 
-- OQ-1 Channel: GH Release + `curl|sh` installer, a Homebrew tap, `cargo-binstall`
-  metadata, or a combination? (design decision)
-- OQ-2 Build vehicle for release artifacts: drive via the existing nix flake on
-  macOS CI, or a plain `cargo build --release` after `just web-build`? Embedding
-  correctness rides on this.
-- OQ-3 Target breadth: macOS-only now, or also publish Linux (and which libc) to
-  make the pipeline general?
-- OQ-4 Gatekeeper/notarization posture for unsigned binaries.
+- OQ-1 Channel → `curl|sh` installer (primary) + `cargo-binstall` metadata;
+  Homebrew tap deferred; `cargo install` retained as fallback.
+- OQ-2 Build vehicle → GitHub Actions (macOS runner), `cargo build` after
+  `just web-build`, embed integrity gated by an artifact smoke test (not nix).
+- OQ-3 Targets → macOS arm64 + x86_64 only; Linux a follow-up.
+- OQ-4 Gatekeeper → unsigned + installer strips quarantine; notarization deferred.
+
+Remaining (plan/reconcile level): exact smoke-test assertions; x86-on-arm
+cross-link viability (prove phase 1); SPEC-009 reconcile for binary delivery.
 
 ## Verification / closure intent
 
@@ -80,4 +81,16 @@ hermetic binary.
 
 ## Summary
 
+Ship prebuilt macOS binaries via a tag-triggered GitHub Actions workflow
+(macOS runner, cargo + bun web-build, embed smoke-test gate) attached to GitHub
+Releases, installable with no local compile via a `curl|sh` installer or
+`cargo binstall`. Sidesteps the `-liconv` compile failure entirely. CI adoption
+is slice-local (no ADR).
+
 ## Follow-Ups
+
+- Homebrew tap (deferred channel).
+- Linux release targets (matrix leg).
+- macOS notarization (if Gatekeeper friction proves real).
+- SPEC-009 reconcile: binary delivery is new evergreen surface beyond the
+  embed-into-project scope.
