@@ -54,8 +54,10 @@ no-panic test (the F1 guard) drives the guard in green-first.
   goldens assert the old layout (incl. `unblocks`); updating them is expected.
   This is distinct from the behaviour-preservation gate above, which binds shared
   machinery, not `next`'s own surface.
-- **Open: optional external adversarial pass on the design** (codex/GPT-5.5 prompt
-  printed). If run and it surfaces design changes, reconcile design.md before
-  executing the affected phase.
-- Design carries the full decision ledger (D1–D6) and adversarial findings
-  (F1–F6); this plan does not restate them.
+- **External adversarial pass: done (DeepSeek), findings integrated.** 1 BLOCKER
+  (lifted-fn self-guard against `page_size==0`), 3 formatting/layering MAJORs, and
+  the tags-gate decision (D7 reversed to visible-slice) are folded into design.md §10
+  and the criteria above. One MAJOR (keep `unblocks` selectable) was rejected — `next`
+  had no `--columns` before this slice, so there is nothing to break; the drop holds.
+- Design carries the full decision ledger (D1–D7) and both adversarial passes
+  (self F1–F6, external F7–F13 + minors); this plan does not restate them.

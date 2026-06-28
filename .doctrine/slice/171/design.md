@@ -41,8 +41,10 @@ See §6 for the full decision ledger. Headlines:
   errors cleanly (no such column).
 - **D2 — `NodeAttr` carries `facets: EntityFacets`.** The shared projection
   (estimate/value/risk/tags) per `mem.pattern.facets.shared-projection`. `NextRow`
-  carries the render subset `estimate`/`value`/`tags`. A future `risk` column
-  extends `NextRow` only — never `NodeAttr`.
+  carries the render subset `estimate`/`value`/`tags`. `NodeAttr` **already carries
+  `risk`** through `EntityFacets`; a future `risk` column therefore only extends
+  `NextRow`'s render subset — no `NodeAttr` change (D-review F-minor corrects the
+  earlier "never `NodeAttr`" phrasing, which wrongly implied risk data was absent).
 - **D3 — pagination mirrors `memory`** (`--limit`/`--offset`/`--page`), and the
   truncation footer fn is **lifted** from `retrieve.rs` to shared `listing`.
 - **D4 — compact unitless cells.** estimate `{lower}–{upper}` (en-dash), value
@@ -54,7 +56,7 @@ See §6 for the full decision ledger. Headlines:
 
 | File | Change |
 |---|---|
-| `src/commands/cli.rs` | `Next` variant: add `--columns` (`Vec<String>`, comma-delimited), `--limit` (default 20), `--offset` (default 0), `--page` (`Option<usize>`, `conflicts_with = "offset"`). Resolve `page→offset` at dispatch (mirror `memory`), thread into `run_next`. |
+| `src/commands/cli.rs` | `Next` variant: add `--columns` (`Option<Vec<String>>`, `value_delimiter=','`), `--limit` (`usize`, `default_value_t = NEXT_LIMIT_DEFAULT`=20), `--offset` (`usize`, default 0), `--page` (`Option<usize>`, `conflicts_with = "offset"`). Resolve `page→offset` at dispatch (mirror `memory`): `--page 0` bail, `--limit 0 --page N` bail. Thread into `run_next`. |
 | `src/priority/mod.rs` | `run_next`: accept `columns: Option<Vec<String>>`, `limit: usize`, `offset: usize`; thread to `next_human`; `--json` path ignores all three. |
 | `src/priority/render.rs` | `NEXT_COLS`: add `estimate`/`value`/`tags`, **remove `unblocks`**; `NEXT_DEFAULT = [id, status, score, estimate, value, title]`; `next_human`: `default_with_tags` + `select_columns` + `--limit`/`--offset` slice + footer via lifted helper. New `NEXT_LIMIT_DEFAULT` const. |
 | `src/priority/view.rs` | `NextRow`: add `estimate: Option<EstimateFacet>`, `value: Option<ValueFacet>`, `tags: Vec<String>`. |
@@ -77,23 +79,46 @@ id      Fixed(Cyan)            r.id
 kind    None                   r.kind                              (selectable-only)
 status  ByValue(status_hue)    r.status
 score   None                   format!("{:.1}", r.score)
-estimate None                  r.estimate → "{lower}–{upper}" | "·"
-value   None                   r.value    → format!("{:.1}")     | "·"
+estimate None                  r.estimate → "{format_bound(lo)}–{format_bound(hi)}" | ABSENT_CELL
+value   None                   r.value    → format_bound(v.value)                    | ABSENT_CELL
 tags    PerToken{split,paint_tag}  r.tags.join(", ")             (via default_with_tags)
 title   Alternate(TITLE_*)     r.title
 ```
 
+**Facet number formatting (D-review F8/F9).** Both estimate bounds AND value go
+through `estimate::display::format_bound` (a config-free `fn(f64)->String` that rounds
+to 1 dp and strips a trailing `.0` → integral renders `3`, fractional `3.2`). Raw
+`format!("{}")` would print full IEEE precision from TOML deserialization
+(`3.141592653589793`); `{:.1}` on value alone would disagree with estimate on integers
+(`5.0` vs `3–8`). Routing both through `format_bound` is the single-source rule (DRY /
+STD-001): `3–8`, `5`, `3.2–4.8`, `5.5`. (`format_bound` lives in `estimate::display`;
+the value cell reuses it — a thin neutral relocation is an optional non-blocking
+cleanup.)
+
 `tags` column rides the house convention verbatim (backlog/knowledge/concept_map):
 `cell` and `split` agree byte-for-byte stripped of ANSI; `default_with_tags(NEXT_DEFAULT, any_tagged)`
 splices `tags` before `title` iff any surfaced row is tagged; `--columns` bypasses
-the splice (explicit list wins). `any_tagged = rows.iter().any(|r| !r.tags.is_empty())`
-is computed over the **full** result set, **before** the pagination slice (D7) — so
-the `tags` column's presence is stable across pages, never flickering per-page.
+the splice (explicit list wins). `any_tagged = visible.iter().any(|r| !r.tags.is_empty())`
+is computed over the **visible (post-slice) page**, not the full set (D7) — so a page
+with no tagged rows shows no `tags` column rather than a column of `·`. The cost is
+per-page presence flicker; accepted as the lesser evil for a sparse facet (D-review F13).
+
+**Splice-order coupling (D-review F-minor).** `default_with_tags` splices `tags`
+immediately before `title`; this assumes `tags` precedes `title` in `NEXT_COLS`
+declaration order (it does). Reordering `NEXT_COLS` to put `tags` after `title` would
+desync the default from declaration order — noted so a future edit doesn't trip it.
 
 Cell formatting is a pure non-capturing `fn(&NextRow)->String` — no config, no unit.
 The `·` middle-dot is the listing absent-value convention. **No shared const for it
 exists today** (adversarial F2) — introduce `listing::ABSENT_CELL = "·"` (STD-001;
-no magic string) and use it for all three facet cells.
+no magic string) and use it for both facet cells.
+
+**`--columns` whitespace (D-review F-minor).** clap `value_delimiter = ','` does not
+trim, so `--columns id, score` yields `[" score"]` → `select_columns` errors
+`unknown column ` score``. This is shared, pre-existing behaviour across every
+`--columns` surface (backlog/memory); `next` inherits it unchanged. Documented as a
+restriction, not fixed here (trimming would alter shared `listing` behaviour — out of
+scope).
 
 ### 5.2 Pagination (`next_human`)
 
@@ -115,6 +140,11 @@ if visible.len() < total {
   `page_size == 0` ⇒ **integer division-by-zero panic** (adversarial F1). The
   `limit != 0` gate forecloses it: uncapped ⇒ never paginated ⇒ never footed, even
   with `--offset N` (`--limit 0 --offset 5` shows `rows[5..]`, no footer).
+- **The lifted fn ALSO self-guards `page_size == 0` → returns `""`** (D-review
+  BLOCKER F7). The call-site `limit != 0` gate expresses intent; the fn-internal
+  guard makes the now-shared `pub(crate)` surface robust regardless of caller
+  discipline — `run_find`/`run_retrieve` guard only `shown < total` and rely on
+  `RETRIEVE_LIMIT_DEFAULT > 0`, so a future 0-passing caller would otherwise panic.
 - `page_size = limit` (the resolved value). `--page` resolves `offset = (page-1)*page_size`
   at the CLI layer (mirror `memory`): `--page 0` → bail; `--limit 0 --page N` → bail
   (`--page requires a positive --limit`).
@@ -137,9 +167,10 @@ column projection (the listing precedent: `--columns`/`--limit` are table-only).
 - **D4** compact unitless cells (no `format_show` reuse — altitude + closure mismatch).
 - **D5** `kind` demoted to selectable-only (redundant with id prefix).
 - **D6** `--json` unchanged.
-- **D7** `any_tagged` (the `default_with_tags` gate) is computed over the full
-  result set, before the offset/limit slice — `tags` column presence is page-stable
-  (surfaced at planning; no per-page flicker).
+- **D7** `any_tagged` (the `default_with_tags` gate) is computed over the **visible
+  (post-slice) page**, not the full set — a page with no tagged rows shows no `tags`
+  column rather than a column of `·`. Trades per-page presence flicker for no-empty-
+  column (user decision over the page-stable alternative; D-review F13).
 
 ## 7. Verification alignment
 
@@ -159,7 +190,9 @@ fixture graph, the SL-133/SL-047 test style):
   `--limit 0 --offset N>0` → `rows[N..]`, **no footer, no panic** (F1 guard);
   `--limit 0 --page 2` → error; `--page 0` → error.
 - **VT-F `--json` invariance** — golden `next --json` byte-identical to pre-slice
-  (no column/pagination leakage; `blocking` still present).
+  (no column/pagination leakage; `blocking` still present). PLUS a negative assertion:
+  the parsed JSON has **no** `estimate`/`value`/`tags` keys (catches a future
+  accidental field-add to the `json!` macro, not just a byte shift — D-review F-minor).
 - **VT-G behaviour-preservation** — `retrieve`/`find`/`memory list` truncation
   goldens stay green unchanged after the `format_truncation_notice` lift.
 
@@ -169,7 +202,11 @@ fixture graph, the SL-133/SL-047 test style):
   absent marker (reuse if a shared const exists). No magic strings.
 - **ADR-001 layering** — `facet`/`estimate`/`value` are leaf; `NodeAttr` (engine)
   carries data, never policy; render stays in the render layer. `format_truncation_notice`
-  in `listing` is leaf-adjacent presentation — no upward dependency.
+  in `listing` is leaf-adjacent presentation — its body uses only `std::fmt`, and both
+  existing callers (`run_find`/`run_retrieve` in `retrieve.rs`) **already import
+  `listing`**, so the move introduces no new edge and no cycle (D-review F11, verified).
+  The lifted fn carries a doc comment pinning its param contract — the 4th arg is
+  `page_size` (not `limit`); call sites pass `limit.unwrap_or(DEFAULT)` (D-review F-minor).
 - **Behaviour-preservation gate** — the `listing` lift + the unchanged `--json`
   payload are proved by existing goldens staying green unchanged (VT-F, VT-G).
 - **SL-037 column model** + `mem.pattern.listing.column-model-extension` — pre-materialise
@@ -211,3 +248,31 @@ fixture graph, the SL-133/SL-047 test style):
 - **F6 (verify-at-impl)** — `--columns` rides the house arg form `Option<Vec<String>>`
   (backlog/memory precedent), `value_delimiter = ','` for `--columns id,score`; pass
   `columns.as_deref()` into `select_columns`. Confirm against `ListArgs` at impl.
+
+### External review (DeepSeek) — disposition
+
+- **F7 (BLOCKER, integrated §5.2)** — lifted `format_truncation_notice` self-guards
+  `page_size == 0 → ""`. `run_find`/`run_retrieve` guard only `shown < total`; the
+  shared surface must not depend on every caller's discipline. Accepted.
+- **F8 (MAJOR, integrated §5.1)** — estimate bounds via `format_bound`, not raw `{}`
+  (full IEEE precision from TOML). Accepted.
+- **F9 (MAJOR, integrated §5.1)** — value via `format_bound` too, for cross-column
+  consistency (no `5.0` vs `3–8` split). Accepted.
+- **F10 (MAJOR, REJECTED)** — "keep `unblocks` selectable to avoid `--columns`
+  breakage." `next` had **no `--columns` before this slice**, so no script can
+  reference `next --columns unblocks` — zero migration cost. Dropping it entirely is
+  the user's standing decision (signal redundant with score). `kind` stays selectable
+  (the valid half). User reconfirmed: drop.
+- **F11 (MAJOR, integrated §8)** — ADR-001 no-cycle now stated explicitly (callers
+  already import `listing`). Accepted.
+- **F12 (MAJOR, integrated §7)** — VT-E sharpened to assert no-panic on
+  `--limit 0 --offset N` (belt-and-suspenders with the fn guard). Accepted.
+- **F13 (MAJOR, integrated §5.1/§6 D7)** — `any_tagged` over the **visible slice**
+  (user decision), avoiding the all-`·` column; accepts per-page flicker. Reverses the
+  planning-time D7 (full-set/page-stable). Accepted per user.
+- **F-minor (integrated)** — fn param-contract doc (§8); splice-order coupling note
+  (§5.1); D2 risk wording (NodeAttr already carries risk); VT-F negative key assertion
+  (§7); `--columns` whitespace restriction documented (§5.1). All accepted.
+- **F-nit** — `NEXT_COLS` size 8 confirmed; `kind` array index unaffected by
+  selectable-only status; cli-table `--limit default_value_t = 20` + `--page`/`--limit 0`
+  validation noted in §4/§5.2. No structural change.

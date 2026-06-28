@@ -40,15 +40,15 @@ exit_criteria = [
   { id = "EX-2", text = "NEXT_DEFAULT = [id, status, score, estimate, value, title]; effective default = default_with_tags(NEXT_DEFAULT, any_tagged); `kind` is selectable-only." },
   { id = "EX-3", text = "NodeAttr carries `facets: EntityFacets` (populated at graph build 3c from the scanned entity); NextRow carries render-subset estimate/value/tags; surface::next() projects from NodeAttr.facets." },
   { id = "EX-4", text = "`--columns` is wired on the Next CLI variant → run_next → next_human via select_columns; unknown column → clean error listing the available set." },
-  { id = "EX-5", text = "Facet cells are compact, unitless, pure fn(&NextRow)->String: estimate `{lower}-{upper}` (en-dash), value `{:.1}`, tags joined (paint_tag), absent -> listing::ABSENT_CELL (= U+00B7 middle dot, a new named const, STD-001)." },
+  { id = "EX-5", text = "Facet cells are compact, unitless, pure fn(&NextRow)->String: estimate `{format_bound(lower)}-{format_bound(upper)}` (en-dash), value `format_bound(value)` — BOTH route through estimate::display::format_bound (1dp, strips trailing .0) for cross-column consistency (D-review F8/F9); tags joined (paint_tag); absent -> listing::ABSENT_CELL (= U+00B7 middle dot, a new named const, STD-001)." },
   { id = "EX-6", text = "`next --json` output is byte-identical to pre-slice — the new NextRow fields do not leak into next_json." },
 ]
 verification = [
   { id = "VT-1", expects = "`next --columns id,score` emits exactly headers id,score; `--columns bogus` errors with the available-set message (select_columns UX)." },
   { id = "VT-2", expects = "Default headers are id,status,score,estimate,value,title when no row tagged; `kind` and `unblocks` absent; `--columns unblocks` errors (no such column)." },
   { id = "VT-3", expects = "The tags column appears iff a surfaced row is tagged (default_with_tags); hidden when none tagged; `--columns tags` forces it even all-empty." },
-  { id = "VT-4", expects = "Faceted row renders estimate `3.2-4.8` and value `5.0`; a bare row renders the ABSENT_CELL in both; over a seeded fixture graph." },
-  { id = "VT-5", expects = "Golden: `next --json` is byte-identical to the pre-slice payload (still carries `blocking`; no estimate/value/tags fields)." },
+  { id = "VT-4", expects = "format_bound cells: fractional estimate `3.2-4.8` renders as-is; integral estimate `3.0/8.0` renders `3-8` and integral value `5.0` renders `5` (trailing .0 stripped, consistent across both columns); a bare row renders ABSENT_CELL in both; over a seeded fixture graph." },
+  { id = "VT-5", expects = "Golden: `next --json` byte-identical to the pre-slice payload (still carries `blocking`); PLUS a negative assertion — the parsed JSON has no estimate/value/tags keys (catches a future field-add to the json! macro, D-review)." },
 ]
 specs        = []
 requirements = []
@@ -67,16 +67,16 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 green: the column model + facet carriage have landed and `next` renders the new default." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "format_truncation_notice lives in src/listing.rs (pub(crate), signature `(shown, total, offset, page_size) -> String`); retrieve.rs's two call sites re-point to it; the local copy is deleted." },
+  { id = "EX-1", text = "format_truncation_notice lives in src/listing.rs (pub(crate), signature `(shown, total, offset, page_size) -> String`, doc-comment pinning the 4th-arg=page_size contract); SELF-GUARDS `page_size == 0 -> \"\"` (D-review BLOCKER F7); retrieve.rs's two call sites re-point to it; the local copy is deleted." },
   { id = "EX-2", text = "The Next CLI variant gains --limit (default 20), --offset (default 0), --page (Option<usize>, conflicts_with offset); page->offset resolves at the CLI layer (offset = (page-1)*page_size, page_size = limit) mirroring memory." },
   { id = "EX-3", text = "run_next + next_human thread limit/offset; the visible slice is rows[offset.min(total)..] capped by limit; ordering is unchanged (slice after sort)." },
   { id = "EX-4", text = "Footer is table-mode only and guarded by `limit != 0 && shown < total` — `--limit 0` (uncapped) never foots and never divides by zero, even with `--offset N>0`." },
   { id = "EX-5", text = "`--page 0` errors; `--limit 0 --page N` errors (`--page requires a positive --limit`). --json ignores limit/offset/page (full set, no footer)." },
-  { id = "EX-6", text = "any_tagged (the default_with_tags gate) is computed over the FULL result set before the offset/limit slice (D7) — the tags column's presence is stable across pages." },
+  { id = "EX-6", text = "any_tagged (the default_with_tags gate) is computed over the VISIBLE (post-slice) page (D7, user decision) — a page with no tagged rows shows no tags column rather than a column of ABSENT_CELL; per-page presence may flicker, accepted." },
 ]
 verification = [
   { id = "VT-1", expects = "`next --limit 2` shows 2 rows + footer `2 of N; use --page 2 ...`; `--offset 2` and `--page 2` produce the equivalent page." },
-  { id = "VT-5", expects = "Page-stable tags column: with exactly one tagged row in a multi-page set, the tags column is present on every page (or absent on every page if --columns omits it) — never per-page flicker (D7)." },
+  { id = "VT-5", expects = "Visible-slice tags gate (D7): in a multi-page set where the tagged row is only on page 2, page 1 shows NO tags column (no all-ABSENT_CELL column) and page 2 shows it; an explicit `--columns tags` overrides and forces the column on every page." },
   { id = "VT-2", expects = "`--limit 0` shows all rows with no footer; `--limit 0 --offset N` shows rows[N..] with no footer and no panic (F1 guard); `--limit 0 --page 2` errors; `--page 0` errors." },
   { id = "VT-3", expects = "Behaviour-preservation: the existing retrieve/find/memory-list truncation goldens stay green UNCHANGED after the lift (pure move)." },
   { id = "VT-4", expects = "`offset > total` (with limit>0) -> empty body + the `offset >= total` footer branch (`reduce --offset or --page`)." },
