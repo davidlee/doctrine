@@ -9,8 +9,7 @@ created = "2026-06-14"
 updated = "2026-06-15"
 
 [relationships]
-# The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
-# SL-048) — author `supersedes` via the transactional `doctrine supersede` verb.
-# `doctrine inspect ADR-012` renders them. `superseded_by` and `tags` stay typed.
-supersedes = ["ADR-004"]
+# `supersedes` stays typed — author with `doctrine supersede ADR-012 <previous>`.
+# `related` edges are uniform `[[relation]]` rows — author with `doctrine link ADR-012 related <target>`.
+supersedes    = ["ADR-004"]
 superseded_by = []   # set on the old ADR by F1; reverse link is derived
