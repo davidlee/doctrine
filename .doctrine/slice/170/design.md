@@ -118,17 +118,23 @@ dispatch conclude hook, skill cadence.
 **S1 — `regression.rs` (pure):**
 
 ```rust
-type FindingKey = String; // tests: "<target>::<test_name>" from the cargo failures: block.
-                          // General — IMP-194 later feeds layering/doctor finding-keys to the SAME diff.
+// A failing test's identity AND a coarse signature of HOW it failed (codex F-1):
+// name-only membership would absorb a test that fails for a NEW reason into
+// `persistent` and ship it. The signature is a volatility-stripped excerpt
+// (panic message / first assertion / failure location, with addresses, durations,
+// tmp paths, hashes normalised out) — coarse enough not to flap, fine enough to
+// catch a changed failure mode.
+struct Failure { key: String, sig: String } // key = "<target>::<test_name>"; sig = normalised excerpt
 
 // A suite run yields EITHER a well-formed failure-set OR an unobtainable marker —
-// never silently ∅ (R-A / INV-5). Mirrors coverage_verify's RunOutcome (F-VII).
-enum FailureSet { Obtained(BTreeSet<FindingKey>), Unobtainable { why: String } }
+// never silently ∅ (INV-5). Mirrors coverage_verify's RunOutcome (F-VII).
+enum FailureSet { Obtained(BTreeMap<String, String>), Unobtainable { why: String } } // key → sig
 
 struct RegressionDelta {
-    new:        BTreeSet<FindingKey>, // current \ baseline = REGRESSIONS → gate halts
-    fixed:      BTreeSet<FindingKey>, // baseline \ current = improvements (informational)
-    persistent: BTreeSet<FindingKey>, // baseline ∩ current = pre-existing/env (IGNORED)
+    new:        BTreeSet<String>, // keys in current \ baseline = REGRESSIONS → halts
+    changed:    BTreeSet<String>, // keys in both, sig differs = NEW failure mode → halts (F-1)
+    fixed:      BTreeSet<String>, // keys in baseline \ current = improvements (informational)
+    persistent: BTreeSet<String>, // keys in both, SAME sig = genuinely pre-existing (ignored)
 }
 
 // Ok only when BOTH sides Obtained; an Unobtainable side is a hard Err (never ∅-pass).
@@ -137,14 +143,30 @@ fn parse_failures(suite_output: &str) -> FailureSet; // section-aware over cargo
 fn render_delta(delta: &RegressionDelta, base: &str) -> String;
 ```
 
-`new` = regressions regardless of which binary/env they surface under. `persistent`
-= the failures B and S share = every env artifact (missing `web/map/dist` embed,
-`DOCTRINE_WORKER`, stale bin, worker marker) — present in *both* sets, so they fall
-here, never in `new`. This discharges OQ-4 mechanically — **but only when both runs
-share the same test-selection** (INV-1): a differing `DOCTRINE_WORKER`/marker filter
-changes *which tests run*, so an absent test reads as "fixed" and a newly-visible one
-as "new". Same tree is necessary, not sufficient; same *invocation + filter state*
-is required.
+The gate **halts on `new` ∪ `changed`**. `persistent` (ignored) is now *same key
+AND same signature* — a pre-existing failure that fails *identically*. `changed`
+closes codex F-1: a slice that regresses an already-red test into a new failure mode
+keeps the key but changes the sig → `changed` → halt, never silently absorbed.
+
+`new`/`changed` = regressions regardless of which binary/env they surface under.
+`persistent` = failures B and S share *identically* = env artifacts (missing
+`web/map/dist` embed, `DOCTRINE_WORKER`, stale bin, worker marker) — present in both,
+same sig. This discharges OQ-4 — **but only under INV-1** (same test-selection): a
+differing `DOCTRINE_WORKER`/marker filter changes *which tests run*, so same tree is
+necessary, not sufficient; same *invocation + filter state* is required.
+
+**Green-B is the goal, persistent is the fallback.** On a correctly-normalised coord
+tree (INV-1: marker cleared, real embed, fresh build) baseline *should* be empty —
+the env artifacts the `persistent` bucket tolerates are exactly what normalisation
+removes. A non-empty baseline is itself surfaced as a warning (a red trunk to fix,
+not silently tolerated as "env"); `persistent` exists only to keep the gate honest
+when normalisation is incomplete.
+
+**The suite is the TEST suite, per-test granularity** — not the full `just gate`.
+clippy/fmt/lint-js are pass/fail aggregates (coarse granularity = the SL-168 F-1
+problem); they belong to IMP-194's finding-granularity extension (D4), not S1. S1
+parses `cargo test` per-test output (section-aware: associate each `failures:` entry
+to its target binary for a stable key).
 
 **The suite is the TEST suite, per-test granularity** — not the full `just gate`.
 clippy/fmt/lint-js are pass/fail aggregates (coarse granularity = the SL-168 F-1
@@ -166,7 +188,8 @@ struct VerificationCriterion {
     id: String,                                  // "VT-1" — mode by prefix
     #[serde(default)] expects:  String,          // free-text, untouched
     #[serde(default)] test_file: Option<String>, // P2 structured mandate
-    #[serde(default)] keywords:  Vec<String>,    // P2 structured mandate
+    #[serde(default)] keywords:  Vec<String>,    // P2: must appear in code (comment-stripped)
+    #[serde(default)] patterns:  Vec<String>,    // P2 optional: line-anchored regex (stronger shape, F-3)
     #[serde(default)] waived:    bool,           // escape valve
     #[serde(default)] waived_reason: Option<String>,
 }
@@ -174,6 +197,8 @@ struct VerificationCriterion {
 enum VtVerdict { Pass, Fail { reason: String }, Uncheckable, Waived { reason: String } }
 
 // read_file injected (purity). waived checked first. VA/VH parsed but not gated.
+// Matching is over COMMENT-STRIPPED source (codex F-3): a keyword in a comment /
+// dead string / the criterion's own echoed text does NOT satisfy the mandate.
 fn check_vt(vt: &VerificationCriterion, read_file: &impl Fn(&str) -> Option<String>) -> VtVerdict;
 fn check_phases(plan: &Plan, read_file: &impl Fn(&str) -> Option<String>) -> Vec<PhaseVtReport>;
 fn render_summary(report: &[PhaseVtReport]) -> String;
@@ -181,6 +206,17 @@ fn render_summary(report: &[PhaseVtReport]) -> String;
 
 Every plan field is `#[serde(default)]` → legacy plans parse with the new fields
 defaulted; the existing `Plan::parse` tests stay green unchanged.
+
+**S3 matching strength & threat model (codex F-3).** `keywords` is checked against a
+**comment-stripped** view of `test_file` (strip line `//` and block `/* */`; a coarse
+strip suffices), so comment/dead-string bait does not satisfy a mandate. `patterns`
+(optional) is line-anchored regex for authors wanting to assert a specific shape
+(e.g. `^\s*\("relation",.*census`). **Threat model is explicit:** the gate defends
+against worker *omission* (a weak model skipping mandated work — the SL-169 failure
+mode), **not** an adversarial worker deliberately planting bait. If the worker were
+adversarial the whole dispatch trust model fails upstream of this gate (ADR-012). So
+substring-on-code is the proportionate floor; `patterns` is the escalation. Semantic
+correctness of the assertion remains a non-goal.
 
 **CLI surfaces:**
 
@@ -204,14 +240,16 @@ for solo/CI and is IMP-194's extension point.
 | VT mandate (`test_file`/`keywords`) | **authored** (`plan.toml`) | plan author (`/plan`) | before dispatch |
 | VT fulfilment (the test) | source delta | worker | during dispatch |
 | VT/regression verdict | computed | orchestrator funnel | at verify/conclude |
-| S1 baseline failure-set | **disposable runtime** (`.doctrine/state/regression/baseline-<sha>`) | orchestrator | per base |
+| S1 baseline failure-set | **disposable runtime** (`.doctrine/state/regression/baseline-<sha>-<fp>`) | orchestrator | per (base, run-fingerprint) |
 
 **The gate reads only authored (`plan.toml`) + git state — never the disposable
 phase sheet.** The phase sheet is derived from `plan.toml` at `/phase-plan` and is
 the executor's scratchpad; it is never authoritative for the gate. The baseline
-cache is a sha-keyed **memo**, regenerable by re-running the suite at that sha;
-authoritative input is git. A cache in the disposable tier is correct *because* it
-is derivable.
+cache is a **memo keyed by `(tree-sha, run-fingerprint)`** (codex F-2 — *not* sha
+alone), regenerable by re-running the suite; authoritative input is git. The
+**run-fingerprint** = hash of {suite argv, test-selection/filter state
+(`DOCTRINE_WORKER` etc.), worker-marker state, doctrine-bin provenance}. A cache in
+the disposable tier is correct *because* it is derivable.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -230,21 +268,27 @@ commit:     (on green) ONE commit; HEAD → B'
 
 **Carry-forward (OQ-1 cost mitigation):** S = (B + imported delta); after commit
 HEAD = B' = that tree. So the diff step's current-set *is* the failure-set at B' —
-persist it keyed by B', and the next batch's `capture --base B'` is a cache hit.
+persist it keyed by `(B', run-fingerprint)`, and the next batch's `capture --base B'`
+is a cache hit **only if the fingerprint matches** (codex F-2). A fingerprint
+mismatch (leaked `DOCTRINE_WORKER`, different argv, marker state change, swapped bin)
+→ cache miss → honest re-capture; a tainted run can never poison a later baseline.
 **Steady-state cost = one suite run per batch** (the diff), not two; only the first
-batch pays the extra capture. A foreign commit / `refresh-base` changes the sha →
-cache miss → honest re-capture.
+batch (or a fingerprint/sha change) pays the extra capture.
 
 **VT gate firing (S3):** the `/dispatch` conclude step runs `verify-vt` **in the
 coord tree, BEFORE the coord worktree is removed** (cadence: verify-vt → on green
 `prepare-review` → remove worktree). The worker's tests are on the coord working fs
-at `S`, so the fs reader suffices; non-zero halts handover. **Two-tree caveat:** the
-*mandate* (plan.toml) is authored state and a mid-dispatch waiver lands on the
-authoring branch, not the coord fork. Absent a mid-dispatch waiver the coord
-plan.toml == authored plan and one tree reads both. A mid-dispatch waiver requires
-the orchestrator (sole writer of authored state) to propagate the plan.toml edit into
-the coord tree before re-running the gate — else the waiver is invisible to it
-(INV-6). Rejected:
+at `S`, so the fs reader suffices; non-zero halts handover. **Two-tree caveat (codex
+F-4):** the *mandate* (plan.toml) is authored state and a mid-dispatch waiver lands
+on the authoring branch, not the coord fork. Absent a mid-dispatch waiver the coord
+plan.toml == authored plan and one tree reads both. A mid-dispatch waiver is **not**
+enough to merely drop into the coord *working fs*: `prepare_review` projects from the
+**committed object graph** of `dispatch/<slice>` (it splices only `boundaries.toml`,
+not arbitrary authored files — `dispatch.rs:1759`), so a working-fs-only waiver would
+let the gate pass a plan the review never sees. The waiver edit must therefore be
+**committed onto `dispatch/<slice>`** by the orchestrator (sole writer) before the
+gate, and `verify-vt` reads plan.toml from that same committed graph — so what the
+gate judges is exactly what `prepare_review` projects (INV-6). Rejected:
 folding into `prepare_review` now (would force git-tree blob reads — the delta is on
 the coord branch, not primary — and mix VT-content into the ref-projection beat,
 ADR-001 cohesion). The pure core takes an injected reader, so a future hardening can
@@ -287,10 +331,19 @@ distinctly. Glyphs/labels are named constants (STD-001).
   `Unobtainable` → a hard error (halt), never an empty failure-set. `diff` errs if
   either side is `Unobtainable`. This closes the false-green-at-S hole (a compile
   error / panic / format change at S must not read as "zero failures").
-- **INV-6 (mandate currency at the gate).** `verify-vt` must read the *current
-  authored* plan (incl. mid-dispatch waivers) + the *landed delta* tests. Default
-  single-coord-tree read satisfies this absent a mid-dispatch waiver; a mid-dispatch
-  waiver requires orchestrator propagation of plan.toml into the coord tree first.
+- **INV-6 (mandate currency = committed currency).** `verify-vt` reads the *current
+  authored* plan + the *landed delta* tests from the **committed `dispatch/<slice>`
+  object graph** — the same graph `prepare_review` projects. A mid-dispatch waiver
+  must be *committed* onto `dispatch/<slice>` (orchestrator, sole writer) before the
+  gate; a working-fs-only edit is invisible to projection and forbidden (codex F-4).
+  So the gate never judges a plan the review will not see.
+- **INV-7 (changed-failure halt).** The gate halts on `new ∪ changed`, not `new`
+  alone. `persistent` is *same key AND same signature*; a key whose failure signature
+  changes is `changed` → halt (codex F-1). A non-empty baseline on the coord tree is
+  surfaced as a warning, not silently tolerated.
+- **INV-8 (cache fingerprint).** The baseline cache key includes a run-fingerprint
+  (argv + filter/marker state + bin provenance), not the tree-sha alone; carry-forward
+  is refused on fingerprint mismatch (codex F-2).
 - **A1.** A VT with `keywords` but no `test_file` is `Uncheckable` (nothing to grep).
 - **A2.** `parse_failures` keys include the target/binary to disambiguate same-named
   tests across binaries (section-aware parse).
@@ -397,6 +450,15 @@ becomes reachable (via IDE-008 / SL-057), 20 steps down the road.
   uncheckable distinct).
 - **S1 unobtainable:** a suite run that does not complete / parses to nothing →
   `Unobtainable` → `diff` errs → non-zero (INV-5), NOT a green ∅. Explicit test.
+- **S1 changed-failure (codex F-1):** a key failing at both B and S with a *different*
+  signature → `changed` → halt; same key + same sig → `persistent` → green. Unit test
+  with crafted sigs.
+- **S1 signature stability:** a failure whose only diff is volatile (address /
+  duration / tmp path / hash) normalises to the same sig → `persistent`, no flap.
+- **S1 fingerprint cache (codex F-2):** capture under fingerprint X then `diff` under
+  fingerprint Y → cache miss → re-capture (no carry-forward poisoning).
+- **S3 comment-bait (codex F-3):** a `test_file` containing a mandated keyword *only*
+  in a comment / dead string → `Fail` (comment-stripped match), not `Pass`.
 - **e2e (hermetic fixtures, SL-168 F-2):** inject a failing test into a delta →
   `check regression diff` exits non-zero with it in `new`; a pre-existing failure at
   B → lands in `persistent`, exit zero. `verify-vt` over a fixture plan + fixture
@@ -436,14 +498,29 @@ becomes reachable (via IDE-008 / SL-057), 20 steps down the road.
 - **Validation strengthened:** SL-169-replay added as the acceptance proof; SL-170
   dogfoods P2 on its own plan (§9).
 
+### External adversarial pass — codex (GPT-5.5), 2026-06-28 — all 4 findings integrated
+
+- **F-1 (BLOCKER→MAJOR) — name-only key absorbs a changed failure.** A test failing at
+  B for reason X, regressed to fail for reason Y at S, kept its key → `persistent` →
+  shipped. Fixed: `Failure{key, sig}`, a `changed` bucket, halt on `new ∪ changed`
+  (INV-7); green-B normalisation makes the bucket usually empty.
+- **F-2 (MAJOR) — sha-only cache poisoning.** A tainted run cached under the sha is
+  reused forever. Fixed: cache key `(sha, run-fingerprint)`; refuse carry-forward on
+  mismatch (INV-8).
+- **F-3 (MAJOR) — `contains` is gameable.** Comment/dead-string bait satisfies a
+  keyword. Fixed: comment-stripped matching + explicit threat model (worker omission,
+  not adversary) + optional anchored `patterns`.
+- **F-4 (MAJOR) — waiver vs projection seam.** `prepare_review` projects the committed
+  object graph (only `boundaries.toml` spliced), so a working-fs waiver is judged by
+  the gate but not projected to review. Fixed: waiver committed onto `dispatch/<slice>`;
+  `verify-vt` reads the same committed graph (INV-6).
+- Codex confirmed **no ADR-001 layering break** and **no immutability violation**
+  (ids immutable, rows not frozen — `waived`/`test_file` additions legal).
+
 ### Residual (non-blocking)
 
 - `prepare_review` hardening to make S3 un-skippable in the binary (seam built,
   wiring deferred pending cadence-trust signal; §5.4, Follow-Ups).
 - IMP-194 finding-granularity generalization to gates/doctor (D4).
-
-### Prime remaining attack surfaces for an external pass
-
-- `parse_failures` section-aware correctness across cargo target boundaries (R1).
-- The INV-1 filter-normalisation step — is clearing the worker marker sufficient, or
-  are there other selection-affecting env vars on the coord tree?
+- Signature-normalisation token list (what counts as "volatile") is an
+  implementation detail to pin in PHASE-02 against captured fixtures.
