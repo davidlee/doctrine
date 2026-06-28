@@ -14,7 +14,8 @@ DOCTRINE=~/.cargo/bin/doctrine
 
 # Fork is orchestrator-classed: run it from the orchestrator root, never from a
 # worker-stamped worktree (else `worktree fork` resolves to worker-mode + refuses).
-cd "$ROOT" || { echo "cd ROOT failed"; exit 1; }m -rf "$D"
+cd "$ROOT" || { echo "cd ROOT failed"; exit 1; }
+rm -rf "$D"
 
 "$DOCTRINE" worktree fork --base "$B" --branch "$BR" --dir "$D" --worker ||
   {
