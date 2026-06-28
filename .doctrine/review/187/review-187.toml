@@ -1,0 +1,52 @@
+id    = 187
+slug  = "sl-174-audit-prebuilt-binary-distribution"
+title = "SL-174 audit — prebuilt binary distribution"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-174"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "src/main.rs clap `version` wiring is an undeclared design surface"
+detail = "Conformance reports src/main.rs as undeclared (edited, not in any design-target selector). Expected: design §5.2 / EX-2a assumed `doctrine --version` already existed. Observed: it was never wired; PHASE-01 added `version` to the root clap `#[command(...)]` (commit 2ed34d25, one line) because the smoke gate asserts `--version`. Now reports `doctrine 0.8.1`. Code is correct; the gap is documentary — design §5.2 should be annotated to record that `--version` was wired by this slice rather than pre-existing. `just check` green → no suite depended on its absence."
+disposition = "verified"
+response = "Observation confirmed; code is correct. Remediation is documentary and belongs to /reconcile as a per-slice direct edit: annotate design.md §5.2 to record that `doctrine --version` was wired by this slice (clap `version` attr, src/main.rs) rather than pre-existing. No plan edit (PHASE-NN/criteria immutable). Routed to the reconciliation brief (per-slice)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "scripts/install-test.sh new test seam not in a design-target selector"
+detail = """Conformance reports scripts/install-test.sh (added, PHASE-03) as undeclared. Expected: design "Affected surface" enumerated installer script / brew formula (location explicitly TBD at design). Observed: a lib-only unit-test harness for install.sh's pure `triple_for_arch` map (sourced via DOCTRINE_INSTALL_LIB_ONLY=1) was added alongside install.sh. It is an appropriate, in-scope test seam for the declared installer surface; the coarse affected-surface simply did not enumerate test infra. No spec/design impact."""
+disposition = "aligned"
+response = """No change needed. install-test.sh is an in-scope unit-test seam for the declared installer surface (install.sh's pure triple map), added per the project TDD convention. The design's affected-surface was deliberately coarse ("installer script and/or brew formula … location TBD at design") and does not enumerate test infra; a test harness riding the declared surface is expected, not scope creep. No spec/design impact."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "OQ-3: binary delivery is new evergreen surface beyond SPEC-009"
+detail = 'Design §6 OQ-3 / §10. Expected: SPEC-009 scopes "embed + lay-down into a project" (no second asset bundle, no network fetch at install time). Observed: this slice adds binary *delivery* — a GitHub-release download channel (release.yml), a curl|sh installer (install.sh), and cargo-binstall metadata — which is durable evergreen surface not covered by SPEC-009. Governance-coherence gap: at reconcile, either extend SPEC-009 to cover the delivery channel or record an explicit scope boundary. Design states this is not a slice blocker.'
+disposition = "verified"
+response = "Observation confirmed; this is a real governance-coherence gap, consciously deferred to reconcile per design OQ-3. Remediation belongs to /reconcile via a governance/spec write surface (REV): either extend SPEC-009 to cover the binary delivery channel (release artifacts, curl|sh installer, binstall) or record an explicit scope boundary stating delivery is out of SPEC-009's embed/lay-down scope. Routed to the reconciliation brief (governance/spec). Not a slice blocker (design §6)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Slice-level VH-1 (default no-toolchain install) completes only at close"
+detail = "Expected: VH-1 — fresh macOS, no toolchain → default `curl|sh` installs runnable doctrine and `cargo binstall doctrine` installs without compiling. Observed: mechanically PROVEN on v0.8.1-rc1 (PHASE-02: both apple-darwin triples green end-to-end, assets published; install.sh verified against the rc via DOCTRINE_VERSION). But GitHub `/releases/latest` excludes prereleases, so the *default* (latest-resolving) curl|sh + binstall only resolve once a NON-prerelease v0.8.1 is published (STOP-2). The remaining step is an operator-only release tag cut at /close, not a code gap."
+disposition = "tolerated"
+response = "Consciously accepted and sequenced, not drift. The distribution mechanism is complete and mechanically proven end-to-end on v0.8.1-rc1 (both apple-darwin triples, assets published, install.sh verified against the rc). The only residual is publishing a non-prerelease v0.8.1 so the latest-resolving default channels resolve (STOP-2) — an operator-only tag cut executed at /close, which completes VH-1 at that moment. Carried to close as the explicit final action; no code remains."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
