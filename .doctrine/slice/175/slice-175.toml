@@ -1,7 +1,7 @@
-id = 172
-slug = "priority-skew-anchor"
-title = "Priority cost skew and bare-estimate anchor"
-status = "ready"
+id = 175
+slug = "admit-spawned-from-relation-label-retcon-19-mislabelled-backlogslice-edges"
+title = "Admit spawned_from relation label + retcon 19 mislabelled backlog→slice edges"
+status = "design"
 created = "2026-06-28"
 updated = "2026-06-28"
 tags = []
@@ -10,38 +10,21 @@ tags = []
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
-[[selector]]
-selector = "src/priority/graph.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/priority/config.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "tests/e2e_priority_golden.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "tests/e2e_priority_cross_kind.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/priority/surface.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/commands/config.rs"
-intent = "design-target"
-
 [[relation]]
-label = "governed_by"
-target = "ADR-015"
+label = "related"
+target = "IMP-207"
 
-[[relation]]
-label = "references"
-role = "scoped_from"
-target = "ISS-057"
+[[selector]]
+selector = "src/relation.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/doctor*.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/backlog/**/backlog-*.toml"
+intent = "scope-relevant"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
