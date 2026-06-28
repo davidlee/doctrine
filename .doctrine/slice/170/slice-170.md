@@ -26,20 +26,27 @@ worker self-report.** This slice moves that from convention into the gate.
 
 ## Scope & Objectives
 
-1. **S1 — regression diff.** Capture a baseline failure-set at the phase base `B`
-   *in the same environment the verify runs in*, then diff the post-implementation
-   failure-set against it. Any *new* failure is a slice regression regardless of
-   which test binary or env var it surfaces under. Pure classifier over two
-   failure-sets; thin shell captures them.
+1. **S1 — regression diff (orchestrator-side).** Capture a baseline failure-set at
+   the phase base `B` *on the coordination tree* (pre-spawn), then diff the
+   post-implementation failure-set (at `S`, same tree) against it. Any *new* failure
+   is a slice regression regardless of which test binary or env var it surfaces
+   under; the failures `B` and `S` share absorb every env artifact (the
+   disambiguator). Pure classifier over two failure-sets keyed by an opaque
+   finding-key; the classifier is **general** (IMP-194 later feeds layering/doctor
+   finding-keys to the same diff) but only the **test** extractor is wired now.
+   Thin shell runs the suite and caches the sha-keyed baseline.
 2. **S3 — VT existence/shape gate.** Lift EN/EX/VT criteria from `plan.toml` into
-   the parsed `PlanPhase` model, then add a structural check at the conclude/
-   prepare-review gate: every VT (mode `VT`) criterion's mandated test file exists
-   and contains the criterion's mandated keywords. Structural, not semantic —
-   "does `e2e_list_conformance.rs` mention `relation` and `census`?", not "is the
-   assertion correct?".
-3. **S6 — VT-status summary.** Emit a per-phase VT pass/exist summary at the
-   dispatch conclude/handover step — the human-readable read-surface of S3's
-   check, making gaps visible at handover, not at audit.
+   the parsed `PlanPhase` model, **plus structured `test_file` / `keywords` fields
+   on VT rows** (P2 — free-text `expects` is too heterogeneous to parse reliably).
+   Add a `doctrine slice verify-vt <id>` gate: every VT (mode `VT`) criterion whose
+   structured mandate is present has its `test_file` exist and contain its
+   `keywords`. Four verdicts — `Pass` / `Fail` (halts) / `Uncheckable` (no
+   structured mandate) / `Waived` (human-authorized, rationale shown). Zero
+   false-fails: the gate halts on `Fail` only.
+3. **S6 — VT-status summary.** Emit a per-phase VT verdict summary at the dispatch
+   conclude/handover step — the human-readable read-surface of S3's check, making
+   gaps (incl. `Uncheckable` / `Waived`, rendered distinctly) visible at handover,
+   not at audit.
 
 ## Non-Goals
 
@@ -51,15 +58,24 @@ worker self-report.** This slice moves that from convention into the gate.
 - Re-architecting the worker trust model or the funnel topology. We add gates to
   the existing import→verify→conclude cadence; we do not move where work lands.
 
-## Affected surface (coarse — `/design` refines)
+## Affected surface (`/design` refined — design-target selectors recorded)
 
-- `src/plan.rs` — lift EN/EX/VT criteria into `PlanPhase` (currently serde-dropped).
-- `src/coverage_verify.rs` — baseline-diff seam in `run()`; carry delta metadata.
-- `src/dispatch.rs` — `prepare_review()` completeness gate; conclude VT summary.
-- `src/commands/` — possible new `doctrine slice verify-vt <id>` surface.
-- `plugins/doctrine/skills/dispatch/**`, `skills/handover/**` — funnel cadence +
-  handover message format.
-- Tests: `tests/e2e_*` for conclude/verify behaviour; unit for the pure classifiers.
+- `src/plan.rs` — lift EN/EX/VT into `PlanPhase` + structured `test_file`/`keywords`/
+  `waived` VT fields (PHASE-01). All additive `#[serde(default)]` (behaviour-preserving).
+- `src/regression.rs` *(new)* — pure `parse_failures` + `diff` + `RegressionDelta` +
+  `render_delta` (PHASE-02).
+- `src/vtgate.rs` *(new)* — pure `check_vt` + `check_phases` + `render_summary` +
+  verdict constants (PHASE-03).
+- `src/commands/**` — `check regression {capture,diff}`; `slice verify-vt <id>`
+  (+ optional `waive-vt`).
+- `src/dispatch.rs` — conclude: invoke verify-vt render (PHASE-04). `prepare_review`
+  fold = deferred hardening option (seam built, wiring not).
+- `plugins/doctrine/skills/{dispatch,handover,plan}/SKILL.md` — funnel cadence
+  (capture/diff), handover VT block, `/plan` authoring discipline (`test_file`/`keywords`).
+- Tests: `tests/e2e_*` + unit for the pure classifiers (hermetic fixtures, SL-168 F-2).
+- **EXCLUDED:** `src/coverage_verify.rs` — granularity mismatch (per-VT-cell matcher,
+  not a full-suite failure-set). S1 is a new module, not a coverage_verify edit
+  (corrects the original coarse guess; design §2 / D-correction).
 
 ## Risks, assumptions, open questions
 
