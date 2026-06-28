@@ -1,0 +1,54 @@
+# Implementation plan for SL-173 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-173"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Normalized --after / --needs edge filters"
+objective = """
+Add repeatable `--after <REF>` and `--needs <REF>` row filters to `doctrine \
+backlog list`, riding the backlog-local retain seam (the same site as `--kind`). \
+Refs match normalized via a pure `norm_ref` helper (`parse_canonical_ref`, \
+cross-kind, case+padding absorbed, verbatim fallback), applied to both query and \
+stored sides. Pure over the in-memory corpus — no new I/O, no ordering change, \
+no JSON-shape change. TDD red/green/refactor."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; D1 normalized-match decision recorded; slice md reconciled." },
+  { id = "EN-2", text = "design-target selector src/backlog.rs recorded; tree builds clean (just check)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`BacklogCommand::List` carries repeatable `--after`/`--needs` (Vec<String>), threaded through run_list/list_rows as params (not ListArgs), mirroring `--kind`." },
+  { id = "EX-2", text = "Pure `norm_ref` helper: uppercase + parse_canonical_ref → canonical_id; verbatim fallback on parse failure; applied to both query refs and stored to/needs." },
+  { id = "EX-3", text = "Two local retains inserted after the `--kind` retain and BEFORE the any_tagged computation; OR within a flag, AND across axes; empty slice = no-op." },
+  { id = "EX-4", text = "Terminal hide-set, ordering (compose over full corpus), JSON shape, and --columns all unchanged." },
+  { id = "EX-5", text = "just gate clean (clippy zero warnings); cargo fmt applied." },
+]
+verification = [
+  { id = "VT-1", expects = "list_rows: `--after IMP-194 --all` retains only items with that after edge; an item whose only edge is to A is excluded by `--after B` (negative)." },
+  { id = "VT-2", expects = "list_rows: normalization — `--after imp-0194` matches stored `IMP-194`; cross-kind `--needs SL-169` matches a needs ref of SL-169." },
+  { id = "VT-3", expects = "list_rows: `--after` AND `--status` compose; `--after` AND `--needs` require both edges present." },
+  { id = "VT-4", expects = "list_rows: an unparseable authored edge ref matches verbatim (raw fallback)." },
+  { id = "VT-5", expects = "list_rows: `--by sequence` order intact over the filtered set; a cycle-degrade changes only ordering, not membership." },
+  { id = "VT-6", expects = "list_rows: `--json` and `--columns` render correctly on the filtered set (row shape unchanged)." },
+]
+specs             = []
+requirements      = []
