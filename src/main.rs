@@ -56,6 +56,8 @@ mod projection;
 mod rec;
 mod reconcile;
 mod registry;
+mod regression;
+mod regression_run;
 mod relation;
 mod relation_graph;
 mod relation_query;

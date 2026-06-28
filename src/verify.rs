@@ -53,6 +53,11 @@ pub(crate) struct VerificationConfig {
     /// Override argv for `doctrine check gate` (end-of-phase cadence). Absent ⇒
     /// [`DEFAULT_GATE`]. Read ONLY by [`resolve_check`] (INV-1).
     gate: Option<Vec<String>>,
+    /// Override argv for the S1 regression suite (`doctrine check regression`).
+    /// Absent ⇒ [`DEFAULT_REGRESSION`]. MUST be a per-test runner (the `cargo
+    /// test` family), NOT the coarse `just gate` aggregate (SL-170 design D4) —
+    /// the gate parses per-test failure keys.
+    regression: Option<Vec<String>>,
 }
 
 impl VerificationConfig {
@@ -60,6 +65,18 @@ impl VerificationConfig {
     /// [`DEFAULT_TIMEOUT_SECS`] (`300`).
     pub(crate) fn timeout_secs(&self) -> u64 {
         self.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS)
+    }
+
+    /// The S1 regression suite argv: the configured `[verification].regression`,
+    /// else the baked [`DEFAULT_REGRESSION`]. Like the other baked defaults this
+    /// *informs* a host convention, never gates it (POL-002 / client-overridable).
+    pub(crate) fn regression_argv(&self) -> Vec<String> {
+        self.regression.clone().unwrap_or_else(|| {
+            DEFAULT_REGRESSION
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect()
+        })
     }
 }
 
@@ -128,6 +145,10 @@ pub(crate) fn resolve(cfg: &VerificationConfig, check: &VtCheck) -> Result<Resol
 const DEFAULT_COMMIT: &[&str] = &["just", "check"];
 /// The baked argv for `doctrine check gate` when `[verification].gate` is absent.
 const DEFAULT_GATE: &[&str] = &["just", "gate"];
+/// The baked S1 regression suite argv when `[verification].regression` is absent.
+/// A per-test runner (NOT `just gate`) so the gate can parse per-test failure
+/// keys (design D4). Pure data — informs, never gates (POL-002), overridable.
+const DEFAULT_REGRESSION: &[&str] = &["cargo", "test", "--no-fail-fast"];
 /// What the `quick` shell prints on the owned no-op path (unconfigured quick).
 const QUICK_UNSET_NOTE: &str = "doctrine check quick: no [verification].quick set — skipping";
 

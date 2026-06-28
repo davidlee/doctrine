@@ -41,28 +41,40 @@ pub(crate) enum CheckCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// S1 regression baseline-diff (SL-170) — capture a failure-set baseline at a
+    /// base ref, then diff a later run against it. NOT a cadence proxy: this verb
+    /// runs the per-test suite itself and partitions failures (new/changed/fixed/
+    /// persistent), halting on a regression regardless of which env it surfaces under.
+    Regression {
+        #[command(subcommand)]
+        command: RegressionCommand,
+    },
 }
 
-impl CheckCommand {
-    /// The `-p/--path` override for this invocation (consumes — the dispatcher
-    /// owns the command and needs nothing else from it).
-    fn path(self) -> Option<PathBuf> {
-        match self {
-            CheckCommand::Quick { path }
-            | CheckCommand::Commit { path }
-            | CheckCommand::Gate { path } => path,
-        }
-    }
-}
-
-impl From<&CheckCommand> for CheckKind {
-    fn from(cmd: &CheckCommand) -> Self {
-        match cmd {
-            CheckCommand::Quick { .. } => CheckKind::Quick,
-            CheckCommand::Commit { .. } => CheckKind::Commit,
-            CheckCommand::Gate { .. } => CheckKind::Gate,
-        }
-    }
+/// `doctrine check regression {capture|diff}` — the S1 gate verbs. `--base <B>` is
+/// the funnel's live pre-spawn HEAD (INV-2), the cache key + render label.
+#[derive(Debug, Subcommand)]
+pub(crate) enum RegressionCommand {
+    /// Run the suite on the coord tree (at `B`) and record `baseline-<B>`; no-op
+    /// on a cache hit.
+    Capture {
+        /// The base ref `B` (the funnel's pre-spawn HEAD) — cache key + label.
+        #[arg(long)]
+        base: String,
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    /// Run the suite at `S`, diff against `baseline-<B>`, and exit non-zero iff a
+    /// new or changed failure surfaced (INV-7), or a run was unobtainable (INV-5).
+    Diff {
+        /// The base ref `B` whose baseline to diff against.
+        #[arg(long)]
+        base: String,
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 /// `doctrine check <kind>` — resolve the cadence's plan from the owned config and
@@ -70,8 +82,14 @@ impl From<&CheckCommand> for CheckKind {
 /// or proxy-spawn the resolved argv (diverging via [`run_proxy`]).
 pub(crate) fn dispatch(cmd: CheckCommand) -> anyhow::Result<()> {
     use std::io::Write;
-    let kind = CheckKind::from(&cmd);
-    let root = crate::root::find(cmd.path(), &crate::root::default_markers())?;
+    // `regression` is a real handler (runs the suite + caches), not a cadence proxy.
+    let (kind, path) = match cmd {
+        CheckCommand::Regression { command } => return dispatch_regression(command),
+        CheckCommand::Quick { path } => (CheckKind::Quick, path),
+        CheckCommand::Commit { path } => (CheckKind::Commit, path),
+        CheckCommand::Gate { path } => (CheckKind::Gate, path),
+    };
+    let root = crate::root::find(path, &crate::root::default_markers())?;
     let cfg = crate::coverage_store::load_config(&root)?;
     match crate::verify::resolve_check(&cfg, kind) {
         CheckPlan::Noop(note) => {
@@ -91,6 +109,29 @@ pub(crate) fn dispatch(cmd: CheckCommand) -> anyhow::Result<()> {
             crate::dtoml::DOCTRINE_TOML
         ),
         CheckPlan::Run(argv) => run_proxy(&root, &argv, kind),
+    }
+}
+
+/// Route a `check regression {capture|diff}` invocation: resolve the root, then
+/// capture (write a baseline) or diff (exit non-zero on a regression — INV-7).
+/// `diff` forwards its computed exit code as the verb's terminal status.
+fn dispatch_regression(cmd: RegressionCommand) -> anyhow::Result<()> {
+    match cmd {
+        RegressionCommand::Capture { base, path } => {
+            let root = crate::root::find(path, &crate::root::default_markers())?;
+            crate::regression_run::run_capture(&root, &base)
+        }
+        RegressionCommand::Diff { base, path } => {
+            let root = crate::root::find(path, &crate::root::default_markers())?;
+            let code = crate::regression_run::run_diff(&root, &base)?;
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "the regression diff verb forwards its gate verdict as the terminal exit code (INV-7)"
+            )]
+            {
+                std::process::exit(code);
+            }
+        }
     }
 }
 

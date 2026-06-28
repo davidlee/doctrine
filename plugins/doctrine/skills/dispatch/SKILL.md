@@ -35,12 +35,32 @@ orchestrator funnel."
 
 ## The funnel (per batch)
 
-Capture `B = git rev-parse HEAD` pre-spawn. After workers return, in exact order:
+Capture `B = git rev-parse HEAD` pre-spawn, then capture the S1 regression
+baseline on the coord tree at `B`:
+```
+doctrine check regression capture --base "$B"     # suite @ B; no-op on cache hit
+```
+**INV-1 — normalise filter state before BOTH this capture and the verify diff**:
+clear the worker marker (`doctrine worktree marker --clear --operator`) and force a
+real rebuild, so capture and diff run an identical suite invocation + test
+selection. Same tree alone is insufficient — a leaked `DOCTRINE_WORKER`/marker
+changes which tests run and breaks the cancellation property (a fingerprint
+mismatch is then a cache miss → honest re-capture, never a poisoned baseline).
+
+After workers return, in exact order:
 1. Precond — worktree/index clean, HEAD == B
 2. Delta check — net diff `B..S`, single non-merge commit, `S^ == B`
 3. R-5 belt — reject any `.doctrine/` or `.claude/` touch
 4. Import — apply surviving net-diffs onto `B`, non-committing
-5. Verify — run project verify; if RED, isolate offender per delta
+5. Verify — `doctrine check regression diff --base "$B"` (suite @ S, SAME
+   normalised filter state as the capture). Exits non-zero on `new ∪ changed` (a
+   slice regression regardless of which test binary/env it surfaces under) OR an
+   unobtainable run (a compile error / panic / format change is a hard halt, never
+   a silent green ∅). `persistent` (same key + same signature at B and S) is the
+   tolerated env artifact; a non-empty baseline is surfaced as a trunk warning to
+   fix, not laundered as "env". On halt, the named `new`/`changed` keys ARE the
+   offenders — no by-hand isolation. (Carry-forward of the green current-set as
+   `baseline-<B'>` is a deferred cost optimisation; steady state still re-captures.)
 6. Branch-point guard — coordination HEAD still `B`?
 7. Commit — ONE commit on coordination branch
 8. Record — knowledge trails the confirmed commit, **and the per-phase `B→B+1`

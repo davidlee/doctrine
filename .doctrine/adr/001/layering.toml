@@ -50,6 +50,7 @@ tag = "leaf"                # out=0: tag normalization — pure
 tomlfmt = "leaf"            # out=0: TOML formatting helpers — pure
 tty = "leaf"                # out=0: terminal width/color — impure seam
 value = "leaf"              # out=0: value facet types — pure
+regression = "leaf"         # out=0: SL-170 S1 pure failure-set diff — parse/diff/render, no IO
 
 # ── engine (15) ──────────────────────────────────────────────────────────
 # Import engines + leaves; do NOT import command modules. Core domain model,
@@ -108,6 +109,7 @@ slice = "command"           # → engine/leaf + coverage, coverage_scan, conduct
 spec = "command"            # → engine/leaf + registry, requirement; spec entity-kind handler
 standard = "command"        # → engine/leaf; standard entity-kind handler
 worktree = "command"        # → fsutil, git, root, slice; worktree fork/coordinate/import
+regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, regression, worktree, root
 
 # ── sub-classified umbrellas ─────────────────────────────────────────────
 # Mixed umbrellas force sub-classification (design D9). The top-level module
