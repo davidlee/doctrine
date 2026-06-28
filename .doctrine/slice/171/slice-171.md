@@ -17,15 +17,21 @@ triage.
    1.9) looks identical to IMP-195 (scored 1.3) — the value/estimate that drove
    the score is invisible.
 
-3. **`unblocks` column wastes space.** The blocking count is almost always 0
-   (see current output). When non-zero it's instructional, but a whole column
-   for a number that's zero 90%+ of the time is poor use of width. It should be
-   an inline annotation (e.g. `⛓ 2` suffixed to `id` or shown only when > 0).
+3. **`unblocks` column wastes space — and is redundant.** The blocking count is
+   almost always 0 (see current output), and where non-zero its signal (downstream
+   leverage) is already folded into the SL-133 score's `leverage`/`optionality`
+   dimensions — which `next` is *already sorted by*. The precise dependent set lives
+   in `blockers <id>`, `explain <id>`, and `next --json` (`blocking`). The column
+   earns no width; **drop it entirely** (design D1).
 
 4. **No pagination / default limit.** The current `next` dumps every actionable
-   item (currently ~60 rows). `memory retrieve` has `--limit`/`--offset`/`--page`;
-   `next` should have at least `--limit` with a sensible default (20?) and a
-   footer hint when rows were truncated.
+   item (currently ~60 rows). `next` adopts `memory`'s pagination triple
+   (`--limit`/`--offset`/`--page`) with a default `--limit 20` and a truncation
+   footer.
+
+5. **Authored `tags` are invisible.** Like `estimate`/`value`, tags are authored
+   facet data; `next` should surface them via the house `default_with_tags`
+   convention (shown iff any surfaced row is tagged).
 
 ## Scope
 
@@ -37,56 +43,48 @@ triage.
   declared, dead-code-expected).
 - Unknown column: clean error with available set (standard `select_columns` UX).
 
-### 2. Default columns: `id status score estimate value unblocks title`
+### 2. Columns & defaults
 
-- Add `estimate` and `value` columns to `NEXT_COLS`.
-- Default set changes from `["id", "kind", "status", "score", "unblocks", "title"]`
-  to `["id", "status", "score", "estimate", "value", "unblocks", "title"]`.
-- `kind` drops from defaults (redundant with prefix).
+- `NEXT_COLS = [id, kind, status, score, estimate, value, tags, title]` —
+  **`unblocks` removed**; `estimate`/`value`/`tags` added.
+- `NEXT_DEFAULT = ["id", "status", "score", "estimate", "value", "title"]`;
+  effective default = `default_with_tags(NEXT_DEFAULT, any_tagged)`.
+- `kind` drops from defaults (redundant with prefix), stays selectable.
+- Facet cells (compact, unitless, pure `fn`): estimate `L–U` (e.g. `3.2–4.8`),
+  value `{:.1}` (e.g. `5.0`), tags joined `, ` (`paint_tag`), absent → `·`.
 
-### 3. Raw facets in the priority graph
+### 3. Facets in the priority graph
 
-- Add `estimate: Option<EstimateFacet>` and `value: Option<ValueFacet>` to
-  `NodeAttr` (currently only carries `base_score`).
-- Populate them during graph build from the `ScannedEntity` (already carries
-  `estimate` and `value`).
-- Render: estimate shows `L–U` (e.g. `1–3`), value shows the magnitude (e.g.
-  `5.0`). Absent → `·` (middle dot, the listing convention).
+- `NodeAttr` carries `facets: EntityFacets` (the shared estimate/value/risk/tags
+  projection); populated at build-3c from the scanned entity.
+- `NextRow` carries the render subset `estimate`/`value`/`tags`; `surface::next()`
+  projects from `NodeAttr.facets`. A future `risk` column extends `NextRow` only.
 
-### 4. Unblocks as inline annotation
+### 4. Pagination
 
-- Remove the standalone `unblocks` column.
-- Annotate the `id` cell: `IMP-120 ⛓2` when blocking > 0, bare `IMP-120` when 0.
-- Candidate approach: a `paint` closure on the `id` column that appends the
-  annotation; or fold it into the cell closure.
-- The `blocking` field on `NextRow` is already populated — just render it
-  differently.
-
-### 5. Default limit + pagination
-
-- Add `--limit <N>` (default: 20) and `--offset <N>` (default: 0) to the CLI.
-- When the actual row count exceeds the displayed count, print a footer:
-  `showing 20 of 63; use --offset 20 for next page`.
-- `--limit 0` means "no cap" (matches the current behaviour when limit is
-  absent — the `all` sentinel).
-- On `--json`: no pagination — JSON always returns the full set (the listing
-  precedent: `--columns` is no-op under `--json`).
+- `--limit <N>` (default 20), `--offset <N>` (default 0), `--page <N>` (1-based
+  sugar, `conflicts_with offset`) — mirroring `memory`. `--page 0` → error;
+  `--limit 0 --page N` → error (`--page requires a positive --limit`).
+- `--limit 0` ⇒ uncapped ⇒ no footer. Footer (table-mode, only when `shown < total`)
+  via the truncation helper **lifted** from `retrieve.rs` to shared `listing`.
+- `--json`: full set, no pagination, no column projection (listing precedent).
 
 ## Out of scope
 
-- `--page` sugar (MVP: `--offset` is sufficient).
 - Changing `survey` or `blockers` columns.
-- `next --format json` already includes `blocking` in the JSON — no JSON
-  schema change needed.
-- No estimate/value columns in `survey` (separate follow-up).
+- No `risk` column yet (future `NextRow`-only extension).
+- No estimate/value/tags columns in `survey` (separate follow-up).
+- No JSON schema change (`blocking` already present).
 
 ## Terrain
 
 | File | Change |
 |------|--------|
-| `src/commands/cli.rs` | `Next` variant: add `--columns`, `--limit`, `--offset` |
-| `src/priority/mod.rs` | `run_next`: accept + thread new args |
-| `src/priority/render.rs` | `NEXT_COLS`: add estimate/value; default set; `next_human`: column selection + pagination footer |
-| `src/priority/surface.rs` | `next()`: carry estimate/value facets into `NextRow` |
-| `src/priority/view.rs` | `NextRow`: add `estimate`, `value` fields |
-| `src/priority/graph.rs` | `NodeAttr`: add `estimate`, `value` fields; populate in build |
+| `src/commands/cli.rs` | `Next` variant: add `--columns`, `--limit`, `--offset`, `--page`; resolve page→offset |
+| `src/priority/mod.rs` | `run_next`: accept + thread columns/limit/offset |
+| `src/priority/render.rs` | `NEXT_COLS` (drop unblocks; add estimate/value/tags); `NEXT_DEFAULT`; `next_human`: select_columns + default_with_tags + pagination footer; `NEXT_LIMIT_DEFAULT` |
+| `src/priority/surface.rs` | `next()`: project facets into `NextRow` |
+| `src/priority/view.rs` | `NextRow`: add `estimate`, `value`, `tags` |
+| `src/priority/graph.rs` | `NodeAttr`: add `facets: EntityFacets`; populate at 3c |
+| `src/listing.rs` | lift `format_truncation_notice` (shared) |
+| `src/retrieve.rs` | re-point call sites to lifted helper |

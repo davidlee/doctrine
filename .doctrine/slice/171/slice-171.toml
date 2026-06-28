@@ -10,6 +10,38 @@ tags = []
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/render.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/view.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/listing.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "design-target"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
