@@ -113,6 +113,9 @@ fn base_score(f: &EntityFacets, kind: &entity::Kind,
               cfg: &config::PriorityConfig, ctx: &CostCtx) -> BaseScore
 ```
 
+`base_score` has exactly one non-test caller (`build_from`, `graph.rs:234`) — the
+signature change is fully contained; test sites read through `build`/`attrs`.
+
 `src/priority/config.rs` — new role sub-table:
 
 ```rust
@@ -166,8 +169,18 @@ post-pass unchanged.
 - **Edge — non-positive bounds** (`lower + β·span ≤ 0`): floored to EPSILON.
 - **Edge — value absent**: `value_dim = 0` regardless of `est_cost` (unchanged);
   the cost model only bites value-bearing items.
+- **Edge — NaN bounds**: `reduce(f64::max)` ignores NaN operands; an all-NaN
+  corpus yields NaN `absent`, but the existing `if raw.is_finite() { raw } else
+  { 0.0 }` guard (`graph.rs:94`) collapses the resulting `value_dim` to 0.0 — no
+  NaN escapes. Preserved, not newly relied upon.
+- **Edge — `margin = 0`**: clamp permits it (operator choice); INV-2 then weakens
+  to `≥` (a bare item can *tie* the single worst-`upper` estimated item). Default
+  `1` keeps strict dominance; documented degeneracy, not a defect.
 - **Assumption**: anchoring on `max(upper)` (not `max(est_cost)`) is intentional
   — independent of β and still dominant (upper ≥ est_cost).
+- **Assumption**: the EstimateFacet invariant `lower ≤ upper` is owned by the
+  estimate facet (set-time), not re-validated here; inverted bounds (if any) stay
+  bounded via `floor_eps`.
 
 ## 6. Open Questions & Unknowns
 
@@ -203,7 +216,12 @@ post-pass unchanged.
 - **R1 — golden churn masks a real regression.** Mitigation: recompute goldens
   *after* the targeted unit tests (INV-1..3) pass, and eyeball each fixture delta
   for direction (bare items sink, estimated items' relative order stable under
-  β-only change). Never blind-accept.
+  β-only change). Never blind-accept. Blast radius confirmed by audit of
+  score/order-asserting tests: the three named goldens recompute;
+  `tests/e2e_inspect_golden.rs` is expected **unchanged** (value-free fixtures →
+  `score: 0.0`) and is promoted to a design-target only if a fixture actually
+  moves; `e2e_estimate_non_blocking` / `e2e_help_families_golden` assert no
+  score/order and are unaffected.
 - **R2 — ADR-015 §2 locality divergence read as drift.** Mitigation: the REV at
   reconcile amends the §2 wording explicitly; design names the load-bearing
   invariant (pre-graph determinism) that actually constrains mint.
@@ -227,6 +245,8 @@ Config (`src/priority/config.rs`):
 
 E2E goldens recompute (deliberate, reviewed): `tests/e2e_priority_golden.rs`,
 `tests/e2e_priority_cross_kind.rs`, `tests/e2e_backlog_list_order_golden.rs`.
+Verify-unchanged (no edit expected): `tests/e2e_inspect_golden.rs` (value-free
+corpus) — escalates to a design-target edit only if its fixtures shift.
 
 Verification modes: VT throughout (pure deterministic scoring); golden deltas VH-
 reviewed for direction.
