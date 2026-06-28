@@ -1,9 +1,9 @@
 id = 168
 slug = "doctor"
 title = "Unified corpus health doctor verb"
-status = "plan"
+status = "reconcile"
 created = "2026-06-27"
-updated = "2026-06-27"
+updated = "2026-06-28"
 tags = []
 
 [relationships]
