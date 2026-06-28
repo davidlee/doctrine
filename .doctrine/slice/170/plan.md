@@ -66,6 +66,15 @@ PHASE-01 lands the model, after which `verify-vt SL-170` judges this very plan �
 it must come back verify-vt-clean (no `Fail`) at the slice's own conclude. That
 is both the acceptance of the P2 surface and the slice's self-test.
 
+**Where UNCHECKABLE is permitted (dogfood bound, codex plan-review F-2).** Every
+automated VT that mandates a *concrete new unit/e2e test* carries
+`test_file`/`keywords` (the regression.rs / vtgate.rs unit rows, the e2e rows).
+`UNCHECKABLE` is permitted **only** for VTs whose mandate is a *non-file
+property* a keyword grep cannot express: behaviour-preservation (PHASE-01 VT-2 —
+"existing suite green, no new test"), cache-IO behaviour (PHASE-02 VT-6/VT-8),
+and the skill-cadence VA row (PHASE-02 VA-1). So a non-trivial `verify-vt SL-170`
+self-proof is preserved — "clean" is not achieved by an UNCHECKABLE sweep.
+
 **The acceptance proof is the SL-169 replay** (design §9), split across the two
 gates that would each independently have stopped the original false-green:
 PHASE-02 VT-7 reconstructs the `e2e_standard_cli_golden` regression → `new` →
@@ -73,6 +82,16 @@ halt; PHASE-03 VT-4 reconstructs the absent conformance matrix → missing-keywo
 `Fail` → halt.
 
 ## Notes
+
+**Codex external plan-review (GPT-5.5, 2026-06-28) — 4 findings integrated.**
+F-1 (INV-6 unverified): added PHASE-04 VT-3 for the in-scope positive half
+(committed waiver honoured); the negative working-fs-rejection half is explicitly
+scoped to the deferred prepare_review hardening (EX-3). F-2 (dogfood overstated):
+structured the regression.rs / vtgate.rs unit VTs and bounded where UNCHECKABLE is
+permitted (above). F-3 (INV-1/INV-2 dispatch-seam unproven): added PHASE-02 VT-9
+(binary half — B from --base only, fingerprint identity) + VA-1 (skill-cadence
+half — marker-clear normalisation). F-4 (carry-forward proof missing): added
+PHASE-02 VT-8. Codex confirmed the 01→03→04 chain and PHASE-02 file-disjointness.
 
 **Verdict / exit semantics — INV-7 governs.** Design §5.2 (line 146) and INV-7
 both make the S1 gate halt on **`new ∪ changed`**, not `new` alone — the

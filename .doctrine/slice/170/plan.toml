@@ -63,12 +63,15 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "diff partition unit (src/regression.rs): new / changed / fixed / persistent; empty-both → green; full overlap same-sig → all-persistent → green; env-mask case baseline{embed_fail,X} vs current{embed_fail,X,new_fail} → new={new_fail} only.", test_file = "src/regression.rs", keywords = ["RegressionDelta", "persistent", "changed", "Unobtainable"] },
-  { id = "VT-2", expects = "parse_failures over captured cargo `failures:` output fixtures (hermetic strings, SL-168 F-2 — not live runs); section-aware keys disambiguate same-named tests across target binaries (A2)." },
-  { id = "VT-3", expects = "Unobtainable path (INV-5): a non-completing / unparseable run → FailureSet::Unobtainable → diff returns Err → non-zero, NOT a green ∅. Explicit test." },
-  { id = "VT-4", expects = "Changed-failure (codex F-1, INV-7): same key with differing sig → changed → halt; same key + same sig → persistent → green. Crafted-sig unit." },
-  { id = "VT-5", expects = "Signature stability: a failure whose only diff is a volatile token (address/duration/tmp path/hash) normalises to the same sig → persistent, no flap." },
-  { id = "VT-6", expects = "Fingerprint cache (codex F-2, INV-8): capture under fingerprint X then diff under fingerprint Y → cache miss → honest re-capture, no carry-forward poisoning." },
+  { id = "VT-2", expects = "parse_failures over captured cargo `failures:` output fixtures (hermetic strings, SL-168 F-2 — not live runs); section-aware keys disambiguate same-named tests across target binaries (A2).", test_file = "src/regression.rs", keywords = ["parse_failures", "failures"] },
+  { id = "VT-3", expects = "Unobtainable path (INV-5): a non-completing / unparseable run → FailureSet::Unobtainable → diff returns Err → non-zero, NOT a green ∅. Explicit test.", test_file = "src/regression.rs", keywords = ["Unobtainable"] },
+  { id = "VT-4", expects = "Changed-failure (codex F-1, INV-7): same key with differing sig → changed → halt; same key + same sig → persistent → green. Crafted-sig unit.", test_file = "src/regression.rs", keywords = ["changed", "persistent", "sig"] },
+  { id = "VT-5", expects = "Signature stability: a failure whose only diff is a volatile token (address/duration/tmp path/hash) normalises to the same sig → persistent, no flap.", test_file = "src/regression.rs", keywords = ["sig", "persistent"] },
+  { id = "VT-6", expects = "Fingerprint cache (codex F-2, INV-8): capture under fingerprint X then diff under fingerprint Y → cache miss → honest re-capture, no carry-forward poisoning. (Cache-IO property — Uncheckable under the file-mandate gate by design.)" },
   { id = "VT-7", expects = "e2e + SL-169 replay (a): inject a failing test into a delta → `check regression diff` exits non-zero with it in `new`; a pre-existing failure at B → lands in persistent, exit zero. Reconstructs the e2e_standard_cli_golden regression that shipped as env.", test_file = "tests/e2e_check_regression.rs", keywords = ["check", "regression", "diff", "new", "persistent"] },
+  { id = "VT-8", expects = "Carry-forward equivalence (codex plan-review F-4 / design §9): the diff's current-set persisted as baseline-<B'> equals a fresh `capture --base B'` under the same fingerprint, so steady-state `capture --base B'` is a cache hit / no-op (one suite run per batch, not two). e2e over a committed B'." },
+  { id = "VT-9", expects = "Dispatch-seam INV-1/INV-2 (codex plan-review F-3, binary half): B is sourced SOLELY from --base (the live pre-spawn HEAD) — never an internal registry / code_start_oid read; capture and diff compute an identical run-fingerprint under identical env and a differing one under changed filter state. Pins the orchestrator call path, not just the pure diff.", test_file = "tests/e2e_check_regression.rs", keywords = ["base", "fingerprint"] },
+  { id = "VA-1", expects = "Dispatch-cadence INV-1 (codex plan-review F-3, skill half — not binary-testable): agent confirms dispatch SKILL.md mandates the orchestrator NORMALISE filter state (clear the worker marker, force a real rebuild) before BOTH capture and diff. Non-silent home for the prose half of INV-1." },
 ]
 specs        = []
 requirements = []
@@ -88,8 +91,8 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "check_vt four-verdict unit (src/vtgate.rs): Pass; Fail-absent-file; Fail-missing-keyword; Uncheckable (keywords, no test_file — A1); Waived short-circuit (returns Waived before any fs read).", test_file = "src/vtgate.rs", keywords = ["VtVerdict", "Uncheckable", "Waived", "check_vt"] },
-  { id = "VT-2", expects = "Comment-bait (codex F-3): a test_file holding a mandated keyword ONLY inside a // comment, a /* block */, or a dead string → Fail (comment-stripped match), not Pass." },
-  { id = "VT-3", expects = "Non-gated paths: a phase with only VA/VH criteria → no VT lines; empty plan / no VT criteria → empty report, exit zero (design §5.5 edges)." },
+  { id = "VT-2", expects = "Comment-bait (codex F-3): a test_file holding a mandated keyword ONLY inside a // comment, a /* block */, or a dead string → Fail (comment-stripped match), not Pass.", test_file = "src/vtgate.rs", keywords = ["strip", "comment"] },
+  { id = "VT-3", expects = "Non-gated paths: a phase with only VA/VH criteria → no VT lines; empty plan / no VT criteria → empty report, exit zero (design §5.5 edges).", test_file = "src/vtgate.rs", keywords = ["check_phases"] },
   { id = "VT-4", expects = "e2e + SL-169 replay (b): verify-vt over a fixture plan + fixture test files mixing Pass/Fail/Uncheckable/Waived → exit non-zero (the Fail), report lists all four with reasons; a VT { test_file = \"tests/e2e_list_conformance.rs\", keywords = [\"relation\",\"census\"] } against a tree missing the conformance matrix → Fail (missing keyword) → halt.", test_file = "tests/e2e_slice_verify_vt.rs", keywords = ["verify-vt", "relation", "census", "Uncheckable", "Waived"] },
 ]
 specs        = []
@@ -106,11 +109,12 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "dispatch conclude invokes verify-vt (render_summary) in the coord tree on the cadence verify-vt → on green prepare-review → remove worktree (design §5.4) — BEFORE coord worktree removal; a Fail exits non-zero and halts handover. The fs reader suffices at conclude because, absent a mid-dispatch waiver, the coord plan.toml == the authored plan." },
   { id = "EX-2", text = "The conclude output and the /handover SKILL.md message embed render_summary plus a one-line S1 regression status; WAIVED and UNCHECKABLE render distinctly from Pass/Fail (named constants, STD-001)." },
-  { id = "EX-3", text = "INV-6 honoured as a recorded cadence rule: a mid-dispatch waiver must be COMMITTED onto dispatch/<slice> by the orchestrator (sole writer) before the gate — a working-fs-only waiver is forbidden. (The un-skippable prepare_review committed-graph reader stays a deferred follow-up; the injected-reader seam is built for it.)" },
+  { id = "EX-3", text = "INV-6 (positive, in-scope half): a waiver COMMITTED onto the coord tree's plan.toml before the gate is honoured — verify-vt reads it from the coord tree and the row renders Waived (non-halting). Gated by VT-3. The NEGATIVE half (mechanically REJECTING a working-fs-only waiver) requires the committed-graph reader and is the DEFERRED prepare_review hardening (design §5.4 / Follow-Ups) — explicitly out of PHASE-04 scope; the injected-reader seam is built for it, and the cadence rule (orchestrator commits the waiver before the gate) carries it until then." },
 ]
 verification = [
   { id = "VT-1", expects = "render_summary unit (src/vtgate.rs) over a mixed report: Pass/Fail/Uncheckable/Waived all render; the waived reason is surfaced; UNCHECKABLE is visually distinct.", test_file = "src/vtgate.rs", keywords = ["render_summary", "WAIVED", "UNCHECKABLE"] },
   { id = "VT-2", expects = "e2e: the dispatch conclude/handover surface emits the VT summary block (a Fail halts handover non-zero; a clean plan passes with the block shown).", test_file = "tests/e2e_dispatch_verify_vt.rs", keywords = ["conclude", "verify-vt", "VT"] },
+  { id = "VT-3", expects = "INV-6 positive half (codex plan-review F-1): a waiver committed onto the coord tree before conclude is honoured — verify-vt reads the committed plan, the row renders Waived (non-halting), handover proceeds. e2e. (The negative working-fs-only-rejection case rides the deferred prepare_review committed-graph reader — out of scope here.)" },
   { id = "VH-1", expects = "Human read of a real conclude/handover output confirms the VT block is legible and the WAIVED/UNCHECKABLE distinction is clear at a glance (the S6 value is human-facing legibility)." },
 ]
 specs        = []
