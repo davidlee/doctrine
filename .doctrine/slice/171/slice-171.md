@@ -50,8 +50,10 @@ triage.
 - `NEXT_DEFAULT = ["id", "status", "score", "estimate", "value", "title"]`;
   effective default = `default_with_tags(NEXT_DEFAULT, any_tagged)`.
 - `kind` drops from defaults (redundant with prefix), stays selectable.
-- Facet cells (compact, unitless, pure `fn`): estimate `L–U` (e.g. `3.2–4.8`),
-  value `{:.1}` (e.g. `5.0`), tags joined `, ` (`paint_tag`), absent → `·`.
+- Facet cells (compact, unitless, pure `fn`): estimate `lo–hi` and value both via
+  `estimate::display::format_bound` (1dp, strips `.0` → `3.2–4.8`, `5`), tags joined
+  `, ` (`paint_tag`), absent → `listing::ABSENT_CELL` (`·`). `tags` column presence
+  gated on the visible page (`default_with_tags`), not the full set.
 
 ### 3. Facets in the priority graph
 
