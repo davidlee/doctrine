@@ -124,10 +124,15 @@ bin-dir = "doctrine"
 
 - INV: published assets always pass `scripts/smoke.sh` (gate precedes upload).
 - INV: asset names match the contract in §5.2 exactly.
-- ASM: GitHub-hosted `macos-14` runners have a clean Apple SDK (no iconv issue)
-  and Rosetta available to run the x86_64 smoke test on the arm64 host.
-- EDGE: x86_64 is cross-compiled on the arm64 runner; if cross-link surprises,
-  fallback is a separate `macos-13` (x86_64) matrix leg — same steps, native.
+- ASM: GitHub-hosted `macos-14` runners have a clean Apple SDK (no iconv issue).
+  Rosetta is NOT assumed present — the workflow installs it
+  (`softwareupdate --install-rosetta --agree-to-license`) before any x86_64 smoke
+  run, or uses the native `macos-13` fallback leg.
+- EDGE: x86_64 is cross-compiled on the arm64 runner. This re-enters the iconv
+  *link* failure domain (the slice's motivating bug is an x86 link error); the
+  SDK's `libiconv.tbd` is arch-agnostic so it should resolve, but the cross-link
+  must be PROVEN in phase 1, not assumed. Fallback: a native `macos-13`
+  (x86_64) matrix leg — same steps, native compile + smoke.
 - EDGE: `install.sh` on an unsupported arch/OS exits with guidance, never a
   partial install.
 - EDGE: quarantine strip is best-effort (`|| true`) — absence of `xattr` or the
@@ -173,9 +178,21 @@ bin-dir = "doctrine"
 - R4 **Unsigned-binary Gatekeeper friction** on direct/binstall downloads (no
   quarantine strip there). Mitigation: document the one-time override; notarization
   available as a follow-up if it bites.
+- R3 (amended) **x86_64 cross-link re-enters the iconv failure domain.** The
+  motivating bug is an x86 link error; cross-compiling x86 on the arm runner is
+  the riskiest single step. Mitigation: prove it FIRST (phase 1, before building
+  the installer/channel on top); native `macos-13` leg as fallback.
 - R5 **Introducing CI to a CI-less repo** — maintenance surface. Mitigation: one
   narrow tag-triggered workflow; reuse `scripts/smoke.sh` so logic isn't
   CI-only.
+- R6 **`curl|sh` supply-chain trust** — the installer verifies asset checksums,
+  but the script itself is fetched unverified (chicken/egg). Mitigation: document
+  "inspect before piping"; the script is short and auditable; checksum-verifies
+  what it downloads.
+- R7 **`install.sh` served from a moving branch** — `main` lags `edge` (the repo
+  promotes edge→main), and a branch URL is unversioned. Mitigation: install.sh
+  must land on `main`; README pins the documented one-liner to a release tag for
+  reproducibility, with `main` as the rolling-latest convenience.
 
 ## 9. Quality Engineering & Validation
 
@@ -189,4 +206,19 @@ bin-dir = "doctrine"
 
 ## 10. Review Notes
 
-(internal adversarial pass + any external review recorded here)
+### Internal adversarial pass (integrated)
+
+- F1 → R3 amended, §5.5 EDGE: x86_64 cross-link re-enters the iconv failure
+  domain; prove in phase 1.
+- F2 → §5.5 ASM: Rosetta not assumed; install it or use the native `macos-13`
+  leg.
+- F3 → R7: `install.sh` must land on `main`; pin README one-liner to a tag.
+- F4 → R6: `curl|sh` trust — checksum-verify downloads, document inspect-first.
+
+### Open governance question (for the author)
+
+- F5: Adopting GitHub Actions / release-automation in a deliberately CI-less repo
+  may be project-global enough to warrant an ADR rather than a slice-local
+  decision. Pending author call; if yes, raise via `doctrine adr new` and link
+  `SL-174 governed_by ADR-NNN`.
+
