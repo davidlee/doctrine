@@ -27,3 +27,6 @@ target = "RFC-004"
 [[relation]]
 label = "related"
 target = "IMP-162"
+
+[value]
+value = 2.3

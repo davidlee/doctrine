@@ -31,3 +31,6 @@ target = "IMP-174"
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
+
+[value]
+value = 1.9

@@ -23,3 +23,6 @@ triggers = []                   # watched source globs: { globs, note? }
 [[relation]]
 label = "related"
 target = "RFC-005"
+
+[value]
+value = 2.2

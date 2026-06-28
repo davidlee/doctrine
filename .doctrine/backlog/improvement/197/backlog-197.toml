@@ -27,3 +27,6 @@ target = "RFC-005"
 [[relation]]
 label = "governed_by"
 target = "ADR-011"
+
+[value]
+value = 3.3
