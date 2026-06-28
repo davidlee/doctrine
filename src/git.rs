@@ -1307,13 +1307,6 @@ impl WorktreeBlock {
 /// longer backs the ref. Surfacing `prunable` is what lets [`live_worktree_for_ref`]
 /// tell a *live* checkout from a dead entry git has not yet pruned (SL-154 PHASE-02,
 /// design D9).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "`branch` is read by the SL-154 PHASE-03 D9 guard rewrite, not yet wired"
-    )
-)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorktreeEntry {
     pub(crate) path: PathBuf,

@@ -7,9 +7,12 @@
 // from main.rs (PHASE-01 consolidated the CLI surface). They are preserved
 // for the standalone skills install path and are reachable via the extracted
 // install_for_claude/install_for_other functions (SL-088 PHASE-02).
-#![expect(
-    dead_code,
-    reason = "run_install call chain — preserved for standalone and ref paths"
+#![cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "run_install call chain — preserved for standalone and ref paths"
+    )
 )]
 
 //! `doctrine skills` — list and install agent skills.

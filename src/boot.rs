@@ -540,13 +540,6 @@ const SESSION_MATCHER_CODEX: &str = "startup|resume|clear|compact";
 /// Cosmetic matcher for the `WorktreeCreate` hook entry (SL-152).
 /// `WorktreeCreate` has no matcher support (hooks.md:237), so this never scopes at
 /// runtime — it only gives the merge core a stable canonical-entry identity.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-152 PHASE-06: Claude hooks ship via the plugin; boot/create-fork specs retained as fallback, test-only callers"
-    )
-)]
 const WORKTREE_CREATE_MATCHER: &str = "*";
 
 // ---------------------------------------------------------------------------
@@ -838,13 +831,6 @@ struct HookPlan {
 /// The hook command for `exec`: `<exec> boot`. A **single** space-free argument
 /// (`boot`) — the invariant the ownership match leans on (see
 /// `is_doctrine_boot_command`).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-152 PHASE-06: boot hook ships via the plugin; retained as fallback, test-only callers"
-    )
-)]
 fn boot_command(exec: &Path) -> String {
     format!("{} boot", exec.display())
 }
@@ -872,13 +858,6 @@ fn desired_entry(spec: &HookSpec) -> Value {
 /// is `boot` and the program's file name is `doctrine`. A foreign hook
 /// (`tool boot`, `/x/doctrine-helper run`) never matches. NOTE: if the hook ever
 /// grows a second/spaced arg, this must move to a real shell-word split.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-152 PHASE-06: boot hook ships via the plugin; retained as fallback, test-only callers"
-    )
-)]
 fn is_doctrine_boot_command(cmd: &str) -> bool {
     let Some((program, arg)) = cmd.trim().rsplit_once(char::is_whitespace) else {
         return false;
@@ -929,13 +908,6 @@ fn is_doctrine_emit_command(cmd: &str) -> bool {
 /// The `WorktreeCreate` hook command for `exec`:
 /// `<exec> worktree create-fork` (SL-152 PHASE-04). Multi-arg, so ownership
 /// matches by suffix-strip (see `is_doctrine_create_fork_command`).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-152 PHASE-06: create-fork hook ships via the plugin; retained as fallback, test-only callers"
-    )
-)]
 fn create_fork_command(exec: &Path) -> String {
     format!("{} worktree create-fork", exec.display())
 }
@@ -944,13 +916,6 @@ fn create_fork_command(exec: &Path) -> String {
 /// ` worktree create-fork` suffix and check the remaining program's file name is
 /// `doctrine`. Disjoint from the boot/sync predicates (neither owns the other's
 /// command), so the `WorktreeCreate` entry never clobbers the `SessionStart` ones.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-152 PHASE-06: create-fork hook ships via the plugin; retained as fallback, test-only callers"
-    )
-)]
 fn is_doctrine_create_fork_command(cmd: &str) -> bool {
     let Some(program) = cmd.trim().strip_suffix(" worktree create-fork") else {
         return false;
