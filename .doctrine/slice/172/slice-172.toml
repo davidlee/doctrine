@@ -12,11 +12,23 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/priority/graph.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/priority/config.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_priority_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_priority_cross_kind.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_backlog_list_order_golden.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
