@@ -90,6 +90,26 @@ selector = "src/state.rs"
 intent = "scope-relevant"
 note = "PHASE-01 incidental: test-helper plan() struct literal needed the 3 new PlanPhase fields (compile-fix, no behaviour change; Plan::parse suite untouched)"
 
+[[selector]]
+selector = "src/regression_run.rs"
+intent = "design-target"
+note = "S1 impure shell — module split decided at impl (PHASE-02 D1); design §5.2 named the shell, not the module name"
+
+[[selector]]
+selector = "src/verify.rs"
+intent = "scope-relevant"
+note = "PHASE-02 incidental: [verification].regression config key (verify.rs, D2); mod decl (main.rs); marker_present re-export (worktree/mod.rs, F-1). All additive/mechanical."
+
+[[selector]]
+selector = "src/main.rs"
+intent = "scope-relevant"
+note = "PHASE-02 incidental: [verification].regression config key (verify.rs, D2); mod decl (main.rs); marker_present re-export (worktree/mod.rs, F-1). All additive/mechanical."
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "scope-relevant"
+note = "PHASE-02 incidental: [verification].regression config key (verify.rs, D2); mod decl (main.rs); marker_present re-export (worktree/mod.rs, F-1). All additive/mechanical."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
