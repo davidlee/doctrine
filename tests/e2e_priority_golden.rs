@@ -182,7 +182,8 @@ fn survey_all_reveals_terminal_and_promoted() {
 
 /// next: the ACTIONABLE nodes only, in composed order_key order (D9). The
 /// workable-but-BLOCKED ISS-001 is ABSENT (the divergence feature); the promoted
-/// ISS-004 and terminal ISS-003 are absent too. RSK-001 shows it unblocks one item.
+/// ISS-004 and terminal ISS-003 are absent too. Default columns (SL-171 PHASE-01):
+/// id, status, score, estimate, value, title — kind and unblocks are gone.
 #[test]
 fn next_human_actionable_only_blocked_absent() {
     let dir = tmp();
@@ -192,10 +193,10 @@ fn next_human_actionable_only_blocked_absent() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ kind │ status │ score │ unblocks │ title\n\
-         ISS-002 │ ISS  │ open   │ 0.0   │ 0        │ Free work\n\
-         RSK-001 │ RSK  │ open   │ 0.0   │ 1        │ The prereq\n\
-         RV-001  │ RV   │ active │ 0.0   │ 0        │ The review\n"
+        "id      │ status │ score │ estimate │ value │ title\n\
+         ISS-002 │ open   │ 0.0   │ ·        │ ·     │ Free work\n\
+         RSK-001 │ open   │ 0.0   │ ·        │ ·     │ The prereq\n\
+         RV-001  │ active │ 0.0   │ ·        │ ·     │ The review\n"
     );
     // The blocked item is absent from the actionable worklist.
     assert!(
@@ -332,6 +333,8 @@ fn explain_json_structured_reasons_and_policy_version() {
 }
 
 /// next --json: actionable rows only, with the policy stamp + structured reasons.
+/// VT-5 (SL-171 PHASE-01): payload is byte-identical to pre-slice — the new
+/// NextRow fields (estimate/value/tags) do NOT leak into the JSON.
 #[test]
 fn next_json_actionable_only_policy_version() {
     let dir = tmp();
@@ -353,6 +356,22 @@ fn next_json_actionable_only_policy_version() {
         !ids.contains(&"ISS-001"),
         "blocked item absent from next --json"
     );
+    // VT-5 negative assertion: no estimate/value/tags keys in the JSON payload
+    // (catches a future field-add to the json! macro).
+    for row in v["rows"].as_array().unwrap() {
+        assert!(
+            row.get("estimate").is_none(),
+            "estimate must not leak into next --json"
+        );
+        assert!(
+            row.get("value").is_none(),
+            "value must not leak into next --json"
+        );
+        assert!(
+            row.get("tags").is_none(),
+            "tags must not leak into next --json"
+        );
+    }
 }
 
 // === EX-3 — clean error / empty channels ================================

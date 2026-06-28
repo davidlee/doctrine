@@ -28,6 +28,9 @@ use std::path::PathBuf;
 
 use crate::listing::{Format, RenderOpts};
 
+/// The default `--limit` for `doctrine next` (SL-171 PHASE-02).
+pub(crate) const NEXT_LIMIT_DEFAULT: usize = 20;
+
 /// Resolve the project root (default markers), shared by every priority verb.
 fn root(path: Option<PathBuf>) -> anyhow::Result<std::path::PathBuf> {
     crate::root::find(path, &crate::root::default_markers())
@@ -54,19 +57,25 @@ pub(crate) fn run_survey(
     Ok(())
 }
 
-/// `doctrine next [--json]` (design §5.4) — the actionable-only advisory worklist.
+/// `doctrine next [--json] [--columns <CSV>] [--limit N] [--offset N] [--page N]`
+/// (design §5.4) — the actionable-only advisory worklist. `columns` is the
+/// `--columns` projection; `limit`/`offset` are the pagination slice
+/// (ignored under `--json`).
 pub(crate) fn run_next(
     path: Option<PathBuf>,
     format: Format,
     json: bool,
     render: RenderOpts,
+    columns: Option<&Vec<String>>,
+    limit: usize,
+    offset: usize,
 ) -> anyhow::Result<()> {
     let root = root(path)?;
     let rows = surface::next(&root)?;
     let out = if json || format == Format::Json {
         render::next_json(&rows)?
     } else {
-        render::next_human(&rows, render)
+        render::next_human(&rows, render, columns.map(Vec::as_slice), limit, offset)?
     };
     write!(io::stdout(), "{out}")?;
     Ok(())

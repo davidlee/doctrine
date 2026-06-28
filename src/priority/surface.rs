@@ -480,6 +480,15 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<Vec<NextRow>> {
                 });
             }
             reasons.push(score_reason(&g, k));
+            // Project facet fields from NodeAttr (SL-171 PHASE-01, D2) — read once,
+            // never recompute.
+            let (estimate, value, tags) = attr(&g, k).map_or((None, None, Vec::new()), |a| {
+                (
+                    a.facets.estimate.clone(),
+                    a.facets.value.clone(),
+                    a.facets.tags.clone(),
+                )
+            });
             NextRow {
                 id: k.canonical(),
                 title: title_of(&g, k),
@@ -490,6 +499,9 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<Vec<NextRow>> {
                 reasons,
                 blockers: Vec::new(),
                 blocking,
+                estimate,
+                value,
+                tags,
             }
         })
         .collect();
