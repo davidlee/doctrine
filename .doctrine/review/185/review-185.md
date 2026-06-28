@@ -109,3 +109,26 @@ is required — every finding lands per-slice or in code.
 
 ### Governance/spec (REV)
 - None. No ADR/spec/policy/standard change is required.
+
+## Repair Outcome (2026-06-28)
+
+All three blockers + minors repaired on `repair/168` @ `eb8b6222` (the SL-168
+impl bundle replayed onto current `main` e16bcf3c, churn dropped):
+
+- **F-1** resolved — `spec_fk_findings` moved to `spec.rs`; `finding`/`doctor_checks`
+  classified in `layering.toml`; `architecture_layering_gate` green (17/0).
+- **F-2** resolved — memory golden reseeded onto a hermetic fixture corpus (`-p`).
+- **F-3** resolved — ProseCite anchored to `.doctrine/**`; 966→118 on the live
+  corpus; unit fixtures relocated under `.doctrine/` so the D11 skips are
+  exercised, not bypassed.
+- **F-5/F-6** resolved in code — `--json` now emits the `{kind, rows}` envelope
+  with a `severity` field (matches locked §5.4), so no design amendment needed.
+- **F-7** reconciled — design §5.1 updated to the as-built module layout.
+- **F-8** — governance.rs churn dropped (trunk kept); policy/standard reformatting
+  retained (rustfmt-mandated under the active edition — not gratuitous).
+- **F-10** resolved — check-number comments corrected.
+- **F-11** (found during repair; truncated audit runs had missed it) — slice-168.toml
+  `related` rows made contiguous.
+
+Full suite green (0 failed), `clippy -D warnings` clean, `fmt --check` clean.
+RV-185 done · await=none. Ledger ready for `/close`.

@@ -295,3 +295,17 @@ should fail loudly with a provisioning hint rather than a deep E0599.
 Secondary: background Bash `${PIPESTATUS[0]}` after a `| tail`/`| grep` captures
 the filter's exit, not cargo's — the harness "exit 0" notifications were
 misleading; had to read the raw output to see the real compile failure.
+
+[/audit→repair; SL-168-audit-2026-06-28]
+Replaying a dispatched impl bundle onto a moved trunk for repair: the squashed
+`review/<slice>` single commit cherry-picks cleanly with `--no-commit`, but two
+non-obvious frictions surfaced. (1) Anchoring a corpus scanner to `.doctrine/**`
+(F-3 fix) silently invalidated unit-test fixtures that wrote `.md` files at the
+temp-root — they fell outside scope and either failed or passed vacuously; the
+real fix was as much in the test fixtures (move them under `.doctrine/`) as in
+the scanner. A scan-scope change must be co-reviewed with its fixtures.
+(2) `cargo fmt --check` flagged files I had reverted to trunk's version
+(policy/standard) — trunk itself is fmt-stale under the active rustfmt edition,
+so the dispatch worker's apparent "fmt churn" was rustfmt *correcting* trunk, not
+noise. An audit that dispositions "gratuitous fmt churn" should first confirm the
+trunk file is fmt-clean under the gating toolchain, else it inverts the fix.

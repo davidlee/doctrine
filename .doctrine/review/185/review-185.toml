@@ -14,7 +14,7 @@ ref   = "SL-168"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "ADR-001 layering gate RED: finding/doctor_checks unclassified + registry→spec upward edge"
 detail = "architecture_layering_gate test FAILS on the impl bundle. Causes, all SL-168 artifacts: (1) new modules `finding` and `doctor_checks` are absent from .doctrine/adr/001/layering.toml → Unclassified; (2) registry::spec_fk_findings (PHASE-02, registry.rs:357) calls crate::spec::build_registry, but registry is classified leaf (out=0, 'pure index') and spec is command → UpwardEdge{registry→spec, Leaf→Command} + MixedUmbrella{registry reaches Command}, violating ADR-001 (leaf←engine←command). Design §5.1 intended the COMMAND-layer orchestrator to compose checks, not a leaf reaching up. Handover Open Item #1 flagged the classification gap (worker blocked by R-5 belt) but it was never landed, and the registry→spec edge was undetected. Fix: relocate spec_fk_findings into spec.rs (command, already owns build_registry) keeping registry pure, AND classify finding=leaf, doctor_checks=command in layering.toml. Expected: gate green. Observed: RED."
@@ -23,7 +23,7 @@ response = "Confirmed real. Repair on the candidate before integration: relocate
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "memory_validate_byte_exact_golden RED: non-hermetic golden over live corpus (volatile commits-behind)"
 detail = "tests/e2e_memory_validate_golden.rs (the D12 safety net authored by PHASE-02 EX-1) FAILS. The test runs `memory validate` against the LIVE repo and asserts byte-equality with a hard-coded expected string containing live mem_* ids and a volatile field: 'verified_sha N commits behind HEAD'. Golden baked N=21; actual now N=20 (HEAD moved — SL-169 landed on main). The single-line diff is 21→20. The golden is brittle BY CONSTRUCTION: any commit to the corpus, any memory/relation change shifts the output, so it cannot serve as a stable behaviour-preservation proof — the very role D12 assigned it. Expected: stable green safety net. Observed: RED on an unrelated commit. Fix: make the golden hermetic (seed an isolated fixture corpus) OR normalise the volatile commits-behind count before comparison."
@@ -32,7 +32,7 @@ response = "Confirmed real. Repair: make tests/e2e_memory_validate_golden.rs her
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "ProseCite (#8) scans whole repo, descends into nested worktrees → 827/966 false positives"
 detail = "prose_cite_findings globs root.join('**/*.md') — the WHOLE repo. Design §5.5/§7 D11 specified scanning the authored corpus '.doctrine/**/*.md'. The whole-repo glob descends into nested git worktrees that each hold a FULL repo copy: .dispatch/*/.doctrine/slice/*/design.md, .worktrees/*, .doctrine/state/dispatch/candidate/*. Measured on the live corpus: 966 ProseCite findings, of which 827 (86%) are nested-worktree duplicates (e.g. slice/092/design.md counted 6+ times across .dispatch/133-p02, .dispatch/141-p01..03, .dispatch/SL-093, SL-095). Anchoring to .doctrine/** collapses 966→139. is_disposable_prose_d11 skips .doctrine/state/ but NOT top-level .dispatch/ or .worktrees/. Fix: anchor the glob to root/.doctrine/**/*.md per design, and/or exclude nested-worktree roots. Expected: scan authored corpus only. Observed: 86% garbage from worktree copies."
@@ -95,12 +95,21 @@ response = "handover.md is disposable runtime state — no authored artifact to 
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "doctor_checks.rs module comments mis-number checks (#5/#6/#7 vs canonical #6/#7/#8)"
 detail = "doctor_checks.rs header comments label RawLabel '#5 catalog-scan check', TomlParse '#6', ProseCite '#7'. Canonical numbering (design §5.2 table, finding.rs Category order) is RawLabel #6, TomlParse #7, ProseCite #8 (#1-#4 are id/relation/specfk/memory, #5 is Lifecycle). Cosmetic comment drift only."
 disposition = "fix-now"
 response = "Trivial comment renumber in doctor_checks.rs (#5/#6/#7 → #6/#7/#8). Sweep into the F-1/F-3 repair pass on the candidate. Nit — does not gate."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "major"
+title = "slice-168.toml: non-contiguous 'related' relation rows (corpus invariant RED)"
+detail = "e2e_relation_migration_storage::relation_rows_of_one_label_are_contiguous FAILS on .doctrine/slice/168/slice-168.toml: the three 'related' rows (IMP-121, IMP-141, IMP-176) were interleaved by two 'references' rows (SPEC-004, SPEC-013), breaking same-label contiguity. Pre-existing in the slice's own authored toml on main; the original audit's full-suite runs were tail-truncated and missed it (only architecture_layering surfaced). Fixed in the repair: reordered so all 'related' rows are contiguous, then 'references'. Data-only; no behaviour impact."
+disposition = "fix-now"
+response = "Fixed in repair commit eb8b6222: reordered slice-168.toml relation rows so the three 'related' rows are contiguous before 'references'. relation_rows_of_one_label_are_contiguous green."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
