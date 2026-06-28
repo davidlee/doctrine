@@ -5,7 +5,7 @@
 # anywhere (pure string mapping) — exercised in-jail on Linux. SL-174 PHASE-03.
 set -eu
 
-here="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+here="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 DOCTRINE_INSTALL_LIB_ONLY=1 . "$here/install.sh"
 
@@ -32,4 +32,9 @@ else
   echo "ok: ppc64 rejected"
 fi
 
-[ "$fail" -eq 0 ] && echo "install-test: PASS" || { echo "install-test: FAIL" >&2; exit 1; }
+if [ "$fail" -eq 0 ]; then
+  echo "install-test: PASS"
+else
+  echo "install-test: FAIL" >&2
+  exit 1
+fi
