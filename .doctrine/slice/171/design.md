@@ -89,8 +89,9 @@ splices `tags` before `title` iff any surfaced row is tagged; `--columns` bypass
 the splice (explicit list wins). `any_tagged = rows.iter().any(|r| !r.tags.is_empty())`.
 
 Cell formatting is a pure non-capturing `fn(&NextRow)->String` — no config, no unit.
-The `·` middle-dot is the listing absent-value convention (STD-001: a named const if
-not already shared).
+The `·` middle-dot is the listing absent-value convention. **No shared const for it
+exists today** (adversarial F2) — introduce `listing::ABSENT_CELL = "·"` (STD-001;
+no magic string) and use it for all three facet cells.
 
 ### 5.2 Pagination (`next_human`)
 
@@ -107,7 +108,11 @@ if visible.len() < total {
 }
 ```
 
-- `--limit 0` ⇒ uncapped ⇒ `shown == total` ⇒ **no footer**.
+- **Footer guard is `limit != 0 && shown < total`** (NOT just `shown < total`).
+  `format_truncation_notice` computes `offset / page_size`; with `--limit 0`,
+  `page_size == 0` ⇒ **integer division-by-zero panic** (adversarial F1). The
+  `limit != 0` gate forecloses it: uncapped ⇒ never paginated ⇒ never footed, even
+  with `--offset N` (`--limit 0 --offset 5` shows `rows[5..]`, no footer).
 - `page_size = limit` (the resolved value). `--page` resolves `offset = (page-1)*page_size`
   at the CLI layer (mirror `memory`): `--page 0` → bail; `--limit 0 --page N` → bail
   (`--page requires a positive --limit`).
@@ -146,7 +151,8 @@ fixture graph, the SL-133/SL-047 test style):
   bare rows.
 - **VT-E pagination** — `--limit 2` shows 2 + footer `2 of N; use --page 2 …`;
   `--offset`/`--page` equivalence; `--limit 0` → all rows, **no footer**;
-  `--limit 0 --page 2` → error.
+  `--limit 0 --offset N>0` → `rows[N..]`, **no footer, no panic** (F1 guard);
+  `--limit 0 --page 2` → error; `--page 0` → error.
 - **VT-F `--json` invariance** — golden `next --json` byte-identical to pre-slice
   (no column/pagination leakage; `blocking` still present).
 - **VT-G behaviour-preservation** — `retrieve`/`find`/`memory list` truncation
@@ -173,5 +179,30 @@ fixture graph, the SL-133/SL-047 test style):
   with the `unblocks` column) — alignment risk eliminated.
 - **R2** `EstimateFacet`/`ValueFacet` `f64` formatting via `{}` prints `1` for `1.0`,
   `3.2` for `3.2` — acceptable compact form. `{:.1}` for value pins one decimal.
-- **R3** `offset > total` → empty body + footer's `offset >= total` branch
-  (`reduce --offset or --page`) — mirror retrieve's guard exactly.
+- **R3** `offset > total` (with `limit > 0`) → empty body + footer's `offset >= total`
+  branch (`reduce --offset or --page`) — mirror retrieve's guard exactly.
+
+## 10. Adversarial review (self) — findings & disposition
+
+- **F1 (must-fix, integrated §5.2)** — `--limit 0 --offset N>0` makes `shown < total`
+  true while `page_size == 0`, so the lifted `format_truncation_notice`'s
+  `offset / page_size` divides by zero (panic). retrieve never hits this (it always
+  caps). **Fixed:** footer guard is `limit != 0 && shown < total`. Adds a test:
+  VT-E covers `--limit 0 --offset N` → no footer, no panic.
+- **F2 (must-fix, integrated §5.1/§8)** — the `·` absent marker has no shared const;
+  rendering it inline would plant a magic string (STD-001). **Fixed:** introduce
+  `listing::ABSENT_CELL`.
+- **F3 (impl note)** — `NEXT_COLS` array size annotation changes `[…; 6]` → `[…; 8]`
+  (drop `unblocks` −1, add `estimate`/`value`/`tags` +3). Mechanical.
+- **F4 (verification scope clarification)** — the existing `next_human` golden tests
+  (SL-047/SL-133) assert the *old* layout (incl. `unblocks`); **this slice updates
+  them** — legitimate, `next` is this slice's own surface. This is distinct from
+  VT-G: the `retrieve`/`find`/`memory list` truncation goldens must stay **unchanged**
+  (the `format_truncation_notice` lift is a pure move — the behaviour-preservation
+  gate, which binds shared machinery, not `next`'s surface).
+- **F5 (accepted, non-blocking)** — `EntityFacets` is cloned twice (the 2b base-score
+  map and the 3c `NodeAttr`). Acceptable; an optional refactor builds the per-entity
+  `EntityFacets` once and has `base_score` read from it. Not in scope.
+- **F6 (verify-at-impl)** — `--columns` rides the house arg form `Option<Vec<String>>`
+  (backlog/memory precedent), `value_delimiter = ','` for `--columns id,score`; pass
+  `columns.as_deref()` into `select_columns`. Confirm against `ListArgs` at impl.
