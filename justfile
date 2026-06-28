@@ -59,6 +59,16 @@ web-check: web-install
 build:
   cargo build
 
+# Embed-integrity smoke gate: build a local binary with a freshly re-embedded
+# web/map/dist, then run scripts/smoke.sh against the actual shipped bytes
+# (--version, the install/ embed, the map embed). Same script the release
+# workflow runs on each artifact before upload — single source, no CI duplicate
+# (SL-174). `touch` forces rust-embed to re-embed the rebuilt dist.
+smoke: web-build
+  touch src/map_server/assets.rs
+  cargo build
+  scripts/smoke.sh ./target/debug/doctrine
+
 # Catches source-filter / asset-embed gaps `cargo build` can't (it reads the real
 # web/map/dist on disk; the nix sandbox builds the frontend hermetically). Slow
 # first run, crane-cached after. Host-real; a genuine failure exits non-zero, but

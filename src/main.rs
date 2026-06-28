@@ -94,7 +94,7 @@ use crate::listing::{Format, ListArgs};
 
 /// doctrine — project tooling.
 #[derive(Parser)]
-#[command(name = "doctrine", about = "doctrine CLI")]
+#[command(name = "doctrine", version, about = "doctrine CLI")]
 struct Cli {
     /// Control colour output
     #[arg(long, default_value = "auto", global = true)]
