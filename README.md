@@ -35,6 +35,13 @@ software engineering with LLM agents.
 
 ## Installation
 
+TL'DR:
+
+```zsh
+curl -sL https://install.doctrinal.systems | sh
+```
+
+
 **Prebuilt binary (macOS, no Rust toolchain) — recommended:**
 
 ``` zsh
@@ -100,7 +107,7 @@ to install skills for other agents:
 npx skills add davidlee/doctrine # or your fork 
 ```
 
-## Setup 
+## Post-Install Setup 
 
 ```zsh
 
@@ -108,14 +115,9 @@ mkdir my-project && cd my-project
 git init 
 mkdir .claude 
 
+# these are also the 'I updated doctrine' routine:
 doctrine install -y 
-doctrine install --agent claude --yes # skills + dispatch-worker agent + SubagentStart hook into .claude
-doctrine install --agent universal --yes
-
-doctrine memory sync 
-
-doctrine boot install # .claude/settings.local.json
-doctrine boot install --agent codex # works for most 
+npx skills add davidlee/doctrine --agent universal -y
 
 cat .gitignore # check & adjust to taste
 
