@@ -112,3 +112,35 @@ design to match the code — code is authoritative here.
 - **SPEC-020 REQ-310 / FR-011 (F-3):** REV — lift the v1 aggregation-deferral
   language now that the corpus `max_upper` aggregation ships; reconcile REQ-310
   status to reflect the delivered aggregation.
+
+## Reconciliation Outcome
+
+### Direct edits applied (per-slice)
+- **design.md §5.2 (F-1):** `est_cost` signature amended to landed form
+  `fn est_cost(bounds: Option<(f64,f64)>, ctx: CostCtx, ec: &config::EstimateCost) -> f64`,
+  with a note that the bounds-tuple param (not `&EstimateFacet`) honours NF-001 —
+  graph.rs's cost fn must not name facet types; caller destructures bounds from
+  `EntityFacets`. Code is authoritative; design prose was stale.
+- **design.md §307-308 (F-2):** the two e2e goldens (`e2e_priority_golden`,
+  `e2e_priority_cross_kind`) demoted from "recompute (deliberate, reviewed)" to
+  **verify-unchanged** — ran green on the impl bundle without edit.
+
+### REVs completed
+- **REV-015 (`reconcile-sl-172`): done** — covers F-3, two `modify` rows landed by
+  hand:
+  - **ADR-015 §1+§2+§4:** `value_dim` cost term rewritten from estimate midpoint to
+    the `est_cost` skew + bare-anchor model (`lower + β(upper−lower)`;
+    `max_upper(corpus) + margin`; empty-corpus `1.0`); β/margin defaults (0.65/1.0)
+    and `[priority.estimate]` config knobs added (§4); §2 base pre-pass notes the
+    threaded `max_upper` corpus input (date/uid pattern).
+  - **SPEC-020 REQ-310 / FR-011:** v1 aggregation-deferral narrowed, not blanket
+    lifted. REQ-310 stays `active`; the *band/facet contract* remains
+    aggregation-free, and the prose now records that the priority engine aggregates
+    corpus `max_upper` caller-side (the aggregation §110 + D3 already anticipated).
+    No status transition — the deferral was prose, not lifecycle.
+  - Rationale + before/after excerpts in `revision-015.md`.
+
+### Withdrawn / tolerated
+- None. F-4 was a positive-evidence anchor (`aligned`); no remediation owed.
+
+Reconcile pass complete — handoff to /close.

@@ -70,8 +70,12 @@ An estimate's `lower`/`upper` bounds carry a project-wide **percentile reading**
 `lower` sits at P-low, `upper` at P-high. The band resolves from
 `doctrine.toml [estimation].lower_confidence`/`upper_confidence`, defaulting
 `0.1`/`0.9`, each bound finite, in `[0,1]`, with `low < high`. The band **frames**
-the bounds for authoring and display only — it drives **no** predicate,
-aggregation, normalization, or validation in v1 (**REQ-310 / FR-011**). Confidence
+the bounds for authoring and display only — the band itself drives **no** predicate,
+normalization, or validation, and the facet contract carries no aggregation
+semantics (**REQ-310 / FR-011**). A caller-side consumer may aggregate the exposed
+bounds: the priority engine aggregates the corpus `max_upper` of the upper bounds as
+its bare-item cost anchor (SL-172 / ADR-015 §1), the caller-side aggregation §110
+and D3 anticipate — the band/facet contract stays aggregation-free. Confidence
 is estimate-only: the value facet is a single magnitude with no band, and `[value]`
 config carries no confidence fields. Wiring the band into the `show` display path is
 deferred to IMP-112.

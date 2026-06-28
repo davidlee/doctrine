@@ -114,10 +114,13 @@ fn floor_eps(x: f64) -> f64 { if x < EPSILON { EPSILON } else { x } }
 /// `base_score`; computed once in the impure scan shell (date/uid pattern).
 struct CostCtx { absent: f64 }
 
-fn est_cost(est: Option<&EstimateFacet>, ctx: &CostCtx, ec: &config::EstimateCost) -> f64 {
-    match est {
-        Some(e) => floor_eps(e.lower + ec.skew * (e.upper - e.lower)),
-        None    => floor_eps(ctx.absent),
+// bounds-tuple param (not &EstimateFacet) honours NF-001: graph.rs's cost fn must
+// not name facet types — the caller destructures (lower,upper) from EntityFacets
+// before the call. ctx by value (Copy struct).
+fn est_cost(bounds: Option<(f64, f64)>, ctx: CostCtx, ec: &config::EstimateCost) -> f64 {
+    match bounds {
+        Some((lower, upper)) => floor_eps(lower + ec.skew * (upper - lower)),
+        None                 => floor_eps(ctx.absent),
     }
 }
 
@@ -304,8 +307,9 @@ Explain / config CLI (guaranteed movers):
   single source of truth, no parallel cost math to update.
 - `src/commands/config.rs` tests for the two new keys via `show/set/get/unset`.
 
-E2E goldens recompute (deliberate, reviewed): `tests/e2e_priority_golden.rs`,
-`tests/e2e_priority_cross_kind.rs`.
+E2E goldens — declared targets, **verify-unchanged** (RV-189 F-2): `tests/e2e_priority_golden.rs`
+and `tests/e2e_priority_cross_kind.rs` ran green on the impl bundle without edit
+(β=0.65 default does not move their asserted scores/order).
 **Removed from scope** (codex F6): `tests/e2e_backlog_list_order_golden.rs` —
 backlog list sorts by kind ordinal, "explicitly NOT a priority claim"
 (`backlog.rs:451-456`); `est_cost` does not move it.
