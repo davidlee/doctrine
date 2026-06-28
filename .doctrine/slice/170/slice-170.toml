@@ -1,7 +1,7 @@
 id = 170
 slug = "dispatch-trust-gate"
 title = "Dispatch handover trust-gate"
-status = "ready"
+status = "started"
 created = "2026-06-28"
 updated = "2026-06-28"
 tags = []
@@ -84,6 +84,11 @@ note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDE
 selector = "tests/e2e_dispatch_verify_vt.rs"
 intent = "design-target"
 note = "SL-170 PHASE-04 S6 conclude/handover VT-summary e2e (design §5.4). predicted name; adjust at impl."
+
+[[selector]]
+selector = "src/state.rs"
+intent = "scope-relevant"
+note = "PHASE-01 incidental: test-helper plan() struct literal needed the 3 new PlanPhase fields (compile-fix, no behaviour change; Plan::parse suite untouched)"
 
 [[relation]]
 label = "governed_by"
