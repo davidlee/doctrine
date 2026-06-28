@@ -125,6 +125,11 @@ release bump: readme-index
   git tag "v${version}"
   echo "released v${version} (committed + tagged) — push with: git push && git push --tags"
 
-# crates.io release; requires token in ENV
+# crates.io release; requires token in ENV.
+# --allow-dirty: web/map/dist is gitignored (by choice) but force-included in the
+# package (Cargo.toml include), so cargo's VCS check always reads it as
+# uncommitted. The flag skips that working-tree walk — which also silences the
+# .direnv symlink-loop warnings. release-check (gate + nix-build) is the real
+# correctness guard; the tree is otherwise clean.
 publish: web-build release-check
-  cargo publish
+  cargo publish --allow-dirty
