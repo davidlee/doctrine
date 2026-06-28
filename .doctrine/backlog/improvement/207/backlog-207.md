@@ -11,13 +11,14 @@ all 19 cases the causality is reversed: the item was **created from** the slice
 SPEC-019 D6 already pins `spawns` for knowledge records → spawned work, but no
 equivalent label exists for backlog ↔ slice edges.
 
-> **Folded into RFC-003 (2026-06-29).** This is `drift` redux — a label abused
-> because no structured outlet exists — and surfaces an unnamed **provenance plane**
-> (`spawns`, `references(scoped_from)`, `spawned_from`, `drift` "carved out from").
-> The *label decision* (point label vs generalized `spawns` vs provenance plane) is
-> now a live decision in RFC-003 § "Provenance plane" — do not mint `spawned_from`
-> ahead of it. **The retcon (step 2) is independent and may proceed regardless** of
-> which label the RFC settles on; only the target label waits.
+> **Folded into RFC-003 (2026-06-29) — resolved.** This is `drift` redux, and the fix
+> is part of **finishing Axis B**: `slices` retires into the universal grammar.
+> Provenance becomes **`references(originates_from)`** (one neutral role) — `spawned_from`
+> is **not** minted; the 19 rows relabel to `originates_from`. Fulfillment + completion
+> becomes a new **`fulfils`** label carrying a `{full, partial}` degree facet. See
+> RFC-003 § "Finish Axis B". The direction is decided; it lands via a ratifying ADR +
+> the finish-Axis-B slice. **The 19-edge retcon (step 2) may proceed independently**,
+> targeting `originates_from`.
 
 ## Problem
 
