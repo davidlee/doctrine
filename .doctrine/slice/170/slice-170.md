@@ -77,23 +77,34 @@ worker self-report.** This slice moves that from convention into the gate.
   not a full-suite failure-set). S1 is a new module, not a coverage_verify edit
   (corrects the original coarse guess; design §2 / D-correction).
 
-## Risks, assumptions, open questions
+## Open questions — RESOLVED at `/design` (see design.md §7)
 
-- **OQ-1 (S1 locus):** baseline capture worker-side (self-correct) vs
-  orchestrator-side (verify-don't-trust the unreliable party). Orchestrator is the
-  trusted seam but pays a second full-suite run. `/design` decides.
-- **OQ-2 (IMP-130 overlap):** [[mem.pattern.audit.dispatched-phase-green-but-incomplete]]
-  links IMP-130, which covers S3's territory at audit time. Dedupe / relate at
-  `/design` — this slice may *subsume* or *complement* it.
-- **OQ-3 (one slice or split):** S1 (regression) is mechanism-independent of
-  S3/S6 (completeness, which share the plan-VT-model dependency). Could be a
-  phase split within SL-170 or two slices. `/design` decides altitude.
-- **OQ-4 (env-artifact masking):** baseline MUST be captured in the verify
-  environment, else fork artifacts (embed gap, `DOCTRINE_WORKER`, stale bin —
-  [[mem.pattern.dispatch.worker-fork-missing-gitignored-embed]]) read as
-  regressions. The baseline-on-`B` run is exactly the disambiguator.
-- **Assumption:** `plan.toml` VT criteria carry enough text (mandated file +
-  keywords) to drive a structural match. To confirm at `/design`.
+- **OQ-1 (S1 locus) → orchestrator-side** (D2). The trusted seam; both runs on the
+  coord tree make env artifacts cancel into `persistent`. Cost (2nd suite run)
+  mitigated by sha-keyed carry-forward → one run/batch steady-state.
+- **OQ-2 (IMP-130 / IDE-008) → leave IMP-130; relate IDE-008** (D6). IMP-130 is the
+  RV-116 close-source candidate-drift guard, orthogonal to VT completeness (its
+  apparent overlap is a loose memory link). IDE-008 is S3's complementary twin
+  (executable pass/fail at solo flip vs S3's structural existence/shape at dispatch
+  handover); shares PHASE-01's plan-VT lift. Linked `SL-170 related IDE-008`.
+- **OQ-3 (altitude) → one slice, phase-split** (D3). PHASE-01 lift → 02 S1 / 03 S3 /
+  04 S6. Mechanism-independent but file- and governance-cohesive.
+- **OQ-4 (env-artifact masking) → discharged by INV-1** (same-tree capture+diff).
+  Resolved as a property of OQ-1=A, not a separate mechanism.
+- **NEW (baseline-diff generalization, ex SL-168) → test-only now, general
+  classifier** (D4). Gates/doctor need finding-granularity (stable finding identity)
+  — real work, IMP-194's; the diff is built general so IMP-194 plugs in extractors.
+- **S3 mechanism → P2 structured fields** (D5). Free-text `expects` too heterogeneous;
+  P2 is the only zero-false-fail posture; forward-only, with `Uncheckable` surfaced.
+
+## Escape valve (infeasible / mis-specified VT)
+
+A VT proving incorrect or impossible mid-execution must NOT be silently skipped or
+self-relaxed. Obstacle → `/consult` → human OK → revise (`test_file`/`keywords`
+edit) or **waive** (`waived=true` + `waived_reason`, id + original mandate retained
+— append, never renumber). Only a human-authorized plan edit can relax; worker and
+dispatch-orchestrator cannot. A waiver is visible (`WAIVED` + reason), never a silent
+pass (design §5.4).
 
 ## Verification / closure intent
 
@@ -105,3 +116,13 @@ classifiers; e2e on the conclude summary surface.
 ## Summary
 
 ## Follow-Ups
+
+- **IMP-194** extends the general S1 finding-key diff to gates (layering) + doctor —
+  needs finding-granularity (stable finding identity); the diff seam is built for it.
+- **`prepare_review` hardening (residual OQ):** make the S3 gate un-skippable in the
+  binary by having `prepare_review` call `vtgate::check_phases` with a git-tree
+  reader. Seam built (injected reader); wiring deferred pending cadence-trust signal.
+- **Forward link to SL-057 / IDE-008:** the structured VT row is the join key that
+  lets `verify::resolve` attach a runnable check per plan VT; the coverage graph
+  already traces VT → phase → slice → REQ — continuous re-derivation of plan VTs
+  back to originating requirements becomes reachable downstream (design §7).
