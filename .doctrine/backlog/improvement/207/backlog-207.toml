@@ -19,3 +19,8 @@ tags = ["area:backlog", "area:relations"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-003"

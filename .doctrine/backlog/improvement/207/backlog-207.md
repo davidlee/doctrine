@@ -11,6 +11,14 @@ all 19 cases the causality is reversed: the item was **created from** the slice
 SPEC-019 D6 already pins `spawns` for knowledge records → spawned work, but no
 equivalent label exists for backlog ↔ slice edges.
 
+> **Folded into RFC-003 (2026-06-29).** This is `drift` redux — a label abused
+> because no structured outlet exists — and surfaces an unnamed **provenance plane**
+> (`spawns`, `references(scoped_from)`, `spawned_from`, `drift` "carved out from").
+> The *label decision* (point label vs generalized `spawns` vs provenance plane) is
+> now a live decision in RFC-003 § "Provenance plane" — do not mint `spawned_from`
+> ahead of it. **The retcon (step 2) is independent and may proceed regardless** of
+> which label the RFC settles on; only the target label waits.
+
 ## Problem
 
 - `slices` implies "this item is implemented by SL-NNN" — semantically wrong for
