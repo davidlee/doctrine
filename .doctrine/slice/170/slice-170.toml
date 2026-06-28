@@ -1,7 +1,7 @@
 id = 170
 slug = "dispatch-trust-gate"
 title = "Dispatch handover trust-gate"
-status = "plan"
+status = "ready"
 created = "2026-06-28"
 updated = "2026-06-28"
 tags = []

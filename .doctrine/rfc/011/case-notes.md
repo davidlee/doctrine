@@ -309,3 +309,5 @@ the scanner. A scan-scope change must be co-reviewed with its fixtures.
 so the dispatch worker's apparent "fmt churn" was rustfmt *correcting* trunk, not
 noise. An audit that dispositions "gratuitous fmt churn" should first confirm the
 trunk file is fmt-clean under the gating toolchain, else it inverts the fix.
+
+[justfile fix; 2026-06-28-A] — trivial justfile edit, no incidental complexity.

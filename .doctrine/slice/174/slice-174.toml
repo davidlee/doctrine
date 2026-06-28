@@ -1,7 +1,7 @@
 id = 174
 slug = "prebuilt-binaries"
 title = "Prebuilt binary distribution"
-status = "design"
+status = "ready"
 created = "2026-06-28"
 updated = "2026-06-28"
 tags = []
