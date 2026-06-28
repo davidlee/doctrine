@@ -41,5 +41,31 @@ survive lives here.
   (F5 resolved).
 - Runners lack `just` → `extractions/setup-just@v2`. dtolnay/rust-toolchain pins
   by channel `@stable` (its model); other actions pinned to major tags.
-- VT-1 actionlint clean (host). VA-1 read passes. **VH-1 (real-tag x86 cross-link
-  proof) is the gating verification — operator/GitHub, pending a tag push.**
+- VT-1 actionlint clean (host). VA-1 read passes. **VH-1 PROVEN** on `v0.8.1-rc1`:
+  aarch64 + x86_64 both green end-to-end (cross-link resolved iconv on the arm
+  runner, smoke passed both arches, assets published). macos-13 fallback unused.
+
+## PHASE-03 — install channels + docs
+
+- `install.sh` (repo root, curl|sh): POSIX `set -eu`, Darwin-only guard,
+  `uname -m`→triple, version resolve (`DOCTRINE_VERSION` else latest GH release),
+  download asset + `.sha256`, `shasum -a 256 -c`, best-effort quarantine strip,
+  install to `${DOCTRINE_BIN_DIR:-$HOME/.local/bin}` + PATH hint. `REPO`/`BIN`
+  single-sourced (STD-001).
+- **Testable seam:** the `triple_for_arch` map is a pure function; the file is
+  sourceable lib-only via `DOCTRINE_INSTALL_LIB_ONLY=1` so `scripts/install-test.sh`
+  unit-tests the mapping in-jail (arm64/x86_64/reject) without running the installer.
+- `Cargo.toml` `[package.metadata.binstall]` (pkg-url/pkg-fmt=tgz/bin-dir) →
+  `cargo binstall doctrine` fetches the prebuilt asset. `cargo metadata` parses.
+- README install reorder: curl|sh (rolling main + v0.8.1 tag pin) → cargo binstall
+  → cargo install (with the `-liconv` toolchain caveat). justfile release recipe
+  notes the v* tag → release.yml trigger.
+- **Asset-name contract (§5.2)** is single-sourced across THREE consumers —
+  release.yml, install.sh, `[metadata.binstall]`. Names: `doctrine-<triple>.tar.gz`
+  + `.sha256`, tarball = one `doctrine` exe. Rename = edit all three together (R2).
+- **STOP-2 (close sequencing):** GitHub `/releases/latest` excludes prereleases,
+  so the default `curl|sh` (latest) + `cargo binstall` only resolve once a
+  NON-prerelease **v0.8.1** is published. Decision: verify install.sh against the
+  rc (`DOCTRINE_VERSION=v0.8.1-rc1`); cut the real v0.8.1 at /close to complete
+  VH-1 (fresh-mac default one-liner + binstall, no toolchain).
+- F5/governance: CI adoption is slice-local (design D1) — no ADR.
