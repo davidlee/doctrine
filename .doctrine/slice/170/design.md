@@ -121,21 +121,36 @@ dispatch conclude hook, skill cadence.
 type FindingKey = String; // tests: "<target>::<test_name>" from the cargo failures: block.
                           // General — IMP-194 later feeds layering/doctor finding-keys to the SAME diff.
 
+// A suite run yields EITHER a well-formed failure-set OR an unobtainable marker —
+// never silently ∅ (R-A / INV-5). Mirrors coverage_verify's RunOutcome (F-VII).
+enum FailureSet { Obtained(BTreeSet<FindingKey>), Unobtainable { why: String } }
+
 struct RegressionDelta {
     new:        BTreeSet<FindingKey>, // current \ baseline = REGRESSIONS → gate halts
     fixed:      BTreeSet<FindingKey>, // baseline \ current = improvements (informational)
     persistent: BTreeSet<FindingKey>, // baseline ∩ current = pre-existing/env (IGNORED)
 }
 
-fn parse_failures(suite_output: &str) -> BTreeSet<FindingKey>; // string → set; fixture-tested
-fn diff(baseline: &BTreeSet<FindingKey>, current: &BTreeSet<FindingKey>) -> RegressionDelta;
+// Ok only when BOTH sides Obtained; an Unobtainable side is a hard Err (never ∅-pass).
+fn diff(baseline: &FailureSet, current: &FailureSet) -> Result<RegressionDelta>;
+fn parse_failures(suite_output: &str) -> FailureSet; // section-aware over cargo `failures:` blocks
 fn render_delta(delta: &RegressionDelta, base: &str) -> String;
 ```
 
 `new` = regressions regardless of which binary/env they surface under. `persistent`
 = the failures B and S share = every env artifact (missing `web/map/dist` embed,
 `DOCTRINE_WORKER`, stale bin, worker marker) — present in *both* sets, so they fall
-here, never in `new`. This discharges OQ-4 mechanically.
+here, never in `new`. This discharges OQ-4 mechanically — **but only when both runs
+share the same test-selection** (INV-1): a differing `DOCTRINE_WORKER`/marker filter
+changes *which tests run*, so an absent test reads as "fixed" and a newly-visible one
+as "new". Same tree is necessary, not sufficient; same *invocation + filter state*
+is required.
+
+**The suite is the TEST suite, per-test granularity** — not the full `just gate`.
+clippy/fmt/lint-js are pass/fail aggregates (coarse granularity = the SL-168 F-1
+problem); they belong to IMP-194's finding-granularity extension (D4), not S1. S1
+parses `cargo test` per-test output (section-aware: associate each `failures:` entry
+to its target binary for a stable `FindingKey`).
 
 **S3 — `plan.rs` model lift + `vtgate.rs` (pure):**
 
@@ -221,8 +236,15 @@ batch pays the extra capture. A foreign commit / `refresh-base` changes the sha 
 cache miss → honest re-capture.
 
 **VT gate firing (S3):** the `/dispatch` conclude step runs `verify-vt` **in the
-coord tree** (present until *after* `prepare-review`), so the worker's tests are on
-the working fs and the fs reader suffices; non-zero halts handover. Rejected:
+coord tree, BEFORE the coord worktree is removed** (cadence: verify-vt → on green
+`prepare-review` → remove worktree). The worker's tests are on the coord working fs
+at `S`, so the fs reader suffices; non-zero halts handover. **Two-tree caveat:** the
+*mandate* (plan.toml) is authored state and a mid-dispatch waiver lands on the
+authoring branch, not the coord fork. Absent a mid-dispatch waiver the coord
+plan.toml == authored plan and one tree reads both. A mid-dispatch waiver requires
+the orchestrator (sole writer of authored state) to propagate the plan.toml edit into
+the coord tree before re-running the gate — else the waiver is invisible to it
+(INV-6). Rejected:
 folding into `prepare_review` now (would force git-tree blob reads — the delta is on
 the coord branch, not primary — and mix VT-content into the ref-projection beat,
 ADR-001 cohesion). The pure core takes an injected reader, so a future hardening can
@@ -249,8 +271,11 @@ distinctly. Glyphs/labels are named constants (STD-001).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1 (same-tree env).** S1 capture and diff both run on the coordination tree;
-  the persistent-set property holds only if one environment produces both sets.
+- **INV-1 (same env AND same selection).** S1 capture and diff run on the coord tree
+  *with an identical suite invocation and identical test-selection/filter state*
+  (`DOCTRINE_WORKER`/marker). Same tree alone is insufficient — a differing filter
+  changes the test universe and breaks the cancellation property. The orchestrator
+  normalises filter state (e.g. clears the worker marker) before both runs.
 - **INV-2 (baseline source).** B is the funnel's live pre-spawn `HEAD`, **never** the
   conformance registry `code_start_oid` — sourcing from the binding would import the
   IMP-175 / IMP-192 / fork-land bugs into the regression gate.
@@ -258,9 +283,28 @@ distinctly. Glyphs/labels are named constants (STD-001).
   authored at `/plan`, independent of worker and dispatch-orchestrator.
 - **INV-4 (green semantics).** The gate halts on `Fail` only. `Uncheckable` and
   `Waived` are visible, distinct, non-halting.
+- **INV-5 (no silent ∅).** A non-completing or unparseable suite run is
+  `Unobtainable` → a hard error (halt), never an empty failure-set. `diff` errs if
+  either side is `Unobtainable`. This closes the false-green-at-S hole (a compile
+  error / panic / format change at S must not read as "zero failures").
+- **INV-6 (mandate currency at the gate).** `verify-vt` must read the *current
+  authored* plan (incl. mid-dispatch waivers) + the *landed delta* tests. Default
+  single-coord-tree read satisfies this absent a mid-dispatch waiver; a mid-dispatch
+  waiver requires orchestrator propagation of plan.toml into the coord tree first.
 - **A1.** A VT with `keywords` but no `test_file` is `Uncheckable` (nothing to grep).
 - **A2.** `parse_failures` keys include the target/binary to disambiguate same-named
-  tests across binaries.
+  tests across binaries (section-aware parse).
+- **A3 (cache hygiene).** The baseline cache (`.doctrine/state/regression/`) is
+  gitignored runtime state, written by the orchestrator, outside the worker delta —
+  so it never appears in the `B..S` diff and the R-5 belt is unaffected.
+- **Edge — flaky tests.** A flaky test poisons the diff (fail@B/pass@S → false
+  `fixed`; pass@B/fail@S → false `new`/halt). Out of scope to *solve*; the
+  new/fixed/persistent report makes a flaky halt diagnosable — a re-capture at the
+  same sha exposes non-determinism (non-empty symmetric difference on an identical
+  tree).
+- **Edge — renamed pre-existing-failing test.** A renamed still-failing test reads as
+  `fixed{old} + new{new}` → halts on `new`. Accepted (a renamed failing test
+  warrants attention); documented limitation, not a bug.
 - **Edge.** Empty plan / no VT criteria → empty report, exit zero. A phase with only
   VA/VH criteria → no VT lines (not gated).
 
@@ -321,9 +365,11 @@ becomes reachable (via IDE-008 / SL-057), 20 steps down the road.
 ## 8. Risks & Mitigations
 
 - **R1 — `parse_failures` brittle to cargo output format.** Mitigation: parse the
-  canonical `failures:` summary block; unit-test against captured output fixtures
-  (hermetic strings, not live runs — SL-168 F-2); a parse miss degrades to a larger
-  `new` set (fails safe / loud), never a silent pass.
+  canonical `failures:` summary block (section-aware per target); unit-test against
+  captured output fixtures (hermetic strings, not live runs — SL-168 F-2). Crucially,
+  an *unrecognised/empty* parse of a run that DID execute is `Unobtainable` → hard
+  error (INV-5), never a silent ∅-pass. The dangerous direction (false-green at S) is
+  closed by construction, not by hoping the parse degrades safely.
 - **R2 — P2 vacuous on legacy/unstructured plans (no completeness pressure).**
   Mitigation: S6 renders `UNCHECKABLE` distinctly at handover, converting absence
   into a visible signal; the `/plan` authoring discipline closes the gap forward.
@@ -349,12 +395,55 @@ becomes reachable (via IDE-008 / SL-057), 20 steps down the road.
   `Plan::parse` tests pass unedited** (behaviour-preservation).
 - **S6 unit:** `render_summary` over a mixed report (waived reason surfaced;
   uncheckable distinct).
+- **S1 unobtainable:** a suite run that does not complete / parses to nothing →
+  `Unobtainable` → `diff` errs → non-zero (INV-5), NOT a green ∅. Explicit test.
 - **e2e (hermetic fixtures, SL-168 F-2):** inject a failing test into a delta →
   `check regression diff` exits non-zero with it in `new`; a pre-existing failure at
   B → lands in `persistent`, exit zero. `verify-vt` over a fixture plan + fixture
   test files mixing Pass/Fail/Uncheckable/Waived → exit non-zero (the Fail), report
   lists all four with reasons. Conclude/handover emits the VT block.
+- **SL-169 replay (the acceptance proof):** reconstruct the two original failures and
+  show the gate catches *both*. (a) S1: the `e2e_standard_cli_golden` regressions are
+  NEW failing tests → `new` → halt. (b) S3: a VT with `test_file =
+  "tests/e2e_list_conformance.rs", keywords = ["relation","census"]` against a tree
+  where the conformance matrix is absent → `Fail` (missing keyword) → halt. Either
+  alone would have stopped the SL-169 false-green.
+- **Dogfood:** SL-170's own `plan.toml` VT rows are the first to carry
+  `test_file`/`keywords` — the forward-only P2 surface is exercised on this very
+  slice (its VTs verify-vt-clean at its own conclude).
 
 ## 10. Review Notes
 
-(Adversarial pass pending — §6 residual and R1/R4 are the prime attack surfaces.)
+### Internal adversarial pass (2026-06-28) — findings integrated
+
+- **F-A (critical) — silent ∅ = false-green at S.** A non-completing/unparseable
+  suite run at S would yield `current = ∅` → `new = ∅` → false pass. Fixed: INV-5 +
+  `FailureSet::Unobtainable` → hard error; `diff` errs on either side unobtainable.
+  Mirrors `coverage_verify` F-VII.
+- **F-B (critical) — "same tree" insufficient.** A differing `DOCTRINE_WORKER`/marker
+  filter changes the test universe, breaking cancellation (absent tests look "fixed",
+  new ones "new"). Fixed: INV-1 now requires identical invocation + filter state.
+- **F-C (important) — unpinned suite.** The full gate folds clippy/fmt/lint at coarse
+  pass/fail granularity (the F-1 problem). Fixed: S1's suite pinned to the *test
+  suite, per-test*; aggregate gates are IMP-194 (D4).
+- **F-D (important) — two-tree mandate currency.** A mid-dispatch waiver lands on the
+  authoring branch, invisible to a coord-tree-only `verify-vt`. Fixed: INV-6 +
+  §5.4 propagation requirement.
+- **F-E (cadence) — gate vs worktree removal.** `verify-vt` must run before coord
+  worktree removal. Fixed: §5.4 cadence made explicit.
+- **F-F/G (minor, accepted) — flaky tests and renamed-failing tests** can mis-classify;
+  documented as limitations (§5.5 Edges); the report aids diagnosis.
+- **Validation strengthened:** SL-169-replay added as the acceptance proof; SL-170
+  dogfoods P2 on its own plan (§9).
+
+### Residual (non-blocking)
+
+- `prepare_review` hardening to make S3 un-skippable in the binary (seam built,
+  wiring deferred pending cadence-trust signal; §5.4, Follow-Ups).
+- IMP-194 finding-granularity generalization to gates/doctor (D4).
+
+### Prime remaining attack surfaces for an external pass
+
+- `parse_failures` section-aware correctness across cargo target boundaries (R1).
+- The INV-1 filter-normalisation step — is clearing the worker marker sufficient, or
+  are there other selection-affecting env vars on the coord tree?
