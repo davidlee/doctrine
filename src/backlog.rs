@@ -83,6 +83,14 @@ pub(crate) enum BacklogCommand {
         #[arg(long = "by", value_enum, default_value_t = OrderBy::Sequence)]
         by: OrderBy,
 
+        /// Filter to items with an `after` edge pointing to any of these refs (repeatable, OR).
+        #[arg(long)]
+        after: Vec<String>,
+
+        /// Filter to items whose `needs` axis contains any of these refs (repeatable, OR).
+        #[arg(long)]
+        needs: Vec<String>,
+
         #[command(flatten)]
         list: crate::CommonListArgs,
 
@@ -230,6 +238,8 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
             by,
             mut list,
             substr,
+            after,
+            needs,
             path,
         } => {
             // A-7: the positional `[SUBSTR]` is a DEPRECATED alias of `--filter`;
@@ -238,7 +248,7 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
             if list.filter.is_none() {
                 list.filter = substr;
             }
-            run_list(path, kind, by, list.into_list_args(color))
+            run_list(path, kind, by, &after, &needs, list.into_list_args(color))
         }
         BacklogCommand::Show { common } => {
             let format = if common.json {
@@ -1191,6 +1201,8 @@ fn list_rows(
     root: &Path,
     kind: Option<ItemKind>,
     by: OrderBy,
+    after: &[String],
+    needs: &[String],
     mut args: ListArgs,
 ) -> anyhow::Result<ListOutput> {
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
@@ -1204,6 +1216,24 @@ fn list_rows(
     };
     let mut items = listing::retain(corpus, &filter, is_hidden, key);
     items.retain(|i| kind.is_none_or(|k| i.kind == k));
+    if !after.is_empty() {
+        let a_set: Vec<String> = after.iter().map(|r| norm_ref(r)).collect();
+        items.retain(|i| {
+            i.relationships
+                .after
+                .iter()
+                .any(|e| a_set.iter().any(|q| *q == norm_ref(&e.to)))
+        });
+    }
+    if !needs.is_empty() {
+        let n_set: Vec<String> = needs.iter().map(|r| norm_ref(r)).collect();
+        items.retain(|i| {
+            i.relationships
+                .needs
+                .iter()
+                .any(|n| n_set.iter().any(|q| *q == norm_ref(n)))
+        });
+    }
     // Dynamic tags-column visibility (D2): the column shows iff the FINAL displayed set
     // (post-retain ∩ post-`--kind`) carries at least one tagged row. Computed once, on
     // the visible rows, and reused across any `--by id` layout (uniform).
@@ -1281,10 +1311,12 @@ pub(crate) fn run_list(
     path: Option<PathBuf>,
     kind: Option<ItemKind>,
     by: OrderBy,
+    after: &[String],
+    needs: &[String],
     args: ListArgs,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let ListOutput { stdout, stderr } = list_rows(&root, kind, by, args)?;
+    let ListOutput { stdout, stderr } = list_rows(&root, kind, by, after, needs, args)?;
     write!(io::stdout(), "{stdout}")?;
     if !stderr.is_empty() {
         write!(io::stderr(), "{stderr}")?;
@@ -1295,6 +1327,16 @@ pub(crate) fn run_list(
 // ---------------------------------------------------------------------------
 // Pure: id parse + show render
 // ---------------------------------------------------------------------------
+
+/// Normalize a ref string for comparison: parse as canonical ref and re-format,
+/// or fall back to the verbatim input. Uses cross-kind [`crate::integrity::parse_canonical_ref`]
+/// so `imp-0194` matches `IMP-194`.
+fn norm_ref(r: &str) -> String {
+    match crate::integrity::parse_canonical_ref(&r.to_uppercase()) {
+        Ok((k, id)) => crate::listing::canonical_id(k.kind.prefix, id),
+        Err(_) => r.to_string(),
+    }
+}
 
 /// Parse a canonical ref (`ISS-007`) into its `(kind, id)` — the `show` auto-detect
 /// (§5.5 / R3). Split on the LAST `-`, upper-case the prefix (`iss-7` is tolerated),
@@ -2837,7 +2879,7 @@ tags = []
     /// behaviour, asserted against the `(kind.ordinal, id)` grouping). The composed
     /// `--by sequence` default is exercised separately (VT-1 / VT-2).
     fn list_id(root: &Path, kind: Option<ItemKind>, args: ListArgs) -> anyhow::Result<String> {
-        list_rows(root, kind, OrderBy::Id, args).map(|o| o.stdout)
+        list_rows(root, kind, OrderBy::Id, &[], &[], args).map(|o| o.stdout)
     }
 
     // --- §5.5: the uniform table header (extends to backlog) ---
@@ -4743,7 +4785,7 @@ tags = []
     /// stderr)` — the SL-051 tuple shape (rows + footer on stdout, the cycle advisory
     /// on stderr).
     fn list_seq(root: &Path, args: ListArgs) -> (String, String) {
-        let out = list_rows(root, None, OrderBy::Sequence, args).unwrap();
+        let out = list_rows(root, None, OrderBy::Sequence, &[], &[], args).unwrap();
         (out.stdout, out.stderr)
     }
 
@@ -5243,5 +5285,304 @@ tags = []
         seed_slice_entity(root, 1, "done");
         let findings = lifecycle_findings(root);
         assert!(findings.is_empty(), "resolved item must not flag");
+    }
+
+    // --- SL-173: --after / --needs edge filters ---
+
+    #[test]
+    fn backlog_list_after_filter_retains_matching_edge_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-1: item with after→IMP-194 kept, item with after→SL-169 excluded
+        write_rel_item(root, ItemKind::Improvement, 194, "open", &[], &[]);
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "IMP-194",
+                rank: 0,
+            }],
+        );
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            2,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "SL-169",
+                rank: 0,
+            }],
+        );
+
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Id,
+            &["IMP-194".into()],
+            &[],
+            list_args(),
+        )
+        .unwrap()
+        .stdout;
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001"],
+            "--after IMP-194 keeps only items with that edge: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_after_negative_excludes_non_matching() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "IMP-194",
+                rank: 0,
+            }],
+        );
+
+        // matching an unrelated ref yields empty
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Id,
+            &["SL-999".into()],
+            &[],
+            list_args(),
+        )
+        .unwrap()
+        .stdout;
+        assert!(
+            ids(&out).is_empty() || !ids(&out).contains(&"ISS-001".to_string()),
+            "--after for an unmatched ref excludes non-matching items: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_after_normalized_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-2: --after imp-0194 matches stored IMP-194
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "IMP-194",
+                rank: 0,
+            }],
+        );
+
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Id,
+            &["imp-0194".into()],
+            &[],
+            list_args(),
+        )
+        .unwrap()
+        .stdout;
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001"],
+            "--after imp-0194 matches stored IMP-194: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_needs_cross_kind_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-2: --needs SL-169 matches
+        write_rel_item(root, ItemKind::Improvement, 1, "open", &["SL-169"], &[]);
+
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Id,
+            &[],
+            &["SL-169".into()],
+            list_args(),
+        )
+        .unwrap()
+        .stdout;
+        assert_eq!(ids(&out), vec!["IMP-001"], "--needs SL-169 matches: {out}");
+    }
+
+    #[test]
+    fn backlog_list_after_and_needs_compose() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-3: both edges required — AND across axes
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["RSK-001"],
+            &[AfterLit {
+                to: "IMP-194",
+                rank: 0,
+            }],
+        );
+        write_rel_item(root, ItemKind::Issue, 2, "open", &["RSK-001"], &[]);
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            3,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "IMP-194",
+                rank: 0,
+            }],
+        );
+
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Id,
+            &["IMP-194".into()],
+            &["RSK-001".into()],
+            list_args(),
+        )
+        .unwrap()
+        .stdout;
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001"],
+            "ISS-001 has both edges; ISS-002 has only needs, ISS-003 has only after: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_after_and_status_compose() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-3: --after AND --status compose
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "IMP-194",
+                rank: 0,
+            }],
+        );
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            2,
+            "resolved",
+            &[],
+            &[AfterLit {
+                to: "IMP-194",
+                rank: 0,
+            }],
+        );
+
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Id,
+            &["IMP-194".into()],
+            &[],
+            ListArgs {
+                status: vec!["resolved".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap()
+        .stdout;
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-002"],
+            "--after IMP-194 AND --status resolved yields only ISS-002: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_after_unparseable_verbatim_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-4: raw fallback — an unparseable query and stored value still match verbatim
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "garbage",
+                rank: 0,
+            }],
+        );
+
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Id,
+            &["garbage".into()],
+            &[],
+            list_args(),
+        )
+        .unwrap()
+        .stdout;
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001"],
+            "unparseable refs fall back to verbatim match: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_after_empty_flag_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+        write_item(root, ItemKind::Issue, 2, "open", "", "b", "Beta", &[]);
+
+        // empty --after = no filtering
+        let out = list_rows(root, None, OrderBy::Id, &[], &[], list_args())
+            .unwrap()
+            .stdout;
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001", "ISS-002"],
+            "empty --after is a noop: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_needs_empty_flag_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+        write_item(root, ItemKind::Issue, 2, "open", "", "b", "Beta", &[]);
+
+        // empty --needs = no filtering
+        let out = list_rows(root, None, OrderBy::Id, &[], &[], list_args())
+            .unwrap()
+            .stdout;
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001", "ISS-002"],
+            "empty --needs is a noop: {out}"
+        );
     }
 }
