@@ -1,0 +1,61 @@
+id    = 188
+slug  = "reconciliation-review-of-sl-170"
+title = "reconciliation review of SL-170"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-170"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "nit"
+title = "Conformance undeclared: SL-170 authoring/governance byproducts + co-committed IMP-208 + already-noted source incidentals — expected, not source scope creep"
+detail = "`slice conformance 170` lists 14 undeclared (paths edited but not in any design-target selector). The bulk is benign byproduct, not code scope creep: (a) SL-170's own authored artifacts — design.md/notes.md/plan.toml/slice-170.toml — never source selectors; (b) `.doctrine/adr/001/layering.toml` (M) registering vtgate=leaf, a legit SL-170 governance touch already declared scope-relevant with a note; (c) `.doctrine/backlog/improvement/208/*` (A) = IMP-208, a legitimate SL-170-derived deferred follow-up (carry-forward no-op, design D3) — though co-committed inside the PHASE-02 feat (97ba17f1) rather than its own commit (minor hygiene); (d) source incidentals src/main.rs, src/state.rs, src/verify.rs, src/worktree/mod.rs, src/slice.rs (M) — real SL-170 edits (mod decls, [verification].regression config key, marker re-export, verify-vt CLI wiring) ALREADY declared scope-relevant with rationale notes (see `slice selector list 170`). Conformance keys on design-target only, so scope-relevant incidentals correctly surface here; the notes document why. No undocumented source touch."
+disposition = "aligned"
+response = "Confirmed benign. The undeclared cells decompose to: SL-170's own authored slice files (never source selectors); the layering.toml vtgate=leaf registration and the five src incidentals, all already declared scope-relevant with rationale notes; and IMP-208, a legitimate SL-170-derived deferred follow-up. No undocumented source touch, no code scope creep. The only sub-item worth a note is the IMP-208 co-commit inside the PHASE-02 feat (97ba17f1) — a one-off commit-hygiene blemish, accepted (the backlog item is correct and the slice's source delta is unaffected). No change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Conformance undeclared: slice-172 design/toml are foreign interleaved work on shared `edge`, swept into PHASE oid ranges — conformance artifact, not SL-170 scope"
+detail = """`.doctrine/slice/172/design.md` (A) and `.doctrine/slice/172/slice-172.toml` (M) appear in SL-170's undeclared set, but they are NOT SL-170 work. SL-172 (priority config knobs) was authored concurrently on the shared `edge` branch; its commits interleave with SL-170's phases. The smoking gun is the PHASE-02 boundary: `boundaries.toml` records `code_start_oid = 93e538c0`, which is itself the commit `plan(SL-172): 3-phase plan`. Because the conformance delta is computed over the recorded B..S oid ranges on a shared branch, foreign commits landing inside those ranges are swept into the union. This is the known shared-branch boundary-capture artifact (cf. mem_019f0342 "fork-landed phase leaves an unbound source-delta"; same family, different mechanism). Nothing in SL-172 is an SL-170 deliverable; no SL-170 remediation is possible or warranted."""
+disposition = "tolerated"
+response = """Accepted artifact, no SL-170 remediation possible. slice-172's design/toml entered the conformance union because SL-172 was authored concurrently on the shared `edge` branch and its commits interleave with SL-170's recorded B..S oid ranges (PHASE-02 code_start_oid 93e538c0 is literally an SL-172 plan commit). This is inherent to multi-stream development on one branch with oid-range boundary capture; the only "fix" would be dispatch/worktree isolation per phase, which is a process choice outside this slice. Tolerated and documented; nothing in SL-172 is an SL-170 deliverable."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Conformance undelivered: src/dispatch.rs design-target never edited — superseded by D2 (conclude = skill cadence, no CLI verb); selector is stale-by-decision"
+detail = '`src/dispatch.rs` is a `design-target` selector (seeded at /design from the Affected surface "conclude: invoke verify-vt render") that matched no git edit → undelivered. This is correct-by-decision, not dropped work: D2 (notes.md PHASE-04; design §5.4) settled that conclude is the `/dispatch` skill cadence (`slice verify-vt → on green prepare-review → remove worktree`), NOT a new dispatch.rs verb or a prepare_review fold — design §5.4 explicitly rejected folding into prepare_review (git-tree blob reads, ADR-001 cohesion) and reserved the injected-reader seam for the deferred hardening. So zero dispatch.rs change is the intended outcome; the design-target selector predates D2 and is now stale. Remediation (reconcile, per-slice direct edit): annotate the dispatch.rs selector with the D2 rationale (or reclassify) so the undelivered cell reads as decided, not dropped.'
+disposition = "fix-now"
+response = "Observation confirmed; remediation is a per-slice authored edit delegated to /reconcile (Reconciliation Brief → Per-slice). src/dispatch.rs undelivered is correct-by-D2 (conclude = skill cadence, design §5.4 rejected the prepare_review fold), not dropped work. Reconcile action: annotate the dispatch.rs design-target selector with the D2 rationale (`slice selector note`) so the undelivered cell reads as decided, not dropped — keeping the conformance algebra truthful at close. No code change."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Conformance undelivered: plugins/doctrine/skills/plan/SKILL.md /plan authoring-discipline (test_file/keywords) was declared scope but never delivered — R2 forward-mitigation unfulfilled"
+detail = """`plugins/doctrine/skills/plan/SKILL.md` is a `design-target` selector and the design's Affected surface names it explicitly: "/plan authoring discipline (test_file/keywords)". It matched no edit (undelivered), and `grep` confirms plan/SKILL.md carries NO mention of test_file/keywords/verify-vt. No PHASE EX criterion mandated it (PHASE-02 EX-5 covers dispatch/SKILL.md cadence; PHASE-03/04 cover dispatch+handover), so the item fell through the phase cracks. This is a genuine gap, not a decision: design §8 R2 ("P2 vacuous on legacy/unstructured plans") names its mitigation as "the /plan authoring discipline closes the gap forward" — without it, future plan authors have no guidance to populate the new structured VT fields, so the S3 gate stays vacuous (Uncheckable) on future slices and the slice's forward value is undercut. Non-blocking: the mechanism ships and works, and S6 renders UNCHECKABLE so absence stays visible. Remediation (reconcile, per-slice direct edit): add the brief authoring-discipline guidance to plan/SKILL.md (when authoring VT rows, populate test_file + keywords so verify-vt can gate them; note patterns as the optional shape escalation)."""
+disposition = "fix-now"
+response = "Genuine declared-scope gap; remediation is a per-slice doc edit delegated to /reconcile (Reconciliation Brief → Per-slice). The /plan authoring-discipline guidance for test_file/keywords (design Affected surface + R2 forward-mitigation) was never delivered and no PHASE EX criterion guarded it. Reconcile action: add a short authoring-discipline note to plugins/doctrine/skills/plan/SKILL.md — when authoring VT rows, populate test_file + keywords so `verify-vt` can gate them; mention patterns as the optional language-agnostic shape escalation. Small, completes declared scope, and closes R2's forward-adoption gap so the S3 gate is not vacuous on future plans. Not deferred to backlog: the fix is small and the slice's own forward value depends on it."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "VH-1 (PHASE-04) human acceptance of S6 conclude/handover legibility pending — only non-auto-proven criterion"
+detail = 'PHASE-04 VH-1 ("human read of a real conclude/handover output confirms the VT block is legible and the WAIVED/UNCHECKABLE distinction is clear at a glance") is the one verification criterion not auto-proven by VT/just-check. The rendered surface is available for human read: `verify-vt 170` emits the per-phase summary with ✓ PASS / ? UNCHECKABLE glyphs (named constants, STD-001), and the handover/conclude S6 block embeds render_summary + a one-line S1 status. WAIVED renders distinctly with its reason. This finding tracks the outstanding human sign-off; it carries no code remediation.'
+disposition = "aligned"
+response = "VH-1 satisfied. Human read of the real `verify-vt 170` S6 surface (2026-06-28) confirms the per-phase VT block is legible and the PASS / UNCHECKABLE / WAIVED glyph+label distinctions are clear at a glance (STD-001 named constants). The one human-acceptance criterion of the slice is met; no remediation."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
