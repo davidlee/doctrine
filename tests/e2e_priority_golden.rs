@@ -182,7 +182,8 @@ fn survey_all_reveals_terminal_and_promoted() {
 
 /// next: the ACTIONABLE nodes only, in composed order_key order (D9). The
 /// workable-but-BLOCKED ISS-001 is ABSENT (the divergence feature); the promoted
-/// ISS-004 and terminal ISS-003 are absent too. RSK-001 shows it unblocks one item.
+/// ISS-004 and terminal ISS-003 are absent too. Default columns (SL-171 PHASE-01):
+/// id, status, score, estimate, value, title — kind and unblocks are gone.
 #[test]
 fn next_human_actionable_only_blocked_absent() {
     let dir = tmp();
@@ -192,15 +193,93 @@ fn next_human_actionable_only_blocked_absent() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ kind │ status │ score │ unblocks │ title\n\
-         ISS-002 │ ISS  │ open   │ 0.0   │ 0        │ Free work\n\
-         RSK-001 │ RSK  │ open   │ 0.0   │ 1        │ The prereq\n\
-         RV-001  │ RV   │ active │ 0.0   │ 0        │ The review\n"
+        "id      │ status │ score │ estimate │ value │ title\n\
+         ISS-002 │ open   │ 0.0   │ ·        │ ·     │ Free work\n\
+         RSK-001 │ open   │ 0.0   │ ·        │ ·     │ The prereq\n\
+         RV-001  │ active │ 0.0   │ ·        │ ·     │ The review\n"
     );
     // The blocked item is absent from the actionable worklist.
     assert!(
         !stdout(&out).contains("ISS-001"),
         "blocked item absent from next"
+    );
+}
+
+// === SL-171 PHASE-02 — next pagination at the CLI surface =================
+// Actionable order over the shared corpus: ISS-002, RSK-001, RV-001.
+// The pure slice/footer/D7 logic is unit-tested in src/priority/render.rs;
+// these black-box cases pin the CLI page→offset resolution + --page validation
+// that the dispatch arm owns (cli.rs), unreachable from a unit test.
+
+/// `next --limit N` clips the worklist and emits the shared truncation footer.
+#[test]
+fn next_limit_truncates_with_footer() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let out = run(dir.path(), &["next", "--limit", "2"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let body = stdout(&out);
+    assert!(body.contains("ISS-002"), "page row 1: {body}");
+    assert!(body.contains("RSK-001"), "page row 2: {body}");
+    assert!(!body.contains("RV-001"), "third row clipped: {body}");
+    assert!(body.contains("2 of 3"), "footer count: {body}");
+    assert!(body.contains("--page 2"), "footer next-page: {body}");
+}
+
+/// `--page N` is exact sugar for `--offset (N-1)*limit` (CLI resolution).
+#[test]
+fn next_page_resolves_to_offset() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let via_page = run(dir.path(), &["next", "--limit", "1", "--page", "2"]);
+    let via_offset = run(dir.path(), &["next", "--limit", "1", "--offset", "1"]);
+    assert!(via_page.status.success(), "page stderr: {}", stderr(&via_page));
+    assert!(
+        via_offset.status.success(),
+        "offset stderr: {}",
+        stderr(&via_offset)
+    );
+    assert_eq!(
+        stdout(&via_page),
+        stdout(&via_offset),
+        "--page 2 == --offset 1 at limit 1"
+    );
+    assert!(
+        stdout(&via_page).contains("RSK-001"),
+        "second actionable row on page 2: {}",
+        stdout(&via_page)
+    );
+}
+
+/// `--page 0` is rejected (1-based).
+#[test]
+fn next_page_zero_errors() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let out = run(dir.path(), &["next", "--page", "0"]);
+    assert!(!out.status.success(), "page 0 must error");
+    assert!(
+        stderr(&out).contains("--page must be >= 1"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+/// `--limit 0 --page N` is rejected (no page size to resolve against).
+#[test]
+fn next_limit_zero_page_errors() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let out = run(dir.path(), &["next", "--limit", "0", "--page", "2"]);
+    assert!(!out.status.success(), "limit 0 + page must error");
+    assert!(
+        stderr(&out).contains("--page requires a positive --limit"),
+        "stderr: {}",
+        stderr(&out)
     );
 }
 
@@ -332,6 +411,8 @@ fn explain_json_structured_reasons_and_policy_version() {
 }
 
 /// next --json: actionable rows only, with the policy stamp + structured reasons.
+/// VT-5 (SL-171 PHASE-01): payload is byte-identical to pre-slice — the new
+/// NextRow fields (estimate/value/tags) do NOT leak into the JSON.
 #[test]
 fn next_json_actionable_only_policy_version() {
     let dir = tmp();
@@ -353,6 +434,22 @@ fn next_json_actionable_only_policy_version() {
         !ids.contains(&"ISS-001"),
         "blocked item absent from next --json"
     );
+    // VT-5 negative assertion: no estimate/value/tags keys in the JSON payload
+    // (catches a future field-add to the json! macro).
+    for row in v["rows"].as_array().unwrap() {
+        assert!(
+            row.get("estimate").is_none(),
+            "estimate must not leak into next --json"
+        );
+        assert!(
+            row.get("value").is_none(),
+            "value must not leak into next --json"
+        );
+        assert!(
+            row.get("tags").is_none(),
+            "tags must not leak into next --json"
+        );
+    }
 }
 
 // === EX-3 — clean error / empty channels ================================
