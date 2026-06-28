@@ -205,6 +205,84 @@ fn next_human_actionable_only_blocked_absent() {
     );
 }
 
+// === SL-171 PHASE-02 — next pagination at the CLI surface =================
+// Actionable order over the shared corpus: ISS-002, RSK-001, RV-001.
+// The pure slice/footer/D7 logic is unit-tested in src/priority/render.rs;
+// these black-box cases pin the CLI page→offset resolution + --page validation
+// that the dispatch arm owns (cli.rs), unreachable from a unit test.
+
+/// `next --limit N` clips the worklist and emits the shared truncation footer.
+#[test]
+fn next_limit_truncates_with_footer() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let out = run(dir.path(), &["next", "--limit", "2"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let body = stdout(&out);
+    assert!(body.contains("ISS-002"), "page row 1: {body}");
+    assert!(body.contains("RSK-001"), "page row 2: {body}");
+    assert!(!body.contains("RV-001"), "third row clipped: {body}");
+    assert!(body.contains("2 of 3"), "footer count: {body}");
+    assert!(body.contains("--page 2"), "footer next-page: {body}");
+}
+
+/// `--page N` is exact sugar for `--offset (N-1)*limit` (CLI resolution).
+#[test]
+fn next_page_resolves_to_offset() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let via_page = run(dir.path(), &["next", "--limit", "1", "--page", "2"]);
+    let via_offset = run(dir.path(), &["next", "--limit", "1", "--offset", "1"]);
+    assert!(via_page.status.success(), "page stderr: {}", stderr(&via_page));
+    assert!(
+        via_offset.status.success(),
+        "offset stderr: {}",
+        stderr(&via_offset)
+    );
+    assert_eq!(
+        stdout(&via_page),
+        stdout(&via_offset),
+        "--page 2 == --offset 1 at limit 1"
+    );
+    assert!(
+        stdout(&via_page).contains("RSK-001"),
+        "second actionable row on page 2: {}",
+        stdout(&via_page)
+    );
+}
+
+/// `--page 0` is rejected (1-based).
+#[test]
+fn next_page_zero_errors() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let out = run(dir.path(), &["next", "--page", "0"]);
+    assert!(!out.status.success(), "page 0 must error");
+    assert!(
+        stderr(&out).contains("--page must be >= 1"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+/// `--limit 0 --page N` is rejected (no page size to resolve against).
+#[test]
+fn next_limit_zero_page_errors() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+
+    let out = run(dir.path(), &["next", "--limit", "0", "--page", "2"]);
+    assert!(!out.status.success(), "limit 0 + page must error");
+    assert!(
+        stderr(&out).contains("--page requires a positive --limit"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
 // === VT-2 — blockers + explain surface the chain; rows direct-only =======
 
 /// blockers ISS-001 (direct): its direct blocked-by is RSK-001; it blocks nothing.

@@ -654,4 +654,115 @@ mod tests {
         let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
         assert!(out.contains(ABSENT_CELL), "bare row has ABSENT_CELL: {out}");
     }
+
+    // ── PHASE-02 pagination (next_human limit/offset slice + footer) ─────
+    // The CLI page→offset resolution + --page validation are covered at the
+    // black-box level in tests/e2e_priority_golden.rs; these pin the pure
+    // next_human slice + footer-guard + D7 visible-slice gate (SL-171 PHASE-02).
+
+    /// Five bare rows for pagination slicing.
+    fn five_rows() -> Vec<NextRow> {
+        (1..=5).map(|n| bare_row(&format!("ISS-00{n}"))).collect()
+    }
+
+    // ── VT-1: footer wording + offset→page math ─────────────────────────
+
+    #[test]
+    fn vt_pagination_limit_shows_footer() {
+        let rows = five_rows();
+        let out = next_human(&rows, RenderOpts::default(), None, 2, 0).unwrap();
+        assert!(out.contains("ISS-001"), "page 1 row 1: {out}");
+        assert!(out.contains("ISS-002"), "page 1 row 2: {out}");
+        assert!(!out.contains("ISS-003"), "row 3 clipped: {out}");
+        // footer: shown=2 of total=5; offset 0 / page_size 2 → next page 2.
+        assert!(out.contains("2 of 5"), "footer count: {out}");
+        assert!(out.contains("--page 2"), "footer next-page: {out}");
+    }
+
+    #[test]
+    fn vt_pagination_offset_slices_and_advances_page() {
+        let rows = five_rows();
+        let out = next_human(&rows, RenderOpts::default(), None, 2, 2).unwrap();
+        assert!(out.contains("ISS-003"), "offset page row 3: {out}");
+        assert!(out.contains("ISS-004"), "offset page row 4: {out}");
+        assert!(!out.contains("ISS-001"), "row 1 skipped: {out}");
+        // offset 2 / page_size 2 → next page (2/2)+2 = 3.
+        assert!(out.contains("--page 3"), "footer advances page: {out}");
+    }
+
+    // ── VT-2: --limit 0 (uncapped) — all rows, no footer, no panic ───────
+
+    #[test]
+    fn vt_pagination_limit_zero_uncapped_no_footer() {
+        let rows = five_rows();
+        let out = next_human(&rows, RenderOpts::default(), None, 0, 0).unwrap();
+        for n in 1..=5 {
+            assert!(out.contains(&format!("ISS-00{n}")), "row {n} shown: {out}");
+        }
+        assert!(!out.contains(" of 5"), "no footer when uncapped: {out}");
+    }
+
+    #[test]
+    fn vt_pagination_limit_zero_with_offset_no_panic_no_footer() {
+        // F1 guard: limit==0 with offset>0 must not divide by zero in the footer.
+        let rows = five_rows();
+        let out = next_human(&rows, RenderOpts::default(), None, 0, 2).unwrap();
+        assert!(!out.contains("ISS-001"), "offset honoured: {out}");
+        assert!(out.contains("ISS-003"), "rows[2..] shown: {out}");
+        assert!(!out.contains(" of 5"), "no footer with --limit 0 --offset N: {out}");
+    }
+
+    // ── VT-4: offset beyond total → empty body + offset-branch footer ────
+
+    #[test]
+    fn vt_pagination_offset_exceeds_total() {
+        let rows = five_rows();
+        let out = next_human(&rows, RenderOpts::default(), None, 2, 10).unwrap();
+        assert!(
+            out.contains("no results at this offset"),
+            "offset-branch footer: {out}"
+        );
+        assert!(out.contains("0 of 5"), "shown=0 of total: {out}");
+    }
+
+    // ── VT-5: D7 — any_tagged computed over the VISIBLE (post-slice) page ─
+
+    #[test]
+    fn vt_d7_tags_gate_is_per_visible_page() {
+        // Tagged row lands only on page 2 (offset 2). Page 1 must show NO tags
+        // column; page 2 must show it.
+        let rows = vec![
+            bare_row("ISS-001"),
+            bare_row("ISS-002"),
+            faceted_row("ISS-003", 0.0, 1.0, 1.0, &["cli:command"]),
+        ];
+        let page1 = next_human(&rows, RenderOpts::default(), None, 2, 0).unwrap();
+        assert!(
+            !page1.lines().next().unwrap_or("").contains("tags"),
+            "page 1 (no tagged row) hides tags column: {page1}"
+        );
+        let page2 = next_human(&rows, RenderOpts::default(), None, 2, 2).unwrap();
+        assert!(
+            page2.lines().next().unwrap_or("").contains("tags"),
+            "page 2 (tagged row) shows tags column: {page2}"
+        );
+    }
+
+    #[test]
+    fn vt_d7_columns_tags_overrides_visible_gate() {
+        // Explicit --columns tags forces the column even on a page with no tagged row.
+        let rows = vec![bare_row("ISS-001"), bare_row("ISS-002")];
+        let out = next_human(
+            &rows,
+            RenderOpts::default(),
+            Some(&["id".to_string(), "tags".to_string()]),
+            2,
+            0,
+        )
+        .unwrap();
+        assert!(
+            out.lines().next().unwrap_or("").contains("tags"),
+            "explicit --columns tags overrides the visible-page gate: {out}"
+        );
+    }
 }
