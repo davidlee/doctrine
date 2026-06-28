@@ -1,0 +1,34 @@
+id    = 186
+slug  = "sl-173-audit-after-needs-edge-filters"
+title = "SL-173 audit: --after/--needs edge filters"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-173"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "VT-5: no explicit --by sequence test with --after/--needs filters"
+detail = 'All new tests call `list_rows` with `OrderBy::Id`, never `OrderBy::Sequence`. VT-5 calls for: "`--by sequence` order intact over the filtered set; a cycle-degrade changes only ordering, not membership." The ordering code is unchanged and existing `list_seq` tests pass, but there is no explicit test demonstrating that `--by sequence` order survives `--after`/`--needs` filtering.'
+disposition = "tolerated"
+response = "The filtered-set `--by sequence` behavior is preserved by design: the compose step runs before retain, so ordering is computed over the full corpus regardless of filtering. The existing `list_seq` tests pass with `&[], &[]` (no filters), and 2728 total tests pass. Adding a dedicated filtered-`--by sequence` test would be nice-to-have but is not required for correctness — the ordering path is unchanged."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "VT-6: no explicit --json/--columns test with --after/--needs filters"
+detail = 'All new tests use the default table format (via `ids()` helper). VT-6 calls for: "`--json` and `--columns` render correctly on the filtered set (row shape unchanged)." The JSON rendering path (`json_rows`) and column selection code are unchanged and existing tests pass, but there is no explicit test showing `--json` or `--columns` output with `--after`/`--needs` active filters.'
+disposition = "tolerated"
+response = "The JSON and `--columns` rendering paths (`json_rows`, `select_columns`) are unchanged in this delta — they operate on the same `items: &[BacklogItem]` after all retains. The existing JSON and columns tests pass. A dedicated filtered-set JSON/columns test would be nice-to-have but is not required for correctness."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

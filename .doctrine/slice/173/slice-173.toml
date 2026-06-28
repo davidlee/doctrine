@@ -1,7 +1,7 @@
 id = 173
 slug = "backlog-after-needs-filter"
 title = "backlog list --after / --needs dependency-sequence edge filter"
-status = "design"
+status = "reconcile"
 created = "2026-06-28"
 updated = "2026-06-28"
 tags = []
