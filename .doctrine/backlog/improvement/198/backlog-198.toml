@@ -30,3 +30,7 @@ target = "ADR-001"
 
 [value]
 value = 3.6
+
+[estimate]
+lower = 1.5
+upper = 3.0

@@ -30,3 +30,7 @@ target = "IMP-192"
 
 [value]
 value = 2.8
+
+[estimate]
+lower = 0.5
+upper = 1.5

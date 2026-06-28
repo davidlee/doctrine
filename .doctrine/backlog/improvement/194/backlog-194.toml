@@ -17,7 +17,7 @@ tags = ["area:dispatch", "area:testing"]
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = []                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "SL-170", rank = 0 }, { to = "IMP-198", rank = 1 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
@@ -38,3 +38,7 @@ target = "IMP-198"
 
 [value]
 value = 3.7
+
+[estimate]
+lower = 3.0
+upper = 6.0
