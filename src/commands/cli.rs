@@ -313,6 +313,22 @@ pub(crate) enum Command {
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
+
+        /// Columns to display (CSV). Available: id, kind, status, score, estimate, value, tags, title.
+        #[arg(long, value_delimiter = ',')]
+        columns: Option<Vec<String>>,
+
+        /// Max rows to show (default 20). Use 0 for uncapped.
+        #[arg(long, default_value_t = crate::priority::NEXT_LIMIT_DEFAULT)]
+        limit: usize,
+
+        /// Skip first N rows (default 0).
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+
+        /// Page number (1-based; sugar over --offset). Mutually exclusive with --offset.
+        #[arg(long, conflicts_with = "offset")]
+        page: Option<usize>,
     },
 
     /// Read-only blocker view.
@@ -1110,15 +1126,43 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
-        Command::Next { format, json, path } => crate::priority::run_next(
-            path,
+        Command::Next {
             format,
             json,
-            crate::listing::RenderOpts {
-                color,
-                term_width: crate::tty::stdout_terminal_width(),
-            },
-        ),
+            path,
+            columns,
+            limit,
+            offset,
+            page,
+        } => {
+            // Validate --page.
+            if page == Some(0) {
+                anyhow::bail!("--page must be >= 1");
+            }
+            if limit == 0 && page.is_some() {
+                anyhow::bail!("--page requires a positive --limit");
+            }
+            // Resolve offset: page sugar or explicit.
+            let resolved_offset = match page {
+                Some(p) => {
+                    let page_size = limit;
+                    (p - 1) * page_size
+                }
+                None => offset,
+            };
+            crate::priority::run_next(
+                path,
+                format,
+                json,
+                crate::listing::RenderOpts {
+                    color,
+                    term_width: crate::tty::stdout_terminal_width(),
+                },
+                columns.as_ref(),
+                limit,
+                resolved_offset,
+            )
+        }
         Command::Blockers {
             id,
             transitive,

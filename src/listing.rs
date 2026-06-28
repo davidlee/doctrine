@@ -29,6 +29,11 @@ use comfy_table::{ContentArrangement, Table, TableComponent};
 use regex_lite::Regex;
 use serde::{Deserialize, Serialize};
 
+/// The absent-cell marker — a middle dot (U+00B7) rendered when a column's data
+/// is not authored for a row (e.g. no estimate, no value, no tags). Single-source
+/// named constant (STD-001).
+pub(crate) const ABSENT_CELL: &str = "·";
+
 /// `SL` + `25` → `"SL-25"`; zero-padded to three digits like the citation
 /// convention (`SL-025`). The single id-form authority for prefixed kinds.
 /// Memory is conformant-by-exception — its uid *is* its canonical id, so it does
@@ -883,6 +888,37 @@ pub(crate) fn render_grouped<T>(
 /// first, and a non-empty grid has `cols ≥ 1`.) Pinned by VT-2's boundary test.
 fn grid_min_width(cols: usize) -> usize {
     (cols * 4).saturating_sub(3)
+}
+
+/// Format a pagination truncation notice for table-mode output when results are
+/// truncated or the offset exceeds the total. Returns `""` when `total == 0`
+/// (empty result set — nothing to paginate) or `page_size == 0` (uncapped —
+/// the self-guard makes the shared surface robust regardless of caller discipline;
+/// D-review BLOCKER F7).
+///
+/// The 4th argument is `page_size` (the resolved limit), NOT a generic `limit`
+/// that could be `None`. Call sites must pass the resolved page size (e.g.
+/// `limit.unwrap_or(DEFAULT)`).
+pub(crate) fn format_truncation_notice(
+    shown: usize,
+    total: usize,
+    offset: usize,
+    page_size: usize,
+) -> String {
+    if total == 0 || page_size == 0 {
+        return String::new();
+    }
+    if offset >= total {
+        return format!(
+            "{shown} of {total}; no results at this offset; reduce --offset or --page\n"
+        );
+    }
+    #[expect(
+        clippy::integer_division,
+        reason = "floor division for 1-based page calc"
+    )]
+    let next_page = (offset / page_size) + 2; // 1-based
+    format!("{shown} of {total}; use --page {next_page} for next or specify a higher --limit\n")
 }
 
 /// Wrap kind-faithful row values in the shared envelope: `{ "kind": …, "rows":

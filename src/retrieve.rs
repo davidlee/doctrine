@@ -826,7 +826,9 @@ pub(crate) fn run_find(
     // Truncation notice: table mode only, when results are truncated or offset exceeds total.
     if format == crate::listing::Format::Table && shown < total {
         let page_size = limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT);
-        parts.push(format_truncation_notice(shown, total, offset, page_size));
+        parts.push(crate::listing::format_truncation_notice(
+            shown, total, offset, page_size,
+        ));
     }
     let output = parts.concat();
     write!(writer, "{output}")?;
@@ -1029,26 +1031,6 @@ pub(crate) fn find_for_mcp(
     Ok(FindForMcp { rows, total })
 }
 
-/// Format a truncation notice line for table-mode output when results are
-/// truncated or the offset exceeds the total. Returns empty string when
-/// `total == 0` (empty result set — nothing to paginate).
-fn format_truncation_notice(shown: usize, total: usize, offset: usize, page_size: usize) -> String {
-    if total == 0 {
-        return String::new();
-    }
-    if offset >= total {
-        return format!(
-            "{shown} of {total}; no results at this offset; reduce --offset or --page\n"
-        );
-    }
-    #[expect(
-        clippy::integer_division,
-        reason = "floor division for 1-based page calc"
-    )]
-    let next_page = (offset / page_size) + 2; // 1-based
-    format!("{shown} of {total}; use --page {next_page} for next or specify a higher --limit\n")
-}
-
 /// A serde row for `memory retrieve --json`.
 #[derive(Serialize)]
 struct MemoryRetrieveRow {
@@ -1157,7 +1139,9 @@ pub(crate) fn run_retrieve(
             }
             // Truncation notice: suppressed under --json (D4).
             if shown < total {
-                parts.push(format_truncation_notice(shown, total, offset, limit));
+                parts.push(crate::listing::format_truncation_notice(
+                    shown, total, offset, limit,
+                ));
             }
         }
         crate::listing::Format::Json => {

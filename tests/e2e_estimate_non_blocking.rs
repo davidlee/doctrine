@@ -71,6 +71,10 @@ const ALLOWLIST: &[&str] = &[
     "commands/facet.rs",
     "facet.rs",
     "knowledge.rs",
+    // SL-171 PHASE-01: `next` facet columns route EstimateFacet/ValueFacet through
+    // the priority view + render layers (design EX-3/EX-5) — sanctioned exposure.
+    "priority/view.rs",
+    "priority/render.rs",
 ];
 
 fn src_dir() -> PathBuf {
