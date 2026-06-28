@@ -35,8 +35,12 @@ lint:
 lint-js:
   @if [ -d web/map/node_modules ]; then cd web/map && bun run lint; else echo "lint-js: node_modules not found, skipping (restore with: cd web/map && bun install)"; fi
 
+# Install JS deps (idempotent — fast no-op when already installed).
+web-install:
+  cd web/map && bun install
+
 # Build the map frontend (typecheck + lint + test + vite build).
-web-build:
+web-build: web-install
   cd web/map && bun run build
 
 # Rust map server on port 8080 (matches vite proxy).
@@ -44,11 +48,11 @@ map-serve:
   cargo run -- map serve --port 8080
 
 # Vite dev server (proxies /api → localhost:8080). Run `just map-serve` alongside.
-web-dev:
+web-dev: web-install
   cd web/map && bun run dev
 
 # Fast frontend check (typecheck + lint + test only, no dist).
-web-check:
+web-check: web-install
   cd web/map && bun run typecheck && bun run lint && bun run test
 
 # cargo build
