@@ -870,6 +870,9 @@ mod tests {
                     id: (*id).to_string(),
                     name: String::new(),
                     objective: String::new(),
+                    entrance_criteria: Vec::new(),
+                    exit_criteria: Vec::new(),
+                    verification: Vec::new(),
                 })
                 .collect(),
         }
