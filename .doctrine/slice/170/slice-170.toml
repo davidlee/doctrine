@@ -12,7 +12,8 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/plan.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
 
 [[selector]]
 selector = "src/coverage_verify.rs"
@@ -20,7 +21,8 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
 
 [[selector]]
 selector = "src/commands/coverage.rs"
@@ -38,13 +40,53 @@ intent = "scope-relevant"
 selector = "tests/e2e_*"
 intent = "scope-relevant"
 
-[[relation]]
-label = "related"
-target = "SL-169"
+[[selector]]
+selector = "src/regression.rs"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+
+[[selector]]
+selector = "src/vtgate.rs"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+
+[[selector]]
+selector = "src/commands/**"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch/SKILL.md"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+
+[[selector]]
+selector = "plugins/doctrine/skills/handover/SKILL.md"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+
+[[selector]]
+selector = "plugins/doctrine/skills/plan/SKILL.md"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+
+[[selector]]
+selector = "tests/e2e_check_regression.rs"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
+
+[[selector]]
+selector = "tests/e2e_slice_verify_vt.rs"
+intent = "design-target"
+note = "SL-170 design §5.2/code-impact. coverage_verify.rs deliberately EXCLUDED (granularity mismatch, design §2/D-correction). test file names predicted; adjust at impl."
 
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
+
+[[relation]]
+label = "related"
+target = "SL-169"
 
 [[relation]]
 label = "related"

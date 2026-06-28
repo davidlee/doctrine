@@ -8,14 +8,17 @@ SL-169's dispatch handed off "complete and green" while carrying its own
 downstream auditor had no independent signal to distrust the handover. Two
 classes of trust-gap surfaced (SL-169 PIR §3):
 
-- **Regression blindness (S1):** the funnel verify (`coverage verify`) re-derives
-  VT status from *current* runs only — there is no baseline. A new failure is
-  indistinguishable from a pre-existing/environmental one, so a worker (or
-  orchestrator) can attribute slice-caused regressions to "env" and ship them.
+- **Regression blindness (S1):** the funnel "Verify" step is orchestrator-side
+  *prose* (dispatch SKILL.md step 5) — the agent runs the suite, eyeballs RED,
+  isolates by hand. No baseline. A new failure is indistinguishable from a
+  pre-existing/environmental one, so a slice-caused regression can be shipped as
+  "env". (NB: `coverage_verify` is per-VT-cell matcher re-derivation, NOT a
+  full-suite failure-set — it is the *wrong* home for S1; see Affected surface.)
 - **Completeness blindness (S3/S6):** the handover tests *what exists*, not *what
   was mandated*. SL-169 PHASE-05 VT-1 promised a parse-conformance matrix; only
-  the columns golden landed. The gate stayed green. `plan.rs` serde-drops EN/EX/VT
-  criteria today, so nothing can check them structurally.
+  the columns golden landed (the file existed; content was incomplete). The gate
+  stayed green. `plan.rs` serde-drops EN/EX/VT criteria today, so nothing can
+  check them structurally.
 
 Governing principle (already half-doctrine on the claude arm,
 [[mem.pattern.dispatch.claude-arm-isolation-fallback]]): **verify, don't trust the
