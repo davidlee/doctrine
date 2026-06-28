@@ -42,12 +42,20 @@ value_dim = (coeff.value × value × kind_weight × tag_term) / est_cost
   `max_upper` corpus aggregate in the scan pre-pass and thread it into
   `base_score` as an input (preserve the pure-layer / date-uid pattern — no
   corpus read inside the pure fn).
-- `src/priority/config.rs` — add `β` (skew) and `margin` knobs to
-  `Coefficients`/`PriorityConfig` with `f64_or` clamping + defaults (0.65, 1.0).
-- **ADR-015 amendment** — the `value_dim` cost term changes at the governance
-  tier. Route a Revision against ADR-015 (ADR-013); this slice carries the impl.
-- Update goldens: `base_score_absent_estimate_uses_midpoint_one` and the
-  `e2e_priority_*` / `e2e_backlog_list_order_golden` fixtures.
+- `src/priority/config.rs` — new `[priority.estimate]` `{ skew, margin }` on
+  `PriorityConfig`, `f64_or` clamping + defaults (0.65 / 1.0), skew∈[0,1],
+  margin≥0.
+- `src/commands/config.rs` — extend `doctrine config show/set/get/unset` to the
+  two new keys (operator surface parity; codex F4).
+- **Governance amendment (REV)** — the change rewrites **ADR-015 §1+§2+§4** *and*
+  lifts **SPEC-020 REQ-310 / FR-011**'s v1 aggregation deferral. Authorized by
+  consult in the design session; REV authored at lock, landed at `/reconcile`.
+- Anchor folds **non-terminal** entities only (`status_class != Terminal`) so
+  closed work cannot poison live ranking (codex F3).
+- Update tests: retire `base_score_absent_estimate_uses_midpoint_one`, migrate the
+  midpoint-coupled `base_score_*` assertions + explain `va1`, recompute
+  `e2e_priority_golden` / `e2e_priority_cross_kind`. (`e2e_backlog_list_order` is
+  NOT score-sorted — out of scope.)
 
 ## Non-Goals
 
@@ -65,10 +73,10 @@ value_dim = (coeff.value × value × kind_weight × tag_term) / est_cost
 
 ## Open Questions
 
-- **OQ-1 (governance):** Does the ADR-015 cost-term change land as an amendment
-  to ADR-015 or a superseding ADR? Resolve in `/design` via the Revision route.
-- **OQ-2:** `max_upper` corpus coupling makes `base_score` depend on a
-  board-wide aggregate → scores become *relative* (adding a big-estimate item
-  lowers every bare item). Confirm acceptable; document the property.
-- **OQ-3:** additive `margin` is scale-sensitive (decisive on 1–6, weak on
-  0–100). Default `1` accepted; revisit if a multiplicative margin is wanted.
+- **OQ-1 (resolved):** Amend, not supersede — REV spans ADR-015 §1+§2+§4 **and**
+  SPEC-020 REQ-310/FR-011 (v1 aggregation deferral, intentionally lifted via
+  consult). Authored at design-lock, landed at `/reconcile`.
+- **OQ-2 (resolved):** corpus coupling makes scores *relative* — accepted; the
+  non-terminal anchor population bounds it (closed items can't poison live order).
+- **OQ-3 (resolved):** additive `margin`, default `1`; multiplicative margin is a
+  future knob, not this slice.

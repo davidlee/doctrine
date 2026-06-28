@@ -27,7 +27,11 @@ selector = "tests/e2e_priority_cross_kind.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "tests/e2e_backlog_list_order_golden.rs"
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/config.rs"
 intent = "design-target"
 
 [[relation]]
