@@ -336,3 +336,45 @@ actual behaviour requires un-prefixed number. Token cost: 1 round.
 No-op reconcile pass works cleanly when all findings are tolerated/withdrawn.
 The reconcile skill's no-op gate is well-documented — append outcome and hand
 off. No friction points.
+
+[dispatch; SL-172-0628]
+- pi-RPC spawn hang: fifo holds pi stdin open, so pi does NOT self-exit on
+  `agent_end` — it idles until the keepalive `sleep`/`timeout` expires (burned a
+  full 1200s window on the first PHASE-01 spawn before kill). Fix: orchestrator
+  must poll worker stdout for the `agent_end` event and kill pi. Encoded in a
+  reusable spawn script. The skill's pi template ("agent_end gives typed
+  completion") implies this but doesn't show the kill-on-event loop; a worked
+  example would save every subprocess-arm user the same rediscovery.
+- `worktree fork` is orchestrator-classed and refuses when its auto-detected
+  project root (from CWD) lands inside a worker-stamped worktree:
+  "refusing authored write `fork` — workers return a source delta". The
+  orchestrator's interactive CWD drifts into worker forks during inspection, so
+  the spawn must `cd` to the orchestrator root (or pass `--path`) before fork.
+  Latent footgun — earlier spawns only worked by CWD luck.
+- Worker prompt friction: `cargo test --lib` is wrong for a binary crate (no lib
+  target). Self-inflicted in the first prompt; worker still committed but its
+  self-verification was unsound. Funnel verify (orchestrator-side, correct cmd)
+  is the real safety net — reinforces "trust the funnel verify, not the worker's
+  self-check."
+- DESIGN DEFECT surfaced (for audit/reconcile): design SL-172 §5.2 specifies
+  `est_cost(est: Option<&EstimateFacet>, ...)`. That names a facet type in
+  `priority/graph.rs`, tripping the NF-001 non-blocking tripwire
+  (tests/e2e_estimate_non_blocking.rs) — the existing architecture routes facets
+  into graph.rs via the local `EntityFacets` struct precisely so graph.rs never
+  names facet types. The worker implemented the design faithfully and hit the
+  wall. Resolved by deviating from the design signature (route via
+  `Option<(f64,f64)>` bounds). The design should have caught this; the design
+  template / inquisition pass doesn't cross-check signatures against authored
+  architectural tripwires.
+
+[audit; SL-170-RV188-audit]
+Conformance triage was the token-heavy beat: `slice conformance` gives the cells
+but not the *cause*, so disambiguating undeclared (foreign-slice interleave vs
+authoring byproduct vs noted incidental) required manual cross-referencing of
+boundaries.toml code_start_oid + git log + selector list. A `conformance --why`
+that annotated each cell with its boundary/provenance origin would collapse ~4
+investigative tool calls into one. Captured the recurring gotcha as a memory so
+the next auditor skips the rediscovery. Minor: system doctrine binary predates
+this slice's `verify-vt` verb — had to switch to ./target/debug (expected for a
+slice that adds a verb, but a one-line "dogfood via build target" hint in the
+audit handover would save the failed call).
