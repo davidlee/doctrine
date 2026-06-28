@@ -47,8 +47,12 @@ The data is already in memory — each `BacklogItem.relationships` carries
 - **Risk**: adding `--after`/`--needs` as repeatable `--after A --after B` may
   be less ergonomic than comma-separated `--after A,B`. Start with repeatable
   (consistent with `--tag`), revisit if feedback disagrees.
-- **Assumption**: matching raw authoured ref strings (not resolved live-refs) is
-  correct — same behaviour as `relation list --target`.
+- **Decision (design D1)**: refs match **normalized** — parse to `(kind, id)`
+  via `parse_canonical_ref` and compare, with a verbatim fallback for
+  unparseable authored refs. No existence resolution, so a dangling/deleted ref
+  still matches; normalization adds no I/O. (Supersedes the earlier raw-string
+  assumption — case/padding now absorbed, e.g. `--after imp-0194` matches
+  `IMP-194`.)
 - **Assumption**: the terminal hide-set should NOT be overridden — consistency
   with other filter axes.
 
