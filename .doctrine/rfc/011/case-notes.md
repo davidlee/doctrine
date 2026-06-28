@@ -390,3 +390,16 @@ real audit work could start. The candidate-create provisioning step should
 seed (symlink/copy) gitignored build artifacts the bin embeds, or the audit
 skill should document the copy-in as a known pre-step for slices that don't
 themselves touch web assets.
+
+[reconcile; SL-172-RV-189]
+Brief F-3 said "reconcile REQ-310 status to reflect the delivered aggregation" — but
+REQ-310 was already `active` and the deferral lived in *prose*, not lifecycle. So the
+"status" verb in the brief was a mis-cue; the real action was a `modify` (prose) row.
+Cost: a re-read of SPEC-020 to confirm no hidden `deferred` status. Reconcile then hit
+a genuine semantic fork the brief flattened: SPEC-020 already delegates aggregation
+caller-side (§110/D3), so "lift the v1 aggregation deferral" risked falsely relocating
+aggregation into the facet schema. Required a user round-trip to pick reading A-truthful
+(narrow, not blanket-lift). Signal: audit briefs should disambiguate status-vs-prose and
+flag when a "lift" interacts with an existing caller-side delegation, so reconcile
+doesn't rediscover the fork. Also hit a transient `.git/index.lock` (concurrent agent) —
+one retry cleared it.
