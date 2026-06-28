@@ -1,0 +1,108 @@
+# Implementation plan for SL-174 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-174"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Embed smoke-test gate"
+objective = """
+Author scripts/smoke.sh — the embed-integrity gate that runs against a built
+doctrine binary — and a `just smoke` recipe. This is the dominant correctness
+risk (R1) and the dependency the release workflow consumes, so it lands first
+and is proven LOCALLY (jail Linux build) independent of CI. The script exercises
+the actual shipped bytes: --version, the install/ embed, and the web/map/dist
+embed.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §5.2 (scripts/smoke.sh contract) is locked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "scripts/smoke.sh exists, takes a binary path arg, exits non-zero unless all embed checks pass." },
+  { id = "EX-2", text = "smoke.sh checks: (a) `<bin> --version`; (b) `<bin> install --path <tmp>` lays down a known install/templates file; (c) `<bin> map serve` answers HTTP 200 with non-empty body, then is torn down." },
+  { id = "EX-3", text = "`just smoke` runs the script against a locally built binary; smoke.sh is the single source reused by CI (no CI-only duplicate)." },
+  { id = "EX-4", text = "shellcheck-clean." },
+]
+verification = [
+  { id = "VT-1", expects = "Against a binary built WITH `just web-build`, smoke.sh exits 0 (all embeds present)." },
+  { id = "VT-2", expects = "Against a binary built WITHOUT web-build (empty/missing web/map/dist), smoke.sh exits non-zero on the map check — proving the gate catches a broken embed." },
+  { id = "VT-3", expects = "shellcheck scripts/smoke.sh reports no warnings." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Release workflow + cross-link proof"
+objective = """
+Author .github/workflows/release.yml: tag-triggered (`v*`), macOS runner, setup
+Rust + targets + bun, `just web-build`, build both apple-darwin triples, install
+Rosetta as needed, run scripts/smoke.sh on each artifact, package tar.gz +
+sha256 per the §5.2 naming contract, upload to the GitHub Release. This phase
+carries the riskiest proof (R3/F1): x86_64 cross-compiled on the arm runner
+re-enters the iconv link-failure domain. The native macos-13 fallback leg is the
+mitigation if cross-link fails.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: scripts/smoke.sh exists and is green locally." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "release.yml triggers on `push: tags: ['v*']`, declares `permissions: contents: write`, and uses pinned action versions." },
+  { id = "EX-2", text = "Workflow builds aarch64-apple-darwin and x86_64-apple-darwin, runs web-build before cargo, and runs scripts/smoke.sh on each built artifact (x86 via Rosetta) before upload." },
+  { id = "EX-3", text = "Assets uploaded match the §5.2 contract: doctrine-<triple>.tar.gz + .sha256, each tarball containing a single `doctrine` executable." },
+  { id = "EX-4", text = "A documented native macos-13 fallback path exists for x86_64 if cross-link fails (comment or commented-out matrix leg)." },
+]
+verification = [
+  { id = "VT-1", expects = "actionlint (or equivalent YAML/workflow lint) passes on release.yml; if actionlint is unavailable in-jail, downgrade to VA-1." },
+  { id = "VA-1", expects = "Manual read confirms web-build precedes cargo, smoke runs before upload, asset names match the contract, and permissions/token are set." },
+  { id = "VH-1", expects = "A real tag push runs the workflow to green: both arch assets published, smoke passed on both, x86_64 cross-link succeeded (the iconv-domain proof). If cross-link fails, the macos-13 fallback leg is enabled and re-proven." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Install channels + docs"
+objective = """
+Author the no-compile install surfaces that consume the release assets, and the
+docs that point users at them: install.sh (curl|sh, repo root),
+[package.metadata.binstall] in Cargo.toml, the README install section reorder
+(curl|sh → binstall → cargo install fallback), and the justfile note that
+`git push --tags` triggers the release workflow.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: a real release with the contracted assets exists to install from." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install.sh: POSIX, `set -eu`, Darwin-only guard, uname-m→triple map, version resolve (DOCTRINE_VERSION or latest), download asset + .sha256, checksum-verify, strip quarantine, install to ${DOCTRINE_BIN_DIR:-$HOME/.local/bin}, PATH hint." },
+  { id = "EX-2", text = "Cargo.toml carries [package.metadata.binstall] (pkg-url → release tgz, pkg-fmt=tgz, bin-dir) matching the §5.2 asset names; `cargo metadata` still parses." },
+  { id = "EX-3", text = "README install section leads with curl|sh (tag-pinned + rolling-main note), then cargo binstall, then cargo install with the toolchain caveat." },
+  { id = "EX-4", text = "justfile documents that pushing a tag triggers release.yml; install.sh is shellcheck-clean." },
+]
+verification = [
+  { id = "VT-1", expects = "shellcheck install.sh reports no warnings; the uname→triple mapping is exercised (sourced-function test or equivalent) for arm64 and x86_64." },
+  { id = "VT-2", expects = "`cargo metadata --no-deps` parses with the binstall block present (no Cargo.toml breakage)." },
+  { id = "VA-1", expects = "README + justfile read: channels ordered correctly, asset names consistent across install.sh / binstall / workflow, fallback caveat present." },
+  { id = "VH-1", expects = "From a fresh macOS env with no Rust toolchain, the curl|sh one-liner installs a runnable doctrine; `cargo binstall doctrine` also installs without compiling." },
+]
+specs        = []
+requirements = []
