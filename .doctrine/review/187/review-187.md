@@ -89,3 +89,30 @@ No unresolved blocker; ledger `done · await=none`.
   `v0.8.1` tag, push) so the latest-resolving `curl|sh` + `cargo binstall`
   channels resolve, completing slice-level VH-1. Mechanism already proven on
   `v0.8.1-rc1`.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §5.2 (RV-187 F-1):** annotated the smoke.sh `--version` bullet —
+  `doctrine --version` was wired by this slice (PHASE-01 clap `version`,
+  `src/main.rs`), not pre-existing as the contract / EX-2a assumed.
+- **design.md §6 OQ-3 (RV-187 F-3):** recorded the SPEC-009 boundary — binary
+  *delivery* (release pipeline, curl|sh installer, binstall metadata) is out of
+  SPEC-009 scope (embed + lay-down only). Operator decision: record boundary, no
+  REV, no spec edit. A dedicated delivery spec is deferred → IDE-023.
+
+### REVs completed
+- None. F-3 routed to a recorded boundary, not a governance edit (operator choice).
+
+### Backlog minted
+- **IDE-023** — "Binary delivery & release tech spec": tracks the deferred
+  delivery spec, authored if/when the delivery surface grows (Linux/Windows,
+  signing, vanity domain, second channel).
+
+### Withdrawn / tolerated
+- **RV-187 F-2:** aligned — `install-test.sh` is an in-scope test seam; no write.
+- **RV-187 F-4:** tolerated — slice-level VH-1 completes at /close by cutting a
+  non-prerelease v0.8.1 (latest excludes prereleases, STOP-2); mechanism proven on
+  v0.8.1-rc1. Carried to close as the final operator action — no reconcile write.
+
+Reconcile pass complete — handoff to /close.

@@ -95,7 +95,9 @@ bin-dir = "doctrine"
 ```
 
 **`scripts/smoke.sh <binary>`** — exit non-zero unless ALL hold:
-- `<binary> --version` succeeds.
+- `<binary> --version` succeeds. (Reconciled RV-187 F-1: the root command exposed
+  no `version` until this slice — PHASE-01 wired clap `version` into `src/main.rs`;
+  this contract / EX-2a assumed it pre-existed.)
 - `<binary> install --path <tmp>` lays down a known template file (proves the
   `install/` embed). Exact file chosen at plan time from `install/templates/`.
 - the embedded map serves: boot `<binary> map serve` on an ephemeral port, GET
@@ -147,6 +149,11 @@ bin-dir = "doctrine"
 - OQ-3 SPEC-009 reconcile: binary *delivery* (download channel, installer) is new
   evergreen surface beyond SPEC-009's "embed + lay-down into a project" scope.
   Route at reconcile (extend SPEC-009 or record a boundary). Not a slice blocker.
+  **Resolved (RV-187 F-3, reconcile):** recorded as a boundary, not a spec edit —
+  binary delivery (release pipeline, curl|sh installer, cargo-binstall metadata)
+  is **out of SPEC-009 scope**; SPEC-009 owns embed + lay-down into a project only.
+  A dedicated delivery spec is deferred (tracked in backlog), authored if/when the
+  delivery surface grows. No REV.
 
 ## 7. Decisions, Rationale & Alternatives
 
