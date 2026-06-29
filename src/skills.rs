@@ -63,7 +63,7 @@ fn program_available(prog: &str) -> bool {
         .is_ok_and(|s| s.success())
 }
 
-/// Resolve the delegated skills runner: try `bunx` first, fall back to `npx`.
+/// Resolve the delegated skills runner: try `npx` first, fall back to `bunx`.
 /// Returns the program name and a concrete runner.
 pub(crate) fn resolve_runner() -> (&'static str, ProcessRunner) {
     resolve_runner_with(&program_available)
@@ -72,10 +72,10 @@ pub(crate) fn resolve_runner() -> (&'static str, ProcessRunner) {
 /// Same as `resolve_runner()` but with an injectable availability check.
 /// The `check` predicate returns `true` when a program is available.
 fn resolve_runner_with(check: &dyn Fn(&str) -> bool) -> (&'static str, ProcessRunner) {
-    if check(RUNNER_BUNX) {
-        (RUNNER_BUNX, ProcessRunner { name: RUNNER_BUNX })
-    } else {
+    if check(RUNNER_NPX) {
         (RUNNER_NPX, ProcessRunner { name: RUNNER_NPX })
+    } else {
+        (RUNNER_BUNX, ProcessRunner { name: RUNNER_BUNX })
     }
 }
 
@@ -1736,15 +1736,15 @@ mod tests {
     }
 
     #[test]
-    fn resolve_runner_with_bunx_available() {
-        let (name, _runner) = resolve_runner_with(&|prog| prog == "bunx");
-        assert_eq!(name, RUNNER_BUNX);
+    fn resolve_runner_with_npx_available() {
+        let (name, _runner) = resolve_runner_with(&|prog| prog == "npx");
+        assert_eq!(name, RUNNER_NPX);
     }
 
     #[test]
-    fn resolve_runner_with_falls_back_to_npx() {
+    fn resolve_runner_with_falls_back_to_bunx() {
         let (name, _runner) = resolve_runner_with(&|_prog| false);
-        assert_eq!(name, RUNNER_NPX);
+        assert_eq!(name, RUNNER_BUNX);
     }
 
     // --- plan ---
