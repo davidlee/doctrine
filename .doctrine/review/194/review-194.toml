@@ -1,0 +1,113 @@
+id    = 194
+slug  = "imp-213-code-review-install-agent-detection-repodelegation-improvements"
+title = "IMP-213 code review: install agent-detection + repo/delegation improvements"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "staff-engineer"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "IMP-213"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Diverged agent detection: detect_agents() vs resolve_agents()"
+detail = """
+**Expected**: The two agent-detection functions in the codebase — `detect_agents()` (install.rs:607) and `resolve_agents()` (skills.rs:561) — should detect the same set of agents. They serve parallel dispatch paths (`doctrine install` vs `doctrine skills install`).
+
+**Observed**: `detect_agents()` now detects `.pi/` → "pi" and `.agents/` → "universal" (added in this change), but `resolve_agents()` still only detects `.claude/` → Claude and `.codex/` → codex. A user running `doctrine skills install` in a pi-only project will get the hard error "No --agent given and no .claude/ or .codex/ found" — while `doctrine install` auto-detects and installs pi skills.
+
+**Evidence**: `detect_agents()` (install.rs lines 608-627) checks `.pi/` and `.agents/`; `resolve_agents()` (skills.rs lines 561-583) does not. The comment on `resolve_agents()` even says "Mirrors boot::resolve_harnesses — the two must stay in sync" — but now there are three mirrors, all diverging.
+
+**Ripple**: Comment at line 608 says `detect_agents()` is "A relaxed resolver distinct from skills::resolve_agents()" — the single comment acknowledges the duplication while the code deepens it. If "relaxed" means "silently empty" vs "hard error", then `detect_agents()` should be the sole resolver, plumbed through both paths."""
+disposition = "fix-now"
+response = "Agreed.  should be the single resolver.  should be updated to also detect .pi/ and .agents/ dirs, or better: collapse both into one function (the error-vs-empty return semantics can be a parameter). The 'Mirrors boot::resolve_harnesses' comment should track all mirrors or be removed. Will reconcile before close."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "resolve_runner() lies about purity, wastes a Box allocation"
+detail = """
+**Expected**: `resolve_runner()` (skills.rs:59) doc says "Pure — no IO beyond `which`". `which` implies finding a binary path. The purity contract is valuable.
+
+**Observed**: The function executes `bunx --version` — an actual process execution with side effects (process spawn, exit code check). It's not a `which` operation. Additionally, the return type `Box<dyn Runner>` is wasteful: both `Npx` and `Bunx` are zero-sized types (structs with no fields, skills.rs:601,614). Every caller immediately calls `.as_ref()` on the Box (install.rs:393, skills.rs:1125). The allocation serves no purpose.
+
+**Evidence**: `resolve_runner()` (skills.rs:59-73) spawns `Command::new(RUNNER_BUNX).arg("--version")` — not `which`. The callers do `runner.as_ref()` within the same scope. real_runner() (skills.rs:874, dead code) also returns Box<dyn Runner>."""
+disposition = "tolerated"
+response = "The doc comment should be corrected: this is not pure, it executes bunx --version. However, the behavior is correct — checking whether bunx actually works (not just which) is the right signal. The Box allocation is wasteful but harmless for a once-per-install path. Fix the doc, leave the Box for now — changing the return type would ripple through callers and the Runner trait seam."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Parallel Bunx/Npx runner implementations — DRY violation"
+detail = """
+**Expected**: DRY — Npx and Bunx runners should share implementation since they differ only in the error message.
+
+**Observed**: `Npx` (skills.rs:601-611) and `Bunx` (skills.rs:614-623) are identical structs with identical `Runner::run()` impls — the only difference is the error context string ("is Node installed?" vs "is Bun installed?"). This is a parallel implementation.
+
+**Evidence**: Compare skills.rs lines 604-610 with 617-623. Both are:
+```
+fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool> {
+    let status = std::process::Command::new(program)
+        .args(args)
+        .status()
+        .with_context(|| format!("Failed to run '{program}' (is {X} installed?)"))?;
+    Ok(status.success())
+}
+```
+
+A single struct with a `name: &'static str` field would collapse both."""
+disposition = "fix-now"
+response = "Agreed. Hoist load_doctrine_toml() and resolve_runner() out of the per-agent loop. Trivial fix."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "No test coverage for resolve_runner() — resolution logic untestable"
+detail = """
+**Expected**: Runner resolution should be testable. The `Runner` trait exists as a seam for testing, but the *resolution* logic (bunx vs npx fallback) is untestable because it performs real process execution.
+
+**Observed**: `resolve_runner()` (skills.rs:59-73) has no test coverage. The function calls `Command::new("bunx").arg("--version").status()` — there's no way to inject a fake `Command` or mock the `which` check. The `FakeRunner` used in other tests tests `execute()` and `install_for_other()` but not which runner gets selected.
+
+**Evidence**: Searching for `resolve_runner` in test code finds zero hits. The function is `pub(crate)` and does real I/O inside what the doc claims is "Pure — no IO beyond `which`". The purity/seam boundary is wrong — the resolution decision should be separable from execution."""
+disposition = "tolerated"
+response = "Both are zero-sized marker types. Collapsing them into a single struct with a name parameter would be cleaner, but the current form is a well-understood Rust pattern (marker types for different error contexts). Not worth the churn for a 4-line difference."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Duplicate doctrine.toml I/O in run_forward_steps() per-agent loop"
+detail = """
+**Expected**: `run_forward_steps()` (install.rs:301) should load `doctrine.toml` once, outside the per-agent loop.
+
+**Observed**: `load_doctrine_toml()` is called inside the per-agent loop (line 387, for each non-Claude agent) AND again after the loop (line 419, for `post_install_instructions`). In a project with `.pi/` and `.codex/`, it's loaded 3 times. Each call reads and parses the full TOML file.
+
+**Evidence**: lines 387 and 419 of install.rs both call `crate::dtoml::load_doctrine_toml(root)?.install.repo`. The repo string doesn't change between iterations."""
+disposition = "fix-now"
+response = "Fair. Remove it — dispatch worktree compat can be restored from git history if needed."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "Dead real_runner() with hand-wave justification, no tracking issue"
+detail = """
+**Expected**: Dead code should be removed unless there's a concrete plan and a tracking issue.
+
+**Observed**: `real_runner()` (skills.rs:874) is annotated `#[expect(dead_code, reason = "retained for dispatch worktree compatibility")]`. No call site exists anywhere in the codebase. The comment doesn't reference a backlog item, issue, or any tracking artifact — it's a hand-wave at a future need that may never arrive.
+
+**Evidence**: `grep -r real_runner src/` finds only the definition at skills.rs:874. The function was previously called from `run_forward_steps()` but that call was replaced with `resolve_runner()` in this change."""
+disposition = "follow-up"
+response = "The resolution logic is inherently impure (it executes a process). Testing it requires either injecting a command factory or refactoring into a pure 'which' check + separate execution. Non-trivial refactor — capture as backlog item for a dedicated improvement."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

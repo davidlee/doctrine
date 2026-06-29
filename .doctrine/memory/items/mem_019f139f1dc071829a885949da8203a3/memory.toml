@@ -1,0 +1,41 @@
+memory_uid = "mem_019f139f1dc071829a885949da8203a3"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Parallel agent-detection resolvers are a known divergence risk"
+summary = "detect_agents() (install.rs), resolve_agents() (skills.rs), and boot::resolve_harnesses() all detect agents differently. RV-194 caught divergence where detect_agents gained .pi/.agents support but resolve_agents did not. Any agent-detection change must update all three."
+created = "2026-06-29"
+updated = "2026-06-29"
+
+[scope]
+paths = ["src/install.rs", "src/skills.rs", "src/boot.rs"]
+globs = []
+commands = []
+tags = ["divergence", "install", "skills"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0ffd64846ac2e17787a657eca228d38928df8b28"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b2746e6f4d62ff9b737fec879ff5a39692c7f8552170413640cf1b446970e705"
+base_commit = "fd86258d93e7c7d6caf055daa5c9c229b8dbcb4a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
