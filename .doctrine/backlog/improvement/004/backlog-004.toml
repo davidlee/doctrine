@@ -5,10 +5,10 @@ id = 4
 slug = "jail-dispatch-isolation-spike"
 title = "Jail dispatch isolation spike: per-worktree target and bwrap confinement"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-08"
-updated = "2026-06-15"
+updated = "2026-06-28"
 tags = ["area:dispatch"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

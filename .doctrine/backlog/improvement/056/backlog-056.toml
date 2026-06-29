@@ -19,3 +19,10 @@ tags = ["area:cli", "area:coverage"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[estimate]
+lower = 1.0
+upper = 3.0
+
+[value]
+value = 1.5

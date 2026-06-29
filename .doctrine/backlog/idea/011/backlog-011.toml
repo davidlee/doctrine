@@ -19,3 +19,10 @@ tags = ["area:coverage", "area:review", "exploration"]
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "RSK-008", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[estimate]
+lower = 8.0
+upper = 20.0
+
+[value]
+value = 2.5

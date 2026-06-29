@@ -12,9 +12,9 @@ updated = "2026-06-15"
 tags = ["area:coverage", "area:slice"]
 
 [facet]                         # risk only — every field typed; seeded empty
-likelihood = ""                 # low | medium | high | critical
-impact     = ""                 # low | medium | high | critical
-origin     = ""
+likelihood = "medium"
+impact = "high"
+origin = "Closure without coverage-gate permits evidence-erasure"
 controls   = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
@@ -25,3 +25,10 @@ controls   = []
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "IMP-026", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[estimate]
+lower = 3.0
+upper = 6.0
+
+[value]
+value = 2.5

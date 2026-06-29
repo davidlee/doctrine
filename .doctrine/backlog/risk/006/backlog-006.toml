@@ -12,12 +12,15 @@ updated = "2026-06-16"
 tags = ["area:coverage", "perf"]
 
 [facet]                         # risk only — every field typed; seeded empty
-likelihood = ""                 # low | medium | high | critical
-impact     = ""                 # low | medium | high | critical
-origin     = ""
+likelihood = "low"
+impact = "medium"
+origin = "Coverage scan perf cliff at scale; deferred, no cliff observed"
 controls   = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "CHR-007", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[value]
+value = 1.0
