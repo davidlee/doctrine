@@ -332,7 +332,7 @@ gives offline fork-safety at single-tree+trunk reach.
   `event_id` + `409 duplicate_event`=success, not a reservation CAS). That is a
   **separate seam** from this slice's reservation `Claim` — it slots into the
   `materialise_named` *write body* (`fs::create_dir` + `write_fileset` → a memory
-  storage backend `FsMarkdown | the external decision registerHttp`), not into the numbered-id claim
+  storage backend `FsMarkdown | RemoteHttp`), not into the numbered-id claim
   loop. D9 (splitting the named path off `Claim`) **enables** this cleanly — it does
   not foreclose it; forcing memory onto the reservation seam would misfit
   HTTP-append-with-server-idempotency onto mkdir-or-`AlreadyHeld`. No v1 work.
