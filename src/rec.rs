@@ -342,7 +342,7 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<(
     // id (reusing the corpus id table, integrity::KINDS) — a slice is a numbered
     // doctrine entity, so the edge must resolve. `decision_ref` is NOT validated:
     // a DEC is now a 2-part numbered kind, but `decision_ref` carries an *external*
-    // 3-part the external decision register cite (e.g. `DEC-005-C`), not a doctrine entity in `KINDS`,
+    // 3-part decision cite (e.g. `DEC-005-C`), not a doctrine entity in `KINDS`,
     // so it carries as free-text (design §5.3).
     if let Some(owning) = &args.owning_slice {
         crate::integrity::ensure_ref_resolves(&root, owning)?;

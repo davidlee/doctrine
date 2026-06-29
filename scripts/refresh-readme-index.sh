@@ -6,7 +6,6 @@ set -euo pipefail
 #
 # Source of truth: the authored spec TOML/MD under .doctrine/spec/<subtype>/
 # (the committed, reviewed tier of doctrine's storage model — not runtime state).
-# Doctrine-flavoured port of the external decision register/scripts/refresh-readme-index.sh.
 #
 # Subtypes: Product Specifications (PRD-*), Technical Specifications (SPEC-*).
 

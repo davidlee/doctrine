@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Git seam — the born-frame producer for memory anchoring (SL-007, design §5.2).
 //!
-//! doctrine reproduces `the external decision register`'s frozen `GitContextFrameV1` algorithm
-//! byte-for-byte so records and event-store claims derive the *same*
-//! `repo_id`/`checkout_state_id` and dedup at the interop seam (design D2/D7).
+//! doctrine derives a frozen `GitContextFrameV1` so records derive a stable
+//! `repo_id`/`checkout_state_id` and dedup on byte-identical trees (design D2/D7).
+//! The derivations are a **frozen, versioned contract** — never alter one in
+//! place; version it instead, so a change is detectable in persisted frames.
 //! This module is the **pure half** (PHASE-01): the frame data shapes plus the
-//! config-independent derivations — canonical-bytes (DEC-009), sha256, the
+//! config-independent derivations — canonical-bytes, sha256, the
 //! `forget.remote.v1` remote normalizer, and the `forget.checkout.v1` checkout-id
 //! composition. The impure `capture` (git subprocess) lands in PHASE-02.
 //!
 //! The data shape here is doctrine's own, flatter projection (design §5.2); only
-//! the *derivation functions* are ported byte-identically. Byte-identity is the
-//! contract — proven by the `normalize_remote_url` oracle table (VT-1) copied
-//! verbatim from the external decision register and, in PHASE-02, a shared conformance golden-vector.
+//! the *derivation functions* are byte-frozen. Byte-stability is the
+//! contract — proven by the `normalize_remote_url` oracle table (VT-1) and, in
+//! PHASE-02, a conformance golden-vector.
 //!
 //! No consumer is wired this phase — `record` (PHASE-04) and `verify` (PHASE-05)
 //! pull it in. So the non-test build sees the module as dead; the tests exercise
@@ -32,7 +33,7 @@ use serde_json::{Number, Value};
 use sha2::{Digest, Sha256};
 
 /// Remote-URL normalizer tag (`forget.remote.v1`) — versions the algorithm so a
-/// future change is detectable in persisted frames. Parity with the external decision register.
+/// future change is detectable in persisted frames.
 pub(crate) const REMOTE_NORMALIZER: &str = "forget.remote.v1";
 /// Checkout-state hashing normalizer tag (`forget.checkout.v1`).
 pub(crate) const CHECKOUT_NORMALIZER: &str = "forget.checkout.v1";
@@ -180,8 +181,8 @@ pub(crate) struct Frame {
 }
 
 // ---------------------------------------------------------------------------
-// Canonical JSON bytes (DEC-009) + sha256 — mirrored from the external decision register's
-// `canonical.rs` / `hash.rs` so the hashed bytes are byte-identical.
+// Canonical JSON bytes + sha256 — a frozen serialization so the hashed bytes are
+// byte-stable across versions and machines.
 //
 // A *protocol*, not "whatever serde_json emits": object keys sorted ascending
 // bytewise, minimal string escaping, integer-only numbers, no insignificant
@@ -296,7 +297,6 @@ fn write_control_escape(c: char, out: &mut Vec<u8>) {
 }
 
 /// Lowercase-hex sha256 of `bytes` (git-context fingerprints, `checkout_state_id`).
-/// Byte-identical to the external decision register's `hash::sha256`.
 pub(crate) fn sha256(bytes: &[u8]) -> String {
     let mut h = Sha256::new();
     h.update(bytes);
@@ -441,13 +441,13 @@ pub(crate) fn normalize_remote_url(raw: &str) -> Option<NormalizedRemote> {
 
 // ---------------------------------------------------------------------------
 // Capture (git I/O) — the impure half (design §5.2). Shells `git` under the
-// normative flags so machine-local config cannot perturb the frame. Ported from
-// the external decision register's `git_context::capture`, projected down to doctrine's flat `Frame`.
+// normative flags so machine-local config cannot perturb the frame, projected
+// down to doctrine's flat `Frame`.
 // ---------------------------------------------------------------------------
 
 /// Normative git config flags applied to **every** invocation (EX-1) so local
 /// config (autocrlf/eol/fileMode) cannot perturb captured trees/diffs/hashes —
-/// required for byte-identity with the external decision register.
+/// required for frame byte-stability.
 const NORMATIVE_FLAGS: &[&str] = &[
     "-c",
     "core.autocrlf=false",
@@ -1468,7 +1468,7 @@ fn write_tree_with_retry(repo_root: &Path) -> Result<String, CaptureError> {
 /// `commit` empty); unborn or non-repo → [`AnchorKind::None`]. Detached HEAD is
 /// still anchored with an empty `ref_name`. Submodule/multi-root/ambiguous-remote
 /// trees error rather than emit an unstable anchor (D8). Symlinks are supported
-/// (SL-012, mirrors the external decision register DE-010): tracked symlinks ride `index_tree`/
+/// (SL-012): tracked symlinks ride `index_tree`/
 /// `worktree_fingerprint`, untracked symlinks hash by link text.
 ///
 /// # Errors
@@ -1697,7 +1697,7 @@ fn select_remote(root: &Path, remotes: &[String]) -> Result<Option<String>, Capt
 
 /// Reject submodule (160000) index entries before hashing (D8).
 ///
-/// Symlinks (120000) are supported (SL-012, mirrors the external decision register DE-010):
+/// Symlinks (120000) are supported (SL-012):
 /// [`untracked_fingerprint`] encodes an untracked symlink by its link text, and
 /// tracked symlinks ride `index_tree` / `worktree_fingerprint` as their `120000`
 /// blob — so the up-front reject is unnecessary and over-rejected clean/tracked-only
@@ -1718,8 +1718,8 @@ fn reject_submodules(root: &Path) -> Result<(), CaptureError> {
 /// sha256 over sorted untracked-entry `path\0<hash>\n` records; `None` when there
 /// are no untracked files. Each path is hashed by *identity*, never by following
 /// links: a regular file via git's frozen blob hashing (`hash-object`), a symlink
-/// via [`symlink_target_hash`] over its raw `readlink(2)` target bytes (SL-012,
-/// mirrors the external decision register DE-010 §3.1). Regular-entry encoding is byte-identical to
+/// via [`symlink_target_hash`] over its raw `readlink(2)` target bytes (SL-012
+/// §3.1). Regular-entry encoding is byte-identical to
 /// before, so symlink-free csids do not move (DEC-010-06).
 fn untracked_fingerprint(root: &Path) -> Result<Option<String>, CaptureError> {
     let raw = git_bytes(root, &["ls-files", "--others", "--exclude-standard", "-z"])?;
@@ -1752,8 +1752,8 @@ fn untracked_fingerprint(root: &Path) -> Result<Option<String>, CaptureError> {
 }
 
 /// Hash an untracked symlink by its link-text identity: `sha256(` raw `readlink(2)`
-/// target bytes `)`, never following the link (SL-012, mirrors the external decision register DE-010
-/// §3.1) — robust to dangling/non-UTF-8 targets that `git hash-object` cannot read.
+/// target bytes `)`, never following the link (SL-012 §3.1) — robust to
+/// dangling/non-UTF-8 targets that `git hash-object` cannot read.
 #[cfg(unix)]
 fn symlink_target_hash(full: &Path) -> Result<String, CaptureError> {
     use std::os::unix::ffi::OsStrExt;
@@ -2129,8 +2129,8 @@ pub(crate) fn resolve_remote(root: &Path) -> Result<Option<String>, CaptureError
 }
 
 // ---------------------------------------------------------------------------
-// Unit tests — pure logic only (no git, no disk). The byte-identity proof for
-// the remote table is copied verbatim from the external decision register's reference (VT-1).
+// Unit tests — pure logic only (no git, no disk). The byte-stability proof for
+// the remote table is the frozen oracle (VT-1).
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -2317,8 +2317,8 @@ mod tests {
         assert_eq!(checkout_state_id("t", "w", "u"), expected);
     }
 
-    // --- EX-4 / VT-1: the repo_id byte-identity oracle. Copied VERBATIM from
-    // the external decision register's `normalize_remote_url_table` — this is the interop proof. ---
+    // --- EX-4 / VT-1: the repo_id byte-identity oracle — the frozen
+    // `normalize_remote_url` table. ---
 
     #[test]
     fn normalize_remote_url_table() {
@@ -2390,7 +2390,7 @@ mod tests {
     // Impure capture (PHASE-02) — scratch-repo fixtures (VT-1/2/3).
     //
     // A throwaway git repo with pinned identity + commit dates so commit/tree
-    // SHAs are deterministic. Mirrors the external decision register's `tests/support` harness.
+    // SHAs are deterministic.
     // -----------------------------------------------------------------------
 
     /// Fixed commit identity/time so captured SHAs are deterministic.
@@ -2828,7 +2828,7 @@ mod tests {
         );
     }
 
-    // FR-001 (SL-012, mirrors the external decision register DE-010) — a repo with a tracked symlink
+    // FR-001 (SL-012) — a repo with a tracked symlink
     // captures a frame instead of being rejected. Clean tree → Commit anchor.
     // (Was: symlink_entry_is_rejected, which asserted CaptureError::Symlink.)
     #[cfg(unix)]
@@ -2883,7 +2883,7 @@ mod tests {
         assert_eq!(a, b, "tracked-symlink-repoint capture is deterministic");
     }
 
-    // NF-001 (SL-012, mirrors the external decision register DE-010, RISK-03) — an untracked symlink
+    // NF-001 (SL-012, RISK-03) — an untracked symlink
     // is encoded by its link text, never followed: mutating the *pointee's content*
     // leaves the csid unchanged. The pointee lives outside the repo, so the only
     // way its content could move the csid is a dereference.
@@ -2976,8 +2976,8 @@ mod tests {
     // A-2 (SL-012 audit) — an untracked *regular* file whose name contains a `\n`
     // hashes correctly and deterministically. doctrine forks `git hash-object -- path`
     // once per path, which is newline-safe; this guards against a future batch-port
-    // (the external decision register IMPR-003 / `untracked_hashes`) silently reintroducing Finding A,
-    // where LF-separated `--stdin-paths` cannot carry a newline-bearing path.
+    // to LF-separated `--stdin-paths` silently reintroducing Finding A, where it
+    // cannot carry a newline-bearing path.
     // A newline in a filename needs raw bytes — go through OsStr/std::fs directly.
     #[cfg(unix)]
     #[test]
@@ -3036,11 +3036,10 @@ mod tests {
     // `worktree_fingerprint` = sha256 of an empty `diff HEAD` (untracked files do
     // not appear in the diff), `untracked_fingerprint` = sha256 over the
     // untracked path + its git blob SHA. None depend on commit dates or git
-    // version, so the literal is reproducible and — because doctrine's
+    // version, so the literal is reproducible. doctrine's
     // `normalize_remote_url`/`checkout_state_id`/`canonical_bytes`/`sha256` are
-    // byte-copied from the external decision register's frozen algorithm (VT-1 verbatim table) —
-    // equals the external decision register's value for the same tree. Drift in either impl breaks
-    // this test.
+    // frozen (VT-1 oracle table), so the same tree always yields this value.
+    // Drift in any of them breaks this test.
     #[test]
     fn conformance_golden_vector() {
         let repo = ScratchRepo::new();
