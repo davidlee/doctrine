@@ -1,9 +1,9 @@
 id = 175
 slug = "admit-spawned-from-relation-label-retcon-19-mislabelled-backlogslice-edges"
 title = "Admit spawned_from relation label + retcon 19 mislabelled backlog→slice edges"
-status = "design"
+status = "abandoned"
 created = "2026-06-28"
-updated = "2026-06-28"
+updated = "2026-06-29"
 tags = []
 
 [relationships]
