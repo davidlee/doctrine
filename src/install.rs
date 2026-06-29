@@ -352,6 +352,8 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
     let (runner_name, runner) = crate::skills::resolve_runner();
     let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
 
+    let mut non_claude_agents: Vec<String> = Vec::new();
+
     for agent in &agents {
         let question: String = if agent == "claude" {
             "Install skills + agent def for claude? [y/N/a]".to_string()
@@ -384,31 +386,36 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             // the doctrine plugin, NOT settings-wired — wiring is delegated to the
             // operator via printed post-install instructions (see end of fn).
         } else {
-            let mut out = io::stdout();
-            if let Err(e) = crate::skills::install_for_other(
-                &crate::skills::InstallOtherArgs {
-                    agent_name: agent,
-                    selected: &selected,
-                    global: args.global,
-                    repo,
-                    runner: &runner,
-                    runner_name,
-                },
-                &mut out,
-            ) {
-                writeln!(io::stdout(), "  {agent} skills install failed: {e:#}")?;
-            }
-            // Agent-def install for pi (non-claude agent).
+            non_claude_agents.push(agent.clone());
+            // Agent-def install per non-Claude agent.
             if let Err(e) = crate::skills::install_agents_for(
                 root,
                 agent,
                 Some(agent),
                 args.global,
                 false,
-                &mut out,
+                &mut io::stdout(),
             ) {
                 writeln!(io::stdout(), "  {agent} agent-def install failed: {e:#}")?;
             }
+        }
+    }
+
+    // Batch-delegate all confirmed non-Claude agents to a single npx invocation.
+    if !non_claude_agents.is_empty() {
+        let mut out = io::stdout();
+        if let Err(e) = crate::skills::install_for_other(
+            &crate::skills::InstallOtherArgs {
+                agent_names: &non_claude_agents,
+                selected: &selected,
+                global: args.global,
+                repo,
+                runner: &runner,
+                runner_name,
+            },
+            &mut out,
+        ) {
+            writeln!(io::stdout(), "  non-Claude skills install failed: {e:#}")?;
         }
     }
 

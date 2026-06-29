@@ -484,7 +484,7 @@ fn foreign_reason(reason: &ForeignReason) -> String {
 
 /// Assemble the `npx skills add …` argv (program `npx`/`bunx` excluded).
 fn delegate_argv(
-    agent: &str,
+    agents: &[&str],
     skills: &[&Entry],
     global: bool,
     subset: bool,
@@ -494,9 +494,11 @@ fn delegate_argv(
         "skills".to_string(),
         "add".to_string(),
         repo.to_string(),
-        "--agent".to_string(),
-        agent.to_string(),
     ];
+    for agent in agents {
+        argv.push("--agent".to_string());
+        argv.push(agent.to_string());
+    }
     if global {
         argv.push("--global".to_string());
     }
@@ -541,7 +543,7 @@ fn build_plan(
             }
             Agent::Other(name) => items.push(AgentPlan::Delegate {
                 agent: name.clone(),
-                argv: delegate_argv(name, &selected, global, subset, repo),
+                argv: delegate_argv(&[name.as_str()], &selected, global, subset, repo),
             }),
         }
     }
@@ -825,7 +827,7 @@ pub(crate) fn install_for_claude(
 /// Extracted from `execute()` for reuse from the consolidated `install::run()`
 /// forward-step dispatch (SL-088 PHASE-02).
 pub(crate) struct InstallOtherArgs<'a> {
-    pub(crate) agent_name: &'a str,
+    pub(crate) agent_names: &'a [String],
     pub(crate) selected: &'a [&'a Entry],
     pub(crate) global: bool,
     pub(crate) repo: &'a str,
@@ -838,25 +840,26 @@ pub(crate) fn install_for_other(
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
     let subset = !args.selected.is_empty();
+    let agent_strs: Vec<&str> = args.agent_names.iter().map(|s| s.as_str()).collect();
     let argv = delegate_argv(
-        args.agent_name,
+        &agent_strs,
         args.selected,
         args.global,
         subset,
         args.repo,
     );
+    let label = args.agent_names.join(", ");
     writeln!(
         out,
-        "agent {} (delegate): {} {}",
-        args.agent_name,
+        "agents {label} (delegate): {} {}",
         args.runner_name,
         argv.join(" ")
     )?;
     if !args.runner.run(args.runner_name, &argv)? {
         bail!(
-            "{} skills failed for agent: {}",
-            args.runner_name,
-            args.agent_name
+            "{runner_name} skills failed for agents: {label}",
+            runner_name = args.runner_name,
+            label = label
         );
     }
     Ok(())
@@ -1631,7 +1634,7 @@ mod tests {
     #[test]
     fn delegate_argv_all_skills_omits_skill_flags() {
         let e = entry("review", "code-review");
-        let argv = delegate_argv("codex", &[&e], false, false, TEST_REPO);
+        let argv = delegate_argv(&["codex"], &[&e], false, false, TEST_REPO);
         assert_eq!(
             argv,
             vec!["skills", "add", TEST_REPO, "--agent", "codex", "--yes"]
@@ -1641,7 +1644,7 @@ mod tests {
     #[test]
     fn delegate_argv_subset_and_global() {
         let e = entry("review", "code-review");
-        let argv = delegate_argv("cursor", &[&e], true, true, TEST_REPO);
+        let argv = delegate_argv(&["cursor"], &[&e], true, true, TEST_REPO);
         assert_eq!(
             argv,
             vec![
@@ -1653,6 +1656,25 @@ mod tests {
                 "--global",
                 "--skill",
                 "code-review",
+                "--yes",
+            ]
+        );
+    }
+
+    #[test]
+    fn delegate_argv_multiple_agents() {
+        let e = entry("review", "code-review");
+        let argv = delegate_argv(&["pi", "codex"], &[&e], false, false, TEST_REPO);
+        assert_eq!(
+            argv,
+            vec![
+                "skills",
+                "add",
+                TEST_REPO,
+                "--agent",
+                "pi",
+                "--agent",
+                "codex",
                 "--yes",
             ]
         );
