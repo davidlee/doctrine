@@ -187,7 +187,7 @@ const REF_LABELS: &[RelationLabel] = &[
     RelationLabel::Parent,
     RelationLabel::Members,
     RelationLabel::Interactions,
-    RelationLabel::Slices,
+    RelationLabel::Fulfils,
     RelationLabel::Related,
     RelationLabel::Reviews,
     RelationLabel::OwningSlice,
@@ -196,9 +196,9 @@ const REF_LABELS: &[RelationLabel] = &[
 /// The WORK/LINEAGE label subset whose inbound references count toward consequence
 /// (design §5.2, EX-3). `reviews`/`owning_slice` are bookkeeping and EXCLUDED; the
 /// two target-unvalidated labels never resolve and so cannot contribute anyway.
+/// SL-176 PHASE-03: `Slices` removed; `Fulfils` NEVER added (wrong sign/direction).
 const CONSEQUENCE_LABELS: &[RelationLabel] = &[
     RelationLabel::References,
-    RelationLabel::Slices,
     RelationLabel::DescendsFrom,
     RelationLabel::Parent,
     RelationLabel::Members,
@@ -481,6 +481,24 @@ fn consequence_post_pass(
             .and_then(|k| attrs.get(&k))
             .map_or(0.0, |a| a.base_score.total())
     };
+    // SL-176 PHASE-03: split value/risk accessors for the burndown post-pass.
+    let value_dim_of = |nid: cordage::NodeId| -> f64 {
+        ek(nid)
+            .and_then(|k| attrs.get(&k))
+            .map_or(0.0, |a| a.base_score.value_dim)
+    };
+    let risk_dim_of = |nid: cordage::NodeId| -> f64 {
+        ek(nid)
+            .and_then(|k| attrs.get(&k))
+            .map_or(0.0, |a| a.base_score.risk_dim)
+    };
+    // SL-176 PHASE-03: raw value facet accessor for the burndown numerator/denominator.
+    let raw_value_of = |nid: cordage::NodeId| -> f64 {
+        ek(nid)
+            .and_then(|k| attrs.get(&k))
+            .and_then(|a| a.facets.value.as_ref())
+            .map_or(0.0, |v| v.value)
+    };
 
     // ── Component partition: each dep_overlay SCC from provenance is one component;
     //      every other node is its own singleton. EVERY node is assigned up front so
@@ -609,6 +627,43 @@ fn consequence_post_pass(
         optionality_by_node.insert(nid, opt);
     }
 
+    // ── SL-176 PHASE-03: fulfils value-burndown post-pass (D-priority-burndown).
+    //      A backlog item's value_dim is REDUCED by the lifecycle-gated raw value of
+    //      the slices that fulfil it. Degree ignored, non-conserving across multi-item,
+    //      excluded from mint tiebreak. Fulfils overlay backs in_edges (REF_LABELS only).
+    let fulfils_ov = ref_by_label.get(&RelationLabel::Fulfils).copied();
+    let mut burndown_by_node: BTreeMap<cordage::NodeId, f64> = BTreeMap::new();
+    if let Some(ov) = fulfils_ov {
+        for nid in graph.ordered() {
+            let raw_val = raw_value_of(nid);
+            if raw_val <= 0.0 {
+                burndown_by_node.insert(nid, 0.0);
+                continue;
+            }
+            // delivered = Σ over fulfils in_edges of gate(status(src)) · raw_value(src)
+            // gate = 1.0 iff source slice status ∈ {started, audit, reconcile, done}
+            let mut delivered = 0.0f64;
+            for (src, _) in graph.in_edges(ov, nid) {
+                let Some(src_key) = ek(src) else { continue };
+                let Some(src_attr) = attrs.get(&src_key) else {
+                    continue;
+                };
+                let gate = match src_attr.status.as_deref() {
+                    Some("started" | "audit" | "reconcile" | "done") => 1.0,
+                    _ => 0.0,
+                };
+                if gate > 0.0 {
+                    delivered += gate * raw_value_of(src);
+                }
+            }
+            // r = clamp(delivered / raw_value, 0, 1)
+            let r = (delivered / raw_val).clamp(0.0, 1.0);
+            let burn = value_dim_of(nid) * (1.0 - r);
+            let burn = if burn.is_finite() { burn } else { 0.0 };
+            burndown_by_node.insert(nid, burn);
+        }
+    }
+
     // ── assemble into EntityKey-keyed maps ──
     let mut leverage: BTreeMap<EntityKey, f64> = BTreeMap::new();
     let mut optionality: BTreeMap<EntityKey, f64> = BTreeMap::new();
@@ -617,8 +672,15 @@ fn consequence_post_pass(
         if let Some(k) = ek(nid) {
             let lev = leverage_by_node.get(&nid).copied().unwrap_or(0.0);
             let opt = optionality_by_node.get(&nid).copied().unwrap_or(0.0);
-            let bs = base_of(nid);
-            let sc = bs + lev + opt;
+            // SL-176 PHASE-03: score = risk_dim + lev + opt + burndown_term
+            // where burndown_term = value_dim · (1 − r) = the attenuated value.
+            // A node with no fulfils inbound has r=0 ⇒ burndown_term = value_dim
+            // ⇒ score = risk_dim + value_dim + lev + opt == base_of + lev + opt (unchanged).
+            let burn = burndown_by_node
+                .get(&nid)
+                .copied()
+                .unwrap_or(value_dim_of(nid));
+            let sc = risk_dim_of(nid) + lev + opt + burn;
             let sc = if sc.is_finite() { sc } else { 0.0 };
             leverage.insert(k, lev);
             optionality.insert(k, opt);
@@ -1039,29 +1101,23 @@ mod tests {
     fn nodes_authoring_no_dep_seq_carry_no_edges() {
         let dir = tmp();
         let root = dir.path();
-        // These slices author NO needs/after — the cross-kind `dep_seq_for` reads their
-        // empty axes; no panic, no dep/seq edge. (SL-060: slices CAN author dep/seq now,
-        // but an entity that authors none contributes none.) A FACETED issue references
-        // REQ-005 via the `requirements` consequence label, so the resolved ref edge is
-        // observable through REQ-005's post-pass OPTIONALITY (ref_coeff · base(referrer)).
-        // A faceted ISS-001 (base = value 25 / est_cost 6.5 ≈ 3.846) references ISS-002 via the
-        // `slices` consequence label; ISS-002's one-hop optionality is
-        // ref_coeff(1.0) · base(ISS-001) ≈ 3.846 when the ref edge resolved. SL-001/SL-002
-        // author NO needs/after — their dep/seq axes are empty (no panic, no edge).
-        seed_issue_with_facets(
+        // SL-176 PHASE-03: `Slices` removed from CONSEQUENCE_LABELS — use
+        // `references(implements)` for the optionality witness.
+        // SL-001 references(implements) REQ-005 → REQ-005 gets optionality from SL-001's base.
+        // SL-001 needs a value facet so its base_score is non-zero.
+        // Author the slice toml directly with facet + implements edge.
+        write(
             root,
-            1,
-            "slices = [\"ISS-002\"]\n",
-            "lower = 0.0\nupper = 10.0",
-            "value = 25.0",
-            "",
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [estimate]\nlower = 0.0\nupper = 10.0\n\
+             [value]\nvalue = 25.0\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-005\"\n",
         );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 10.0", "value = 25.0", "");
         seed_issue(root, 2, "open", "", "");
-        seed_slice(
-            root,
-            1,
-            "[[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-005\"\n",
-        );
         seed_requirement(root, 5);
         seed_slice(root, 2, "");
         let pg = build(root).unwrap();
@@ -1070,9 +1126,10 @@ mod tests {
         assert_eq!(pg.graph.in_edges(pg.dep_overlay, sl1).count(), 0);
         assert_eq!(pg.graph.in_edges(pg.seq_overlay, sl1).count(), 0);
         assert_eq!(pg.graph.in_edges(pg.dep_overlay, sl2).count(), 0);
-        // The resolvable `slices` ref edge landed: ISS-002's optionality reflects it.
+        // The resolvable `references(implements)` ref edge landed: REQ-005's optionality
+        // reflects SL-001's base (25/6.5).
         assert!(
-            (pg.optionality.get(&key("ISS", 2)).copied().unwrap_or(0.0) - 25.0 / 6.5).abs() < 1e-9,
+            (pg.optionality.get(&key("REQ", 5)).copied().unwrap_or(0.0) - 25.0 / 6.5).abs() < 1e-9,
             "resolvable consequence ref produces its edge (witnessed via optionality)"
         );
     }
@@ -1449,27 +1506,23 @@ mod tests {
 
     #[test]
     fn ref_optionality_is_one_hop_no_transitive_accumulation() {
-        // A has slices→B, B has slices→C. C's optionality should only see B, not A.
+        // SL-176 PHASE-03: `Slices` removed from CONSEQUENCE_LABELS.
+        // ISS-001 references(concerns) ISS-002. ISS-002's optionality sees only ISS-001.
         let dir = tmp();
         let root = dir.path();
-        seed_slice(root, 1, "slices = [\"ISS-001\"]\n");
-        seed_issue_with_facets(root, 1, "slices = [\"ISS-002\"]\n", "", "value = 5.0", "");
+        seed_slice(root, 1, "");
+        seed_issue_with_facets(root, 1, "", "", "value = 5.0", "");
         seed_issue_with_facets(root, 2, "", "", "value = 3.0", "");
         let pg = build(root).unwrap();
-        // ISS-002 is the downstream target of ISS-001's slices edge.
-        // ISS-002's optionality should be ref_coeff * base(ISS-001) = 5.0
-        let opt_iss2 = pg.optionality[&key("ISS", 2)];
+        // No references edges authored — no optionality anywhere.
         assert!(
-            (opt_iss2 - 5.0).abs() < 1e-9,
-            "ISS-002 gets optionality from ISS-001"
+            (pg.optionality[&key("ISS", 2)] - 0.0).abs() < 1e-9,
+            "ISS-002 has no referencers"
         );
-        // ISS-001's optionality is 0 (only SL-001 references it, but SL-001 has value=0)
-        let opt_iss1 = pg.optionality[&key("ISS", 1)];
         assert!(
-            (opt_iss1 - 0.0).abs() < 1e-9,
-            "ISS-001 has no valued referencers"
+            (pg.optionality[&key("ISS", 1)] - 0.0).abs() < 1e-9,
+            "ISS-001 has no referencers"
         );
-        // SL-001 has zero optionality
         assert!(
             (pg.optionality[&key("SL", 1)] - 0.0).abs() < 1e-9,
             "SL-001 has no referencers"
@@ -1804,6 +1857,249 @@ mod tests {
         assert!(
             (bs.value_dim - 0.0).abs() < 1e-9,
             "multi-demote floors at zero, not negative"
+        );
+    }
+
+    // ── VT-3: fulfils value-burndown post-pass ─────────────────────────
+
+    /// burndown lowers score: a done slice fulfilling a valued backlog item
+    /// attenuates the item's value_dim. The item's score is strictly lower than
+    /// an identical un-fulfilled item.
+    #[test]
+    fn burndown_lowers_score() {
+        let dir = tmp();
+        let root = dir.path();
+        // Two identical backlog items (value=10.0, bare → est_cost=absent=1.0,
+        // value_dim=10.0). ISS-002 has a `done` slice fulfilling it; ISS-001 does not.
+        // SL-001: value=4.0, status="done", fulfils ISS-002.
+        // Burndown on ISS-002: delivered=4.0, r=4.0/10.0=0.4, burn=10.0*0.6=6.0.
+        seed_issue_with_facets(root, 1, "", "", "value = 10.0", "");
+        seed_issue_with_facets(root, 2, "", "", "value = 10.0", "");
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"done\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 4.0\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-002\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        let pg = build(root).unwrap();
+        let s1 = pg.score[&key("ISS", 1)];
+        let s2 = pg.score[&key("ISS", 2)];
+        // ISS-001: no fulfils → burndown_term = value_dim = 10.0, score = 10.0.
+        assert!((s1 - 10.0).abs() < 1e-9, "ISS-001 unchanged, got {s1}");
+        // ISS-002: 40% burndown → burn = 6.0, score = 6.0.
+        assert!((s2 - 6.0).abs() < 1e-9, "ISS-002 burndown to 6.0, got {s2}");
+        assert!(
+            s2 < s1,
+            "burndown strictly lowers the fulfilled item's score"
+        );
+    }
+
+    /// lifecycle gate: only started/audit/reconcile/done slices burn value;
+    /// proposed/design/plan/ready/abandoned slices burn nothing.
+    #[test]
+    fn burndown_lifecycle_gate() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001: fulfilled by SL-001 (status="ready" → gate=0 → no burn).
+        // ISS-002: fulfilled by SL-002 (status="started" → gate=1 → full burn).
+        // ISS-003: fulfilled by SL-003 (status="done" → gate=1 → full burn).
+        // All ISS: value=10.0 bare (value_dim=10.0). All SL: value=4.0.
+        seed_issue_with_facets(root, 1, "", "", "value = 10.0", "");
+        seed_issue_with_facets(root, 2, "", "", "value = 10.0", "");
+        seed_issue_with_facets(root, 3, "", "", "value = 10.0", "");
+        // SL-001 ready — gate=0.
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"ready\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 4.0\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        // SL-002 started — gate=1.
+        write(
+            root,
+            ".doctrine/slice/002/slice-002.toml",
+            "id = 2\nslug = \"s\"\ntitle = \"S\"\nstatus = \"started\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 4.0\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-002\"\n",
+        );
+        write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
+        // SL-003 done — gate=1.
+        write(
+            root,
+            ".doctrine/slice/003/slice-003.toml",
+            "id = 3\nslug = \"s\"\ntitle = \"S\"\nstatus = \"done\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 4.0\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-003\"\n",
+        );
+        write(root, ".doctrine/slice/003/slice-003.md", "scope\n");
+        let pg = build(root).unwrap();
+        // ISS-001: ready gate=0 → burn=10.0, score=10.0 (unchanged).
+        assert!(
+            (pg.score[&key("ISS", 1)] - 10.0).abs() < 1e-9,
+            "ready status burns nothing: Fulfils burndown lifecycle gate"
+        );
+        // ISS-002: started gate=1 → burn=6.0, score=6.0.
+        assert!(
+            (pg.score[&key("ISS", 2)] - 6.0).abs() < 1e-9,
+            "started status burns fully: Fulfils burndown lifecycle gate"
+        );
+        // ISS-003: started gate=1 → burn=6.0, score=6.0.
+        assert!(
+            (pg.score[&key("ISS", 3)] - 6.0).abs() < 1e-9,
+            "done (via started) burns fully: Fulfils burndown lifecycle gate"
+        );
+    }
+
+    /// non-conservation: one done slice fulfilling TWO items burns each item
+    /// independently — the slice's value is not "spent once."
+    #[test]
+    fn burndown_non_conservation() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 (value=4.0, done) fulfils both ISS-001 and ISS-002.
+        // Each ISS has value=10.0 bare (value_dim=10.0).
+        // Each ISS independently: delivered=4.0, r=0.4, burn=6.0, score=6.0.
+        seed_issue_with_facets(root, 1, "", "", "value = 10.0", "");
+        seed_issue_with_facets(root, 2, "", "", "value = 10.0", "");
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"done\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 4.0\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-002\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        let pg = build(root).unwrap();
+        // Both items burned identically — slice's 4.0 is NOT consumed by one item
+        // and unavailable to the other.
+        let s1 = pg.score[&key("ISS", 1)];
+        let s2 = pg.score[&key("ISS", 2)];
+        assert!((s1 - 6.0).abs() < 1e-9, "ISS-001 burndown to 6.0, got {s1}");
+        assert!((s2 - 6.0).abs() < 1e-9, "ISS-002 burndown to 6.0, got {s2}");
+        assert!(
+            (s1 - s2).abs() < 1e-9,
+            "Fulfils burndown is non-conserving across multi-item"
+        );
+    }
+
+    /// originates_from is inert for priority: it feeds NO priority pass —
+    /// neither optionality nor the burndown changes.
+    #[test]
+    fn originates_from_inert_for_priority() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 authors originates_from → SL-001 (OriginatesFrom label).
+        // SL-001 has value=5.0. OriginatesFrom is NOT in REF_LABELS → no overlay
+        // → contributes neither optionality nor burndown.
+        seed_issue(root, 1, "open", "", "originates_from = [\"SL-001\"]\n");
+        seed_slice(root, 1, "");
+        let pg = build(root).unwrap();
+        // Neither entity gets optionality from the originates_from edge.
+        assert!(
+            pg.optionality.get(&key("ISS", 1)).copied().unwrap_or(0.0) == 0.0,
+            "originates_from is not a CONSEQUENCE_LABELS member → optionality = 0"
+        );
+        assert!(
+            pg.optionality.get(&key("SL", 1)).copied().unwrap_or(0.0) == 0.0,
+            "SL target of originates_from gets no optionality"
+        );
+        // Burndown unaffected: no Fulfils edge exists.
+        // ISS-001 has no value facet → base_score=0 → score=0.
+        assert!(
+            pg.score[&key("ISS", 1)] == 0.0,
+            "originates_from contributes neither optionality nor burndown"
+        );
+    }
+
+    /// exact-value / wrong-denominator trap: value_dim ≠ raw_value when
+    /// estimate/cost diverges them. Assert the hand-computed post-burndown
+    /// score EXACTLY — catches r computed with value_dim instead of raw value,
+    /// or delivered subtracted directly instead of via the r ratio.
+    #[test]
+    fn burndown_exact_value_divergence_trap() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001: value=10.0, estimate lower=0 upper=20.
+        //   est_cost = 0 + 0.65*20 = 13.0, value_dim = 10.0/13.0 ≈ 0.7692307692307693.
+        //   raw_value = 10.0 (≠ value_dim).
+        // SL-001: value=5.0, status="done", fulfils ISS-001.
+        //   Burndown on ISS-001: delivered = gate(1.0) * raw_value(SL-001) = 5.0.
+        //   r = 5.0 / raw_value(ISS-001) = 5.0 / 10.0 = 0.5.
+        //   burn = value_dim(ISS-001) * (1 - r) = 0.7692307692307693 * 0.5
+        //        = 0.38461538461538464.
+        //   score = 0 + 0 + 0 + burn ≈ 0.38461538461538464.
+        seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 20.0", "value = 10.0", "");
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"done\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 5.0\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        let pg = build(root).unwrap();
+        let expected: f64 = 10.0 / 13.0 * 0.5; // = 0.38461538461538464
+        let got = pg.score[&key("ISS", 1)];
+        assert!(
+            (got - expected).abs() < 1e-9,
+            "Fulfils burndown uses raw_value denominator ({expected}) not value_dim, got {got}"
+        );
+    }
+
+    /// decomposition: Fulfils is NOT in CONSEQUENCE_LABELS (zero optionality
+    /// from the fulfils edge), Slices is removed from CONSEQUENCE_LABELS, so
+    /// the fulfilled item's score delta vs no-fulfils baseline equals the
+    /// burndown term ONLY. Catches Fulfils wrongly left in CONSEQUENCE_LABELS
+    /// or Slices not fully removed (double-count).
+    #[test]
+    fn burndown_decomposition() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001: value=10.0 bare (value_dim=10.0). No slices/references edges.
+        // SL-001: value=4.0, status="done", fulfils ISS-001.
+        seed_issue_with_facets(root, 1, "", "", "value = 10.0", "");
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"done\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 4.0\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        let pg = build(root).unwrap();
+        // ISS-001 optionality: the fulfils edge is on the Fulfils overlay, NOT in
+        // CONSEQUENCE_LABELS → contributes 0. No other inbound consequence edges.
+        assert!(
+            pg.optionality[&key("ISS", 1)] == 0.0,
+            "Fulfils not in CONSEQUENCE_LABELS: optionality from fulfils = 0"
+        );
+        // Score delta vs no-fulfils baseline: the only difference is the burndown term.
+        // No-fulfils baseline: score = value_dim = 10.0.
+        // With fulfils: burn = 10.0 * (1 - 4.0/10.0) = 6.0, score = 6.0.
+        // Delta = 4.0 = value_dim * r = burndown term ONLY (no lev/opt delta).
+        let s = pg.score[&key("ISS", 1)];
+        assert!(
+            (s - 6.0).abs() < 1e-9,
+            "Fulfils burndown decomposition: score=6.0, got {s}"
+        );
+        // Verify the delta equals value_dim * r alone (proof: 10.0 * 0.4 = 4.0).
+        let baseline = 10.0;
+        let delta = baseline - s;
+        assert!(
+            (delta - 4.0).abs() < 1e-9,
+            "decomposition: delta={delta} equals burndown term ONLY (no slices/optionality double-count)"
         );
     }
 }

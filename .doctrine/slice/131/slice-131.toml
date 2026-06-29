@@ -11,12 +11,12 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IDE-012"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IMP-111"
 
 [[relation]]

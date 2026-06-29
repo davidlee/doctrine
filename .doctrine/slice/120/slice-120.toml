@@ -11,7 +11,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IMP-117"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed

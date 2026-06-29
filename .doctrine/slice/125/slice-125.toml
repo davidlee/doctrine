@@ -15,8 +15,13 @@ target = "ADR-006"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IMP-046"
+
+[[relation]]
+label = "fulfils"
+degree = "partial"
+target = "ISS-011"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

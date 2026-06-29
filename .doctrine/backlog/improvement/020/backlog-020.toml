@@ -20,9 +20,6 @@ triggers = []                   # watched source globs: { globs, note? }
 value = 2.0
 
 [[relation]]
-label = "slices"
+label = "references"
+role = "originates_from"
 target = "SL-036"
-
-[[relation]]
-label = "slices"
-target = "SL-140"

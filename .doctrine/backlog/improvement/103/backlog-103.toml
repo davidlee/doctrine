@@ -21,5 +21,6 @@ after    = [{ to = "IMP-101", rank = 0 }]                   # item→item soft s
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
-label = "slices"
+label = "references"
+role = "originates_from"
 target = "SL-121"

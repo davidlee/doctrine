@@ -16,7 +16,7 @@ target = "SPEC-020"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IDE-013"
 
 [estimate]

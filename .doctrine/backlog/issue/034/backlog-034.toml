@@ -19,7 +19,3 @@ tags = ["area:dispatch", "area:harness", "area:worktree", "scope:claude-arm"]
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "ISS-031", rank = 1 }] # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "slices"
-target = "SL-123"

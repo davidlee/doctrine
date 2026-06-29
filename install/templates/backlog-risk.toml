@@ -17,8 +17,9 @@ impact     = ""                 # low | medium | high | critical
 origin     = ""
 controls   = []
 
-# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
-# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
 # `doctrine link RSK-NNN <label> <target>`; `doctrine inspect RSK-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]

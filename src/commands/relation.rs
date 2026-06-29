@@ -25,13 +25,15 @@ fn resolve_link_path(
     source: &str,
     label: &str,
     role: Option<crate::relation::Role>,
+    degree: Option<crate::relation::Degree>,
 ) -> anyhow::Result<(PathBuf, &'static crate::relation::RelationRule)> {
     let (kref, id) = crate::integrity::parse_canonical_ref(source)?;
     // SL-149 PHASE-04c: the parsed `--role` flows into the legality gate. `validate_link`
     // yields `MissingRole` (a roleful `references` with no role), `RoleNotApplicable`
     // (a role on a label-only label), or `IllegalRole` (a role outside the source's
-    // legal set); the surviving `rule` is the `(source, label, role)` row.
-    let rule = crate::relation::validate_link(kref.kind, label, role)?;
+    // legal set); SL-176 PHASE-02: `DegreeNotApplicable` for degree on a non-`fulfils`
+    // label. The surviving `rule` is the `(source, label, role)` row.
+    let rule = crate::relation::validate_link(kref.kind, label, role, degree)?;
     let toml_path = crate::entity::id_path(root, kref.kind, id, crate::entity::Ext::Toml);
     Ok((toml_path, rule))
 }
@@ -43,11 +45,23 @@ fn parse_role(role: Option<&str>) -> anyhow::Result<Option<crate::relation::Role
     role.map(|name| {
         crate::relation::Role::from_name(name).ok_or_else(|| {
             anyhow::anyhow!(
-                "`{name}` is not a known role (expected: implements, scoped_from, concerns)"
+                "`{name}` is not a known role (expected: implements, originates_from, concerns)"
             )
         })
     })
     .transpose()
+}
+
+/// Parse the optional `--degree <DEGREE>` flag into a [`Degree`](crate::relation::Degree),
+/// erroring on an unknown spelling. `None` ⇒ no flag given ≡ Full.
+fn parse_degree(degree: Option<&str>) -> anyhow::Result<Option<crate::relation::Degree>> {
+    degree
+        .map(|name| {
+            crate::relation::Degree::from_name(name).ok_or_else(|| {
+                anyhow::anyhow!("`{name}` is not a known degree (expected: full, partial)")
+            })
+        })
+        .transpose()
 }
 
 /// `doctrine link <SOURCE-ID> <LABEL> <TARGET>` (SL-048 §5.4) — author a tier-1
@@ -61,12 +75,14 @@ pub(crate) fn run_link(
     source: &str,
     label: &str,
     role: Option<&str>,
+    degree: Option<&str>,
     target: &str,
 ) -> anyhow::Result<()> {
     use anyhow::Context;
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let role = parse_role(role)?;
+    let degree = parse_degree(degree)?;
 
     // Memory branch — detect mem_<uid> / mem.<key> / mem_<prefix> sources
     // and route to memory.toml relations (SL-090 §PHASE-03). Memory edges are
@@ -100,7 +116,7 @@ pub(crate) fn run_link(
         return Ok(());
     }
 
-    let (toml_path, rule) = resolve_link_path(&root, source, label, role)?;
+    let (toml_path, rule) = resolve_link_path(&root, source, label, role, degree)?;
     // Forward-edge validation (§5.5): free-text labels skip both gates; validated
     // labels must resolve AND be of a legal target kind.
     if !matches!(rule.target, crate::relation::TargetSpec::Unvalidated) {
@@ -109,7 +125,7 @@ pub(crate) fn run_link(
         let (skref, _sid) = crate::integrity::parse_canonical_ref(source)?;
         crate::relation::check_target_kind(rule, skref.kind, tkref.kind.prefix)?;
     }
-    let outcome = crate::relation::append_edge(&toml_path, rule.label, rule.role, target)?;
+    let outcome = crate::relation::append_edge(&toml_path, rule.label, rule.role, degree, target)?;
     match outcome {
         crate::relation::AppendOutcome::Wrote => {
             writeln!(std::io::stdout(), "linked: {source} {label} {target}")?;
@@ -352,7 +368,7 @@ pub(crate) fn run_unlink(
         return Ok(());
     }
 
-    let (toml_path, rule) = resolve_link_path(&root, source, label, role)?;
+    let (toml_path, rule) = resolve_link_path(&root, source, label, role, None)?;
     let outcome = crate::relation::remove_edge(&toml_path, rule.label, rule.role, target)?;
     match outcome {
         crate::relation::RemoveOutcome::Removed => {
@@ -436,6 +452,7 @@ mod tests {
             "ADR-001",
             "related",
             None,
+            None,
             "ADR-002",
         )
         .unwrap();
@@ -455,6 +472,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             "SL-001",
         )
@@ -480,6 +498,7 @@ mod tests {
             MEM_TEST_UID,
             "related",
             None,
+            None,
             "SL-001",
         )
         .unwrap();
@@ -488,6 +507,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             "SL-001",
         )
@@ -512,6 +532,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             "SL-001",
         )
@@ -551,6 +572,7 @@ mod tests {
             MEM_TEST_UID,
             "related",
             None,
+            None,
             "SL-999",
         );
         assert!(result.is_err());
@@ -568,6 +590,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             "https://example.com",
         )
@@ -591,6 +614,7 @@ mod tests {
             "SL-001",
             "related",
             None,
+            None,
             "SL-002",
         )
         .unwrap();
@@ -611,6 +635,7 @@ mod tests {
             Some(root.to_path_buf()),
             "mem.fact.cli.skinny",
             "related",
+            None,
             None,
             "SL-001",
         )
@@ -664,6 +689,7 @@ mod tests {
             "SL-001",
             "references",
             Some("implements"),
+            None,
             "SPEC-001",
         )
         .unwrap();
@@ -728,6 +754,7 @@ mod tests {
             "SL-001",
             "references",
             Some("concerns"),
+            None,
             "SL-002",
         )
         .unwrap();
@@ -738,7 +765,7 @@ mod tests {
             Some(root.to_path_buf()),
             "SL-001",
             "references",
-            Some("scoped_from"),
+            Some("originates_from"),
             "SL-002",
         )
         .unwrap();
@@ -778,6 +805,7 @@ mod tests {
             "SL-001",
             "references",
             None,
+            None,
             "SPEC-001",
         );
         let err = result.unwrap_err().to_string();
@@ -801,6 +829,7 @@ mod tests {
             "SL-001",
             "governed_by",
             Some("implements"),
+            None,
             "ADR-001",
         );
         let err = result.unwrap_err().to_string();
@@ -826,6 +855,7 @@ mod tests {
             "SL-001",
             "references",
             Some("concerns"),
+            None,
             "SL-002",
         )
         .unwrap();
@@ -837,6 +867,7 @@ mod tests {
             "SL-001",
             "references",
             Some("implements"),
+            None,
             "SL-002",
         );
         assert!(result.is_err(), "implements → a slice target is refused");
@@ -854,6 +885,7 @@ mod tests {
             "SL-001",
             "references",
             Some("realises"),
+            None,
             "SPEC-001",
         );
         let err = result.unwrap_err().to_string();

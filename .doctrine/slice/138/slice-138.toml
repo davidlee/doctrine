@@ -9,11 +9,6 @@ updated = "2026-06-26"
 needs = []                      # slice→work hard prerequisite
 after = [{ to = "SL-137", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
-[[relation]]
-label = "references"
-role = "concerns"
-target = "RFC-002"
-
 [[selector]]
 selector = "crates/cordage/src/query.rs"
 intent = "design-target"
@@ -33,6 +28,15 @@ intent = "design-target"
 [[selector]]
 selector = "src/commands/cli.rs"
 intent = "design-target"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-002"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-138"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

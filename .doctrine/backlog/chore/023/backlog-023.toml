@@ -21,9 +21,6 @@ after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
-label = "drift"
-target = "SL-143: carved out from shipped-memory corpus overhaul"
-
-[[relation]]
-label = "slices"
-target = "SL-144"
+label = "references"
+role = "originates_from"
+target = "SL-143"
