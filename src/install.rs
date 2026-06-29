@@ -349,6 +349,8 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
     // 3. Skills per agent
     let catalog = crate::skills::discover()?;
     let selected = crate::skills::select_for_install(&catalog, args.skills, args.domains)?;
+    let (runner_name, runner) = crate::skills::resolve_runner();
+    let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
 
     for agent in &agents {
         let question: String = if agent == "claude" {
@@ -383,15 +385,13 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             // operator via printed post-install instructions (see end of fn).
         } else {
             let mut out = io::stdout();
-            let (runner_name, runner) = crate::skills::resolve_runner();
-            let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
             if let Err(e) = crate::skills::install_for_other(
                 &crate::skills::InstallOtherArgs {
                     agent_name: agent,
                     selected: &selected,
                     global: args.global,
                     repo,
-                    runner: runner.as_ref(),
+                    runner: &runner,
                     runner_name,
                 },
                 &mut out,
@@ -416,9 +416,8 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
     // settings-wired — they double-fired with the plugin). Delegate wiring to
     // the operator via printed instructions. Non-Claude skills are handled
     // live by the per-agent loop above.
-    let repo = crate::dtoml::load_doctrine_toml(root)?.install.repo;
     let has_claude = agents.iter().any(|a| a == "claude");
-    if let Some(block) = post_install_instructions(has_claude, &repo) {
+    if let Some(block) = post_install_instructions(has_claude, repo) {
         let mut out = io::stdout();
         writeln!(out)?;
         writeln!(out, "{block}")?;

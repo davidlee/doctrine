@@ -54,19 +54,28 @@ const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET
 const RUNNER_BUNX: &str = "bunx";
 const RUNNER_NPX: &str = "npx";
 
-/// Resolve the delegated skills runner: try `bunx` first, fall back to `npx`.
-/// Returns the program name and a Runner. Pure — no IO beyond `which`.
-pub(crate) fn resolve_runner() -> (&'static str, Box<dyn Runner>) {
-    if std::process::Command::new(RUNNER_BUNX)
+fn program_available(prog: &str) -> bool {
+    std::process::Command::new(prog)
         .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
-    {
-        (RUNNER_BUNX, Box::new(Bunx))
+}
+
+/// Resolve the delegated skills runner: try `bunx` first, fall back to `npx`.
+/// Returns the program name and a concrete runner.
+pub(crate) fn resolve_runner() -> (&'static str, ProcessRunner) {
+    resolve_runner_with(&program_available)
+}
+
+/// Same as `resolve_runner()` but with an injectable availability check.
+/// The `check` predicate returns `true` when a program is available.
+fn resolve_runner_with(check: &dyn Fn(&str) -> bool) -> (&'static str, ProcessRunner) {
+    if check(RUNNER_BUNX) {
+        (RUNNER_BUNX, ProcessRunner { name: RUNNER_BUNX })
     } else {
-        (RUNNER_NPX, Box::new(Npx))
+        (RUNNER_NPX, ProcessRunner { name: RUNNER_NPX })
     }
 }
 
@@ -556,8 +565,9 @@ fn parse_agent(s: &str) -> Agent {
 }
 
 /// Resolve target agents: explicit list, else auto-detect by marker
-/// (`.claude/` → Claude; `.codex/` or a non-Claude-alias `AGENTS.md` → codex).
-/// Mirrors `boot::resolve_harnesses` — the two must stay in sync.
+/// (`.claude/` → Claude; `.codex/` → codex; `.pi/` → pi; `.agents/` → universal;
+/// non-Claude-alias `AGENTS.md` → codex).
+/// Mirrors `boot::resolve_harnesses` and `install::detect_agents` — all three must stay in sync.
 fn resolve_agents(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Agent>> {
     if !explicit.is_empty() {
         return Ok(explicit.iter().map(|s| parse_agent(s)).collect());
@@ -577,10 +587,16 @@ fn resolve_agents(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Agent>
     if root.join(".codex").exists() || (agents.exists() && !agents_is_claude_alias) {
         found.push(Agent::Other("codex".into()));
     }
+    if root.join(".pi").exists() {
+        found.push(Agent::Other("pi".into()));
+    }
+    if root.join(".agents").exists() {
+        found.push(Agent::Other("universal".into()));
+    }
     if found.is_empty() {
         bail!(
-            "No --agent given and no .claude/ or .codex/ (or AGENTS.md) found. \
-             Pass --agent <name> (e.g. claude, codex, cursor)."
+            "No --agent given and no .claude/, .codex/, .pi/, or .agents/ (or AGENTS.md) found. \
+             Pass --agent <name> (e.g. claude, codex, pi, cursor)."
         );
     }
     Ok(found)
@@ -598,27 +614,16 @@ pub(crate) trait Runner: std::fmt::Debug {
 
 /// Real runner: spawns the process and inherits stdio.
 #[derive(Debug)]
-struct Npx;
-
-impl Runner for Npx {
-    fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool> {
-        let status = std::process::Command::new(program)
-            .args(args)
-            .status()
-            .with_context(|| format!("Failed to run '{program}' (is Node installed?)"))?;
-        Ok(status.success())
-    }
+pub(crate) struct ProcessRunner {
+    name: &'static str,
 }
 
-#[derive(Debug)]
-struct Bunx;
-
-impl Runner for Bunx {
+impl Runner for ProcessRunner {
     fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool> {
         let status = std::process::Command::new(program)
             .args(args)
             .status()
-            .with_context(|| format!("Failed to run '{program}' (is Bun installed?)"))?;
+            .with_context(|| format!("Failed to run '{program}' (is {} installed?)", self.name))?;
         Ok(status.success())
     }
 }
@@ -867,12 +872,6 @@ pub(crate) fn select_for_install<'a>(
 ) -> anyhow::Result<Vec<&'a Entry>> {
     validate_filters(catalog, skills, domains)?;
     Ok(select(catalog, skills, domains))
-}
-
-/// Real runner for the forwarding install path.
-#[expect(dead_code, reason = "retained for dispatch worktree compatibility")]
-pub(crate) fn real_runner() -> Box<dyn Runner> {
-    resolve_runner().1
 }
 
 /// Public wrapper for `install_agent_def`.
@@ -1126,7 +1125,7 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     // `--global` ignores its $HOME tree rather than the project (SL-010 B1).
     crate::install::ensure_gitignored(&install_base(&root, args.global)?, ".doctrine/skills/*")?;
     let (runner_name, runner) = resolve_runner();
-    execute(&plan, &catalog, runner.as_ref(), runner_name, &mut out)?;
+    execute(&plan, &catalog, &runner, runner_name, &mut out)?;
 
     // Agents leg + SubagentStart hook are Claude-surface-only: install them iff
     // Claude is a resolved target (skip a codex-only / global-npx install).
@@ -1712,6 +1711,40 @@ mod tests {
     fn resolve_agents_errors_without_target() {
         let dir = tempfile::tempdir().unwrap();
         assert!(resolve_agents(&[], dir.path()).is_err());
+    }
+
+    // --- plan ---
+
+    #[test]
+    fn resolve_agents_detects_pi_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".pi")).unwrap();
+        assert_eq!(
+            resolve_agents(&[], dir.path()).unwrap(),
+            vec![Agent::Other("pi".into())]
+        );
+    }
+
+    #[test]
+    fn resolve_agents_detects_universal_for_dot_agents_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agents")).unwrap();
+        assert_eq!(
+            resolve_agents(&[], dir.path()).unwrap(),
+            vec![Agent::Other("universal".into())]
+        );
+    }
+
+    #[test]
+    fn resolve_runner_with_bunx_available() {
+        let (name, _runner) = resolve_runner_with(&|prog| prog == "bunx");
+        assert_eq!(name, RUNNER_BUNX);
+    }
+
+    #[test]
+    fn resolve_runner_with_falls_back_to_npx() {
+        let (name, _runner) = resolve_runner_with(&|_prog| false);
+        assert_eq!(name, RUNNER_NPX);
     }
 
     // --- plan ---
