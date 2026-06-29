@@ -5,10 +5,10 @@ id = 143
 slug = "merge-sl-110-rev-2-pencil-model-ux-rework-from-candidate110review-001-into-main"
 title = "merge SL-110 Rev 2 pencil-model UX rework from candidate/110/review-001 into main"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-06-29"
 tags = ["area:concept-map", "area:ux", "area:web-map"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
