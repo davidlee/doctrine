@@ -107,8 +107,8 @@ push-main:
   git push . edge:main
 
 # lazy .doctrine commit to clear the decks
-commit-doctrine: readme-index
-  git reset && git add README.md .doctrine && git add .doctrine/ && git ci -m doctrine
+commit-doctrine:# readme-index
+  git reset && git add .doctrine/ && git ci -m doctrine
 
 # Push local edge and main to origin — works from any branch
 push-upstream:
@@ -125,7 +125,7 @@ release-check: gate nix-build
 # NB: pushing the `v*` tag triggers .github/workflows/release.yml, which builds
 # and publishes the prebuilt macOS binaries to the GitHub Release (SL-174).
 # Cut a release: bump version, run the pre-release gate, commit + tag the chore.
-release bump: readme-index
+release bump: # readme-index
   #!/usr/bin/env bash
   set -euo pipefail
   git diff --quiet -- Cargo.toml Cargo.lock || { echo "release: Cargo.toml/Cargo.lock already modified — commit or revert first" >&2; exit 1; }
