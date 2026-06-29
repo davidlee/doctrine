@@ -12,19 +12,67 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/relation.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
 
 [[selector]]
 selector = "src/relation_graph.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
 
 [[selector]]
 selector = "src/commands/relation.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
 
 [[selector]]
 selector = "install/templates/*.toml"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/relation_query.rs"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "src/catalog/hydrate.rs"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "src/catalog/graph.rs"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "src/lazyspec.rs"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "install/templates/slice.toml"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "install/templates/backlog.toml"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
+
+[[selector]]
+selector = "tests/e2e_relation_*.rs"
+intent = "design-target"
+note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
 
 [[relation]]
 label = "governed_by"

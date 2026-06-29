@@ -44,8 +44,8 @@ degree facet).
   on `drift` and are deferred to that future edge (IMP-012 / IDE-015). `drift` is **not**
   fully retired by this slice.
 - **The close-cascade consumer** — making `doctor` / `/close` *act* on `fulfils(full)`
-  as a closure hint is a consumer change. Decide in design whether a minimal hint is
-  in-scope or spun out; the cascade must stay **hint-not-auto** (F-6) regardless.
+  as a closure hint. **DECIDED (design): spun out → IMP-210.** Not in this slice; hint-not-
+  auto (F-6) regardless.
 - **Axis D** (`part_of` / altitude), **`influences` planes**, **`exclusive_with`**,
   **prose-hunt**, and the **vocabulary-evolution feedback loop** — all deferred (RFC-003
   Deferred set).
@@ -66,22 +66,30 @@ degree facet).
 
 ## Risks / assumptions / open questions
 
-- **`fulfils` storage + write seam.** Tier-1 with a degree column, or tier-2 typed
-  payload (like `interactions`' free-text `type`)? `LinkPolicy` — `Writable` with a
-  `--degree` flag, or a typed verb? Threading a *facet* (not just a role) through the
-  seam is the novel work; SL-149 only added the role column. **Design decision.**
-- **`scoped_from` → `originates_from`: rename vs add+migrate.** Rename the enum variant
-  in place (one wire-name change + edge migration) vs add new role and migrate. SL-149
-  precedent informs this.
-- **Author-at-the-mutable-end** is a *new modelled property* — the authoring end is
-  dictated by lifecycle state, not a fixed source kind. Is it enforced or convention?
-  ADR-004 (outbound-only) still holds; this refines *which* end is outbound.
-- **`{full, partial}` does not aggregate** (two partials ≠ full) — by design. Item
-  completion over a set of inbound `fulfils` edges is a judgement, not arithmetic.
-- **Behaviour-preservation gate** — the entity-engine suites must stay green; this rides
-  the existing relation seam (no parallel implementation).
-- **Dogfooding wrinkle.** This slice will itself carry `slices`/`originates_from` edges
-  to IMP-207/IMP-149; its own migration must remain self-consistent.
+The six open design questions are **resolved in `design.md`** (decision ledger). Summary:
+
+- **`fulfils` storage** → Tier-1 + `degree: Option<Degree>` column + `link --degree`
+  (mirrors SL-149's `role`; degree is non-keyed payload). Tier-2 typed rejected.
+- **`scoped_from` → `originates_from`** → rename role variant in place; widen source/target.
+  Parallel naming with the REV→RFC `originates_from` *label* accepted (different namespaces).
+- **Author-at-the-mutable-end** → **convention** + source-set partial fence (`fulfils`
+  SL-only structurally forces slice-end); no lifecycle enforcement (residual R9).
+- **`{full, partial}` does not aggregate** — held; `None` degree ≡ full.
+- **Close-cascade** → spun out (IMP-210). **Drift** entity rows → `originates_from` /
+  `needs`-`after`; 5 free-text deferred.
+
+Standing assumptions / risks:
+
+- **Behaviour-preservation gate** — entity-engine suites stay green; `append_edge` upsert
+  is a no-op for roleless/degreeless edges (SR-6). No parallel implementation.
+- **Migration is per-edge, re-censused live** (SL-149 AR-1) — the prov-vs-fulfil split over
+  82 `slices` is human judgement; IMP-207's 19 are reference, not input.
+- **Dogfooding** — SL-176's own edges migrate self-consistently; the design-authored
+  `IMP-210 references(concerns) SL-176` edge is provenance-shaped (may retcon).
+
+**Follow-ups captured:** IMP-210 (close-cascade hint consumer), IMP-156 (create-time
+`--originates-from` flag). Reconciliation: ratifying ADR + SPEC-018 + `relation-
+vocabulary.md` + close RFC-003.
 
 ## Verification / closure intent
 
