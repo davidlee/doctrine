@@ -503,7 +503,7 @@ usage (`cargo test` does).
   module layering, not dependency admission; the project adds libraries
   (`clap`/`serde`/`glob`/…) at slice altitude without ADRs. `bm25` is a scoped
   scoring implementation detail, not a project-global architecture decision (unlike
-  the the external decision register event-store backend, which is an ADR). If the user disagrees,
+  the memory storage-backend decision, which is an ADR). If the user disagrees,
   promote to `doctrine adr new` before PHASE-01.
 - **Storage rule / float ban — respected.** Score is derived, never stored; no
   `f32` in payload/export/backend; no new persisted field (R3, by construction).

@@ -160,7 +160,7 @@ storage out by governance.
   `fs::create_dir`, not a `Claim` backend. Supersedes the SL-005 D7 named+numeric
   unification (the enrichment made `ClaimCtx` numeric-shaped). Memory's remote
   future is a separate storage seam (design OQ-6, `scratch/memory-contract.local.md`
-  — the external decision register HTTP), not the reservation `Claim`.
+  — a future HTTP backend), not the reservation `Claim`.
 - **Jail relaxation for network e2e** — relax the bubblewrap jail's git-push block
   to dev/test the backend against a real network remote (e.g. GitHub). Dev-only;
   not a CI dependency.

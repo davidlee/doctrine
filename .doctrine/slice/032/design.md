@@ -41,7 +41,7 @@ Out: raw-tree confinement (D2b, ADR-008); the funnel itself (SL-031).
 - **CLI dispatch.** One central `match cli.command` in `main()`
   (`src/main.rs:870`); each write verb calls a `*::run_*` handler.
 - **Commits.** Doctrine creates **no** commits in production paths (the `commit`
-  tokens in `src/git.rs` are the the external decision register event-store verb enum + test
+  tokens in `src/git.rs` are the frozen-frame verb enum + test
   helpers). D2a's "doctrine-driven commits" is therefore moot today.
 - **Worktree detection.** `src/worktree.rs` does **not** expose a self-detection
   seam (X8): `verify_sibling_worktree` (private, `:286`) checks whether *two* trees

@@ -79,11 +79,10 @@ the payload, never in the substrate schema):
 `record` mints the uid, constructs the git context frame, writes the scope
 (`paths`/`globs`/`commands`/`tags`) and the captured anchor, and scaffolds the item;
 `memory new` is the uniform-grammar alias dispatching the identical handler. The git
-frame is built by Doctrine, never inferred by any backend, and the algorithm is
-frozen and shared with the interop counterparty (`the external decision register`): `src/git.rs`
-reproduces `GitContextFrameV1` (normalizer tags `forget.remote.v1` /
-`forget.checkout.v1`) byte-for-byte, so a Doctrine record and a backend claim derive
-identical ids and dedup at the seam. The frame derives `repo_id` by precedence
+frame is built by Doctrine and the algorithm is
+frozen: `src/git.rs` implements `GitContextFrameV1` (normalizer tags
+`forget.remote.v1` / `forget.checkout.v1`) under byte-stable rules, so the same
+fileset always derives identical ids and records dedup at the frame seam. The frame derives `repo_id` by precedence
 explicit → remote → local-root (ambiguous multi-remote is an error, not a guess),
 hashes a content-bearing `checkout_state_id` for a dirty tree (so distinct edits to
 one fileset do not collide), keeps born / unborn / non-repo as three distinct
@@ -181,10 +180,9 @@ not a new memory type.
   UUID and the engine's named materialiser; this is the caller that forced the second
   identity shape, and the reason lives here while the mechanism lives in the parent
   engine.
-- **D2 — the git frame algorithm is frozen and shared.** `src/git.rs` reproduces
-  the external decision register's `GitContextFrameV1` byte-for-byte under fixed normalizer tags so a
-  Doctrine record and a backend claim derive identical ids; the frame is built by
-  Doctrine and never inferred by any backend.
+- **D2 — the git frame algorithm is frozen.** `src/git.rs` implements
+  `GitContextFrameV1` byte-for-byte under fixed normalizer tags so the same fileset
+  always derives identical ids; the frame is built by Doctrine.
 - **D3 — verification is a separate axis from lifecycle status.** A memory's
   `active`/`draft`/… status and its `unverified`/`verified`/`stale`/`disputed`
   verification state are orthogonal; verification is advanced by `verify`/review, never

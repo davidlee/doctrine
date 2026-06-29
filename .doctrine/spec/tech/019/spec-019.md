@@ -46,8 +46,8 @@ positional on capture and the kebab serde of the stored `record_kind` field.
 
 The `DEC` prefix is **dual-namespaced**, deliberately (D8): the numbered decision kind is
 the **2-part** form `DEC-NNN` (`DEC-003`); the entrenched **3-part** `DEC-NNN-XX` refs
-already in the corpus (`DEC-005-C`, `DEC-010-06`) are *external* the external decision register
-decision-log citations, not doctrine entities — they stay free-text prose and are never
+already in the corpus (`DEC-005-C`, `DEC-010-06`) are *external* decision-log
+citations, not doctrine entities — they stay free-text prose and are never
 renumbered. The shipped `DecisionRef` Unvalidated label and `rec.decision_ref`, which
 carry those external refs today, are disambiguated inside the DEC-kind slice, not here.
 
@@ -418,8 +418,8 @@ plus per-verb black-box goldens.
   layer keeps `blocked_by` predecessors `!= Terminal`). No new relation vocabulary.
 - **D8 — `DEC` is dual-namespaced; the decision kind takes the 2-part form, external
   citations keep the 3-part.** The numbered decision kind is `DEC-NNN` (2-part); the
-  entrenched `DEC-NNN-XX` (3-part) refs in the corpus are *external* the external decision register
-  decision-log citations, not doctrine entities, and stay free-text prose — never
+  entrenched `DEC-NNN-XX` (3-part) refs in the corpus are *external* decision-log
+  citations, not doctrine entities, and stay free-text prose — never
   renumbered (provenance). The shipped `DecisionRef` Unvalidated label and
   `rec.decision_ref`, which carry those external refs today, are disambiguated inside the
   DEC-kind slice (the stale "DEC is not a numbered kind" comment, the test fixtures, the

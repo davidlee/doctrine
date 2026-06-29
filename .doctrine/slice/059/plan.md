@@ -58,7 +58,7 @@ surface byte-for-byte.
 The `decision_ref` disambiguation is only *warranted* once DEC is a numbered
 2-part kind (PHASE-02) — before that the 2-part `DEC-NNN` form is unambiguous and
 there is nothing to clarify. The edits are clarity-only: the label stays
-`Unvalidated`, so external 3-part the external decision register cites survive untouched, and the
+`Unvalidated`, so external 3-part decision-log cites survive untouched, and the
 fixture edits move value and assertion in lockstep — no engine behaviour
 changes. The authored-entity install/gitignore plumbing rides here too; it need
 not precede the earlier phases (their tests run in temp dirs that never touch the

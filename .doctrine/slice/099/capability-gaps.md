@@ -101,5 +101,5 @@ supersession, or archival lifecycle verbs for memories.
   `RelationLabel` for numbered entities. This is documented in
   `mem.pattern.link.memory-label-fork` and is intentional.
 - **Storage model.** TOML + MD, no database — matches the spec-driver
-  file-memory model. The the external decision register compatibility contract
-  (`memory-contract.local.md`) describes a future backend, not a current gap.
+  file-memory model. The frozen-frame compatibility contract
+  (`memory-contract.local.md`) describes future work, not a current gap.

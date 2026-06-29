@@ -56,7 +56,7 @@ the living prose, not by reasoning from the armchair:
 - **The 3-part exclusion rested on a misread (F-1, F-4).** The existing
   whole-token primitive treats `-` as no boundary, so it matches `DEC-005` inside
   `DEC-005-C` — the "skip 3-part" rule would never have fired. And the *reason*
-  given (the external decision register decision cites) was the minority case; the corpus is ruled by
+  given (external decision cites) was the minority case; the corpus is ruled by
   `SL-048-style`/`IMP-006-gated` compound adjectives. A new maximal-token scanner
   is now mandated and its tests pinned.
 

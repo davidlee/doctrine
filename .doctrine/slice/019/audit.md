@@ -22,7 +22,7 @@ template reword `dd95d3b`; skill rework `77c9795`.
 | 7 | Storage rule: no taxonomy/source-map artifact committed under `doc/` or `slice/019/` (CHARGE VII; PHASE-05 EX-4, VT-3) | committed diff touches only `.doctrine/spec` + `.doctrine/requirement` + template + skill; `slice/019/` dir is untracked scaffolding | `git show --stat` of the 3 commits | **aligned** |
 | 8 | Template §4 reworded + committed *before* any spec scaffolded (CHARGE V; PHASE-02 VT-3) | `dd95d3b` reworded §4 to "Constraints and invariants. (…REQ entities…)"; corpus committed later in `7fc3aad` | commit order | **aligned** |
 | 9 | `just check` green (PHASE-05 EX-4; design §7) | EXIT=0 — fmt + clippy + full test suite + build all pass | `just check` (recipe: fmt lint test build) | **aligned** |
-| 10 | Specs are durable *what/why*, not *how*; altitude holds (design §6, §9 "source skew" risk) | independent read of PRD-001 (exemplar) and PRD-005 (most mechanism-prone): need/value framing, observable behaviour, mechanism deferred to doc/*; no `the external decision register`/`mkdir`/git internals leaking up | auditor read of `spec show` | **aligned** |
+| 10 | Specs are durable *what/why*, not *how*; altitude holds (design §6, §9 "source skew" risk) | independent read of PRD-001 (exemplar) and PRD-005 (most mechanism-prone): need/value framing, observable behaviour, mechanism deferred to doc/*; no `mkdir`/git internals leaking up | auditor read of `spec show` | **aligned** |
 
 ## Findings requiring disposition
 

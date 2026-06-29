@@ -96,7 +96,7 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "M1: `mem_019ea25af18d...` (backlog work-intake) — paths updated to SPEC-004" },
-  { id = "EX-2", text = "M2: `mem_019e95a9926b...` (the external decision register backend) — paths updated to SPEC-007" },
+  { id = "EX-2", text = "M2: `mem_019e95a9926b...` (backend master — privatized) — paths updated to SPEC-007" },
   { id = "EX-3", text = "M3: `mem_019ea298bcee...` (canonical change loop) — paths updated to SPEC-014" },
   { id = "EX-4", text = "M4: `mem_019e97df317d...` (spec composition) — prose ref updated to SPEC-004" },
   { id = "EX-5", text = "M5: `mem_019ea298bcee...` (md body) — prose ref updated to SPEC-014" },

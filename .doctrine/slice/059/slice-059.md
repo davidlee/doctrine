@@ -58,8 +58,8 @@ Deliver SPEC-019 **FR-001/002/003/004**, **FR-007** (the four shared verbs only)
    entity kind"* — becomes false), the `relation_graph.rs`/`rec.rs` test
    fixtures, and the `src/main.rs:1537` `--decision` doc example. **Decide** the
    `DecisionRef` Unvalidated label's posture (keep free-text so external
-   the external decision register `DEC-NNN-XX` refs survive — recommended — vs validate numbered
-   DEC). External the external decision register citations stay 3-part prose, untouched.
+   `DEC-NNN-XX` decision-log refs survive — recommended — vs validate numbered
+   DEC). External decision-log citations stay 3-part prose, untouched.
 
 ## Non-Goals
 
@@ -78,7 +78,7 @@ Deliver SPEC-019 **FR-001/002/003/004**, **FR-007** (the four shared verbs only)
   all-`Terminal`-inert; gating only via a spawned backlog proxy (out of scope
   here — that's a relation, Slice B).
 - **The memory↔record seam** — OQ-1 / PRD-010 OQ-006/007, v2.
-- **Renaming external the external decision register `DEC-NNN-XX` citations** — provenance, never
+- **Renaming external `DEC-NNN-XX` decision-log citations** — provenance, never
   renumbered (D8).
 
 ## Affected surface

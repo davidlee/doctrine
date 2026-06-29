@@ -60,7 +60,7 @@ never regenerated** (memory-spec § Identity) — **not** content-derived. The
 content-addressed / append-idempotent property belongs to `event_id` (deterministic
 `uuid5`), which arrives with the deferred ledger seam. A stored UUID (memory uses
 **v7**, time-ordered) is fully spec-compliant. Do not "fix" the uid to a content
-hash; that is the event layer's job. See [[mem.fact.backend.the external decision register-event-store]].
+hash; that is the event layer's job.
 
 ## Invariants that gate any engine change
 

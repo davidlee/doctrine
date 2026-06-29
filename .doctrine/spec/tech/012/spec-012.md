@@ -168,11 +168,11 @@ computation (design C-V).
 `git.rs` is the impure born-frame producer for memory anchoring (SL-007). It confines
 all git, disk, and process impurity to one module: the `git_bytes`/`git_text`
 runners, `capture` of the working-tree frame, remote selection, and submodule
-rejection. It reproduces `the external decision register`'s normalizers **byte-for-byte** —
+rejection. It freezes the `GitContextFrameV1` normalizers **byte-for-byte** —
 `forget.remote.v1` (`normalize_remote_url`, versioned by the `REMOTE_NORMALIZER` tag)
 for routing-identity remote-URL normalization, and `forget.checkout.v1`
 (`checkout_state_id`, the `CHECKOUT_NORMALIZER` tag) for content-bearing dirty-tree
-hashing — so a `repo_id` and checkout-state id derived here match the event-store's
+hashing — so a `repo_id` and checkout-state id derived here are stable across captures
 exactly. The version tags make the algorithm replaceable without silently re-anchoring
 existing memories.
 
@@ -255,7 +255,7 @@ lie, and no harness-specific command (`claude -p`) is ever a required element.
   the in-verb re-anchor is deferred (IMP-043).
 - **Smell test is not a guarantee.** `check-allowlist` green never means the fork is
   clean; only `select_copies` guarantees tier exclusion. The two must not be conflated.
-- **Normalizer fidelity is load-bearing.** A drift from `the external decision register`'s byte-for-byte
+- **Normalizer fidelity is load-bearing.** A drift from the frozen byte-for-byte
   algorithm would silently mis-anchor memory; the version tags are the seam that makes
   a deliberate change visible rather than silent.
 

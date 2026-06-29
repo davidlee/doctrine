@@ -60,8 +60,8 @@ ages fastest.
 - `src/retrieve.rs` — find/retrieve pipeline, sort key, holdback
 - `src/inspect.rs` — inspect command (refuses memory refs currently)
 - `scratch/memory-spec.local.md` — spec-driver reference model
-- `scratch/memory-contract.local.md` — the external decision register compatibility contract
-  (future backend, not current concern)
+- `scratch/memory-contract.local.md` — frozen-frame compatibility contract
+  (future work, not current concern)
 
 ## Stealable patterns (for SL-100)
 

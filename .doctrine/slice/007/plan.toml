@@ -25,13 +25,13 @@ dependencies = []
 id        = "PHASE-01"
 name      = "Git seam — pure core (frame types, repo normalizer, checkout id)"
 objective = """
-src/git.rs's pure half: the types and derivations that reproduce the external decision register's \
+src/git.rs's pure half: the types and derivations that implement doctrine's \
 frozen frame algorithm byte-for-byte (design D2/D7). Enable the sha2/hex/ \
-serde_json deps; mirror the external decision register's canonical-bytes (DEC-009: sorted keys, \
+serde_json deps; implement the frozen canonical-bytes (DEC-009: sorted keys, \
 integer-only, minimal escaping) + sha256 helper; define Frame/RepoIdentity/ \
 AnchorKind/RepoIdKind/Confidence; implement normalize_remote_url \
 (forget.remote.v1) and the checkout_state_id composition (forget.checkout.v1). \
-No subprocess, no disk — this is where byte-identity with the interop seam is \
+No subprocess, no disk — this is where byte-identity at the frame seam is \
 proven by a pure repo_id table.
 """
 entrance_criteria = [
@@ -40,13 +40,13 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "Cargo.toml enables sha2/hex/serde_json (the commented workspace deps uncommented)" },
-  { id = "EX-2", text = "src/git.rs: canonical_bytes(&serde_json::Value)->Vec<u8> (sorted keys, integer-only, float-rejecting) + sha256(&[u8])->String hex — byte rules matching the external decision register canonical.rs/hash.rs" },
+  { id = "EX-2", text = "src/git.rs: canonical_bytes(&serde_json::Value)->Vec<u8> (sorted keys, integer-only, float-rejecting) + sha256(&[u8])->String hex — byte rules per the frozen canonical/hash contract" },
   { id = "EX-3", text = "types: AnchorKind{Commit,CheckoutState,None}; RepoIdKind{Explicit,Remote,LocalRoot}; Confidence{High,Medium,Low}; RepoIdentity{repo_id,kind,confidence}; Frame (design §5.2)" },
   { id = "EX-4", text = "normalize_remote_url(&str)->Option<_>: ssh/https/http/git + scp-short; drops scheme+userinfo; preserves non-default ports; lowercases host, preserves path case; strips trailing .git/slash (forget.remote.v1)" },
   { id = "EX-5", text = "checkout_state_id(index_tree,worktree_fp,untracked_fp)->String = sha256(canonical{normalizer:\"forget.checkout.v1\",...}); clippy zero warnings" },
 ]
 verification = [
-  { id = "VT-1", expects = "normalize_remote_url table (HTTPS, SSH, SSH-with-port, scp-short, credentialed, git://, trailing-slash, mixed-case-host) yields the same repo_ids as the external decision register's reference table — the repo_id byte-identity proof" },
+  { id = "VT-1", expects = "normalize_remote_url table (HTTPS, SSH, SSH-with-port, scp-short, credentialed, git://, trailing-slash, mixed-case-host) yields the frozen reference repo_ids — the repo_id byte-identity proof" },
   { id = "VT-2", expects = "checkout_state_id deterministic + field-sensitive (each of the three inputs changes it); canonical_bytes sorts keys, rejects a float" },
   { id = "VT-3", expects = "cargo clippy zero warnings; pure module — no std::process/fs reference yet" },
 ]
@@ -65,7 +65,7 @@ dirty detection; repo-identity precedence (explicit→remote→local-root, \
 ambiguous-multi-remote → error); the unstable-frame guards (submodule/symlink/ \
 multi-root → named error, D8/Q-E). Temp-repo fixtures, plus the shared \
 conformance golden-vector pinning repo_id + checkout_state_id equal to \
-the external decision register's reference output (the interop seam proof, D7/R3).
+the frozen reference output (the frame seam proof, D7/R3).
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 merged (pure frame core available)" },
@@ -79,7 +79,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "temp-repo fixtures (clean/dirty/detached/unborn/non-repo) assert frame fields: commit empty iff dirty, detached anchored, none iff unborn/non-repo, never a panic" },
   { id = "VT-2", expects = "repo-identity: origin → remote/high; two remotes no origin → AmbiguousRemote; no remote → local-root/medium; --repo override → explicit/high and userinfo-stripped" },
-  { id = "VT-3", expects = "submodule/symlink/multi-root trees error; conformance golden-vector: a fixed fixture tree's repo_id + checkout_state_id equal the external decision register's reference values (byte-identity)" },
+  { id = "VT-3", expects = "submodule/symlink/multi-root trees error; conformance golden-vector: a fixed fixture tree's repo_id + checkout_state_id equal the frozen reference values (byte-identity)" },
 ]
 specs        = []
 requirements = []

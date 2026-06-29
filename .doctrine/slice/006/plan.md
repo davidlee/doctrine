@@ -69,7 +69,7 @@ this file.
   F2's gitignored `adr/<status>/` symlink dirs beside it (engine's numeric-only
   `scan_ids` already ignores them). Neither is built here.
 
-- **Backend context (not this slice).** the external decision register's ADR-005 fixes the external decision register as
-  a generic event substrate and doctrine *memory* as a client riding opaque
+- **Backend context (not this slice).** The storage-backend context fixes the backend
+  as a generic event substrate and doctrine *memory* as a client riding opaque
   payloads — relevant to the memory roadmap (SL-008 anchoring / SL-009 links), not
   to ADR. Doctrine's ADR feature is a local authored entity with no backend.

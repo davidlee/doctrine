@@ -111,7 +111,7 @@ mid-work attest-then-commit workflow.
 
 ## Non-Goals (out of both slices)
 
-- Changing the storage backend (the external decision register compatibility is separate work)
+- Changing the storage backend (frozen-frame contract compatibility is separate work)
 - Modifying the relation write path — memory labels remain free-form per
   `mem.pattern.link.memory-label-fork`
 - Catalog scan inclusion of memories (deferred)

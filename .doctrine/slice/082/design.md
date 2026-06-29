@@ -97,7 +97,7 @@ rehoming before disposal. No mapping changes required.
 | # | Record key | Paths field | Replacement |
 |---|---|---|---|
 | M1 | `mem.concept.backlog.work-intake-membership` | `["doc/entity-model.md", ".doctrine/spec/product/009"]` | `[".doctrine/spec/tech/004", ".doctrine/spec/product/009"]` (SPEC-004 entity engine) |
-| M2 | `mem.fact.backend.the external decision register-event-store` | `["doc/memory-spec.md"]` | `[".doctrine/spec/tech/007"]` (SPEC-007 memory engine) |
+| M2 | (backend master — privatized) | `["doc/memory-spec.md"]` | `[".doctrine/spec/tech/007"]` (SPEC-007 memory engine) |
 | M3 | `mem.concept.workflow.canonical-change-loop` | `["doc/slices-spec.md"]` | `[".doctrine/spec/tech/014"]` (SPEC-014 slice surface) |
 
 Prose-only refs (no `paths` field change; update markdown body):

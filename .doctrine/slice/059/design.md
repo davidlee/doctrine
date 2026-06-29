@@ -96,7 +96,7 @@ and adds the implementation-shaping local decisions (L-series):
   where types pay (heterogeneous fields, the assumption-only invariant); stringly only
   for the uniform status word-list (L1).
 - **L3 (OQ2) — `DecisionRef` stays `Unvalidated` free-text.** The `decision_ref` label
-  carries **external 3-part** the external decision register cites (`DEC-005-C`), which are not doctrine
+  carries **external 3-part** decision-log cites (`DEC-005-C`), which are not doctrine
   entities; validating them against the new numbered DEC kind would reject live data.
   No behaviour change to the label — D8 work here is **comment/example disambiguation
   only** (§10).
@@ -302,11 +302,11 @@ three drift canaries (`confidence`/`basis`/`source`).
 ## 10. D8 Disambiguation (no behaviour change — `DecisionRef` stays `Unvalidated`, L3)
 
 The numbered DEC kind makes the 2-part `DEC-NNN` form read as a doctrine entity, so
-every site that uses 2-part `DEC-` as an *external* the external decision register cite is now misleading.
+every site that uses 2-part `DEC-` as an *external* decision-log cite is now misleading.
 Disambiguate them all to the unmistakable 3-part `DEC-NNN-XX` external form:
 
 - `src/rec.rs:318` comment — reword: a DEC *is* now a 2-part numbered kind, but
-  `decision_ref` carries **external 3-part** the external decision register cites (`DEC-005-C`), not
+  `decision_ref` carries **external 3-part** decision-log cites (`DEC-005-C`), not
   entities → still carries free-text.
 - `src/relation.rs:164` `TargetSpec::Unvalidated` doc — same reword (rationale shifts
   from "no kind in KINDS" to "3-part external cites are not entities").
@@ -379,7 +379,7 @@ Disambiguate them all to the unmistakable 3-part `DEC-NNN-XX` external form:
 - **Constraint owner / immutability-or-enforceability axis** — captured as **IDE-006**.
 - **Guidance: DEC record vs ADR vs governance surface** — captured as **IDE-007**.
 - **Memory↔record seam** — OQ-1 / PRD-010 OQ-006/007, v2.
-- **Renaming external the external decision register `DEC-NNN-XX` cites** — provenance, never renumbered.
+- **Renaming external `DEC-NNN-XX` decision-log cites** — provenance, never renumbered.
 
 ## 13. Risks & Open Questions
 

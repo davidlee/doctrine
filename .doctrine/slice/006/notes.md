@@ -91,4 +91,4 @@ in `state/.../phases/`; this survives.
 
 - **D4** extract concrete fns only, **no `numeric_entity` trait/generic**.
 - **meta.rs, not entity.rs** — presentation/reader ≠ kind-blind engine.
-- ADR is a **local authored entity, no backend** (the external decision register's ADR-005 = memory).
+- ADR is a **local authored entity, no backend** (the storage-backend decision = memory).

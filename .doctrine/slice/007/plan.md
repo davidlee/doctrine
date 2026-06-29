@@ -10,15 +10,15 @@ Six phases build the producer half of memory v1: doctrine's first git seam, the
 parser/Memory widening that carries the anchor, the `record` capture path, the
 `verify` verb, and the `show` consumer + close-out. The spine is the design's
 pure/imperative split and the one non-negotiable from re-review: the born frame is
-**reproduced from the external decision register's frozen `GitContextFrameV1`, byte-for-byte**, not
-invented — because doctrine's `record` and the event-store backend's claim must
-derive identical `repo_id`/`checkout_state_id` to dedup at the interop seam
+**doctrine's own frozen `GitContextFrameV1`, implemented byte-for-byte**, not
+invented ad-hoc — because the same fileset must always
+derive identical `repo_id`/`checkout_state_id` to dedup at the frame seam
 ([design.md](design.md) D2/D7; [audit.md](audit.md) B4).
 
 The phases are sized so each ends green and each is a clean review unit. The git
 seam splits pure (PHASE-01) from impure (PHASE-02) so the byte-identity logic — the
 risky part — is unit-testable without a subprocess, and the conformance
-golden-vector that pins us to the external decision register lands the moment capture exists.
+golden-vector that pins the frozen frame lands the moment capture exists.
 
 ## Sequencing & Rationale
 
@@ -54,10 +54,9 @@ but the plan sequences them linearly for a single reviewer.
 - **Behaviour-preservation gate.** `src/entity.rs` is untouched all slice; its suite
   (plus slice/state) must stay green unchanged. The only intended behaviour change is
   `record`'s rendered output (PHASE-04) — an SL-005 verb whose own tests update.
-- **No shared crate (D7).** the external decision register is a separate workspace + daemon; we
-  re-implement and pin equivalence with the golden-vector rather than depend on its
-  lib. If drift proves a real maintenance cost, extracting a shared `git_context`
-  crate is a future slice/ADR, not this one.
+- **Self-contained implementation (D7).** doctrine implements the frozen frame
+  in-tree and pins equivalence with the golden-vector. If conformance ever needs
+  to be shared, extracting a `git_context` crate is a future slice/ADR, not this one.
 - **adr's plain write (M6).** `adr::set_adr_status` uses a non-atomic `fs::write`;
   `verify` will not copy that — it writes temp+rename. Unifying both behind one
   atomic-editor helper is out of scope here (don't touch adr unannounced).

@@ -276,7 +276,7 @@ run_doctor(path):
 
   **Resolver gating (two bail-avoidance gates).**
   1. **3-part `KIND-NNN-XX`** → **skip**. Two sub-shapes, both excluded:
-     the external decision register decision-log cites (`DEC-005-C` 519×, `DEC-010-06` 462× —
+     external decision-log cites (`DEC-005-C` 519×, `DEC-010-06` 462× —
      mem.pattern.entity.dec-prefix-dual-namespaced, SPEC-019 D8; un-parseable —
      `parse_canonical_ref` rsplit → non-numeric *or* unknown-prefix bail) **and**,
      the empirically-dominant case, `KIND-NNN-<word>` compound adjectives whose
@@ -479,7 +479,7 @@ bugs and five precision/honesty gaps.
 - **F1 (bug, fixed §5.5; corrected by user re DEC).** ProseCite must classify a
   cite token before resolving. `integrity::KINDS` **includes** record kinds, so
   `DEC-001` (2-part) is a real entity cite to validate — not skip. The genuine
-  crash triggers are (a) **3-part `DEC-005-C`** the external decision register cites (un-parseable →
+  crash triggers are (a) **3-part `DEC-005-C`** decision-log cites (un-parseable →
   `parse_canonical_ref` bails) and (b) truly-unknown prefixes (`ensure_ref_resolves`
   bails). Fix: exclude 3-part tokens; gate 2-part on `kind_by_prefix`; dir-probe
   the rest. Added the 3-part exclusion class (dual-namespace,
@@ -520,7 +520,7 @@ all resolved on the ledger; design body corrected.
   proof" of byte-exact native re-point is false: `validate` asserts substrings
   (`.contains`), `memory validate` has **no** output golden. Gated the #1/#4
   native re-point on authoring byte-exact goldens first, red (D12).
-- **F-4 (minor → fixed §5.5).** The 3-part rationale ("the external decision register decision-log
+- **F-4 (minor → fixed §5.5).** The 3-part rationale ("external decision-log
   cites") was empirically wrong — the corpus is dominated by `KIND-NNN-<word>`
   compound adjectives over real refs. Corrected the rationale; owned the dangling
   3-part false-negative.

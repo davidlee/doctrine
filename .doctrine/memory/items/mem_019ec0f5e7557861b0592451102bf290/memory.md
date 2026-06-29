@@ -1,14 +1,14 @@
-# DEC prefix dual-namespaced — numbered kind (2-part) vs external the external decision register cites (3-part)
+# DEC prefix dual-namespaced — numbered kind (2-part) vs external decision-log cites (3-part)
 
 The `DEC` prefix carries two distinct namespaces, deliberately (SPEC-019 D8):
 
 - **`DEC-NNN` (2-part)** — the numbered **decision** knowledge-record kind
   (SPEC-019, the ASM/DEC/QUE/CON family). A real entity in `integrity::KINDS`.
 - **`DEC-NNN-XX` (3-part, letter/number suffix: `DEC-005-C`, `DEC-010-06`)** —
-  **external the external decision register decision-log citations**, sprinkled through SL-007/012
-  prose (the external decision register byte-reproduction work), `src/git.rs` comments, memory, and
+  **external decision-log citations**, sprinkled through SL-007/012
+  prose (the frozen git-frame work), `src/git.rs` comments, memory, and
   the boot snapshot. Free-text prose, **never doctrine entities, never
-  renumbered** (provenance to the external decision register's own log). Doctrine's *own* doc-local
+  renumbered** (provenance to an external decision log). Doctrine's *own* doc-local
   decisions use the bare `D1` glossary form, never `DEC-`.
 
 **Why:** before SPEC-019, `DEC` was not a kind, so the shipped `DecisionRef`
@@ -23,6 +23,6 @@ adversarial-review CRITICAL on SPEC-019.
 disambiguate the ~6 live `decision_ref` sites — the `rec.rs:318` comment, the
 `relation_graph.rs`/`rec.rs` test fixtures, the `main.rs:1537` `--decision`
 example — and **decide the `DecisionRef` posture**: keep it free-text
-(recommended — external the external decision register refs survive) vs validate numbered DEC. Do
-**not** sed-rename the 3-part external citations. See [[mem.fact.backend.the external decision register-event-store]]
-and [[mem.pattern.entity.free-text-ref-not-forward-validated]].
+(recommended — external refs survive) vs validate numbered DEC. Do
+**not** sed-rename the 3-part external citations. See
+[[mem.pattern.entity.free-text-ref-not-forward-validated]].

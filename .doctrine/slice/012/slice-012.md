@@ -10,9 +10,9 @@ hard-errors on any submodule (160000) or symlink (120000) entry —
 `Error: unsupported: symlink entry (mode 120000)`.
 
 This gate is deliberate (SL-007 **D8**, `slice/007/design.md:341`): the anchor's
-`checkout_state_id` reproduces the external decision register's `forget.checkout.v1` normalizer
+`checkout_state_id` implements the frozen `forget.checkout.v1` normalizer
 **byte-for-byte**, proven by a conformance golden vector (SL-007 **VT-3**).
-Symlink hashing is **deferred in the external decision register itself**, so the frame normalizer
+Symlink hashing is **deferred in the frozen contract itself**, so the frame normalizer
 has no defined symlink encoding — rather than emit an unstable/divergent anchor,
 SL-007 chose to refuse the whole frame.
 
@@ -29,14 +29,14 @@ store (`memory record`) — every record call failed on this gate.
 ## Scope & Objectives
 
 Make `memory record` succeed in a repo containing committed symlinks, **without
-breaking the the external decision register conformance contract** (SL-007 VT-3 golden vector must
+breaking the frozen-frame conformance contract** (SL-007 VT-3 golden vector must
 stay byte-identical for symlink-free trees).
 
-**DECIDED (design D1): direction 3 — upstream-first.** the external decision register un-defers m12
-(the gate is a verbatim copy of `the external decision register/src/git_context.rs:727`); doctrine
-then re-syncs the mirrored gate + the VT-3 golden vector. **Slice is `blocked`
-on the the external decision register change.** Directions 1 (record soft-fail) and 2 (doctrine-local
-seam narrowing) were rejected: both fork the byte-for-byte mirror unilaterally.
+**DECIDED (design D1): direction 3 — contract-first.** The frozen-frame contract
+un-defers m12 (the symlink-gate change); doctrine
+then applies the revised gate + the VT-3 golden vector. **Slice is `blocked`
+on the contract revision.** Directions 1 (record soft-fail) and 2 (doctrine-local
+seam narrowing) were rejected: both fork the byte-for-byte contract ad-hoc.
 See `design.md` §7.
 
 Candidate directions (decided — direction 3):
@@ -50,10 +50,10 @@ Candidate directions (decided — direction 3):
    omit only `checkout_state_id` (`forget.checkout.v1`, the tree-hashing half)
    when the tree carries a symlink. Preserves staleness-by-commit; drops
    worktree-fingerprint precision in symlink repos.
-3. **Un-defer symlink encoding** — define a conformant symlink hashing in
-   `forget.checkout.v1` upstream in the external decision register, then mirror it byte-for-byte
+3. **Un-defer symlink encoding** — define a conformant symlink hashing in the frozen
+   `forget.checkout.v1` contract, then implement it byte-for-byte
    (the DEC-005-D coordination pattern). Highest fidelity, highest cost, blocks
-   on an upstream change — likely a separate future slice, not this one.
+   on a contract revision — likely a separate future slice, not this one.
 
 Design must decide which, and what `verify` / staleness do when the anchor is
 partial or absent.
@@ -62,7 +62,7 @@ partial or absent.
 
 - **No locally-invented symlink hash.** Hashing the symlink target text *only in
   doctrine* would diverge from `forget.checkout.v1` and break the conformance
-  golden vector. Out of scope unless the external decision register un-defers (direction 3).
+  golden vector. Out of scope unless the frozen contract un-defers (direction 3).
 - **No change to submodule (160000) or multi-root rejection** — those stay hard
   errors (genuinely unstable to anchor; D8 unchanged for them).
 - **Not removing the committed symlinks** from the doctrine repo — they are
@@ -96,8 +96,8 @@ partial or absent.
   (`forget.remote.v1`) never touches the index tree; only `checkout_state_id`
   does. The whole-tree scan may be over-broad relative to what actually hashes
   the tree.
-- **A1 —** the external decision register's `forget.checkout.v1` still defines no symlink encoding
-  (assumed; verify against `<the external decision register>/.spec-driver` before direction 3).
+- **A1 —** the frozen `forget.checkout.v1` contract still defines no symlink encoding
+  (assumed; verify against the frozen-frame reference before direction 3).
 
 ## Verification / Closure Intent
 
@@ -112,7 +112,7 @@ partial or absent.
 ## Follow-Ups
 
 - Port `doc/memories/{customizable-governance-surface, doctrine-just-module,
-  engine-identity-and-claim-seam, the external decision register-event-store-backend-contract}` into
+  engine-identity-and-claim-seam, backend-contract}` into
   the memory store once `record` works.
-- Possible upstream slice: un-defer symlink encoding in the external decision register
-  `forget.checkout.v1` (direction 3) for full anchor fidelity.
+- Possible follow-up slice: un-defer symlink encoding in the frozen
+  `forget.checkout.v1` contract (direction 3) for full anchor fidelity.

@@ -3,8 +3,8 @@ memory_key = "mem.pattern.entity.dec-prefix-dual-namespaced"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "DEC prefix dual-namespaced — numbered kind (2-part) vs external the external decision register cites (3-part)"
-summary = "DEC prefix is dual-namespaced: 2-part DEC-NNN = numbered decision-record kind; 3-part DEC-NNN-XX = external the external decision register decision-log citations (free-text prose, never renumbered)"
+title = "DEC prefix dual-namespaced — numbered kind (2-part) vs external decision-log cites (3-part)"
+summary = "DEC prefix is dual-namespaced: 2-part DEC-NNN = numbered decision-record kind; 3-part DEC-NNN-XX = external decision-log citations (free-text prose, never renumbered)"
 created = "2026-06-13"
 updated = "2026-06-13"
 
@@ -39,10 +39,6 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
-
-[[relation]]
-label = "related"
-target = "mem.fact.backend.the external decision register-event-store"
 
 [[relation]]
 label = "related"

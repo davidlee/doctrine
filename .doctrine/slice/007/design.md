@@ -1,9 +1,9 @@
 # Design SL-007: Memory anchoring & capture
 
 > Revised after the pre-plan re-review ([audit.md](audit.md), 2026-06-04). The
-> headline change: the born frame is **not invented here** — it is adopted from the
-> interop counterparty (`the external decision register`'s frozen `GitContextFrameV1`), reproduced
-> byte-for-byte so doctrine records and backend claims dedup at the seam. Decisions
+> headline change: the born frame is **not invented ad-hoc** — it is doctrine's own
+> frozen, byte-stable contract (`GitContextFrameV1`), implemented byte-for-byte so the
+> same fileset always derives identical ids and records dedup at the frame seam. Decisions
 > Q-A…Q-E in the audit are folded in.
 
 ## 1. Design Problem
@@ -18,16 +18,15 @@ is explicitly out of scope.
 This is *not* a retrieval design. It is an **anchoring** design, and the three hard
 parts are all on the write/IO side:
 
-1. **The born frame is a locked, *shared* contract.** Locked decision 6
+1. **The born frame is a locked, *frozen* contract.** Locked decision 6
    ([memory-spec](../../../doc/memory-spec.md) § Locked decisions) fixes the minimum
    frame: `repo (+ repo_id_kind/confidence) + HEAD commit/tree/ref + checkout_state_id
-   (dirty) + base_commit`. Critically, the **algorithm is frozen and shared with the
-   event-store backend**: `the external decision register` already defines this frame as
-   `GitContextFrameV1` under the normalizer tags `forget.remote.v1` / `forget.checkout.v1`
-   ([the external decision register `src/git_context.rs`](../../../../the external decision register/src/git_context.rs)).
-   doctrine's first git seam (`src/git.rs`) **reproduces that algorithm byte-for-byte**
+   (dirty) + base_commit`. Critically, the **algorithm is frozen as doctrine's own
+   byte-stable contract**: `GitContextFrameV1` under the normalizer tags
+   `forget.remote.v1` / `forget.checkout.v1`.
+   doctrine's first git seam (`src/git.rs`) **implements that algorithm byte-for-byte**
    — anything else derives divergent `repo_id`/`checkout_state_id` and breaks append
-   idempotency when the adapter lands (interop constraint 3, § Identity). The only
+   idempotency (frame-seam constraint 3, § Identity). The only
    `git` token in `src/` today is `.git` as a root marker (`src/root.rs`).
 2. **`verified_sha` must not be written at capture.** The spec defines it as "SHA at
    last verification" and gates attested staleness solely on its presence
@@ -76,20 +75,20 @@ input).
   targets an **authored committed** file and **refuses to insert a missing key**
   (the F-1 guard: a tail insert would land inside a trailing subtable) — the exact
   pattern `verify` reuses.
-- **Counterparty reference.** `the external decision register/src/git_context.rs` is the frozen
-  `GitContextFrameV1` capture (repo identity, content-bearing `checkout_state_id`,
-  normative flags, unstable-frame guards) doctrine reproduces. `hash.rs::sha256` and
-  `canonical.rs::to_canonical_bytes` are the helper shapes doctrine mirrors.
+- **Frozen-frame contract.** `GitContextFrameV1` is doctrine's frozen
+  capture (repo identity, content-bearing `checkout_state_id`,
+  normative flags, unstable-frame guards). `sha256` and
+  `to_canonical_bytes` are the helper shapes the seam relies on.
 - **No git module, no `verify`, no `clock`-style git seam.**
 
 ## 3. Forces & Constraints
 
 - **Pure/imperative split (hard):** no git or clock in the pure layer. Frame capture
   is impure; `render_memory_toml` and validation take the resolved frame as data.
-- **Locked decision 6 + interop byte-identity (hard):** the full born frame, and the
-  *same bytes* the external decision register derives — proven by a shared conformance golden-vector.
-- **Interop constraint 4 (hard):** repo-scoped memory requires a born frame or it is
-  an error; the backend never infers git — doctrine constructs the frame.
+- **Locked decision 6 + byte-identity (hard):** the full born frame, and the
+  *same bytes* every clean derivation produces — proven by a conformance golden-vector.
+- **Frame constraint 4 (hard):** repo-scoped memory requires a born frame or it is
+  an error; the frame is never inferred — doctrine constructs it.
 - **Storage rule:** scope + anchor are authored structured TOML (committed); `dirty`
   is **derived from `anchor_kind`, not stored**.
 - **Behaviour-preservation:** `entity.rs` untouched, its suites green. `record`'s
@@ -103,8 +102,8 @@ input).
 
 1. **Anchor honestly.** Write what capture knows (`base_commit`, `commit`/`checkout_state_id`,
    `tree`, `ref_name`); never write what only verification knows (`verified_sha`).
-2. **Match the seam, don't invent it.** The frame algorithm is the external decision register's; doctrine
-   reproduces it and a golden-vector proves equivalence.
+2. **Honor the frozen contract, don't drift it.** The frame algorithm is fixed; doctrine
+   implements it and a golden-vector proves equivalence.
 3. **Resolve git at the edge.** One frame capture per `record`; the pure render takes
    the frame as data.
 4. **Every git failure is a state, not a crash.** Missing binary, non-repo, unborn →
@@ -129,13 +128,13 @@ show   ─▶ Memory.anchor ─▶ render_show (pure, real anchor line)
 ```
 
 `src/git.rs` (new, impure): `capture` (the full frame), repo-identity, content
-fingerprints — reproducing `the external decision register`'s `forget.remote.v1`/`forget.checkout.v1`.
+fingerprints — implementing the frozen `forget.remote.v1`/`forget.checkout.v1`.
 `src/memory.rs`: parser widening, `Draft`/render widening, `verify` shell,
 `render_show` anchor line.
 
 ### 5.2 Interfaces & Contracts
 
-**Git seam (`src/git.rs`, impure).** Reproduces `the external decision register`'s `GitContextFrameV1`
+**Git seam (`src/git.rs`, impure).** Implements `GitContextFrameV1`
 field-for-field; names align with the persisted schema.
 
 ```rust
@@ -169,8 +168,8 @@ pub(crate) fn capture(repo_root: &Path) -> Result<Frame, CaptureError>;
 ```
 
 Every git call runs under **normative flags** (`-c core.autocrlf=false -c core.eol=lf
--c core.fileMode=true`) so machine-local config cannot perturb the hash (parity with
-the external decision register; required for byte-identity).
+-c core.fileMode=true`) so machine-local config cannot perturb the hash (required for
+byte-identity).
 
 - **HEAD / dirty.** `rev-parse --verify HEAD^{commit}` (born?), `rev-parse HEAD^{tree}`,
   `symbolic-ref --quiet HEAD` (empty ⇒ detached, still anchored). Dirty detection is
@@ -194,11 +193,11 @@ the external decision register; required for byte-identity).
   `--repo` overrides the derived `repo_id` (kind=`explicit`, confidence=high) — and is
   routed through the **same canonicalizer**, so a credentialed override is also
   userinfo-stripped. *Deviation from byte-identity (audit F-A3):* doctrine
-  normalizes the **explicit-config** id too, but the external decision register stores `forget.repo.id`
-  verbatim — a URL-shaped explicit id derives a different `repo_id` and would not
-  dedup. Defensible (R4 secret-strip extended to the config slot; non-URL ids pass
-  through verbatim both sides), uncovered by the golden vector — resolve on the
-  adapter slice (doc here, or have the external decision register normalize too).
+  normalizes the **explicit-config** id too, but the frozen contract stores
+  `forget.repo.id` verbatim — a URL-shaped explicit id derives a different `repo_id`
+  and would not dedup. Defensible (R4 secret-strip extended to the config slot;
+  non-URL ids pass through verbatim both sides), uncovered by the golden vector —
+  resolve on a later contract revision (doc here, or normalize the explicit slot too).
 
 **`record` flags (new).** `--path <P>` / `--glob <G>` / `--command <C>` (each
 repeatable) → the `scope` arrays; `--repo <R>` overrides the derived identity.
@@ -265,8 +264,8 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
 
 - **Anchor honesty:** `verified_sha` is written by `verify` only, never by `record`;
   `verify` refuses a dirty tree.
-- **Byte-identity:** doctrine's `repo_id`/`checkout_state_id` equal the external decision register's for
-  the same tree — pinned by a shared golden-vector (§ 9).
+- **Byte-identity:** doctrine's `repo_id`/`checkout_state_id` are stable for
+  the same tree — pinned by a golden-vector (§ 9).
 - **Repo-scoped + unanchorable ⇒ error**, not a silent unscoped write (constraint 4).
 - **Legacy parse:** an SL-005 `memory.toml` (no `[git]` fields, no `reviewed`) parses;
   `anchor_kind` normalizes empty→`none`, `reviewed`→`""` — covered by a fixture.
@@ -286,13 +285,13 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
 
 *(All three pre-review questions resolved by the audit — recorded here for trail.)*
 
-1. **`checkout_state_id` definition — RESOLVED (Q-C).** Content-bearing hash adopting
-   the external decision register's `forget.checkout.v1` (index tree + diff fingerprint + untracked
+1. **`checkout_state_id` definition — RESOLVED (Q-C).** Content-bearing hash per the
+   frozen `forget.checkout.v1` (index tree + diff fingerprint + untracked
    fingerprint). No same-fileset collision.
 2. **`verify` in a non-git repo — RESOLVED (Q-B).** Stamp the review axis with empty
    `verified_sha`; the time-based staleness mode uses it. (A *dirty* tree, by
    contrast, is refused.)
-3. **Repo normalization corners — RESOLVED (Q-D).** Adopt the external decision register's
+3. **Repo normalization corners — RESOLVED (Q-D).** The frozen
    `normalize_remote_url` (SSH ports, scp-short, userinfo strip, multi-remote error).
    No remaining open question; future algorithm changes are caught by the normalizer
    tag + golden-vector.
@@ -306,14 +305,14 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
   review M4) keeps attestation honest — `verified_sha` never claims an uncommitted
   state. *Rejected:* stamp dirty + document (over-claims attested staleness);
   record-time `verified_sha` (spec deviation + dead-code).
-- **D2 — reproduce the external decision register's frame byte-for-byte (B4/B1).** *Rationale:* the
-  event-store seam requires identical `repo_id`/`checkout_state_id` for append
-  idempotency (interop constraint 3, § Identity). A hand-rolled frame bakes divergent
+- **D2 — implement the frozen frame byte-for-byte (B4/B1).** *Rationale:* the
+  dedup seam requires identical `repo_id`/`checkout_state_id` for append
+  idempotency (frame-seam constraint 3, § Identity). A hand-rolled frame bakes divergent
   ids into committed files — the wrong-contract-in-stored-data failure D2 itself warns
   of. The full frame (incl. `tree`, `repo_id_kind`/`confidence`) is the locked
-  minimum. *Rejected:* invent doctrine's own frame (divergent at the seam); persist a
+  minimum. *Rejected:* invent an ad-hoc frame (divergent at the seam); persist a
   subset (latent spec violation the reader inherits).
-- **D3 — repo identity = the external decision register's `forget.remote.v1` (B1/M3).** *Rationale:*
+- **D3 — repo identity = the frozen `forget.remote.v1` (B1/M3).** *Rationale:*
   `repo` is a partition key and security boundary; `repo_id_kind`/`confidence` are the
   trust signal, and the precedence + ambiguous-remote error make it deterministic. The
   naive `:`→`/` rule (original design) corrupts SSH-with-port and is non-deterministic
@@ -323,7 +322,7 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
   `[git]` block must *mean* `none` (serde gives `""`, so validation normalizes).
   *Rejected:* a schema-version bump forcing migration.
 - **D5 — subprocess git seam, no library.** Smallest dep; matches "doctrine builds the
-  frame" and the external decision register's own choice. *Rejected:* `git2`/`gix`.
+  frame". *Rejected:* `git2`/`gix`.
 - **D6 — `verify` reuses the `adr status` `toml_edit` shape, incl. the F-1 missing-key
   guard, with atomic temp+rename writes (B3/M6).** *Rationale:* no new mutation
   mechanism; the guard is safe only because `record` now **seeds** the verify-mutable
@@ -332,13 +331,11 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
   plain `fs::write` (not atomic). *(Note: `adr::set_adr_status` still uses plain
   `fs::write` — a pre-existing minor gap; a shared atomic-editor helper could later
   cover both. Out of scope to change adr here.)*
-- **D7 — stay aligned with the external decision register via re-implementation + a shared conformance
-  golden-vector, not a shared crate (Q-D).** *Rationale:* the external decision register is a separate
-  workspace + daemon (PG/http); depending on its lib is too heavy. Re-implementing
-  pinned to the normalizer tags keeps doctrine independent; the golden-vector catches
-  drift. *Rejected:* extract a shared crate now (cross-repo restructure — a future
-  slice/ADR if drift proves real).
-- **D8 — adopt the external decision register's unstable-frame guards (Q-E).** Born/unborn/non-repo are
+- **D7 — pin the frozen frame via a conformance golden-vector keyed on the normalizer
+  tags (Q-D).** *Rationale:* a self-contained implementation pinned to the normalizer
+  tags keeps the contract byte-stable; the golden-vector catches any drift. *Rejected:*
+  leave conformance unpinned (silent drift bakes divergent ids into committed files).
+- **D8 — adopt the frozen unstable-frame guards (Q-E).** Born/unborn/non-repo are
   three states; submodule/symlink/multi-root/ambiguous-remote are hard errors.
   *Rationale:* never emit an unstable anchor; parity with the seam. *Rejected:*
   best-effort anchoring with a documented gap (a divergence to reconcile later).
@@ -350,8 +347,8 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
   succeeds (now anchored).
 - **R2 — git portability/absence.** Every soft failure → `anchor_kind=none`/named
   error, never panic; temp-repo + non-repo fixtures drive each edge.
-- **R3 — frame drift from the external decision register (the seam breaks silently).** *Mitigation:* the
-  shared conformance golden-vector (§ 9) fails CI if `repo_id`/`checkout_state_id`
+- **R3 — frame drift from the frozen contract (the seam breaks silently).** *Mitigation:* the
+  conformance golden-vector (§ 9) fails CI if `repo_id`/`checkout_state_id`
   diverge; the persisted `normalizer` tag versions the algorithm.
 - **R4 — secret capture via repo URL.** Strip userinfo before storing `repo` (derived
   *and* `--repo`); test a credentialed URL maps to a clean identity.
@@ -370,8 +367,8 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
   credentialed, no-origin→ambiguous-error, no-remote→local-root); unstable trees
   (submodule/symlink/multi-root) → the named errors.
 - **Conformance golden-vector (D7):** a fixture tree with known `repo_id` +
-  `checkout_state_id` values, asserted equal to the external decision register's reference output —
-  the byte-identity proof for the interop seam.
+  `checkout_state_id` values, asserted equal to the frozen reference output —
+  the byte-identity proof for the frame seam.
 - **Parser tests:** SL-005-shaped legacy `memory.toml` parses (defaults + empty→none);
   a fully-populated `[git]`/`[review]` round-trips through validation.
 - **Verb integration:** `record --path … --command …` writes the scope arrays + a
@@ -388,8 +385,8 @@ mirrors `Frame`'s persisted subset + `verified_sha` + the `normalizer` tag.
 
 > Re-reviewed before `slice plan` (two independent adversarial passes — this agent +
 > codex; [audit.md](audit.md), 2026-06-04). The pass found the design hand-rolled a
-> frame the interop counterparty (`the external decision register`) had already frozen; the resolution
-> (D2/D7/D8) is to reproduce it byte-for-byte with a conformance vector. Decisions
+> frame where a frozen, byte-stable contract was needed; the resolution
+> (D2/D7/D8) is to implement it byte-for-byte with a conformance vector. Decisions
 > Q-A (extend the locked `[git]`/`[scope]` schema — done in memory-spec), Q-B (refuse
 > dirty `verify`), Q-C (content-bearing `checkout_state_id`), Q-D (re-implement +
 > vectors), Q-E (adopt the unstable-frame guards) are folded in, along with the

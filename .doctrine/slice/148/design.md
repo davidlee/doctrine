@@ -327,7 +327,7 @@ gives offline fork-safety at single-tree+trunk reach.
   failure trade left open.
 - **OQ-6 (memory remote storage — out of scope, recorded so D9 isn't re-litigated)**
   — memory wants a *remote storage/coordination* backend in future
-  (`scratch/memory-contract.local.md`: the external decision register / `the external backend`, an HTTP+JSON
+  (`scratch/memory-contract.local.md`: a future HTTP+JSON
   append-only event log; idempotency is **server-side** via a deterministic
   `event_id` + `409 duplicate_event`=success, not a reservation CAS). That is a
   **separate seam** from this slice's reservation `Claim` — it slots into the

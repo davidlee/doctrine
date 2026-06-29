@@ -20,7 +20,7 @@ resolved (§10 "Code-verification pass" disposition). Findings F-V1..F-V6:
   Fresh-numeric-only. **Supersedes SL-005 D7** (the named+numeric unification in
   `mem.system.engine.identity-claim-seam` §2) → memory update at /reconcile (R8).
   Checked against `scratch/memory-contract.local.md`: memory's remote future
-  (the external decision register HTTP, server-side idempotency) is a **separate storage seam** at the
+  (a future HTTP backend, server-side idempotency) is a **separate storage seam** at the
   `materialise_named` write body — D9 *enables* it, doesn't foreclose it (OQ-6).
 - **F-V1 → 11 Fresh sites**, not ~10: the design omitted the `materialise_fresh_prebuilt`
   family (review/rec×2/revision). EN-1/EX-2 corrected.
