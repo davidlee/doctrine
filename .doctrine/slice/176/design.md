@@ -9,13 +9,13 @@ Design draft for **RFC-003 § "Finish Axis B"** — the unfinished work→backlo
 the relation-vocabulary collapse SL-149 began for work→canon. The *what* is decided
 (RFC-003, direction locked 2026-06-29); this design resolves the **mechanism**.
 
-**Review state (2026-06-29):** revised through external pass 1 (codex F1–F6) then a second
-independent external pass (codex G1–G4). **Pass 2 verdict: RETURN-TO-DESIGN** — open
-**G1** (backlog `fulfilled by` needs an inbound read-path `backlog show` lacks + an ADR-004
-posture call) plus under-grounded **G2** (validate uniqueness finding-class/seam) and **G3**
-(widening flips rule-contract tests — a content/machinery mis-frame). Lifecycle stays
-`design`; next step is a design session to resolve G1–G3, not `/plan`. See the two
-"Adversarial review (external pass …)" sections.
+**Review state (2026-06-29):** revised through external pass 1 (codex F1–F6), then a second
+independent external pass (codex G1–G4), then a **design session resolving G1–G4**.
+**G1 resolved option (a)** (user-locked) — D-backlog-inbound; **G2 resolved** —
+D-uniqueness-seam (`read_block`, local); **G3** re-classed as deliberate content
+(enumerate at plan); **G4** census add. Mechanism complete. **Optional: one confirming
+third external pass on the G1(a) backlog-inbound mechanism, else lock → `/plan`.** See the
+decision ledger + the two "Adversarial review (external pass …)" sections.
 
 **Governance ratification is deferred to reconciliation** (per scope + RFC-003): the
 ratifying ADR (amend ADR-016 / ADR-010, or a sibling) is authored at P5/reconcile, after
@@ -38,7 +38,7 @@ cross-corpus relation contract), **RFC-003** (the deliberation this slice implem
 | **Q5 cascade** | Close-cascade hint (`doctor`/`/close` reading `fulfils(full)`) **spun out → IMP-210**. Not in this slice. Hint-not-auto regardless (RFC-003 F-6). | user-locked |
 | **Q6 drift** | Name the mapping now, re-census at execution: entity "carved out from" → `originates_from`; "feeds into" → `needs`/`after`; 5 free-text non-entity stay `drift` (deferred). | user-locked |
 | **D-degree-default** | `None` degree ≡ **Full**. `partial` is the marked exception. Does NOT repeat SL-149's banned `unspecified` (that was banned because role keys the target gate; degree keys nothing). | design |
-| **D-edge-identity** | Edge identity = `(label, role, target)`; **degree excluded**. Single-edge guaranteed by a **validate uniqueness invariant** on `(source, fulfils, target)`. Degree set at author time; **changed via `unlink`+`relink`**, NOT upsert (codex F1 — no mutation path exists in `append_relation_row`). `link` of an existing triple with a *different* degree **errors** ("exists with degree X; unlink to change"); identical → `Noop`. `unlink` matches `(label, role, target)`, degree ignored. | design (codex F1/F2) |
+| **D-edge-identity** | Edge identity = `(label, role, target)`; **degree excluded**. Single-edge guaranteed by a **per-entity `read_block` `DuplicateEdge` check** on `(label, role, target)` (G2 / D-uniqueness-seam), not corpus validate. Degree set at author time; **changed via `unlink`+`relink`**, NOT upsert (codex F1 — no mutation path exists in `append_relation_row`). `link` of an existing triple with a *different* degree **errors** ("exists with degree X; unlink to change"); identical → `Noop`. `unlink` matches `(label, role, target)`, degree ignored. | design (codex F1/F2) |
 | **D-inspect-shape** | `RelationGroup` targets change from `Vec<String>` to **structured entries carrying `Option<Degree>`** (codex F3 — the flat `Vec<String>` cannot hold per-target degree). Affects outbound + inbound + `inspect --json` schema. A render-side side-index is insufficient. | design (codex F3) |
 | **D-backlog-inbound** | (G1, user-locked **a**) `backlog show`/`show --json` render `fulfilled by` as **derived inbound**, computed via the **same relation-graph inbound machinery `inspect` uses** (`in_edges` + `inbound_role_index`/degree, threaded with `root`) — NOT the item's own outbound (which the migration deletes). `backlog show` thereby becomes **corpus-aware** (was item-local, `backlog.rs:1363-65`); this is a deliberate posture **refinement, ADR-004-consistent** (inbound is always derived; ADR-004 defers the reverse *field*, not derived render). The `slices` outbound read is removed, not swapped. `doctor` (`:2201`) takes the same inbound set. | design (codex G1) |
 | **D-uniqueness-seam** | (G2) The `(source, label, role, target)` uniqueness invariant is **per-entity and local** — `source` is one entity, so a duplicate logical edge is two `fulfils` rows in **one slice's own toml**. Enforced in **`read_block`/per-entity row validation** (new `DuplicateEdge` finding, match on `(label, role, target)`, **degree-agnostic**), NOT corpus `validate_relations` (which would need degree threaded into `CatalogEdge`). The write-seam degree-conflict error (§A.5) is the author-time guard; this is the at-rest backstop for hand-authored dupes. | design (codex G2) |
@@ -85,7 +85,8 @@ references | [SL, ISS,IMP,CHR,RSK,IDE] | OriginatesFrom | "originated from" | Ki
   SL-122, inbound "precursor of"). Distinguished in storage by field (`label=` vs `role=`)
   and tier; both mean "born from." Accepted parallel naming.
 
-> **G3 [MAJOR — flag] the source/target widening deliberately FLIPS shipped rule-contract
+> **G3 [MAJOR — RESOLVED as content; enumerate at plan] the source/target widening
+> deliberately FLIPS shipped rule-contract
 > tests; these are *content*, not "machinery green unchanged" (external pass 2).** Widening
 > the source set `[SL]`→`{SL+backlog}` and target `Kinds(BACKLOG)`→`Kinds(BACKLOG+[SL])`
 > inverts assertions the current contract pins: `relation.rs:2696-2701` asserts a **backlog
@@ -134,10 +135,12 @@ struct RelationRow  { label: String, role: Option<String>, degree: Option<String
 
 **Edge identity = `(label, role, target)`** — degree **excluded** (D-edge-identity): one
 `fulfils` edge per (slice, item); you do not fulfil the same item both full and partial.
-**Single-edge is guaranteed by a `validate` uniqueness invariant** on `(source, fulfils,
-target)` (codex F2 — `read_block` legalises rows independently and never detects duplicate
-logical edges, so absent this invariant two `fulfils` rows with differing degree could
-coexist and the inbound index would pick an arbitrary winner). Mechanics — **no upsert**
+**Single-edge is guaranteed by a per-entity `read_block` uniqueness check** (G2 /
+D-uniqueness-seam — `read_block` legalises rows independently and never detects duplicate
+logical edges, so absent the check two `fulfils` rows with differing degree could coexist and
+the inbound index would pick an arbitrary winner). The check is **local** (identity's `source`
+is one entity → dupes live in one toml): a new **`DuplicateEdge`** finding on a repeated
+`(label, role, target)`, degree-agnostic — NOT corpus `validate_relations`. Mechanics — **no upsert**
 (codex F1: `append_relation_row` is append-or-`Noop`, `relation.rs:911/949`; there is no
 mutation path, and inventing one is real seam work, not a payload thread):
 
@@ -149,18 +152,19 @@ mutation path, and inventing one is real seam work, not a payload thread):
   degree is set once at slice close; partial→full is a *new slice's* edge, never an edit to
   a closed slice's edge (RFC-003).
 - `unlink` matches `(label, role, target)`, degree ignored.
-- `read_block` parses the optional `degree`; `validate` enforces the uniqueness invariant.
+- `read_block` parses the optional `degree` and **enforces the `DuplicateEdge` uniqueness
+  check** (G2 / D-uniqueness-seam — per-entity, degree-agnostic match on `(label, role, target)`).
 
-> **G2 [MAJOR — open] the uniqueness invariant is not grounded in the validator seam
-> (external pass 2, refines codex F2).** `validate_relations` (`relation_graph.rs:341+`)
-> today emits **only** dangler (`UnresolvedRef`) and catalog-corruption findings — it has
-> **no duplicate-logical-edge detection and no concept of degree** (the `CatalogEdge` model
-> carries `label`/`role`/`target`, not degree). So "validate enforces uniqueness on
-> `(source, fulfils, target)`" is a **new finding class** plus a **degree-carrying catalog
-> edge**, not a local note. Specify at design: the finding text/category, and whether the
-> check lives in `validate_relations` (needs degree threaded into `CatalogEdge`) or in
-> `read_block`/storage validation (which sees the raw rows directly and may be the cheaper
-> seam). The single-edge guarantee is real but its *home* is unspecified.
+> **G2 [MAJOR — RESOLVED, see D-uniqueness-seam] the uniqueness invariant lives in
+> per-entity `read_block` validation, not corpus `validate_relations`.** `validate_relations`
+> (`relation_graph.rs:341+`) today emits only dangler + corruption findings and `CatalogEdge`
+> carries no degree — but it doesn't need to: identity is `(source, label, role, target)` and
+> `source` is **one entity**, so a duplicate logical edge is two `fulfils` rows in **one
+> slice's own toml** — detectable **locally at `read_block`** with no corpus scan and no
+> degree thread into `CatalogEdge`. New **`DuplicateEdge`** finding, match on
+> `(label, role, target)` **degree-agnostic** (degree is excluded from identity by design).
+> The write-seam degree-conflict error (§A.5) guards author-time; `read_block` is the at-rest
+> backstop for hand-authored dupes. Finding text/category pinned at plan.
 
 ### A.6 Functions re-keyed
 
@@ -391,8 +395,8 @@ they do **not** stay green-unchanged.
   - New: `degree_bearing` true on exactly the `fulfils` row; `Degree` name/from_name
     round-trip; canonical degree order.
 - **Validation:** `DegreeNotApplicable` (degree on non-`degree_bearing` label); **`fulfils`
-  uniqueness invariant** — a second `fulfils` row for an existing `(source, target)` flagged
-  (codex F2); `link` of an existing triple with a different degree errors (codex F1); corpus
+  `DuplicateEdge`** — a second `fulfils` row for an existing `(source, target)` in one
+  entity's toml flagged at `read_block`, degree-agnostic (codex F2 / G2 / D-uniqueness-seam); `link` of an existing triple with a different degree errors (codex F1); corpus
   `validate` clean post-migration (no `IllegalRow`, no dangler regression).
 - **Storage round-trip:** author `fulfils --degree partial` → row → read back → `inspect`
   slice outbound `fulfils (partial)` + backlog inbound "fulfilled by … (partial)";
@@ -426,13 +430,17 @@ they do **not** stay green-unchanged.
 1. **P1** — `Degree` enum + `Role` rename + `RelationLabel::Fulfils` + rules
    (`fulfils`, widened `originates_from`) + `degree_bearing` column + lockstep VT tests.
    Leaf/engine. `Slices` retained.
-2. **P2** — storage (`RelationEdge`/`RelationRow`/`read_block`/`append`-upsert/`remove`) +
-   `validate_link` `DegreeNotApplicable` + `check_target_kind` for widened `originates_from`.
+2. **P2** — storage (`RelationEdge`/`RelationRow`/`read_block` incl. the `DuplicateEdge`
+   uniqueness check (G2) / `append` degree-conflict-error / `remove`) + `validate_link`
+   `DegreeNotApplicable` + `check_target_kind` for widened `originates_from`.
 3. **P3** — surfaces + **consumer re-point (A′)**: `RelationTargetView` structured targets
    (`InspectView` outbound+inbound, `render_*`, `inspect --json` schema), `CatalogEdge`
-   degree, `relation list`/`census`, web graph, `link --degree`; **re-point
-   `priority/graph.rs` + `backlog.rs` show/JSON/lifecycle from `Slices`→`fulfils`**;
-   `scoped_from`→`originates_from` output fields in `slice.rs`/`backlog.rs`/`cli.rs`.
+   degree **only if a catalog/census consumer needs it** (the G2 uniqueness check does NOT —
+   it is `read_block`-local), `relation list`/`census`, web graph, `link --degree`; **re-point
+   `priority/graph.rs` from `Slices`→`fulfils`**; **`backlog.rs` show/JSON/lifecycle gain the
+   derived `fulfils`-inbound read-path (G1(a) / D-backlog-inbound — `inspect`-style inbound
+   derivation, not the deleted `slices` outbound)**; `scoped_from`→`originates_from` output
+   fields in `slice.rs`/`backlog.rs`/`cli.rs`/`commands/relation.rs`.
 4. **P4** — migration: full in-memory transform (classes 1–5) + disposition artifact +
    single-shot apply + class-aware oracle + **drop `Slices`** + scaffold templates. Hard
    cut, same commit.
@@ -614,7 +622,10 @@ integration; none overturns a locked decision. Verdict: **RETURN-TO-DESIGN** on 
   `scoped_from`.** `commands/relation.rs:42-47` — distinct from the `cli.rs:552` clap help the
   first pass named. *Integrated* §A′.2 (new row).
 
-**Disposition.** G1 is genuine open mechanism (a read-path + an ADR-004 posture question);
-G2/G3 are specified-but-under-grounded mechanism the design must pin before plan; G4 is a
-one-line census add. **Lifecycle stays `design`** — the next step is a design working
-session to resolve G1 (and ground G2/G3), then a re-offer, NOT `/plan`.
+**Disposition (resolved in the same-day design session).** **G1 → option (a)**, user-locked
+(D-backlog-inbound): backlog show/json gain the `inspect`-style derived inbound; ADR-004-
+consistent; backlog show becomes corpus-aware. **G2 → D-uniqueness-seam**: per-entity
+`read_block` `DuplicateEdge` finding, degree-agnostic, no corpus scan / no `CatalogEdge`
+degree thread. **G3 → content**: the flipped rule-contract tests enumerated at plan (§C
+caveat). **G4 → §A′.2** row. Mechanism now complete; lifecycle stays `design` pending an
+optional confirming third pass on the G1(a) read-path, else lock.
