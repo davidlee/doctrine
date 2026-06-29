@@ -7,16 +7,12 @@ updated = "2026-06-29"
 tags = []
 
 [relationships]
-needs = []                      # slice→work hard prerequisite
+needs = ["SL-176"]                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/priority/**"
 intent = "scope-relevant"
-
-[[selector]]
-selector = "src/value.rs"
-intent = "design-target"
 
 [[selector]]
 selector = "src/kinds.rs"

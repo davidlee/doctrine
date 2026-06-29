@@ -12,5 +12,50 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-177"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Default applied at base_score value_dim only — never reaches SL-176 burndown's raw_value seam; slice fails its purpose"
+detail = """Expected: SL-177's default-1.0 makes valueless work entities participate in SL-176 value-burndown (the slice's stated reason to exist, per SL-176 D-value-floor-sibling). Observed: the design (design.md §5.4, §5.2) applies the default ONLY inside base_score's value_dim computation (graph.rs:114). But SL-176's burndown spec (.doctrine/slice/176/design.md:297-311, D-burndown-denomination) reads raw_value(src)/raw_value(I) = the RAW authored `value` facet, explicitly "raw units, not the cost/kind-weighted value_dim". The two are different seams. Consequence: a valueless backlog item I → raw_value(I)=0 → r(I)=0 (burndown no-op); a valueless fulfilling slice src → raw_value(src)=0 → contributes 0 to delivered. The default at base_score is invisible to burndown. Fix: define ONE shared accessor effective_raw_value(kind, &EntityFacets)->Option<f64> applying the default, consumed by BOTH base_score's value_dim AND SL-176's burndown raw_value. Coordinates with SL-176 (mid-dispatch) — its post-pass must read the shared seam. Sub-finding: DEFAULT_VALUE home (F-4) folds here — the const lives next to the shared seam (priority tier), not value.rs."""
+disposition = "design-wrong"
+response = "Accepted. Seam relocates from base_score-only to a shared pure accessor effective_raw_value(kind, &EntityFacets)->Option<f64> in the priority tier, applying the default for value-bearing kinds. Consumed by BOTH base_score's value_dim AND SL-176's burndown raw_value(src)/raw_value(I). Coordination (user-chosen option 1): SL-177 owns the seam and lands AFTER SL-176; on landing it retrofits SL-176's burndown raw_value call site to call effective_raw_value. Interim (SL-176 landed, SL-177 not): valueless items simply don't burn down — the soft-dep posture SL-176 already accepts. Dependency promoted soft→sequencing-hard: SL-177 needs SL-176 (the raw_value site must exist to retrofit). DEFAULT_VALUE rehomed beside the seam (F-4). Design rewritten accordingly."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Test/golden blast radius under-enumerated — only 2 unit tests named, goldens + consequence tests also encode valueless-work==0"
+detail = "Expected: design §9.1 enumerates every test asserting the old valueless-work==0 contract that this slice deliberately changes. Observed: only base_score_risk_only_value_absent and base_score_neither_facet_present are named. Codex flags additional fixtures hard-coding zero base/score for valueless SL/ISS/RSK: tests/e2e_priority_golden.rs (CLI goldens) and further graph.rs consequence tests. Fix: grep the full suite for valueless work fixtures (no [value] table on SL/backlog kinds asserting value_dim/total/score==0) and enumerate ALL in §9.1; the plan must regenerate affected goldens. Honest blast-radius or the behaviour-preservation claim is false."
+disposition = "fix-now"
+response = "Accepted. Design §9.1 rewritten to name the full blast radius honestly: (a) base_score unit tests asserting valueless-work value_dim/total==0 (base_score_risk_only_value_absent, base_score_neither_facet_present); (b) graph.rs score-consequence tests with valueless work fixtures asserting score==0 (e.g. ~L987, L1161, L1264-1279 — exact set is a plan-phase grep); (c) both e2e goldens — tests/e2e_priority_golden.rs and tests/e2e_priority_cross_kind.rs — which bake valueless SL/ISS/RSK scores. Plan phase enumerates line-by-line and re-baselines goldens; the behaviour-preservation claim is scoped to genuinely-unrelated behaviour only."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "kinds::WORK name collides with established is_work_like ({slice,backlog}∪REV) — false-equivalence DRY trap"
+detail = """Expected: a new shared kind-set named to avoid conflation with existing concepts. Observed: design §5.2 proposes kinds::WORK = {SL, ISS, IMP, CHR, RSK, IDE}. But dep_seq.rs:17 already owns is_work_like = {SL, ISS, IMP, CHR, RSK, IDE, REV} (SL-060/SL-066) — same word "work", REV-different set. Promoting surface.rs's WORK_PREFIXES (actionability node set, SL-089 D2, also REV-less) to a generic kinds::WORK invites a later refactor to merge the two and wrongly grant REV a value default (or wrongly use the value-set for dep/seq). Fix: name the new set by its semantic, e.g. kinds::VALUE_BEARING + is_value_bearing (NOT WORK); keep is_work_like untouched and separate; document that value-bearing ⊂ work-like (excludes REV)."""
+disposition = "fix-now"
+response = "Accepted. The new set is named kinds::VALUE_BEARING with predicate is_value_bearing — NOT WORK. dep_seq.rs::is_work_like ({slice,backlog}∪REV) is left untouched and separate. Design documents the relation: value_bearing ⊂ work_like, differing by REV (a revision is work-like for dep/seq but not value-bearing — excluded from the priority value default, consistent with surface.rs SL-089 D2 and SL-176 {slice,backlog}). surface.rs's function-local WORK_PREFIXES is promoted to kinds::VALUE_BEARING and both sites consume is_value_bearing."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "DEFAULT_VALUE in value.rs is wrong cohesion — it is a priority-scoring policy, not a value-facet property"
+detail = "Expected: the const lives with the concern it serves. Observed: design §5.2/D5 homes DEFAULT_VALUE in value.rs, which owns authored value parse/validate/display only. The default is a priority-policy fallback for absent values on selected kinds — priority-tier concern. ADR-001 permits the dependency but cohesion is wrong. Resolves into F-1: with the shared effective_raw_value seam in the priority tier, DEFAULT_VALUE belongs beside it (priority/graph.rs or priority/config.rs), keeping value.rs facet-pure."
+disposition = "design-wrong"
+response = "Accepted, folds into F-1. DEFAULT_VALUE moves out of value.rs (which stays authored-facet-pure: parse/validate/display) into the priority tier beside the shared effective_raw_value seam (priority/graph.rs, or priority/config.rs if/when tunable). Cohesion restored: the default is a scoring policy, not a property of the value facet."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Operator legibility — score reflects implicit default but value column renders authored-only (·), no authored-vs-effective signal"
+detail = "Expected: next/survey make the scoring basis legible. Observed (codex #5, render.rs:158-164/266-275): a valueless work item shows a non-zero score from the implicit 1.0 while the value column still renders authored value (·/blank). Mitigation (user): unvalued+unestimated items take the absent-estimate anchor (> largest real estimate) as cost, so value_dim≈1.0/large is small — the surprise is bounded; only unvalued-but-cheaply-estimated items are conspicuous. Residual: authored-vs-effective value is not signalled. Candidate follow-up (render polish: mark implicit defaults) rather than in-scope, pending user call."
+disposition = "follow-up"
+response = "Accepted as follow-up, not in-scope. Residual: next/survey score reflects the implicit default but the value column renders authored value only (·), with no authored-vs-effective signal. Bounded by the estimate-default (user): unvalued+unestimated items take the absent-estimate anchor (> largest real estimate) as cost, so value_dim≈1.0/large is small; only unvalued-but-cheaply-estimated items are conspicuous. Captured as a render-polish backlog item (mark/expose effective vs authored value). Not a blocker on SL-177's correctness."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
