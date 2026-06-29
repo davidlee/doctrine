@@ -235,7 +235,11 @@ fn next_page_resolves_to_offset() {
 
     let via_page = run(dir.path(), &["next", "--limit", "1", "--page", "2"]);
     let via_offset = run(dir.path(), &["next", "--limit", "1", "--offset", "1"]);
-    assert!(via_page.status.success(), "page stderr: {}", stderr(&via_page));
+    assert!(
+        via_page.status.success(),
+        "page stderr: {}",
+        stderr(&via_page)
+    );
     assert!(
         via_offset.status.success(),
         "offset stderr: {}",

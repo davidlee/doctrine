@@ -709,7 +709,10 @@ mod tests {
         let out = next_human(&rows, RenderOpts::default(), None, 0, 2).unwrap();
         assert!(!out.contains("ISS-001"), "offset honoured: {out}");
         assert!(out.contains("ISS-003"), "rows[2..] shown: {out}");
-        assert!(!out.contains(" of 5"), "no footer with --limit 0 --offset N: {out}");
+        assert!(
+            !out.contains(" of 5"),
+            "no footer with --limit 0 --offset N: {out}"
+        );
     }
 
     // ── VT-4: offset beyond total → empty body + offset-branch footer ────
