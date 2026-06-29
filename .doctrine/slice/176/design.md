@@ -9,6 +9,14 @@ Design draft for **RFC-003 § "Finish Axis B"** — the unfinished work→backlo
 the relation-vocabulary collapse SL-149 began for work→canon. The *what* is decided
 (RFC-003, direction locked 2026-06-29); this design resolves the **mechanism**.
 
+**Review state (2026-06-29):** revised through external pass 1 (codex F1–F6) then a second
+independent external pass (codex G1–G4). **Pass 2 verdict: RETURN-TO-DESIGN** — open
+**G1** (backlog `fulfilled by` needs an inbound read-path `backlog show` lacks + an ADR-004
+posture call) plus under-grounded **G2** (validate uniqueness finding-class/seam) and **G3**
+(widening flips rule-contract tests — a content/machinery mis-frame). Lifecycle stays
+`design`; next step is a design session to resolve G1–G3, not `/plan`. See the two
+"Adversarial review (external pass …)" sections.
+
 **Governance ratification is deferred to reconciliation** (per scope + RFC-003): the
 ratifying ADR (amend ADR-016 / ADR-010, or a sibling) is authored at P5/reconcile, after
 this design is adversarially reviewed — *not* in design or plan. This differs from SL-149,
@@ -75,6 +83,19 @@ references | [SL, ISS,IMP,CHR,RSK,IDE] | OriginatesFrom | "originated from" | Ki
   SL-122, inbound "precursor of"). Distinguished in storage by field (`label=` vs `role=`)
   and tier; both mean "born from." Accepted parallel naming.
 
+> **G3 [MAJOR — flag] the source/target widening deliberately FLIPS shipped rule-contract
+> tests; these are *content*, not "machinery green unchanged" (external pass 2).** Widening
+> the source set `[SL]`→`{SL+backlog}` and target `Kinds(BACKLOG)`→`Kinds(BACKLOG+[SL])`
+> inverts assertions the current contract pins: `relation.rs:2696-2701` asserts a **backlog
+> item CANNOT author `scoped_from`** (err→ok under source-widening); `relation.rs:2743-2748`
+> asserts `scoped_from` **refuses a non-backlog target** (the `SPEC` case still refuses, but
+> an `SL` target flips err→ok under target-widening); `VT-2 sources_match_shipped_accessors`
+> (`relation.rs:1457-1477`) pins the exact per-label source set and **must** churn. §C frames
+> these under "machinery stays green unchanged" — wrong: they are **deliberate
+> rule-contract content changes** and belong in the machinery-vs-content split (R5) on the
+> *content* side, enumerated and rewritten, not discovered as regression. No mechanism
+> breakage; a verification-accounting correction. Re-class at design, list at plan.
+
 ### A.3 `RelationLabel` — add `Fulfils`, retire `Slices`
 
 Add `Fulfils`; `Slices` retained through migration then dropped (SL-149 retain-then-cut
@@ -127,6 +148,17 @@ mutation path, and inventing one is real seam work, not a payload thread):
   a closed slice's edge (RFC-003).
 - `unlink` matches `(label, role, target)`, degree ignored.
 - `read_block` parses the optional `degree`; `validate` enforces the uniqueness invariant.
+
+> **G2 [MAJOR — open] the uniqueness invariant is not grounded in the validator seam
+> (external pass 2, refines codex F2).** `validate_relations` (`relation_graph.rs:341+`)
+> today emits **only** dangler (`UnresolvedRef`) and catalog-corruption findings — it has
+> **no duplicate-logical-edge detection and no concept of degree** (the `CatalogEdge` model
+> carries `label`/`role`/`target`, not degree). So "validate enforces uniqueness on
+> `(source, fulfils, target)`" is a **new finding class** plus a **degree-carrying catalog
+> edge**, not a local note. Specify at design: the finding text/category, and whether the
+> check lives in `validate_relations` (needs degree threaded into `CatalogEdge`) or in
+> `read_block`/storage validation (which sees the raw rows directly and may be the cheaper
+> seam). The single-edge guarantee is real but its *home* is unspecified.
 
 ### A.6 Functions re-keyed
 
@@ -190,7 +222,26 @@ IMP-210 — that item is only the *new* close-cascade hint, not the *existing* b
 | **priority scoring** | `src/priority/graph.rs:190, 201` | `Slices` is in **both** the reference-label and consequence-label sets — a backlog item's "optionality" credit counts the slices that reference it | the optionality signal moves to the **derived `fulfils` inbound** (a slice `fulfils` the item). Re-point both label-set memberships from `Slices` to `Fulfils`; preserve the scoring behaviour (behaviour-preservation on the *numbers*, not the label). |
 | **backlog show (human)** | `src/backlog.rs:1420, 1443` | `targets_for(tier1, Slices)` → a `("slices", …)` line | render the derived **`fulfilled by`** inbound instead (the `slices` *outbound* row no longer exists post-migration). |
 | **backlog show (JSON)** | `src/backlog.rs:1574` | `"slices": targets_for(…, Slices)` field | replace with the `fulfils`-derived shape; **public JSON schema change** — enumerate goldens at plan. |
-| **lifecycle findings** | `src/backlog.rs:~961` (doctor "all linked slices terminal") | reads `Slices`-linked slices | read the `fulfils`/derived-inbound set. Keep the finding's semantics; swap the edge it reads. |
+| **lifecycle findings** | `src/backlog.rs:2201` (doctor "all linked slices terminal") | reads `Slices`-linked slices | read the `fulfils`/derived-inbound set. Keep the finding's semantics; swap the edge it reads. |
+
+> **G1 [BLOCKER — open] the backlog re-point is NOT a label swap; it is an
+> inbound-derivation read-path `backlog show` structurally lacks (external pass 2).**
+> `format_show`/`format_json` are documented as a **pure fn of the item's OWN tier1**,
+> explicitly *not* inbound — "the reverse view is the deferred registry surface's,
+> ADR-004" (`src/backlog.rs:1363-1365`); the three reads (`backlog.rs:1420` human,
+> `:1574` json, `:2201` lifecycle) all call `targets_for(&item.tier1, Slices)` on the
+> item's *own outbound* rows. **Post-migration the `slices` outbound row no longer
+> exists on the backlog item** — `fulfils` is authored at the *slice* end and surfaces
+> on the item only as **derived inbound**. So "render the derived inbound instead"
+> requires giving `backlog show` an inbound scan/index it does not have, and **reverses
+> the ADR-004 posture this surface deliberately holds** (backlog show does not compute
+> inbound by design). This is unresolved mechanism, not enumeration: **RESOLUTION
+> REQUIRED at design** — either (a) backlog show/json gains a corpus-scan inbound
+> derivation (a posture change to reconcile against ADR-004 / the registry-surface
+> deferral), or (b) the surfaces drop the line and point at `inspect` (which *does*
+> derive inbound). The `doctor` lifecycle finding (`:2201`) already runs over a full
+> scan with `slice_metas` in hand, so it is the tractable one; `show`/`json` are the
+> open question. Picking (a) vs (b) is a design decision, possibly a user call.
 
 The priority re-point (A′.1 row 1) is the load-bearing one: it must keep the *scoring
 numbers* identical (a fulfils inbound credits optionality exactly as a `slices` reference
@@ -207,7 +258,8 @@ The role rename moves named output fields + CLI text, each golden-load-bearing:
 | slice show (JSON) | `src/slice.rs:1758` (`"scoped_from":` field) |
 | backlog show (human) | `src/backlog.rs:1428, 1447` |
 | backlog show (JSON) | `src/backlog.rs:1581` (`"scoped_from":` field) |
-| CLI `--role` help/error | `src/commands/cli.rs:552` (the role-name doc + parse error text) |
+| CLI `--role` help (clap) | `src/commands/cli.rs:552` (the role-name doc) |
+| CLI unknown-role diagnostic | `src/commands/relation.rs:42-47` (G4 — the runtime parse-error string hardcodes `scoped_from`, **distinct** from the clap help above; missed by the first pass) |
 
 All become `originates_from`. The JSON field renames are **public schema changes** — list
 the affected `show --json` goldens at plan; the human-render goldens move with the wording
@@ -315,7 +367,10 @@ shipped `migrate` verb** — SPEC-018 dogfood precedent); plan picks.
 `lookup`) stays behaviour-preserving — those suites green **unchanged**. The *vocabulary
 content* changes deliberately — `slices`/`scoped_from`/`drift`-entity goldens update. Proof
 obligation: an explicit list of which goldens legitimately change vs which stay
-byte-identical.
+byte-identical. **Caveat (G3):** the `originates_from` source/target *widening* also flips
+**rule-contract tests** (`relation.rs:2696`/`:2743`/VT-2 accessor census `:1457`) — those
+sit on the *content* side of this split (deliberate change), despite exercising machinery;
+they do **not** stay green-unchanged.
 
 ### Tests to change / add
 
@@ -523,3 +578,39 @@ source before integration; none overturned a locked decision (the *what*), all c
 
 Codex verdict was "return to design"; the return is this revision (mechanism + blast-radius
 corrections), not a re-decision of the locked direction.
+
+---
+
+## Adversarial review (external pass 2 — codex/GPT-5.5, integrated)
+
+Second **independent** hostile pass on the F1–F6 revision (fresh thread; reviewer did not
+see pass 1). Attacked the mechanism the revision *introduced* (no-upsert, `RelationTargetView`,
+the A′ blast radius, the widening). All four findings verified against live source before
+integration; none overturns a locked decision. Verdict: **RETURN-TO-DESIGN** on G1.
+
+- **G1 [BLOCKER, NEW] backlog re-point is an inbound read-path `backlog show` lacks, not a
+  label swap.** `format_show`/`format_json` are pure-on-own-tier1 by design, inbound
+  explicitly deferred to the registry surface (ADR-004) — `backlog.rs:1363-1365`; the three
+  reads (`:1420`/`:1574`/`:2201`) read the item's *own outbound* `slices`, which the
+  migration deletes. Rendering `fulfilled by` = derived inbound the surface cannot compute
+  + an ADR-004 posture reversal. *Integrated* §A′.1 (G1 callout). **Open — resolution
+  required: (a) give show/json a scan-derived inbound, or (b) drop the line, defer to
+  `inspect`.** Drives the verdict.
+- **G2 [MAJOR, NEW — refines F2] the `(source,fulfils,target)` uniqueness invariant has no
+  home in the validator seam.** `validate_relations` (`relation_graph.rs:341+`) reports only
+  danglers + corruption; no duplicate-edge class, and `CatalogEdge` carries no degree.
+  *Integrated* §A.5 (G2 callout) — needs a named finding class + a seam choice
+  (`validate_relations` with degree threaded vs `read_block`/storage validation).
+- **G3 [MAJOR, NEW] the `originates_from` source/target widening flips shipped rule-contract
+  tests, mis-framed as "machinery green unchanged."** `relation.rs:2696-2701` (backlog can't
+  author scoped_from), `:2743-2748` (non-backlog target refused), `VT-2` accessor census
+  `:1457-1477`. *Integrated* §A.2 (G3 callout) — re-classed as deliberate *content* change
+  (R5 split), enumerated at plan. No mechanism breakage.
+- **G4 [MINOR, residue of F5] the unknown-role diagnostic string still hardcodes
+  `scoped_from`.** `commands/relation.rs:42-47` — distinct from the `cli.rs:552` clap help the
+  first pass named. *Integrated* §A′.2 (new row).
+
+**Disposition.** G1 is genuine open mechanism (a read-path + an ADR-004 posture question);
+G2/G3 are specified-but-under-grounded mechanism the design must pin before plan; G4 is a
+one-line census add. **Lifecycle stays `design`** — the next step is a design working
+session to resolve G1 (and ground G2/G3), then a re-offer, NOT `/plan`.

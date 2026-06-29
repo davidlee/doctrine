@@ -123,3 +123,37 @@ fence · Q5 cascade spun out → IMP-210 · Q6 drift mapping named, re-census at
 **Next:** second codex pass (fresh agent) → if clean, `doctrine slice status 176 plan` +
 `/plan`. If the priority re-point (R10) or `RelationTargetView` change (R11) draws blood,
 back to design.
+
+## Second codex pass — DONE, verdict RETURN-TO-DESIGN (2026-06-29)
+
+Fresh independent codex thread, hostile read-only. Four findings, all verified in source,
+all integrated into design.md (new "external pass 2" subsection + section callouts G1–G4).
+Lifecycle **stays `design`** — NOT moved to plan.
+
+- **G1 [BLOCKER, open]** the §A′.1 backlog re-point is **not a label swap** — it needs an
+  inbound read-path `backlog show` structurally lacks. `format_show`/`format_json` are
+  pure-on-own-tier1, inbound deferred to the registry surface by ADR-004
+  (`backlog.rs:1363-1365`); reads at `:1420`/`:1574`/`:2201` read the item's *own outbound*
+  `slices`, which migration deletes. `fulfilled by` = derived inbound + an ADR-004 posture
+  reversal. **Resolution required at design:** (a) show/json gain scan-derived inbound, or
+  (b) drop the line, defer to `inspect`. `doctor` (`:2201`) is tractable (already scans);
+  show/json are the open call. *Drives the verdict.*
+- **G2 [MAJOR, open]** validate uniqueness invariant has no home — `validate_relations`
+  (`relation_graph.rs:341+`) reports only danglers/corruption, `CatalogEdge` carries no
+  degree. Needs a named finding class + seam choice.
+- **G3 [MAJOR, flag]** `originates_from` source/target widening flips shipped rule-contract
+  tests (`relation.rs:2696`/`:2743`/VT-2 `:1457`) — deliberate *content*, mis-framed under
+  "machinery green unchanged." Re-classed; no mechanism breakage.
+- **G4 [MINOR]** unknown-role diagnostic string `commands/relation.rs:42-47` hardcodes
+  `scoped_from` (distinct from `cli.rs:552` clap help). Census add.
+
+**Reusable gotcha (memory-worthy at execution):** retiring/renaming a relation label is
+NEVER vocab-table-local. Beyond `priority/graph.rs` + `backlog.rs` show/json/lifecycle
+(F4), grep also **`lazyspec.rs` `map_edge`** (web-graph), **`commands/relation.rs`**
+(runtime role-parse diagnostics, distinct from clap help), and any surface that reads the
+*item's own outbound* for an edge that is migrating to the *other* endpoint — those silently
+need an inbound-derivation read-path, not a swap (G1).
+
+**Next:** design session to resolve G1 (a/b decision — likely a user call on the ADR-004
+posture) and ground G2/G3, re-offer for a third pass or lock. Commits: `96fa4edf` →
+`27bd3321` → `20e86c8d` → (this pass-2 integration).
