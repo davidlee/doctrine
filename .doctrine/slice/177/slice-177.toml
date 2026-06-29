@@ -1,7 +1,7 @@
 id = 177
 slug = "value-floor"
 title = "Default value floor for valueless actionable kinds"
-status = "reconcile"
+status = "done"
 created = "2026-06-29"
 updated = "2026-06-29"
 tags = []
