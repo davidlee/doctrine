@@ -55,9 +55,9 @@ entity; the target is canonical truth or an artefact.
 | Label | Wire name | Role | Inbound | Meaning |
 |---|---|---|---|---|
 | `References` | `references` | `implements` | `implemented by` | "this slice builds the capability that SPEC/PRD/REQ defines" |
-| `References` | `references` | `scoped_from` | `scoped into` | "this slice was scoped from that backlog item" |
+| `References` | `references` | `originates_from` | `originated from` | "this slice/backlog item was born from that backlog item or slice" |
 | `References` | `references` | `concerns` | `concerned by` | "this work bears on / is about that numbered entity" |
-| `Slices` | `slices` | — | `slices` | "this backlog item is implemented by those slices" |
+| `Fulfils` | `fulfils` | — | `fulfilled by` | "this slice fulfils that backlog item" — carries a `Degree {full, partial}` facet (`None ≡ full`) |
 | `Drift` | `drift` | — | `drift` | "this backlog item is about this free-text drift reference" |
 | `Reviews` | `reviews` | — | `reviews` | "this review targets that entity" |
 | `Revises` | `revises` | — | `revises` | "this revision changes that authored truth" |
@@ -66,17 +66,27 @@ entity; the target is canonical truth or an artefact.
 (SL→`{SPEC,PRD}`) and `requirements` (SL→`REQ`) labels named the *target kind*,
 never the verb — the missing verb *is* the role. They folded onto one structural
 `references` label refined by a closed `Role`: `implements` (SL → canon),
-`scoped_from` (SL → backlog), `concerns` (work → any numbered). The target gate
-re-keyed from `(source, label)` to `(source, label, role)`; type safety is
-preserved, relocated from label to role. `concerns` also absorbs the lightweight
-`reviews` *role* RFC-003 floated — heavyweight, dispositioned review stays the
+`originates_from` (provenance — born-from; SL/backlog → backlog/SL), `concerns` (work →
+any numbered). The target gate re-keyed from `(source, label)` to `(source, label, role)`;
+type safety is preserved, relocated from label to role. `concerns` also absorbs the
+lightweight `reviews` *role* RFC-003 floated — heavyweight, dispositioned review stays the
 first-class RV `reviews` label above.
+
+**Finishing Axis B (SL-176 / ADR-018).** The work→backlog half — `slices` and `drift` —
+stayed standing after ADR-016. SL-176 retires **`slices`**, splitting its three conflated
+dimensions: provenance folds into the renamed-and-widened **`references(originates_from)`**
+role (was `scoped_from`, SL-only → now `{SL + backlog}` ↔ `{BACKLOG + SL}`, subsuming the
+proposed `spawned_from`); fulfilment becomes the new **`fulfils`** label (SL → backlog,
+derived inbound "fulfilled by", carrying the old "addressed by" reading); completion becomes
+a non-keyed **`Degree {full, partial}`** facet on `fulfils` — the one place ADR-016 §2's
+derivable-not-relational law is partially reversed (completion is per-edge fact, not a status
+projection). `drift` is untouched (deferred IMP-012/IDE-015).
 
 **Why role, not source-set.** Refining intent by role keeps inbound coherent:
 `references(implements)` renders "implemented by", `references(concerns)` renders
 "concerned by" — a slice *realising* a spec and a chore *bearing on* one no longer
 collapse to one nonsense inbound ("specs this spec"). The remaining class-3 labels
-(`slices`/`drift`/`reviews`/`revises`) keep their own structural identity; they did
+(`fulfils`/`drift`/`reviews`/`revises`) keep their own structural identity; they did
 not fold because their inbound is already coherent. Adding a new intent is a code
 change (a new `Role` variant), so the closed set stays auditable.
 
@@ -133,7 +143,7 @@ a cross-corpus edge. `Drift` is also unvalidated but fits class 3 semantically
 None of the existing classes capture "truth that shapes work." A knowledge
 record (assumption, decision, question, constraint — SPEC-019) *informs*,
 *constrains*, *grounds*, or *motivates* — it is epistemic input to work, not
-execution output. The work→canon labels (`references`, `slices`) carry the wrong
+execution output. The work→canon labels (`references`, `fulfils`) carry the wrong
 inbound semantics for records — a record *informing* a spec is not a slice
 *implementing* it.
 

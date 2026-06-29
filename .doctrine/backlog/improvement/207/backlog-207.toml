@@ -5,10 +5,10 @@ id = 207
 slug = "add-spawned-from-relation-label-for-backlogslice-edges-and-retcon-19-mislabelled-slices-edges"
 title = "Add spawned_from relation label for backlog→slice edges and retcon 19 mislabelled slices edges"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-28"
-updated = "2026-06-28"
+updated = "2026-06-29"
 tags = ["area:backlog", "area:relations"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

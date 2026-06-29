@@ -375,6 +375,14 @@ Here 63 edges *relocate* backlog→slice toml (direction flip). The old backlog-
 inbound view re-materialises as the slice-end `fulfils` outbound + the backlog item's
 derived `fulfilled by` inbound.
 
+> **Execution carve-out (OQ-2, recorded at reconcile — RV-192 F-4).** Two entity-target
+> `drift` rows — `ISS-041 drift RFC-003` and `ISS-048 drift IMP-148` — fit **neither** outlet
+> 4 (provenance) nor 5 (dependency): they are "concerns"-shaped references with no target role
+> in this slice's grammar. Under OQ-2 ("leave") they stay on `drift`, classed **Class 6** in
+> the disposition record. The authoritative decision (VH-1 approved 2026-06-29) lives in
+> [`migration-dispositions.{md,toml}`](migration-dispositions.md), not here — this xref only
+> points at it.
+
 **Prov-vs-fulfil triage criterion (SR-3)** — the load-bearing judgement separating class 2
 from class 3 on the 82 `slices` edges. A `slices` edge (backlog→SL) is:
 

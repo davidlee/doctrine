@@ -1,0 +1,28 @@
+schema = "doctrine.adr"
+version = 1
+
+id = 18
+slug = "finish-axis-b-fulfils-degree-burndown"
+title = "Finish Axis B: neutral originates_from provenance, fulfils label with completion degree, value-burndown"
+status = "accepted"
+created = "2026-06-29"
+updated = "2026-06-29"
+tags = []
+
+[relationships]
+# `supersedes` stays typed — author with `doctrine supersede ADR-NNN <previous>`.
+# `related` edges are uniform `[[relation]]` rows — author with `doctrine link ADR-NNN related <target>`.
+supersedes    = []
+superseded_by = []   # set on the old ADR by F1; reverse link is derived
+
+[[relation]]
+label = "related"
+target = "ADR-016"
+
+[[relation]]
+label = "related"
+target = "ADR-010"
+
+[[relation]]
+label = "related"
+target = "ADR-004"

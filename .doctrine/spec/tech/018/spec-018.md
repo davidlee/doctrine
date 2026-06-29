@@ -39,10 +39,14 @@ target)`:
   `consumes`, `references`. Its wire spelling is `name()`.
 - **role** — an optional closed `Role` (ADR-016) refining a label whose structure
   alone underspecifies intent. Present only for `references`
-  (`{implements, scoped_from, concerns}`); `None` elsewhere. The role, not the label,
+  (`{implements, originates_from, concerns}`); `None` elsewhere. The role, not the label,
   carries the target gate when present.
 - **target** — a canonical ref to another entity, or free text for unvalidated
   labels.
+- **degree** — an optional non-keyed `Degree {full, partial}` payload column, present
+  only on the `fulfils` label (ADR-018), `None ≡ full`. Unlike `role` it keys no gate and
+  is **excluded from edge identity** `(label, role, target)`; it records how much of the
+  target a `fulfils` edge satisfies and never aggregates (two `partial` ≠ `full`).
 
 Inbound is **never stored**. The reciprocal view ("what governs this ADR?", "what
 supersedes this slice?") is derived from `in_edges` in the SL-046 graph (ADR-004);
@@ -64,14 +68,16 @@ six axes — see the code for the authoritative set; this spec describes only th
   rule serves a label from several kinds without row explosion).
 - **role** (`Option<Role>`) — the closed intent dimension. `None` for labels whose
   structure already fixes intent; `Some(Role)` for `references`, where
-  `{implements, scoped_from, concerns}` separate distinct intents under one label.
+  `{implements, originates_from, concerns}` separate distinct intents under one label.
   `(source, label)` admits a fixed *set* of legal roles (`legal_roles`); each new
-  intent is a code change, not a free-text value (cost #1).
+  intent is a code change, not a free-text value (cost #1). (`fulfils` is a distinct
+  *label*, not a `references` role — its completion facet is the `degree` column, not a
+  role; ADR-018.)
 - **target** (`TargetSpec`) — `Kinds(…)` (a fixed legal target-kind set),
   `SameKind` (target kind equals source kind, e.g. governance `related`),
   `AnyNumbered`, or `Unvalidated` (free text). Keyed by `(source, label, role)` when
   a role is present (`references(implements) → {SPEC,PRD,REQ}`;
-  `references(scoped_from) → backlog kinds`; `references(concerns) → AnyNumbered`),
+  `references(originates_from) → Kinds(BACKLOG + SL)`; `references(concerns) → AnyNumbered`),
   by `(source, label)` otherwise. Drives forward validation.
 - **tier** — the storage shape (below).
 - **link** (`LinkPolicy`) — whether the generic `link` verb admits the triple:
@@ -80,8 +86,9 @@ six axes — see the code for the authoritative set; this spec describes only th
   req add`).
 - **inbound_name** — how the *derived* reciprocal renders on the target. Keyed
   `(label, role)` where a role is present (`references(implements)` → "implemented by",
-  `references(scoped_from)` → "scoped into", `references(concerns)` → "concerned by"),
-  `(label)` otherwise (`governed_by` → "governs"); render-text only, and pinned
+  `references(originates_from)` → "originated from", `references(concerns)` → "concerned by"),
+  `(label)` otherwise (`governed_by` → "governs", `fulfils` → "fulfilled by"); render-text
+  only, and pinned
   `== name()` for every pre-existing label so legacy inbound output is unchanged.
 
 This one table is the sole driver of **five consumers** — the `read_block` parser's
@@ -160,8 +167,9 @@ The work→canon label family — the noun-named `specs` (SL→`{SPEC,PRD}`) and
 standalone `requirements` label (SL→`REQ`) — folded onto the single `references`
 label refined by role (ADR-016): the missing **verb** *is* the role.
 `references(implements)` (SL → `{SPEC,PRD,REQ}`) absorbs `specs`/`requirements`;
-`references(scoped_from)` (SL → backlog) and `references(concerns)` (work → any
-numbered) absorb the mismapped `related` rows that asserted scope or aboutness.
+`references(originates_from)` (SL → backlog; named `scoped_from` at SL-149, renamed at
+SL-176) and `references(concerns)` (work → any numbered) absorb the mismapped `related`
+rows that asserted scope or aboutness.
 True symmetric peers stay on `related`, which does **not** fold — symmetry is
 structural, so it remains its own label. `reviews` as a lightweight role was
 dropped (it folds into `concerns`; heavyweight review keeps the first-class RV
@@ -177,6 +185,29 @@ and corpus in disagreement. The migration is recorded in
 [migration-dispositions.md](../../../slice/149/migration-dispositions.md): 195 edges
 (implements 93 · concerns 76 · scoped_from 14 · related-kept 12), with a per-row role
 and rationale for every hand-judged edge, asserted by the role-assignment oracle.
+
+### Finishing Axis B (SL-176 / ADR-018)
+
+ADR-016 collapsed the work→**canon** half; the work→**backlog** half (`slices`, `drift`)
+stayed standing until **SL-176** (ratified by **ADR-018**). The `slices` edge conflated
+provenance, fulfilment, and completion; it is retired and split:
+
+- **Provenance** — the `scoped_from` role is renamed **`originates_from`** in place
+  (inbound "originated from") and widened to `{SL + backlog}` sources and
+  `Kinds(BACKLOG + SL)` targets, subsuming the proposed `spawned_from`: a backlog item
+  authors "born from SL", a slice "born from idea / sibling slice".
+- **Fulfilment** — a new **`fulfils`** label (SL → backlog) carries the old "addressed by"
+  reading as derived inbound "fulfilled by"; `backlog show` renders it through the same
+  inbound machinery `inspect` uses (ADR-004-consistent).
+- **Completion** — a non-keyed **`Degree {full, partial}`** column on `fulfils` (`None ≡
+  full`, excluded from edge identity), the one place ADR-016 §2's derivable-not-relational
+  law is partially reversed (completion is per-edge fact, not a status projection).
+
+`drift` is untouched here (free-text escape hatch, deferred IMP-012/IDE-015). The priority
+consequence of `fulfils` is a **value-burndown** post-pass (a backlog item's value reduced
+by the value of the slices fulfilling it), not the old additive `slices`→optionality credit
+(SPEC-001 / ADR-018). The migration record is
+[migration-dispositions.md](../../../slice/176/migration-dispositions.md).
 
 ## Concerns
 

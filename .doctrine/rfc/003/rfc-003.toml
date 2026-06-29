@@ -4,9 +4,9 @@ version = 1
 id = 3
 slug = "relation-structure-vs-role-intent"
 title = "Relation model: durable structural shape vs contextual role-intent"
-status = "open"
+status = "resolved"
 created = "2026-06-23"
-updated = "2026-06-23"
+updated = "2026-06-29"
 tags = ["design", "model", "relations", "vocabulary"]
 
 [relationships]

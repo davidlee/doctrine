@@ -109,3 +109,43 @@ governance authoring, handed to /reconcile below.
 - **Backlog closures** — discharge IMP-207 (19-row retcon rode this slice) and
   IMP-149 (`slices` ambiguity dissolved); confirm IMP-210 / IMP-156 remain open
   follow-ups (close-cascade hint consumer; create-time `--originates-from` flag).
+
+## Reconciliation Outcome
+
+Reconcile pass complete (2026-06-29). All five findings were terminal at entry
+(F-1..F-4 `aligned`, F-5 `reconcile`); the substantive write was F-5's deferred
+governance. F-1..F-4 were `aligned` conformance dispositions needing no write
+(F-4's optional polish applied below).
+
+### Governance / spec authored
+
+- **ADR-018** (`finish-axis-b-fulfils-degree-burndown`) — authored + `accepted`.
+  Ratifies RFC-003 § "Finish Axis B"; composes with ADR-016/010/004 and **partially
+  reverses ADR-016 §2** (completion is relational via the `fulfils` degree facet).
+  `related` → ADR-016/010/004; `SL-176 governed_by ADR-018` linked. Authored directly
+  (the REV change grammar has no create-ADR action; ADR-016 precedent). Covers RV-192 F-5.
+- **REV-016** (`reconcile-sl-176`, `originates_from` RFC-003) — `done`. One `modify`
+  row against **SPEC-018**, hand-landed: `scoped_from`→`originates_from` (renamed +
+  widened), new `fulfils` label + `Degree {full, partial}` facet, plus a "Finishing
+  Axis B" subsection; companion **relation-vocabulary.md** refreshed (retired `Slices`
+  row, renamed role, added `Fulfils` + degree). Rationale in revision-016.md. Covers F-5.
+- **RFC-003** → `resolved` (`rfc status`) — Finish-Axis-B decision discharged by ADR-018.
+
+### Direct edits applied
+
+- **design.md** migration § — added the OQ-2 bare-entity-drift carve-out xref
+  (ISS-041→RFC-003, ISS-048→IMP-148 left on `drift`, Class 6, authoritative truth in
+  `migration-dispositions.{md,toml}`). Covers RV-192 F-4 (optional polish).
+
+### Backlog discharged
+
+- **IMP-207** (spawned_from retcon) → `resolved · done`; **IMP-149** (`slices`
+  ambiguity) → `resolved · done`. **IMP-210** (close-cascade hint) and **IMP-156**
+  (`--spawn-from` flag) confirmed open follow-ups — not discharged (out of SL-176 scope).
+
+### Withdrawn / tolerated
+
+- None. All findings verified terminal; no withdrawals or tolerations.
+
+Reconcile pass complete — handoff to **/close** (remove coord tree `.dispatch/SL-176`,
+`git fetch . edge:main`, `dispatch sync --integrate --trunk refs/heads/main`).
