@@ -42,7 +42,7 @@ curl -sL https://install.doctrinal.systems | sh
 ```
 
 
-**Prebuilt binary (macOS, no Rust toolchain) — recommended:**
+**Prebuilt binary (macOS + Linux, no Rust toolchain) — recommended:**
 
 ``` zsh
 # latest release (rolling):
@@ -54,7 +54,8 @@ curl -fsSL https://raw.githubusercontent.com/davidlee/doctrine/v0.8.1/install.sh
 
 Installs to `~/.local/bin` (override with `DOCTRINE_BIN_DIR`); choose a version
 with `DOCTRINE_VERSION`. The script checksum-verifies what it downloads — read it
-before piping to a shell. macOS arm64 + x86_64; Linux is a follow-up.
+before piping to a shell. macOS arm64 + x86_64; Linux x86_64 + aarch64 (static
+musl — runs on any distro regardless of glibc version).
 
 **Or with [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) (prebuilt, no compile):**
 

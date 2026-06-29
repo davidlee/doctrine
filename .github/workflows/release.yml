@@ -31,9 +31,11 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-14 # arm64 runner — native
             rosetta: false
+            musl: false
           - target: x86_64-apple-darwin
             os: macos-14 # cross-compiled on arm64; x86 smoke runs under Rosetta
             rosetta: true
+            musl: false
           # FALLBACK (EX-4): if the x86_64 cross-link re-enters the iconv failure
           # domain on the arm64 runner (R3-amended), disable the x86 leg above
           # and enable this native macos-13 (Intel) leg instead — same steps,
@@ -41,6 +43,17 @@ jobs:
           # - target: x86_64-apple-darwin
           #   os: macos-13
           #   rosetta: false
+          #   musl: false
+          # Linux: static musl on native runners (no cross, no Rosetta) so the
+          # shipped binary runs on any distro regardless of glibc version.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-24.04 # x86_64 runner — native
+            rosetta: false
+            musl: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm # arm64 runner — native
+            rosetta: false
+            musl: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,6 +70,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # musl static link needs the musl C toolchain (provides musl-gcc); the
+      # native runner already matches the target arch, so no cross is involved.
+      - name: Setup musl toolchain
+        if: ${{ matrix.musl }}
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       # MUST precede cargo: generates web/map/dist so rust-embed embeds the map.
       # A plain cargo build would ship a broken map embed (the dominant risk R1).
@@ -84,7 +103,13 @@ jobs:
           set -eu
           asset="doctrine-${{ matrix.target }}.tar.gz"
           tar -czf "$asset" -C "target/${{ matrix.target }}/release" doctrine
-          shasum -a 256 "$asset" > "$asset.sha256"
+          # Portable checksum: macOS ships shasum, Linux ships sha256sum. Both
+          # emit the `<hash>  <name>` format install.sh's verify_sha256 reads.
+          if command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "$asset" > "$asset.sha256"
+          else
+            sha256sum "$asset" > "$asset.sha256"
+          fi
           ls -l "$asset" "$asset.sha256"
 
       - name: Upload to Release
