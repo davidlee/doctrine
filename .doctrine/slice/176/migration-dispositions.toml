@@ -1,0 +1,1179 @@
+# SL-176 PHASE-04 — machine-readable migration disposition record.
+# Companion to migration-dispositions.md (the VH-1 review subject). One row per
+# migrated edge: the FROM shape (pre-cut) and the applied TO shape. Oracle input
+# (VT-1 faithfulness: each TO edge exists in the corpus at the recorded shape).
+schema = "doctrine.sl176.migration"
+version = 1
+
+# VH-1 APPROVED 2026-06-29 (David): 41 provenance / 41 fulfilment; OQ-2 leave,
+# OQ-3 needs, OQ-4 retcon IMP-210. See migration-dispositions.md for rationale.
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-019"
+from_label = "slices"
+from_target = "SL-036"
+to_source = "IMP-019"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-036"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-020"
+from_label = "slices"
+from_target = "SL-036"
+to_source = "IMP-020"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-036"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "ISS-003"
+from_label = "slices"
+from_target = "SL-036"
+to_source = "ISS-003"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-036"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "RSK-001"
+from_label = "slices"
+from_target = "SL-036"
+to_source = "RSK-001"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-036"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "RSK-002"
+from_label = "slices"
+from_target = "SL-036"
+to_source = "RSK-002"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-036"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "RSK-003"
+from_label = "slices"
+from_target = "SL-036"
+to_source = "RSK-003"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-036"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "RSK-004"
+from_label = "slices"
+from_target = "SL-036"
+to_source = "RSK-004"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-036"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-036"
+from_label = "slices"
+from_target = "SL-127"
+to_source = "SL-127"
+to_label = "fulfils"
+to_target = "ISS-036"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "RSK-010"
+from_label = "slices"
+from_target = "SL-127"
+to_source = "SL-127"
+to_label = "fulfils"
+to_target = "RSK-010"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-035"
+from_label = "slices"
+from_target = "SL-048"
+to_source = "SL-048"
+to_label = "fulfils"
+to_target = "IMP-035"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-099"
+from_label = "slices"
+from_target = "SL-105"
+to_source = "IMP-099"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-105"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-134"
+from_label = "slices"
+from_target = "SL-136"
+to_source = "SL-136"
+to_label = "fulfils"
+to_target = "IMP-134"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-162"
+from_label = "slices"
+from_target = "SL-147"
+to_source = "IMP-162"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-147"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "ISS-019"
+from_label = "slices"
+from_target = "SL-085"
+to_source = "ISS-019"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-085"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-075"
+from_label = "slices"
+from_target = "SL-121"
+to_source = "SL-121"
+to_label = "fulfils"
+to_target = "IMP-075"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-078"
+from_label = "slices"
+from_target = "SL-121"
+to_source = "SL-121"
+to_label = "fulfils"
+to_target = "IMP-078"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-102"
+from_label = "slices"
+from_target = "SL-121"
+to_source = "IMP-102"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-121"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-103"
+from_label = "slices"
+from_target = "SL-121"
+to_source = "IMP-103"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-121"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-122"
+from_label = "slices"
+from_target = "SL-121"
+to_source = "IMP-122"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-121"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-022"
+from_label = "slices"
+from_target = "SL-121"
+to_source = "SL-121"
+to_label = "fulfils"
+to_target = "ISS-022"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-030"
+from_label = "slices"
+from_target = "SL-121"
+to_source = "SL-121"
+to_label = "fulfils"
+to_target = "ISS-030"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "CHR-010"
+from_label = "slices"
+from_target = "SL-094"
+to_source = "CHR-010"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-094"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-094"
+from_label = "slices"
+from_target = "SL-094"
+to_source = "IMP-094"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-094"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-021"
+from_label = "slices"
+from_target = "SL-094"
+to_source = "SL-094"
+to_label = "fulfils"
+to_target = "ISS-021"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "RSK-009"
+from_label = "slices"
+from_target = "SL-094"
+to_source = "RSK-009"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-094"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-006"
+from_label = "slices"
+from_target = "SL-062"
+to_source = "SL-062"
+to_label = "fulfils"
+to_target = "IMP-006"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-033"
+from_label = "slices"
+from_target = "SL-060"
+to_source = "SL-060"
+to_label = "fulfils"
+to_target = "IMP-033"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-090"
+from_label = "slices"
+from_target = "SL-093"
+to_source = "SL-093"
+to_label = "fulfils"
+to_target = "IMP-090"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-036"
+from_label = "slices"
+from_target = "SL-046"
+to_source = "IMP-036"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-046"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-037"
+from_label = "slices"
+from_target = "SL-046"
+to_source = "IMP-037"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-046"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "RSK-007"
+from_label = "slices"
+from_target = "SL-046"
+to_source = "RSK-007"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-046"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-001"
+from_label = "slices"
+from_target = "SL-040"
+to_source = "SL-040"
+to_label = "fulfils"
+to_target = "IMP-001"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-025"
+from_label = "slices"
+from_target = "SL-040"
+to_source = "IMP-025"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-040"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-068"
+from_label = "slices"
+from_target = "SL-040"
+to_source = "IMP-068"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-040"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-050"
+from_label = "slices"
+from_target = "SL-096"
+to_source = "SL-096"
+to_label = "fulfils"
+to_target = "IMP-050"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-051"
+from_label = "slices"
+from_target = "SL-096"
+to_source = "IMP-051"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-096"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-053"
+from_label = "slices"
+from_target = "SL-096"
+to_source = "IMP-053"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-096"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IDE-004"
+from_label = "slices"
+from_target = "SL-056"
+to_source = "IDE-004"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-056"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-045"
+from_label = "slices"
+from_target = "SL-056"
+to_source = "IMP-045"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-056"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-052"
+from_label = "slices"
+from_target = "SL-056"
+to_source = "IMP-052"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-056"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "ISS-001"
+from_label = "slices"
+from_target = "SL-020"
+to_source = "ISS-001"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-020"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-001"
+from_label = "slices"
+from_target = "SL-027"
+to_source = "SL-027"
+to_label = "fulfils"
+to_target = "ISS-001"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-038"
+from_label = "slices"
+from_target = "SL-079"
+to_source = "SL-079"
+to_label = "fulfils"
+to_target = "IMP-038"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-039"
+from_label = "slices"
+from_target = "SL-079"
+to_source = "SL-079"
+to_label = "fulfils"
+to_target = "IMP-039"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-040"
+from_label = "slices"
+from_target = "SL-079"
+to_source = "SL-079"
+to_label = "fulfils"
+to_target = "IMP-040"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-039"
+from_label = "slices"
+from_target = "SL-053"
+to_source = "IMP-039"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-053"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-040"
+from_label = "slices"
+from_target = "SL-053"
+to_source = "IMP-040"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-053"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-037"
+from_label = "slices"
+from_target = "SL-077"
+to_source = "SL-077"
+to_label = "fulfils"
+to_target = "IMP-037"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-058"
+from_label = "slices"
+from_target = "SL-077"
+to_source = "SL-077"
+to_label = "fulfils"
+to_target = "IMP-058"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-064"
+from_label = "slices"
+from_target = "SL-095"
+to_source = "SL-095"
+to_label = "fulfils"
+to_target = "IMP-064"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-082"
+from_label = "slices"
+from_target = "SL-095"
+to_source = "SL-095"
+to_label = "fulfils"
+to_target = "IMP-082"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-105"
+from_label = "slices"
+from_target = "SL-026"
+to_source = "IMP-105"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-026"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-112"
+from_label = "slices"
+from_target = "SL-132"
+to_source = "SL-132"
+to_label = "fulfils"
+to_target = "IMP-112"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-118"
+from_label = "slices"
+from_target = "SL-133"
+to_source = "SL-133"
+to_label = "fulfils"
+to_target = "IMP-118"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-132"
+from_label = "slices"
+from_target = "SL-134"
+to_source = "SL-134"
+to_label = "fulfils"
+to_target = "IMP-132"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-136"
+from_label = "slices"
+from_target = "SL-137"
+to_source = "SL-137"
+to_label = "fulfils"
+to_target = "IMP-136"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-138"
+from_label = "slices"
+from_target = "SL-138"
+to_source = "SL-138"
+to_label = "fulfils"
+to_target = "IMP-138"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-143"
+from_label = "slices"
+from_target = "SL-110"
+to_source = "IMP-143"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-110"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-145"
+from_label = "slices"
+from_target = "SL-139"
+to_source = "SL-139"
+to_label = "fulfils"
+to_target = "IMP-145"
+degree = "partial"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-161"
+from_label = "slices"
+from_target = "SL-146"
+to_source = "SL-146"
+to_label = "fulfils"
+to_target = "IMP-161"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-163"
+from_label = "slices"
+from_target = "SL-143"
+to_source = "IMP-163"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-143"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "CHR-021"
+from_label = "slices"
+from_target = "SL-143"
+to_source = "SL-143"
+to_label = "fulfils"
+to_target = "CHR-021"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "CHR-022"
+from_label = "slices"
+from_target = "SL-140"
+to_source = "CHR-022"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-140"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-020"
+from_label = "slices"
+from_target = "SL-140"
+to_source = "SL-140"
+to_label = "fulfils"
+to_target = "IMP-020"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "CHR-023"
+from_label = "slices"
+from_target = "SL-144"
+to_source = "SL-144"
+to_label = "fulfils"
+to_target = "CHR-023"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IDE-009"
+from_label = "slices"
+from_target = "SL-059"
+to_source = "IDE-009"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-059"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IDE-021"
+from_label = "slices"
+from_target = "SL-148"
+to_source = "IDE-021"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-148"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-041"
+from_label = "slices"
+from_target = "SL-135"
+to_source = "SL-135"
+to_label = "fulfils"
+to_target = "ISS-041"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-005"
+from_label = "slices"
+from_target = "SL-024"
+to_source = "IMP-005"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-024"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-008"
+from_label = "slices"
+from_target = "SL-043"
+to_source = "IMP-008"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-043"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-047"
+from_label = "slices"
+from_target = "SL-158"
+to_source = "SL-158"
+to_label = "fulfils"
+to_target = "IMP-047"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-065"
+from_label = "slices"
+from_target = "SL-064"
+to_source = "IMP-065"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-064"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-082"
+from_label = "slices"
+from_target = "SL-080"
+to_source = "IMP-082"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-080"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "IMP-095"
+from_label = "slices"
+from_target = "SL-097"
+to_source = "IMP-095"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-097"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-102"
+from_label = "slices"
+from_target = "SL-126"
+to_source = "SL-126"
+to_label = "fulfils"
+to_target = "IMP-102"
+degree = "full"
+
+[[edge]]
+class = 2
+kind = "provenance"
+from_source = "RSK-005"
+from_label = "slices"
+from_target = "SL-039"
+to_source = "RSK-005"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-039"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "RSK-007"
+from_label = "slices"
+from_target = "SL-092"
+to_source = "SL-092"
+to_label = "fulfils"
+to_target = "RSK-007"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "IMP-036"
+from_label = "slices"
+from_target = "SL-092"
+to_source = "SL-092"
+to_label = "fulfils"
+to_target = "IMP-036"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-007"
+from_label = "slices"
+from_target = "SL-052"
+to_source = "SL-052"
+to_label = "fulfils"
+to_target = "ISS-007"
+degree = "full"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-011"
+from_label = "slices"
+from_target = "SL-124"
+to_source = "SL-124"
+to_label = "fulfils"
+to_target = "ISS-011"
+degree = "partial"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-011"
+from_label = "slices"
+from_target = "SL-125"
+to_source = "SL-125"
+to_label = "fulfils"
+to_target = "ISS-011"
+degree = "partial"
+
+[[edge]]
+class = 3
+kind = "fulfilment"
+from_source = "ISS-034"
+from_label = "slices"
+from_target = "SL-123"
+to_source = "SL-123"
+to_label = "fulfils"
+to_target = "ISS-034"
+degree = "full"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-117"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-106"
+to_source = "SL-117"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-106"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-118"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IDE-013"
+to_source = "SL-118"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IDE-013"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-119"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-116"
+to_source = "SL-119"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-116"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-120"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-117"
+to_source = "SL-120"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-117"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-122"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IDE-007"
+to_source = "SL-122"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IDE-007"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-123"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "ISS-034"
+to_source = "SL-123"
+to_label = "references"
+to_role = "originates_from"
+to_target = "ISS-034"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-123"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-052"
+to_source = "SL-123"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-052"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-123"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-072"
+to_source = "SL-123"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-072"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-125"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-046"
+to_source = "SL-125"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-046"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-128"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-124"
+to_source = "SL-128"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-124"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-129"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-067"
+to_source = "SL-129"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-067"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-131"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IDE-012"
+to_source = "SL-131"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IDE-012"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-131"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-111"
+to_source = "SL-131"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-111"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-145"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "CHR-024"
+to_source = "SL-145"
+to_label = "references"
+to_role = "originates_from"
+to_target = "CHR-024"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-152"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-072"
+to_source = "SL-152"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-072"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-165"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-188"
+to_source = "SL-165"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-188"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-166"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "ISS-056"
+to_source = "SL-166"
+to_label = "references"
+to_role = "originates_from"
+to_target = "ISS-056"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-169"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "IMP-133"
+to_source = "SL-169"
+to_label = "references"
+to_role = "originates_from"
+to_target = "IMP-133"
+
+[[edge]]
+class = 1
+kind = "scoped_from_rename"
+from_source = "SL-172"
+from_label = "references"
+from_role = "scoped_from"
+from_target = "ISS-057"
+to_source = "SL-172"
+to_label = "references"
+to_role = "originates_from"
+to_target = "ISS-057"
+
+[[edge]]
+class = 4
+kind = "drift_carved_out"
+from_source = "CHR-023"
+from_label = "drift"
+from_target = "SL-143: carved out from shipped-memory corpus overhaul"
+to_source = "CHR-023"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-143"
+
+[[edge]]
+class = 5
+kind = "drift_feeds_into"
+from_source = "CHR-021"
+from_label = "drift"
+from_target = "IMP-148: MCP tool help gaps \u2014 the response-field section feeds into this audit"
+to_source = "CHR-021"
+to_label = "needs"
+to_target = "IMP-148"
+
+[[edge]]
+class = 2
+kind = "dogfood_concerns_retcon"
+from_source = "IMP-210"
+from_label = "references"
+from_role = "concerns"
+from_target = "SL-176"
+to_source = "IMP-210"
+to_label = "references"
+to_role = "originates_from"
+to_target = "SL-176"
+
+# Class 6 (untouched, 5 free-text/bare-entity drift rows — OQ-2 leave):
+#   CHR-021 drift mem.pattern.distribution.shipped-memory-authoring: …
+#   IMP-148 drift mem.concept.doctrine.memory-model: …
+#   IMP-150 drift install/review-ledger.md: …
+#   ISS-041 drift RFC-003
+#   ISS-048 drift IMP-148

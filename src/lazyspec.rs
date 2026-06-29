@@ -768,7 +768,7 @@ mod tests {
         assert_eq!(map_edge(RelationLabel::Drift), "related-to");
         assert_eq!(map_edge(RelationLabel::Consumes), "related-to");
         assert_eq!(map_edge(RelationLabel::GovernedBy), "related-to");
-        assert_eq!(map_edge(RelationLabel::Slices), "related-to");
+        assert_eq!(map_edge(RelationLabel::Fulfils), "related-to");
     }
 
     // --- VT-2: INV-1, INV-4, INV-5, INV-7 ---

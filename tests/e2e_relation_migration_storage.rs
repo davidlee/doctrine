@@ -280,7 +280,15 @@ fn slice_corpus_relationships_table_holds_only_dep_seq_keys() {
         for label in &v.relation_labels {
             assert!(
                 // SL-149 PHASE-05: specs/requirements collapsed into references.
-                ["references", "supersedes", "governed_by", "related"].contains(&label.as_str()),
+                // SL-176 PHASE-04: `fulfils` (slice→backlog) is a slice tier-1 label.
+                [
+                    "references",
+                    "supersedes",
+                    "governed_by",
+                    "related",
+                    "fulfils"
+                ]
+                .contains(&label.as_str()),
                 "{}: unexpected slice [[relation]] label `{label}`",
                 f.display()
             );
@@ -354,8 +362,9 @@ fn backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes() {
         for label in &v.relation_labels {
             assert!(
                 // SL-149 PHASE-05: backlog specs collapsed into references(concerns).
-                ["slices", "references", "drift", "related", "governed_by"]
-                    .contains(&label.as_str()),
+                // SL-176 PHASE-04: `slices` retired → backlog→slice provenance is
+                // references(originates_from); addressed-by is the derived fulfils inbound.
+                ["references", "drift", "related", "governed_by"].contains(&label.as_str()),
                 "{}: unexpected backlog [[relation]] label `{label}` (dep/seq axes \
                  needs/after/triggers must stay typed)",
                 f.display()

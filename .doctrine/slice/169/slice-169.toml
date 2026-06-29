@@ -96,7 +96,7 @@ note = "RV-184 F-3: compile-necessary fallout — declared at reconcile"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IMP-133"
 
 [[relation]]

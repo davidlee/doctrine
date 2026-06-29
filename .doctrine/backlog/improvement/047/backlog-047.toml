@@ -15,7 +15,3 @@ tags = ["area:backlog", "area:memory"]
 needs    = []                   # item→item hard prerequisite
 after    = [ { to = "IMP-012", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "slices"
-target = "SL-158"

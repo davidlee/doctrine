@@ -549,10 +549,14 @@ pub(crate) enum Command {
         /// The relation label, e.g. `governed_by`, `consumes`, `related`.
         label: String,
         /// The intent role refining a `references` edge (SL-149): `implements`,
-        /// `scoped_from`, or `concerns`. Required for `references`; refused for
+        /// `originates_from`, or `concerns`. Required for `references`; refused for
         /// label-only labels.
         #[arg(long)]
         role: Option<String>,
+        /// The completion degree for a `fulfils` edge: `partial` or `full` (default).
+        /// Only valid for the `fulfils` label; refused for all others.
+        #[arg(long)]
+        degree: Option<String>,
         /// The target — a canonical ref (`ADR-010`) for validated labels, free text
         /// for `drift`.
         target: String,
@@ -1271,9 +1275,17 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             source,
             label,
             role,
+            degree,
             target,
             path,
-        } => crate::commands::relation::run_link(path, &source, &label, role.as_deref(), &target),
+        } => crate::commands::relation::run_link(
+            path,
+            &source,
+            &label,
+            role.as_deref(),
+            degree.as_deref(),
+            &target,
+        ),
         Command::Config { command } => {
             let root = crate::root::find(None, &crate::root::default_markers())?;
             match command {

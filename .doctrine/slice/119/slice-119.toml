@@ -19,7 +19,7 @@ target = "ADR-012"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IMP-116"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed

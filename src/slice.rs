@@ -1674,8 +1674,8 @@ fn format_show(
             targets_for_role(tier1, RelationLabel::References, Role::Implements),
         ),
         (
-            "references(scoped_from)",
-            targets_for_role(tier1, RelationLabel::References, Role::ScopedFrom),
+            "references(originates_from)",
+            targets_for_role(tier1, RelationLabel::References, Role::OriginatesFrom),
         ),
         (
             "references(concerns)",
@@ -1755,7 +1755,7 @@ fn show_json(
         "references".to_string(),
         serde_json::json!({
             "implements": targets_for_role(tier1, RelationLabel::References, Role::Implements),
-            "scoped_from": targets_for_role(tier1, RelationLabel::References, Role::ScopedFrom),
+            "originates_from": targets_for_role(tier1, RelationLabel::References, Role::OriginatesFrom),
             "concerns": targets_for_role(tier1, RelationLabel::References, Role::Concerns),
         }),
     );
@@ -3565,7 +3565,7 @@ mod tests {
             ),
             RelationEdge::with_role(
                 RelationLabel::References,
-                Some(Role::ScopedFrom),
+                Some(Role::OriginatesFrom),
                 "IMP-012".into(),
             ),
             RelationEdge::with_role(
@@ -3589,7 +3589,7 @@ mod tests {
             serde_json::json!(["SPEC-018"])
         );
         assert_eq!(
-            rel["references"]["scoped_from"],
+            rel["references"]["originates_from"],
             serde_json::json!(["IMP-012"])
         );
         assert_eq!(

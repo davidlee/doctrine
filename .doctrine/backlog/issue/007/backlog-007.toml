@@ -15,7 +15,3 @@ tags = ["area:relations", "testing"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "slices"
-target = "SL-052"

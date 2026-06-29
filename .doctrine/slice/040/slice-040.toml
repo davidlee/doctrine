@@ -8,6 +8,10 @@ updated = "2026-06-11"
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[relation]]
+label = "fulfils"
+target = "IMP-001"
+
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
 # When specs land, this section gains (illustrative, not v1):
 #   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates

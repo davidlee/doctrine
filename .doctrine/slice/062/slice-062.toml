@@ -17,6 +17,10 @@ target = "ADR-009"
 label = "governed_by"
 target = "ADR-010"
 
+[[relation]]
+label = "fulfils"
+target = "IMP-006"
+
 # Structural relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` table (SL-048 "the cut"). Slices carry no typed relation axes.
 # Author an edge with the `doctrine link` verb — it validates the (source, label)

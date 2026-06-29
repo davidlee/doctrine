@@ -1360,14 +1360,65 @@ fn parse_ref(reference: &str) -> anyhow::Result<(ItemKind, u32)> {
     Ok((kind, id))
 }
 
-/// Render a `BacklogItem` for `show` or `inspect` — a pure fn of the item's OWN
-/// local state ("cannot go stale"), so it reads no other file and surfaces no
-/// inbound refs (the reverse view is the deferred registry surface's, ADR-004).
+/// One derived `fulfilled by` inbound entry: the canonical slice ref plus the per-edge
+/// degree (SL-176 PHASE-03). A named alias keeps the show/table signatures under clippy's
+/// type-complexity threshold.
+type FulfilsRef = (String, Option<crate::relation::Degree>);
+
+/// Derive the `fulfilled by` inbound slice set for a backlog item from the relation
+/// graph scan (SL-176 PHASE-03 / G1(a)). Uses the same machinery as `inspect` —
+/// scans entities, builds the graph, looks up `in_edges` on the `Fulfils` overlay.
+/// Returns `(canonical_slice_ref, degree)` pairs sorted by ref.
+fn derive_fulfils_inbound(
+    root: &std::path::Path,
+    item: &BacklogItem,
+) -> anyhow::Result<Vec<(String, Option<crate::relation::Degree>)>> {
+    let scanned = crate::relation_graph::scan_entities(
+        root,
+        &mut vec![],
+        crate::catalog::scan::ScanMode::default(),
+    )?;
+    let query_key = crate::relation_graph::EntityKey {
+        prefix: item.kind.prefix(),
+        id: item.id,
+    };
+    let rg = crate::relation_graph::build_relation_graph_from(&scanned)?;
+    let Some(node) = rg.projection.resolve(query_key) else {
+        return Ok(Vec::new());
+    };
+    // Find the Fulfils overlay.
+    let fulfils_label = crate::relation::RelationLabel::Fulfils;
+    let Some(ov) = rg.overlays.by_label.get(&fulfils_label).copied() else {
+        return Ok(Vec::new());
+    };
+    // Collect inbound edges with degree from the source payload.
+    let degree_index = crate::relation_graph::inbound_degree_index(&scanned);
+    let mut result: Vec<(String, Option<crate::relation::Degree>)> = Vec::new();
+    for (src_node, _) in rg.graph.in_edges(ov, node) {
+        let Some(src_key) = rg.projection.key_of(src_node) else {
+            continue;
+        };
+        let degree = degree_index
+            .get(&(src_key, fulfils_label, query_key))
+            .copied()
+            .unwrap_or(None);
+        result.push((src_key.canonical(), degree));
+    }
+    result.sort_by(|(a, _), (b, _)| a.cmp(b));
+    Ok(result)
+}
+
+/// Render a `BacklogItem` for `show` or `inspect` — primarily a pure fn of the
+/// item's OWN local state, augmented with corpus-derived `fulfilled by` inbound
+/// (SL-176 PHASE-03 / G1(a) — the inbound derivation via the relation-graph scan).
 /// House style: `Vec<String>` parts each carrying their own newline, joined by
 /// `concat()` (the `spec::render`/`format_rows` precedent — avoids the
 /// `push_str(&format!)` lint). The facet block is gated on `item.facet` (risk
 /// only); relationship axes and the optional fields render only when populated.
-fn format_metadata(item: &BacklogItem) -> Vec<String> {
+fn format_metadata(
+    item: &BacklogItem,
+    fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+) -> Vec<String> {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
 
@@ -1412,44 +1463,65 @@ fn format_metadata(item: &BacklogItem) -> Vec<String> {
         }
     }
 
-    // outbound relations (§5.5) — each axis only when non-empty; inbound is the
-    // deferred registry surface's, NOT computed here (D-PHASE04-2 / ADR-004).
-    // SL-048 PHASE-04: the tier-1 axes (slices/drift) come from `item.tier1` (read via
-    // `read_block`), the dep/sequence axes stay typed.
+    // outbound relations (§5.5) — each axis only when non-empty.
+    // SL-176 PHASE-03 (G1(a)): the `fulfilled by` axis is DERIVED inbound (from the
+    // relation-graph scan), not the item's own outbound `slices` (which the migration
+    // deletes). The `slices` outbound read is REMOVED.
     let rel = &item.relationships;
-    let slices = targets_for(&item.tier1, RelationLabel::Slices);
     let drift = targets_for(&item.tier1, RelationLabel::Drift);
     // SL-149: the `references` label by role. A backlog item only ever authors
-    // `concerns` (implements/scoped_from are SL-only), so the other buckets stay empty;
+    // `concerns` (implements/originates_from are SL-only), so the other buckets stay empty;
     // each axis renders only when non-empty. PHASE-05's migration rewrote the old
     // backlog `specs`→canon edges onto `references(concerns)`.
     let ref_concerns = targets_for_role(&item.tier1, RelationLabel::References, Role::Concerns);
     let ref_implements = targets_for_role(&item.tier1, RelationLabel::References, Role::Implements);
-    let ref_scoped_from =
-        targets_for_role(&item.tier1, RelationLabel::References, Role::ScopedFrom);
-    if !slices.is_empty()
+    let ref_originates_from =
+        targets_for_role(&item.tier1, RelationLabel::References, Role::OriginatesFrom);
+    // Render fulfils inbound with degree suffix.
+    let fulfils_rendered: Vec<String> = fulfils_inbound
+        .iter()
+        .map(|(ref_str, deg)| match deg {
+            Some(crate::relation::Degree::Partial) => format!("{ref_str} (partial)"),
+            _ => ref_str.clone(),
+        })
+        .collect();
+    if !fulfils_inbound.is_empty()
         || !drift.is_empty()
         || !rel.needs.is_empty()
         || !rel.after.is_empty()
         || !rel.triggers.is_empty()
         || !ref_implements.is_empty()
-        || !ref_scoped_from.is_empty()
+        || !ref_originates_from.is_empty()
         || !ref_concerns.is_empty()
     {
         parts.push("\nrelationships:\n".to_string());
-        // the four string axes share the one loop; `after`/`triggers` carry payload
-        // (per-edge rank, glob+note) and render bespoke below, in §5.2 key order.
-        for (label, refs) in [
-            ("slices", &slices),
-            ("drift", &drift),
-            ("needs", &rel.needs),
-            ("references(implements)", &ref_implements),
-            ("references(scoped_from)", &ref_scoped_from),
-            ("references(concerns)", &ref_concerns),
-        ] {
-            if !refs.is_empty() {
-                parts.push(format!("  {label}: {}\n", refs.join(", ")));
-            }
+        // SL-176 PHASE-03: `fulfilled by` replaces `slices` (derived inbound).
+        if !fulfils_inbound.is_empty() {
+            parts.push(format!("  fulfilled by: {}\n", fulfils_rendered.join(", ")));
+        }
+        if !drift.is_empty() {
+            parts.push(format!("  drift: {}\n", drift.join(", ")));
+        }
+        if !rel.needs.is_empty() {
+            parts.push(format!("  needs: {}\n", rel.needs.join(", ")));
+        }
+        if !ref_implements.is_empty() {
+            parts.push(format!(
+                "  references(implements): {}\n",
+                ref_implements.join(", ")
+            ));
+        }
+        if !ref_originates_from.is_empty() {
+            parts.push(format!(
+                "  references(originates_from): {}\n",
+                ref_originates_from.join(", ")
+            ));
+        }
+        if !ref_concerns.is_empty() {
+            parts.push(format!(
+                "  references(concerns): {}\n",
+                ref_concerns.join(", ")
+            ));
         }
         if !rel.after.is_empty() {
             let rendered = rel
@@ -1488,15 +1560,21 @@ fn format_metadata(item: &BacklogItem) -> Vec<String> {
 }
 
 /// Render a `BacklogItem` for `show` — metadata + prose body.
-fn format_show(item: &BacklogItem) -> String {
-    let mut parts = format_metadata(item);
+fn format_show(
+    item: &BacklogItem,
+    fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+) -> String {
+    let mut parts = format_metadata(item, fulfils_inbound);
     parts.push(format!("\n{}", item.body));
     parts.concat()
 }
 
 /// Render a `BacklogItem` for `inspect` — metadata only, no prose body.
-fn format_inspect(item: &BacklogItem) -> String {
-    format_metadata(item).concat()
+fn format_inspect(
+    item: &BacklogItem,
+    fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+) -> String {
+    format_metadata(item, fulfils_inbound).concat()
 }
 
 /// `doctrine backlog show <ID>` — reassemble metadata + prose body (PRD-009 REQ-051, §5.4). Thin
@@ -1506,19 +1584,26 @@ fn format_inspect(item: &BacklogItem) -> String {
 /// the item's own state.
 /// Shared shell: root-find → parse → read → render. The `format_table` fn and
 /// `with_body` flag select the table renderer and whether JSON includes the prose body.
+///
+/// SL-176 PHASE-03 (G1(a)): the `fulfilled by` inbound is DERIVED from the
+/// relation-graph scan (same machinery `inspect` uses), not from the item's own
+/// outbound (which the migration deletes). `backlog show` becomes corpus-aware —
+/// a deliberate refinement of the former item-local posture.
 fn run_show_inspect(
     path: Option<PathBuf>,
     reference: &str,
     format: Format,
-    format_table: fn(&BacklogItem) -> String,
+    format_table: fn(&BacklogItem, &[FulfilsRef]) -> String,
     with_body: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (item_kind, id) = parse_ref(reference)?;
     let item = read_item(&root, item_kind, id)?;
+    // SL-176 PHASE-03: derive fulfils-inbound from the relation graph.
+    let fulfils_inbound = derive_fulfils_inbound(&root, &item)?;
     let out = match format {
-        Format::Table => format_table(&item),
-        Format::Json => show_json(&item, with_body)?,
+        Format::Table => format_table(&item, &fulfils_inbound),
+        Format::Json => show_json(&item, &fulfils_inbound, with_body)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -1539,7 +1624,11 @@ pub(crate) fn run_show(
 /// JSON is projected by hand (not a derive): the flat identity, the optional resolution,
 /// the risk `[facet]` (risk only), and the outbound relationships — the same data the
 /// table reassembles, structured. Pure over the item's own state (no cross-corpus scan).
-fn show_json(item: &BacklogItem, with_body: bool) -> anyhow::Result<String> {
+fn show_json(
+    item: &BacklogItem,
+    fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+    with_body: bool,
+) -> anyhow::Result<String> {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let facet = item.facet.as_ref().map(|f| {
         serde_json::json!({
@@ -1570,15 +1659,23 @@ fn show_json(item: &BacklogItem, with_body: bool) -> anyhow::Result<String> {
         inner.insert("body".into(), serde_json::json!(item.body));
     }
     inner.insert("facet".into(), serde_json::json!(facet));
+    // SL-176 PHASE-03: `fulfilled_by` replaces `slices` (derived inbound with degree).
+    let fulfils_json: Vec<serde_json::Value> = fulfils_inbound
+        .iter()
+        .map(|(ref_str, deg)| match deg {
+            Some(d) => serde_json::json!({ "ref": ref_str, "degree": d.name() }),
+            None => serde_json::json!({ "ref": ref_str }),
+        })
+        .collect();
     inner.insert("relationships".into(), serde_json::json!({
-        "slices": targets_for(&item.tier1, RelationLabel::Slices),
+        "fulfilled_by": fulfils_json,
         "drift": targets_for(&item.tier1, RelationLabel::Drift),
         "needs": rel.needs,
         "after": rel.after,
         "triggers": rel.triggers,
         "references": {
             "implements": targets_for_role(&item.tier1, RelationLabel::References, Role::Implements),
-            "scoped_from": targets_for_role(&item.tier1, RelationLabel::References, Role::ScopedFrom),
+            "originates_from": targets_for_role(&item.tier1, RelationLabel::References, Role::OriginatesFrom),
             "concerns": targets_for_role(&item.tier1, RelationLabel::References, Role::Concerns),
         },
     }));
@@ -2166,7 +2263,8 @@ fn render_overrides(
 
 use crate::finding::{Category, Finding};
 use crate::lifecycle::is_transition_terminal;
-use crate::relation::{RelationLabel, targets_for};
+// SL-176 PHASE-03: RelationLabel and targets_for no longer used here
+// (fulfils-inbound replaces Slices outbound).
 
 /// Flag non-terminal backlog items whose linked slices are ALL terminal.
 ///
@@ -2177,6 +2275,9 @@ use crate::relation::{RelationLabel, targets_for};
 ///
 /// **≥1 guard (F2):** items with ZERO linked slices are skipped, preventing
 /// a vacuous-truth false positive on a slice-less item.
+///
+/// SL-176 PHASE-03: the `fulfils`-derived inbound replaces the old `Slices`
+/// outbound read (the item's toml no longer carries `slices` post-migration).
 pub(crate) fn lifecycle_findings(root: &Path) -> Vec<Finding> {
     let Ok(items) = read_all(root) else {
         return Vec::new();
@@ -2190,6 +2291,20 @@ pub(crate) fn lifecycle_findings(root: &Path) -> Vec<Finding> {
             .map(|m| (m.id, m.status))
             .collect();
 
+    // SL-176 PHASE-03: derive fulfils-inbound from the relation graph for all items.
+    let Ok(scanned) = crate::relation_graph::scan_entities(
+        root,
+        &mut vec![],
+        crate::catalog::scan::ScanMode::default(),
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rg) = crate::relation_graph::build_relation_graph_from(&scanned) else {
+        return Vec::new();
+    };
+    let fulfils_label = crate::relation::RelationLabel::Fulfils;
+    let fulfils_ov = rg.overlays.by_label.get(&fulfils_label).copied();
+
     let mut findings = Vec::new();
 
     for item in &items {
@@ -2198,7 +2313,26 @@ pub(crate) fn lifecycle_findings(root: &Path) -> Vec<Finding> {
             continue;
         }
 
-        let slice_refs = targets_for(&item.tier1, RelationLabel::Slices);
+        // SL-176 PHASE-03: derive fulfils inbound from the graph.
+        let query_key = crate::relation_graph::EntityKey {
+            prefix: item.kind.prefix(),
+            id: item.id,
+        };
+        let Some(node) = rg.projection.resolve(query_key) else {
+            continue;
+        };
+        let mut slice_refs: Vec<String> = Vec::new();
+        if let Some(ov) = fulfils_ov {
+            for (src_node, _) in rg.graph.in_edges(ov, node) {
+                let Some(src_key) = rg.projection.key_of(src_node) else {
+                    continue;
+                };
+                // Only count SL- prefixes (fulfils is SL→backlog by rule).
+                if src_key.prefix == "SL" {
+                    slice_refs.push(src_key.canonical());
+                }
+            }
+        }
 
         // ≥1 guard: skip items with no linked slices (F2).
         if slice_refs.is_empty() {
@@ -2360,7 +2494,7 @@ pub(crate) mod test_support {
                 ));
             }
             // SL-149: a backlog item's spec-targeting edges are references(concerns)
-            // (implements/scoped_from are SL-only). The `specs` fixture field name is
+            // (implements/originates_from are SL-only). The `specs` fixture field name is
             // retained as a convenience; the authored row is references(concerns).
             for s in x.specs {
                 relation_rows.push_str(&format!(
@@ -3479,7 +3613,7 @@ tags = []
         );
 
         let item = read_item(root, ItemKind::Risk, 1).unwrap();
-        let json = show_json(&item, true).unwrap();
+        let json = show_json(&item, &[], true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["kind"], "backlog");
         let b = &v["backlog"];
@@ -3489,29 +3623,27 @@ tags = []
         assert_eq!(b["tags"][0], "security");
         assert_eq!(b["facet"]["likelihood"], "high");
         assert_eq!(b["facet"]["impact"], "critical");
-        assert_eq!(b["relationships"]["slices"][0], "SL-020");
+        assert_eq!(b["relationships"]["fulfilled_by"], serde_json::json!([]));
     }
 
     #[test]
     fn backlog_show_json_groups_references_by_role_and_keeps_legacy_keys() {
-        // SL-149 PHASE-04b: a backlog item authoring a `concerns` reference edge (plus a
-        // legacy `slices` edge) → the JSON carries a `references` object grouped by role
-        // (only `concerns` populated — implements/scoped_from are SL-only), and the
-        // legacy `slices` key still carries its data unchanged (additive).
+        // SL-149 PHASE-04b: a backlog item authoring a `concerns` reference edge → the JSON
+        // carries a `references` object grouped by role (only `concerns` populated —
+        // implements/originates_from are SL-only). (SL-176 retired the legacy `slices` edge;
+        // backlog→slice provenance is now `references(originates_from)`, and addressed-by is
+        // the derived `fulfilled_by` inbound.)
         use crate::relation::{RelationEdge, RelationLabel, Role};
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         new_item(root, ItemKind::Improvement, "Token expiry");
         let mut item = read_item(root, ItemKind::Improvement, 1).unwrap();
-        item.tier1 = vec![
-            RelationEdge::new(RelationLabel::Slices, "SL-020".into()),
-            RelationEdge::with_role(
-                RelationLabel::References,
-                Some(Role::Concerns),
-                "SPEC-018".into(),
-            ),
-        ];
-        let json = show_json(&item, true).unwrap();
+        item.tier1 = vec![RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Concerns),
+            "SPEC-018".into(),
+        )];
+        let json = show_json(&item, &[], true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["backlog"]["relationships"];
         assert_eq!(
@@ -3519,36 +3651,34 @@ tags = []
             serde_json::json!(["SPEC-018"])
         );
         assert_eq!(rel["references"]["implements"], serde_json::json!([]));
-        assert_eq!(rel["references"]["scoped_from"], serde_json::json!([]));
-        // legacy key unchanged
-        assert_eq!(rel["slices"], serde_json::json!(["SL-020"]));
+        assert_eq!(rel["references"]["originates_from"], serde_json::json!([]));
+        // SL-176 PHASE-03: `slices` → `fulfilled_by` (derived inbound; empty here).
+        assert_eq!(rel["fulfilled_by"], serde_json::json!([]));
     }
 
     #[test]
     fn backlog_show_json_references_object_carries_concerns() {
         // SL-149 PHASE-05: a backlog item authors `references(concerns)` (the migration
         // target of the old backlog `specs`→canon edge); the legacy `specs` key is gone.
-        // implements/scoped_from stay empty (SL-only roles).
+        // implements/originates_from stay empty (SL-only roles). (SL-176 retired `slices`.)
         use crate::relation::{RelationEdge, RelationLabel, Role};
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         new_item(root, ItemKind::Improvement, "Concerns only");
         let mut item = read_item(root, ItemKind::Improvement, 1).unwrap();
-        item.tier1 = vec![
-            RelationEdge::new(RelationLabel::Slices, "SL-007".into()),
-            RelationEdge::with_role(
-                RelationLabel::References,
-                Some(Role::Concerns),
-                "SPEC-018".into(),
-            ),
-        ];
-        let json = show_json(&item, true).unwrap();
+        item.tier1 = vec![RelationEdge::with_role(
+            RelationLabel::References,
+            Some(Role::Concerns),
+            "SPEC-018".into(),
+        )];
+        let json = show_json(&item, &[], true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["backlog"]["relationships"];
-        assert_eq!(rel["slices"], serde_json::json!(["SL-007"]));
+        // SL-176 PHASE-03: `slices` → `fulfilled_by` (derived inbound; empty here).
+        assert_eq!(rel["fulfilled_by"], serde_json::json!([]));
         assert!(rel.get("specs").is_none(), "legacy specs key removed");
         assert_eq!(rel["references"]["implements"], serde_json::json!([]));
-        assert_eq!(rel["references"]["scoped_from"], serde_json::json!([]));
+        assert_eq!(rel["references"]["originates_from"], serde_json::json!([]));
         assert_eq!(
             rel["references"]["concerns"],
             serde_json::json!(["SPEC-018"])
@@ -3574,7 +3704,7 @@ tags = []
             },
         );
         let item = read_item(root, ItemKind::Improvement, 1).unwrap();
-        let json = show_json(&item, false).unwrap();
+        let json = show_json(&item, &[], false).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(
             v["backlog"].get("body").is_none(),
@@ -3617,7 +3747,7 @@ tags = []
         // a plain issue and an assessed risk, both reserved id 1 (independent trees).
         new_item(root, ItemKind::Issue, "Auth bug");
         let issue = read_item(root, ItemKind::Issue, 1).unwrap();
-        let issue_out = format_show(&issue);
+        let issue_out = format_show(&issue, &[]);
         assert!(
             issue_out.starts_with("ISS-001 — Auth bug\n"),
             "identity line: {issue_out}"
@@ -3634,7 +3764,7 @@ tags = []
         // an assessed risk (seeded directly) shows its facet axes.
         write_assessed_risk(root, 1);
         let risk = read_item(root, ItemKind::Risk, 1).unwrap();
-        let risk_out = format_show(&risk);
+        let risk_out = format_show(&risk, &[]);
         assert!(risk_out.starts_with("RSK-001 — Token expiry\n"));
         assert!(risk_out.contains("[facet]"), "risk shows the facet block");
         assert!(risk_out.contains("likelihood: high"));
@@ -3648,24 +3778,26 @@ tags = []
     fn backlog_show_renders_outbound_only() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        // ISS-001 points OUT at SL-020; a *separate* item (ISS-002) points AT it.
-        write_related(root, ItemKind::Issue, 1, &["SL-020"], &["PRD-009"]);
+        // SL-176 PHASE-03: `slices` outbound removed from backlog show; use
+        // `references(concerns)` (still rendered from tier1) as the outbound witness.
+        // ISS-001 authors references(concerns) → PRD-009 (the migrated shape).
+        // ISS-002 has no relations.
+        write_related(root, ItemKind::Issue, 1, &[], &["PRD-009"]);
         write_related(root, ItemKind::Issue, 2, &[], &[]);
 
-        let out = format_show(&read_item(root, ItemKind::Issue, 1).unwrap());
+        let out = format_show(&read_item(root, ItemKind::Issue, 1).unwrap(), &[]);
         assert!(out.contains("relationships:"), "the outbound seam renders");
-        assert!(out.contains("slices: SL-020"), "outbound slice ref shown");
         assert!(
             out.contains("references(concerns): PRD-009"),
             "outbound spec ref shown as references(concerns)"
         );
 
-        // an item with no outbound relations renders no relationships block —
-        // and the reverse view (who points AT it) is never computed here.
-        let bare = format_show(&read_item(root, ItemKind::Issue, 2).unwrap());
+        // an item with no relations renders no relationships block — the inbound
+        // derived view is computed but empty, and no outbound edges exist.
+        let bare = format_show(&read_item(root, ItemKind::Issue, 2).unwrap(), &[]);
         assert!(
             !bare.contains("relationships:"),
-            "no outbound relations → no block (inbound never surfaced): {bare}"
+            "no relations → no block (inbound never surfaced): {bare}"
         );
     }
 
@@ -3750,7 +3882,7 @@ tags = []
 
         // table seam: each axis renders, in fixed §5.2 order (needs/after/triggers);
         // a non-zero `after` rank annotates, the trigger note trails its globs.
-        let out = format_show(&item);
+        let out = format_show(&item, &[]);
         assert!(out.contains("needs: ISS-002"), "hard prereq axis: {out}");
         assert!(
             out.contains("after: ISS-003 (rank 2)"),
@@ -3762,7 +3894,7 @@ tags = []
         );
 
         // JSON seam: needs is a string array; after/triggers are arrays of tables.
-        let json = show_json(&item, true).unwrap();
+        let json = show_json(&item, &[], true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["backlog"]["relationships"];
         assert_eq!(rel["needs"][0], "ISS-002");
@@ -5152,6 +5284,8 @@ tags = []
     // ------------------------------------------------------------------
 
     /// Seed a real backlog item with tier1 slices links.
+    /// SL-176 PHASE-03: also authors fulfils edges on the SLICE side so the
+    /// doctor lifecycle scan finds them via the Fulfils overlay.
     fn seed_backlog_item(root: &Path, kind: ItemKind, id: u32, status: Status, slices: &[&str]) {
         let name = format!("{id:03}");
         let dir = root.join(kind.kind().dir).join(&name);
@@ -5167,6 +5301,23 @@ tags = []
             toml.push_str(&format!(
                 "[[relation]]\nlabel = \"slices\"\ntarget = \"{s}\"\n"
             ));
+            // SL-176: also seed the reverse fulfils edge on the slice side.
+            if let Some(sl_id_str) = s.strip_prefix("SL-") {
+                if let Ok(sl_id) = sl_id_str.parse::<u32>() {
+                    let sl_name = format!("{sl_id:03}");
+                    let sl_dir = root.join(".doctrine/slice").join(&sl_name);
+                    // Only append if the slice dir already exists (seed_slice_entity was called first).
+                    let sl_toml = sl_dir.join(format!("slice-{sl_name}.toml"));
+                    if let Ok(existing) = std::fs::read_to_string(&sl_toml) {
+                        let mut updated = existing;
+                        let item_ref = kind.canonical_id(id);
+                        updated.push_str(&format!(
+                            "[[relation]]\nlabel = \"fulfils\"\ntarget = \"{item_ref}\"\n"
+                        ));
+                        let _ = std::fs::write(&sl_toml, updated);
+                    }
+                }
+            }
         }
         std::fs::write(dir.join(format!("backlog-{name}.toml")), toml).unwrap();
         std::fs::write(
@@ -5196,8 +5347,9 @@ tags = []
     fn lifecycle_done_only_slices_flag() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        seed_backlog_item(root, ItemKind::Issue, 1, Status::Open, &["SL-001"]);
+        // SL-176: seed slice first so seed_backlog_item can append fulfils edge.
         seed_slice_entity(root, 1, "done");
+        seed_backlog_item(root, ItemKind::Issue, 1, Status::Open, &["SL-001"]);
         let findings = lifecycle_findings(root);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, Category::Lifecycle);
@@ -5209,8 +5361,8 @@ tags = []
     fn lifecycle_abandoned_only_slices_flag() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        seed_backlog_item(root, ItemKind::Issue, 1, Status::Open, &["SL-001"]);
         seed_slice_entity(root, 1, "abandoned");
+        seed_backlog_item(root, ItemKind::Issue, 1, Status::Open, &["SL-001"]);
         let findings = lifecycle_findings(root);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, Category::Lifecycle);
@@ -5220,6 +5372,8 @@ tags = []
     fn lifecycle_mixed_terminal_flags() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        seed_slice_entity(root, 1, "done");
+        seed_slice_entity(root, 2, "abandoned");
         seed_backlog_item(
             root,
             ItemKind::Issue,
@@ -5227,8 +5381,6 @@ tags = []
             Status::Open,
             &["SL-001", "SL-002"],
         );
-        seed_slice_entity(root, 1, "done");
-        seed_slice_entity(root, 2, "abandoned");
         let findings = lifecycle_findings(root);
         assert_eq!(findings.len(), 1, "all terminal → flag");
     }
@@ -5237,6 +5389,8 @@ tags = []
     fn lifecycle_live_slice_no_flag() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        seed_slice_entity(root, 1, "done");
+        seed_slice_entity(root, 2, "started"); // live
         seed_backlog_item(
             root,
             ItemKind::Issue,
@@ -5244,8 +5398,6 @@ tags = []
             Status::Open,
             &["SL-001", "SL-002"],
         );
-        seed_slice_entity(root, 1, "done");
-        seed_slice_entity(root, 2, "started"); // live
         let findings = lifecycle_findings(root);
         assert!(findings.is_empty(), "live slice → no flag");
     }

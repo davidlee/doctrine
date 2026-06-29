@@ -141,9 +141,9 @@ pub(crate) fn require_minted(
 /// Label is overlay identity (OQ2-B): the same label authored from different source
 /// kinds (e.g. `Supersedes` from both slice and governance, `GovernedBy` from SL·PRD·
 /// SPEC) shares ONE overlay — the iteration de-dupes on the label key.
-struct OverlayMap {
-    by_label: BTreeMap<RelationLabel, OverlayId>,
-    by_overlay: BTreeMap<OverlayId, RelationLabel>,
+pub(crate) struct OverlayMap {
+    pub(crate) by_label: BTreeMap<RelationLabel, OverlayId>,
+    pub(crate) by_overlay: BTreeMap<OverlayId, RelationLabel>,
 }
 
 impl OverlayMap {
@@ -193,13 +193,13 @@ impl OverlayMap {
 /// projection, the overlay-identity map, and the per-source danglers collected
 /// during the edge pass. `inspect` reads inbound from the graph, outbound fresh
 /// from `outbound_for`, and returns only the queried entity's danglers.
-struct RelationGraph {
-    graph: Graph,
-    projection: Projection<EntityKey>,
-    overlays: OverlayMap,
+pub(crate) struct RelationGraph {
+    pub(crate) graph: Graph,
+    pub(crate) projection: Projection<EntityKey>,
+    pub(crate) overlays: OverlayMap,
     /// Danglers keyed by source entity — the unresolved / free-text / no-overlay
     /// outbound targets, so `inspect` returns only the queried entity's set.
-    danglers: BTreeMap<EntityKey, Vec<(RelationLabel, String)>>,
+    pub(crate) danglers: BTreeMap<EntityKey, Vec<(RelationLabel, String)>>,
 }
 
 /// Build the cross-kind reference-overlay graph from a PRE-SCANNED entity slice (the
@@ -219,7 +219,9 @@ struct RelationGraph {
 ///    INCLUDING a resolvable target under a no-overlay label) ⇒ a dangler.
 /// 3. `builder.build()` — NO `OrderSpec` over reference overlays (I2: direct-only,
 ///    composition-free; no union-cycle pass touches them).
-fn build_relation_graph_from(scanned: &[ScannedEntity]) -> anyhow::Result<RelationGraph> {
+pub(crate) fn build_relation_graph_from(
+    scanned: &[ScannedEntity],
+) -> anyhow::Result<RelationGraph> {
     let mut builder = GraphBuilder::new();
     let overlays = OverlayMap::build(&mut builder);
     let mut projection: Projection<EntityKey> = Projection::new();
@@ -295,6 +297,28 @@ fn inbound_role_index(
                 id: tid,
             };
             index.insert((entity.key, edge.label, target), edge.role);
+        }
+    }
+    index
+}
+
+/// Index every outbound edge's `degree` from the scanned corpus by `(source, label, target)`,
+/// in parallel to [`inbound_role_index`] (SL-176 PHASE-03). Degree is per-edge non-keyed
+/// payload; the inbound render recovers it from this index, attached per-source.
+pub(crate) fn inbound_degree_index(
+    scanned: &[ScannedEntity],
+) -> BTreeMap<(EntityKey, RelationLabel, EntityKey), Option<crate::relation::Degree>> {
+    let mut index = BTreeMap::new();
+    for entity in scanned {
+        for edge in &entity.outbound {
+            let Ok((kref, tid)) = integrity::parse_canonical_ref(&edge.target) else {
+                continue;
+            };
+            let target = EntityKey {
+                prefix: kref.kind.prefix,
+                id: tid,
+            };
+            index.insert((entity.key, edge.label, target), edge.degree);
         }
     }
     index
@@ -428,6 +452,8 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
                     // SL-149: a hand-edited `references` row with a missing/illegal/stray
                     // role — the role-class finding. Label-only rows never reach here.
                     crate::relation::IllegalReason::IllegalRole => "missing or illegal role",
+                    crate::relation::IllegalReason::IllegalDegree => "illegal degree",
+                    crate::relation::IllegalReason::DuplicateEdge => "duplicate edge",
                 };
                 findings.push(format!(
                     "{}: [[relation]] row `{}` -> `{}` is illegal ({why})",
@@ -516,9 +542,23 @@ fn validate_supersession(root: &Path) -> anyhow::Result<Vec<String>> {
 /// `references` edges render distinct verbs instead of collapsing into one label bucket.
 pub(crate) type RelationKey = (RelationLabel, Option<Role>);
 
-/// One `(label, role)` group of an inspect surface: the key and its targets (canonical
-/// refs), in render order.
-type RelationGroup = (RelationKey, Vec<String>);
+/// One inbound source under a `(label, role)` group: the source key plus the per-edge
+/// degree recovered from its outbound payload (SL-176 PHASE-03). A named alias keeps the
+/// inbound accumulator type under clippy's complexity threshold.
+type InboundSrc = (EntityKey, Option<crate::relation::Degree>);
+
+/// A single target entry in a `RelationGroup` — the canonical ref plus its per-edge
+/// `Degree` facet (SL-176 PHASE-03 / D-inspect-shape). `degree` is `None` on every
+/// non-`fulfils` label and `Some(Full|Partial)` on `fulfils` edges.
+#[derive(Debug, Clone)]
+pub(crate) struct RelationTargetView {
+    pub(crate) target: String,
+    pub(crate) degree: Option<crate::relation::Degree>,
+}
+
+/// One `(label, role)` group of an inspect surface: the key and its targets (structured
+/// views carrying per-edge degree), in render order.
+type RelationGroup = (RelationKey, Vec<RelationTargetView>);
 
 /// One entity's direct relation view (design §5.2): its authored outbound relations
 /// grouped by `(label, role)`, the derived inbound relations grouped by `(label, role)`,
@@ -616,12 +656,17 @@ pub(crate) fn inspect_from(
     // outbound — the entity's own authored edges, grouped by `(label, role)` (targets in
     // authored order within a group). The role rides on the edge payload (SL-149 F1): a
     // `references` edge groups under `Some(role)`, a label-only edge under `None`.
-    let mut outbound_by_key: BTreeMap<(RelationLabel, Option<Role>), Vec<String>> = BTreeMap::new();
+    // SL-176 PHASE-03: degree is threaded per-target via RelationTargetView.
+    let mut outbound_by_key: BTreeMap<(RelationLabel, Option<Role>), Vec<RelationTargetView>> =
+        BTreeMap::new();
     for edge in outbound_for(root, kref.kind, qid)? {
         outbound_by_key
             .entry((edge.label, edge.role))
             .or_default()
-            .push(edge.target);
+            .push(RelationTargetView {
+                target: edge.target,
+                degree: edge.degree,
+            });
     }
     let outbound: Vec<RelationGroup> = outbound_by_key.into_iter().collect();
 
@@ -630,9 +675,10 @@ pub(crate) fn inspect_from(
     // in the graph edge; it is recovered from the SOURCE entity's outbound PAYLOAD via
     // [`inbound_role_index`] (F1). Re-keying by `(label, role)` keeps `implements` and
     // `concerns` inbound in distinct buckets, each with its own derived verb.
+    // SL-176 PHASE-03: degree is recovered in parallel via [`inbound_degree_index`].
     let role_index = inbound_role_index(scanned);
-    let mut inbound_by_key: BTreeMap<(RelationLabel, Option<Role>), Vec<EntityKey>> =
-        BTreeMap::new();
+    let degree_index = inbound_degree_index(scanned);
+    let mut inbound_by_key: BTreeMap<RelationKey, Vec<InboundSrc>> = BTreeMap::new();
     for (&overlay, &label) in &rg.overlays.by_overlay {
         for (src_node, _attrs) in rg.graph.in_edges(overlay, node) {
             let Some(src_key) = rg.projection.key_of(src_node) else {
@@ -646,10 +692,16 @@ pub(crate) fn inspect_from(
                 .get(&(src_key, label, query_key))
                 .copied()
                 .unwrap_or(None);
+            // The degree of the source's edge (SL-176 PHASE-03): recovered from the
+            // source's outbound payload, parallel to the role index.
+            let degree = degree_index
+                .get(&(src_key, label, query_key))
+                .copied()
+                .unwrap_or(None);
             inbound_by_key
                 .entry((label, role))
                 .or_default()
-                .push(src_key);
+                .push((src_key, degree));
         }
     }
     // in_edges orders by the (src,rank,age) adjacency key, but src NodeId order is mint
@@ -659,8 +711,16 @@ pub(crate) fn inspect_from(
     let inbound: Vec<RelationGroup> = inbound_by_key
         .into_iter()
         .map(|(key, mut srcs)| {
-            srcs.sort();
-            (key, srcs.into_iter().map(EntityKey::canonical).collect())
+            srcs.sort_by_key(|(a, _)| *a);
+            (
+                key,
+                srcs.into_iter()
+                    .map(|(k, deg)| RelationTargetView {
+                        target: k.canonical(),
+                        degree: deg,
+                    })
+                    .collect(),
+            )
         })
         .collect();
 
@@ -764,13 +824,19 @@ fn render_outbound(
         let rendered: Vec<String> = if *label == RelationLabel::Interactions {
             targets
                 .iter()
-                .map(|t| match interaction_types.get(t) {
-                    Some(ty) => format!("{t} ({ty})"),
-                    None => t.clone(),
+                .map(|t| match interaction_types.get(&t.target) {
+                    Some(ty) => format!("{} ({})", t.target, ty),
+                    None => t.target.clone(),
                 })
                 .collect()
         } else {
-            targets.clone()
+            targets
+                .iter()
+                .map(|t| match t.degree {
+                    Some(crate::relation::Degree::Partial) => format!("{} (partial)", t.target),
+                    _ => t.target.clone(),
+                })
+                .collect()
         };
         parts.push(format!(
             "  {}: {}\n",
@@ -807,8 +873,16 @@ fn render_inbound(parts: &mut Vec<String>, view: &InspectView) {
         // label-only edges pass role `None` and carry `inbound_name == name()`, so
         // shipped goldens are unchanged. The `--json` inbound keeps the raw label +
         // role (`inspect_value`), per R2-M3.
+        // SL-176 PHASE-03: suffix `(partial)` per target where degree is Partial.
         let word = crate::relation::inbound_name(*label, *role);
-        parts.push(format!("  {word}: {}\n", srcs.join(", ")));
+        let rendered: Vec<String> = srcs
+            .iter()
+            .map(|t| match t.degree {
+                Some(crate::relation::Degree::Partial) => format!("{} (partial)", t.target),
+                _ => t.target.clone(),
+            })
+            .collect();
+        parts.push(format!("  {word}: {}\n", rendered.join(", ")));
     }
 }
 
@@ -850,11 +924,35 @@ pub(crate) fn inspect_value(view: &InspectView) -> serde_json::Value {
     // `references(implements)`); the role is an additive sibling key, emitted ONLY for a
     // role-bearing `references` group (SL-149 §2.6 / R2-M3). A label-only group omits the
     // `role` key, so every shipped label-only golden stays byte-identical.
-    let group = |label: RelationLabel, role: Option<Role>, targets: &[String]| match role {
-        Some(role) => {
-            serde_json::json!({ "label": label.name(), "role": role.name(), "targets": targets })
+    //
+    // SL-176 PHASE-03 (D-inspect-shape): degree-bearing groups (`fulfils`) emit target
+    // entries as objects `{ "ref": "…", "degree": "partial" }` (degree `skip_if None` ⇒
+    // full omitted); ALL other groups keep bare-string targets (heterogeneous-by-label).
+    let is_degree_bearing = |label: RelationLabel| -> bool {
+        crate::relation::RELATION_RULES
+            .iter()
+            .any(|r| r.label == label && r.degree_bearing)
+    };
+    let target_value = |label: RelationLabel, t: &RelationTargetView| -> serde_json::Value {
+        if is_degree_bearing(label) {
+            match t.degree {
+                Some(deg) => {
+                    serde_json::json!({ "ref": t.target, "degree": deg.name() })
+                }
+                None => serde_json::json!({ "ref": t.target }),
+            }
+        } else {
+            serde_json::Value::String(t.target.clone())
         }
-        None => serde_json::json!({ "label": label.name(), "targets": targets }),
+    };
+    let group = |label: RelationLabel, role: Option<Role>, targets: &[RelationTargetView]| {
+        let ts: Vec<serde_json::Value> = targets.iter().map(|t| target_value(label, t)).collect();
+        match role {
+            Some(role) => {
+                serde_json::json!({ "label": label.name(), "role": role.name(), "targets": ts })
+            }
+            None => serde_json::json!({ "label": label.name(), "targets": ts }),
+        }
     };
     let outbound: Vec<serde_json::Value> = view
         .outbound
@@ -1363,38 +1461,37 @@ mod tests {
     }
 
     #[test]
-    fn backlog_outbound_slices_specs_drift_only() {
+    fn backlog_outbound_references_drift_only() {
         let dir = tmp();
         let root = dir.path();
-        // Every axis populated — only slices/specs/drift must emit (not
-        // needs/after/triggers).
+        // Every axis populated — only references/drift must emit (not needs/after/triggers).
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            // SL-048 PHASE-04: slices/specs/drift migrated to `[[relation]]`; the typed
-            // `needs` axis stays in a `[relationships]` table preceding the arrays (F1).
+            // SL-048 PHASE-04: structural edges are `[[relation]]` rows; the typed `needs`
+            // axis stays in a `[relationships]` table preceding the arrays (F1). SL-176
+            // retired `slices` → backlog→slice provenance is `references(originates_from)`.
             "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [relationships]\nneeds = [\"ISS-002\"]\n\
-             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-020\"\n\
              [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"PRD-009\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"originates_from\"\ntarget = \"SL-020\"\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"some-free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
         let edges = outbound_for(&root, kind_for("ISS"), 1).unwrap();
         // SL-048 PHASE-04 (X1): `read_block` emits in canonical RELATION_RULES order —
-        // specs (pos 0) precedes slices (pos 10) precedes drift (pos 14). The former
-        // hardcoded accessor order (slices, specs, drift) is replaced; no render golden
-        // depends on the raw accessor order (inspect regroups by enum Ord, which is the
-        // same specs<slices<drift; format_show/show_json keep their own literal order).
+        // references (pos 0) precedes drift (pos 14); within `references`, rows sort by
+        // role Ord (originates_from < concerns). No render golden depends on the raw
+        // accessor order (inspect regroups by enum Ord).
         assert_eq!(
             pairs(&edges),
             vec![
+                (RelationLabel::References, "SL-020"),
                 (RelationLabel::References, "PRD-009"),
-                (RelationLabel::Slices, "SL-020"),
                 (RelationLabel::Drift, "some-free-text"),
             ],
-            "backlog emits references/slices/drift ONLY (no needs/after/triggers), canonical order"
+            "backlog emits references/drift ONLY (no needs/after/triggers), canonical order"
         );
     }
 
@@ -1725,7 +1822,7 @@ mod tests {
         view.inbound
             .iter()
             .filter(|((l, _), _)| *l == label)
-            .flat_map(|(_, v)| v.iter().map(String::as_str))
+            .flat_map(|(_, v)| v.iter().map(|t| t.target.as_str()))
             .collect()
     }
 
@@ -1734,7 +1831,7 @@ mod tests {
         view.outbound
             .iter()
             .filter(|((l, _), _)| *l == label)
-            .flat_map(|(_, v)| v.iter().map(String::as_str))
+            .flat_map(|(_, v)| v.iter().map(|t| t.target.as_str()))
             .collect()
     }
 
@@ -1924,25 +2021,26 @@ mod tests {
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
-            // SL-048 PHASE-04: slices/drift migrated to `[[relation]]` rows.
+            // SL-048 PHASE-04: structural edges are `[[relation]]` rows. SL-176 retired
+            // `slices` → backlog→slice provenance is `references(originates_from)`.
             "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
-             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-099\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"originates_from\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"originates_from\"\ntarget = \"SL-099\"\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"some-free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
         let view = inspect(&root, "ISS-001").unwrap();
         // The resolvable slice edge is NOT a dangler.
         assert_eq!(
-            outbound_targets(&view, RelationLabel::Slices),
+            outbound_targets(&view, RelationLabel::References),
             vec!["SL-001", "SL-099"],
             "outbound lists every authored target regardless of resolution"
         );
         // Danglers: the unresolved SL-099 and the free-text drift.
         assert!(
             view.danglers
-                .contains(&(RelationLabel::Slices, "SL-099".to_string())),
+                .contains(&(RelationLabel::References, "SL-099".to_string())),
             "an unresolved canonical ref dangles"
         );
         assert!(
@@ -1956,21 +2054,24 @@ mod tests {
         std::os::unix::fs::symlink("001", root.join(".doctrine/slice/a-slug")).unwrap();
         let still = inspect(&root, "ISS-001").unwrap();
         assert_eq!(
-            outbound_targets(&still, RelationLabel::Slices),
+            outbound_targets(&still, RelationLabel::References),
             vec!["SL-001", "SL-099"]
         );
 
         // VT-5 — an entity with no relations: empty sections, not an error.
         let empty = inspect(&root, "SL-001").unwrap();
-        // SL-001 is referenced by ISS-001's slices edge → it DOES have inbound;
-        // a freshly-isolated no-relation entity proves the empty path instead.
+        // SL-001 is referenced by ISS-001's references(originates_from) edge → it DOES have
+        // inbound; a freshly-isolated no-relation entity proves the empty path instead.
         seed_slice(&root, 50, &[]);
         let lone = inspect(&root, "SL-050").unwrap();
         assert!(lone.outbound.is_empty());
         assert!(lone.inbound.is_empty());
         assert!(lone.danglers.is_empty());
-        // (SL-001 has the inbound slices edge — sanity that inspect saw it.)
-        assert_eq!(inbound_for(&empty, RelationLabel::Slices), vec!["ISS-001"]);
+        // (SL-001 has the inbound references edge — sanity that inspect saw it.)
+        assert_eq!(
+            inbound_for(&empty, RelationLabel::References),
+            vec!["ISS-001"]
+        );
     }
 
     // SL-050 F6 — a well-formed ref to a never-minted id is now an ERROR (flips the old
@@ -2061,10 +2162,9 @@ mod tests {
                 "{label:?} (Unvalidated) must have no overlay"
             );
         }
-        // The 18 = 21 distinct labels minus the 3 Unvalidated (SL-149 PHASE-05 retired
-        // specs/requirements, collapsing them into the single resolvable `references`
-        // label → one overlay, label-keyed per R5; SL-159 PHASE-02 added supports/disputes).
-        // The set, not just the count, is the real assertion above; the count is a sanity tag.
+        // SL-176 PHASE-01 added Fulfils (resolvable, Tier-1); PHASE-04 dropped Slices → 18
+        // overlay-backed labels. The set, not just the count, is the real assertion above;
+        // the count is a sanity tag.
         assert_eq!(overlay_backed.len(), 18, "overlay-backed label count is 18");
     }
 
@@ -2116,7 +2216,7 @@ mod tests {
         let root = dir.path();
 
         // --- SL: specs, requirements, supersedes, governed_by, related (all tier-1),
-        //     plus references in all three roles (SL-149: implements/scoped_from/concerns
+        //     plus references in all three roles (SL-149: implements/originates_from/concerns
         //     — the SL source authors every references role) ---
         write(
             &root,
@@ -2126,11 +2226,12 @@ mod tests {
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
              [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"SPEC-018\"\n\
-             [[relation]]\nlabel = \"references\"\nrole = \"scoped_from\"\ntarget = \"IMP-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"originates_from\"\ntarget = \"IMP-001\"\n\
              [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"RFC-003\"\n\
              [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-002\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
-             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n",
+             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"IMP-005\"\n",
         );
         write(&root, ".doctrine/slice/001/slice-001.md", "s\n");
         assert_eq!(
@@ -2158,8 +2259,8 @@ mod tests {
 
         // --- ISS (backlog): specs + slices + related + drift + governed_by (all tier-1;
         //     governed_by + related widened in for backlog by SL-145) + references(concerns)
-        //     (SL-149: a backlog item authors ONLY the concerns role — implements/scoped_from
-        //     are SL-only) ---
+        //     + references(originates_from) (SL-176 §A.2: backlog may now author originates_from);
+        //     implements stays SL-only ---
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
@@ -2167,7 +2268,7 @@ mod tests {
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\ntarget = \"SL-001\"\n\
-             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"originates_from\"\ntarget = \"SL-002\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"free-text\"\n",
@@ -2176,7 +2277,7 @@ mod tests {
         assert_eq!(
             emitted_labels(root, "ISS", 1),
             table_labels_for("ISS"),
-            "backlog reader emits exactly specs + slices + related + governed_by + drift"
+            "backlog reader emits exactly its table labels"
         );
 
         // --- SPEC (tech): governed_by (tier-1) + descends_from/parent (typed) +
@@ -2512,7 +2613,7 @@ mod tests {
              id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n\
-             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n"
+             [[relation]]\nlabel = \"references\"\nrole = \"originates_from\"\ntarget = \"SL-001\"\n"
             ),
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");

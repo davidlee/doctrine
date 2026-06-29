@@ -32,7 +32,7 @@ intent = "design-target"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "IMP-188"
 
 [[relation]]

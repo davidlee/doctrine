@@ -20,7 +20,7 @@ target = "RFC-005"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "ISS-056"
 
 [[selector]]

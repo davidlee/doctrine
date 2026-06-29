@@ -11,13 +11,13 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
 label = "references"
-role = "scoped_from"
-target = "IMP-106"
+role = "implements"
+target = "REQ-288"
 
 [[relation]]
 label = "references"
-role = "implements"
-target = "REQ-288"
+role = "originates_from"
+target = "IMP-106"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

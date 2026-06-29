@@ -17,7 +17,7 @@ target = "RFC-003"
 
 [[relation]]
 label = "references"
-role = "scoped_from"
+role = "originates_from"
 target = "CHR-024"
 
 [[relation]]

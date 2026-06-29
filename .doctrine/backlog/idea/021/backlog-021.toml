@@ -26,5 +26,6 @@ role = "concerns"
 target = "PRD-005"
 
 [[relation]]
-label = "slices"
+label = "references"
+role = "originates_from"
 target = "SL-148"
