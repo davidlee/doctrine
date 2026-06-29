@@ -1,0 +1,49 @@
+memory_uid = "mem_019f13369d257870b8b42aae60103217"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reconcile: new ratifying ADR is authored directly, not via REV"
+summary = "Reconcile authors new ratifying ADRs DIRECTLY (adr new); the REV change grammar has no create-ADR action — REV carries only amendments (modify) + the narrative link"
+created = "2026-06-29"
+updated = "2026-06-29"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "985d908db51094397d41cec6884214c1c4a85f74"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a1860521d02d6f4f64c839d8a9d3884b7761dd3b32fcb68d68e73e15ff593641"
+base_commit = "c71e2192df7df5117e3321845dac1383de5134e8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "minor"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-176"
+
+[[source]]
+kind = "adr"
+ref = "ADR-018"
+
