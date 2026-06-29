@@ -38,6 +38,17 @@ pub(crate) const BACKLOG: &[&str] = &[ISS, IMP, CHR, RSK, IDE];
 /// Every knowledge-record kind.
 pub(crate) const RECORD: &[&str] = &[ASM, DEC, QUE, CON, EVD, HYP];
 
+/// Value-bearing kinds (SL-089 D2): a slice plus the five backlog kinds — the set
+/// that carries a value facet and feeds priority value/burndown. A STRICT SUBSET
+/// of `dep_seq::is_work_like`: `value_bearing` ⊂ `work_like`, parted by REV (a
+/// Revision is work-like for dep/seq but NOT value-bearing). Governance and
+/// knowledge records are excluded.
+pub(crate) const VALUE_BEARING: &[&str] = &[SL, ISS, IMP, CHR, RSK, IDE];
+
+pub(crate) fn is_value_bearing(prefix: &str) -> bool {
+    VALUE_BEARING.contains(&prefix)
+}
+
 /// Membership predicate over [`RECORD`] — the single source for "is this a
 /// knowledge-record kind?" so adding/renaming a record kind edits RECORD,
 /// not every call site.
@@ -54,5 +65,31 @@ mod tests {
         assert_eq!(GOV, &[ADR, POL, STD]);
         assert_eq!(BACKLOG, &[ISS, IMP, CHR, RSK, IDE]);
         assert_eq!(RECORD, &[ASM, DEC, QUE, CON, EVD, HYP]);
+    }
+
+    /// SL-177: VALUE_BEARING == SL + BACKLOG; every elem is work-like; REV is
+    /// work-like but NOT value-bearing.
+    #[test]
+    fn value_bearing_is_sl_plus_backlog_strict_subset_of_work_like() {
+        // VALUE_BEARING == [SL] + BACKLOG
+        let expected: &[&str] = &[SL, ISS, IMP, CHR, RSK, IDE];
+        assert_eq!(VALUE_BEARING, expected);
+        // Every VALUE_BEARING elem is work-like.
+        let work_like: &[&str] = &["SL", "ISS", "IMP", "CHR", "RSK", "IDE", "REV"];
+        for &prefix in VALUE_BEARING {
+            assert!(work_like.contains(&prefix), "{prefix} must be work-like");
+        }
+        // REV is work-like but NOT value-bearing.
+        assert!(
+            !VALUE_BEARING.contains(&"REV"),
+            "REV is work-like for dep/seq but NOT value-bearing"
+        );
+        // Governance and records are neither.
+        for &prefix in &[ADR, POL, STD, ASM, DEC, QUE, CON, EVD, HYP] {
+            assert!(
+                !is_value_bearing(prefix),
+                "{prefix} must NOT be value-bearing"
+            );
+        }
     }
 }
