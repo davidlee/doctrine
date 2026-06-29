@@ -1,0 +1,34 @@
+id    = 193
+slug  = "audit-sl-177-default-value-floor-conformance-evidence"
+title = "Audit: SL-177 default value floor — conformance & evidence"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-177"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "5 undeclared conformance edits — all design-§9.1-sanctioned test/golden re-baselines, no source scope creep"
+detail = '`slice conformance 177`: undeclared(5) = M src/priority/channels.rs (test mod only), tests/e2e_inspect_golden.rs, tests/e2e_priority_golden.rs, tests/fixtures/sl071_inspect_sl001_golden.json, sl071_inspect_sl003_golden.json. undelivered(0). conformant(3) = kinds.rs, priority/graph.rs, priority/surface.rs (the three design-target selectors). Expected: undeclared edits are scope creep or undocumented touches. Observed: every undeclared path is a mechanical 0.0→1.0 score re-baseline (+ consequent ordering changes) flowing from the value-contract change — valueless value-bearing entities now score the DEFAULT_VALUE=1.0 default. design.md §9.1 ("Tests that change BY DESIGN — full blast radius") deliberately sanctions re-baselining "every fixture asserting the old valueless-work==0 contract." No production source touched outside the 3 declared files. INV-4 holds (verified: no residual raw f.value scoring reads). Legitimate, design-anticipated; not scope creep.'
+disposition = "aligned"
+response = "Aligned — observed undeclared set is exactly the design-§9.1-sanctioned test/golden re-baseline; no production source touched beyond the 3 declared selectors, undelivered is empty, INV-4 holds. The full suite is green at S (see F-confirmation in Synthesis), so the re-baselined golden set is complete and correct, not merely green. No code change required. The only residual is a record-honesty question (should design-target selectors enumerate the test surface) — folded into F-2's reconcile note, not a defect here."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "design §9.1 blast-radius enumeration is stale — over-lists cross_kind, omits inspect-golden/channels/sl071 fixtures"
+detail = "design.md §9.1 names `tests/e2e_priority_cross_kind.rs` as a golden needing regeneration, but it was NOT touched — correctly, since it asserts ordering/relations, not absolute scores (grep: zero `score`/`0.0`/`1.0` asserts). Conversely §9.1 does NOT name three surfaces that WERE re-baselined: tests/e2e_inspect_golden.rs (5 inspect score asserts 0.0→1.0), src/priority/channels.rs test mod (score_reads_the_post_pass_value), tests/fixtures/sl071_inspect_sl00{1,3}_golden.json. The edits themselves are correct value-propagation; only the design's prose enumeration of the blast radius is inaccurate. Handover corroborates: worker under-enumerated the golden blast radius twice (cost 2 extra round-trips). Per-slice design-artifact accuracy gap — reconcile should correct §9.1 to match the delivered set (and may extend design-target selectors to cover the test surface so future `slice conformance` reads honestly)."
+disposition = "design-wrong"
+response = "Confirmed — the design's §9.1 blast-radius enumeration is the inaccuracy, not the code. The delivered edits are correct value-propagation; §9.1 prose is stale (names cross_kind which needed no change; omits inspect-golden/channels/sl071). Per-slice design artifact → delegated to /reconcile as a direct edit (see Reconciliation Brief): correct §9.1 to match the actual delivered set, and optionally extend design-target selectors to cover the test/golden surface so future `slice conformance` reads clean. Not a blocker; no spec/governance impact."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
