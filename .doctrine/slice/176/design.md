@@ -40,6 +40,8 @@ cross-corpus relation contract), **RFC-003** (the deliberation this slice implem
 | **D-degree-default** | `None` degree ≡ **Full**. `partial` is the marked exception. Does NOT repeat SL-149's banned `unspecified` (that was banned because role keys the target gate; degree keys nothing). | design |
 | **D-edge-identity** | Edge identity = `(label, role, target)`; **degree excluded**. Single-edge guaranteed by a **validate uniqueness invariant** on `(source, fulfils, target)`. Degree set at author time; **changed via `unlink`+`relink`**, NOT upsert (codex F1 — no mutation path exists in `append_relation_row`). `link` of an existing triple with a *different* degree **errors** ("exists with degree X; unlink to change"); identical → `Noop`. `unlink` matches `(label, role, target)`, degree ignored. | design (codex F1/F2) |
 | **D-inspect-shape** | `RelationGroup` targets change from `Vec<String>` to **structured entries carrying `Option<Degree>`** (codex F3 — the flat `Vec<String>` cannot hold per-target degree). Affects outbound + inbound + `inspect --json` schema. A render-side side-index is insufficient. | design (codex F3) |
+| **D-backlog-inbound** | (G1, user-locked **a**) `backlog show`/`show --json` render `fulfilled by` as **derived inbound**, computed via the **same relation-graph inbound machinery `inspect` uses** (`in_edges` + `inbound_role_index`/degree, threaded with `root`) — NOT the item's own outbound (which the migration deletes). `backlog show` thereby becomes **corpus-aware** (was item-local, `backlog.rs:1363-65`); this is a deliberate posture **refinement, ADR-004-consistent** (inbound is always derived; ADR-004 defers the reverse *field*, not derived render). The `slices` outbound read is removed, not swapped. `doctor` (`:2201`) takes the same inbound set. | design (codex G1) |
+| **D-uniqueness-seam** | (G2) The `(source, label, role, target)` uniqueness invariant is **per-entity and local** — `source` is one entity, so a duplicate logical edge is two `fulfils` rows in **one slice's own toml**. Enforced in **`read_block`/per-entity row validation** (new `DuplicateEdge` finding, match on `(label, role, target)`, **degree-agnostic**), NOT corpus `validate_relations` (which would need degree threaded into `CatalogEdge`). The write-seam degree-conflict error (§A.5) is the author-time guard; this is the at-rest backstop for hand-authored dupes. | design (codex G2) |
 
 ---
 
@@ -224,8 +226,8 @@ IMP-210 — that item is only the *new* close-cascade hint, not the *existing* b
 | **backlog show (JSON)** | `src/backlog.rs:1574` | `"slices": targets_for(…, Slices)` field | replace with the `fulfils`-derived shape; **public JSON schema change** — enumerate goldens at plan. |
 | **lifecycle findings** | `src/backlog.rs:2201` (doctor "all linked slices terminal") | reads `Slices`-linked slices | read the `fulfils`/derived-inbound set. Keep the finding's semantics; swap the edge it reads. |
 
-> **G1 [BLOCKER — open] the backlog re-point is NOT a label swap; it is an
-> inbound-derivation read-path `backlog show` structurally lacks (external pass 2).**
+> **G1 [BLOCKER — RESOLVED (a), see D-backlog-inbound] the backlog re-point is NOT a
+> label swap; it is an inbound-derivation read-path `backlog show` structurally lacks.**
 > `format_show`/`format_json` are documented as a **pure fn of the item's OWN tier1**,
 > explicitly *not* inbound — "the reverse view is the deferred registry surface's,
 > ADR-004" (`src/backlog.rs:1363-1365`); the three reads (`backlog.rs:1420` human,
