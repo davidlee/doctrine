@@ -1,0 +1,78 @@
+# Implementation plan for SL-177 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-177"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Value-bearing set + shared seam + scoring default"
+objective = """
+Introduce kinds::VALUE_BEARING + is_value_bearing, the priority-tier
+effective_raw_value(kind, &facets) accessor and DEFAULT_VALUE const, route
+base_score's value_dim through the accessor, and consume is_value_bearing in
+surface.rs (dropping its local WORK_PREFIXES). Re-baseline every test/golden that
+encodes the old valueless-work==0 contract. This is the scoring-side change;
+burndown wiring is PHASE-02.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (RV-191 done); SL-176 merged to main so its scoring/golden churn is already in (avoids re-baseline conflict)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "kinds::VALUE_BEARING = [SL,ISS,IMP,CHR,RSK,IDE] + is_value_bearing exist; NOT named WORK; is_work_like untouched." },
+  { id = "EX-2", text = "effective_raw_value(kind,&facets)->Option<f64> + DEFAULT_VALUE=1.0 live in the priority tier (graph.rs); value.rs unchanged." },
+  { id = "EX-3", text = "base_score value_dim routes through effective_raw_value: valueless value-bearing kind → as-if 1.0; record/REV/governance → None→0; authored value (incl 0.0, <1.0) untouched (no-clamp)." },
+  { id = "EX-4", text = "surface.rs consumes kinds::is_value_bearing; local WORK_PREFIXES removed; actionability view set-preserved." },
+  { id = "EX-5", text = "Full suite green: base_score units, graph.rs score-consequence tests, and both e2e goldens re-baselined to the new valueless-work scores (deliberate, enumerated)." },
+]
+verification = [
+  { id = "VT-1", expects = "Set canary: VALUE_BEARING == [SL]+BACKLOG and VALUE_BEARING ⊂ is_work_like (parted by REV)", test_file = "src/kinds.rs", keywords = ["VALUE_BEARING", "is_value_bearing"] },
+  { id = "VT-2", expects = "base_score: valueless SL + one valueless backlog kind → value_dim equals explicit value=1.0 computation (red vs current 0.0)", test_file = "src/priority/graph.rs", keywords = ["effective_raw_value", "value_dim"] },
+  { id = "VT-3", expects = "Exclusion: valueless ASM and REV → effective_raw_value None → value_dim==0", test_file = "src/priority/graph.rs", keywords = ["effective_raw_value", "REV"] },
+  { id = "VT-4", expects = "No-clamp: authored value=0.3 on SL reflects 0.3 not 1.0; authored value=0.0 → value_dim==0 (absent≠zero)", test_file = "src/priority/graph.rs", keywords = ["effective_raw_value", "value_dim"] },
+  { id = "VT-5", expects = "surface set-preservation: actionability view unchanged after WORK_PREFIXES→is_value_bearing promotion", test_file = "src/priority/surface.rs", keywords = ["is_value_bearing"] },
+  { id = "VA-1", expects = "e2e goldens (e2e_priority_golden.rs, e2e_priority_cross_kind.rs) re-baseline diffs confirmed as the intended valueless-work score change, not regressions — grep-enumerated list reviewed before regeneration" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Burndown raw_value retrofit"
+objective = """
+Retrofit SL-176's burndown post-pass so raw_value(src)/raw_value(I) read through
+the shared effective_raw_value accessor — the single change that makes the default
+reach burndown (RV-191 F-1). Add the regression guard proving a valueless
+delivering-status slice now burns down a fulfilled item.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (effective_raw_value seam exists); SL-176 burndown post-pass present in src/priority/graph.rs." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "burndown raw_value(src) and raw_value(I) route through effective_raw_value(kind,&facets) (unwrap_or(0.0) at the denominator guard; SL-176's raw_value>0 branch preserved)." },
+  { id = "EX-2", text = "A backlog item fulfilled by a valueless delivering-status slice: delivered reflects 1.0 and r(I)>0; valueless item with a fulfiller now denominates (raw_value(I) defaulted)." },
+  { id = "EX-3", text = "No site reads f.value raw for scoring/burndown — INV-4 one-seam holds." },
+]
+verification = [
+  { id = "VT-1", expects = "F-1 regression guard: backlog item fulfilled by a valueless slice in delivering status {started,audit,reconcile,done} → delivered==1.0, r(I)>0, item score reduced. Fails if burndown reads raw f.value instead of effective_raw_value", test_file = "src/priority/graph.rs", keywords = ["effective_raw_value", "burndown"] },
+  { id = "VT-2", expects = "Exclusion in burndown: a valueless REV/record cannot deliver value (effective_raw_value None → contributes 0)", test_file = "src/priority/graph.rs", keywords = ["effective_raw_value", "burndown"] },
+]
+specs             = []
+requirements      = []
