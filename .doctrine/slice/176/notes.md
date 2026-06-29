@@ -178,3 +178,19 @@ design.md fully reconciled (ledger rows D-backlog-inbound + D-uniqueness-seam ad
 (it is the one genuinely new read-path), else **lock → `slice status 176 plan` → `/plan`**.
 User to choose third-pass vs lock. Commits: `96fa4edf` → `27bd3321` → `20e86c8d` →
 `560d4a1a` (pass-2) → (this G1–G4 resolution).
+
+## Design locked → plan; HALTED on a priority-scoring decision (2026-06-29)
+
+User chose **lock → `/plan`** (no third pass). Lifecycle moved `design`→`plan`; 4-phase
+`plan.toml` + `plan.md` authored and committed (engine / storage / surfaces / migration;
+governance ratification deferred to reconcile, not a plan phase).
+
+**Plan finalisation HALTED.** The critical pass (plan skill step 7) grounded design **R10**
+in source and found it **false**: the `Slices`→`Fulfils` priority re-point does NOT preserve
+optionality numbers — the edge direction flips (`slices` item→SL vs `fulfils` SL→item), so
+the credited node flips. Full context + the user's decisive guidance + the resolution
+direction + the one remaining open scope question are dumped in
+**`decision-priority-optionality.md`** — the fresh agent resolves that BEFORE finalising the
+plan. Resolution direction is settled (credit the item from the slice's facets, degree-
+weighted; delete R10's preservation claim); open question is whether degree-weighting is
+in-scope here or a follow-up.
