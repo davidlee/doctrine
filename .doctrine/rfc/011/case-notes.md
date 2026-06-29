@@ -500,3 +500,31 @@ fixtures exist; a "new test fn count must increase" check would be stronger. (b)
 funnel should run `check gate` (or at least clippy) as part of the verify beat, not
 just `regression diff` — behaviour-green ≠ landable. (c) worker prompts must name a
 REAL green command; "check quick" is a no-op trap when unconfigured.
+
+[dispatch/SL-176-PHASE-04; orchestrator-editorial-migration]
+Two mechanism gotchas cost a debug+re-run cycle during the corpus migration:
+1. scoped_from→originates_from via unlink+link is WRONG — both spellings parse to
+   Role::OriginatesFrom (transitional alias), so unlink --role scoped_from no-ops and
+   link adds a DUPLICATE. Class-1 wire-rename must be a pure on-disk value substitution,
+   not engine unlink+link. Cost: 1 corrupted entity (SL-117), caught by inspection.
+2. append_relation_row's F1 guard refuses to append a [[relation]] when a typed
+   array-of-tables ([[selector]]) sits AFTER the relation array. One fulfil-target slice
+   (SL-138) needed its [[selector]] blocks re-homed above [[relation]] before the bulk
+   driver could complete. The migration op-runner aborted mid-batch on this; idempotent
+   re-run after the fix completed. Lesson: pre-scan fulfil-target slices for trailing
+   typed tables BEFORE running an append-driven migration.
+Net: driving a bulk migration through the engine's own write seam (vs hand text-surgery)
+is the right call for toml validity + contiguity, but the alias + F1 edges need an
+up-front pass, not discovery mid-run.
+
+[conclude SL-176; verify-vt-gate-divergence]
+At funnel conclude, `check gate` (build+tests) was green but `slice verify-vt 176`
+exited 1 on 3 VT existence-gate FAILs — two distinct gates, no single "is it done"
+signal. Cost: a full re-derivation of where each mandated keyword/test actually
+lived (P04 VT-1/VT-2 oracles never written; P03 VT-2 keyword pointed at the wrong
+file — "fulfilled by" is owned by relation.rs, not relation_graph.rs). The
+existence gate checks keyword presence but cannot tell a genuinely-missing test
+from a mis-located mandate; disambiguating that took ~6 source probes. A
+`verify-vt` that emitted the grep target + nearest matching symbol per FAIL would
+have collapsed most of that. Handover had flagged the P04 oracle as an open
+judgment, which saved re-discovering the question itself.
