@@ -11,9 +11,9 @@ governance, and is every gap consciously dispositioned before reconciliation?
 The audit stage runs on a **review ledger** — the RV kind (`RV-NNN`, ADR-007). The
 shared ledger mechanics (open + prime, raise, dispose + resolve, the severity and
 disposition vocab, synthesis, the close-gate, the parent-tree caveat) live in
-`review-ledger.md` — **read it; this skill does not repeat the verbs.** What
-follows is the audit *lens*: the facet, the modes, the scope, the evidence the
-reconciliation loop demands, and the audit-specific harvest and closure tail.
+`.doctrine/review-ledger.md` — **read it; this skill does not repeat the verbs.** 
+What follows is the audit *lens*: the facet, the modes, the scope, the evidence 
+the reconciliation loop demands, and the audit-specific harvest and closure tail.
 
 Findings are append-only to the ledger and field-owned, "no undispositioned 
 findings before close" is enforced by the binary
