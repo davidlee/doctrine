@@ -1,4 +1,4 @@
-# SL-176 Design — Finish Axis B: retire `slices` / `drift`
+# SL-176 Design — Finish Axis B: retire `slices`/`drift` + `fulfils` priority burndown
 
 <!-- Reference forms: entity ids padded (ADR-016, SPEC-018); doc-local refs bare
      (A.1 section, Q1 question, R1 risk, B.3 class). -->
@@ -13,9 +13,23 @@ the relation-vocabulary collapse SL-149 began for work→canon. The *what* is de
 independent external pass (codex G1–G4), then a **design session resolving G1–G4**.
 **G1 resolved option (a)** (user-locked) — D-backlog-inbound; **G2 resolved** —
 D-uniqueness-seam (`read_block`, local); **G3** re-classed as deliberate content
-(enumerate at plan); **G4** census add. Mechanism complete. **Optional: one confirming
-third external pass on the G1(a) backlog-inbound mechanism, else lock → `/plan`.** See the
-decision ledger + the two "Adversarial review (external pass …)" sections.
+(enumerate at plan); **G4** census add. The *vocabulary/migration* mechanism is complete;
+the **priority consumer was re-opened and re-resolved 2026-06-29** — see the scope note
+below. **Optional: one confirming third external pass on the G1(a) backlog-inbound mechanism
++ the new burndown spec.** See the decision ledger + the two "Adversarial review (external
+pass …)" sections.
+
+**Scope broadened (2026-06-29, design session — Option 2, user-locked).** Grounding
+PHASE-03's priority re-point in source showed the original §A′.1/R10 claim — that a
+`fulfils` inbound credits optionality identically to a `slices` reference — is **false**:
+the consequence pass credits the edge *target* ∝ the *source*'s base (`graph.rs:595-628`),
+so flipping `slices` (item→SL) to `fulfils` (SL→item) flips the credited node. Resolved with
+the User: `fulfils` carries a **new value-burndown** priority effect (a backlog item's value
+is *reduced* by the value of the slices fulfilling it), NOT additive optionality. The slice's
+mandate **broadens** to own this scoring change; the default value floor it relies on for
+valueless entities is a **separate sibling slice**. See D-priority-burndown /
+D-burndown-denomination / D-burndown-lifecycle / D-value-floor-sibling in the ledger, the
+rewritten §A′.1 row 1 + burndown spec, and R10/R12.
 
 **Governance ratification is deferred to reconciliation** (per scope + RFC-003): the
 ratifying ADR (amend ADR-016 / ADR-010, or a sibling) is authored at P5/reconcile, after
@@ -42,6 +56,10 @@ cross-corpus relation contract), **RFC-003** (the deliberation this slice implem
 | **D-inspect-shape** | `RelationGroup` targets change from `Vec<String>` to **structured entries carrying `Option<Degree>`** (codex F3 — the flat `Vec<String>` cannot hold per-target degree). Affects outbound + inbound + `inspect --json` schema. A render-side side-index is insufficient. | design (codex F3) |
 | **D-backlog-inbound** | (G1, user-locked **a**) `backlog show`/`show --json` render `fulfilled by` as **derived inbound**, computed via the **same relation-graph inbound machinery `inspect` uses** (`in_edges` + `inbound_role_index`/degree, threaded with `root`) — NOT the item's own outbound (which the migration deletes). `backlog show` thereby becomes **corpus-aware** (was item-local, `backlog.rs:1363-65`); this is a deliberate posture **refinement, ADR-004-consistent** (inbound is always derived; ADR-004 defers the reverse *field*, not derived render). The `slices` outbound read is removed, not swapped. `doctor` (`:2201`) takes the same inbound set. | design (codex G1) |
 | **D-uniqueness-seam** | (G2) The `(source, label, role, target)` uniqueness invariant is **per-entity and local** — `source` is one entity, so a duplicate logical edge is two `fulfils` rows in **one slice's own toml**. Enforced in **`read_block`/per-entity row validation** (new `DuplicateEdge` finding, match on `(label, role, target)`, **degree-agnostic**), NOT corpus `validate_relations` (which would need degree threaded into `CatalogEdge`). The write-seam degree-conflict error (§A.5) is the author-time guard; this is the at-rest backstop for hand-authored dupes. | design (codex G2) |
+| **D-priority-burndown** | The `fulfils` priority effect is a **new subtractive value-burndown**, NOT additive optionality (supersedes the original behaviour-preserving label-swap — proven false, R10: the consequence pass credits the edge *target* ∝ the *source*'s base, so flipping `slices` item→SL to `fulfils` SL→item flips the credited node). `Slices` is **removed** from both `REF_LABELS` and `CONSEQUENCE_LABELS`; `Fulfils` joins **`REF_LABELS` only** (overlay for inbound/burndown `in_edges`), **never `CONSEQUENCE_LABELS`**. A new post-pass reduces a backlog item's value by the value of the slices fulfilling it. The old `slices`→optionality credit is **dropped, not replaced** (User-vetoed OK). | user-locked 2026-06-29 |
+| **D-burndown-denomination** | **Value-denominated**, not coverage-fraction: delivered = each fulfilling slice's **raw `value` facet** (proportionally offsetting the item's `value_dim`; raw-value units so the deliverer's cost/kind-weight don't distort delivery). Coverage-fraction-on-the-edge rejected — locked binary `Degree {Full,Partial}` can't carry a fraction, and ADR-016 §2 (derivable-not-relational) bars authoring a derivable fraction on the relation. **Degree is OUT of scoring** entirely (keeps inbound display + IMP-210). **Non-conserving** across multi-item: a slice fulfilling A and B burns its value from each (leverage-like; deliberate). | user-locked 2026-06-29 |
+| **D-burndown-lifecycle** | Only **delivered** value burns down: a source slice with status `planned`/draft contributes **0**; `in_progress`/`completed` contribute full. (Stops a freshly-scoped slice silently hiding a high-value item before any work lands.) Post-pass reads `NodeAttr.status`. **Excluded from mint** (graph-derived, like leverage/optionality — I3). | user-locked 2026-06-29 |
+| **D-value-floor-sibling** | The **default value 1.0** for value-bearing actionable kinds **{slice, backlog}** (knowledge **records excluded** — SL-158 trinary actionability: gating/estimable but not value-bearing) is a **separate sibling slice**, NOT SL-176. **Soft** dependency: burndown works for explicitly-valued entities without it; the floor only governs the *valueless* case. The `fulfils` coverage-% derived display is a deferred follow-up (carried open). | user-locked 2026-06-29 |
 
 ---
 
@@ -225,7 +243,7 @@ IMP-210 — that item is only the *new* close-cascade hint, not the *existing* b
 
 | consumer | file:line | today | becomes |
 |---|---|---|---|
-| **priority scoring** | `src/priority/graph.rs:190, 201` | `Slices` is in **both** the reference-label and consequence-label sets — a backlog item's "optionality" credit counts the slices that reference it | the optionality signal moves to the **derived `fulfils` inbound** (a slice `fulfils` the item). Re-point both label-set memberships from `Slices` to `Fulfils`; preserve the scoring behaviour (behaviour-preservation on the *numbers*, not the label). |
+| **priority scoring** | `src/priority/graph.rs:190, 201` + new post-pass | `Slices` is in **both** the reference-label and consequence-label sets — a backlog item's "optionality" credit counts the slices that reference it | **REPLACED — value burndown (D-priority-burndown).** Remove `Slices` from **both** label sets; add `Fulfils` to `REF_LABELS` **only**. A backlog item's `value_dim` is **reduced** (not credited) by the lifecycle-gated raw `value` of the slices that `fulfil` it, degree-ignored, in a **new post-pass**. The old `slices`→optionality credit is **dropped**. NOT behaviour-preserving — a deliberate correctness change (R10). Full mechanism: the **burndown spec** below. |
 | **backlog show (human)** | `src/backlog.rs:1420, 1443` | `targets_for(tier1, Slices)` → a `("slices", …)` line | render the derived **`fulfilled by`** inbound instead (the `slices` *outbound* row no longer exists post-migration). |
 | **backlog show (JSON)** | `src/backlog.rs:1574` | `"slices": targets_for(…, Slices)` field | replace with the `fulfils`-derived shape; **public JSON schema change** — enumerate goldens at plan. |
 | **lifecycle findings** | `src/backlog.rs:2201` (doctor "all linked slices terminal") | reads `Slices`-linked slices | read the `fulfils`/derived-inbound set. Keep the finding's semantics; swap the edge it reads. |
@@ -251,10 +269,51 @@ IMP-210 — that item is only the *new* close-cascade hint, not the *existing* b
 > same inbound set. Exact wiring (reuse `InspectView` inbound vs a focused `fulfils`-inbound
 > query) pinned at plan.
 
-The priority re-point (A′.1 row 1) is the load-bearing one: it must keep the *scoring
-numbers* identical (a fulfils inbound credits optionality exactly as a `slices` reference
-did), proven by the priority suite staying green on equivalent fixtures (fixtures re-authored
-from `slices=[…]` to a `fulfils` edge).
+The priority re-point (A′.1 row 1) is the load-bearing one — and it is **not**
+behaviour-preserving. The original claim (a `fulfils` inbound credits optionality exactly as
+a `slices` reference did) is **false**: the consequence pass credits the edge *target* ∝ the
+*source*'s base (`graph.rs:595-628`), so reversing the edge (`slices` item→SL ⇒ `fulfils`
+SL→item) flips the credited node. The re-point is therefore a **deliberate scoring change** —
+value-burndown — proven by *new* fixtures asserting the changed behaviour, not by
+number-preservation.
+
+#### Priority burndown — the new `fulfils` scoring effect (`src/priority/graph.rs`)
+
+A backlog item's priority should reflect its **undelivered** value: a slice that delivers
+value against an item burns that value *down*, lowering the item's score (not raising it).
+This is the deliberate replacement for the dropped `slices`→optionality credit (D-priority-burndown).
+
+- **Label sets (`:183-205`).** `Slices` leaves **both** `REF_LABELS` and `CONSEQUENCE_LABELS`.
+  `Fulfils` joins **`REF_LABELS` only** — its overlay backs the inbound `in_edges` lookups
+  (burndown + the G1(a) backlog-inbound render); it is **never** added to `CONSEQUENCE_LABELS`
+  (that pass only *adds* `base(source)` to the target — wrong sign and wrong direction for
+  burndown).
+- **New post-pass** (parallel to `leverage`/`optionality`, after the base pre-pass; like
+  them **excluded from the mint tiebreak**, I3). For each backlog item node `I`:
+  - `delivered(I) = Σ over in_edges(fulfils_overlay, I) of gate(status(src)) · value(src)`,
+    where `gate = 1.0` for source status `in_progress`/`completed`, else `0.0`
+    (D-burndown-lifecycle), and `value(src)` is the slice's **raw `value` facet**
+    (D-burndown-denomination — raw units, not the cost/kind-weighted `value_dim`; the slice's
+    own est/cost must not discount what it delivers). Both `value` + `status` are already on
+    `NodeAttr` (`facets`/`status`).
+  - The item's value is offset proportionally: `burndown(I) = value_dim(I) · min(1,
+    delivered(I) / value(I))` for `value(I) > 0`, clamped so the item's value-derived score
+    never goes negative and never eats `risk_dim`/`leverage`/`optionality`. `score(I) =
+    base(I) + leverage(I) + optionality(I) − burndown(I)`.
+  - **Degree (`Full`/`Partial`) is not read here** (D-burndown-denomination). **Non-conserving**
+    across multi-item by construction (per-item `in_edges` sum).
+  - A config coefficient (`consequence.fulfil_coeff`, default `1.0` = pure 1:1 subtraction)
+    MAY be added at plan for parity with `ref_coeff`/`dep_coeff`; not required.
+- **Valueless sources/items.** With no `value` facet `value(src)` is absent ⇒ contributes 0
+  (today). The **default-1.0 floor** (sibling slice, D-value-floor-sibling) is what later lets
+  a valueless slice/item participate. SL-176 burndown is correct and testable for
+  explicitly-valued entities **without** the floor.
+- **Verification (replaces R10's preservation proof).** New `priority/graph.rs` fixtures: (1)
+  a slice with a `value` facet fulfilling an item *reduces* that item's score (correct sign,
+  sane magnitude); (2) a `planned` fulfilling slice burns nothing, an `in_progress`/`completed`
+  one does (lifecycle gate); (3) a slice fulfilling two items burns each independently
+  (non-conservation); (4) `originates_from` (provenance) does **not** feed any priority pass
+  (the conflation the old `slices` mixed in).
 
 ### A′.2 `scoped_from` → `originates_from` output surfaces
 
@@ -442,8 +501,10 @@ they do **not** stay green-unchanged.
 3. **P3** — surfaces + **consumer re-point (A′)**: `RelationTargetView` structured targets
    (`InspectView` outbound+inbound, `render_*`, `inspect --json` schema), `CatalogEdge`
    degree **only if a catalog/census consumer needs it** (the G2 uniqueness check does NOT —
-   it is `read_block`-local), `relation list`/`census`, web graph, `link --degree`; **re-point
-   `priority/graph.rs` from `Slices`→`fulfils`**; **`backlog.rs` show/JSON/lifecycle gain the
+   it is `read_block`-local), `relation list`/`census`, web graph, `link --degree`; **`priority/graph.rs` scoring change:
+   remove `Slices` from both label sets, add `Fulfils` to `REF_LABELS` only, add the new
+   value-burndown post-pass** (deliberate change, not number-preserving — §A′.1 burndown spec,
+   R10); **`backlog.rs` show/JSON/lifecycle gain the
    derived `fulfils`-inbound read-path (G1(a) / D-backlog-inbound — `inspect`-style inbound
    derivation, not the deleted `slices` outbound)**; `scoped_from`→`originates_from` output
    fields in `slice.rs`/`backlog.rs`/`cli.rs`/`commands/relation.rs`.
@@ -468,11 +529,19 @@ they do **not** stay green-unchanged.
   source kinds are legal, so a mis-authored reverse edge (origin authoring toward the born
   entity) is not kind-catchable by `validate` → accepted residual; cleaned at reconcile if
   the dogfood census surfaces any. Lifecycle-aware enforcement deferred.
-- **R10 (codex F4)** — the `priority/graph.rs` re-point is the highest-risk consumer change:
-  a wrong move silently shifts work-ordering scores. Mitigation: the optionality numbers must
-  stay identical (fulfils inbound credits exactly as a `slices` reference did), proven by the
-  priority suite green on fixtures re-authored `slices`→`fulfils`. NOT a behaviour change to
-  scoring, only to the edge it reads.
+- **R10 (codex F4 → reframed 2026-06-29)** — the `priority/graph.rs` change is the
+  highest-risk consumer change: a wrong move silently shifts work-ordering scores. It is
+  **NOT behaviour-preserving** — the original "numbers identical" mitigation rested on a false
+  premise (the consequence pass credits target ∝ source base, so the edge-direction flip moves
+  the credited node; §A′.1 burndown spec). Mitigation is now a **deliberate-change** proof:
+  the new value-burndown post-pass is pinned by *new* fixtures (sign, lifecycle gate,
+  non-conservation, provenance-excluded), and the old `slices`→optionality credit is dropped
+  by design (User-vetoed). The behaviour-preservation gate applies only to the *untouched*
+  leverage/optionality/dep passes, which stay green unchanged.
+- **R12 (burndown ↔ value-floor coupling)** — burndown is correct only for entities carrying
+  an explicit `value`; the valueless case depends on the **default-1.0 floor** in a sibling
+  slice (D-value-floor-sibling). Accepted as a **soft** dependency: SL-176 lands and tests
+  burndown on explicit values; valueless participation arrives with the floor. No hard block.
 - **R11 (codex F3)** — `RelationGroup` target-type change (`Vec<String>`→`Vec<RelationTargetView>`)
   touches every inspect render/JSON path; mitigated by degree `skip_if None` (degreeless
   groups render/serialise byte-identically) — but the type signature ripples; machinery-vs-
@@ -497,6 +566,11 @@ they do **not** stay green-unchanged.
 - Sub-roles on `originates_from` (`scoped` vs `follow_up`) → deferred until an edge demands.
 - Lifecycle-aware author-end enforcement → convention now (source-set partial fence).
 - Governance ratification ADR (amend ADR-016 / ADR-010, or sibling) → reconciliation.
+- **Default value 1.0 for value-bearing actionable kinds {slice, backlog}** (records excluded)
+  → **sibling slice** (D-value-floor-sibling); soft prerequisite for valueless burndown
+  participation, NOT a hard block on SL-176.
+- **`fulfils` coverage-% derived display** (`slice_value/item_value`, shown not stored;
+  ADR-016 §2) → deferred follow-up; scoring does not need it.
 
 ### Reconciliation intent (P5 — authored at reconcile, not design/plan)
 

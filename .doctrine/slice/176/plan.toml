@@ -110,9 +110,13 @@ target representation `RelationGroup = (RelationKey, Vec<String>)` → `Vec<Rela
 `render_outbound`/`render_inbound` (suffix '(partial)' per target; None/Full byte-identical),
 and the inbound degree recovery (parallel to inbound_role_index). `inspect --json`:
 degree-bearing groups emit objects `{ref, degree}` (skip_if None), other groups keep bare
-strings (heterogeneous-by-label). Add `--degree` to `doctrine link`. Re-point
-`priority/graph.rs:190/201` (REF_LABELS + CONSEQUENCE_LABELS) `Slices`→`Fulfils`, holding the
-optionality numbers identical (R10). G1(a): `backlog show`/`show --json`/lifecycle
+strings (heterogeneous-by-label). Add `--degree` to `doctrine link`. `priority/graph.rs`
+scoring change (D-priority-burndown, §A′.1 burndown spec): REMOVE `Slices` from both
+`REF_LABELS` and `CONSEQUENCE_LABELS`; add `Fulfils` to `REF_LABELS` ONLY; add the new
+value-burndown post-pass (a backlog item's `value_dim` reduced by the lifecycle-gated raw
+`value` of the slices fulfilling it — degree ignored, non-conserving, mint-excluded). NOT
+number-preserving — a deliberate change (R10); old `slices`→optionality credit dropped. G1(a):
+`backlog show`/`show --json`/lifecycle
 (`backlog.rs:1420/1574/2201`) gain the derived `fulfils`-inbound read-path (inspect-style
 in_edges + inbound degree, threaded with root) — `slices` outbound read REMOVED, not swapped.
 Rename `scoped_from`→`originates_from` output fields/text in `slice.rs:1677/1758`,
@@ -127,14 +131,14 @@ exit_criteria = [
   { id = "EX-1", text = "`RelationTargetView{target, degree}`; RelationGroup target type changed; inspect_from/render_*/inbound-degree threaded; degreeless groups render+serialise byte-identical" },
   { id = "EX-2", text = "`inspect --json`: degree-bearing groups emit {ref, degree} objects (skip_if None); other groups bare strings; schema goldens updated" },
   { id = "EX-3", text = "`doctrine link <SL> fulfils <BACKLOG> --degree partial` works; --degree on non-fulfils label → DegreeNotApplicable; absent ≡ full" },
-  { id = "EX-4", text = "priority/graph.rs REF_LABELS + CONSEQUENCE_LABELS re-pointed Slices→Fulfils; optionality scoring numbers identical on re-authored fixtures (R10)" },
+  { id = "EX-4", text = "priority/graph.rs: Slices removed from REF_LABELS + CONSEQUENCE_LABELS, Fulfils added to REF_LABELS only; new value-burndown post-pass reduces a fulfilled item's value_dim by lifecycle-gated raw slice value (degree ignored, non-conserving, mint-excluded); old slices→optionality credit dropped (R10 — deliberate change, NOT number-preservation)" },
   { id = "EX-5", text = "G1(a): backlog show/json/lifecycle render `fulfilled by: <SL> (degree)` from DERIVED inbound (item toml carries no fulfils row); ADR-004-consistent corpus-aware read-path" },
   { id = "EX-6", text = "scoped_from→originates_from renamed at ALL output surfaces: slice.rs, backlog.rs, cli.rs:552 (help), commands/relation.rs:42-47 (role-error), lazyspec map_edge, relation list/census, web graph" },
 ]
 verification = [
   { id = "VT-1", expects = "Inspect mixed golden: fulfils+degree as JSON target objects, originates_from, label-only bare strings; structured-target schema (D-inspect-shape)", test_file = "src/relation_graph.rs", keywords = ["RelationTargetView", "degree"] },
   { id = "VT-2", expects = "Outbound/inbound render: fulfils (partial) suffix per target; degreeless groups byte-identical (no golden churn)", test_file = "src/relation_graph.rs", keywords = ["partial", "fulfilled by"] },
-  { id = "VT-3", expects = "priority/graph.rs suite green on fixtures re-authored slices=[…]→fulfils edge — optionality numbers identical (R10 behaviour-preservation)", test_file = "src/priority/graph.rs", keywords = ["Fulfils", "optionality"] },
+  { id = "VT-3", expects = "priority burndown fixtures: (1) a valued slice fulfilling an item LOWERS the item score (correct sign, sane magnitude); (2) planned slice burns nothing, in_progress/completed burns (lifecycle gate); (3) a slice fulfilling two items burns each independently (non-conservation); (4) originates_from feeds NO priority pass", test_file = "src/priority/graph.rs", keywords = ["Fulfils", "burndown"] },
   { id = "VT-4", expects = "G1(a) backlog derived-inbound: slice authors fulfils IMP --degree partial → backlog show IMP renders 'fulfilled by: SL (partial)' from inbound; item toml has no fulfils row", test_file = "src/backlog.rs", keywords = ["fulfilled by", "Fulfils"] },
   { id = "VT-5", expects = "scoped_from→originates_from field/wording renames across slice/backlog show+json + cli help + role-error string", test_file = "src/backlog.rs", keywords = ["originates_from"] },
   { id = "VT-6", expects = "link --degree CLI: partial author + absent≡full + DegreeNotApplicable on non-fulfils", test_file = "src/commands/relation.rs", keywords = ["degree", "fulfils"] },

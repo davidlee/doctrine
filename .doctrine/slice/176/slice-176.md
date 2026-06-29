@@ -25,9 +25,16 @@ adversarially reviewed before any governance is touched. RFC-003 asserts no cano
    **mutable / born end** (the live entity).
 2. **Fulfillment + completion → new `fulfils` label + `{full, partial}` degree facet.**
    Slice → backlog. The old `slices` "addressed by" reading becomes `fulfils`' **derived
-   inbound** (ADR-004), not a stored label. The degree is a **facet** (a quantity), not
-   a role and not a coverage substrate.
-3. **Migration (SL-149 redux).** Retire the `slices` label; relabel existing edges.
+   inbound** (ADR-004), not a stored label. Degree is a non-keyed **facet** for inbound
+   display + the IMP-210 close-cascade hint — **out of priority scoring** (D-burndown-denomination).
+3. **`fulfils` priority effect → value BURNDOWN** (scope-broadened 2026-06-29, Option 2).
+   A backlog item's priority reflects its **undelivered** value: a new `priority/graph.rs`
+   post-pass *reduces* an item's value by the lifecycle-gated raw `value` of the slices
+   fulfilling it (subtractive, value-denominated, degree-ignored, non-conserving).
+   Replaces the old `slices`→optionality credit, which is dropped (design §A′.1 burndown
+   spec, R10/R12). The default-1.0 value floor it relies on for valueless entities is a
+   **separate sibling slice** (soft dependency).
+4. **Migration (SL-149 redux).** Retire the `slices` label; relabel existing edges.
    Fold **IMP-207's 19-row retcon** (mislabelled `slices` → `originates_from`). Fold
    `drift` **entity** rows: "carved out from" → `originates_from`; "feeds into" → the
    dep/seq layer (`needs`/`after`). Retire `drift` for entity targets.
@@ -51,6 +58,11 @@ degree facet).
   Deferred set).
 - **Sub-roles** on `originates_from` (`scoped` vs `follow_up`) — one neutral role now;
   sub-roles only if an edge later demands the distinction.
+- **Default value 1.0 floor** for value-bearing actionable kinds {slice, backlog} (records
+  excluded) — a **separate sibling slice**, not SL-176. Burndown (objective 3) works on
+  explicitly-valued entities without it; the floor only governs the valueless case (soft dep).
+- **`fulfils` coverage-% derived display** (`slice_value/item_value`) — deferred follow-up;
+  scoring does not need it.
 
 ## Affected surface (coarse — `/design` pins the exact touch-set)
 
@@ -59,6 +71,8 @@ degree facet).
 - `src/relation_graph.rs` — `outbound_for`, inbound/reciprocity derivation (the derived
   `fulfils` inbound replacing stored `slices`), overlay allocation.
 - `src/commands/relation.rs` — `link`/`unlink`/`inspect` surfaces; the `--degree` axis.
+- `src/priority/graph.rs` — label-set membership (`Slices` out, `Fulfils` into `REF_LABELS`)
+  + the new value-burndown post-pass (objective 3).
 - The **migration** path (SL-149's edge-rewrite machinery — locate via SL-149).
 - `install/templates/{slice,backlog}.toml` — scaffold rows referencing `slices`/`drift`.
 - The 19 IMP-207 backlog `*.toml` (retcon targets) + any live `slices`/`drift` rows.

@@ -1,11 +1,31 @@
-# SL-176 — OPEN DECISION: priority optionality direction for `fulfils`
+# SL-176 — RESOLVED DECISION: priority `fulfils` effect (value burndown)
 
-**Status:** UNRESOLVED. Surfaced during `/plan` (grounding PHASE-03's priority re-point in
-source). Halts plan finalisation. A fresh agent should resolve this **before** materialising
-phase sheets / `/execute`. The slice is in `plan` status; design is otherwise locked.
+**Status: RESOLVED 2026-06-29 (design session 2).** `design.md` is authoritative again — it
+**supersedes this file**. This is the investigation trail; the binding outcome is in the
+design ledger (D-priority-burndown / D-burndown-denomination / D-burndown-lifecycle /
+D-value-floor-sibling), the rewritten §A′.1 row 1 + "Priority burndown" spec, and R10/R12.
 
-This file is the full context dump for that decision. Authority on everything else remains
-`design.md`; this file supersedes design **R10** and **§A′.1 row 1** pending resolution.
+> **FINAL RESOLUTION (supersedes the "Resolution direction" + TL;DR below — those captured an
+> earlier *additive-credit + degree-weight* model that was itself replaced).**
+>
+> The `fulfils` priority effect is a **value BURNDOWN**, not additive optionality, and not the
+> degree-weighted credit drafted below:
+> 1. **Subtractive, value-denominated.** A backlog item's value is *reduced* by the raw `value`
+>    of the slices fulfilling it (item-4, slice-3 → residual 1). `delivered = Σ gate(status)·
+>    value(slice)`; item `value_dim` offset proportionally, clamped ≥ 0.
+> 2. **Off the additive pass.** `Slices` removed from both `REF_LABELS`+`CONSEQUENCE_LABELS`;
+>    `Fulfils` joins `REF_LABELS` ONLY (overlay for `in_edges`); a NEW post-pass does the
+>    subtraction. `CONSEQUENCE_LABELS` only *adds* — wrong sign/direction for burndown.
+> 3. **Degree is OUT of scoring.** Locked binary `Degree{Full,Partial}` can't carry a fraction;
+>    ADR-016 §2 (derivable-not-relational) bars a coverage fraction on the edge. The named
+>    partial-weight constant drafted below is **dropped**. Degree keeps display + IMP-210 only.
+> 4. **Lifecycle-gated.** `planned`/draft slices burn 0; `in_progress`/`completed` burn full.
+> 5. **Non-conserving** across multi-item (per-item `in_edges` sum) — deliberate, leverage-like.
+> 6. **Default value 1.0** for value-bearing actionable kinds {slice, backlog} (records
+>    EXCLUDED) → **sibling slice**; SL-176 broadened to own burndown (Option 2, user-locked);
+>    soft dependency only. Coverage-% derived display → deferred follow-up.
+>
+> The old `slices`→optionality credit is **dropped, not replaced** (User-vetoed OK).
 
 ---
 
