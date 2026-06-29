@@ -23,15 +23,14 @@ commit as soon as work is coherent; git add specifies paths, don't use -A unless
 
 the main worktree stays on edge. DO NOT checkout the primary working tree
 to another branch or i WILL END YOU. If auditing / closing a feature, land it on 
-a worktree and push to main.
+a worktree and push to main. 
 
-The thing to watch with the edge/main
-split: dispatch setup forks from trunk
-(ladder → main). If main hasn't been
-promoted from edge before dispatch starts,
-the worktree won't include the latest
-authored content. So the pre-dispatch ritual
-becomes:
+DO NOT USE `git checkout <ref> --`
+
+The thing to watch with the edge/main split: dispatch setup forks from trunk
+(ladder → main). If main hasn't been promoted from edge before dispatch starts,
+the worktree won't include the latest authored content. So the pre-dispatch
+ritual becomes:
 
  ```bash
    git fetch . edge:main   # promote edge
