@@ -25,6 +25,14 @@ Inputs:
       design.
     - if planning surfaces substantive new design problems, run `/design` to
       revise or append to the design before continuing.
+    - **re-grep before you trust the design's premises.** The design was locked
+      at author-time; the tree has moved since. Scan `design.md` for concrete,
+      grep-pable references — file paths, function/type names, constants, config
+      keys — and resolve each against the *current* tree (`grep`, `ls`,
+      `git show`). A missing path, moved file, or renamed symbol means the design
+      rests on a stale premise: STOP and run `/design` to reconcile it before
+      scaffolding phase sheets against wrong paths. (A design that names nothing
+      concrete has nothing to check — this costs only what the design asserts.)
 3.  Scaffold the plan: `doctrine slice plan <ID>` writes `plan.toml` + `plan.md`
     (refuses to clobber existing files). The tool reads these but never rewrites
     them — hand-edit freely.
