@@ -528,3 +528,45 @@ from a mis-located mandate; disambiguating that took ~6 source probes. A
 `verify-vt` that emitted the grep target + nearest matching symbol per FAIL would
 have collapsed most of that. Handover had flagged the P04 oracle as an open
 judgment, which saved re-discovering the question itself.
+
+[audit; SL-176-audit-2026-06-29]
+Census/corpus inspection trap during /audit: ran `doctrine relation census` from
+the live coord tree via the PATH binary (~/.cargo/bin/doctrine 0.8.1, pre-SL-176)
+and it reported the new `fulfils`/`references(originates_from)` labels as ABSENT —
+a false-negative (stale binary silently drops unknown labels), nearly logged as a
+spurious migration-gap finding. Cost: one extra investigation round (edge-level
+grep + re-run with the coord tree's own ./target/debug/doctrine 0.9.0) to clear it.
+Root cause: post-migration corpus inspection MUST use the build target, not the
+installed PATH binary — generalises the known verify-vt evidence-tree caveat from
+"wrong tree" to "wrong binary". A single sentence in the dispatched-slice audit
+lens ("inspect the migrated corpus with the coord tree's built binary") would have
+saved the round.
+
+[reconcile; SL-176-reconcile-2026-06-29]
+- `doctrine revision new --title X` rejected: TITLE is positional, not a `--title`
+  flag (unlike `adr new` which also takes positional but the muscle-memory `--title`
+  cost a retry). Minor inconsistency vs other `new` verbs that DO take named flags.
+- `doctrine revision list` returns EMPTY when all REVs are terminal (`done`) — hides
+  them by default with no hint. Looked like zero REVs existed; had to `ls .doctrine/
+  revision/` to confirm the `NNN-reconcile-sl-NNN` convention and derive next id (016).
+  A `--all`/count hint or a "(N terminal hidden)" footer would save the dir-stat.
+- Seam mismatch: the reconcile skill routes governance/spec truth through REV, but the
+  REV `change add` action set has NO create-ADR action (`create` is spec-only). A new
+  ratifying ADR must be authored directly (`adr new`) and only *recorded* in the REV
+  narrative — the skill's "governance → REV" framing implies otherwise and needed
+  reasoning to resolve. Worth a one-line skill note: "new ADRs are authored directly;
+  REV carries amendments (modify) + the narrative link."
+- Stale PATH binary 0.8.1 (the known census trap) did NOT bite reconcile — revision/
+  adr/spec/rfc/backlog verbs are not SL-176 functionality — but I spent tokens
+  confirming that before trusting the CLI on edge.
+
+[close; SL-176-close-2026-06-29]
+- `doctrine link SL-176 governed_by ADR-018` (0.8.1 PATH binary) appended the new
+  same-label row at the END of the [[relation]] block — AFTER the references(concerns)
+  rows — breaking the same-label-contiguity storage invariant that SL-176's own
+  `e2e_relation_migration_storage::relation_rows_of_one_label_are_contiguous` enforces.
+  `doctrine check quick` caught it (good), but only after the bad row was already
+  committed. Stale-binary `link` does not regroup-on-append; had to hand-reorder the
+  toml. COMPOUNDS the stale-binary caveat: on edge, even non-census write verbs (`link`)
+  can emit corpus the SL-176 gates reject. Mitigation: author edges via the build-target
+  binary, or eyeball toml row order after any `link` on edge.
