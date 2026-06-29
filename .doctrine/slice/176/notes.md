@@ -154,6 +154,27 @@ NEVER vocab-table-local. Beyond `priority/graph.rs` + `backlog.rs` show/json/lif
 *item's own outbound* for an edge that is migrating to the *other* endpoint — those silently
 need an inbound-derivation read-path, not a swap (G1).
 
-**Next:** design session to resolve G1 (a/b decision — likely a user call on the ADR-004
-posture) and ground G2/G3, re-offer for a third pass or lock. Commits: `96fa4edf` →
-`27bd3321` → `20e86c8d` → (this pass-2 integration).
+## Design session — G1–G4 resolved (2026-06-29)
+
+- **G1 → (a), user-locked** (D-backlog-inbound): `backlog show`/`json` gain the
+  `inspect`-style **derived-inbound** read-path (`in_edges`+`inbound_role_index`, threaded
+  with `root`); `slices` outbound read **removed**, not swapped; `fulfilled by: SL (degree)`
+  from derived inbound. **ADR-004-consistent** (inbound always derived; ADR defers the
+  reverse *field*, not a derived render). `backlog show` becomes **corpus-aware** —
+  deliberate refinement of the `:1363-65` item-local posture. `doctor` (`:2201`) same set.
+- **G2 → D-uniqueness-seam**: identity's `source` is one entity → duplicate logical edge is
+  two `fulfils` rows in **one toml** → enforce **locally at `read_block`** (new
+  `DuplicateEdge` finding, degree-agnostic `(label,role,target)` match). NOT corpus
+  `validate_relations`; no degree thread into `CatalogEdge`. Write-seam degree-conflict error
+  = author-time guard; `read_block` = at-rest backstop.
+- **G3 → content**: widening flips `relation.rs:2696`/`:2743`/VT-2 `:1457` — deliberate
+  rule-contract content, enumerated at plan (§C). No mechanism breakage.
+- **G4 → §A′.2** row: `commands/relation.rs:42-47` role-error string.
+
+design.md fully reconciled (ledger rows D-backlog-inbound + D-uniqueness-seam added; §A.5,
+§A.6, §A′.1, §A′.2, §C, P2/P3 phasing, Status, both review subsections all consistent).
+
+**Next:** OPTIONAL one confirming third external pass on the G1(a) backlog-inbound mechanism
+(it is the one genuinely new read-path), else **lock → `slice status 176 plan` → `/plan`**.
+User to choose third-pass vs lock. Commits: `96fa4edf` → `27bd3321` → `20e86c8d` →
+`560d4a1a` (pass-2) → (this G1–G4 resolution).

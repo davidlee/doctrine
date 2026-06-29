@@ -416,8 +416,14 @@ they do **not** stay green-unchanged.
 - **Consumer re-point (A′ — codex F4/F5):** `priority/graph.rs` suite stays green on
   fixtures re-authored from `slices=[…]` to a `fulfils` edge (optionality numbers identical
   — the load-bearing behaviour-preservation proof for the re-point); `backlog` show/JSON +
-  lifecycle-findings goldens move to the `fulfils`/derived shape; `slice`/`backlog`
-  `scoped_from`→`originates_from` field/wording goldens.
+  lifecycle-findings goldens move to the `fulfils`-**derived-inbound** shape (G1(a) — new
+  test: a slice authors `fulfils IMP-x --degree partial` → `backlog show IMP-x` renders
+  `fulfilled by: SL-… (partial)` from derived inbound, item's own toml carrying no `fulfils`
+  row); `slice`/`backlog` `scoped_from`→`originates_from` field/wording goldens.
+- **Rule-contract churn (G3 — deliberate content):** widened `originates_from` flips
+  `relation.rs:2696` (backlog may now author it), revises the `:2743` target assertion (SL
+  legal, SPEC still refused), and churns VT-2 accessor census `:1457`. Enumerate + rewrite at
+  plan; these are content-side, not behaviour-preservation regressions.
 - **Determinism:** BTree ordering only; canonical `(label, role, degree)` order =
   declaration order; no `HashMap` on the relation path (REQ-077).
 
@@ -573,7 +579,8 @@ source before integration; none overturned a locked decision (the *what*), all c
   existing triple with a different degree **errors** (one new branch, not a redesign).
 - **F2 [BLOCKER] degree-as-non-keyed payload is lossy without an invariant** — `read_block`
   legalises rows independently; duplicate `fulfils` with differing degree → arbitrary winner.
-  *Fixed:* §A.5 + §C — `validate` **uniqueness invariant** on `(source, fulfils, target)`.
+  *Fixed:* §A.5 + §C — uniqueness check on `(source, fulfils, target)` (later refined by G2 →
+  per-entity `read_block` `DuplicateEdge`, not corpus `validate`).
 - **F3 [BLOCKER] `inbound_degree_index` structurally insufficient** — `RelationGroup` flattens
   to `Vec<String>` (`relation_graph.rs:521`); cannot carry per-target degree on outbound or
   `--json`. *Fixed:* D-inspect-shape + §A.6 — target type becomes `RelationTargetView { target,
