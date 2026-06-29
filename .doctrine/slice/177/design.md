@@ -185,6 +185,14 @@ the default fills only the `None` case for work kinds; records get `None → 0.0
   `None`-branch only if SL-176's denomination changes.
 - **R3 — `surface.rs` refactor regresses the actionability view.** *Mitigation:*
   set-preserving change (same six prefixes); existing surface tests are the gate.
+- **R4 — Standalone priority-ordering change (lands before SL-176).** This slice
+  changes `next`/`survey` ordering on its own: every valueless work item moves from
+  `value_dim 0` to `≈ 1.0/cost`, so a *cheap* valueless item can float up the
+  frontier (same math as any `value = 1.0` item). Intended — a valueless work item
+  is not worthless, and a sane baseline is the point — but it is a visible scoring
+  change independent of burndown, not a no-op deferred until SL-176. *Mitigation:*
+  documented here and confirmed with the user at design lock (§10 AR-3); the two
+  rewritten tests (§9.1) pin the new numbers.
 
 ## 9. Quality Engineering & Validation
 
@@ -199,9 +207,48 @@ TDD, red→green→refactor. New / asserted behaviour:
 - **VT — authored zero ≠ absent.** Authored `value = 0.0` → `value_dim == 0`.
 - **VT — `WORK` set identity canary.** `WORK == [SL]+BACKLOG` (mirrors the existing
   `groupings_match_documented_membership` test).
-- **Behaviour-preservation.** Existing `base_score_*` suite green unchanged; the
-  `surface` actionability-view tests green unchanged after the const promotion.
+
+### 9.1 Tests that change BY DESIGN (not preservation)
+
+The behaviour-preservation gate covers behaviour this slice does **not** intend
+to change. Two existing tests assert the *old* valueless-work contract and so are
+**deliberately rewritten** red→green — they are not preservation invariants:
+
+- `base_score_risk_only_value_absent` — seeds an **ISS** (a work kind), no value,
+  has risk; today asserts `value_dim == 0`, `total == 4.0`. Under SL-177 the
+  default applies: `value_dim == 1.0` (coeff 1.0 × 1.0 × kw 1.0 × tag 1.0 / cost
+  1.0), `total == 5.0`. Updated assertions.
+- `base_score_neither_facet_present` — seeds an **ISS**, no facets; today asserts
+  `value_dim/total == 0`. Under SL-177: `value_dim == 1.0`, `total == 1.0`.
+  Updated assertions.
+
+`base_score_bare_item_empty_corpus_fallback_cost_one` (ISS, `value = 3.0`) is
+**unaffected** — authored value, no default — and is the standing no-clamp guard.
+
+### 9.2 Genuine behaviour-preservation
+
+- No consumer treats `value_dim == 0` as a "value-absent" sentinel (verified:
+  `value_dim` flows only into `total` and render — `channels.rs:193`,
+  `render.rs`). So lifting valueless work items off zero breaks no downstream
+  branch.
+- `surface` actionability-view tests stay green after the `WORK_PREFIXES` →
+  `kinds::is_work` promotion (set-preserving: same six prefixes).
 
 ## 10. Review Notes
 
-(pending adversarial pass)
+### Internal adversarial pass (2026-06-29)
+
+- **AR-1 — False preservation claim (fixed).** The draft asserted the
+  `base_score_*` suite stays green unchanged. Two tests
+  (`base_score_risk_only_value_absent`, `base_score_neither_facet_present`) seed a
+  **work kind** (ISS) with absent value and assert `value_dim == 0` — the exact
+  contract this slice changes. Reclassified as deliberate red→green rewrites (§9.1);
+  preservation now scoped to genuinely-unrelated behaviour (§9.2).
+- **AR-2 — Sentinel safety (verified, no issue).** Confirmed no consumer branches
+  on `value_dim == 0` as "value absent"; it only sums into `total` / renders. Lifting
+  valueless work items off zero is downstream-safe.
+- **AR-3 — Standalone ordering change (surfaced for user confirm).** SL-177 alters
+  `next`/`survey` ordering before SL-176 lands; cheap valueless items can float up.
+  Recorded as R4; pending user acknowledgement at lock.
+- **AR-4 — `WORK` vs value-bearing coupling (accepted).** One set serves two roles
+  (R1). Documented coupling note; split deferred (YAGNI).

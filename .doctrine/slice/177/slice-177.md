@@ -50,15 +50,17 @@ without this slice; this slice closes the valueless gap.
 
 ## Risks / Assumptions / Open questions
 
-- **OQ-1** Is the floor a hard constant (1.0) or a config coefficient? SL-176
-  fixes the *value* at 1.0; tunability is a `/design` call.
-- **OQ-2** Kind-membership source: how does scoring know an entity is a
-  value-bearing actionable kind {slice, backlog} vs an excluded record? Confirm
-  the SL-158 actionability classification is reachable at the graph.rs site.
-- **A-1** Applying the floor at the scoring seam (not in authored TOML) is
+- **OQ-1** *(resolved — hard constant)* `DEFAULT_VALUE = 1.0`, not config-tunable;
+  tunability is a clean follow-up (swap const for a `cfg` field, no seam change).
+- **OQ-2** *(resolved — reuse `WORK`)* The value-bearing set already exists as
+  `surface.rs`'s `WORK_PREFIXES` (SL-089 D2); promoted to `kinds::WORK`/`is_work`.
+- **A-1** Applying the default at the scoring seam (not in authored TOML) is
   correct — keeps storage honest, no derived data written to prose/TOML.
 - **R-1** Coupling to SL-176: soft. If SL-176's burndown denomination changes
   shape before this lands, re-check the `None`-branch contract.
+- **R-4** *Standalone ordering change.* This slice alters `next`/`survey` ordering
+  on its own (valueless work items gain a baseline `value_dim`; cheap ones can
+  float up), independent of SL-176. Intended; confirmed at design lock.
 
 ## Verification / closure intent
 
