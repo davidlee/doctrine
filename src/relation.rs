@@ -262,7 +262,7 @@ pub(crate) enum TargetSpec {
     /// is any entity).
     AnyNumbered,
     /// The target is free-text, not a doctrine entity (`drift`, `decision_ref`):
-    /// a `decision_ref` is an *external* 3-part the external decision register cite (e.g. `DEC-005-C`),
+    /// a `decision_ref` is an *external* 3-part decision cite (e.g. `DEC-005-C`),
     /// not the 2-part numbered DEC kind — so it never resolves, always dangles, no
     /// overlay (ADR-010 D2).
     Unvalidated,
