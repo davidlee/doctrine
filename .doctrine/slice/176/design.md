@@ -15,9 +15,13 @@ independent external pass (codex G1–G4), then a **design session resolving G1�
 D-uniqueness-seam (`read_block`, local); **G3** re-classed as deliberate content
 (enumerate at plan); **G4** census add. The *vocabulary/migration* mechanism is complete;
 the **priority consumer was re-opened and re-resolved 2026-06-29** — see the scope note
-below. **Optional: one confirming third external pass on the G1(a) backlog-inbound mechanism
-+ the new burndown spec.** See the decision ledger + the two "Adversarial review (external
-pass …)" sections.
+below. **Codex pass 3 (burndown spec, 2026-06-29): F1–F4 integrated** — lifecycle gate re-keyed to
+the real slice FSM `{started,audit,reconcile,done}` (F1, was a non-existent
+`in_progress`/`completed`), exact bounded formula `value_dim·(1−r)` with `r=clamp(delivered/
+raw_value,0,1)` (F2, guards finite-not-nonneg values), raw_value denominator pinned + two new
+fixtures (F3 exact-value, F4 decomposition). Overlay-availability + mint/base interaction
+cleared. **Optional: one further confirming pass on the G1(a) backlog-inbound mechanism.**
+See the decision ledger + the three "Adversarial review (external pass …)" sections.
 
 **Scope broadened (2026-06-29, design session — Option 2, user-locked).** Grounding
 PHASE-03's priority re-point in source showed the original §A′.1/R10 claim — that a
@@ -58,7 +62,7 @@ cross-corpus relation contract), **RFC-003** (the deliberation this slice implem
 | **D-uniqueness-seam** | (G2) The `(source, label, role, target)` uniqueness invariant is **per-entity and local** — `source` is one entity, so a duplicate logical edge is two `fulfils` rows in **one slice's own toml**. Enforced in **`read_block`/per-entity row validation** (new `DuplicateEdge` finding, match on `(label, role, target)`, **degree-agnostic**), NOT corpus `validate_relations` (which would need degree threaded into `CatalogEdge`). The write-seam degree-conflict error (§A.5) is the author-time guard; this is the at-rest backstop for hand-authored dupes. | design (codex G2) |
 | **D-priority-burndown** | The `fulfils` priority effect is a **new subtractive value-burndown**, NOT additive optionality (supersedes the original behaviour-preserving label-swap — proven false, R10: the consequence pass credits the edge *target* ∝ the *source*'s base, so flipping `slices` item→SL to `fulfils` SL→item flips the credited node). `Slices` is **removed** from both `REF_LABELS` and `CONSEQUENCE_LABELS`; `Fulfils` joins **`REF_LABELS` only** (overlay for inbound/burndown `in_edges`), **never `CONSEQUENCE_LABELS`**. A new post-pass reduces a backlog item's value by the value of the slices fulfilling it. The old `slices`→optionality credit is **dropped, not replaced** (User-vetoed OK). | user-locked 2026-06-29 |
 | **D-burndown-denomination** | **Value-denominated**, not coverage-fraction: delivered = each fulfilling slice's **raw `value` facet** (proportionally offsetting the item's `value_dim`; raw-value units so the deliverer's cost/kind-weight don't distort delivery). Coverage-fraction-on-the-edge rejected — locked binary `Degree {Full,Partial}` can't carry a fraction, and ADR-016 §2 (derivable-not-relational) bars authoring a derivable fraction on the relation. **Degree is OUT of scoring** entirely (keeps inbound display + IMP-210). **Non-conserving** across multi-item: a slice fulfilling A and B burns its value from each (leverage-like; deliberate). | user-locked 2026-06-29 |
-| **D-burndown-lifecycle** | Only **delivered** value burns down: a source slice with status `planned`/draft contributes **0**; `in_progress`/`completed` contribute full. (Stops a freshly-scoped slice silently hiding a high-value item before any work lands.) Post-pass reads `NodeAttr.status`. **Excluded from mint** (graph-derived, like leverage/optionality — I3). | user-locked 2026-06-29 |
+| **D-burndown-lifecycle** | Only **delivered** value burns down. Gate on the real slice-status FSM (slices-spec/ADR-009): **delivering set `{started, audit, reconcile, done}`** burns full; `{proposed, design, plan, ready, abandoned}` burn **0**. (NOT a generic `in_progress`/`completed` — those are not slice statuses; that error would burn 0 always — codex F1.) Stops a freshly-scoped slice silently hiding a high-value item before any work lands. Post-pass reads `NodeAttr.status` (raw authored string). **Excluded from mint** (graph-derived, like leverage/optionality — I3). | user-locked 2026-06-29 |
 | **D-value-floor-sibling** | The **default value 1.0** for value-bearing actionable kinds **{slice, backlog}** (knowledge **records excluded** — SL-158 trinary actionability: gating/estimable but not value-bearing) is a **separate sibling slice**, NOT SL-176. **Soft** dependency: burndown works for explicitly-valued entities without it; the floor only governs the *valueless* case. The `fulfils` coverage-% derived display is a deferred follow-up (carried open). | user-locked 2026-06-29 |
 
 ---
@@ -290,16 +294,24 @@ This is the deliberate replacement for the dropped `slices`→optionality credit
   burndown).
 - **New post-pass** (parallel to `leverage`/`optionality`, after the base pre-pass; like
   them **excluded from the mint tiebreak**, I3). For each backlog item node `I`:
-  - `delivered(I) = Σ over in_edges(fulfils_overlay, I) of gate(status(src)) · value(src)`,
-    where `gate = 1.0` for source status `in_progress`/`completed`, else `0.0`
-    (D-burndown-lifecycle), and `value(src)` is the slice's **raw `value` facet**
+  - `delivered(I) = Σ over in_edges(fulfils_overlay, I) of gate(status(src)) · raw_value(src)`,
+    where `gate = 1.0` for source slice status in the **delivering set `{started, audit,
+    reconcile, done}`**, else `0.0` (D-burndown-lifecycle — `{proposed, design, plan, ready,
+    abandoned}` deliver nothing; vocabulary is the slices-spec/ADR-009 FSM, NOT a generic
+    `in_progress`/`completed`). `raw_value(src)` is the slice's **raw `value` facet**
     (D-burndown-denomination — raw units, not the cost/kind-weighted `value_dim`; the slice's
     own est/cost must not discount what it delivers). Both `value` + `status` are already on
     `NodeAttr` (`facets`/`status`).
-  - The item's value is offset proportionally: `burndown(I) = value_dim(I) · min(1,
-    delivered(I) / value(I))` for `value(I) > 0`, clamped so the item's value-derived score
-    never goes negative and never eats `risk_dim`/`leverage`/`optionality`. `score(I) =
-    base(I) + leverage(I) + optionality(I) − burndown(I)`.
+  - The item's value is offset proportionally. Exact formula (NOT prose — pin it to forbid a
+    wrong denominator): `r(I) = clamp(delivered(I) / raw_value(I), 0, 1)` when
+    `raw_value(I) > 0`, else `r(I) = 0`; then `score(I) = risk_dim(I) + leverage(I) +
+    optionality(I) + value_dim(I) · (1 − r(I))`. The `value_dim·(1−r)` form is inherently
+    bounded — `r∈[0,1]` means the offset can never exceed the item's own `value_dim` and can
+    never eat `risk_dim`/`leverage`/`optionality`. Both numerator and denominator of `r` are
+    **raw** value-facet units (dimensionally sound; `value_dim` appears only as the scaled
+    quantity being attenuated). Negative `value` facets are out of scope (value-facet
+    validation's concern); `clamp(...,0,1)` makes a negative ratio a no-op (`r=0`), and NaN/inf
+    is caught by the existing `is_finite` guards on the score.
   - **Degree (`Full`/`Partial`) is not read here** (D-burndown-denomination). **Non-conserving**
     across multi-item by construction (per-item `in_edges` sum).
   - A config coefficient (`consequence.fulfil_coeff`, default `1.0` = pure 1:1 subtraction)
@@ -310,10 +322,17 @@ This is the deliberate replacement for the dropped `slices`→optionality credit
   explicitly-valued entities **without** the floor.
 - **Verification (replaces R10's preservation proof).** New `priority/graph.rs` fixtures: (1)
   a slice with a `value` facet fulfilling an item *reduces* that item's score (correct sign,
-  sane magnitude); (2) a `planned` fulfilling slice burns nothing, an `in_progress`/`completed`
-  one does (lifecycle gate); (3) a slice fulfilling two items burns each independently
-  (non-conservation); (4) `originates_from` (provenance) does **not** feed any priority pass
-  (the conflation the old `slices` mixed in).
+  sane magnitude); (2) a `ready`/`plan`-status fulfilling slice burns nothing, a
+  `started`/`done` one does (lifecycle gate, real FSM states); (3) a slice fulfilling two
+  items burns each independently (non-conservation); (4) `originates_from` (provenance) does
+  **not** feed any priority pass (the conflation the old `slices` mixed in); (5) **exact-value
+  fixture** where the item's `raw_value` and `value_dim` deliberately diverge (via estimate /
+  kind-weight / tag), with a hand-computed expected delta — fails any impl that divides by
+  `value_dim` instead of `raw_value`, or subtracts `delivered` directly (codex F3); (6)
+  **decomposition assertion** — the fulfilled item's `optionality` contribution *from*
+  `fulfils` is exactly `0` and the old `slices` credit is gone, so the score delta equals the
+  burndown term **only** (catches `Fulfils` wrongly left in `CONSEQUENCE_LABELS` or `Slices`
+  not fully removed — double-counting that fixtures 1–4 would miss; codex F4).
 
 ### A′.2 `scoped_from` → `originates_from` output surfaces
 
