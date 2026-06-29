@@ -82,3 +82,44 @@ is IMP-207's 19 named rows (some currently counted under `slices`).
 - **Relations via `doctrine link`**, never hand-authored `[[relation]]` rows.
 - Tangential: `src/supersede.rs` has a known RECORD-supersede tier drift (IMP-095, one of
   the 19 retcon rows) — *not* this slice's concern, but IMP-095's edge gets relabelled here.
+
+---
+
+## Design session — COMPLETE, locked (2026-06-29)
+
+`design.md` written + adversarially reviewed (internal SR-1..12 + external codex F1..6),
+all integrated. Six open questions resolved (see design.md decision ledger). **Lifecycle
+still `design`** — NOT moved to `plan` yet; user wants a **second codex pass** on the
+revised design first (the F3/F4 fixes added new mechanism).
+
+**Commits:** `96fa4edf` (design + scope + selectors + IMP-210/IMP-156 follow-ups) ·
+`27bd3321` (codex F1–F6 integration). `.doctrine` committed promptly. No code touched →
+`doctrine check gate` N/A (design only).
+
+**Resolutions (one-liners; design.md is authority):** Q1 tier-1 + `degree:Option<Degree>`
+column · Q2 rename `ScopedFrom`→`OriginatesFrom` in place, parallel-naming with REV label
+accepted · Q3 degree-aware inbound (per-target) · Q4 author-end = convention + source-set
+fence · Q5 cascade spun out → IMP-210 · Q6 drift mapping named, re-census at exec.
+
+**Codex grew the scope (verified in source — durable, memory-worthy at execution):**
+- **F1** `append_relation_row` is append-or-`Noop` (`relation.rs:911/949`) — **no mutation/
+  upsert path**. Degree set at author; change = `unlink`+`relink`; conflicting-degree relink
+  errors. F2 → `validate` uniqueness invariant on `(source,fulfils,target)`.
+- **F3** `RelationGroup = (RelationKey, Vec<String>)` (`relation_graph.rs:521`) flattens
+  targets to bare strings — per-target degree needs a **data-model change**
+  (`RelationTargetView{target,degree}`), not a render-side index. Touches all inspect
+  render/JSON paths.
+- **F4 (the consequential one)** retiring `slices` is **NOT vocab-table-local**: live
+  consumers are **`src/priority/graph.rs:190/201`** (backlog optionality scoring — reference
+  + consequence label) and **`src/backlog.rs`** show/JSON/lifecycle-findings. Re-point all at
+  `fulfils`, scoring numbers held identical. *Reusable gotcha for any future relation-label
+  retirement: grep priority/graph + backlog show/json/lifecycle, not just `RELATION_RULES`.*
+- **F5** `scoped_from` hardcoded in `slice.rs:1677/1758`, `backlog.rs:1428/1447/1581`,
+  `cli.rs:552` (show/JSON/help) — public field renames.
+
+**Selectors:** 14 `design-target` recorded (incl. the F4/F5 additions
+`src/priority/graph.rs`, `src/commands/cli.rs`).
+
+**Next:** second codex pass (fresh agent) → if clean, `doctrine slice status 176 plan` +
+`/plan`. If the priority re-point (R10) or `RelationTargetView` change (R11) draws blood,
+back to design.
