@@ -237,13 +237,15 @@ IMP-210 — that item is only the *new* close-cascade hint, not the *existing* b
 > on the item only as **derived inbound**. So "render the derived inbound instead"
 > requires giving `backlog show` an inbound scan/index it does not have, and **reverses
 > the ADR-004 posture this surface deliberately holds** (backlog show does not compute
-> inbound by design). This is unresolved mechanism, not enumeration: **RESOLUTION
-> REQUIRED at design** — either (a) backlog show/json gains a corpus-scan inbound
-> derivation (a posture change to reconcile against ADR-004 / the registry-surface
-> deferral), or (b) the surfaces drop the line and point at `inspect` (which *does*
-> derive inbound). The `doctor` lifecycle finding (`:2201`) already runs over a full
-> scan with `slice_metas` in hand, so it is the tractable one; `show`/`json` are the
-> open question. Picking (a) vs (b) is a design decision, possibly a user call.
+> inbound by design). **RESOLVED — option (a)** (D-backlog-inbound): `show`/`json` gain
+> the inbound derivation via the **same relation-graph machinery `inspect` uses**
+> (`in_edges` + `inbound_role_index`/degree, threaded with `root`); the `slices` outbound
+> read is **removed**, not swapped; `fulfilled by: <SL> (degree)` renders from derived
+> inbound. **ADR-004-consistent** — inbound is always derived; the ADR defers the reverse
+> *field*, not a derived render. `backlog show` becomes **corpus-aware** (deliberate
+> refinement of the `:1363-65` item-local posture, recorded). `doctor` (`:2201`) takes the
+> same inbound set. Exact wiring (reuse `InspectView` inbound vs a focused `fulfils`-inbound
+> query) pinned at plan.
 
 The priority re-point (A′.1 row 1) is the load-bearing one: it must keep the *scoring
 numbers* identical (a fulfils inbound credits optionality exactly as a `slices` reference
