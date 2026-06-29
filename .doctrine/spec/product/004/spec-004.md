@@ -40,8 +40,7 @@ Out of scope:
   memory's meaning is independent of how it is stored or matched; mechanism belongs to
   the technical specification.
 - Proactive, unsolicited injection of memories into a context ahead of demand.
-- Cross-client and cross-tenant federation, shared multi-writer durability, and the
-  authenticity guarantees that fan-out requires.
+- Any coordination or durability guarantee beyond a single local working context.
 - Automatic summarisation, reflection, or retention/erasure policy.
 - Enforced graph linkage between memories as a recall mechanism.
 
@@ -181,9 +180,6 @@ quality requirements is tracked against those entities, not duplicated here.
 - Should recall surface memories proactively as a context is entered, or only on
   explicit demand? This blocks the contract for any pre-emptive surfacing and the
   trust bar such surfacing would require.
-- When memory fans across clients or tenants, how is the authenticity of a recorded
-  context established, given that a single-tenant local context is trusted without
-  proof? This blocks any shared, multi-writer durability guarantee.
 - What is the retention and erasure policy for memories that are no longer wanted but
   whose audit trail must survive? This blocks a defensible position on durable
   retention of sensitive recalled text.

@@ -461,3 +461,42 @@ Friction encountered during SL-171 two-phase pi-arm dispatch:
   gate exited 0 on a dead signal — it neither confirmed PHASE-01's strong coverage
   nor flagged PHASE-02's genuine test gap. The gap was only found by hand-reading the
   diff for added test fns. A green-but-inert gate is a token/attention trap. (→ IMP-209)
+
+[dispatch (pi arm); SL-176-drive-2026-06-29]
+Regression baseline fingerprint drift mid-drive. Captured `baseline-B'` clean at
+PHASE-02 start (fp 56536277). After spawning the pi worker + applying its diff,
+`check regression diff --base B'` hit INV-8 cache-miss: the run-fingerprint had
+drifted (env/exe component) so the freshly-captured baseline no longer matched.
+fingerprint() is source-independent (argv+env_worker+marker+current_exe), so the
+clean and patched trees compute the SAME fp at any given moment — but it differed
+between the B'-capture call and the later diff call within one drive. Recovery cost
+a full extra suite run: reverse-apply patch → re-capture clean baseline under the
+now-current fp → re-apply → diff (green). Incidental complexity: the orchestrator
+must capture the baseline IMMEDIATELY before the diff (same env window), OR the
+fingerprint needs to be stable across a drive. Capturing right after the prior
+phase's commit (as the funnel cadence implies) is NOT safe if anything perturbs
+current_exe/env between then and the verify beat. ~1 wasted ~25s suite run per
+occurrence + the reverse/reapply git surgery.
+
+[dispatch (pi arm); SL-176-drive-2026-06-29 PHASE-03]
+Two worker-verification gaps the funnel had to catch by hand:
+1. MISSING TESTS read as green. Worker implemented the burndown production code
+   correctly but added ZERO new test fns (count 32→32). The mandated 6 VT-3 fixtures
+   were absent. The `slice verify-vt` keyword gate (test_file + keywords ["Fulfils",
+   "burndown"]) would FALSE-PASS because those keywords appear in production code +
+   comments, not tests — the gate checks presence-in-file, not presence-in-test. And
+   `check regression diff` cannot catch missing tests (absence ≠ new failure). Only an
+   orchestrator eyeball (git diff test-fn count) caught it. Cost: a continuation worker
+   spawn to add fixtures.
+2. HOLLOW self-reported green. Worker reported "check quick green". But `check quick`
+   is UNCONFIGURED here ⇒ an owned no-op (exit 0). So the worker's lint self-check was
+   vacuous. The real `check gate` (clippy -D warnings) found 7 errors (type_complexity,
+   unnested or-patterns, let-else, sort_by_key, doc backticks) the worker introduced.
+   The dispatch funnel's verify beat is `regression diff` (behaviour) only — it does NOT
+   run clippy, so lint rot lands silently unless the orchestrator runs `check gate`
+   per-phase. Fixed inline (orchestrator sole-writer, behaviour-preserving nits).
+Takeaways: (a) verify-vt keyword gate is satisfiable by prose — it is NOT proof the
+fixtures exist; a "new test fn count must increase" check would be stronger. (b) the
+funnel should run `check gate` (or at least clippy) as part of the verify beat, not
+just `regression diff` — behaviour-green ≠ landable. (c) worker prompts must name a
+REAL green command; "check quick" is a no-op trap when unconfigured.
