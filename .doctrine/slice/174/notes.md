@@ -69,3 +69,28 @@ survive lives here.
   rc (`DOCTRINE_VERSION=v0.8.1-rc1`); cut the real v0.8.1 at /close to complete
   VH-1 (fresh-mac default one-liner + binstall, no toolchain).
 - F5/governance: CI adoption is slice-local (design D1) — no ADR.
+
+## Follow-up — Linux support (OQ-3, post-close)
+
+Quick backlog-style change (musl/static, user-chosen), landed under `feat(SL-174)`
+after the slice was `done`. Supersedes several PHASE-03 facts above:
+
+- `install.sh`: `triple_for_arch(arch)` → **`triple_for(os, arch)`** — OS-aware
+  (Darwin + Linux); the Darwin-only guard is **gone** (unsupported OS/arch now
+  fall out of `triple_for` non-zero). Linux maps to static-musl triples
+  (`x86_64`/`aarch64-unknown-linux-musl`; `uname -m` may report `arm64`).
+- **Checksum portability bug fixed:** `shasum -a 256 -c` was macOS-only and would
+  fail on Linux. New `verify_sha256` helper falls back `shasum` → `sha256sum`
+  (Linux ships the latter); both emit/read the same `<hash>  <name>` format.
+- `scripts/install-test.sh`: `check` now takes (os, arch); covers macOS + Linux
+  arches + unsupported-OS and unsupported-arch. Still lib-only sourceable, in-jail.
+- `release.yml`: two **native** musl legs (`ubuntu-24.04`, `ubuntu-24.04-arm`) —
+  no cross, no Rosetta; `musl-tools` install; Package checksum made portable
+  (`shasum` || `sha256sum`). macOS legs unchanged.
+- `Cargo.toml` binstall: **no change** — `pkg-url` `{ target }` is already generic,
+  so Linux assets resolve once published. The §5.2 contract now spans Linux triples.
+- README: installer now macOS + Linux x86_64/aarch64 (static musl).
+- **Unproven in-jail (prove-at-CI, mirrors PHASE-02 R3):** musl static-link of
+  doctrine's deps actually compiling, and live download/checksum/install. Only a
+  real `v*` tag exercises these. Fallback if musl link fails: gnu legs.
+  Locally green: mapping test PASS, `sh -n` clean both scripts.
