@@ -50,19 +50,23 @@ const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
 /// carries duplicates that would collide on skill id. Excluded at discovery.
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
 
+/// Runner program names — single-source per STD-001.
+const RUNNER_BUNX: &str = "bunx";
+const RUNNER_NPX: &str = "npx";
+
 /// Resolve the delegated skills runner: try `bunx` first, fall back to `npx`.
 /// Returns the program name and a Runner. Pure — no IO beyond `which`.
 pub(crate) fn resolve_runner() -> (&'static str, Box<dyn Runner>) {
-    if std::process::Command::new("bunx")
+    if std::process::Command::new(RUNNER_BUNX)
         .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
     {
-        ("bunx", Box::new(Bunx))
+        (RUNNER_BUNX, Box::new(Bunx))
     } else {
-        ("npx", Box::new(Npx))
+        (RUNNER_NPX, Box::new(Npx))
     }
 }
 
@@ -829,7 +833,13 @@ pub(crate) fn install_for_other(
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
     let subset = !args.selected.is_empty();
-    let argv = delegate_argv(args.agent_name, args.selected, args.global, subset, args.repo);
+    let argv = delegate_argv(
+        args.agent_name,
+        args.selected,
+        args.global,
+        subset,
+        args.repo,
+    );
     writeln!(
         out,
         "agent {} (delegate): {} {}",
@@ -838,7 +848,11 @@ pub(crate) fn install_for_other(
         argv.join(" ")
     )?;
     if !args.runner.run(args.runner_name, &argv)? {
-        bail!("{} skills failed for agent: {}", args.runner_name, args.agent_name);
+        bail!(
+            "{} skills failed for agent: {}",
+            args.runner_name,
+            args.agent_name
+        );
     }
     Ok(())
 }
@@ -856,6 +870,7 @@ pub(crate) fn select_for_install<'a>(
 }
 
 /// Real runner for the forwarding install path.
+#[expect(dead_code, reason = "retained for dispatch worktree compatibility")]
 pub(crate) fn real_runner() -> Box<dyn Runner> {
     resolve_runner().1
 }
@@ -1170,6 +1185,8 @@ pub(crate) fn dispatch(cmd: SkillsCommand, _color: bool) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    const TEST_REPO: &str = "davidlee/doctrine";
 
     // ADR-005 / SL-023 PHASE-04 (VT-1): the de-dup'd skills route rather than
     // restate. Guards the named sites against re-growing flag-syntax templates,
@@ -1615,30 +1632,23 @@ mod tests {
     #[test]
     fn delegate_argv_all_skills_omits_skill_flags() {
         let e = entry("review", "code-review");
-        let argv = delegate_argv("codex", &[&e], false, false, "davidlee/doctrine");
+        let argv = delegate_argv("codex", &[&e], false, false, TEST_REPO);
         assert_eq!(
             argv,
-            vec![
-                "skills",
-                "add",
-                "davidlee/doctrine",
-                "--agent",
-                "codex",
-                "--yes"
-            ]
+            vec!["skills", "add", TEST_REPO, "--agent", "codex", "--yes"]
         );
     }
 
     #[test]
     fn delegate_argv_subset_and_global() {
         let e = entry("review", "code-review");
-        let argv = delegate_argv("cursor", &[&e], true, true, "davidlee/doctrine");
+        let argv = delegate_argv("cursor", &[&e], true, true, TEST_REPO);
         assert_eq!(
             argv,
             vec![
                 "skills",
                 "add",
-                "davidlee/doctrine",
+                TEST_REPO,
                 "--agent",
                 "cursor",
                 "--global",
@@ -1717,7 +1727,7 @@ mod tests {
             &[],
             &[],
             false,
-            "davidlee/doctrine",
+            TEST_REPO,
         )
         .unwrap();
 
@@ -1752,7 +1762,7 @@ mod tests {
             &["code-review".into()],
             &[],
             false,
-            "davidlee/doctrine",
+            TEST_REPO,
         )
         .unwrap();
         let runner = FakeRunner {
@@ -1760,7 +1770,7 @@ mod tests {
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
-        execute(&plan, &catalog, &runner, "npx", &mut out).unwrap();
+        execute(&plan, &catalog, &runner, RUNNER_NPX, &mut out).unwrap();
         assert!(runner.calls.borrow().is_empty(), "no npx for Claude");
         String::from_utf8(out).unwrap()
     }
@@ -1885,6 +1895,7 @@ mod tests {
             &["code-review".into()],
             &[],
             false,
+            TEST_REPO,
         )
         .unwrap();
 
@@ -1899,7 +1910,7 @@ mod tests {
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
-        execute(&plan, &catalog, &runner, "npx", &mut out).unwrap();
+        execute(&plan, &catalog, &runner, RUNNER_NPX, &mut out).unwrap();
 
         // execute re-classifies at mutation time → keeps it, never clobbers (A2).
         let log = String::from_utf8(out).unwrap();
@@ -1925,6 +1936,7 @@ mod tests {
             &[],
             &[],
             false,
+            TEST_REPO,
         )
         .unwrap();
 
@@ -1933,7 +1945,7 @@ mod tests {
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
-        execute(&plan, &catalog, &runner, "npx", &mut out).unwrap();
+        execute(&plan, &catalog, &runner, RUNNER_NPX, &mut out).unwrap();
 
         let calls = runner.calls.borrow();
         assert_eq!(calls.len(), 1);
@@ -1989,6 +2001,7 @@ mod tests {
             &[],
             &[],
             false,
+            TEST_REPO,
         )
         .unwrap();
 

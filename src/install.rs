@@ -689,6 +689,8 @@ mod tests {
     use super::*;
     use std::fs;
 
+    const TEST_REPO: &str = "davidlee/doctrine";
+
     // ---------------------------------------------------------------
     // detect_project_root
     // ---------------------------------------------------------------
@@ -1218,12 +1220,12 @@ mod tests {
 
     #[test]
     fn post_install_instructions_none_when_no_claude() {
-        assert!(post_install_instructions(false, "davidlee/doctrine").is_none());
+        assert!(post_install_instructions(false, TEST_REPO).is_none());
     }
 
     #[test]
     fn post_install_instructions_claude_prints_plugin_block() {
-        let block = post_install_instructions(true, "davidlee/doctrine").unwrap();
+        let block = post_install_instructions(true, TEST_REPO).unwrap();
         assert!(block.contains("Claude hooks ship via the doctrine plugin"));
         assert!(block.contains("/plugin marketplace add davidlee/doctrine"));
         assert!(block.contains("/plugin install doctrine@doctrine"));
