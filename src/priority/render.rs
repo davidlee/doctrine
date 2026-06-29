@@ -141,11 +141,16 @@ const NEXT_DEFAULT: &[&str] = &["id", "status", "score", "estimate", "value", "t
 // Facet cell formatters — pure fn(&NextRow) -> String (SL-171 PHASE-01, D4)
 // ---------------------------------------------------------------------------
 
-/// Render the estimate column cell: `{format_bound(lo)}–{format_bound(hi)}`,
-/// or [`listing::ABSENT_CELL`] when no estimate is authored.
+/// Render the estimate column cell: `{format_bound(lo)} - {format_bound(hi)}`,
+/// each side right-padded to 4 chars (accommodates 1.0–99.9).
+/// Unset estimates render [`listing::ABSENT_CELL`].
 fn estimate_cell(r: &NextRow) -> String {
     match &r.estimate {
-        Some(e) => format!("{}–{}", format_bound(e.lower), format_bound(e.upper)),
+        Some(e) => format!(
+            "{:>4} - {:>4}",
+            format_bound(e.lower),
+            format_bound(e.upper)
+        ),
         None => listing::ABSENT_CELL.to_string(),
     }
 }
@@ -620,24 +625,27 @@ mod tests {
     fn vt4_format_bound_estimate_fractional() {
         let rows = vec![faceted_row("ISS-001", 3.2, 4.8, 5.0, &[])];
         let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
-        assert!(out.contains("3.2–4.8"), "fractional estimate: {out}");
+        assert!(out.contains(" 3.2 -  4.8"), "fractional estimate: {out}");
     }
 
     #[test]
     fn vt4_format_bound_estimate_integral() {
         let rows = vec![faceted_row("ISS-001", 3.0, 8.0, 5.0, &[])];
         let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
-        assert!(out.contains("3–8"), "integral estimate strips .0: {out}");
+        assert!(
+            out.contains(" 3.0 -  8.0"),
+            "integral estimate shows .0: {out}"
+        );
     }
 
     #[test]
     fn vt4_format_bound_value_integral() {
         let rows = vec![faceted_row("ISS-001", 3.0, 8.0, 5.0, &[])];
         let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
-        // value 5.0 → "5" via format_bound
+        // value 5.0 → "5.0" via format_bound (always one decimal)
         assert!(
-            out.contains(" 5 ") || out.contains("│ 5 │"),
-            "integral value 5: {out}"
+            out.contains(" 5.0 ") || out.contains("│5.0│"),
+            "integral value 5.0: {out}"
         );
     }
 

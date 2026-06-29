@@ -6,13 +6,7 @@ pub(crate) fn format_bound(f: f64) -> String {
     debug_assert!(f.is_finite());
 
     let rounded = (f * 10.0).round() / 10.0;
-    let fractional = (rounded - rounded.trunc()).abs();
-
-    if fractional <= f64::EPSILON {
-        format!("{rounded:.0}")
-    } else {
-        format!("{rounded:.1}")
-    }
+    format!("{rounded:.1}")
 }
 
 #[cfg_attr(
@@ -100,14 +94,14 @@ mod tests {
     #[test]
     fn vt1_format_bound_rows() {
         let cases = [
-            (0.0, "0"),
-            (2.0, "2"),
+            (0.0, "0.0"),
+            (2.0, "2.0"),
             (2.5, "2.5"),
             (3.75, "3.8"),
             (2.33333, "2.3"),
             (0.1, "0.1"),
-            (100.0, "100"),
-            (2.000000000001, "2"),
+            (100.0, "100.0"),
+            (2.000000000001, "2.0"),
         ];
 
         for (input, expected) in cases {
@@ -124,7 +118,7 @@ mod tests {
 
         assert_eq!(
             format_estimate_normal(Some(&facet), "espresso_shots"),
-            "Estimate: 2-8 espresso_shots"
+            "Estimate: 2.0-8.0 espresso_shots"
         );
     }
 
@@ -145,7 +139,7 @@ mod tests {
 
         assert_eq!(
             format_estimate_normal(Some(&facet), "espresso_shots"),
-            "Estimate: 2.5-8 espresso_shots"
+            "Estimate: 2.5-8.0 espresso_shots"
         );
     }
 
@@ -164,8 +158,8 @@ mod tests {
         assert_eq!(
             format_estimate_verbose(Some(&facet), "espresso_shots"),
             vec![
-                "  Attention spread: 4x".to_string(),
-                "  Attention width: 6 espresso_shots".to_string(),
+                "  Attention spread: 4.0x".to_string(),
+                "  Attention width: 6.0 espresso_shots".to_string(),
             ]
         );
     }
@@ -181,7 +175,7 @@ mod tests {
             format_estimate_verbose(Some(&facet), "espresso_shots"),
             vec![
                 "  Attention spread: ratio unavailable".to_string(),
-                "  Attention width: 5 espresso_shots".to_string(),
+                "  Attention width: 5.0 espresso_shots".to_string(),
             ]
         );
     }
@@ -195,13 +189,13 @@ mod tests {
 
         assert_eq!(
             format_estimate_normal(Some(&facet), "shots"),
-            "Estimate: 5-5 shots"
+            "Estimate: 5.0-5.0 shots"
         );
         assert_eq!(
             format_estimate_verbose(Some(&facet), "shots"),
             vec![
-                "  Attention spread: 1x".to_string(),
-                "  Attention width: 0 shots".to_string(),
+                "  Attention spread: 1.0x".to_string(),
+                "  Attention width: 0.0 shots".to_string(),
             ]
         );
     }
