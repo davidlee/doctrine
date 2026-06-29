@@ -15,33 +15,19 @@ use serde::Deserialize;
 
 use crate::memory::MemoryType;
 
-/// Build the post-install delegation instructions (PURE — no IO).
+/// Build the post-install Claude plugin reminder (PURE — no IO).
 ///
 /// Claude hooks now ship via the doctrine plugin (not settings-wired), so the
-/// install verb DELEGATES wiring to the operator via printed commands. Returns
-/// `None` when neither a Claude nor a non-Claude harness is present. Built via
-/// `Vec<String>` + `join` (repo clippy DENIES `format_push_string`).
-pub(crate) fn post_install_instructions(
-    has_claude: bool,
-    has_non_claude: bool,
-    repo: &str,
-) -> Option<String> {
-    if !has_claude && !has_non_claude {
+/// install verb DELEGATES wiring to the operator via printed commands.
+/// Non-Claude agents are handled live by the forward-step loop.
+pub(crate) fn post_install_instructions(has_claude: bool, repo: &str) -> Option<String> {
+    if !has_claude {
         return None;
     }
     let mut lines: Vec<String> = Vec::new();
-    if has_claude {
-        lines.push("Claude hooks ship via the doctrine plugin. To install:".to_string());
-        lines.push(format!("  /plugin marketplace add {repo}"));
-        lines.push("  /plugin install doctrine@doctrine".to_string());
-    }
-    if has_non_claude {
-        if has_claude {
-            lines.push(String::new());
-        }
-        lines.push("Non-Claude skills install:".to_string());
-        lines.push(format!("  npx skills add {repo} --agent universal -y"));
-    }
+    lines.push("Claude hooks ship via the doctrine plugin. To install:".to_string());
+    lines.push(format!("  /plugin marketplace add {repo}"));
+    lines.push("  /plugin install doctrine@doctrine".to_string());
     Some(lines.join("\n"))
 }
 
@@ -397,13 +383,17 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             // operator via printed post-install instructions (see end of fn).
         } else {
             let mut out = io::stdout();
-            let runner = crate::skills::real_runner();
+            let (runner_name, runner) = crate::skills::resolve_runner();
+            let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
             if let Err(e) = crate::skills::install_for_other(
-                agent,
-                &catalog,
-                &selected,
-                args.global,
-                runner.as_ref(),
+                &crate::skills::InstallOtherArgs {
+                    agent_name: agent,
+                    selected: &selected,
+                    global: args.global,
+                    repo,
+                    runner: runner.as_ref(),
+                    runner_name,
+                },
                 &mut out,
             ) {
                 writeln!(io::stdout(), "  {agent} skills install failed: {e:#}")?;
@@ -422,13 +412,13 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
         }
     }
 
-    // SL-152 PHASE-06: delegate Claude hook-wiring to the doctrine plugin (and
-    // non-Claude skills to the universal npx command) via printed instructions,
-    // rather than wiring hooks into settings (which double-fired with the plugin).
+    // SL-152 PHASE-06: Claude hooks now ship via the doctrine plugin (not
+    // settings-wired — they double-fired with the plugin). Delegate wiring to
+    // the operator via printed instructions. Non-Claude skills are handled
+    // live by the per-agent loop above.
     let repo = crate::dtoml::load_doctrine_toml(root)?.install.repo;
     let has_claude = agents.iter().any(|a| a == "claude");
-    let has_non_claude = agents.iter().any(|a| a != "claude");
-    if let Some(block) = post_install_instructions(has_claude, has_non_claude, &repo) {
+    if let Some(block) = post_install_instructions(has_claude, &repo) {
         let mut out = io::stdout();
         writeln!(out)?;
         writeln!(out, "{block}")?;
@@ -618,10 +608,20 @@ fn detect_agents(agents: &[String], root: &Path) -> Vec<String> {
     if !agents.is_empty() {
         return agents.to_vec();
     }
+    let mut detected: Vec<String> = Vec::new();
     if root.join(".claude").exists() {
-        return vec!["claude".to_string()];
+        detected.push("claude".to_string());
     }
-    Vec::new()
+    if root.join(".codex").exists() {
+        detected.push("codex".to_string());
+    }
+    if root.join(".pi").exists() {
+        detected.push("pi".to_string());
+    }
+    if root.join(".agents").exists() {
+        detected.push("universal".to_string());
+    }
+    detected
 }
 
 /// Prompt a single forward step. Returns `true` if the user wants to
@@ -1217,13 +1217,13 @@ mod tests {
     // ---------------------------------------------------------------
 
     #[test]
-    fn post_install_instructions_none_when_no_agents() {
-        assert!(post_install_instructions(false, false, "davidlee/doctrine").is_none());
+    fn post_install_instructions_none_when_no_claude() {
+        assert!(post_install_instructions(false, "davidlee/doctrine").is_none());
     }
 
     #[test]
     fn post_install_instructions_claude_prints_plugin_block() {
-        let block = post_install_instructions(true, false, "davidlee/doctrine").unwrap();
+        let block = post_install_instructions(true, "davidlee/doctrine").unwrap();
         assert!(block.contains("Claude hooks ship via the doctrine plugin"));
         assert!(block.contains("/plugin marketplace add davidlee/doctrine"));
         assert!(block.contains("/plugin install doctrine@doctrine"));
@@ -1231,22 +1231,7 @@ mod tests {
     }
 
     #[test]
-    fn post_install_instructions_non_claude_prints_npx_block() {
-        let block = post_install_instructions(false, true, "acme/doctrine").unwrap();
-        assert!(block.contains("Non-Claude skills install:"));
-        assert!(block.contains("npx skills add acme/doctrine --agent universal -y"));
-        assert!(!block.contains("/plugin"));
-    }
-
-    #[test]
-    fn post_install_instructions_both_print_both_blocks() {
-        let block = post_install_instructions(true, true, "davidlee/doctrine").unwrap();
-        assert!(block.contains("/plugin install doctrine@doctrine"));
-        assert!(block.contains("npx skills add davidlee/doctrine --agent universal -y"));
-    }
-
-    #[test]
-    fn detect_agents_empty_when_no_claude_dir_and_no_flags() {
+    fn detect_agents_empty_when_no_agent_dirs_and_no_flags() {
         let dir = tempfile::tempdir().unwrap();
         let agents = detect_agents(&[], dir.path());
         assert!(agents.is_empty());
@@ -1258,6 +1243,39 @@ mod tests {
         fs::create_dir(dir.path().join(".claude")).unwrap();
         let agents = detect_agents(&[], dir.path());
         assert_eq!(agents, vec!["claude".to_string()]);
+    }
+
+    #[test]
+    fn detect_agents_returns_pi_when_dir_present() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".pi")).unwrap();
+        let agents = detect_agents(&[], dir.path());
+        assert_eq!(agents, vec!["pi".to_string()]);
+    }
+
+    #[test]
+    fn detect_agents_returns_codex_when_dir_present() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".codex")).unwrap();
+        let agents = detect_agents(&[], dir.path());
+        assert_eq!(agents, vec!["codex".to_string()]);
+    }
+
+    #[test]
+    fn detect_agents_returns_universal_for_dot_agents_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".agents")).unwrap();
+        let agents = detect_agents(&[], dir.path());
+        assert_eq!(agents, vec!["universal".to_string()]);
+    }
+
+    #[test]
+    fn detect_agents_detects_multiple_agent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".claude")).unwrap();
+        fs::create_dir(dir.path().join(".pi")).unwrap();
+        let agents = detect_agents(&[], dir.path());
+        assert_eq!(agents, vec!["claude".to_string(), "pi".to_string()]);
     }
 
     #[test]

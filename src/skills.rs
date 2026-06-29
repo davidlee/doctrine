@@ -50,8 +50,21 @@ const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
 /// carries duplicates that would collide on skill id. Excluded at discovery.
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
 
-/// Source from which the delegated `npx skills` pulls non-Claude installs.
-const DELEGATE_SOURCE: &str = "davidlee/doctrine";
+/// Resolve the delegated skills runner: try `bunx` first, fall back to `npx`.
+/// Returns the program name and a Runner. Pure — no IO beyond `which`.
+pub(crate) fn resolve_runner() -> (&'static str, Box<dyn Runner>) {
+    if std::process::Command::new("bunx")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        ("bunx", Box::new(Bunx))
+    } else {
+        ("npx", Box::new(Npx))
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Model
@@ -456,12 +469,18 @@ fn foreign_reason(reason: &ForeignReason) -> String {
     }
 }
 
-/// Assemble the `npx skills add …` argv (program `npx` excluded).
-fn delegate_argv(agent: &str, skills: &[&Entry], global: bool, subset: bool) -> Vec<String> {
+/// Assemble the `npx skills add …` argv (program `npx`/`bunx` excluded).
+fn delegate_argv(
+    agent: &str,
+    skills: &[&Entry],
+    global: bool,
+    subset: bool,
+    repo: &str,
+) -> Vec<String> {
     let mut argv = vec![
         "skills".to_string(),
         "add".to_string(),
-        DELEGATE_SOURCE.to_string(),
+        repo.to_string(),
         "--agent".to_string(),
         agent.to_string(),
     ];
@@ -486,6 +505,7 @@ fn build_plan(
     ids: &[String],
     domains: &[String],
     global: bool,
+    repo: &str,
 ) -> anyhow::Result<Plan> {
     let selected = select(all, ids, domains);
     let subset = !(ids.is_empty() && domains.is_empty());
@@ -508,7 +528,7 @@ fn build_plan(
             }
             Agent::Other(name) => items.push(AgentPlan::Delegate {
                 agent: name.clone(),
-                argv: delegate_argv(name, &selected, global, subset),
+                argv: delegate_argv(name, &selected, global, subset, repo),
             }),
         }
     }
@@ -586,6 +606,19 @@ impl Runner for Npx {
     }
 }
 
+#[derive(Debug)]
+struct Bunx;
+
+impl Runner for Bunx {
+    fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool> {
+        let status = std::process::Command::new(program)
+            .args(args)
+            .status()
+            .with_context(|| format!("Failed to run '{program}' (is Bun installed?)"))?;
+        Ok(status.success())
+    }
+}
+
 /// Materialise the canonical copy of `entry` at `dest` (`.doctrine/skills/<id>`),
 /// staged via a `.tmp-<id>` sibling then swapped in with a minimal-window
 /// remove+rename. Always overwrites — the canonical tree is derived (owns no
@@ -649,6 +682,7 @@ fn execute(
     plan: &Plan,
     catalog: &[Entry],
     runner: &dyn Runner,
+    runner_name: &str,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
     let mut failed: Vec<String> = Vec::new();
@@ -700,8 +734,12 @@ fn execute(
                 }
             }
             AgentPlan::Delegate { agent, argv } => {
-                writeln!(out, "agent {agent} (delegate): npx {}", argv.join(" "))?;
-                if !runner.run("npx", argv)? {
+                writeln!(
+                    out,
+                    "agent {agent} (delegate): {runner_name} {}",
+                    argv.join(" ")
+                )?;
+                if !runner.run(runner_name, argv)? {
                     failed.push(agent.clone());
                 }
             }
@@ -777,19 +815,30 @@ pub(crate) fn install_for_claude(
 /// Install skills for a non-Claude agent: delegate to `npx skills`.
 /// Extracted from `execute()` for reuse from the consolidated `install::run()`
 /// forward-step dispatch (SL-088 PHASE-02).
+pub(crate) struct InstallOtherArgs<'a> {
+    pub(crate) agent_name: &'a str,
+    pub(crate) selected: &'a [&'a Entry],
+    pub(crate) global: bool,
+    pub(crate) repo: &'a str,
+    pub(crate) runner: &'a dyn Runner,
+    pub(crate) runner_name: &'a str,
+}
+
 pub(crate) fn install_for_other(
-    agent_name: &str,
-    _catalog: &[Entry],
-    selected: &[&Entry],
-    global: bool,
-    runner: &dyn Runner,
+    args: &InstallOtherArgs<'_>,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
-    let subset = !selected.is_empty();
-    let argv = delegate_argv(agent_name, selected, global, subset);
-    writeln!(out, "agent {agent_name} (delegate): npx {}", argv.join(" "))?;
-    if !runner.run("npx", &argv)? {
-        bail!("npx skills failed for agent: {agent_name}");
+    let subset = !args.selected.is_empty();
+    let argv = delegate_argv(args.agent_name, args.selected, args.global, subset, args.repo);
+    writeln!(
+        out,
+        "agent {} (delegate): {} {}",
+        args.agent_name,
+        args.runner_name,
+        argv.join(" ")
+    )?;
+    if !args.runner.run(args.runner_name, &argv)? {
+        bail!("{} skills failed for agent: {}", args.runner_name, args.agent_name);
     }
     Ok(())
 }
@@ -808,7 +857,7 @@ pub(crate) fn select_for_install<'a>(
 
 /// Real runner for the forwarding install path.
 pub(crate) fn real_runner() -> Box<dyn Runner> {
-    Box::new(Npx)
+    resolve_runner().1
 }
 
 /// Public wrapper for `install_agent_def`.
@@ -1034,7 +1083,16 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     validate_filters(&catalog, &skills, args.domains)?;
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let agents = resolve_agents(args.agents, &root)?;
-    let plan = build_plan(&root, &agents, &catalog, &skills, args.domains, args.global)?;
+    let repo = crate::dtoml::load_doctrine_toml(&root)?.install.repo;
+    let plan = build_plan(
+        &root,
+        &agents,
+        &catalog,
+        &skills,
+        args.domains,
+        args.global,
+        &repo,
+    )?;
 
     let mut out = io::stdout();
     print_plan(&plan, &mut out)?;
@@ -1052,7 +1110,8 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     // Anchor the ignore at the same base the canonical tree is written to, so
     // `--global` ignores its $HOME tree rather than the project (SL-010 B1).
     crate::install::ensure_gitignored(&install_base(&root, args.global)?, ".doctrine/skills/*")?;
-    execute(&plan, &catalog, &Npx, &mut out)?;
+    let (runner_name, runner) = resolve_runner();
+    execute(&plan, &catalog, runner.as_ref(), runner_name, &mut out)?;
 
     // Agents leg + SubagentStart hook are Claude-surface-only: install them iff
     // Claude is a resolved target (skip a codex-only / global-npx install).
@@ -1068,14 +1127,9 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
 
     // SL-152 PHASE-06: the Claude hooks (boot + create-fork) now ship via the
     // doctrine plugin (NOT settings-wired — they double-fired with the plugin).
-    // Delegate wiring to the operator via printed instructions; non-Claude agents
-    // get the universal npx skills command.
-    let repo = crate::dtoml::load_doctrine_toml(&root)?.install.repo;
+    // Delegate wiring to the operator via printed instructions.
     let has_claude = agents.iter().any(|a| matches!(a, Agent::Claude));
-    let has_non_claude = agents.iter().any(|a| !matches!(a, Agent::Claude));
-    if let Some(block) =
-        crate::install::post_install_instructions(has_claude, has_non_claude, &repo)
-    {
+    if let Some(block) = crate::install::post_install_instructions(has_claude, &repo) {
         writeln!(out)?;
         writeln!(out, "{block}")?;
     }
@@ -1561,7 +1615,7 @@ mod tests {
     #[test]
     fn delegate_argv_all_skills_omits_skill_flags() {
         let e = entry("review", "code-review");
-        let argv = delegate_argv("codex", &[&e], false, false);
+        let argv = delegate_argv("codex", &[&e], false, false, "davidlee/doctrine");
         assert_eq!(
             argv,
             vec![
@@ -1578,7 +1632,7 @@ mod tests {
     #[test]
     fn delegate_argv_subset_and_global() {
         let e = entry("review", "code-review");
-        let argv = delegate_argv("cursor", &[&e], true, true);
+        let argv = delegate_argv("cursor", &[&e], true, true, "davidlee/doctrine");
         assert_eq!(
             argv,
             vec![
@@ -1663,6 +1717,7 @@ mod tests {
             &[],
             &[],
             false,
+            "davidlee/doctrine",
         )
         .unwrap();
 
@@ -1697,6 +1752,7 @@ mod tests {
             &["code-review".into()],
             &[],
             false,
+            "davidlee/doctrine",
         )
         .unwrap();
         let runner = FakeRunner {
@@ -1704,7 +1760,7 @@ mod tests {
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
-        execute(&plan, &catalog, &runner, &mut out).unwrap();
+        execute(&plan, &catalog, &runner, "npx", &mut out).unwrap();
         assert!(runner.calls.borrow().is_empty(), "no npx for Claude");
         String::from_utf8(out).unwrap()
     }
@@ -1843,7 +1899,7 @@ mod tests {
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
-        execute(&plan, &catalog, &runner, &mut out).unwrap();
+        execute(&plan, &catalog, &runner, "npx", &mut out).unwrap();
 
         // execute re-classifies at mutation time → keeps it, never clobbers (A2).
         let log = String::from_utf8(out).unwrap();
@@ -1877,7 +1933,7 @@ mod tests {
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
-        execute(&plan, &catalog, &runner, &mut out).unwrap();
+        execute(&plan, &catalog, &runner, "npx", &mut out).unwrap();
 
         let calls = runner.calls.borrow();
         assert_eq!(calls.len(), 1);
@@ -1941,6 +1997,6 @@ mod tests {
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
-        assert!(execute(&plan, &catalog, &runner, &mut out).is_err());
+        assert!(execute(&plan, &catalog, &runner, "npx", &mut out).is_err());
     }
 }
