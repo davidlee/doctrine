@@ -488,9 +488,9 @@ mod tests {
     fn score_reads_the_post_pass_value() {
         let dir = tmp();
         let root = dir.path();
-        // No facets ⇒ base/leverage/optionality all 0 ⇒ score reads 0.0 (the floor),
-        // and the readers default to 0.0 for an unseen key (the SL-133 score contract:
-        // `channels::score` reads `g.score`, never the old u32 tally).
+        // SL-001 is value-bearing with no authored value → default 1.0 → base 1.0.
+        // REQ-005 gets optionality from SL-001: ref_coeff(0.1) * base(SL-001)(1.0) = 0.1.
+        // REQ-005 is NOT value-bearing → its own base stays 0.0; leverage stays 0.0.
         seed_slice(
             root,
             1,
@@ -499,10 +499,17 @@ mod tests {
         );
         seed_requirement(root, 5);
         let g = build(root).unwrap();
-        assert_eq!(score(&g, key("REQ", 5)), 0.0, "no facets → score floor 0");
+        // SL-177: score now 1.0 (optionality from valueless SL default base=1.0, ref_coeff=1.0).
+        assert!(
+            (score(&g, key("REQ", 5)) - 1.0).abs() < 1e-9,
+            "SL default → optionality 1.0"
+        );
         assert_eq!(base(&g, key("REQ", 5)), 0.0);
         assert_eq!(leverage(&g, key("REQ", 5)), 0.0);
-        assert_eq!(optionality(&g, key("REQ", 5)), 0.0);
+        assert!(
+            (optionality(&g, key("REQ", 5)) - 1.0).abs() < 1e-9,
+            "optionality = 1.0 from SL-001 default"
+        );
     }
 
     // -- VT-4: cycle degrade ---------------------------------------------------

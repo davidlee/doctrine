@@ -97,6 +97,22 @@ fn est_cost(bounds: Option<(f64, f64)>, ctx: CostCtx, ec: &config::EstimateCost)
     }
 }
 
+/// Default raw value for a value-bearing entity that authors no `[value]` facet
+/// (SL-177; SL-176 D-value-floor-sibling). Default-when-absent, NOT a min-clamp:
+/// an authored value (incl. < 1.0 and 0.0) is returned untouched.
+const DEFAULT_VALUE: f64 = 1.0;
+
+/// Single definition of an entity's value for priority purposes. Authored value
+/// wins; a value-bearing kind with no facet defaults to `DEFAULT_VALUE`; any other
+/// valueless kind (records, governance, REV) is None. Consumed by `base_score`'s
+/// `value_dim` now and SL-176 burndown later (RV-191 F-1).
+fn effective_raw_value(kind: &entity::Kind, f: &EntityFacets) -> Option<f64> {
+    f.value
+        .as_ref()
+        .map(|v| v.value)
+        .or_else(|| crate::kinds::is_value_bearing(kind.prefix).then_some(DEFAULT_VALUE))
+}
+
 /// Pure base-score computation per entity (design §5.1). Returns the SPLIT
 /// `BaseScore` so `explain` can surface `value_dim` / `risk_dim`. No IO.
 fn base_score(
@@ -112,16 +128,17 @@ fn base_score(
     // negative multiplier from many demoting tags.
     let tag_term = (1.0 + f.tags.iter().map(|t| cfg.tag_coeff(t) - 1.0).sum::<f64>()).max(0.0);
     let value_dim = {
-        let raw = if let Some(ref v) = f.value {
-            let cost = est_cost(
-                f.estimate.as_ref().map(|e| (e.lower, e.upper)),
-                ctx,
-                &cfg.estimate,
-            );
-            let kw = cfg.kind_weight(kind.prefix);
-            cfg.coefficients.value * v.value * kw * tag_term / cost
-        } else {
-            0.0
+        let raw = match effective_raw_value(kind, f) {
+            Some(v) => {
+                let cost = est_cost(
+                    f.estimate.as_ref().map(|e| (e.lower, e.upper)),
+                    ctx,
+                    &cfg.estimate,
+                );
+                let kw = cfg.kind_weight(kind.prefix);
+                cfg.coefficients.value * v * kw * tag_term / cost
+            }
+            None => 0.0,
         };
         if raw.is_finite() { raw } else { 0.0 }
     };
@@ -492,12 +509,14 @@ fn consequence_post_pass(
             .and_then(|k| attrs.get(&k))
             .map_or(0.0, |a| a.base_score.risk_dim)
     };
-    // SL-176 PHASE-03: raw value facet accessor for the burndown numerator/denominator.
+    // SL-176 PHASE-03 / SL-177 PHASE-02: raw value accessor routed through the
+    // priority-tier seam — authored value wins, value-bearing kind defaults to 1.0,
+    // valueless kind is 0.0. The burndown numerator and denominator both use this.
     let raw_value_of = |nid: cordage::NodeId| -> f64 {
         ek(nid)
             .and_then(|k| attrs.get(&k))
-            .and_then(|a| a.facets.value.as_ref())
-            .map_or(0.0, |v| v.value)
+            .and_then(|a| effective_raw_value(a.kind, &a.facets))
+            .unwrap_or(0.0)
     };
 
     // ── Component partition: each dep_overlay SCC from provenance is one component;
@@ -1045,8 +1064,9 @@ mod tests {
             "ISS-002 (base 25/6.5≈3.846) mints before the heavily-referenced ISS-001 (base 0) — mint is base-only (I3)"
         );
         // The post-pass still credits ISS-001's optionality (two slices reference it,
-        // both base 0 here → optionality 0), proving score is a separate display tier.
-        assert_eq!(pg.score.get(&key("ISS", 1)).copied().unwrap_or(0.0), 0.0);
+        // both base 0 here → optionality 0). SL-177 PHASE-02: valueless ISS-001 has
+        // default 1.0 → value_dim = 1.0/11.0 ≈ 0.0909 → score = 0.0909.
+        assert!((pg.score.get(&key("ISS", 1)).copied().unwrap_or(0.0) - 1.0 / 11.0).abs() < 1e-9);
     }
 
     // -- EX-4: dep/seq edges; an unresolved target contributes no edge ---------
@@ -1214,10 +1234,12 @@ mod tests {
             0,
             "free-text drift target produces no dep edge"
         );
+        // SL-177 PHASE-02: valueless backlog item defaults to 1.0 via
+        // effective_raw_value → passes burndown guard → score = value_dim = 1.0.
         assert_eq!(
             pg.score.get(&key("ISS", 1)).copied().unwrap_or(0.0),
-            0.0,
-            "free-text drift target produces no edge → score floor 0"
+            1.0,
+            "free-text drift target: valueless item score = 1.0 (default)"
         );
     }
 
@@ -1318,10 +1340,15 @@ mod tests {
         );
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        assert!((bs.value_dim - 0.0).abs() < 1e-9, "value_dim should be 0");
+        // SL-177: ISS is value-bearing; no authored value → default 1.0.
+        // est_cost = absent = 1.0 (lone bare item); value_dim = 1.0 * 1.0 * 1.0 * 1.0 / 1.0 = 1.0.
+        assert!(
+            (bs.value_dim - 1.0).abs() < 1e-9,
+            "value_dim should be 1.0 (default)"
+        );
         // risk_dim = 2.0 * 2 (low=1 × medium=2) = 4.0
         assert!((bs.risk_dim - 4.0).abs() < 1e-9, "risk_dim should be 4.0");
-        assert!((bs.total() - 4.0).abs() < 1e-9, "total should be 4.0");
+        assert!((bs.total() - 5.0).abs() < 1e-9, "total should be 5.0");
     }
 
     #[test]
@@ -1331,9 +1358,14 @@ mod tests {
         seed_issue(root, 1, "open", "", "");
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
-        assert!((bs.value_dim - 0.0).abs() < 1e-9, "value_dim should be 0");
+        // SL-177: ISS is value-bearing; no authored value → default 1.0.
+        // est_cost = absent = 1.0 (lone bare item); value_dim = 1.0.
+        assert!(
+            (bs.value_dim - 1.0).abs() < 1e-9,
+            "value_dim should be 1.0 (default)"
+        );
         assert!((bs.risk_dim - 0.0).abs() < 1e-9, "risk_dim should be 0");
-        assert!((bs.total() - 0.0).abs() < 1e-9, "total should be 0");
+        assert!((bs.total() - 1.0).abs() < 1e-9, "total should be 1.0");
     }
 
     #[test]
@@ -1353,6 +1385,114 @@ mod tests {
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
         assert!((bs.value_dim - 3.0).abs() < 1e-9, "value_dim should be 3.0");
+    }
+
+    // ── SL-177: effective_raw_value / DEFAULT_VALUE ─────────────────────
+
+    /// Valueless SL (value-bearing, no authored value) → value_dim = DEFAULT_VALUE / est_cost.
+    /// Red: old behaviour was 0.0. Green: equals the explicit value=1.0 computation.
+    #[test]
+    fn base_score_valueless_sl_equals_explicit_value_one() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001: no value facet (implicit default 1.0); ISS-002: value = 1.0 explicitly.
+        seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 10.0", "", "");
+        seed_issue_with_facets(root, 2, "", "lower = 0.0\nupper = 10.0", "value = 1.0", "");
+        let pg = build(root).unwrap();
+        let bs1 = pg.attrs[&key("ISS", 1)].base_score;
+        let bs2 = pg.attrs[&key("ISS", 2)].base_score;
+        // Both have absent = 1.0 (empty-corpus fallback) because neither has an estimate…
+        // Wait: both HAVE an estimate (lower=0, upper=10). max_upper = 10.0. absent = 10.0 + margin(1.0) = 11.0.
+        // est_cost = lower + β·(upper-lower) = 0.0 + 0.65*10.0 = 6.5.
+        // ISS-001 value_dim = 1.0(default) * 1.0 / 6.5; ISS-002 value_dim = 1.0(authored) * 1.0 / 6.5.
+        let expected = 1.0 / 6.5;
+        assert!(
+            (bs1.value_dim - expected).abs() < 1e-9,
+            "valueless SL value_dim = 1.0/6.5 = {expected}, got {}",
+            bs1.value_dim
+        );
+        assert!(
+            (bs2.value_dim - expected).abs() < 1e-9,
+            "explicit value=1.0 SL value_dim = 1.0/6.5 = {expected}, got {}",
+            bs2.value_dim
+        );
+    }
+
+    /// Valueless ASM and REV → effective_raw_value None → value_dim == 0.
+    #[test]
+    fn base_score_valueless_asm_and_rev_value_dim_zero() {
+        // Test effective_raw_value directly on real kind descriptors from the
+        // integrity table — avoids the disk-seed complexity for REV (which nests
+        // under a slice).
+        let facets = crate::facet::EntityFacets {
+            estimate: None,
+            value: None,
+            risk: None,
+            tags: vec![],
+        };
+        // Find ASM and REV kinds from the integrity table.
+        let asm_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "ASM")
+            .map(|k| k.kind)
+            .expect("ASM in KINDS");
+        let rev_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "REV")
+            .map(|k| k.kind)
+            .expect("REV in KINDS");
+        let iss_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "ISS")
+            .map(|k| k.kind)
+            .expect("ISS in KINDS");
+        assert_eq!(effective_raw_value(asm_kind, &facets), None);
+        assert_eq!(effective_raw_value(rev_kind, &facets), None);
+        assert_eq!(
+            effective_raw_value(iss_kind, &facets),
+            Some(DEFAULT_VALUE),
+            "ISS is value-bearing → default"
+        );
+        // value_dim for ASM/REV is 0.
+        let cfg = config::PriorityConfig::default();
+        let ctx = CostCtx { absent: 1.0 };
+        let bs = base_score(&facets, asm_kind, &cfg, ctx);
+        assert!(
+            (bs.value_dim - 0.0).abs() < 1e-9,
+            "ASM value_dim should be 0"
+        );
+        let bs = base_score(&facets, rev_kind, &cfg, ctx);
+        assert!(
+            (bs.value_dim - 0.0).abs() < 1e-9,
+            "REV value_dim should be 0"
+        );
+        let bs = base_score(&facets, iss_kind, &cfg, ctx);
+        assert!(
+            (bs.value_dim - 1.0).abs() < 1e-9,
+            "ISS value_dim should be 1.0 (default)"
+        );
+    }
+
+    /// No-clamp: authored value=0.3 on SL → 0.3, not 1.0. Authored 0.0 → value_dim == 0.
+    #[test]
+    fn base_score_authored_value_preserved_no_clamp() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001: value = 0.3; ISS-002: value = 0.0.
+        seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 10.0", "value = 0.3", "");
+        seed_issue_with_facets(root, 2, "", "lower = 0.0\nupper = 10.0", "value = 0.0", "");
+        let pg = build(root).unwrap();
+        let bs1 = pg.attrs[&key("ISS", 1)].base_score;
+        let bs2 = pg.attrs[&key("ISS", 2)].base_score;
+        // est_cost = 0.0 + 0.65*10.0 = 6.5.
+        assert!(
+            (bs1.value_dim - 0.3 / 6.5).abs() < 1e-9,
+            "authored 0.3 should be 0.3/6.5, not clamped to 1.0"
+        );
+        assert!(
+            (bs2.value_dim - 0.0).abs() < 1e-9,
+            "authored 0.0 stays 0.0 (not defaulted to 1.0)"
+        );
     }
 
     // ── VT-4: directions & classes ──────────────────────────────────────
@@ -2013,11 +2153,11 @@ mod tests {
             pg.optionality.get(&key("SL", 1)).copied().unwrap_or(0.0) == 0.0,
             "SL target of originates_from gets no optionality"
         );
-        // Burndown unaffected: no Fulfils edge exists.
-        // ISS-001 has no value facet → base_score=0 → score=0.
+        // Burndown unaffected: no Fulfils edge exists (r=0, burn = value_dim).
+        // SL-177 PHASE-02: ISS-001 is value-bearing valueless → default 1.0 → score=1.0.
         assert!(
-            pg.score[&key("ISS", 1)] == 0.0,
-            "originates_from contributes neither optionality nor burndown"
+            (pg.score[&key("ISS", 1)] - 1.0).abs() < 1e-9,
+            "originates_from: valueless item score = 1.0 (default); still no lev/opt change"
         );
     }
 
@@ -2101,5 +2241,96 @@ mod tests {
             (delta - 4.0).abs() < 1e-9,
             "decomposition: delta={delta} equals burndown term ONLY (no slices/optionality double-count)"
         );
+    }
+
+    // ── VT-4 (SL-177 PHASE-02): burndown raw_value retrofit ──────────────
+
+    /// VT-1 (F-1 regression guard): a valueless slice (value-bearing, no authored
+    /// value) in a delivering status fulfils a valued backlog item. The slice's
+    /// default 1.0 (via `effective_raw_value`) contributes to `delivered` → the
+    /// item's score is reduced vs an unfulfilled baseline.
+    #[test]
+    fn burndown_valueless_fulfilling_slice_delivers_default_value() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001: unfulfilled, value=10.0 → value_dim=10.0, score=10.0.
+        // ISS-002: fulfilled by valueless SL-001 in `started`.
+        //   SL-001 has no [value] facet → effective_raw_value returns 1.0 (default).
+        //   delivered = gate(1.0) * 1.0 = 1.0, r = 1.0/10.0 = 0.1.
+        //   burn = 10.0 * 0.9 = 9.0, score = 9.0.
+        seed_issue_with_facets(root, 1, "", "", "value = 10.0", "");
+        seed_issue_with_facets(root, 2, "", "", "value = 10.0", "");
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"started\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-002\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        let pg = build(root).unwrap();
+        let s1 = pg.score[&key("ISS", 1)];
+        let s2 = pg.score[&key("ISS", 2)];
+        // Unfulfilled baseline: 10.0.
+        assert!(
+            (s1 - 10.0).abs() < 1e-9,
+            "ISS-001 unfulfilled baseline 10.0, got {s1}"
+        );
+        // Fulfilled by valueless slice: delivered=1.0, r=0.1, burn=9.0.
+        assert!(
+            (s2 - 9.0).abs() < 1e-9,
+            "ISS-002 burndown by valueless slice to 9.0, got {s2}"
+        );
+        assert!(
+            s2 < s1,
+            "valueless fulfilling slice reduces the item's score"
+        );
+        assert!(
+            s2 > 0.0,
+            "score is positive (delivered > 0 from default value), got {s2}"
+        );
+    }
+
+    /// VT-2 (exclusion): a non-value-bearing kind as a fulfils source would
+    /// contribute 0 to delivered — `effective_raw_value` returns None for REV
+    /// and record kinds, and the `unwrap_or(0.0)` in `raw_value_of` converts
+    /// that to 0.0. Since the relation graph constrains Fulfils sources to SL
+    /// (always value-bearing), this is tested via the `raw_value_of` closure
+    /// semantics: verify that `effective_raw_value` returns None for REV/ASM,
+    /// which the burndown path converts to a 0 contribution.
+    #[test]
+    fn burndown_non_value_bearing_source_contributes_zero() {
+        // Test effective_raw_value directly: REV and ASM are NOT value-bearing.
+        let facets = crate::facet::EntityFacets {
+            estimate: None,
+            value: None,
+            risk: None,
+            tags: vec![],
+        };
+        let rev_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "REV")
+            .map(|k| k.kind)
+            .expect("REV in KINDS");
+        let asm_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "ASM")
+            .map(|k| k.kind)
+            .expect("ASM in KINDS");
+        let iss_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "ISS")
+            .map(|k| k.kind)
+            .expect("ISS in KINDS");
+        // Non-value-bearing → None → raw_value_of returns 0.0 (via unwrap_or).
+        assert_eq!(effective_raw_value(rev_kind, &facets), None);
+        assert_eq!(effective_raw_value(asm_kind, &facets), None);
+        // Value-bearing without authored value → Some(1.0) (default).
+        assert_eq!(effective_raw_value(iss_kind, &facets), Some(DEFAULT_VALUE));
+        // When routed through the burndown closure (raw_value_of), these map to:
+        //   effective_raw_value(None) → unwrap_or(0.0) → 0.0 (can't deliver value)
+        //   effective_raw_value(Some(1.0)) → unwrap_or(0.0) → 1.0 (delivers default)
+        // This guards against the old path that read f.value directly and missed
+        // the default for value-bearing kinds.
     }
 }
