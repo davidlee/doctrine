@@ -216,3 +216,24 @@ the live coord tree `.dispatch/SL-176` using its own built binary (0.9.0).
 - **Handed to /reconcile:** ratifying ADR + SPEC-018 + relation-vocabulary.md +
   close RFC-003 (all via REV); discharge IMP-207/IMP-149. See review-192.md
   Reconciliation Brief.
+
+## Reconcile + close (2026-06-29) — RV-192 discharged
+
+Reconcile (commit `03d2870f`) authored the deferred governance (RV-192 F-5):
+
+- **ADR-018** (accepted) ratifies finish-Axis-B; composes with ADR-016/010/004 and
+  **partially reverses ADR-016 §2** — completion is relational via the `fulfils`
+  `Degree {full,partial}` facet, not a status projection. Authored DIRECTLY: the REV
+  `change add` grammar has no create-ADR action (`create` = spec-only), so a new
+  ratifying ADR is authored like any entity and only *recorded* in the REV narrative.
+- **REV-016** (`reconcile-sl-176`, done): one `modify` row vs SPEC-018, hand-landed —
+  `scoped_from`→`originates_from`, `fulfils` label + degree, "Finishing Axis B"
+  subsection; `relation-vocabulary.md` companion refreshed (retired `Slices`, added
+  `Fulfils`+degree).
+- **RFC-003** → resolved; **IMP-207/IMP-149** → resolved·done; IMP-210/IMP-156 stay open.
+- **design.md** OQ-2 carve-out xref (F-4 polish).
+
+Close gotcha (commit `0025ad38`): `doctrine link` on the stale 0.8.1 PATH binary
+appended `governed_by ADR-018` after the `references` rows, breaking SL-176's own
+same-label-contiguity storage invariant. `check quick` caught it; hand-reordered the
+toml. On edge, prefer the build-target binary for `link`, or verify row order after.
