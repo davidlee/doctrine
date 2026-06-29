@@ -30,7 +30,8 @@ cross-corpus relation contract), **RFC-003** (the deliberation this slice implem
 | **Q5 cascade** | Close-cascade hint (`doctor`/`/close` reading `fulfils(full)`) **spun out → IMP-210**. Not in this slice. Hint-not-auto regardless (RFC-003 F-6). | user-locked |
 | **Q6 drift** | Name the mapping now, re-census at execution: entity "carved out from" → `originates_from`; "feeds into" → `needs`/`after`; 5 free-text non-entity stay `drift` (deferred). | user-locked |
 | **D-degree-default** | `None` degree ≡ **Full**. `partial` is the marked exception. Does NOT repeat SL-149's banned `unspecified` (that was banned because role keys the target gate; degree keys nothing). | design |
-| **D-edge-identity** | Edge identity = `(label, role, target)`; **degree excluded** (one `fulfils` edge per (slice,item)). `append_edge` **upserts** degree; `unlink` ignores degree. | design |
+| **D-edge-identity** | Edge identity = `(label, role, target)`; **degree excluded**. Single-edge guaranteed by a **validate uniqueness invariant** on `(source, fulfils, target)`. Degree set at author time; **changed via `unlink`+`relink`**, NOT upsert (codex F1 — no mutation path exists in `append_relation_row`). `link` of an existing triple with a *different* degree **errors** ("exists with degree X; unlink to change"); identical → `Noop`. `unlink` matches `(label, role, target)`, degree ignored. | design (codex F1/F2) |
+| **D-inspect-shape** | `RelationGroup` targets change from `Vec<String>` to **structured entries carrying `Option<Degree>`** (codex F3 — the flat `Vec<String>` cannot hold per-target degree). Affects outbound + inbound + `inspect --json` schema. A render-side side-index is insufficient. | design (codex F3) |
 
 ---
 
@@ -109,13 +110,23 @@ struct RelationRow  { label: String, role: Option<String>, degree: Option<String
 ```
 
 **Edge identity = `(label, role, target)`** — degree **excluded** (D-edge-identity): one
-`fulfils` edge per (slice, item); you do not fulfil the same item both full and partial. So:
+`fulfils` edge per (slice, item); you do not fulfil the same item both full and partial.
+**Single-edge is guaranteed by a `validate` uniqueness invariant** on `(source, fulfils,
+target)` (codex F2 — `read_block` legalises rows independently and never detects duplicate
+logical edges, so absent this invariant two `fulfils` rows with differing degree could
+coexist and the inbound index would pick an arbitrary winner). Mechanics — **no upsert**
+(codex F1: `append_relation_row` is append-or-`Noop`, `relation.rs:911/949`; there is no
+mutation path, and inventing one is real seam work, not a payload thread):
 
-- `append_edge` matches `(label, role, target)` and **upserts degree** (re-link updates).
-  Discipline: degree is set once at slice close; partial→full is a *new slice's* edge,
-  never an edit to a closed slice's edge (RFC-003).
+- `append_relation_row` noop-guard matches `(label, role, target)`: identical (incl.
+  degree) → `Noop`; **same triple, different degree → hard error** ("already `fulfils` X
+  with degree=full; `unlink` to change") — a new `AppendOutcome`/error branch, the one
+  honest extension to the seam; else `Wrote`.
+- **Degree set at author time; changed via `unlink` + `relink`.** Aligns with the discipline:
+  degree is set once at slice close; partial→full is a *new slice's* edge, never an edit to
+  a closed slice's edge (RFC-003).
 - `unlink` matches `(label, role, target)`, degree ignored.
-- `read_block` parses the optional `degree`.
+- `read_block` parses the optional `degree`; `validate` enforces the uniqueness invariant.
 
 ### A.6 Functions re-keyed
 
@@ -125,13 +136,33 @@ struct RelationRow  { label: String, role: Option<String>, degree: Option<String
   symmetric to SL-149's `RoleNotApplicable`. **No `MissingDegree`** (absent ≡ full).
   Target-kind mismatch still refused via `check_target_kind` against the role-keyed
   `TargetSpec` (now widened for `originates_from`).
-- **Graph/projection** carry degree (like role rode SL-149 F1): `RelationEdge` →
-  `CatalogEdge` → `InspectView`. New `inbound_degree_index: (source,label,target) → Degree`
-  parallel to `inbound_role_index`. `render_inbound` suffixes degree per-source:
-  `fulfilled by: SL-A · SL-B (partial)`. **Overlay allocation stays label-keyed** —
-  `fulfils` is one overlay-backed label; cordage stays vocabulary-unaware (ADR-016 §3, R8).
-  Inbound grouping key stays `(label, role)`; degree is rendered inline within a source's
-  entry, not a grouping dimension (Q3).
+- **Graph/projection — a data-model change, not a render-side index (codex F3).** Today
+  `RelationGroup = ((RelationLabel, Option<Role>), Vec<String>)` (`relation_graph.rs:521`);
+  both `InspectView.outbound` and `.inbound` flatten targets to **bare `Vec<String>`** with
+  no per-target metadata slot. A side `inbound_degree_index` would (a) only reach the human
+  *inbound* render, leaving *outbound* `fulfils (partial)` and `inspect --json`
+  unexpressible, and (b) on a duplicate row pick an arbitrary winner (F2). **So the target
+  representation itself changes:**
+  ```rust
+  struct RelationTargetView { target: String, degree: Option<Degree> }   // NEW
+  type RelationGroup = (RelationKey, Vec<RelationTargetView>);            // was Vec<String>
+  ```
+  - Outbound: `outbound_for` already carries `degree` on the edge (A.5) → populate
+    `RelationTargetView.degree` (`inspect_from` `relation_graph.rs:619-626`).
+  - Inbound: recover degree from the SOURCE entity's outbound payload, exactly as role is
+    recovered via `inbound_role_index` (`relation_graph.rs:633-665`) — extend that index (or
+    a parallel `inbound_degree_index`) to also carry degree, attached per-source.
+  - `render_outbound`/`render_inbound` (`relation_graph.rs:~756/797`) suffix `(partial)` per
+    target where degree is `Some(Partial)`; `None`/`Full` render bare (no golden churn for
+    non-degree groups).
+  - **`inspect --json` schema decision (D-inspect-shape):** degree-bearing groups
+    (`fulfils`) emit target entries as objects `{ "ref": "...", "degree": "partial" }`
+    (degree `skip_if None` ⇒ full omitted); all other groups keep bare-string targets
+    (heterogeneous-by-label, keyed by the group label — avoids churning every inspect-json
+    golden). Enumerate the affected goldens at plan.
+  - **Overlay allocation stays label-keyed** — `fulfils` is one overlay-backed label;
+    cordage stays vocabulary-unaware (ADR-016 §3, R8). Grouping key stays `(label, role)`;
+    degree rides per-target within the group, not as a grouping dimension (Q3).
 
 ### A.7 CLI
 
@@ -143,6 +174,44 @@ doctrine link  <BACKLOG> references --role originates_from <SL>   # born-end = b
 doctrine unlink <SL> fulfils <BACKLOG>                     # matches (label,role,target), degree ignored
 # --degree on a non-fulfils label → DegreeNotApplicable
 ```
+
+---
+
+## Section A′ — Live consumers of the retired labels (codex F4/F5 — blast radius)
+
+Retiring `slices` and renaming `scoped_from` is **not** vocab-table-local: shipped
+consumers read both. These are **in scope** (re-pointed in this slice), not deferrable to
+IMP-210 — that item is only the *new* close-cascade hint, not the *existing* behaviour.
+
+### A′.1 `RelationLabel::Slices` consumers → re-point at `fulfils`
+
+| consumer | file:line | today | becomes |
+|---|---|---|---|
+| **priority scoring** | `src/priority/graph.rs:190, 201` | `Slices` is in **both** the reference-label and consequence-label sets — a backlog item's "optionality" credit counts the slices that reference it | the optionality signal moves to the **derived `fulfils` inbound** (a slice `fulfils` the item). Re-point both label-set memberships from `Slices` to `Fulfils`; preserve the scoring behaviour (behaviour-preservation on the *numbers*, not the label). |
+| **backlog show (human)** | `src/backlog.rs:1420, 1443` | `targets_for(tier1, Slices)` → a `("slices", …)` line | render the derived **`fulfilled by`** inbound instead (the `slices` *outbound* row no longer exists post-migration). |
+| **backlog show (JSON)** | `src/backlog.rs:1574` | `"slices": targets_for(…, Slices)` field | replace with the `fulfils`-derived shape; **public JSON schema change** — enumerate goldens at plan. |
+| **lifecycle findings** | `src/backlog.rs:~961` (doctor "all linked slices terminal") | reads `Slices`-linked slices | read the `fulfils`/derived-inbound set. Keep the finding's semantics; swap the edge it reads. |
+
+The priority re-point (A′.1 row 1) is the load-bearing one: it must keep the *scoring
+numbers* identical (a fulfils inbound credits optionality exactly as a `slices` reference
+did), proven by the priority suite staying green on equivalent fixtures (fixtures re-authored
+from `slices=[…]` to a `fulfils` edge).
+
+### A′.2 `scoped_from` → `originates_from` output surfaces
+
+The role rename moves named output fields + CLI text, each golden-load-bearing:
+
+| surface | file:line |
+|---|---|
+| slice show (human) | `src/slice.rs:1677` (`"references(scoped_from)"` label + `targets_for_role(References, ScopedFrom)`) |
+| slice show (JSON) | `src/slice.rs:1758` (`"scoped_from":` field) |
+| backlog show (human) | `src/backlog.rs:1428, 1447` |
+| backlog show (JSON) | `src/backlog.rs:1581` (`"scoped_from":` field) |
+| CLI `--role` help/error | `src/commands/cli.rs:552` (the role-name doc + parse error text) |
+
+All become `originates_from`. The JSON field renames are **public schema changes** — list
+the affected `show --json` goldens at plan; the human-render goldens move with the wording
+(R6).
 
 ---
 
@@ -197,10 +266,21 @@ set. Committed `migration-dispositions.md` records per row:
   defaulting would lose exactly the completion signal this slice exists to add (the RFC
   named IMP-141 as a partial exemplar). Each `partial` carries a one-line rationale.
 
-Oracle: (1) exact expected `(source,target) → (label, role|degree)` per row; (2)
-disposition artifact match; (3) edge-count + **class-aware** `(source,target)` multiset
-(classes 1/2/4 preserve the pair; class 3 flips source↔target; class 5 moves label-space;
-class 6 unchanged) — *secondary* sanity, not the primary proof.
+**Oracle scope — honest framing (codex F6).** The automated oracle proves the migration
+**faithfully APPLIES the recorded dispositions** (mechanical correctness), NOT that the
+dispositions are *correct* (the prov-vs-fulfil + degree judgement). The latter is human and
+is reviewed separately — the disposition artifact is itself the adversarial-review subject,
+per-row rationale committed as evidence; the automated test cannot self-certify it (it would
+be checking the rewrite against its own input). So:
+- (1) **mechanical:** each row lands at exactly the `(label, role|degree)` its disposition
+  records (deterministic class 1 emits its planned map; classes 2/3/4/5 assert against the
+  artifact); (2) **class-aware** edge-count + `(source,target)` multiset (classes 1/2/4
+  preserve the pair; class 3 flips source↔target; class 5 moves label-space; class 6
+  unchanged) — *secondary* sanity; (3) `validate` clean (incl. the new `fulfils` uniqueness
+  invariant). The multiset check **cannot** detect a misclassification (a wrong prov-vs-fulfil
+  call preserves the pair) — that is what the human review of the disposition artifact is for;
+  the design does not claim otherwise. Call it an **editorial migration with a mechanical
+  faithfulness oracle**, not an oracle-validated classification.
 
 ### B.3 Atomicity (SL-149 F3 — no-dual-read ⇒ no valid intermediate)
 
@@ -251,9 +331,10 @@ byte-identical.
     renamed `originates_from`→"originated from".
   - New: `degree_bearing` true on exactly the `fulfils` row; `Degree` name/from_name
     round-trip; canonical degree order.
-- **Validation:** `DegreeNotApplicable` (degree on non-`degree_bearing` label); corpus
-  `validate` clean post-migration (no `IllegalRow`, no dangler regression); a hand-edited
-  bad-degree `fulfils` row flagged.
+- **Validation:** `DegreeNotApplicable` (degree on non-`degree_bearing` label); **`fulfils`
+  uniqueness invariant** — a second `fulfils` row for an existing `(source, target)` flagged
+  (codex F2); `link` of an existing triple with a different degree errors (codex F1); corpus
+  `validate` clean post-migration (no `IllegalRow`, no dangler regression).
 - **Storage round-trip:** author `fulfils --degree partial` → row → read back → `inspect`
   slice outbound `fulfils (partial)` + backlog inbound "fulfilled by … (partial)";
   **upsert** — re-link same `(label,target)` new degree updates not duplicates;
@@ -264,11 +345,16 @@ byte-identical.
   goldens assert new vocabulary (`slices` inbound "slices" → `fulfils` "fulfilled by";
   "scoped into" → "originated from"); storage-level post-check guards on-disk row order
   (render launders it — SPEC-018 concern).
-- **Surfaces:** `inspect` mixed (fulfils+degree, originates_from, label-only) golden;
-  `relation list`/`census` (`slices` gone, `fulfils`+degree present, `scoped_from`→
-  `originates_from`); web-graph edge label; slice/backlog `show --json` (the `slices`-
-  derived field, if any, → `fulfils`/derived-inbound shape — enumerate affected goldens at
-  plan).
+- **Surfaces:** `inspect` mixed (fulfils+degree as JSON target objects, originates_from,
+  label-only) golden + the structured-target schema (D-inspect-shape); `relation
+  list`/`census` (`slices` gone, `fulfils`+degree present, `scoped_from`→`originates_from`);
+  web-graph edge label; slice/backlog `show --json` field renames (`scoped_from`→
+  `originates_from`; `slices`→`fulfils`-derived) — enumerate goldens at plan.
+- **Consumer re-point (A′ — codex F4/F5):** `priority/graph.rs` suite stays green on
+  fixtures re-authored from `slices=[…]` to a `fulfils` edge (optionality numbers identical
+  — the load-bearing behaviour-preservation proof for the re-point); `backlog` show/JSON +
+  lifecycle-findings goldens move to the `fulfils`/derived shape; `slice`/`backlog`
+  `scoped_from`→`originates_from` field/wording goldens.
 - **Determinism:** BTree ordering only; canonical `(label, role, degree)` order =
   declaration order; no `HashMap` on the relation path (REQ-077).
 
@@ -283,8 +369,11 @@ byte-identical.
    Leaf/engine. `Slices` retained.
 2. **P2** — storage (`RelationEdge`/`RelationRow`/`read_block`/`append`-upsert/`remove`) +
    `validate_link` `DegreeNotApplicable` + `check_target_kind` for widened `originates_from`.
-3. **P3** — surfaces (`CatalogEdge` degree, `inspect`, `inbound_degree_index`,
-   `render_inbound`, `relation list`/`census`, web graph, `show --json`) + `link --degree`.
+3. **P3** — surfaces + **consumer re-point (A′)**: `RelationTargetView` structured targets
+   (`InspectView` outbound+inbound, `render_*`, `inspect --json` schema), `CatalogEdge`
+   degree, `relation list`/`census`, web graph, `link --degree`; **re-point
+   `priority/graph.rs` + `backlog.rs` show/JSON/lifecycle from `Slices`→`fulfils`**;
+   `scoped_from`→`originates_from` output fields in `slice.rs`/`backlog.rs`/`cli.rs`.
 4. **P4** — migration: full in-memory transform (classes 1–5) + disposition artifact +
    single-shot apply + class-aware oracle + **drop `Slices`** + scaffold templates. Hard
    cut, same commit.
@@ -306,6 +395,16 @@ byte-identical.
   source kinds are legal, so a mis-authored reverse edge (origin authoring toward the born
   entity) is not kind-catchable by `validate` → accepted residual; cleaned at reconcile if
   the dogfood census surfaces any. Lifecycle-aware enforcement deferred.
+- **R10 (codex F4)** — the `priority/graph.rs` re-point is the highest-risk consumer change:
+  a wrong move silently shifts work-ordering scores. Mitigation: the optionality numbers must
+  stay identical (fulfils inbound credits exactly as a `slices` reference did), proven by the
+  priority suite green on fixtures re-authored `slices`→`fulfils`. NOT a behaviour change to
+  scoring, only to the edge it reads.
+- **R11 (codex F3)** — `RelationGroup` target-type change (`Vec<String>`→`Vec<RelationTargetView>`)
+  touches every inspect render/JSON path; mitigated by degree `skip_if None` (degreeless
+  groups render/serialise byte-identically) — but the type signature ripples; machinery-vs-
+  content split must distinguish the type-thread (machinery, behaviour-preserving for None)
+  from the fulfils content.
 - **R4** — `originates_from` label(REV)/role(references) name collision → name→meaning
   paths + diagnostics disambiguate by field; accepted (Q2 option 1).
 - **R5** — golden-churn volume → machinery-vs-content split explicit so a reviewer tells
@@ -392,3 +491,35 @@ the audit trail.
   `originates_from`.
 - **SR-12 — the ~19/~63 split rests on a stale IMP-207 count.** *Covered* — re-census live
   at execution; disposition authored then (SL-149 AR-1 discipline).
+
+---
+
+## Adversarial review (external pass — codex/GPT-5.5, integrated)
+
+Hostile external review of the committed draft. All six findings verified against the live
+source before integration; none overturned a locked decision (the *what*), all corrected the
+*mechanism / blast radius*.
+
+- **F1 [BLOCKER] "upsert degree" not grounded in the write seam** — `append_relation_row` is
+  append-or-`Noop` (`relation.rs:911/949`), no mutation path. *Fixed:* D-edge-identity +
+  §A.5 — no upsert; degree set at author time, changed via `unlink`+`relink`; `link` of an
+  existing triple with a different degree **errors** (one new branch, not a redesign).
+- **F2 [BLOCKER] degree-as-non-keyed payload is lossy without an invariant** — `read_block`
+  legalises rows independently; duplicate `fulfils` with differing degree → arbitrary winner.
+  *Fixed:* §A.5 + §C — `validate` **uniqueness invariant** on `(source, fulfils, target)`.
+- **F3 [BLOCKER] `inbound_degree_index` structurally insufficient** — `RelationGroup` flattens
+  to `Vec<String>` (`relation_graph.rs:521`); cannot carry per-target degree on outbound or
+  `--json`. *Fixed:* D-inspect-shape + §A.6 — target type becomes `RelationTargetView { target,
+  degree }`; JSON degree-bearing groups emit objects; degreeless groups byte-identical.
+- **F4 [BLOCKER] live `slices` consumers missed** — `priority/graph.rs:190/201` (optionality
+  scoring), `backlog.rs` show/JSON/lifecycle. *Fixed:* new **§A′.1** — re-point all at
+  `fulfils`; priority numbers held identical (R10); brought into scope + selectors.
+- **F5 [MAJOR] `scoped_from` rename understated** — hardcoded in slice/backlog show+JSON +
+  `cli.rs:552`. *Fixed:* new **§A′.2** — enumerated output surfaces; public JSON field renames.
+- **F6 [MAJOR] migration oracle not independent** — certifies the rewrite against its own
+  handwritten judgement. *Fixed (framing):* §B.2 — reframed as a **mechanical faithfulness
+  oracle** (proves dispositions are *applied*, not *correct*); the classification is human,
+  reviewed via the disposition artifact. No false oracle claim.
+
+Codex verdict was "return to design"; the return is this revision (mechanism + blast-radius
+corrections), not a re-decision of the locked direction.

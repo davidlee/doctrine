@@ -74,6 +74,16 @@ selector = "tests/e2e_relation_*.rs"
 intent = "design-target"
 note = "SL-176 Finish Axis B: fulfils label + degree facet, originates_from role, slices/drift-entity migration (design §A/B/C)"
 
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+note = "SL-176 codex F4/F5: slices consumer (priority scoring) + scoped_from CLI surface"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "SL-176 codex F4/F5: slices consumer (priority scoring) + scoped_from CLI surface"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-004"
