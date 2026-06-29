@@ -103,3 +103,28 @@ agents — left untouched; someone should claim or revert it. Surfaced to the us
 ### Governance/spec (REV)
 - None. The value-absent→`DEFAULT_VALUE` default is internal scoring policy;
   SPEC-001 does not spec a value-absent contract; no ADR/spec/REV change required.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §9.1 (F-2):** corrected the e2e-goldens blast-radius enumeration —
+  removed `tests/e2e_priority_cross_kind.rs` (asserts ordering/relations, not
+  absolute scores; correctly untouched), added `tests/e2e_inspect_golden.rs` with
+  fixtures `tests/fixtures/sl071_inspect_sl00{1,3}_golden.json`, and noted the
+  in-tree `src/priority/channels.rs` test mod re-baseline. §9.1 now matches what
+  was delivered.
+
+### REVs completed
+- None. No governance/spec change required (brief: value-absent default is internal
+  scoring policy; SPEC-001 spec'd no value-absent contract).
+
+### Withdrawn / tolerated
+- None. Both findings `verified`; F-1 needed no write (the 5 undeclared edits are
+  design-sanctioned), F-2 resolved by the direct edit above.
+
+### Optional item — not done
+- Selector-widening (cover the re-baselined test/golden surface so
+  `slice conformance 177` reports those edits conformant) deferred by user
+  decision. Pure bookkeeping, no behaviour at stake.
+
+Reconcile pass complete — handoff to /close.

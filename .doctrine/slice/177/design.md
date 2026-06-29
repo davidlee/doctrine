@@ -221,7 +221,11 @@ line-by-line via grep before touching code):
 - **graph.rs score-consequence tests** — valueless work fixtures asserting
   `score==0` (e.g. ~L987, L1161, L1264-1279); exact set is a plan grep.
 - **e2e goldens** — `tests/e2e_priority_golden.rs` and
-  `tests/e2e_priority_cross_kind.rs` bake valueless SL/ISS/RSK scores; regenerate.
+  `tests/e2e_inspect_golden.rs` (fixtures
+  `tests/fixtures/sl071_inspect_sl00{1,3}_golden.json`) bake valueless SL/ISS/RSK
+  scores; regenerate. `tests/e2e_priority_cross_kind.rs` is **untouched** — it
+  asserts ordering/relations, not absolute scores.
+- **in-tree test mod** — `src/priority/channels.rs` test fixtures also re-baseline.
 
 `base_score_bare_item_empty_corpus_fallback_cost_one` (ISS, `value=3.0`) is
 **unaffected** (authored value) — the standing no-clamp guard.
