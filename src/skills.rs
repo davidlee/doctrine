@@ -490,11 +490,7 @@ fn delegate_argv(
     subset: bool,
     repo: &str,
 ) -> Vec<String> {
-    let mut argv = vec![
-        "skills".to_string(),
-        "add".to_string(),
-        repo.to_string(),
-    ];
+    let mut argv = vec!["skills".to_string(), "add".to_string(), repo.to_string()];
     for agent in agents {
         argv.push("--agent".to_string());
         argv.push(agent.to_string());
@@ -840,14 +836,8 @@ pub(crate) fn install_for_other(
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
     let subset = !args.selected.is_empty();
-    let agent_strs: Vec<&str> = args.agent_names.iter().map(|s| s.as_str()).collect();
-    let argv = delegate_argv(
-        &agent_strs,
-        args.selected,
-        args.global,
-        subset,
-        args.repo,
-    );
+    let agent_strs: Vec<&str> = args.agent_names.iter().map(String::as_str).collect();
+    let argv = delegate_argv(&agent_strs, args.selected, args.global, subset, args.repo);
     let label = args.agent_names.join(", ");
     writeln!(
         out,
@@ -1668,14 +1658,7 @@ mod tests {
         assert_eq!(
             argv,
             vec![
-                "skills",
-                "add",
-                TEST_REPO,
-                "--agent",
-                "pi",
-                "--agent",
-                "codex",
-                "--yes",
+                "skills", "add", TEST_REPO, "--agent", "pi", "--agent", "codex", "--yes",
             ]
         );
     }
