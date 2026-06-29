@@ -194,3 +194,25 @@ direction + the one remaining open scope question are dumped in
 plan. Resolution direction is settled (credit the item from the slice's facets, degree-
 weighted; delete R10's preservation claim); open question is whether degree-weighting is
 in-scope here or a follow-up.
+
+## Audit (2026-06-29) — RV-192, reconciliation facet
+
+Self-audit of the dispatched slice via candidate `cand-176-review-001`
+(`candidate/176/review-001` @ `910959d8`, admitted against RV-192). Evidence from
+the live coord tree `.dispatch/SL-176` using its own built binary (0.9.0).
+
+- **Evidence:** verify-vt 19/19 PASS exit 0; `check gate` exit 0, suite green,
+  zero warnings; P04 VT-1 faithfulness oracle (`8a9201cd`) green; census end-state
+  `slices`=0, `fulfils`=41, `references(originates_from)`=62 (all resolved, no
+  dangling), `scoped_from`=0.
+- **5 findings, all terminal, none blocking.** Conformance algebra (124 undeclared
+  / 4 undelivered / 10 conformant) all dispositioned `aligned`: corpus relabel
+  deliverable (F-1), `append_edge` degree ripple in supersede.rs (F-2), coarse
+  affected-surface over-declaration (F-3), 2 bare-entity drift rows left per OQ-2
+  VH-1-approved carve-out (F-4). Governance deferral (F-5) → reconcile.
+- **Gotcha:** stale PATH binary (0.8.1) drops `fulfils`/`originates_from` from
+  census → false-negative; use the coord tree's built binary. Logged to RFC-011
+  case-notes; covered by `mem.pattern.jail.stale-binary-strips-registry-field`.
+- **Handed to /reconcile:** ratifying ADR + SPEC-018 + relation-vocabulary.md +
+  close RFC-003 (all via REV); discharge IMP-207/IMP-149. See review-192.md
+  Reconciliation Brief.

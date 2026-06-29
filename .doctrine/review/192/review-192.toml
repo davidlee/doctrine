@@ -1,0 +1,61 @@
+id    = 192
+slug  = "reconciliation-review-of-sl-176"
+title = "reconciliation review of SL-176"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-176"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "nit"
+title = "124 corpus .toml rewrites land undeclared — no design-target selector covers .doctrine/** migration footprint"
+detail = 'Expected: the corpus migration footprint (.doctrine/{backlog,slice}/**/*.toml — the relabel deliverable) declared by a design-target selector. Observed: `slice conformance 176` reports 124 undeclared paths; the design-target selectors enumerate only code/test/template paths (src/relation*.rs, src/priority/graph.rs, install/templates/{slice,backlog}.toml, tests/e2e_relation_*.rs). The corpus footprint was anticipated in design "Affected surface" prose ("the 19 IMP-207 *.toml + any live slices/drift rows") but never encoded as a selector. Evidence the edits landed faithfully: P04 VT-1 faithfulness oracle (8a9201cd) green — every relation-layer TO edge in migration-dispositions.toml exists in the live corpus at recorded (label, role, degree); census (coord 0.9.0) confirms label="slices" 0, fulfils 41, references(originates_from) 62, all resolved, no dangling.'
+disposition = "aligned"
+response = """Aligned. A corpus-wide relabel by design touches the whole corpus; the footprint was anticipated in design "Affected surface" prose and is the slice's deliverable. Faithfulness is proven independently of the selector list: P04 VT-1 oracle (8a9201cd) asserts every relation-layer TO edge in the VH-1-approved migration-dispositions.toml exists at recorded shape, and census confirms slices=0 / fulfils=41 / originates_from=62, all resolved, zero dangling. The undeclared cell is a selector-coverage artifact, not scope creep. Process nit for future migration slices: a `.doctrine/**/*.toml` design-target selector would make conformance clean — not worth a retroactive selector edit on a completed slice. No reconcile action."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "src/commands/supersede.rs edited but undeclared by any selector"
+detail = "Expected: every code edit covered by a design-target selector. Observed: supersede.rs modified (undeclared). Diff (vs merge-base d0576007): the sole change is the append_edge call site gaining the new degree argument — `append_edge(&new_path, RelationLabel::Supersedes, None, &old_ref)` → `append_edge(&new_path, RelationLabel::Supersedes, None, None, &old_ref)`. This is the mechanical call-site ripple of the append_edge signature gaining the `degree: Option<Degree>` column (objective 2, fulfils degree facet). Behaviour-preserving: passes None degree (≡ full, the SR-6 upsert no-op for degreeless edges)."
+disposition = "aligned"
+response = "Aligned. Necessary mechanical ripple: append_edge gained the `degree: Option<Degree>` parameter (objective 2), so every call site must thread it. supersede.rs passes None (≡ full degree), behaviour-preserving. Covered by the behaviour-preservation gate — entity-engine suites green unchanged (check gate exit 0, full suite green from coord tree). Under-declared selector, not a defect. No reconcile action."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "4 design-target selectors undelivered (relation_query.rs, catalog/{hydrate,graph}.rs, install/templates/slice.toml)"
+detail = """Expected: declared design-targets deliver edits. Observed: `slice conformance 176` reports 4 undelivered selectors. Investigated on dispatch/176: (a) src/relation_query.rs, src/catalog/hydrate.rs, src/catalog/graph.rs carry only FREE-TEXT `drift` in #[cfg(test)] fixtures/assertions — free-text/non-entity drift is an explicit Non-Goal (deferred to IMP-012/IDE-015), so no edit is the correct outcome; they never referenced the `Slices` label either. (b) install/templates/slice.toml has no slices/drift relation row (SL-048 "the cut" removed structural rows from the slice template — only a descriptive comment remains). Root cause: the design's "Affected surface" was explicitly labelled "coarse — /design pins the exact touch-set"; these were over-declared and correctly not touched."""
+disposition = "aligned"
+response = """Aligned. Benign over-declaration from the design's explicitly "coarse" affected-surface. relation_query.rs / catalog/{hydrate,graph}.rs carry only free-text drift in test fixtures (free-text drift is a Non-Goal, deferred IMP-012/IDE-015) and never consumed the Slices label; slice.toml template has no slices/drift relation row (SL-048 cut). No edit was the correct outcome for all four. No reconcile action."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = '2 bare-entity drift edges remain (ISS-041→RFC-003, ISS-048→IMP-148) vs design "fold drift entity rows"'
+detail = """Expected: design scope §4 — drift entity rows migrate ("carved out from" → originates_from; "feeds into" → needs/after). Observed: census (coord 0.9.0) shows drift=5 (3 free-text + 2 resolving to entities). The 2 entity-target rows are ISS-041 drift RFC-003 and ISS-048 drift IMP-148. Both are recorded in migration-dispositions.toml as Class 6 ("untouched, free-text/bare-entity drift rows — OQ-2 leave"), VH-1 APPROVED 2026-06-29 (David). Rationale: the two defined migration outlets (provenance, dependency) fit neither — these are "concerns"-shaped references with no outlet in this slice's grammar; OQ-2 "leave" is the recorded decision. The migration scope's two transformation rules describe the entity-drift rows that fit those semantics, not a promise to migrate every entity-drift row."""
+disposition = "aligned"
+response = """Aligned. The 2 remaining bare-entity drift rows (ISS-041→RFC-003, ISS-048→IMP-148) fit neither migration outlet (provenance / dependency) — they are "concerns"-shaped references with no target role in this slice's grammar. Consciously left under OQ-2 ("leave"), recorded as Class 6 in migration-dispositions.toml, VH-1 APPROVED 2026-06-29. Canon-truth for this decision lives in the disposition record (a slice artifact); the migration scope's two rules describe the entity-drift rows that fit those semantics, not a blanket fold-all. No divergence. Optional future polish (not required): a one-line design.md xref to the OQ-2 bare-entity carve-out for reader convenience."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Governance ratification (ADR + SPEC-018 + RFC-003 close) deferred to reconciliation — not yet authored"
+detail = 'Expected (by design, deliberately): per slice Non-Goal "Governance ratification — the ratifying ADR is authored at reconciliation, after design + adversarial review; not in design/plan" and "Reconciliation authors the ratifying ADR; IMP-207/IMP-149 closed". RFC-003 asserts no canon; design+migration are now locked and oracle-verified. Observed: no ratifying ADR, no SPEC-018, RFC-003 still open. This is correct sequencing, not drift — the governance write surface is /reconcile (via REV), never audit. Recorded here as the audit→reconcile handoff anchor; the actionable map is in the Reconciliation Brief (governance/REV section).'
+disposition = "reconcile"
+response = "Confirmed and delegated to /reconcile (the sole governance write surface; audit never authors governance). Not drift — correct deferral per design Non-Goal. The actionable map is in the Reconciliation Brief → Governance/spec (REV) section: (1) ratifying ADR (amend ADR-016/ADR-010 or sibling) for the originates_from role + fulfils label + degree facet + burndown; (2) SPEC-018 (relation vocabulary / spec coherence); (3) ship relation-vocabulary.md; (4) close RFC-003 via REV. Finding verified terminal here so it does not gate close; remediation tracked in the brief, executed by /reconcile."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
