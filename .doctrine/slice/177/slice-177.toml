@@ -16,7 +16,19 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/value.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/kinds.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
 
 [[relation]]
 label = "references"
