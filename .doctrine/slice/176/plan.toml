@@ -1,0 +1,183 @@
+# Implementation plan for SL-176 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-176"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Design reference: .doctrine/slice/176/design.md (§D phasing). Governance
+# ratification (ratifying ADR, SPEC-018, relation-vocabulary.md, RFC-003 close)
+# is the design's "P5" — DEFERRED TO RECONCILIATION (locked, RFC-003 + scope), so
+# it is NOT a plan phase here. The four phases below are the implementation;
+# reconcile authors the canon after the mechanism is proven.
+
+# ---------------------------------------------------------------------------
+# PHASE-01 — Vocabulary + engine: Degree enum, Role rename, Fulfils, rules
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Degree + Role rename + Fulfils rules"
+objective = """
+Leaf/engine only (no storage/IO, no surfaces). Add the `Degree` enum {Full, Partial}
+(Copy+Ord, name()/from_name round-trip; design §A.1). Rename `Role::ScopedFrom` →
+`OriginatesFrom` in place, wire `scoped_from`→`originates_from`, inbound "scoped into" →
+"originated from", and WIDEN its rule: source `[SL]`→`{SL + backlog kinds}`, target
+`Kinds(BACKLOG)`→`Kinds(BACKLOG+[SL])` (§A.2). Add `RelationLabel::Fulfils` (SL→BACKLOG,
+role None, inbound "fulfilled by", degree_bearing) and the `degree_bearing: bool` column on
+`RelationRule` with a table invariant asserting it true on exactly the `fulfils` row (§A.3/§A.4).
+`Slices` RETAINED this phase (retain-then-cut, dropped in PHASE-04). `lookup` unchanged
+(degree keys nothing).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (two external passes G1–G4 + F1–F6 integrated); slice in plan status" },
+  { id = "EN-2", text = "Exact widened originates_from source/target sets confirmed against live `relation list` / census (R2 re-census discipline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Degree` enum {Full, Partial}: Copy+Ord, name()/from_name round-trip, canonical order = declaration order; None ≡ Full documented (no persisted 'unspecified')" },
+  { id = "EX-2", text = "`Role::ScopedFrom`→`OriginatesFrom` renamed in place; wire `originates_from`; inbound 'originated from'; rule source/target widened per §A.2" },
+  { id = "EX-3", text = "`RelationLabel::Fulfils` rule added (SL→BACKLOG, role None, inbound 'fulfilled by', degree_bearing:true); `Slices` row retained unchanged" },
+  { id = "EX-4", text = "`RelationRule.degree_bearing: bool` column added; table invariant: degree_bearing true on exactly the fulfils row; lookup unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "Enum-order lockstep green for new RelationLabel set (Fulfils in, Slices still in) + Role rename + new Degree order pinned", test_file = "src/relation.rs", keywords = ["Fulfils", "OriginatesFrom", "Degree"] },
+  { id = "VT-2", expects = "sources_match_shipped_accessors green for fulfils source [SL] + widened originates_from source set", test_file = "src/relation.rs", keywords = ["sources_match_shipped_accessors", "Fulfils"] },
+  { id = "VT-3", expects = "inbound_name per (label,role): fulfils→'fulfilled by', originates_from→'originated from'", test_file = "src/relation.rs", keywords = ["fulfilled by", "originated from"] },
+  { id = "VT-4", expects = "degree_bearing true on exactly the fulfils row; Degree name/from_name round-trip; canonical degree order", test_file = "src/relation.rs", keywords = ["degree_bearing", "from_name"] },
+  { id = "VT-5", expects = "G3 rule-contract churn applied (deliberate content): backlog may author originates_from; widened target accepts SL, still refuses SPEC; accessor census updated", test_file = "src/relation.rs", keywords = ["originates_from", "OriginatesFrom"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-02 — Storage + IO: degree threading, no-upsert, DuplicateEdge, validation
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Storage + degree IO + uniqueness"
+objective = """
+Thread `degree: Option<Degree>` through `RelationEdge`/`RelationRow`; the `[[relation]]` row
+gains an optional `degree` key (serde skip when None ≡ full). `read_block` parses it AND
+enforces the per-entity `DuplicateEdge` uniqueness check (G2 / D-uniqueness-seam: a repeated
+`(label, role, target)` in one entity's toml is flagged, degree-agnostic — local, no corpus
+scan, no CatalogEdge degree thread). NO UPSERT (codex F1): `append_relation_row` noop-guard
+matches `(label, role, target)` — identical→Noop; same triple, different degree → hard ERROR
+(new AppendOutcome/error branch, "already fulfils X with degree=…; unlink to change").
+`unlink`/`remove_edge` match `(label, role, target)`, degree ignored. `validate_link` gains
+`DegreeNotApplicable` (degree on a non-degree_bearing label); `check_target_kind` honours the
+widened originates_from TargetSpec. No surfaces yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: Degree/Fulfils/widened originates_from rules + degree_bearing column green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`RelationEdge`/`RelationRow` carry `degree: Option<Degree>`; row serialises with no `degree` key when None (≡ full); read_block round-trips degree" },
+  { id = "EX-2", text = "`read_block` emits `DuplicateEdge` on a repeated (label,role,target) within one entity (degree-agnostic); local per-entity, no corpus scan" },
+  { id = "EX-3", text = "append no-upsert: identical triple+degree→Noop; same triple different degree→hard error (new branch); unlink/remove match (label,role,target) ignoring degree" },
+  { id = "EX-4", text = "`validate_link` `DegreeNotApplicable` for degree on non-degree_bearing label; no `MissingDegree`; check_target_kind refuses bad widened-originates_from targets" },
+  { id = "EX-5", text = "Behaviour-preservation: roleless/degreeless append path is a strict no-op superset — existing append_edge/remove_edge suites green UNCHANGED (R3/SR-6)" },
+]
+verification = [
+  { id = "VT-1", expects = "Storage round-trip: author fulfils --degree partial → row → read back → degree recovered; degree-absent edge serialises with no degree key", test_file = "src/relation.rs", keywords = ["degree", "partial"] },
+  { id = "VT-2", expects = "DuplicateEdge: two fulfils rows same (label,role,target) different degree in one toml flagged at read_block, degree-agnostic", test_file = "src/relation.rs", keywords = ["DuplicateEdge", "read_block"] },
+  { id = "VT-3", expects = "No-upsert: append identical→Noop; same triple different degree→error; unlink matches ignoring degree", test_file = "src/relation.rs", keywords = ["AppendOutcome", "degree"] },
+  { id = "VT-4", expects = "validate_link DegreeNotApplicable on a non-degree_bearing label + degree; widened originates_from target gate goldens", test_file = "src/relation.rs", keywords = ["DegreeNotApplicable"] },
+  { id = "VT-5", expects = "Existing append_edge/remove_edge suites green unchanged (behaviour-preservation gate, roleless/degreeless no-op)", test_file = "src/relation.rs", keywords = ["append_edge", "remove_edge"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-03 — Surfaces + consumer re-point (the A′ blast radius + G1(a))
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Surfaces + consumer re-point"
+objective = """
+Surface degree + complete the blast-radius re-point (§A.6, §A′, G1(a)). Change the inspect
+target representation `RelationGroup = (RelationKey, Vec<String>)` → `Vec<RelationTargetView
+{target, degree}>` (D-inspect-shape), threading degree through `inspect_from`,
+`render_outbound`/`render_inbound` (suffix '(partial)' per target; None/Full byte-identical),
+and the inbound degree recovery (parallel to inbound_role_index). `inspect --json`:
+degree-bearing groups emit objects `{ref, degree}` (skip_if None), other groups keep bare
+strings (heterogeneous-by-label). Add `--degree` to `doctrine link`. Re-point
+`priority/graph.rs:190/201` (REF_LABELS + CONSEQUENCE_LABELS) `Slices`→`Fulfils`, holding the
+optionality numbers identical (R10). G1(a): `backlog show`/`show --json`/lifecycle
+(`backlog.rs:1420/1574/2201`) gain the derived `fulfils`-inbound read-path (inspect-style
+in_edges + inbound degree, threaded with root) — `slices` outbound read REMOVED, not swapped.
+Rename `scoped_from`→`originates_from` output fields/text in `slice.rs:1677/1758`,
+`backlog.rs:1428/1447/1581`, `cli.rs:552`, and the role-error string `commands/relation.rs:42-47`
+(G4). Also `lazyspec.rs:771` map_edge + web-graph edge label, `relation list`/`census`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: degree storage + DuplicateEdge + validate_link green" },
+  { id = "EN-2", text = "Full Slices/scoped_from consumer census re-confirmed by grep (incl. lazyspec map_edge, commands/relation.rs role-error, backlog.rs:2201) — no un-enumerated site" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`RelationTargetView{target, degree}`; RelationGroup target type changed; inspect_from/render_*/inbound-degree threaded; degreeless groups render+serialise byte-identical" },
+  { id = "EX-2", text = "`inspect --json`: degree-bearing groups emit {ref, degree} objects (skip_if None); other groups bare strings; schema goldens updated" },
+  { id = "EX-3", text = "`doctrine link <SL> fulfils <BACKLOG> --degree partial` works; --degree on non-fulfils label → DegreeNotApplicable; absent ≡ full" },
+  { id = "EX-4", text = "priority/graph.rs REF_LABELS + CONSEQUENCE_LABELS re-pointed Slices→Fulfils; optionality scoring numbers identical on re-authored fixtures (R10)" },
+  { id = "EX-5", text = "G1(a): backlog show/json/lifecycle render `fulfilled by: <SL> (degree)` from DERIVED inbound (item toml carries no fulfils row); ADR-004-consistent corpus-aware read-path" },
+  { id = "EX-6", text = "scoped_from→originates_from renamed at ALL output surfaces: slice.rs, backlog.rs, cli.rs:552 (help), commands/relation.rs:42-47 (role-error), lazyspec map_edge, relation list/census, web graph" },
+]
+verification = [
+  { id = "VT-1", expects = "Inspect mixed golden: fulfils+degree as JSON target objects, originates_from, label-only bare strings; structured-target schema (D-inspect-shape)", test_file = "src/relation_graph.rs", keywords = ["RelationTargetView", "degree"] },
+  { id = "VT-2", expects = "Outbound/inbound render: fulfils (partial) suffix per target; degreeless groups byte-identical (no golden churn)", test_file = "src/relation_graph.rs", keywords = ["partial", "fulfilled by"] },
+  { id = "VT-3", expects = "priority/graph.rs suite green on fixtures re-authored slices=[…]→fulfils edge — optionality numbers identical (R10 behaviour-preservation)", test_file = "src/priority/graph.rs", keywords = ["Fulfils", "optionality"] },
+  { id = "VT-4", expects = "G1(a) backlog derived-inbound: slice authors fulfils IMP --degree partial → backlog show IMP renders 'fulfilled by: SL (partial)' from inbound; item toml has no fulfils row", test_file = "src/backlog.rs", keywords = ["fulfilled by", "Fulfils"] },
+  { id = "VT-5", expects = "scoped_from→originates_from field/wording renames across slice/backlog show+json + cli help + role-error string", test_file = "src/backlog.rs", keywords = ["originates_from"] },
+  { id = "VT-6", expects = "link --degree CLI: partial author + absent≡full + DegreeNotApplicable on non-fulfils", test_file = "src/commands/relation.rs", keywords = ["degree", "fulfils"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-04 — Migration: editorial transform + mechanical oracle + drop Slices
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Migration + drop Slices"
+objective = """
+Re-census live (SL-149 AR-1: P1/IMP-207 lists are reference, not input). Hand-author the
+disposition artifact `migration-dispositions.md` classifying each `slices` edge prov-vs-fulfil
+(§B.1 SR-3 criterion: creation-order + intent) with one-line rationale, and EVERY class-3
+fulfil edge affirmatively examined for partial (SR-4, rationale per partial). Full in-memory
+transform of all affected [[relation]] rows (class 1 scoped_from→originates_from wire rename;
+class 2 slices-provenance→originates_from relabel; class 3 slices-fulfillment→fulfils two-file
+flip backlog→slice toml + degree; class 4/5 drift entity rows → originates_from / needs-after;
+class 6 free-text drift untouched) → SINGLE ATOMIC apply → validate after (§B.3). Parser change
+(drop `Slices` variant) + rewritten corpus + scaffold templates (install/templates/{slice,
+backlog}.toml) land in the SAME commit (hard cut, no code/corpus disagreement). Mechanical
+faithfulness oracle (§B.2, codex F6 honest framing): proves dispositions are APPLIED, not that
+they are correct — the classification is human, reviewed via the artifact.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: surfaces + consumers re-pointed; fulfils/originates_from fully live; Slices still retained" },
+  { id = "EN-2", text = "Live census re-snapshot taken at execution start (concurrent main authoring may have minted new slices/drift rows since 2026-06-29)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`migration-dispositions.md` committed: every slices/drift-entity edge classified prov-vs-fulfil + rationale; every class-3 edge degree-examined (partial rationale where set)" },
+  { id = "EX-2", text = "Full corpus transform applied atomically (classes 1–5); class 3 flips backlog→slice toml; `validate` clean after (no IllegalRow, no DuplicateEdge, no dangler regression)" },
+  { id = "EX-3", text = "`RelationLabel::Slices` variant dropped; scaffold templates stripped/rewritten; parser+corpus+templates in ONE commit (hard cut)" },
+  { id = "EX-4", text = "Dogfood: SL-176's own edges migrated self-consistently; IMP-210 concerns edge dispositioned (provenance-shaped retcon noted); 5 free-text drift rows untouched" },
+]
+verification = [
+  { id = "VT-1", expects = "Mechanical oracle: each row lands at exactly the (label, role|degree) its disposition records (class 1 planned map; classes 2/3/4/5 assert against artifact)", test_file = "src/relation.rs", keywords = ["migration", "disposition"] },
+  { id = "VT-2", expects = "Class-aware multiset: (source,target) preserved for classes 1/2/4, flipped src↔target for class 3, label-moved class 5, unchanged class 6 — secondary sanity", test_file = "src/relation.rs", keywords = ["multiset", "migration"] },
+  { id = "VT-3", expects = "Post-migration corpus `validate` clean incl. new fulfils DuplicateEdge invariant; after-migration render goldens assert new vocabulary (slices→fulfilled by, scoped into→originated from)", test_file = "src/relation.rs", keywords = ["validate", "fulfilled by"] },
+  { id = "VH-1", expects = "Human review of migration-dispositions.md: the prov-vs-fulfil + degree classification is CORRECT (the editorial judgement the mechanical oracle cannot self-certify, codex F6)" },
+  { id = "VA-1", expects = "`doctrine relation census` shows slices=0, fulfils + originates_from present with expected counts; `doctrine validate` clean corpus-wide" },
+]
+specs        = []
+requirements = []
