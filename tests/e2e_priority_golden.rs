@@ -151,10 +151,10 @@ fn survey_human_importance_order_blocked_last_terminal_promoted_excluded() {
     assert_eq!(
         stdout(&out),
         "id      │ kind │ status │         │ score │ blocker │ title\n\
-         ISS-002 │ ISS  │ open   │         │ 0.0   │         │ Free work\n\
-         RSK-001 │ RSK  │ open   │         │ 0.0   │         │ The prereq\n\
+         RSK-001 │ RSK  │ open   │         │ 1.5   │         │ The prereq\n\
+         ISS-002 │ ISS  │ open   │         │ 1.0   │         │ Free work\n\
          RV-001  │ RV   │ active │         │ 0.0   │         │ The review\n\
-         ISS-001 │ ISS  │ open   │ BLOCKED │ 0.0   │ RSK-001 │ Blocked work\n"
+         ISS-001 │ ISS  │ open   │ BLOCKED │ 1.0   │ RSK-001 │ Blocked work\n"
     );
 }
 
@@ -194,8 +194,8 @@ fn next_human_actionable_only_blocked_absent() {
     assert_eq!(
         stdout(&out),
         "id      │ status │ score │ estimate │ value │ title\n\
-         ISS-002 │ open   │ 0.0   │ ·        │ ·     │ Free work\n\
-         RSK-001 │ open   │ 0.0   │ ·        │ ·     │ The prereq\n\
+         RSK-001 │ open   │ 1.5   │ ·        │ ·     │ The prereq\n\
+         ISS-002 │ open   │ 1.0   │ ·        │ ·     │ Free work\n\
          RV-001  │ active │ 0.0   │ ·        │ ·     │ The review\n"
     );
     // The blocked item is absent from the actionable worklist.
@@ -220,8 +220,8 @@ fn next_limit_truncates_with_footer() {
     let out = run(dir.path(), &["next", "--limit", "2"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let body = stdout(&out);
-    assert!(body.contains("ISS-002"), "page row 1: {body}");
-    assert!(body.contains("RSK-001"), "page row 2: {body}");
+    assert!(body.contains("RSK-001"), "page row 1: {body}");
+    assert!(body.contains("ISS-002"), "page row 2: {body}");
     assert!(!body.contains("RV-001"), "third row clipped: {body}");
     assert!(body.contains("2 of 3"), "footer count: {body}");
     assert!(body.contains("--page 2"), "footer next-page: {body}");
@@ -251,7 +251,7 @@ fn next_page_resolves_to_offset() {
         "--page 2 == --offset 1 at limit 1"
     );
     assert!(
-        stdout(&via_page).contains("RSK-001"),
+        stdout(&via_page).contains("ISS-002"),
         "second actionable row on page 2: {}",
         stdout(&via_page)
     );
@@ -338,7 +338,7 @@ fn explain_human_byte_exact() {
         "ISS-001 — explain\n\
          \x20\x20eligibility: open → Workable\n\
          \x20\x20blocked by: RSK-001\n\
-         \x20\x20score: 0.0 (base 0.0 [value 0.0, risk 0.0], leverage 0.0, optionality 0.0)\n"
+         \x20\x20score: 1.0 (base 1.0 [value 1.0, risk 0.0], leverage 0.0, optionality 0.0)\n"
     );
 }
 
@@ -361,12 +361,12 @@ fn survey_json_every_surface_and_policy_version() {
     let rows = v["rows"].as_array().expect("rows array");
     // ISS-002 leads; every surface present on it.
     let lead = &rows[0];
-    assert_eq!(lead["id"], "ISS-002");
-    assert_eq!(lead["title"], "Free work");
-    assert_eq!(lead["kind"], "ISS");
+    assert_eq!(lead["id"], "RSK-001");
+    assert_eq!(lead["title"], "The prereq");
+    assert_eq!(lead["kind"], "RSK");
     assert_eq!(lead["status"], "open");
     assert_eq!(lead["actionability"], "actionable");
-    assert_eq!(lead["score"], 0.0);
+    assert_eq!(lead["score"], 1.5);
     assert!(lead["blockers"].is_array(), "blockers surface present");
     assert!(lead["reasons"].is_array(), "reasons surface present");
     // The blocked row carries the structured blocked_by reason + its direct blocker.
@@ -376,6 +376,9 @@ fn survey_json_every_surface_and_policy_version() {
         .expect("ISS-001 row");
     assert_eq!(blocked["actionability"], "blocked");
     assert_eq!(blocked["blockers"][0], "RSK-001");
+    // SL-177 PHASE-02: burndown raw_value retrofit — valueless value-bearing items
+    // now denominate (default 1.0) and deliver → score 1.0 (no fulfils r=0, burn=value_dim).
+    assert_eq!(blocked["score"], 1.0);
     let has_blocked_by = blocked["reasons"]
         .as_array()
         .unwrap()
@@ -406,12 +409,14 @@ fn explain_json_structured_reasons_and_policy_version() {
     );
     // SL-133 VA-1: the score breakdown exposes every dimension.
     assert_eq!(v["score"]["kind"], "score");
-    assert_eq!(v["score"]["base"], 0.0);
-    assert_eq!(v["score"]["value_dim"], 0.0);
+    assert_eq!(v["score"]["base"], 1.0);
+    assert_eq!(v["score"]["value_dim"], 1.0);
     assert_eq!(v["score"]["risk_dim"], 0.0);
     assert_eq!(v["score"]["leverage"], 0.0);
     assert_eq!(v["score"]["optionality"], 0.0);
-    assert_eq!(v["score"]["total"], 0.0);
+    // SL-177 PHASE-02: burndown raw_value retrofit — denominate default 1.0 →
+    // valueless items now score 1.0 (no fulfils r=0, burn = value_dim).
+    assert_eq!(v["score"]["total"], 1.0);
 }
 
 /// next --json: actionable rows only, with the policy stamp + structured reasons.
@@ -433,7 +438,7 @@ fn next_json_actionable_only_policy_version() {
         .iter()
         .map(|r| r["id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids, vec!["ISS-002", "RSK-001", "RV-001"]);
+    assert_eq!(ids, vec!["RSK-001", "ISS-002", "RV-001"]);
     assert!(
         !ids.contains(&"ISS-001"),
         "blocked item absent from next --json"
@@ -569,7 +574,7 @@ fn inspect_appends_actionability_block_human() {
          actionability:\n\
          \x20\x20eligible: true\n\
          \x20\x20actionable: false\n\
-         \x20\x20score: 0.0\n\
+         \x20\x20score: 1.0\n\
          \x20\x20blocked by: RSK-001\n"
     );
 }
@@ -594,5 +599,7 @@ fn inspect_json_additive_actionability_key() {
     assert_eq!(v["actionability"]["eligible"], true);
     assert_eq!(v["actionability"]["actionable"], false);
     assert_eq!(v["actionability"]["blockers"][0], "RSK-001");
-    assert_eq!(v["actionability"]["score"], 0.0);
+    // SL-177 PHASE-02: burndown raw_value retrofit — valueless value-bearing items
+    // denominate (default 1.0) → score 1.0 (no fulfils r=0, burn = value_dim).
+    assert_eq!(v["actionability"]["score"], 1.0);
 }

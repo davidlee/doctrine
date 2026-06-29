@@ -209,17 +209,17 @@ pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
 pub(crate) fn survey_view_for_map(g: &PriorityGraph, all: bool) -> ActionabilityView {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-    /// Work-entity kinds — the only entities with dep/seq edges that constitute
-    /// the actionability graph (SL-089 D2). SPEC, REQ, ADR, etc. are governance
-    /// entities and are excluded from the actionability view.
-    const WORK_PREFIXES: &[&str] = &["SL", "ISS", "IMP", "CHR", "RSK", "IDE"];
+    // Value-bearing kinds — the only entities with dep/seq edges that constitute
+    // the actionability graph (SL-089 D2). SPEC, REQ, ADR, etc. are governance
+    // entities and are excluded from the actionability view.
+    // Uses `crate::kinds::is_value_bearing` — the single source for this set.
 
     // 1. Build canonical rows (eligible set + ordering).
     let rows: Vec<_> = survey_for_map(g, all)
         .into_iter()
         .filter(|r| {
             // Only work entities appear in the actionability graph (SL-089 D2).
-            WORK_PREFIXES.contains(&r.kind.as_str())
+            crate::kinds::is_value_bearing(r.kind.as_str())
         })
         .collect();
 
@@ -811,6 +811,37 @@ mod tests {
         );
     }
 
+    // ── SL-177: actionability view set-preserved after WORK_PREFIXES → is_value_bearing ──
+
+    /// The actionability view node set is unchanged after promoting the local
+    /// `WORK_PREFIXES` to `kinds::is_value_bearing` — the same six kind prefixes
+    /// are admitted, same exclusion of governance/knowledge entities.
+    #[test]
+    fn actionability_view_set_preserved_after_value_bearing_promotion() {
+        let dir = tmp();
+        let root = dir.path();
+        // The old WORK_PREFIXES = ["SL", "ISS", "IMP", "CHR", "RSK", "IDE"] —
+        // exactly VALUE_BEARING. Seed one of each non-work kind to prove they're excluded.
+        seed_issue(root, 1, "open", "", &[]);
+        // Also seed a requirement (governance — excluded from actionability view).
+        write(
+            root,
+            ".doctrine/requirement/005/requirement-005.toml",
+            "id = 5\nslug = \"r\"\ntitle = \"R\"\nstatus = \"active\"\n",
+        );
+        write(root, ".doctrine/requirement/005/requirement-005.md", "r\n");
+        let g = build(root).unwrap();
+        let view = survey_view_for_map(&g, false);
+        // Only the work/value-bearing entity appears; the requirement does NOT.
+        assert_eq!(view.nodes.len(), 1, "only the ISS appears, not REQ-005");
+        assert_eq!(view.nodes[0].id, "ISS-001");
+        // The set of kind prefixes in the view matches the old WORK_PREFIXES set.
+        let kind_set: std::collections::BTreeSet<&str> =
+            view.nodes.iter().map(|n| n.kind.as_str()).collect();
+        let expected: std::collections::BTreeSet<&str> = ["ISS"].iter().copied().collect();
+        assert_eq!(kind_set, expected, "only work/value-bearing kinds appear");
+    }
+
     // ── SL-133 dedicated helpers + ordering proofs (VT-5 / VT-7 / VA-1) ───
 
     /// Seed an open backlog issue with an explicit `[value]` over a fixed estimate
@@ -888,18 +919,21 @@ mod tests {
             prefix: "RSK",
             id: 2,
         };
-        // RSK-001's leverage = 0.5 · (base(ISS-010) + 0)
-        //   base(ISS-010) = 100.0 / 6.5 ≈ 15.384615385
-        //   leverage = 0.5 · 15.3846... ≈ 7.692307692
+        // RSK-001's leverage = 0.5 · base(ISS-010). base(ISS-010) = 100.0/6.5.
+        //   leverage = 50.0/6.5 ≈ 7.692307692.
+        //   SL-177 PHASE-02: RSK-001 value_dim = default 1.0 / absent(11.0) ≈ 0.090909.
+        //   score = lev + value_dim = 50.0/6.5 + 1.0/11.0 ≈ 7.783216783.
         assert!(
-            (channels::score(&g, rsk1) - 100.0 / 13.0).abs() < 1e-9,
+            (channels::score(&g, rsk1) - (50.0 / 6.5 + 1.0 / 11.0)).abs() < 1e-9,
             "RSK-001 leverages the one high-value dependent: got {}",
             channels::score(&g, rsk1)
         );
         // RSK-002 gates five zero-value ideas → leverage 0.
+        // SL-177 PHASE-02: value_dim = default 1.0 / absent(11.0) ≈ 0.090909.
         assert!(
-            channels::score(&g, rsk2).abs() < 1e-9,
-            "RSK-002 gates only zero-value ideas → score 0"
+            (channels::score(&g, rsk2) - 1.0 / 11.0).abs() < 1e-9,
+            "RSK-002 gates only zero-value ideas → score = value_dim only: got {}",
+            channels::score(&g, rsk2)
         );
         // survey orders RSK-001 (score 10) BEFORE RSK-002 (score 0) — the old
         // inbound-count (5 vs 1) would have ranked RSK-002 first.
