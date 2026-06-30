@@ -1,0 +1,57 @@
+id    = 199
+slug  = "inquisition-sl-181-design-the-positive-coordination-tree-signal"
+title = "Inquisition: SL-181 design — the positive coordination-tree signal"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-181"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = 'The "positive coordination signal" is NOT unique to the coord tree — every claude dispatch worker fork rides `dispatch/<name>` and matches it'
+detail = """
+EXPECTED (design §2.3, §0, §3): `is_coordination_worktree(root)` = `is_linked && current_branch.starts_with("dispatch/")` is a POSITIVE signal unique to the SL-064 coordination worktree; an unstamped worker rides a NON-`dispatch/N` branch (truth-table row 132 originally `worktree-agent-<id>`, then "corrected" to detached-HEAD), so the predicate returns false for it ⇒ the Orchestrator-verb clause REFUSES it. This is the slice's whole mechanism and §4 calls it the "sole structural fence, load-bearing" on the claude arm.
+
+OBSERVED (code): the claude dispatch worker fork is created by the `WorktreeCreate → doctrine worktree create-fork` hook → `act_on_create::Fork` (`src/worktree/create.rs:238-243`), which sets `let branch = format!("dispatch/{name}");` UNCONDITIONALLY and forks the worker onto it (`fork_core(root,&base,&branch,&dir,true)`). The coord tree rides `dispatch/{slice:03}` (`coordinate.rs:212-223`); the worker rides `dispatch/<name>` (e.g. `dispatch/agent-<hex>`). BOTH start with `dispatch/`. The predicate `starts_with("dispatch/")` (DISPATCH_BRANCH_PREFIX) CANNOT distinguish them: for a worker fork it returns TRUE ⇒ `is_coordination_worktree` TRUE ⇒ the new clause's guard condition `!is_coordination_worktree(&root)` is FALSE ⇒ the Orchestrator verb is ALLOWED. The guard is VOID for precisely the unstamped worker it targets, on the load-bearing claude arm.
+
+The design built on a FALSE premise: that dispatch worker forks do not ride `dispatch/` branches. `create.rs:240` proves they ride exactly `dispatch/{name}`. The probe (RSK-014 probe-h1 finding 5) observed only the BENIGN `act_on_create::Passthrough` path (`create.rs:247-266`, detached HEAD) — a non-arming-dir spawn — NEVER the real arming-dir Fork path a true `dispatch arm-spawn --base B` exercises. So both the original `worktree-agent-<id>` label AND the just-committed "detached-HEAD per probe finding 5" correction (commit 244d7bc4) are wrong for the real dispatch worker.
+
+PENANCE: the predicate needs a signal that actually distinguishes the coord tree from a worker fork — candidates: (a) match the coord form specifically `dispatch/<NNN>` (numeric slice) AND exclude the worker name-shape, but worker `name` is harness-supplied and could be numeric → fragile; (b) anchor on the registered coordination-worktree identity from dispatch state (the slice's own §2 Scope preferred "derive coordination identity from existing dispatch state … rather than minting a new marker" — the branch-prefix shortcut abandoned that and broke it); (c) reconcile against the marker leg — see the sibling reachability finding. Do NOT proceed to /plan until the signal is provably coord-unique."""
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = '§4 "sole structural fence, load-bearing on claude" is hollow: create-fork marks the worker ATOMICALLY with the branch, so the branch-check is never the operative gate'
+detail = """
+EXPECTED (design §3 row 132, §4): on the claude arm an UNSTAMPED worker (marker absent, ISS-011 SubagentStart crash/OOM) reaches an Orchestrator verb and is caught ONLY by the new branch-check — "the sole structural fence … Load-bearing."
+
+OBSERVED: the claude worker is forked by `create-fork → act_on_create::Fork`, which calls `fork_core(...,worker=true)`. `fork_core` (`src/worktree/fork.rs:130-162`) creates the branch (step 1) THEN, inside a compensating closure, `write_marker(dir)` (step 3); any failure runs `rollback_fork` removing BOTH branch and dir. So on this path branch ⟹ marker atomically: a worker tree on `dispatch/<name>` ALWAYS carries the marker (or was fully rolled back). Therefore:
+  • The always-marked worker is refused by the EXISTING marker leg (`mode.refused`), BEFORE the new clause runs (`guard.rs`: the clause is gated on `!mode.refused`). The branch-check adds nothing for it.
+  • For the branch-check to ever be the operative gate it needs marker-ABSENT + Orchestrator verb + linked. Via create-fork that state is unreachable (rollback). If it arises another way, the tree was still forked at `dispatch/<name>` ⇒ predicate TRUE ⇒ ALLOW (see F-1). 
+Net: on the claude arm the new clause either fires on a state that cannot occur, or fails open on the state that can. The "load-bearing" claim is unsupported by the spawn code. The design must demonstrate a CONCRETE reachable claude state where (marker absent ∧ branch ∉ dispatch/* ∧ Orchestrator verb) — i.e. reconcile the ISS-011 "unstamped worker still live post-SL-124/125" premise (design §1) against `create.rs:243` (worker=true) + `fork_core` atomic marker+rollback. If that state is genuinely unreachable on claude, the slice's claude-arm value collapses to zero and the REV/§4 must say so.
+
+PENANCE: trace the real claude marker lifecycle end-to-end — is the operative marker create-fork's `write_marker` (atomic) or the SubagentStart stamp (separate, failable), and can the two diverge to leave branch-without-marker? Pin the answer with a test before any plan. If create-fork is authoritative and atomic, withdraw the "load-bearing on claude" framing."""
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = """Commit 244d7bc4's "detached-HEAD per probe finding 5" reframe generalised the BENIGN Passthrough observation onto the real Fork path — making §3/OQ-A more wrong, not less"""
+detail = """
+EXPECTED: the probe-h1 reframe (commit 244d7bc4, this session) should have corrected §3/OQ-A toward the truth.
+
+OBSERVED: it asserted "doctrine's WorktreeCreate → worktree create-fork makes a detached-HEAD tree … current_branch returns None ⇒ refuse" and used it to claim OQ-A is "better-supported." But probe-h1 finding 5 explicitly scoped that observation to a BENIGN (non-arming-dir) spawn — `act_on_create::Passthrough` (`create.rs:247-266`, detached). The REAL dispatch worker takes `act_on_create::Fork` (`create.rs:238-243`, branch `dispatch/<name>`). The reframe generalised the wrong branch of a two-branch function onto the load-bearing path, so the design now POSITIVELY asserts a falsehood (worker is detached ⇒ caught) where the truth is the opposite (worker rides `dispatch/<name>` ⇒ F-1 void). §3 row 132, footnote §, §4, §5 REV ("anti-accident interim"), and OQ-A all inherit the error.
+
+PENANCE: revert/repair the §3/§4/OQ-A/§5 edits from 244d7bc4 so they reflect `create.rs:238-243` (worker → `dispatch/<name>`, NOT detached), conditioned on F-1's resolution. The probe-h1 confinement reframe of §5's "closable not unclosable" leg may survive on its own merit (it concerns RSK-014 bwrap, independent of the branch signal) — but re-derive it cleanly rather than leave it tangled with the false detached-HEAD claim."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
