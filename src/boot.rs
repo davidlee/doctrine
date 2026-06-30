@@ -357,7 +357,19 @@ fn regenerate(root: &Path, exec: &Path, command_map: fn() -> String) -> anyhow::
 /// source was missing or empty at render time. Exact, not a substring grep: a
 /// section is unpopulated iff its body is byte-equal to `marker(heading)` or
 /// `gov_nudge(heading)` (SL-069 — governance empty-section nudge).
+///
+/// Governance `GovRows` sections (Accepted ADRs, Active Policies, Active
+/// Standards) are always excluded: zero entities of these kinds is a legitimate
+/// terminal state, not a sentry concern (IMP-015). The boot snapshot text still
+/// carries the marker/nudge; only the `--check` warning is suppressed.
 fn is_marker(section: &Section) -> bool {
+    // Governance GovRows — never a sentry concern when empty.
+    if matches!(
+        section.heading.as_str(),
+        "Accepted ADRs" | "Active Policies" | "Active Standards"
+    ) {
+        return false;
+    }
     section.body == marker(&section.heading)
         || (section.heading.starts_with("Active ") && section.body == gov_nudge(&section.heading))
 }
@@ -3198,31 +3210,41 @@ world";
         );
     }
 
-    /// VT-3 (SL-069): `boot --check` reports empty Policies and Standards
-    /// sections as unpopulated (governance nudge, not generic marker).
+    /// VT-3 (IMP-015): `boot --check` does NOT report empty governance
+    /// GovRows sections (Accepted ADRs, Active Policies, Active Standards)
+    /// as unpopulated — zero entities of these kinds is a legitimate
+    /// terminal state. Other empty sections (Memory, etc.) are still flagged.
     #[test]
-    fn boot_check_reports_empty_governance_as_unpopulated() {
+    fn boot_check_governance_govrows_not_flagged_when_empty() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new("/abs/target/debug/doctrine");
 
-        // fresh root: zero policies, zero standards → both sections emit nudges.
+        // fresh root: zero policies, zero standards, zero ADRs.
         regenerate(root, exec, noop_map).unwrap();
         let report = boot_check(root, exec, noop_map);
         assert!(
-            report
+            !report
                 .marker_sections
-                .contains(&"Active Policies".to_string()),
-            "empty policies reported: {:?}",
+                .contains(&"Accepted ADRs".to_string()),
+            "empty ADRs NOT flagged: {:?}",
             report.marker_sections
         );
         assert!(
-            report
+            !report
                 .marker_sections
-                .contains(&"Active Standards".to_string()),
-            "empty standards reported: {:?}",
+                .contains(&"Active Policies".to_string()),
+            "empty policies NOT flagged: {:?}",
             report.marker_sections
         );
+        assert!(
+            !report
+                .marker_sections
+                .contains(&"Active Standards".to_string()),
+            "empty standards NOT flagged: {:?}",
+            report.marker_sections
+        );
+        // Non-governance empty sections (Memory) are still flagged.
         assert!(report.marker_sections.contains(&"Memory".to_string()));
     }
 
