@@ -2072,3 +2072,86 @@ fn close_target_from_moved_candidate_ref_refuses() {
         stderr
     );
 }
+
+// --- CHR-030: candidate worktree provisions gitignored embed assets ----------
+
+#[test]
+fn e2e_dispatch_candidate_create_provisions_gitignored_embed_assets() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    prepare_review(dir);
+
+    // Add .worktreeinclude listing a gitignored embed root.
+    std::fs::write(dir.join(".worktreeinclude"), "web/map/dist/**\n").unwrap();
+    // Create a gitignored embed asset the provisioner should copy.
+    std::fs::create_dir_all(dir.join("web/map/dist")).unwrap();
+    std::fs::write(dir.join("web/map/dist/index.html"), "<html></html>\n").unwrap();
+    std::fs::write(dir.join("web/map/dist/app.js"), "console.log(1);\n").unwrap();
+    // Ensure web/map/dist is gitignored.
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\nweb/map/dist/\n").unwrap();
+    git(dir, &["add", ".gitignore", ".worktreeinclude"]);
+    git(
+        dir,
+        &["commit", "-q", "-m", "add worktreeinclude and embed assets"],
+    );
+
+    // Create a review_surface candidate with --worktree.
+    let out = create(
+        dir,
+        None,
+        &[
+            "--role",
+            "review_surface",
+            "--payload",
+            "impl_bundle",
+            "--base",
+            "refs/heads/main",
+            "--label",
+            "provision-001",
+            "--worktree",
+        ],
+    );
+    assert!(out.status.success(), "create failed: {}", stderr(&out));
+
+    // Stdout: line 1 = target ref, line 2 = worktree path.
+    let out_stdout = stdout(&out);
+    let lines: Vec<&str> = out_stdout.lines().collect();
+    assert_eq!(
+        lines.len(),
+        2,
+        "expected two stdout lines, got: {out_stdout}"
+    );
+    let wt_path = std::path::PathBuf::from(lines[1]);
+    assert!(
+        wt_path.exists(),
+        "worktree path should exist: {}",
+        wt_path.display()
+    );
+
+    // Provisional assets copied into the worktree.
+    assert!(
+        wt_path.join("web/map/dist/index.html").exists(),
+        "web/map/dist/index.html should be provisioned into {}",
+        wt_path.display()
+    );
+    assert!(
+        wt_path.join("web/map/dist/app.js").exists(),
+        "web/map/dist/app.js should be provisioned into {}",
+        wt_path.display()
+    );
+    assert_eq!(
+        std::fs::read_to_string(wt_path.join("web/map/dist/index.html")).unwrap(),
+        "<html></html>\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(wt_path.join("web/map/dist/app.js")).unwrap(),
+        "console.log(1);\n"
+    );
+
+    // Withheld tiers are NOT copied (provision guarantee).
+    assert!(
+        !wt_path.join(".doctrine/state/boot.md").exists(),
+        "withheld .doctrine/state/ must not be provisioned"
+    );
+}
