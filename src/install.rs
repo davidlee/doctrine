@@ -26,8 +26,8 @@ pub(crate) fn post_install_instructions(has_claude: bool, repo: &str) -> Option<
     }
     let mut lines: Vec<String> = Vec::new();
     lines.push("Claude hooks ship via the doctrine plugin. To install:".to_string());
-    lines.push(format!("  /plugin marketplace add {repo}"));
-    lines.push("  /plugin install doctrine@doctrine".to_string());
+    lines.push(format!("  /plugin marketplace add {repo} -s project"));
+    lines.push("  /plugin install doctrine@doctrine -s project".to_string());
     Some(lines.join("\n"))
 }
 
@@ -1233,8 +1233,8 @@ mod tests {
     fn post_install_instructions_claude_prints_plugin_block() {
         let block = post_install_instructions(true, TEST_REPO).unwrap();
         assert!(block.contains("Claude hooks ship via the doctrine plugin"));
-        assert!(block.contains("/plugin marketplace add davidlee/doctrine"));
-        assert!(block.contains("/plugin install doctrine@doctrine"));
+        assert!(block.contains("/plugin marketplace add davidlee/doctrine -s project"));
+        assert!(block.contains("/plugin install doctrine@doctrine -s project"));
         assert!(!block.contains("npx skills"));
     }
 

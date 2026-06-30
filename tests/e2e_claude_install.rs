@@ -126,11 +126,11 @@ fn install_wires_skills_agent_and_delegates_hooks_to_plugin() {
     // SL-152 PHASE-06: hooks are delegated to the plugin via printed instructions,
     // not settings-wired.
     assert!(
-        out.contains("/plugin marketplace add davidlee/doctrine"),
+        out.contains("/plugin marketplace add davidlee/doctrine -s project"),
         "plugin marketplace instruction: {out}"
     );
     assert!(
-        out.contains("/plugin install doctrine@doctrine"),
+        out.contains("/plugin install doctrine@doctrine -s project"),
         "plugin install instruction: {out}"
     );
     assert!(
@@ -143,7 +143,7 @@ fn install_wires_skills_agent_and_delegates_hooks_to_plugin() {
     // print again, and still no hooks are settings-wired.
     let out = install(dir);
     assert!(
-        out.contains("/plugin install doctrine@doctrine"),
+        out.contains("/plugin install doctrine@doctrine -s project"),
         "reinstall prints plugin instructions: {out}"
     );
     assert!(
