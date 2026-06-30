@@ -854,6 +854,36 @@ weight = 0
     }
 
     #[test]
+    fn close_drift_master_ships_and_lints() {
+        // VT-1 (SL-178 PHASE-01): the close-drift-discharge recipe ships as a
+        // global-orientation master and passes master-lint (INV + scope floor),
+        // so `memory find` discovers it and the slice-status close error / the
+        // /close skill may point at its key without referencing host-local state
+        // (POL-002). debug-embed reads `memory/` from disk, so this sees the
+        // real shipped master.
+        const KEY: &str = "mem.pattern.doctrine.close-drift-discharge-rec";
+        let assets = embedded_assets();
+        let master = assets
+            .iter()
+            .find(|a| {
+                a.toml
+                    .parse::<toml::Value>()
+                    .ok()
+                    .and_then(|v| {
+                        v.get("memory_key")
+                            .and_then(toml::Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .as_deref()
+                    == Some(KEY)
+            })
+            .unwrap_or_else(|| panic!("no embedded master ships key {KEY}"));
+        if let Err(v) = lint_master(&master.toml) {
+            panic!("shipped master {KEY} fails master-lint: {v:?}");
+        }
+    }
+
+    #[test]
     fn lint_flags_a_non_empty_repo() {
         // repo set, anchor still none — parses fine (the repo⇒anchor gate is a
         // write-path concern, not a parse one), so the repo signal is isolated.

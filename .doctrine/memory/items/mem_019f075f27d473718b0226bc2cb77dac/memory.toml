@@ -2,11 +2,11 @@ memory_uid = "mem_019f075f27d473718b0226bc2cb77dac"
 memory_key = "mem.pattern.doctrine.close-drift-discharge-rec"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "archived"
 title = "Closure drift discharge via accept REC"
 summary = "slice status done refuses with 'undischarged residual drift' until an accept REC discharges each touched/covered requirement"
 created = "2026-06-27"
-updated = "2026-06-27"
+updated = "2026-06-30"
 
 [scope]
 paths = []
