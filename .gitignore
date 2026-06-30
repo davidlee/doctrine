@@ -71,3 +71,4 @@ handover.md
 
 web/map/dist/
 web/map/node_modules/
+.harness/

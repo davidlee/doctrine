@@ -1,0 +1,59 @@
+memory_uid = "mem_019f18d2a9307cc38d5e4ba9749e6208"
+memory_key = "mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinement"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Confine claude isolation:worktree subagents via PreToolUse(Bash) + nested bwrap"
+summary = "PreToolUse(Bash) updatedInput → nested bwrap confines claude isolation:worktree subagents (Bash wall); Edit/Write already native"
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = [".claude/skills/doctrine/hooks/**", "scripts/pi-spawn-confined.sh"]
+commands = []
+tags = ["dispatch", "confinement", "worktree", "hooks", "harness:claude"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "bd91a4ecc25d4c96492b618c13f207f6142f930f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "07d50ad2be44c7d9a6d21b3ff413ba9835717e6d6a4d9b9183a2a616b8582a60"
+base_commit = "14b74c0bc9090f14063c5bba18633f76fe7b9399"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "probe"
+ref = "RSK-014/probe-h1"
+
+[[relation]]
+label = "related"
+target = "mem_019ec345c2d879f3bab52aa1dad7a401"
+
+[[relation]]
+label = "related"
+target = "mem_019ec65ecbc77282bad7e10a5240ad27"
+
+[[relation]]
+label = "related"
+target = "mem_019f01e2f7d27fe1886c12ff80811c0c"
+
