@@ -5,7 +5,8 @@
      R1 (§10), Q1. -->
 
 Status: LOCKED (internal adversarial pass + `/inquisition` RV-200 + RV-201 +
-RV-202 codex pass all integrated; §10). Two harness unknowns remain **by design**,
+RV-202 codex pass + SL-183 cross-arm seam upstream all integrated; §10). Two
+harness unknowns remain **by design**,
 gated to the Phase-1 empirical probe (D7, §9), not to prose: `SubagentStop`
 blocking/tree-intact/worktree-correlation, and plugin-PreToolUse firing — each with
 a defined abort to Path C / IDE-024. Governed by ADR-008 (closes its claude-arm
@@ -77,8 +78,18 @@ claude arm with a hard wall, not the cooperative marker (RSK-014).
   concurrency-stable; `agent_id` present ⟺ subagent. Pass through ⟺ `agent_id`
   absent.
 - **Opaque wrap.** base64 the original command, decode+exec inside the jail; never
-  parse the command to inject flags (shell-undecidability).
+  parse the command to inject flags (shell-undecidability). **Wrapper-agnostic** —
+  `opaque_wrap` takes the jailer's argv as *input* (it quotes+assembles whatever
+  wrapper argv it is handed + the base64 command), so it is reused unchanged when the
+  wrapper is `sandbox-exec` not `bwrap` (SL-183 / brief §2).
 - **DRY the proven flags.** Single-source the bwrap core with the pi arm.
+- **Platform seam, not platform branch (SL-183 parity, brief §2/§7 D-mac2).**
+  Everything platform-agnostic — `resolve_target`, `decide_bash`, `decide_write`,
+  `pathcheck`, `opaque_wrap`, `validate_policy` — sits **above** a single named fork
+  point (`Jailer`); only the argv/profile builder (`bwrap_argv`/`bwrap_core_argv`)
+  sits **below** it. The macOS arm (IMP-045/SL-183) is a second `Jailer` impl
+  (`seatbelt_profile` + `sandbox_exec_argv`) behind the same seam — *not* a refactor
+  of this core. Designed now so SL-183 slots in; macOS impl deferred. See D8.
 - **As simple as possible.** Land the floor (confine-to-worktree); defer clone
   topology (IDE-024) and selector-allowlist (IDE-025).
 
@@ -90,10 +101,16 @@ Three new units under `src/worktree/`, layered:
 
 ```
  command      pretooluse.rs   (thin shell: stdin JSON in, hookSpecificOutput out,
-                               bwrap-presence probe, policy-file read)
+                               backend-presence probe, policy-file read)
    |  calls
- engine/leaf  jail.rs         (PURE: Decision, JailPolicy, bwrap argv builder,
-                               opaque wrap, pathcheck predicate, footgun validation)
+ engine/leaf  jail.rs         (PURE)
+                ├─ platform-agnostic core (ABOVE the seam): Decision, Target,
+                │   JailPolicy, resolve_target, decide_bash, decide_write,
+                │   opaque_wrap, pathcheck, validate_policy
+                └─ Jailer seam (the SINGLE fork point, D8) — selects a backend:
+                    · Bwrap  → bwrap_core_argv / bwrap_argv          (this slice)
+                    · Seatbelt → seatbelt_profile / sandbox_exec_argv (SL-183, deferred)
+                    · (no supported backend) → deny  (capability-keyed, C/§5.5)
    |  reuses
  leaf         shared.rs       (is_linked_worktree, worktree recognition)
 ```
@@ -116,7 +133,7 @@ matcher-regex example. `Edit`/`Write` is the documented, probe-proven write surf
 A notebook write-vector is re-added only once V-plugin captures its real matcher
 name + stdin schema; guarding an unread tool would be a latent jail hole.)
 
-**Pure core (`jail.rs`):**
+**Pure core (`jail.rs`) — platform-agnostic, ABOVE the Jailer seam:**
 ```rust
 enum Decision {
     PassThrough,                                       // emit nothing
@@ -131,15 +148,36 @@ fn resolve_target(agent_id: Option<&str>, cwd: &Path, worktrees_root: &Path) -> 
 //  Some & is_worktree(cwd)      => Jail(cwd)
 //  Some & !is_worktree(cwd)     => Reject("cwd-not-a-worktree")
 
+// decide_* are backend-neutral: they take the SELECTED jailer (None ⇒ no supported
+// backend on this platform ⇒ Deny — capability-keyed, never a hardcoded else, C/§5.5).
 fn decide_bash(target: &Target, cmd: &str, desc: &str, policy: &JailPolicy,
-               bwrap_present: bool) -> Decision;
+               jailer: Option<&dyn Jailer>) -> Decision;
 fn decide_write(target: &Target, file_path: Option<&Path>, policy: &JailPolicy) -> Decision;
 
-fn bwrap_core_argv(wt: &Path) -> Vec<OsString>;          // == pi arm core
-fn bwrap_argv(wt: &Path, policy: &JailPolicy) -> Vec<OsString>;
-fn opaque_wrap(orig_cmd: &str, argv: &[OsString]) -> String;
+fn opaque_wrap(orig_cmd: &str, argv: &[OsString]) -> String;   // wrapper-agnostic (B): quotes+
+                                                               // assembles ANY argv + b64 cmd
 fn pathcheck(real: &Path, wt: &Path, extra_rw: &[PathBuf]) -> bool; // ∈ {wt} ∪ extra_rw
 fn validate_policy(policy: &JailPolicy, main_root: &Path) -> Result<(), String>;
+//  ^ STRICTLY platform-agnostic, the shared cross-arm contract (D, brief §2): zero
+//    bwrap/namespace assumptions; reused UNCHANGED by SL-183 as its parity proof.
+```
+
+**Jailer seam (`jail.rs`) — the SINGLE fork point (D8), BELOW which backends differ:**
+```rust
+trait Jailer {                       // selected once per call by platform capability
+    fn wrap_argv(&self, wt: &Path, policy: &JailPolicy) -> Vec<OsString>; // the wrapper argv
+}                                    // opaque_wrap consumes whatever this returns
+
+struct Bwrap;                        // THIS slice — Linux
+impl Jailer for Bwrap { /* bwrap_core_argv (== pi arm) + extra_rw + network */ }
+fn bwrap_core_argv(wt: &Path) -> Vec<OsString>;          // == pi arm core (D5 parity)
+fn bwrap_argv(wt: &Path, policy: &JailPolicy) -> Vec<OsString>;
+
+// struct Seatbelt;  — SL-183 / IMP-045 (deferred): seatbelt_profile + sandbox_exec_argv
+//                     behind THIS trait; no core change.
+
+fn select_jailer() -> Option<Box<dyn Jailer>>;  // capability lookup: Linux+bwrap ⇒ Bwrap;
+//  macOS ⇒ None today (a NAMED arm pending SL-183), other ⇒ None. None ⇒ deny (§5.5).
 ```
 
 `is_worktree(cwd)` is **git-topology-based**, not path-prefix: `cwd` is a linked
@@ -434,10 +472,22 @@ tree-intact.
   `extra_rw` entry is orchestrator-supplied). The original command rides as
   charset-safe base64 (never re-parsed). Test: a worktree path / `extra_rw` with a
   space and a single quote round-trips and executes correctly.
-- **Edge:** `/tmp` is a private `--tmpfs` for Bash (ephemeral, never host /tmp) and
-  denied for Edit/Write — restrictive default; loosen a run via `extra_rw`.
-- **Edge:** non-bwrap platform → `deny "bwrap-unavailable"` (fail-closed; macOS =
-  IMP-045), never unwrapped pass-through.
+- **Edge — per-worker scratch (E, brief §3b).** Scratch is private **by the arm's
+  mechanism, not a portable `tmpfs` guarantee**: on the bwrap arm a private
+  `--tmpfs /tmp` (ephemeral, never host /tmp, vanishes with the namespace); on the
+  Seatbelt arm (SL-183) there is *no* tmpfs analog — privacy comes from
+  `TMPDIR=<wt>/.tmp` + deny `/private/tmp`, and the scratch persists until teardown
+  GC. In both, `/tmp` is denied for Edit/Write by restrictive default; loosen a run
+  via `extra_rw`. Do **not** state "/tmp is private" as a cross-arm guarantee — it is
+  false on macOS.
+- **Edge — capability-keyed backend, not `else: deny` (C, brief §1/§6).** Platform
+  dispatch is a capability lookup (`select_jailer`): a platform with **no supported
+  backend ⇒ `deny "no-jail-backend"`** (fail-closed), never unwrapped pass-through.
+  **macOS is a NAMED arm that currently denies** (pending IMP-045/SL-183), not a
+  hardcoded `else`. SL-183 is therefore a **capability flip** (deny → Seatbelt
+  behind the same seam), not a control-flow rewrite. This degrade contract aligns
+  with RFC-012's capability ladder (`none` / `contained-writes` / …): "no backend"
+  is the `none` rung, the bwrap/Seatbelt arms the `contained-writes` rung.
 - **Assumption (verify):** PreToolUse via `settings.local.json` fires for worktree
   subagents — proven (probe). The plugin `hooks.json` path is **not** assumed — it is
   V-plugin-gated with the settings.local path as a planned same-phase fallback
@@ -521,6 +571,22 @@ tree-intact.
   docs and build directly — rejected; the two tallest risks (R1 funnel-teardown,
   R2 plugin-registration) are harness behaviours doc-unconfirmed and cheapest to
   refute in shell.*
+- **D8 — single `Jailer` seam, factored now for cross-arm parity (SL-183 upstream,
+  brief §2/§7 D-mac2).** The platform-agnostic core (`resolve_target`, `decide_*`,
+  `pathcheck`, `opaque_wrap`, `validate_policy`) sits above one named fork point; only
+  the wrapper-argv/profile builder sits below it (`Bwrap` this slice; `Seatbelt` =
+  SL-183, deferred). Three concrete shape commitments fall out, all **zero Linux
+  behaviour change** — they only prevent SL-183 from having to refactor this core:
+  **(i)** `opaque_wrap` is wrapper-agnostic — takes the jailer's argv as input (B);
+  **(ii)** backend selection is a **capability lookup** (`select_jailer`), so "no
+  supported backend ⇒ deny" with macOS a named-but-denying arm, not a hardcoded
+  `else` (C, §5.5); **(iii)** `validate_policy` carries **zero** bwrap/namespace
+  assumptions and is the shared cross-arm contract, reused unchanged as SL-183's
+  parity proof (D). The macOS decisions themselves (D-mac1 *allow-default-deny-write-
+  except*, D-mac3 `TMPDIR` scratch, D-mac4 `network`→`(deny network*)`) live in the
+  SL-183 brief, not here — this slice only guarantees the seam they hang off.
+  *Alt: inline the bwrap argv into the decision logic — rejected; forces SL-183 to
+  refactor a locked, behaviour-frozen core (behaviour-preservation gate).*
 
 ## 8. Risks & Mitigations
 
@@ -557,6 +623,17 @@ tree-intact.
   cost (case-notes SL-171, hollow greens). This is a deliberate **efficiency
   regression traded for confinement** — exactly the driver for **IDE-024 (Path
   C)**. Named so the tradeoff is visible, not discovered post-hoc.
+- **R9 — the "no out-of-namespace executor" residual is PLATFORM-SPECIFIC, not
+  closed (SL-183 upstream, brief §5).** On the NixOS/bwrap arm the
+  delegation-to-a-reachable-executor vector is dead *because the closure ships no
+  cron/at/systemd* — a property of this platform, not of the jail. **macOS always
+  ships `launchd`**, which Seatbelt (not a namespace) does not remove: file-based
+  delegation (LaunchAgent plist, crontab) is still write-floor-denied, but a
+  pure-IPC `launchctl submit`/mach-service path is not. Frame this residual as
+  platform-specific, **owned by RFC-012 / the future IPC-egress wall (a non-goal of
+  this write floor)** — do not claim it "closed" cross-arm. SL-183's probe *measures*
+  `launchctl submit`/`at` rather than assuming. (Sibling of the OQ-6
+  socket-reachable-peer residual: postgres `COPY…TO PROGRAM`, nix-daemon.)
 
 ## 9. Quality Engineering & Validation
 
@@ -595,7 +672,12 @@ cheapest to refute in shell — do it before sinking Rust into a refuted premise
   `pathcheck` (⊆wt / escape / extra_rw-hit / `.git`-reject); `load_policy`
   (default / present / malformed); `bwrap_argv` (core + extra_rw + `network`);
   `opaque_wrap` (base64 round-trip **+ INV-5 path with space & single-quote**
-  round-trips & executes); `validate_policy` (reject `/`, root-ancestor, `.git`).
+  round-trips & executes; **wrapper-agnostic — asserts it assembles an arbitrary
+  given argv, not a bwrap-shaped one, B**); `validate_policy` (reject `/`,
+  root-ancestor, `.git` — **+ a no-namespace-assumption assertion locking it as the
+  shared cross-arm contract, D**); **`select_jailer` capability dispatch (D8/C):
+  Linux+bwrap ⇒ `Bwrap`; macOS ⇒ `None` ⇒ deny `"no-jail-backend"`; the `decide_*`
+  None-jailer arm denies, never passes through**.
 - **Integration (synthetic stdin → emitted JSON):** the probe escape battery
   re-expressed as cases; INV-2 repo-root-ancestor deny; orchestrator pass-through
   (no `agent_id`); isolation:none deny (`agent_id` + repo-root cwd); D5 parity
@@ -782,3 +864,36 @@ pass re-swept for twins explicitly.
   Shell-form is actually doc-proven (`hooks.md:337`) ⇒ D7 item 3 is *lower* risk
   than the prose implied (noted in §9). slice-182.md objective 3 confirmed matching
   locked D2/D6/F-1.
+
+### SL-183 upstream — cross-arm seam contracts (2026-07-01, no behaviour change)
+
+SL-183 (macOS Seatbelt arm, discharges IMP-045, `needs SL-182`) reuses `jail.rs`
+wholesale and forks only the argv/profile builder. Five seam-shape requirements
+upstreamed **before lock** so SL-183 slots in rather than retrofits — all are
+contract/altitude shape, **zero Linux behaviour change** (brief:
+`.doctrine/slice/183/seatbelt-seam-brief.md`).
+
+- **A (load-bearing) — explicit `Jailer` seam.** The platform-agnostic core sits
+  above one named fork point; only `bwrap_argv`/`bwrap_core_argv` below it. → §5.1
+  diagram + §5.2 `trait Jailer` + D8. *Was: argv builder listed inline in the pure
+  core — would have forced SL-183 to refactor.*
+- **B (load-bearing) — `opaque_wrap` wrapper-agnostic.** Already took `argv` as a
+  param (§5.2); now locked as a contract (§4 Opaque-wrap bullet, §5.2 comment, §9
+  unit asserts arbitrary argv).
+- **C (load-bearing) — capability-keyed dispatch, not `else: deny`.** → §5.5 +
+  `select_jailer` (§5.2): "no supported backend ⇒ deny"; macOS a named-but-denying
+  arm; SL-183 = a capability flip, not a control-flow rewrite; aligned to RFC-012's
+  ladder. *Was: "non-bwrap platform → deny bwrap-unavailable" hardcoded else.*
+- **D (contract-framing) — `validate_policy` strictly platform-agnostic.** Locked as
+  the shared cross-arm parity proof, zero bwrap/namespace assumptions (§5.2 + §9
+  no-namespace-assumption assertion + D8.iii).
+- **E (contract-framing) — scratch privacy scoped to the mechanism.** "/tmp is
+  private" was a false cross-arm guarantee (Seatbelt has no tmpfs). → §5.5 reworded
+  to per-worker-scratch-private-by-mechanism (tmpfs on Linux, `TMPDIR` redirect on
+  macOS).
+- **(note, non-blocking) — reachable-peer residual is platform-specific.** → R9
+  (§8): the bwrap "no cron/systemd in the closure" property is NixOS-specific; macOS
+  ships `launchd`; framed as owned by RFC-012/the IPC wall, not "closed" cross-arm.
+
+The macOS-side decisions themselves (D-mac1..4, OQ-mac1/2) stay in the SL-183 brief;
+this slice guarantees only the seam they hang off.

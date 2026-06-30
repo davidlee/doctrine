@@ -98,6 +98,13 @@ point of putting it first.
   dispatch funnel) stays green; they must pass unchanged.
 - **STD-001.** The `doctrine` token, each subcommand string, the bwrap bind flags,
   and the `ARMING_SUBPATH`/`jail/` path fragments are single-source named constants.
+- **SL-183 cross-arm seam (PHASE-02, D8).** The macOS Seatbelt arm (SL-183 /
+  IMP-045, `needs SL-182`) reuses `jail.rs` wholesale and forks only the
+  argv/profile builder. PHASE-02 therefore factors the `Jailer` seam now (trait +
+  `Bwrap` impl + capability-keyed `select_jailer`), keeps `opaque_wrap`
+  wrapper-agnostic, and locks `validate_policy` platform-agnostic — all zero Linux
+  behaviour change (design §10 SL-183 upstream; EX-5 / VT-8). Building it inline
+  would force SL-183 to refactor a behaviour-frozen core.
 - **Disposability (PHASE-01).** The probe apparatus is throwaway — its EX-4
   requires no committed Rust or installed hooks survive the phase; only the
   recorded findings + decisions persist (notes + a durable memory if novel).
