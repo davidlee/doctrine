@@ -1,0 +1,50 @@
+memory_uid = "mem_019f172c7fd37640b72023a508afff9b"
+memory_key = "mem.pattern.doctrine.shipped-master-body-scrub"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Promoting a local memory to a shipped master requires a body scrub, not just a TOML re-class"
+summary = "Re-classing toml signature (repo='', anchor=none, scope floor) is necessary but NOT sufficient: the body must also be scrubbed of host-local refs (local memory uids, ISS-/SL-/REC-/REQ- ids) or it ships host-project state, violating POL-002"
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:memory", "area:dispatch", "pol-002"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a7796afaef34ed9635ab4cbf6501603d611200a7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a5d73c3feeed12cbc0019425ec29896d3c89ccc2e5776349954479a6476171bf"
+base_commit = "0f376fa4d1cd2aae1b38784399742d9791872d15"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-178"
+
+[[source]]
+kind = "review"
+ref = "RV-195"
+
