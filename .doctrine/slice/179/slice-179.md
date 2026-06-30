@@ -54,8 +54,14 @@ Blocked cell to close — the very erasure this slice kills.
    (today `rec_discharges` is blind to the `DivergentReason`).
 
 3. **Preserve a stricter override for `Blocked`.** A `Blocked` cell remains
-   reconcilable via the recorded-override (accept-REC) path, raised-bar relative
-   to status-lag acceptance. Exact strictness mechanism = design.
+   reconcilable via the recorded-override (accept-REC) path, but only with a fresh
+   **human (VH)** `Verified` cell on the req and the REC citing both keys (design
+   D3).
+
+3a. **Withdrawal over a live contradiction is a recorded act (design D4).** Flipping
+   a req to `Retired`/`Superseded` while it carries a live `Failed`/`Blocked` cell
+   refuses close unless a slice-owned `revise`/`redesign` REC cites the evidence —
+   closing the "withdraw to escape" leak the original remedy left open.
 
 4. **Govern the D8 amendment via a REV.** SPEC-002 D8 currently treats all
    residual drift uniformly. Distinguishing `Failed` (un-acceptable) from
@@ -113,4 +119,9 @@ Blocked cell to close — the very erasure this slice kills.
 
 ## Follow-Ups
 
-- (none yet — capture durable findings at `/notes` / close.)
+- **RSK-012** — closure gate-set scope is per-slice; a foreign Failed req can be
+  omitted by not declaring it (deferred from the SL-179 codex pass; no silent leak,
+  broader gate-set-breadth concern).
+- **RSK-013** — `scan_coverage` silently skips malformed/unreadable `coverage.toml`;
+  closure needs a strict fail-closed scan mode (deferred from the codex pass).
+- Further durable findings captured at `/notes` / close.

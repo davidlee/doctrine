@@ -57,11 +57,28 @@ ADR-001 downward edge (`slice.rs:1229`); no new cross-module coupling.
   is a reviewed, committed hand-edit of the authored `coverage.toml` — git-visible,
   durable, peer-reviewable. *Alt rejected:* `--force` escape (re-opens the exact
   leak under a new name; terminal loudness is not durable evidence).
-- **D3 (Q3=B) — `ObservedBlocked` discharges only with a fresh `Verified` cell.**
-  Machine-checkable (`composite.any_fresh_verified()`), reuses existing
-  coverage-cell machinery, honours PRD-013 (blocked never defaults to verified) and
-  NF-001 (human attests via a recorded cell). *Alt rejected:* status-quo discharge
-  (Blocked as cheap as lag); rationale-prose/flag (theatre, not machine-checkable).
+- **D3 (Q3=B, tightened post-review) — `ObservedBlocked` discharges only with a
+  fresh human (`VH`) `Verified` cell, and the REC cites both keys.** The bar is a
+  fresh **VH** Verified cell on the req (NOT VT or VA — only a human sign-off is the
+  accountable "the unobtainable thing actually works"; VT is the blocked check
+  itself, VA is an agent, neither is the manual confirmation). The accept-REC's
+  `evidence_ref` must cite **both** the Blocked key and the confirming VH key
+  (self-documenting; codex M5). Machine-checkable, honours PRD-013 (blocked never
+  defaults to verified) and NF-001 (human attests via a recorded cell). *Alt
+  rejected:* mode-agnostic `any_fresh_verified` (a foreign VT/VA cell for a
+  different contribution could satisfy it without being the manual confirmation);
+  status-quo discharge; rationale-prose/flag (theatre, not machine-checkable).
+- **D4 (codex B3) — withdrawal over a live contradiction requires a recorded act.**
+  `drift` short-circuits `Retired`/`Superseded` to `Coherent` *before* inspecting
+  coverage (`coverage.rs:287`), and requirement status is free any-to-any (D-B6) —
+  so flipping a req to `Retired` lets a slice close over its live `Failed`/`Blocked`
+  cell, then reactivate the req later, with no evidence-citing act. The **closure
+  gate** (not `drift` itself — the read-view semantics stay) must treat a withdrawn
+  gate-set req that *still carries a live `Failed`/`Blocked` cell* as undischarged
+  **unless** a slice-owned `revise`/`redesign` REC cites those evidence keys. So
+  withdrawal-as-resolution becomes a recorded reconciliation act, not a silent
+  status flip. *Alt rejected:* trusting the bare status flip (the exact
+  evidence-erasure this slice kills, by another verb).
 
 ## 3. Current vs target behaviour
 
@@ -69,9 +86,11 @@ ADR-001 downward edge (`slice.rs:1229`); no new cross-module coupling.
 |---|---|---|
 | live `Failed` cell, no REC | refuse (Divergent) | **refuse** (ObservedFailure) |
 | live `Failed` cell + accept-REC (3 clauses) | **discharges → closes** | **refuse** — not dischargeable |
-| live `Blocked` cell + accept-REC, no Verified | discharges → closes | **refuse** — needs confirming Verified |
-| live `Blocked` + fresh `Verified` + accept-REC | discharges → closes | **discharges → closes** |
+| live `Blocked` cell + accept-REC, no VH Verified | discharges → closes | **refuse** — needs confirming VH cell |
+| live `Blocked` + fresh `VH` Verified + accept-REC citing both keys | discharges → closes | **discharges → closes** |
+| live `Failed`/`Blocked` cell + req flipped to `Retired`/`Superseded`, no REC | discharges (drift→Coherent) | **refuse** — needs a recorded withdrawal REC (D4) |
 | status-lag (`EvidenceOutrunsAuthored`) + accept-REC | discharges | discharges (**unchanged**) |
+| `Indeterminate` + accept-REC with empty residual keys | discharges (vacuous clause-c) | **refuse** — empty-evidence accept forbidden (M7) |
 | `coverage forget` a `Failed`/`Blocked` cell | erases silently → gate blind | **refused** |
 | `coverage forget` a `Planned`/`Verified` cell | erases | erases (**unchanged**) |
 
@@ -98,24 +117,42 @@ ADR-001 downward edge (`slice.rs:1229`); no new cross-module coupling.
   `any_failed_or_blocked` if the column is coarse; sharpen the verdict cell).
 
 ### 4.4 `slice.rs` — closure gate (§2)
-- `undischarged_drift` (`:1287`): branch on the verdict reason —
-  - `ObservedFailure` → always undischarged (push, never call `rec_discharges`).
-  - `ObservedBlocked` → undischarged unless `composite.any_fresh_verified()` **and**
-    `rec_discharges(...)`.
-  - `EvidenceOutrunsAuthored` / `Indeterminate` → unchanged (`rec_discharges`).
-- `rec_discharges` (`:1352`): signature gains the verdict (or reason) + `&Composite`
-  it needs for the Blocked branch. Returns bool (a refuse decision — no status
-  write; NF-001).
-- `UndischargedReq` (`:1320`): carry the `DivergentReason` so the bail copy is
-  per-req accurate.
+**Control flow pinned (codex M10): `undischarged_drift` classifies once per req and
+decides; `rec_discharges` stays the unchanged 3-clause REC predicate.** Per gate-set
+req, compute `verdict = drift(authored, &composite)` then:
+  - `Divergent(ObservedFailure)` → **always undischarged** (push; never call
+    `rec_discharges`).
+  - `Divergent(ObservedBlocked)` → undischarged unless `composite.has_fresh_vh()`
+    **and** `rec_discharges(...)` **and** the REC cites the confirming VH key (D3).
+  - `Divergent(EvidenceOutrunsAuthored)` → unchanged `rec_discharges`, **plus** the
+    M7 guard.
+  - `Indeterminate` → unchanged `rec_discharges`, **plus** the M7 guard: if
+    `residual_keys` is empty, accept cannot discharge (clause (c) is otherwise
+    vacuously true, `slice.rs:1373`) → undischarged.
+  - `Coherent` → normally skip, **except the D4 withdrawal check**: if `authored ∈
+    {Retired, Superseded}` AND `composite.any_failed() || composite.any_blocked()`
+    (a live contradiction the withdrawal short-circuited), require a slice-owned
+    `revise`/`redesign` REC citing those keys; absent → undischarged.
+- `rec_discharges` (`:1352`): **signature unchanged** — it remains the 3-clause REC
+  predicate. The reason-branching, the VH bar, the M7 empty-keys guard, and the D4
+  withdrawal check all live in `undischarged_drift`. (Keeps the bool predicate pure
+  and the policy in the gate; NF-001 — a refuse decision, never a status write.)
+- New `Composite` helper: `has_fresh_vh()` (a fresh `Verified` cell with `mode ==
+  VH`) — distinct from the mode-agnostic `any_fresh_verified()` (D3).
+- `UndischargedReq` (`:1320`): carry the `DivergentReason` (+ a withdrawal-marker
+  variant) so the bail copy is per-req accurate.
 - bail copy (`:841-849`): three registers —
   - failure: "REQ-X has a Failed coverage cell — re-derive it (VT: `coverage verify
     SL-N`) or re-attest it (VA/VH: `coverage record`), or withdraw the requirement;
     a Failed cell is not accept-dischargeable." (Remedy is mode-aware: VT cells
     re-derive via `verify`; VA/VH cells are overwritten via `record` same-key — F4.)
-  - blocked-no-verified: "REQ-X is Blocked with no confirming evidence — record a
-    VH/VA Verified attestation, then accept-REC; or withdraw."
-  - blocked-with-verified / lag: existing accept-REC recipe (SL-178 legibility
+  - blocked-no-VH: "REQ-X is Blocked with no human confirmation — record a VH
+    Verified attestation that it works, then an accept-REC citing both the blocked
+    and confirming keys; or use the withdrawal path."
+  - withdrawal-without-REC (D4): "REQ-X is withdrawn but still carries a live
+    Failed/Blocked cell — record a slice-owned revise/redesign REC citing the
+    evidence keys; a bare status flip cannot retire a live contradiction."
+  - blocked-with-VH / lag: existing accept-REC recipe (SL-178 legibility
     preserved).
 
 ### 4.5 `coverage_store.rs` — forget guard (§3)
@@ -138,21 +175,33 @@ SPEC-002 **D8** today: closure gate default-refuses residual drift, *with a reco
 override (a REC recording accepted residual drift)*. The amendment **narrows what is
 acceptable residual drift**:
 - a `Failed` cell is **not** acceptable — it must be fixed (cell → Verified) or the
-  requirement withdrawn;
+  requirement withdrawn via a recorded act;
 - a `Blocked` cell is acceptable **only** when the requirement also carries fresh
-  confirming `Verified` evidence.
+  confirming **human (VH)** `Verified` evidence cited by the REC;
+- withdrawing a requirement that still carries a live `Failed`/`Blocked` cell is
+  itself a reconciliation act — a recorded `revise`/`redesign` REC citing the
+  evidence, not a bare status flip (D4);
+- the closure gate is the **`done`** path; `abandoned` is a distinct
+  giving-up terminal, explicitly **not** gated on coverage (codex M6 — clarify the
+  "terminal status" wording so it does not imply abandon-gating).
 
-Candidate touch: **REQ-113** (gate refuses undischarged residual drift) may gain a
-clause or companion requirement on Failed un-acceptability. The REV is **shaped
-after this design locks** (PHASE-01); spec authorizes the code, so governance lands
-first. Routed per ADR-013 (governance edit → Revision).
+Candidate touch: **REQ-113** (gate refuses undischarged residual drift) gains
+clauses (or companion requirements) for Failed un-acceptability, the VH-Blocked bar,
+and the withdrawal-act rule. The REV is **shaped after this design locks**
+(PHASE-01); spec authorizes the code, so governance lands first. Routed per ADR-013
+(governance edit → Revision).
 
 ## 6. Phasing (shape — `/plan` sets criteria)
 
-- **PHASE-01 — governance:** author + approve + apply the D8/REQ-113 REV.
+- **PHASE-01 — governance:** author + approve + apply the D8/REQ-113 REV (Failed
+  un-acceptable, VH-Blocked bar, withdrawal-act rule, abandon-not-gated
+  clarification). Also seed SL-179's own `[gate].extra_reqs` with the REV targets so
+  the dogfood is non-vacuous (codex M8/B1).
 - **PHASE-02 — verdict model:** §4.1–4.3 (`coverage.rs`, `reconcile.rs`,
-  `coverage_view.rs`). Behaviour-preserving except the named reason split.
-- **PHASE-03 — closure gate:** §4.4 (`slice.rs`).
+  `coverage_view.rs`) + the `has_fresh_vh()` helper. Behaviour-preserving except the
+  named reason split.
+- **PHASE-03 — closure gate:** §4.4 (`slice.rs`) — Failed hard-refuse, VH-Blocked
+  bar, M7 empty-keys guard, D4 withdrawal check, per-reason bail copy.
 - **PHASE-04 — forget guard:** §4.5 (`coverage_store.rs`). File-disjoint from
   PHASE-03; /plan may parallelize or merge.
 
@@ -160,8 +209,15 @@ first. Routed per ADR-013 (governance edit → Revision).
 
 - VT: live `Failed` on a gate-set req refuses `reconcile→done`; **no** accept-REC
   discharges it (regression vs the current accept path).
-- VT: `Blocked` + fresh `Verified` + accept-REC → closes; `Blocked` without
-  `Verified` → refuses.
+- VT: `Blocked` + fresh `VH` Verified + accept-REC citing both keys → closes;
+  `Blocked` with only a VT/VA Verified, or no Verified → refuses (D3).
+- VT: req flipped to `Retired`/`Superseded` over a live Failed/Blocked cell refuses
+  unless a slice-owned revise/redesign REC cites the evidence keys (D4).
+- VT: `Indeterminate`/lag accept with **empty** residual keys → refuses (M7).
+- VA: the reconcile writer still cannot observe `Composite`/`Verdict` at
+  `select_status` after the reason split (NF-001 verdict-independence, codex M9).
+- VA: SL-179's own close seeds a declared cross-slice Failed cell and proves the
+  **candidate binary** refuses (non-vacuous dogfood, codex M8).
 - VT: status-lag accept path unchanged. The existing discharge tests (VT-4
   `vt4_matching_accept_rec_discharges_the_drift`, VT-5) exercise
   `EvidenceOutrunsAuthored` (a `Verified` cell on a `Pending` req), **not** a
@@ -209,4 +265,36 @@ Hostile pass against the code, findings folded above:
   model as every VH cell (attributable, git-anchored, dated). Not a new hole; the
   bar is "honest recorded confirmation," consistent with NF-001. Predicate is
   mode-agnostic (any fresh `Verified`); the canonical case is a VH/VA manual
-  attestation.
+  attestation. *(Superseded by D3 — the bar is now VH-only + cite-both-keys.)*
+
+### 9.1 External adversarial pass — codex GPT-5.5 (integrated)
+
+Read-only review of the design + gate/coverage/reconcile surface. Disposition:
+
+**Folded into the design:**
+- **B3 → D4** — withdrawal-over-contradiction was a real escape (req flipped to
+  Retired → drift Coherent → close → reactivate). Now requires a recorded
+  revise/redesign REC.
+- **M5 → D3** — Blocked bar tightened from mode-agnostic `any_fresh_verified` to a
+  fresh **VH** cell + REC citing both keys.
+- **M7** — vacuous discharge: accept with empty `residual_keys` now refused.
+- **M9** — added NF-001 verdict-independence VA after the reason split.
+- **M10** — control flow pinned: classify in `undischarged_drift`; `rec_discharges`
+  signature unchanged.
+- **M8 / B1-dogfood** — PHASE-01 seeds SL-179's own `[gate].extra_reqs`; final VA
+  seeds a declared cross-slice Failed cell and proves the candidate binary refuses.
+- **M6** — `abandoned` is not gated (giving-up ≠ closing); clarified in the D8 REV.
+
+**Verified mostly-moot:**
+- **B2** — `redesign` empty-`status_delta` keeps a req out of the `reconciled` gate
+  term, but `redesign` drives the ADR-009 back-edge (`reconcile.rs:14,265`) → the
+  slice returns to `design` and cannot close that way. Residual is the gate-set
+  breadth theme (B1).
+
+**Deferred to follow-up backlog (out of RSK-008 scope):**
+- **B1** → **RSK-012** — closure gate-set scope is per-slice; a foreign Failed req
+  can be omitted by not declaring it (no *silent* leak — un-declaring is a reviewed
+  toml edit; per-slice scope is deliberate, SL-044 D-B2).
+- **M4** → **RSK-013** — `scan_coverage` silently skips malformed/unreadable
+  `coverage.toml`; closure needs a strict (fail-closed) scan mode. A genuine silent
+  gap, but broader machinery than this slice.
