@@ -1,109 +1,122 @@
-# Positive coordination-tree marker
+# Orchestration worker-safety: accidental ref-corruption guard + OQ-D reframe
 
-Closes ADR-012 **OQ-D** (RV-023 F-2), the deferred redress carried as **IMP-065**.
-Amends ADR-006 **D2a**. Successor concern to SL-064.
+Reframes (does **not** "close") ADR-012 **OQ-D** (RV-023 F-2), the redress carried
+as **IMP-065**. Pairs a cheap anti-accident guard with a **Revision** that retracts
+the over-claimed "positive marker is the real close" framing. Successor concern to
+SL-064. Standing residual tracked as **RSK-014**.
 
-## Context
+## Context — and the correction
 
-Dispatch coordination-tree write-permission today rests on marker **absence**.
-The worker-mode verdict is `worker_mode = (is_linked_worktree && marker_present)
-OR env DOCTRINE_WORKER`; a Write/Orchestrator-classed verb is refused **only**
-when the worker marker is present (`marker.rs::Cause`, `guard.rs::worker_guard`).
-SL-064 moved the orchestrator into a *linked* coordination worktree created
-**markerless** (`coordinate.rs::run_coordinate`, D9 amendment) — so it is
-permitted precisely because no worker marker is present.
+ADR-012 deferred OQ-D as "the real close" of the dispatch impersonation gap
+(ADR-011 D6/M2): an **unstamped worker** (stamp-hook failure / matcher drift —
+ISS-011) is `is_linked && marker_absent`, **indistinguishable by absence** from the
+markerless coordination tree SL-064 introduced (`coordinate.rs::run_coordinate`),
+so its **Orchestrator verb class** (`fork`/`import`/`gc`/`coordinate`/sync) is
+permitted fail-open. IMP-065 proposed a *positive* orchestrator marker to
+disambiguate by presence.
 
-The gap (ADR-006 D2b note; ADR-012 §Consequences/Negative): an **unstamped
-worker** (SubagentStart stamp-hook failure / matcher drift — see ISS-011) is
-`is_linked && marker_absent`, i.e. **indistinguishable by absence** from the
-legitimate coordination tree. SL-064 widened the blast radius from "looks like a
-solo `/execute`" to "looks like the tree that owns the funnel and the whole
-**Orchestrator verb class** (`fork`/`import`/`gc`/`coordinate`/sync)". The D2b
-fence (R-5 import belt + IMP-052 post-spawn check + env-worker-on-main catch +
-bwrap-no-push) is **defence-in-depth, not a proof** it catches `gc`/`sync`
-impersonation (RV-025 B3).
+**Design finding (this slice): a positive marker cannot close that gap.** Worker
+identity is a presence-only file (`.doctrine/state/dispatch/worker`) + an optional
+`DOCTRINE_WORKER` env. **Both are cooperative flags, not enforced boundaries** —
+an agent sets/unsets its own env at will and writes/deletes/`cd`s around an
+unprotected file at will. The *only* arm with real isolation is
+`scripts/pi-spawn-confined.sh` (bwrap `--ro-bind / /`); claude `Agent` and vanilla
+pi subagents have **none**. So an uncontained worker defeats any marker trivially
+(`cd` into the coord tree, or forge the file); a bwrap worker can't misbehave
+anyway. **In every arm the marker buys ~zero against a *capable* worker** — and
+ADR-006 D2a already concedes this ("the fence … is the funnel + the jail, **not** a
+fail-closed CLI floor"). RSK-014 records the full state of play.
 
-**The redress:** stamp a **positive** coordination-tree marker (orchestrator
-identity) at markerless-creation time, so the identity guard distinguishes
-legit-coordination-tree from unstamped-worker by **presence of the right
-marker**, not absence of the worker marker. The positive marker must
-**supersede** the absence dependence, not layer on top of it.
+**What is left, and is worth a cheap fix:** the **accidental, cooperative,
+unstamped worker that stays in its own tree** and runs an Orchestrator verb there.
+The R-5 import belt catches `.doctrine/` *file* writes at import but **not ref
+mutation** (`gc`/`sync`/`import`/`candidate` rewrite shared refs, absent from the
+`B..S` file delta) — so this one honest-failure path is genuinely uncaught today.
+Anthropic models' strong alignment against *malicious compliance* means an
+anti-accident guard goes further than the cooperative-flag critique implies: the
+honest worker is the common case.
 
 ## Scope & Objectives
 
-1. **Mint a positive orchestrator marker** at coordination-tree creation
-   (`run_coordinate`, and the `create.rs` markerless variant) — a withheld-tier
-   identity stamp distinct from the worker marker (`marker --stamp-subagent`).
-2. **Key the Orchestrator verb class on marker presence.** In a linked worktree,
-   an Orchestrator-classed verb (`fork`/`import`/`gc`/`coordinate`/sync) is
-   permitted iff the orchestrator marker is **present**; absent ⇒ refuse. This
-   inverts the absence dependence to a positive signal — an unstamped worker
-   (neither marker) is now refused, not fail-open.
-3. **Amend ADR-006 D2a** prose to record the positive coordination identity and
-   retire the marker-absence transitional assumption (owner-locked VH — governance
-   act, route through `/design` → `/inquisition`, likely a Revision).
-4. **Impersonation tests** (OQ-D plan-gate (ii), mandatory): prove the marker
-   catches `gc`/`sync`/`coordinate` impersonation the D2b fence could not.
+1. **Cheap accidental-ref-corruption guard.** Refuse an Orchestrator-classed verb
+   (`fork`/`import`/`gc`/`coordinate`/`dispatch sync`/`candidate`/`arm-spawn`) when
+   the cwd tree is a linked worktree that is **not** the registered coordination
+   worktree. Framed and tested as **honest-failure defence-in-depth, NOT an
+   impersonation boundary**. Preferred mechanism: derive coordination identity from
+   **existing dispatch state** (the registered coord worktree / `dispatch/<slice>`
+   branch the orchestrator already wrote) rather than minting a new marker file —
+   DRY, no second cooperative artefact to forge. (Mechanism is the one open design
+   decision; see OQ-1.)
+2. **Revision against ADR-012** (and the ADR-006 D2a/D2b notes): retract "the
+   positive marker is the real close of OQ-D"; reclassify the residual as
+   **enforcement-bound and consciously accepted** — the genuine close is
+   *confinement* (bwrap, linux-only; or `claude -p`, cost-untenable), tracked in
+   RSK-014. Honest scope/bounds of orchestration worker-safety is the **primary
+   deliverable**, the guard the secondary.
 
 ## Non-Goals
 
-- **Do NOT gate ordinary authored writes on the positive marker.** D6a ("mode,
-  not location, decides") lets a **solo `/execute` in a worktree** write directly,
-  marker-absent. Requiring the positive marker for *all* authored writes re-breaks
-  that path — the exact failure that got the G2 fail-closed clause reverted
-  (SL-056 PHASE-05, owner-locked VH). The positive requirement is scoped to the
-  **Orchestrator verb class**, not the general Write class. (See Open Question 1 —
-  must be confirmed in design, not assumed.)
-- Not a dispatch **topology** change (that is ADR-012, shipped).
-- Does **not** close the D2b raw-tree harness-confinement gap (bare `git commit`
-  / hand-edit by an unconfined worker) — that stays deferred to sandbox/harness
-  work (ADR-008).
+- **No new cooperative marker presented as security.** A positive marker file does
+  not raise the enforcement altitude; do not build one and call it an impersonation
+  fix. (If the guard ends up needing a stamped artefact, it is labelled
+  anti-accident DiD, not a boundary.)
+- **Does not close the impersonation gap.** A capable/misbehaving worker is out of
+  scope — that needs confinement (RSK-014 / ADR-008 / D2b), unsolved on the claude
+  arm. This slice does not pretend otherwise.
+- **Does NOT gate ordinary authored writes.** D6a ("mode, not location, decides")
+  lets a solo `/execute` in a worktree write directly, marker-absent. The guard is
+  scoped to the **Orchestrator verb class** only — re-breaking general Write is the
+  reverted-G2 hazard (SL-056 PHASE-05, owner-locked VH).
+- Not a dispatch **topology** change (ADR-012, shipped).
 
 ## Affected Surface (coarse — `/design` refines)
 
-- `src/worktree/marker.rs` — `Cause`/`StatusLine`/`resolve_mode`; the marker file
-  model gains the orchestrator-identity stamp.
-- `src/worktree/coordinate.rs` — `run_coordinate` (the markerless creation /
-  positive-stamp point).
-- `src/worktree/create.rs` — markerless creation variant (D9).
-- `src/commands/guard.rs` — `worker_guard` / `write_class` (Orchestrator class
-  refusal keyed on positive-marker presence).
-- `src/worktree/subagent.rs` — worker-marker minting (the contrast verb).
-- `.doctrine/adr/006/adr-006.md` — D2a amendment (governance).
+- `src/commands/guard.rs` — `worker_guard` / `write_class`: the Orchestrator-class
+  refusal gains the not-the-coord-tree check.
+- `src/worktree/coordinate.rs` — `run_coordinate`: source of the registered-coord
+  identity the guard checks (and/or the stamp point, if a marker is chosen).
+- `src/worktree/marker.rs` — only if the mechanism needs a new predicate; minimise.
+- `src/dispatch.rs` — Orchestrator dispatch verbs (`sync`/`candidate`/`arm-spawn`)
+  share the guard.
+- **REV** against `ADR-012` (+ ADR-006 D2a/D2b notes) — governance deliverable.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 (scope-shaping, decide in design).** Does the positive requirement apply
-  to the Orchestrator verb class **only**, or more broadly? Broader re-breaks
-  solo-`/execute`-in-worktree (the reverted G2 hazard). Working assumption:
-  Orchestrator-class only.
-- **OQ-2.** OQ-D plan-gate (i) required SL-064 to restrict Orchestrator-verb
-  invocation to "the trusted orchestrator path until a positive marker lands." No
-  explicit trusted-path gate was found in `src/` during preflight — confirm
-  whether it shipped (and under what name) and how SL-181 retires/replaces it.
-- **OQ-3.** Marker minting/storage: the orchestrator stamp must not collide with
-  the worker withheld-tier marker model, and must be a distinct mint verb/identity
-  from `marker --stamp-subagent`. `Cause` enum likely gains a variant.
-- **A1.** `needs: ISS-011` is **closed/done** (fulfilled by SL-124/SL-125) — this
-  slice is actionable (ADR-017 gate clear).
-- **A2 (governance).** ADR-006 D2a is **owner-locked (VH, SL-056 PHASE-05)**.
-  Amending it is a governance act — `/design` → `/inquisition`, possibly a
-  Revision; the plan is not higher authority than D2a/ADR-012.
+- **OQ-1 (the one real design decision).** Mechanism for "is this the coordination
+  tree?": (a) derive from existing dispatch state / `dispatch/<slice>` branch
+  registration (preferred — no new artefact); (b) a new presence-only orchestrator
+  marker stamped at `coordinate` (rejected unless (a) proves unworkable — adds a
+  second forgeable file). Decide in design.
+- **OQ-2 (verify, researcher thread 1).** Is the `coordinate`-created coord tree the
+  **sole** legitimate caller of an Orchestrator verb from inside a *linked*
+  worktree? If yes, the guard is unconditional on the class; if any other legit
+  flow runs one from a linked tree, narrow it. (Determines correctness, not value.)
+- **OQ-3.** Does SL-064's OQ-D plan-gate (i) "trusted orchestrator path" restriction
+  exist in code? If so, this guard replaces/retires it; if not, this is the first
+  implementation of that obligation.
+- **A1.** `needs: ISS-011` closed (SL-124/SL-125) — actionable.
+- **A2 (governance).** ADR-006 D2a/D2b owner-locked (VH). The REV is the sanctioned
+  amendment path; the guard's value-claim must match the REV's honest framing.
+- **A3 (premise of the value).** Anti-accident guard is worth it because honest
+  failure (ISS-011 stamp drift) is real and the model is well-aligned against
+  malice. If ISS-011 stamp reliability post-SL-124/125 made unstamped workers rare,
+  the guard is near-pure DiD — still cheap, still honest, lower urgency.
 
 ## Verification / Closure Intent
 
-- Unstamped worker (`is_linked && both markers absent`) is **refused** at the
-  Orchestrator verb seam (the fail-open that exists today is closed).
-- Legit coordination tree (orchestrator marker present) **writes**; solo
-  `/execute` in a worktree (both markers absent) **still writes** its own doctrine
-  state (D6a preserved).
-- Impersonation tests for `gc`/`sync`/`coordinate` (plan-gate (ii)).
-- ADR-006 D2a prose records the positive identity; absence dependence superseded,
-  not layered.
+- **Accidental case caught:** an unstamped worker (linked, not the coord tree)
+  running `gc`/`sync`/`import` from its own cwd is **refused** (today: fail-open).
+- **Legit case preserved:** the registered coordination tree runs Orchestrator
+  verbs; a solo `/execute` in a worktree **still writes** general authored entities
+  (D6a intact); general Write class unchanged.
+- **Honest framing landed:** the REV retracts "real close"; SL-181 and IMP-065 no
+  longer claim impersonation closure; RSK-014 carries the residual.
+- **Tests labelled** anti-accident DiD, not impersonation proofs — no test asserts
+  the guard stops a capable worker (it doesn't).
 - Behaviour-preservation: existing `e2e_worktree_coordinate` + worker-guard suites
-  stay green except where they encoded the absence dependence (those update with
-  the D2a amendment).
+  stay green except where they encoded the absence dependence.
 
 ## Follow-Ups
 
-- (none yet)
+- **RSK-014** — claude-subagent confinement state-of-play; the real close lives there.
+- **IMP-065** — to be closed as "reframed, not closed-by-marker" when this lands.

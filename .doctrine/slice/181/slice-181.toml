@@ -1,6 +1,6 @@
 id = 181
 slug = "positive-coordination-marker"
-title = "Positive coordination-tree marker"
+title = "Worker-safety: accidental ref-corruption guard + OQ-D reframe"
 status = "design"
 created = "2026-06-30"
 updated = "2026-06-30"
@@ -42,6 +42,10 @@ target = "ADR-012"
 label = "references"
 role = "originates_from"
 target = "IMP-065"
+
+[[relation]]
+label = "related"
+target = "RSK-014"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
