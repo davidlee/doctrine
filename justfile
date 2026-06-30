@@ -2,6 +2,8 @@ mod? doctrine '.doctrine/doctrine.just'
 
 default: lint test install
 
+setup: web-build build
+
 quick: fmt lint test
 
 # doctrine + skills reinstall; idempotent

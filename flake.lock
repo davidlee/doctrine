@@ -354,14 +354,19 @@
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1781924124,
-        "narHash": "sha256-s6gUIc7qQBfMlytc+HnWqHwpnfHCtdZd7Ohqt5/bCb0=",
-        "path": "/home/david/flakes/pub",
-        "type": "path"
+        "dir": "flakes/pub",
+        "lastModified": 1781924286,
+        "narHash": "sha256-tyRCfN2TK8GtSQ3qHqp91m5cxAWVrWSWAd5wOPK/X7A=",
+        "owner": "davidlee",
+        "repo": "nix-config",
+        "rev": "888fe94e3d157140e987106e3aa48ecdf6869381",
+        "type": "github"
       },
       "original": {
-        "path": "/home/david/flakes/pub",
-        "type": "path"
+        "dir": "flakes/pub",
+        "owner": "davidlee",
+        "repo": "nix-config",
+        "type": "github"
       }
     },
     "root": {
