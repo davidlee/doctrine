@@ -5,15 +5,19 @@ set +o pipefail
 BASE="https://code.claude.com/docs/"
 MATCH='https://code\.claude\.com/docs/en/(.+/)?\K[^ )]+\.md'
 INDEX="${BASE}llms.txt"
-DOWNLOADS="hooks.md hooks-reference.md subagents.md plugins.md plugins-reference.md" # see index.txt for more
+DOWNLOADS="hooks.md hooks-reference.md subagents.md plugins.md plugins-reference.md settings-reference.md" # see index.txt for more
 
 echo -e "Fetching Claude Code docs index: llms.txt ..."
 curl $INDEX -sL | grep -oP "$MATCH" | sort | uniq >index.txt
 
 echo -e "Index of available docs written to index.txt\nDownloading ..."
 for file in $DOWNLOADS; do
-  echo -e "  -> $file"
-  curl "${BASE}en/${file}" -sL >$file
+  if [ -s $file ]; then
+    echo -e "  -> $file ... skipping (exists)"
+  else
+    echo -e "  -> $file"
+    curl "${BASE}en/${file}" -sL >$file
+  fi
 done
 
 echo 'Done.'
