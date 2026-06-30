@@ -116,11 +116,8 @@ mkdir my-project && cd my-project
 git init 
 mkdir .claude 
 
-# these are also the 'I updated doctrine' routine:
-doctrine install -y 
-npx skills add davidlee/doctrine --agent universal -y
-
-cat .gitignore # check & adjust to taste
+# also run this after a new doctrine version:
+doctrine install -y
 
 git add -A && git commit -m "chore: doctrine install"
 ```
