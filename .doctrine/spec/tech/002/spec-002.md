@@ -145,12 +145,27 @@ ADR-009 topology).
   evidence), **revise** (write corrected spec truth), or **redesign** (escalate
   `reconcile → design`, ADR-009 — no instance write). It emits exactly one REC per
   reconciliation act.
-- **D8 — the closure gate default-refuses residual drift, with a recorded override.**
-  Moving a slice to a terminal status checks its owning specs carry no outstanding
-  unreconciled drift. Residual drift → refuse, unless an explicit override is present;
-  the override **is** a reconciliation act (a REC recording accepted residual drift +
-  rationale), so closed-with-*unreconciled*-drift is unrepresentable. The topology
-  edge (`done` only from `reconcile`) stays ADR-009 F12 hard. Resolves PRD-013 **OQ-3**.
+- **D8 — the closure gate default-refuses residual drift; the override is narrowed,
+  not uniform (REV-017).** Moving a slice to **`done`** checks its owning specs carry
+  no outstanding unreconciled drift (the `abandoned` terminal is a distinct giving-up
+  exit and is **not** coverage-gated). Residual drift → refuse, and what may override
+  depends on the drift's source:
+  - a live **`Failed`** cell (a check that *ran and contradicted*) is **not**
+    override-acceptable — no accept-REC discharges it; it must be fixed (the cell
+    re-derived to `Verified`) or the requirement withdrawn via a recorded act;
+  - a live **`Blocked`** cell (evidence *unobtainable*) is override-acceptable **only**
+    when the requirement also carries a fresh **human (VH)** `Verified` cell and the
+    override REC cites both keys (stricter than status-lag);
+  - **status-lag** (`EvidenceOutrunsAuthored` — authored status trails confirmed
+    evidence) keeps the unchanged recorded-override path;
+  - **withdrawing** a requirement that still carries a live `Failed`/`Blocked` cell is
+    itself a reconciliation act — a slice-owned `revise`/`redesign` REC citing the
+    evidence keys, not a bare status flip.
+
+  The override **is** a reconciliation act (a REC recording the accepted residual
+  drift + rationale), so closed-with-*unreconciled*-drift is unrepresentable. The
+  topology edge (`done` only from `reconcile`) stays ADR-009 F12 hard. Resolves
+  PRD-013 **OQ-3**.
 - **D9 — CLI surface is named, shapes deferred.** A coverage recorder/reader, the
   `reconcile` writer, and a closure-gate hook on the slice-status / `/close` seam. The
   CLI is the source of truth for exact verb/flag shapes; they settle at build, not in

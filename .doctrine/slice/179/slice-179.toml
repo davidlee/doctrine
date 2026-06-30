@@ -1,7 +1,7 @@
 id = 179
 slug = "close-failed-cell-gate"
 title = "Closure gate hardens on live Failed coverage cell; close the forget evidence-erasure leak"
-status = "plan"
+status = "started"
 created = "2026-06-30"
 updated = "2026-06-30"
 tags = []
@@ -56,3 +56,9 @@ intent = "design-target"
 #   doctrine link SL-NNN specs SPEC-018
 #   doctrine link SL-NNN governed_by ADR-010
 # `doctrine inspect SL-NNN` renders the inbound + outbound edges.
+
+# Closure-gate declared set (PHASE-01, REV-017): the governed requirement this slice
+# amends is added to its own gate set so SL-179's close is answerable for it — the
+# PHASE-03 dogfood (VA-1) is non-vacuous (codex M8).
+[gate]
+extra_reqs = ["REQ-113"]

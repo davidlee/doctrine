@@ -7,10 +7,13 @@ title = "Enforce the closure gate by default-refusing residual drift with a reco
 status = "active"
 kind = "functional"
 
-description = "The closure gate default-refuses a terminal transition while owning specs carry residual drift, overridable only by a recorded reconciliation act."
+description = "The closure gate default-refuses a `done` transition while owning specs carry residual drift; the override is not uniform — a `Failed` cell is never override-dischargeable, a `Blocked` cell only via a recorded override citing fresh human (VH) evidence, and withdrawal over a live contradiction is itself a recorded reconciliation act."
 tags = []
 acceptance_criteria = [
-  "A slice with outstanding unreconciled drift on its owning specs is refused a terminal status.",
-  "An override is admitted only as a reconciliation act (a REC recording accepted residual drift with rationale).",
+  "A slice with outstanding unreconciled drift on its owning specs is refused a `done` status; the `abandoned` terminal is a distinct giving-up exit and is not coverage-gated.",
+  "A live `Failed` cell (a check that ran and contradicted) on a gate-set requirement is not discharged by any accept-REC — it must be fixed (cell re-derived to Verified) or the requirement withdrawn via a recorded act.",
+  "A live `Blocked` cell (evidence unobtainable) is discharged only by a recorded override (an accept-REC) when the requirement also carries a fresh `Verified` cell of mode VH and the REC cites both keys.",
+  "Withdrawing a requirement (to Retired/Superseded) that still carries a live `Failed`/`Blocked` cell is admitted only as a slice-owned `revise`/`redesign` REC citing the evidence keys — not a bare status flip.",
+  "The status-lag override path (EvidenceOutrunsAuthored — authored status trails confirmed evidence) is unchanged.",
   "The reconcile->done topology edge stays hard-enforced (ADR-009 F12), independent of the drift check.",
 ]
