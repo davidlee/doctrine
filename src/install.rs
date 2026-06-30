@@ -15,22 +15,6 @@ use serde::Deserialize;
 
 use crate::memory::MemoryType;
 
-/// Build the post-install Claude plugin reminder (PURE — no IO).
-///
-/// Claude hooks now ship via the doctrine plugin (not settings-wired), so the
-/// install verb DELEGATES wiring to the operator via printed commands.
-/// Non-Claude agents are handled live by the forward-step loop.
-pub(crate) fn post_install_instructions(has_claude: bool, repo: &str) -> Option<String> {
-    if !has_claude {
-        return None;
-    }
-    let mut lines: Vec<String> = Vec::new();
-    lines.push("Claude hooks ship via the doctrine plugin. To install:".to_string());
-    lines.push(format!("  /plugin marketplace add {repo} -s project"));
-    lines.push("  /plugin install doctrine@doctrine -s project".to_string());
-    Some(lines.join("\n"))
-}
-
 /// Embedded install assets — everything under `install/`.
 #[derive(RustEmbed)]
 #[folder = "install/"]
@@ -382,9 +366,16 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             ) {
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
             }
-            // SL-152 PHASE-06: the Claude hooks (boot + create-fork) now ship via
-            // the doctrine plugin, NOT settings-wired — wiring is delegated to the
-            // operator via printed post-install instructions (see end of fn).
+            // Hooks install as a skills-directory plugin — Claude auto-discovers
+            // `.claude/skills/doctrine/.claude-plugin/plugin.json` and loads hooks
+            // with no marketplace install step.
+            if let Err(e) = crate::skills::install_hooks_plugin_for_claude(
+                root,
+                args.global,
+                &mut io::stdout(),
+            ) {
+                writeln!(io::stdout(), "  hooks plugin install failed: {e:#}")?;
+            }
         } else {
             non_claude_agents.push(agent.clone());
             // Agent-def install per non-Claude agent.
@@ -419,16 +410,9 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
         }
     }
 
-    // SL-152 PHASE-06: Claude hooks now ship via the doctrine plugin (not
-    // settings-wired — they double-fired with the plugin). Delegate wiring to
-    // the operator via printed instructions. Non-Claude skills are handled
-    // live by the per-agent loop above.
-    let has_claude = agents.iter().any(|a| a == "claude");
-    if let Some(block) = post_install_instructions(has_claude, repo) {
-        let mut out = io::stdout();
-        writeln!(out)?;
-        writeln!(out, "{block}")?;
-    }
+    // SL-152 PHASE-06: Hooks are now installed directly as a skills-directory
+    // plugin (see the Claude agent branch above). No post-install delegation needed.
+    // Non-Claude skills are handled by the per-agent loop above.
 
     Ok(())
 }
@@ -694,8 +678,6 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use std::fs;
-
-    const TEST_REPO: &str = "davidlee/doctrine";
 
     // ---------------------------------------------------------------
     // detect_project_root
@@ -1219,24 +1201,6 @@ mod tests {
     // ---------------------------------------------------------------
     // PHASE-02: detect_agents + prompt_step
     // ---------------------------------------------------------------
-
-    // ---------------------------------------------------------------
-    // PHASE-06: post-install delegation instructions (pure builder)
-    // ---------------------------------------------------------------
-
-    #[test]
-    fn post_install_instructions_none_when_no_claude() {
-        assert!(post_install_instructions(false, TEST_REPO).is_none());
-    }
-
-    #[test]
-    fn post_install_instructions_claude_prints_plugin_block() {
-        let block = post_install_instructions(true, TEST_REPO).unwrap();
-        assert!(block.contains("Claude hooks ship via the doctrine plugin"));
-        assert!(block.contains("/plugin marketplace add davidlee/doctrine -s project"));
-        assert!(block.contains("/plugin install doctrine@doctrine -s project"));
-        assert!(!block.contains("npx skills"));
-    }
 
     #[test]
     fn detect_agents_empty_when_no_agent_dirs_and_no_flags() {

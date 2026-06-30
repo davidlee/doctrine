@@ -5,11 +5,10 @@
 //! proves the Claude-surface install (design §9):
 //!   * VT-1: `install --agent claude --skill code-review` wires skills + agent def.
 //!   * VT-2: the dispatch-worker agent def resolves at `.claude/agents/`.
-//!   * SL-152 PHASE-06: the Claude hooks now ship via the doctrine PLUGIN, so the
-//!     install verb DELEGATES wiring via printed instructions rather than wiring
-//!     the boot (`SessionStart`) / create-fork (`WorktreeCreate`) hooks into
-//!     `.claude/settings.local.json` (they double-fired with the plugin). No
-//!     SessionStart, WorktreeCreate, or retired SubagentStart hook is emitted.
+//!   * SL-152: Claude hooks now ship as a skills-directory plugin — `doctrine install`
+//!     copies `.claude-plugin/plugin.json` + `hooks/` directly into `.claude/skills/doctrine/`,
+//!     so Claude auto-discovers them with no marketplace install step. No SessionStart,
+//!     WorktreeCreate, or retired SubagentStart hook is settings-wired.
 
 #![allow(
     clippy::expect_used,
@@ -113,7 +112,7 @@ fn assert_installed(dir: &Path) {
 }
 
 #[test]
-fn install_wires_skills_agent_and_delegates_hooks_to_plugin() {
+fn install_wires_skills_agent_and_hooks_directly() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
@@ -123,32 +122,46 @@ fn install_wires_skills_agent_and_delegates_hooks_to_plugin() {
         out.contains("linked    dispatch-worker.md"),
         "agents leg: {out}"
     );
-    // SL-152 PHASE-06: hooks are delegated to the plugin via printed instructions,
-    // not settings-wired.
+    // Hooks are installed as a skills-directory plugin — no marketplace delegation.
     assert!(
-        out.contains("/plugin marketplace add davidlee/doctrine -s project"),
-        "plugin marketplace instruction: {out}"
+        out.contains("hooks (skills-dir plugin):"),
+        "hooks plugin install header: {out}"
     );
     assert!(
-        out.contains("/plugin install doctrine@doctrine -s project"),
-        "plugin install instruction: {out}"
+        out.contains("refreshed .claude-plugin/plugin.json"),
+        "plugin manifest refreshed: {out}"
+    );
+    assert!(
+        out.contains("refreshed hooks/hooks.json"),
+        "hooks config refreshed: {out}"
     );
     assert!(
         !out.contains("worktree hook: wired"),
         "no settings-wired hook line: {out}"
     );
+    assert!(
+        !out.contains("/plugin marketplace add"),
+        "no delegated marketplace add: {out}"
+    );
+    assert!(
+        !out.contains("/plugin install"),
+        "no delegated plugin install: {out}"
+    );
     assert_installed(dir);
 
-    // Reinstall is idempotent: skills/agent re-reconcile, the plugin instructions
-    // print again, and still no hooks are settings-wired.
+    // Reinstall is idempotent: skills/agent/hooks re-reconcile.
     let out = install(dir);
     assert!(
-        out.contains("/plugin install doctrine@doctrine -s project"),
-        "reinstall prints plugin instructions: {out}"
+        out.contains("hooks (skills-dir plugin):"),
+        "reinstall refreshes hooks plugin: {out}"
     );
     assert!(
         !out.contains("worktree hook:"),
         "reinstall wires no settings hook: {out}"
+    );
+    assert!(
+        !out.contains("/plugin install"),
+        "reinstall prints no plugin delegation: {out}"
     );
     assert_installed(dir);
 }

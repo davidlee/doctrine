@@ -1011,6 +1011,47 @@ pub(crate) fn install_agent_def(
 }
 
 // ---------------------------------------------------------------------------
+// Hooks plugin leg — install the doctrine Claude plugin as a skills-directory
+// plugin so hooks (SessionStart / WorktreeCreate) auto-load without a
+// marketplace install step. The per-skill symlinks are untouched; the plugin
+// dir carries only the manifest + hooks.
+// ---------------------------------------------------------------------------
+
+/// Install the doctrine hooks plugin directly into `.claude/skills/doctrine/`.
+/// Claude auto-discovers skills-directory plugins — any folder under a skills
+/// dir containing `.claude-plugin/plugin.json` loads as `<name>@skills-dir`
+/// with all components (here: just hooks) active.
+pub(crate) fn install_hooks_plugin_for_claude(
+    root: &Path,
+    global: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let skills_dir = claude_dir(root, global)?;
+    let plugin_dir = skills_dir.join("doctrine");
+    let manifest_dir = plugin_dir.join(".claude-plugin");
+    let hooks_dir = plugin_dir.join("hooks");
+
+    writeln!(out, "hooks (skills-dir plugin):")?;
+
+    fs::create_dir_all(&manifest_dir)
+        .with_context(|| format!("Failed to create {}", manifest_dir.display()))?;
+    fs::create_dir_all(&hooks_dir)
+        .with_context(|| format!("Failed to create {}", hooks_dir.display()))?;
+
+    let manifest = PluginAssets::get("doctrine/.claude-plugin/plugin.json")
+        .context("Embedded plugin manifest 'doctrine/.claude-plugin/plugin.json' not found")?;
+    crate::fsutil::write_atomic(&manifest_dir.join("plugin.json"), &manifest.data)?;
+    writeln!(out, "  refreshed .claude-plugin/plugin.json")?;
+
+    let hooks = PluginAssets::get("doctrine/hooks/hooks.json")
+        .context("Embedded hooks config 'doctrine/hooks/hooks.json' not found")?;
+    crate::fsutil::write_atomic(&hooks_dir.join("hooks.json"), &hooks.data)?;
+    writeln!(out, "  refreshed hooks/hooks.json")?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // CLI entry points (thin)
 // ---------------------------------------------------------------------------
 
@@ -1130,15 +1171,13 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         crate::install::ensure_gitignored(&base, ".doctrine/agents/*")?;
         crate::install::ensure_gitignored(&base, "!.doctrine/agents/AGENTS.md")?;
         install_agents_for(&root, "claude", None, args.global, args.dry_run, &mut out)?;
-    }
 
-    // SL-152 PHASE-06: the Claude hooks (boot + create-fork) now ship via the
-    // doctrine plugin (NOT settings-wired — they double-fired with the plugin).
-    // Delegate wiring to the operator via printed instructions.
-    let has_claude = agents.iter().any(|a| matches!(a, Agent::Claude));
-    if let Some(block) = crate::install::post_install_instructions(has_claude, &repo) {
-        writeln!(out)?;
-        writeln!(out, "{block}")?;
+        // Hooks install as a skills-directory plugin — Claude auto-discovers
+        // `.claude/skills/doctrine/.claude-plugin/plugin.json` and loads hooks
+        // with no marketplace install step.
+        if let Err(e) = install_hooks_plugin_for_claude(&root, args.global, &mut out) {
+            writeln!(out, "  hooks plugin install failed: {e:#}")?;
+        }
     }
 
     writeln!(out, "Done.")?;
