@@ -72,3 +72,16 @@ in parallel once the master ships.
   symbols (`run_status`, `undischarged_drift`, `rec_discharges`, `SLICE_DIR`,
   `expect_close_refused`) are the stable anchors and all resolve in the current
   tree.
+- **Supersede, do NOT delete (design tension, pinned).** §5.3 says the local
+  capture `mem_019f075f` "is removed"; D3 / §5.4 step 3 / §7 say **superseded**
+  (`memory status superseded --by <new-uid>`). D3 is the authoritative revised
+  decision (post-RV-195 F-5) — "removed" reads as functionally-inactive, not
+  `rm`. PHASE-01 supersedes the capture; it is not deleted (it carries the
+  historical refs that still resolve via `memory show`).
+- **Same-key shadow check.** After supersede + `memory sync`, the superseded local
+  capture and the active shipped master both spell the key. PHASE-01 EX-3's "find
+  discovers the master" must confirm `memory find` returns the *master*, not the
+  superseded capture (or both) — verify, don't assume the supersede excludes it.
+- `--global` verified present on `doctrine memory record` (mint a global
+  orientation master: suppress born frame, write into `memory/`) — design D3's
+  premise holds.
