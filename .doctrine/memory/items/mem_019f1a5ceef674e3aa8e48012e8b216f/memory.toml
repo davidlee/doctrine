@@ -41,3 +41,7 @@ trust_level = "high"
 severity = "medium"
 weight = 0
 
+[[relation]]
+label = "related"
+target = "RFC-012"
+
