@@ -70,15 +70,27 @@ Harness claude-code 2.1.181. H1a ✓ H1b ✓ H1c ✓ H1d ✓ — every sub-claim
   OUR bwrap, not native. Native Bash sandbox is worktree-unaware (per docs);
   confirmed — native produced no Bash block.
 
-### SURPRISE FINDING — Edit/Write is natively worktree-confined
-A subagent `Write` to a parent path was DENIED by the harness BEFORE our
-pathcheck hook ran (pathcheck.log logged only the inside-worktree PASS). Native
-message: *"This agent is isolated in the worktree <wt>. Edit the worktree copy
-of this file instead of the shared-checkout path."* → **contradicts the brief's
-vendor-doc claim that the native sandbox covers Bash only, not Edit/Write.**
-Our pathcheck stub is redundant for shared-checkout paths (defense-in-depth).
-OPEN: does native Edit-block cover arbitrary absolute paths (/tmp, /home) or only
-shared-checkout? If only the latter, the pathcheck stub still earns its keep.
+### Edit/Write wall — native covers ONLY the shared checkout; our pathcheck covers the rest
+Native harness DOES confine subagent Edit/Write — but **only to the shared
+repo checkout.** A Write to a repo-root path is denied natively BEFORE our hook
+runs (native msg: *"This agent is isolated in the worktree <wt>. Edit the
+worktree copy … instead of the shared-checkout path."*). This already
+contradicts the brief's "native sandbox covers Bash only" claim.
+
+BUT the second probe (Write to non-checkout absolute paths) proves native
+coverage is **partial**:
+| Write target | denied by | proof |
+|---|---|---|
+| repo root (shared checkout) | **native** | no pathcheck record (native preempts) |
+| `/tmp/escape_probe` | **our pathcheck** | pathcheck.log DENY; file absent |
+| `/home/david/escape_probe` | **our pathcheck** | pathcheck.log DENY; file absent |
+| inside worktree | allowed | pathcheck PASS; file created |
+
+→ Native fences the repo only; the ENTIRE filesystem outside it (`/tmp`, `$HOME`,
+`/etc`, ssh keys, shell rc…) is open to the Edit/Write tools. **Our
+`PreToolUse(Edit|Write)` pathcheck is the ONLY thing that closes that gap, and
+its deny branch is now proven to enforce in-situ.** Both layers are load-bearing:
+native (repo) + pathcheck (everywhere else). NOT redundant.
 
 ### Falsification completeness — remaining checks (follow-up)
 - Confirm bwrap is NECESSARY for Bash: disable wrapper, re-run vector 1 — expect
@@ -89,7 +101,9 @@ shared-checkout? If only the latter, the pathcheck stub still earns its keep.
 
 ### Two-wall summary (full write-containment)
 - **Bash wall:** OUR PreToolUse(Bash) bwrap wrapper. REQUIRED (native doesn't cover).
-- **Edit/Write wall:** NATIVE harness guard (this version). Pathcheck = backup.
+- **Edit/Write wall:** TWO load-bearing layers — NATIVE guard (shared checkout
+  only) + OUR PreToolUse(Edit|Write) pathcheck (everywhere else: /tmp, $HOME, …).
+  Both required; native alone leaves the whole non-repo filesystem writable.
 - Out of scope (flagged): reads stay open (exfil), network egress unaddressed.
 
 ## Exp 2 — Containment & escape battery (H1b/c/d) — DONE (see verdict)
@@ -119,6 +133,7 @@ Decide: every vector denied + wrapper.log shows WRAP for the subagent + canaries
 intact → H1 supported (Bash wall). Any canary mutated OR wrapper.log shows the
 subagent PASS-THROUGH/absent → updatedInput not honoured → H1b falsified.
 
-## Edit/Write second wall — STAGED (pathcheck stub; out of Bash scope)
+## Edit/Write second wall — DONE (pathcheck PROVEN load-bearing)
 `pretooluse-pathcheck.sh` denies subagent Edit/Write whose realpath escapes cwd.
-Verify post-restart by asking a subagent to Edit a parent-tree file.
+In-situ: DENY fired for `/tmp` + `$HOME` writes (native ignores those); repo-root
+write preempted by native. Native = shared-checkout only; pathcheck = the rest.

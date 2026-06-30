@@ -25,14 +25,15 @@ worktree, `--ro-bind / /` everything else. Flags mirror
   discriminator. Rule: jail iff `agent_id` present AND `cwd ⊆ .worktrees/`; else
   pass through (orchestrator needs full-repo access). cf. [[mem_019f01e2f7d27fe1886c12ff80811c0c]] (no per-worktree ENV seam — use cwd instead), [[mem_019ec65ecbc77282bad7e10a5240ad27]].
 
-## Edit/Write wall — ALREADY NATIVE (surprise)
-This harness natively confines `Edit`/`Write` by an `isolation:worktree`
-subagent to its worktree: a Write to a parent/shared-checkout path is denied
+## Edit/Write wall — native covers ONLY the shared checkout
+This harness natively denies subagent `Edit`/`Write` to the shared repo checkout
 *before any hook runs* ("This agent is isolated in the worktree … Edit the
-worktree copy"). Contradicts the old "native sandbox covers Bash only" claim.
-So only the Bash bwrap wrapper is NEW machinery; a `PreToolUse(Edit|Write)`
-path-check is redundant for shared-checkout paths (still possibly useful for
-arbitrary absolute paths — unconfirmed).
+worktree copy"). Contradicts the old "native covers Bash only" claim — BUT
+coverage is **partial**: Writes to `/tmp`, `$HOME`, etc. are NOT caught natively.
+A `PreToolUse(Edit|Write)` pathcheck (`realpath(file_path) ⊆ cwd`, fail-closed)
+catches those — its deny is proven to enforce in-situ. So full Edit/Write
+containment needs BOTH: native (repo) + the pathcheck hook (entire non-repo fs).
+NEW machinery to land = bwrap Bash wrapper + Edit/Write pathcheck.
 
 ## Operational gotcha
 **Settings hooks load at session start ONLY — no hot-reload.** Editing

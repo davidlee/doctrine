@@ -5,7 +5,7 @@ lifespan = "procedural"
 memory_type = "pattern"
 status = "active"
 title = "Confine claude isolation:worktree subagents via PreToolUse(Bash) + nested bwrap"
-summary = "PreToolUse(Bash) updatedInput → nested bwrap confines claude isolation:worktree subagents (Bash wall); Edit/Write already native"
+summary = "PreToolUse(Bash)→bwrap confines worktree-subagent Bash; Edit/Write needs native(repo)+pathcheck(rest)"
 created = "2026-06-30"
 updated = "2026-06-30"
 

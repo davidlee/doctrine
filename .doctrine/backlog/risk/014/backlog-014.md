@@ -61,14 +61,18 @@ Confinement altitude, by arm:
      (absolute / traversal / symlink / hardlink / shared-`.git` / `/proc` alias /
      child-proc / detached job / `$HOME`) was contained by `Read-only file system`.
      Apparatus + raw logs + verdict: [`probe-h1/`](./probe-h1/) (`results.md`).
-   - **SURPRISE:** Edit/Write are **already natively worktree-confined** by this
-     harness (a subagent Write to a parent path is denied before any hook runs) —
-     contradicts the brief's "native sandbox covers Bash only" assumption. So the
-     `PreToolUse(Edit|Write)` path-check is redundant for shared-checkout paths;
-     the bwrap Bash wrapper is the only NEW machinery needed. Net: this path is a
-     **viable real close** of the claude-arm Bash hole — graduate `.harness/probe/`
-     into the doctrine skill hooks under a slice to land it. Linux/bwrap only
-     (macOS still open — see IMP-045 seatbelt seam).
+   - **Edit/Write wall — PARTIALLY native, needs our hook for the rest.** This
+     harness natively confines subagent Edit/Write **only to the shared repo
+     checkout** (a Write to a repo-root path is denied before any hook runs —
+     contradicts the brief's "native covers Bash only" claim). But a second probe
+     proved coverage is partial: Writes to `/tmp` and `$HOME` were NOT caught by
+     native and were denied by **our** `PreToolUse(Edit|Write)` pathcheck (deny
+     branch proven to enforce in-situ). So full Edit/Write containment needs BOTH
+     layers: native (repo) + our pathcheck (entire non-repo filesystem). NOT
+     redundant. Net: this path is a **viable real close** of the claude-arm holes
+     — NEW machinery = the bwrap Bash wrapper + the Edit/Write pathcheck; graduate
+     `.harness/probe/` into the doctrine skill hooks under a slice to land it.
+     Linux/bwrap only (macOS still open — see IMP-045 seatbelt seam).
 2. A **gatekeeper-agent** enforcement model (auto-mode or a custom variant) that
    adjudicates the worker's actions.
 3. Manually-started sessions inside a worktree with reduced permissions, coordinated
