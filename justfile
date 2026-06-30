@@ -20,8 +20,8 @@ gate: fmt lint lint-js test-all build
 #   @cargo run -q -- memory list
 
 # # Refresh the spec index in README.md from .doctrine/spec/.
-# readme-index:
-#   @scripts/refresh-readme-index.sh
+readme-index:
+  @scripts/refresh-readme-index.sh
 
 # format rust code
 fmt:
