@@ -43,6 +43,7 @@ emit_profile() {
     echo "(allow file-write* (subpath (param \"RW$i\")))"  # one per validated extra_rw
   done
   [ "$network" = "false" ] && echo '(deny network*)'       # coarse: syscall-deny, not iface removal (M3/egress non-goal)
+  return 0   # the network `&&` short-circuits when network=true; don't leak its rc=1 to callers
 }
 
 # --- argv builder: realpath every path param, opaque base64 body -------------
