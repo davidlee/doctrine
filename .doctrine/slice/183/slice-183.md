@@ -70,10 +70,14 @@ scratch) — `/design` consumes it.
 
 ## Risks / assumptions / open questions
 
-- **OQ-mac1 — nesting vs Claude's own Seatbelt** (top risk, hard gate). Claude
-  Code's native macOS sandbox *is* Seatbelt; a nested `sandbox-exec` may be
-  refused or silently weakened (undocumented composition). Probe before any Rust.
-- **OQ-mac2 — launchd IPC residual** — measure, then assign to the IPC wall.
+- **OQ-mac1 — nesting vs Claude's own Seatbelt** (top risk, hard gate).
+  **CLOSED (RSK-014 H2 pass 2, 2026-07-01): SUPPORTED.** Nested `sandbox-exec`
+  composes inside a real `isolation:worktree` subagent under bypassPermissions;
+  every external vector denied, `updatedInput` honoured. Probe gate discharged.
+- **OQ-mac2 — launchd IPC residual** — **MEASURED-LOW:** `launchctl submit` / `at`
+  denied by Seatbelt default. Assigned to the IPC/egress wall (non-goal), not open.
+- **OQ-mac4 — second temp surface (`/var/folders/$USER/T`)** — **RESOLVED:** narrow
+  `xcrun_db` cache-file allow; rest denied (documented cross-subagent caveat).
 - **Canonicalization footgun (INV-5 twin):** macOS aliases `/tmp→/private/tmp`,
   `/var→/private/var`, `/etc→/private/etc`; `subpath` matches the *resolved* path.
   Feed realpaths into every `-D` param; prove symlink/hardlink containment in the
@@ -82,9 +86,11 @@ scratch) — `/design` consumes it.
   by Anthropic's own sandbox-runtime + system `.sb` profiles depending on it. Low,
   not zero.
 - **Hard dependency on SL-182.** Parity reuses SL-182's `jail.rs` seams; SL-182 is
-  in `design` (RV-201 active). **Implementation is blocked until SL-182 locks**,
-  and SL-182's design should expose the `Jailer` fork point so this arm slots in
-  rather than bolts on. Tracked as `needs SL-182`.
+  **`ready`** (design locked) but **not yet implemented** — `jail.rs` doesn't exist
+  on disk. SL-182 already upstreamed the cross-arm `Jailer` seam + capability-as-data
+  `select_jailer` fork point; SL-183 slots the Seatbelt argv/profile builder in
+  as-is (OQ-mac3 resolved, no SL-182 refactor). **Implementation blocked until
+  SL-182 lands.** Tracked as `needs SL-182`.
 - **Execution host:** the probe + verification require a macOS machine — cannot
   run inside the Linux/bwrap jail. The operator ships this slice to macOS to
   execute.

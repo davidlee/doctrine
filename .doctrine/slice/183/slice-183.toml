@@ -32,11 +32,17 @@ target = "IMP-045"
 
 [[selector]]
 selector = "src/**/jail.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Jailer seam: seatbelt_profile + sandbox_exec_argv fork + select_jailer macOS branch (D-mac1/2/3/4)"
 
 [[selector]]
 selector = "src/**/worktree/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/**/worktree/pretooluse*"
+intent = "design-target"
+note = "os-branch selection in the pretooluse dispatch (D-mac2); precise path inherited from SL-182 once jail.rs lands"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

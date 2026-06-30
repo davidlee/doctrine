@@ -4,11 +4,11 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-<!-- STATUS: design IN PROGRESS. §§ below carry the RSK-014 H2 probe findings
-     (pass 1, orchestrator context — `.doctrine/backlog/risk/014/probe-h2-seatbelt/`).
-     The architectural decisions (seam shape D-mac2; SL-182 ordering) are NOT yet
-     locked with the user. Pass-2 (M1-sub in-situ subagent leg) is OUTSTANDING and
-     gates final lock. Do not treat §5/§7 as settled. -->
+<!-- STATUS: design RATIFIED, lock pending /inquisition. §§ below carry the
+     RSK-014 H2 probe findings (pass 1 orchestrator + pass 2 in-situ subagent, both
+     DONE — `.doctrine/backlog/risk/014/probe-h2-seatbelt/`). D-mac1..4 RATIFIED with
+     the user 2026-07-01; OQ-mac4 RESOLVED (narrow xcrun_db allow). Remaining before
+     lock: adversarial /inquisition pass → resolve RV → user lock. -->
 
 ## 1. Design Problem
 
@@ -38,8 +38,9 @@ SL-182 §5.5 / POL-002). Reuse the **same** `Decision`/`Target`/policy/funnel �
   in the shell. No new pipeline — fork one seam.
 - **POL-002** platform independence / fail-closed ethos: any ambiguity ⇒ `deny
   worktree-subagent Bash`, never unwrapped pass-through.
-- **STD-001** no magic strings: profile tokens, `-D` param names, the device-sink
-  allow-set, bind/deny flag strings → single-sourced named constants.
+- **STD-001** no magic strings: profile tokens, `-D` param names (`WT`/`TMP`/`PTMP`/
+  `DUTMP`/`RWn`), the device-sink allow-set, the `xcrun_db` cache-file regex
+  (F-E), bind/deny flag strings → single-sourced named constants.
 - **Behaviour-preservation gate:** `resolve_target`, `decide_bash`, `decide_write`,
   `pathcheck`, `opaque_wrap`, `validate_policy` reused UNCHANGED — SL-182's suites
   stay green.
@@ -64,15 +65,22 @@ The profile (proven shape, RSK-014 H2 pass 1):
 (allow default)                                 ; reads open (parity: reads OOS)
 (deny file-write*)                              ; the floor
 (deny file-write* (subpath (param "PTMP")))     ; F-A: coarse deny FIRST (see 5.5)
+(deny file-write* (subpath (param "DUTMP")))    ; /var/folders/$USER/T — coarse FIRST
 ; device write sinks — F-B (literals/regex, must stay writable):
 (allow file-write* (literal "/dev/null")) … (regex #"^/dev/tty") …
 (allow file-write* (subpath (param "WT")))      ; worktree rw — SPECIFIC, LAST
 (allow file-write* (subpath (param "TMP")))     ; TMPDIR=<wt>/.tmp (D-mac3)
+; F-E: re-allow ONLY the xcrun_db cache file under the per-user temp, NOT the
+; whole surface — narrowest hole that fixes the proven breakage (OQ-mac4):
+(allow file-write* (regex (string-append (param "DUTMP") "/xcrun_db")))
 (allow file-write* (subpath (param "RWn")))     ; per validated extra_rw
-; (deny network*)  iff policy.network == false  ; coarse (M3 caveat)
+; (deny network*)  iff policy.network == deny   ; default OPEN; emitted only on
+;                                               ; opt-in, via the same policy→profile
+;                                               ; pass as extra_rw (D-mac4 thin seam)
 ```
 Invoked: `sandbox-exec -D WT=<realpath> -D TMP=<realpath> -D PTMP=/private/tmp
--D RWn=… -f <profile> -- bash -c "$(base64 -d <<<$B64)"`. Children inherit.
+-D DUTMP=<realpath getconf DARWIN_USER_TEMP_DIR> -D RWn=… -f <profile>
+-- bash -c "$(base64 -d <<<$B64)"`. Children inherit.
 
 ### 5.2 Interfaces & Contracts
 
@@ -80,12 +88,17 @@ Two new pure functions behind the `Jailer` seam (shell analogs proven in
 `probe-h2-seatbelt/seatbelt-jail.sh`):
 - `seatbelt_profile(policy) -> String` — emits the profile body, **rules ordered
   deny-coarse-first / allow-specific-last** (F-A). Device-sink allow-set is a
-  constant.
-- `sandbox_exec_argv(wt, policy) -> Vec<OsString>` — realpaths WT/TMP/extra_rw into
-  `-D` params (F-A footgun mitigation), opaque base64 body, sets
-  `TMPDIR=<wt>/.tmp`.
+  constant; the `xcrun_db` cache-file allow (F-E) is a named constant (STD-001).
+  The `(deny network*)` line is emitted **only** when `policy.network == deny` —
+  default-open; network rides the same policy→profile pass as `extra_rw`, never a
+  hardcoded special case (D-mac4).
+- `sandbox_exec_argv(wt, policy) -> Vec<OsString>` — realpaths WT/TMP/DUTMP/extra_rw
+  into `-D` params (F-A footgun mitigation), opaque base64 body, sets
+  `TMPDIR=<wt>/.tmp`. `DUTMP` = realpath of `getconf DARWIN_USER_TEMP_DIR`.
 
-Seam shape (trait vs runtime-os branch) — **D-mac2, NOT yet locked** (§6/§7).
+Seam shape: reuse all of SL-182's `jail.rs`; fork **only** the argv/profile builder
+behind SL-182's existing capability-as-data `select_jailer` fork point (D-mac2,
+RATIFIED — OQ-mac3 resolved: slot in as-is, no SL-182 refactor).
 
 ### 5.3 Data, State & Ownership
 
@@ -111,12 +124,19 @@ Pinned empirically (RSK-014 H2 pass 1, orchestrator context):
 - **INV (F-B) — device sinks stay writable.** `(deny file-write*)` denies
   `/dev/null`, `/dev/std{out,err}`, `/dev/tty*`, `/dev/fd`, `/dev/dtracehelper` →
   breaks tooling (proven: python3). Re-allow them (constant set).
-- **EDGE (F-E) — `/var/folders/$USER/T` is a SECOND temp surface.** macOS per-user
-  temp (`DARWIN_USER_TEMP_DIR`, `$TMPDIR` default), distinct from `/tmp`; xcrun
-  hardcodes an `xcrun_db` cache there. The `TMPDIR=<wt>/.tmp` redirect does NOT
-  cover it → denied, noisy (cosmetic for python; breaks cache-dependent tools).
-  **DECISION NEEDED (D-mac3 refinement):** also redirect/allow
-  `/var/folders/$USER/T`, or accept the breakage class.
+- **EDGE (F-E) — `/var/folders/$USER/T` is a SECOND temp surface. RESOLVED
+  (OQ-mac4, 2026-07-01).** macOS per-user temp (`DARWIN_USER_TEMP_DIR`, `$TMPDIR`
+  default), distinct from `/tmp`; xcrun hardcodes an `xcrun_db` cache there. The
+  `TMPDIR=<wt>/.tmp` redirect does NOT cover it (xcrun reads it via
+  `confstr(_CS_DARWIN_USER_TEMP_DIR)`, not `$TMPDIR`) → denied, noisy (cosmetic for
+  python; breaks cache-dependent tools). **Decision:** coarse-deny the whole
+  surface, then re-allow **only** the `xcrun_db` cache file via a narrow regex
+  (`DUTMP/xcrun_db`) — the smallest hole that fixes the proven breakage. The rest of
+  the per-user temp stays denied. **Caveat (load-bearing):** this is a deliberate
+  containment tradeoff — `/var/folders/$USER/T` is host-shared and GC-uncontrolled,
+  so the allowed cache file is a cross-subagent write surface OUTSIDE the floor;
+  scoping to `xcrun_db` keeps it to one OS-owned filename. Other Xcode tools with
+  different cache files will still deny → re-surface case-by-case as encountered.
 - **INV (M2) — canonicalization containment holds.** Realpath'd `-D` params are
   sufficient: absolute, `../`, symlink-deref, **hardlink** (`ln` to outside target
   denied — Seatbelt resolves the link target), `/tmp` alias, shared-`.git`, `$HOME`
@@ -161,20 +181,36 @@ Pinned empirically (RSK-014 H2 pass 1, orchestrator context):
   seam; no SL-183-driven refactor of SL-182. (See §7 D-mac2.) Note F-G constrains
   the seam: the `Jailer` derives the worktree from `cwd` via git, not a path
   template.
-- **OQ-mac4 (F-E) — second temp surface** redirect-or-accept (see 5.5).
+- **OQ-mac4 (F-E) — second temp surface. RESOLVED (with user, 2026-07-01):**
+  coarse-deny `/var/folders/$USER/T`, re-allow ONLY the `xcrun_db` cache file via a
+  narrow regex (not the whole surface, not redirect — `confstr`-derived, not
+  `$TMPDIR`-overridable). Documented cross-subagent caveat + case-by-case
+  re-surfacing for other Xcode caches. See §5.5 EDGE(F-E), §5.1 profile.
 
 ## 7. Decisions, Rationale & Alternatives
 
-Seeded from the design-ahead brief (`seatbelt-seam-brief.md`); **D-mac1/2/3/4 are
-PROPOSALS, not yet ratified with the user.**
+Seeded from the design-ahead brief (`seatbelt-seam-brief.md`); **D-mac1/2/3/4
+RATIFIED with the user 2026-07-01.**
 
-- **D-mac1** — Seatbelt = allow-default-deny-write-except, not default-deny.
-  *(Probe-confirmed feasible.)*
-- **D-mac2** — single `Jailer` seam; reuse all of `jail.rs` except the argv/profile
-  builder. *(Seam shape trait-vs-branch open — §6 OQ-mac3.)*
-- **D-mac3** — `TMPDIR=<wt>/.tmp` + deny `/private/tmp`. *(Probe-confirmed working;
-  needs F-E refinement for `/var/folders`.)*
-- **D-mac4** — `network` knob → `(deny network*)`, coarseness caveat; egress non-goal.
+- **D-mac1 — RATIFIED.** Seatbelt = allow-default-deny-write-except, not
+  default-deny (the SBPL footgun this design sidesteps). *(Probe-confirmed feasible.)*
+- **D-mac2 — RATIFIED.** Single `Jailer` seam; reuse all of SL-182's `jail.rs`
+  except the argv/profile builder, slotting into SL-182's existing capability-as-data
+  `select_jailer` fork point as-is — no SL-183-driven SL-182 refactor (OQ-mac3
+  resolved). **Constraint (F-G):** the seam derives the worktree from PreToolUse
+  `cwd` via git (toplevel ≠ main checkout, realpath'd), NOT a path template —
+  macOS Agent worktrees land at `<repo>/.claude/worktrees/agent-<id>`, a
+  harness-version surface; the git relationship is the invariant.
+- **D-mac3 — RATIFIED.** `TMPDIR=<wt>/.tmp` + deny `/private/tmp`. Folds OQ-mac4:
+  coarse-deny `/var/folders/$USER/T`, re-allow ONLY the `xcrun_db` cache file
+  (narrow regex). *(Probe-confirmed working; F-E resolved — see §5.5.)*
+- **D-mac4 — RATIFIED (default-open thin seam).** Network defaults **open** (the
+  operating default). `(deny network*)` is emitted **only** on `policy.network ==
+  deny`, via the same policy→profile pass as `extra_rw` — not a hardcoded special
+  case. A finer host/port/iface egress model later is a policy-schema extension, not
+  a seam refactor (forward-compat by design). Coarseness caveat stands: syscall-deny,
+  not iface removal (asymmetric with bwrap's netns by design); egress wall remains a
+  non-goal (IPC/egress territory).
 
 ## 8. Risks & Mitigations
 
@@ -198,6 +234,6 @@ PROPOSALS, not yet ratified with the user.**
 
 ## 10. Review Notes
 
-<!-- RSK-014 H2 pass-1 findings folded in 2026-07-01. Pending: user ratification of
-     D-mac1..4 + OQ-mac3 (SL-182 seam ordering); pass-2 M1-sub probe; then
-     adversarial review → lock. -->
+<!-- RSK-014 H2 pass-1 + pass-2 findings folded 2026-07-01. D-mac1..4 RATIFIED,
+     OQ-mac3 + OQ-mac4 RESOLVED, M1-sub probe DONE (SUPPORTED). Pending: adversarial
+     /inquisition pass → resolve RV → user lock → /plan. -->
