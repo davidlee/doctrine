@@ -5,10 +5,10 @@ id = 15
 slug = "boot-check-flags-empty-governance-sections-active-policiesstandards-as-unpopulated"
 title = "boot --check flags empty governance sections (Active Policies/Standards) as unpopulated"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-30"
 tags = ["area:governance"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

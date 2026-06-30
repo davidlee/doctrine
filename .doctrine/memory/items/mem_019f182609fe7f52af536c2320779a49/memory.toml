@@ -1,0 +1,42 @@
+memory_uid = "mem_019f182609fe7f52af536c2320779a49"
+memory_key = "mem.pattern.lint.dead-code-staged-ahead-cfg-test"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Predicate staged one phase ahead of its consumer: gate dead_code via cfg_attr(not(test), expect)"
+summary = "A pub(crate) fn used only by tests now (real consumer lands a later phase) needs cfg_attr(not(test), expect(dead_code)) — a bare #[expect] is unfulfilled under cargo test."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy", "doctrine check gate"]
+tags = ["rust", "clippy", "dead_code", "lint", "phasing", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "880ad3bb0f6130a4ab4cbbe8fdfe0c2723fadc1e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "565679cd836613a857b542fd8809f0124a79795e0b93fe488c53cde8cd983fcb"
+base_commit = "aa92b9b46fd62907d157aaabb4d1b285e169393b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

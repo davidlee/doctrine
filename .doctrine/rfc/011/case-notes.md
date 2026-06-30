@@ -610,3 +610,18 @@ saved the round.
   tools found" — the `select:` form did not resolve the MCP review verbs by name;
   a keyword search ("doctrine review ledger raise dispose") loaded them fine.
   Minor: cost one extra search round-trip.
+
+[execute SL-179/PHASE-01; gov-rev-spec-target]
+Minor friction authoring the D8 REV: `doctrine requirement show REQ-113` is not a
+verb (req access is `spec req {add,status,list}` — no `show`); had to read the
+requirement via `spec show SPEC-002` rendering or the raw toml. Also `change add
+--action modify --target` help lists peer-FK examples REQ-201/ADR-006 only, so
+whether a SPEC was a valid modify target was an unknown I had to plan a fallback
+around (it IS valid — no fallback needed). Both cost a probe round-trip.
+
+[preflight; IMP-065-pf-a]
+backlog_show / backlog_inspect not exposed as MCP tools (ToolSearch
+"select:..." returned none) — fell back to CLI `doctrine backlog show`.
+Minor: one extra ToolSearch round-trip before reaching for Bash. The
+boot snapshot's command spine lists `backlog inspect` but not a `show`;
+the actual reader is `backlog show` (CLI). Small id/verb-shape friction.

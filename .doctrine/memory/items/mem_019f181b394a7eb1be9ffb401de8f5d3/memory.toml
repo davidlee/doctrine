@@ -1,0 +1,42 @@
+memory_uid = "mem_019f181b394a7eb1be9ffb401de8f5d3"
+memory_key = "mem.fact.revision.spec-prose-modify-target"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "REV `modify --target SPEC-NNN` amends spec prose directly (surfaced-for-manual at apply)"
+summary = "A SPEC is a valid `revision change add --action modify --target`; spec-prose (decision) amendments route through the REV, applied as a surfaced-for-manual hand-edit."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = ["src/revision.rs", ".doctrine/spec/tech"]
+globs = []
+commands = ["doctrine revision change add", "doctrine revision apply"]
+tags = ["revision", "governance", "adr-013", "spec-amendment"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0403eae065336e08655390080f6cc4e02fe1ad2f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "fb64c2b15aded7092779e84c9be27316a8aef380ef1b4fd3a22046af7b4f5624"
+base_commit = "93a60a31196ad5b8828c8fb1d4a3b44f02cb9ecb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
