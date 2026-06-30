@@ -1,0 +1,34 @@
+id    = 202
+slug  = "codex-pass-iii-sl-182-sl-183-seam-upstream-select-jailer-capability-shape"
+title = "Codex pass III: SL-182 SL-183 seam upstream — select_jailer capability shape"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex (GPT-5.5)"
+responder = "opus"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-182"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "select_jailer() is a zero-arg host lookup in the pure leaf — regresses the pure/imperative split, collapses SL-183's degrade state, and is untestable on Linux CI"
+detail = """§5.2 (design.md:179) declares `fn select_jailer() -> Option<Box<dyn Jailer>>` with no inputs, inside the PURE `jail.rs` leaf. To pick a backend with no args it must read ambient host state (OS / bwrap presence), violating the project pure/imperative split (AGENTS.md: "no clock, rng, git, or disk in the pure layer — pass them in as inputs"). §5.1 already says the SHELL does the "backend-presence probe" (design.md:104), but select_jailer takes no args, so the probe result has no path into the core — the seam is internally inconsistent. The prior signature `decide_bash(.., bwrap_present: bool)` already did this correctly (capability passed in); the seam edit regressed it. Two further consequences: (1) `Option<Box<dyn Jailer>>` collapses absent / unsupported-platform / present-but-degraded into one opaque None, leaving no room for the "Seatbelt present but nesting refused ⇒ deny" state the brief §3a explicitly requires SL-183 to represent — so SL-183 must widen the type and refactor the seam, defeating the upstream's purpose; (2) EX-5/VT-8 "macOS ⇒ None ⇒ deny" cannot be exercised by a zero-arg host lookup on a Linux CI runner. Fix: shell resolves capability to DATA — `enum Backend { Bwrap, Seatbelt, Deny{reason} }` — passed into the core; `select_jailer(&Backend)` becomes a pure map; `decide_bash(.., &Backend)` denies with the descriptor's reason. Resolves all three (purity, degrade-state, Linux testability) at once."""
+disposition = "fix-now"
+response = "Accepted. Replaced the zero-arg `select_jailer()` host lookup with capability-as-data: the shell resolves a `Backend` descriptor (`Bwrap | Seatbelt | Deny{reason}`) and `select_jailer(&Backend)` is a pure map; `decide_bash(.., &Backend)` denies with the descriptor's per-arm reason. (a) pure/imperative split restored — host detection lives only in the shell; (b) the three-valued `Deny{reason}` reserves the present-but-degraded state (brief §3a), so SL-183 adds a variant arm, not a type change; (c) VT-8 is now a pure table test over injected descriptors, Linux-CI-exercisable. Landed: design §5.1 diagram, §5.2 (`Backend` enum + decide_bash/select_jailer signatures), §5.5 edge, D8.ii, §9 VT, §10 RV-202 note; plan.toml EX-1/EX-5/VT-8 + objective; plan.md seam bullet."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = '"zero Linux behaviour change" overstated — missing-bwrap deny reason flattened from "bwrap-unavailable" to generic "no-jail-backend"'
+detail = """The upstream renamed the Linux missing-backend deny reason to the generic "no-jail-backend" (VT-8 asserts it, plan.toml:92; §5.5 design.md:485). Brief §2 says "absent tool ⇒ deny unchanged". No shipped behaviour breaks (jail.rs is not yet authored, so the behaviour-preservation gate is not tripped), but a real choice was flattened: Linux+no-bwrap loses its specific, actionable reason. Either keep "bwrap-unavailable" on the Linux arm (the per-arm reason rides the Backend::Deny{reason} descriptor from F-1's fix) or narrow the claim wording to "no Linux happy-path behaviour change". Pin deliberately, don't leave the generic string as an accident of the refactor."""
+disposition = "fix-now"
+response = """Accepted. The per-arm deny reason now rides `Backend::Deny{reason}`, so the Linux missing-bwrap path keeps "bwrap-unavailable" (no flattening to a generic string) — §5.5, §9 VT, VT-8 updated. Claim wording tightened to "zero Linux happy-path behaviour change": the seam shape moved, the bwrap arm's deny reason + decisions did not (§10 RV-202 note; design Status line)."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
