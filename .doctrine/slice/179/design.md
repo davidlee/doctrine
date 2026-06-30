@@ -115,6 +115,11 @@ ADR-001 downward edge (`slice.rs:1229`); no new cross-module coupling.
 ### 4.3 `coverage_view.rs` — read view
 - `:111` / `:393`: render the two new reasons (keep combined health summary via
   `any_failed_or_blocked` if the column is coarse; sharpen the verdict cell).
+- **Reconcile note (RV-198 F-1):** no edit landed — both clauses satisfied unedited.
+  `:393` `Verdict::Divergent(r) => Some(r.label())` already auto-renders the new
+  `observed-failure`/`observed-blocked` labels, and `:111` `observed_state()` keeps
+  the combined `any_failed_or_blocked` health summary. The "undelivered" conformance
+  selector was a stale design over-declaration absorbed by existing delegation.
 
 ### 4.4 `slice.rs` — closure gate (§2)
 **Control flow pinned (codex M10): `undischarged_drift` classifies once per req and

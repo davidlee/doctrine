@@ -99,3 +99,23 @@ observed-failure` — the label-split renders live). Then:
   (`done`/`approved`) already narrowed SPEC-002 D8 + REQ-113, and the audit (F-2,
   PHASE-01 VA-1) confirms they carry the four narrowings consistently. No further
   REV is owed by this audit.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md §4.3 (`coverage_view.rs`): appended reconcile note recording that no
+  render edit landed — both §4.3 clauses are satisfied unedited via existing
+  delegation (`:393` `r.label()` auto-renders the split labels; `:111`
+  `observed_state()` keeps the combined health summary). The "undelivered"
+  conformance selector was a stale over-declaration (RV-198 F-1).
+
+### REVs completed
+- None. Governance was reconciled ahead of the code in PHASE-01 (REV-017
+  `done`/`approved` narrowed SPEC-002 D8 + REQ-113); audit F-2 + PHASE-01 VA-1
+  confirmed consistency. No REV owed by this audit.
+
+### Withdrawn / tolerated
+- None. Both findings `verified`; F-2 (undeclared governance paths) is expected
+  work, no drift, no edit needed.
+
+Reconcile pass complete — handoff to /close.
