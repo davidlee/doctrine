@@ -32,6 +32,40 @@ edits integrated into `design.md`:
 **Plan A (User, 2026-07-01): land SL-181 with this framing, then beeline the
 confinement slice (the real OQ-D close).**
 
+## INQUISITION VERDICT (2026-07-01, RV-199) — SLICE BLOCKED, back to /design
+
+The inquisition (RV-199, facet design, codex/GPT-5.5 cross-exam) found the
+mechanism **structurally unsound**. One unresolved **blocker** gates the slice.
+
+- **F-1 (blocker, design-wrong, OPEN — gates /plan).** `is_coordination_worktree`
+  = `is_linked && branch.starts_with("dispatch/")` is **NOT coord-unique.** The
+  claude worker fork rides `dispatch/<name>` unconditionally (`create.rs:238-243`
+  `act_on_create::Fork`); the coord tree rides `dispatch/<NNN>` (`coordinate.rs`).
+  Both match the prefix ⇒ predicate TRUE for a worker fork ⇒ guard ALLOWS the
+  Orchestrator verb ⇒ **void for the unstamped worker it targets.** The probe-h1
+  detached-HEAD evidence was the BENIGN `Passthrough` path, never the armed Fork.
+  Confirmed independently by codex.
+- **F-2 (major, design-wrong).** §1/§3/§4 conflate two marker lifecycles: armed
+  `create-fork → fork_core(worker=true)` stamps atomically + rolls back (no
+  unstamped state reachable there); the reachable unstamped state is the legacy
+  failable `SubagentStart` stamp (`subagent.rs:135-148,224-239`). §4 "load-bearing
+  on claude" unsupported until the operative marking path + its branch shape are
+  pinned with a test.
+- **F-3 (major, fix-now).** My commit 244d7bc4 generalised the Passthrough
+  detached-HEAD onto the Fork path — §3/OQ-A/§5 now positively assert a falsehood.
+  Undo in the rework; re-derive §5's confinement leg (independent, may survive).
+- **Acquittals:** `--path` seam SOUND (caller-cwd, `guard.rs:362-373`); OQ-C CLEAN
+  (refresh-base leaves `MERGE_HEAD`, not detached, `dispatch.rs:680-763`).
+
+### Next step (NOT /plan — blocked)
+
+`/design` rework of the coordination signal: anchor on the **registered
+coordination-worktree dispatch state** (the slice's own Scope obj-1 already asked
+for this; the branch-prefix shortcut abandoned it), provably unique vs the
+`dispatch/<name>` worker shape. Then pin F-2's marker lifecycle, repair F-3, and
+`review verify RV-199 F-1` only once the reworked signal holds. Durable trap
+recorded: `mem.fact.dispatch.dispatch-branch-prefix-not-coord-unique`.
+
 ## HANDOVER — for the inquisition agent
 
 Read in order: `doctrine slice show SL-181`, then `design.md` (the target),

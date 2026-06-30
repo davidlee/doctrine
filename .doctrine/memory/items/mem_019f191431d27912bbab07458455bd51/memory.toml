@@ -1,0 +1,42 @@
+memory_uid = "mem_019f191431d27912bbab07458455bd51"
+memory_key = "mem.fact.dispatch.dispatch-branch-prefix-not-coord-unique"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A `dispatch/` branch prefix is NOT unique to the coordination worktree — worker forks ride `dispatch/<name>` too"
+summary = "Both the coord tree (dispatch/NNN) and every claude worker fork (dispatch/<name>) ride dispatch/* — prefix alone cannot identify the coord worktree."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = ["src/worktree/create.rs", "src/worktree/coordinate.rs", "src/commands/guard.rs"]
+globs = []
+commands = ["doctrine"]
+tags = ["dispatch", "worktree", "guard"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6bef9a153de0bb65f02222a7739c9d1aa2583084"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0e26d93d2dc516130275e8616f896a2d5091cacad3b491822903005f39e08b24"
+base_commit = "354a3092ee331190f6d3b0dce89cb6b9151c7c46"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
