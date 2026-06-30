@@ -47,11 +47,15 @@ selector = "src/dispatch.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/boot.rs"
+selector = ".claude/skills/dispatch-agent/SKILL.md"
 intent = "design-target"
 
 [[selector]]
-selector = ".claude/skills/dispatch-agent/SKILL.md"
+selector = "src/worktree/create.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/hooks/hooks.json"
 intent = "design-target"
 
 [[relation]]

@@ -4,7 +4,7 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-Status: draft (pre-adversarial). Governed by ADR-008 (closes its claude-arm
+Status: draft (internal adversarial pass integrated; §10). Governed by ADR-008 (closes its claude-arm
 confinement gap), ADR-006 (D2b raw-tree confinement; D-sole-writer). Originates
 from RSK-014 (probe-h1, PROVEN). Path C deferred → IDE-024; selector-allowlist
 mode → IDE-025.
@@ -127,8 +127,11 @@ fn pathcheck(real: &Path, wt: &Path, extra_rw: &[PathBuf]) -> bool; // ∈ {wt} 
 fn validate_policy(policy: &JailPolicy, main_root: &Path) -> Result<(), String>;
 ```
 
-`is_worktree(cwd)` = `shared::is_linked_worktree(cwd)` AND `cwd` under
-`worktrees_root` (`<main>/.worktrees/`). Replaces the probe's hard-coded glob.
+`is_worktree(cwd)` is **git-topology-based**, not path-prefix: `cwd` is a linked
+worktree (`shared::is_linked_worktree`) **whose `git-common-dir` resolves to this
+project's main `.git`**. This avoids coupling to a directory layout (`.worktrees/`
+vs `.dispatch/`) — a sibling repo's worktree at the same prefix would not match
+(A1). Replaces the probe's hard-coded `$ROOT/.worktrees/agent-*` glob.
 
 **Emitted JSON (mirrors probe):**
 - deny → `{hookSpecificOutput:{hookEventName,permissionDecision:"deny",permissionDecisionReason:"worktree-jail: <reason>"}}`
@@ -137,7 +140,7 @@ fn validate_policy(policy: &JailPolicy, main_root: &Path) -> Result<(), String>;
 
 ### 5.3 Data, State & Ownership
 
-**Per-worker jail policy** — `<main>/.doctrine/state/dispatch/jail/<agent_id>.toml`
+**Per-worker jail policy** — `<main>/.doctrine/state/dispatch/jail/<worktree-name>.toml`
 (runtime state: gitignored, `rm -rf`-able). **Outside every worktree** (a worker
 rw's its own tree — must not author its own policy) and **ro to the worker** (under
 `<main>/.doctrine/state/`, ancestor of the worktree, ro-bound).
@@ -152,24 +155,49 @@ network  = true    # false => --unshare-net; default preserves current behavior
 struct JailPolicy { #[serde(default)] extra_rw: Vec<PathBuf>,
                     #[serde(default = "default_true")] network: bool }
 impl Default { extra_rw: vec![], network: true }
-fn load_policy(main_root: &Path, agent_id: &str) -> JailPolicy; // missing file => Default
+fn load_policy(main_root: &Path, worktree_name: &str) -> JailPolicy; // missing => Default
 ```
 
-**Ownership:** orchestrator (ADR-006 sole-writer) authors the policy file at spawn,
-*before* the worker's first tool call — written by the claude arm's
-`dispatch arm-spawn` (`src/dispatch.rs`). **GC** with worktree teardown. Per-worker
-file ⇒ no parallel-write contention; no worker TOCTOU (authored before spawn, ro
-in jail, read by the hook process not the worker's command).
+**Keying — corrected (A7).** The earlier draft keyed by `agent_id` written by the
+orchestrator pre-spawn. **That is impossible:** `agent_id` is harness-assigned *at*
+spawn — the orchestrator cannot know it beforehand. Resolved by riding the existing
+spawn handshake: the orchestrator (`dispatch arm-spawn`) declares the intended
+policy to a deterministic **pre-spawn** location (alongside the base file the
+`WorktreeCreate` hook already reads); the **`worktree create-fork` hook** — which
+runs at spawn and *does* know the new worktree (`name = agent-<id>`, payload) —
+**provisions** that declaration into `<main>/.doctrine/state/dispatch/jail/<name>.toml`.
+The PreToolUse hook then resolves policy by `cwd → basename(worktree) → file`. So
+`src/worktree/create.rs` is in the touch-set (provision step), not just
+`src/dispatch.rs` (declare step).
+
+**Ownership:** orchestrator (ADR-006 sole-writer) is the source of the policy;
+`create-fork` is its trusted provisioner (already an orchestrator-classed hook). GC
+with worktree teardown. Per-worker file ⇒ no parallel-write contention; no worker
+TOCTOU (provisioned before the worker's first call, ro in jail, read by the hook
+process not the worker's command). **Absence ⇒ `Default` (strictest floor)** — a
+worker spawned with no declared policy is still jailed to its worktree.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Registration** (decided: D-reg) — via `settings.local.json` through the boot.rs
-`plan_hook` seam (the path the probe proved), exec-path-injected, idempotently
-merged (`is_ours` ownership predicate, never clobbers foreign hooks). Two
-PreToolUse entries: matcher `Bash` and matcher `Edit|Write|NotebookEdit`, both →
-`<exec> worktree pretooluse`. **Hook registration loads at session start only — no
-hot-reload**; install path documents the restart ritual + the Edit/Write escape
-hatch (a broken Bash wrapper is disablable via Edit + restart).
+**Registration** (decided: D-reg) — via the embedded **plugin `hooks.json`**
+(`plugins/doctrine/hooks/hooks.json`, RustEmbed → materialized to
+`.claude/skills/doctrine/hooks/hooks.json`, auto-discovered), the same seam that
+already carries `SessionStart`/`WorktreeCreate`. Two PreToolUse entries: matcher
+`Bash` and matcher `Edit|Write|NotebookEdit`, both → `doctrine worktree
+pretooluse` (bare exec on PATH, as the existing plugin hooks do — no
+`resolve_exec`/settings merge). Preferred on user steer (prior empirical tests show
+plugin hooks uniform with settings hooks) **but gated:** a re-test (V-plugin, §9)
+must confirm PreToolUse-via-plugin fires for a worktree subagent before this is
+relied on — the probe proved the mechanism via `settings.local.json`, not the
+plugin path. **Do not invest in the `settings.local.json` install path** unless
+V-plugin fails. **Plugin `hooks/` changes are not hot-reloaded**
+(`docs/claude/plugins-reference.md:394`) — pick them up via `/reload-plugins`
+(lighter) or a session restart; the runbook documents this + the Edit/Write escape
+hatch (a broken Bash wrapper is disablable via Edit + `/reload-plugins`).
+
+(Housekeeping: the live probe hooks were cleared from `settings.local.json` —
+backup at `.claude/settings.local.json.backup` — so the slice installs onto a
+clean slate.)
 
 **Per-call flow:** harness → PreToolUse → `doctrine worktree pretooluse` (stdin) →
 `resolve_target` → bash/write decision → emit. Binary startup ≈ 2 ms (measured),
@@ -193,7 +221,15 @@ commit); relax the single-commit delta-check on this arm; `verify-worker` adjust
 - **INV-3** `.git` is ro and **not tunable**: `validate_policy` rejects any
   `extra_rw` entry equal to `/`, an ancestor of `main_root`, or touching `.git`.
 - **INV-4** Edit/Write allowlist = `{wt} ∪ extra_rw` — coherent with what the Bash
-  jail rw-binds.
+  jail rw-binds. **Safe only because `validate_policy` already rejected dangerous
+  `extra_rw`** (root-ancestors/`.git`); the pathcheck trusts a validated policy
+  (A6 cross-link to INV-3).
+- **INV-5 (A3) — robust shell-quoting.** `opaque_wrap` interpolates `wt` and every
+  `extra_rw` path into the emitted `updatedInput.command` shell string. All
+  interpolated paths MUST be single-quote-escaped (paths may contain spaces; an
+  `extra_rw` entry is orchestrator-supplied). The original command rides as
+  charset-safe base64 (never re-parsed). Test: a worktree path / `extra_rw` with a
+  space and a single quote round-trips and executes correctly.
 - **Edge:** `/tmp` is a private `--tmpfs` for Bash (ephemeral, never host /tmp) and
   denied for Edit/Write — restrictive default; loosen a run via `extra_rw`.
 - **Edge:** non-bwrap platform → `deny "bwrap-unavailable"` (fail-closed; macOS =
@@ -208,8 +244,10 @@ commit); relax the single-commit delta-check on this arm; `verify-worker` adjust
 - **OQ-2 (verify in execute)** does the claude harness, when the worker leaves
   uncommitted worktree changes (commit blocked by ro-`.git`), still surface the
   worktree diff to the orchestrator import? End-to-end verification target (§9).
-- **OQ-3 (deferred)** plugin `hooks.json` as the tidier registration home — verify
-  it fires for PreToolUse before migrating (D-reg keeps settings.local.json now).
+- **OQ-3 → V-plugin (first step in execute).** Plugin `hooks.json` is the chosen
+  registration home (D-reg). Confirm PreToolUse-via-plugin fires for a worktree
+  subagent before building on it; cross-check hook semantics against `docs/claude`
+  (local official-docs cache — authoritative over web/subagent).
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -230,8 +268,13 @@ commit); relax the single-commit delta-check on this arm; `verify-worker` adjust
   test** against `pi-spawn-confined.sh`; leave the live pi script untouched. *Alt:
   extract `worktree jail-argv` consumed by both — true DRY but touches live pi
   dispatch → follow-up.*
-- **D-reg — register via `settings.local.json`** (boot.rs `plan_hook`), the proven
-  path. *Alt: plugin `hooks.json` — tidier, unproven for PreToolUse → OQ-3.*
+- **D-reg — register via the plugin `hooks.json`** (`plugins/doctrine/hooks/`).
+  Preferred on user steer — prior empirical tests show plugin hooks uniform with
+  settings hooks; rides the existing auto-discovered seam (no settings merge / no
+  `resolve_exec`). **Gated on V-plugin** (re-test PreToolUse-via-plugin fires for a
+  worktree subagent). *Alt: `settings.local.json` via boot.rs `plan_hook` — the
+  probe's proven path; fallback only if V-plugin fails. Do not build it
+  pre-emptively.*
 - **D6 — schema = `extra_rw` + `network`.** Dropped `extra_ro` (redundant under
   `--ro-bind / /`) and `strict/loose mode` (the floor *is* strict; loosening ==
   `extra_rw`). Footgun violations **deny** (fail-closed).
@@ -241,27 +284,47 @@ commit); relax the single-commit delta-check on this arm; `verify-worker` adjust
 - **R1 — funnel breakage.** Confinement removes claude self-commit → breaks the
   `B..S` delta-check. *Mit:* objective-5 convergence to working-tree-diff import is
   in scope; end-to-end verification gate (§9) before close.
-- **R2 — registration path unproven for plugin.** *Mit:* D-reg uses the proven
-  settings.local.json path; plugin migration gated behind OQ-3 verification.
+- **R2 — plugin registration unproven for PreToolUse.** D-reg chooses the plugin
+  path (user steer: empirically uniform). *Mit:* V-plugin re-tests it as the first
+  execute step; settings.local.json fallback held in reserve (not built unless
+  V-plugin fails). Verify hook semantics against `docs/claude`, not web/subagent.
 - **R3 — bwrap-flag drift** between the Rust builder and the pi script. *Mit:* D5
   parity test fails on divergence.
 - **R4 — policy TOCTOU / forged-absent.** *Mit:* absence ⇒ strictest jail (can only
-  tighten); file authored before spawn, ro in jail.
+  tighten); provisioned before the worker's first call, ro in jail.
 - **R5 — harness change reopens repo-root** (native checkout-guard dropped). *Mit:*
   INV-2 ancestor-rule deny holds independently (pinned test).
 - **R6 — non-Linux silent hole.** *Mit:* INV — fail-closed deny when bwrap absent.
+- **R7 — orchestrator pass-through is unconfined (god-mode).** Pass-through trusts
+  an un-authenticated tell (`agent_id` absent; `session_id` shared). A phantom
+  no-`agent_id` spawn would inherit it. *Accepted residual* (both enumerable spawn
+  modes carry `agent_id`); the structural close is **OQ-5 — jail the orchestrator
+  too** (widest jail), deferred. Named, not silent.
+- **R8 — convergence imposes the pi arm's verify-cost on the claude arm.** Losing
+  worker self-commit means the worker can no longer commit-gate a self-verify; the
+  orchestrator inherits the pi arm's "can't trust worker green → re-run suite"
+  cost (case-notes SL-171, hollow greens). This is a deliberate **efficiency
+  regression traded for confinement** — exactly the driver for **IDE-024 (Path
+  C)**. Named so the tradeoff is visible, not discovered post-hoc.
 
 ## 9. Quality Engineering & Validation
 
-- **Unit (pure, TDD red/green/refactor):** `resolve_target` (3 arms);
+- **Unit (pure, TDD red/green/refactor):** `resolve_target` (3 arms, topology-based
+  recognition incl. a sibling-repo worktree → not-jailed-here, A1);
   `pathcheck` (⊆wt / escape / extra_rw-hit / `.git`-reject); `load_policy`
   (default / present / malformed); `bwrap_argv` (core + extra_rw + `network`);
-  `opaque_wrap` (base64 round-trip, quoting-safe); `validate_policy` (reject `/`,
-  root-ancestor, `.git`).
+  `opaque_wrap` (base64 round-trip **+ INV-5 path with space & single-quote**
+  round-trips & executes); `validate_policy` (reject `/`, root-ancestor, `.git`).
 - **Integration (synthetic stdin → emitted JSON):** the probe escape battery
   re-expressed as cases; INV-2 repo-root-ancestor deny; orchestrator pass-through
   (no `agent_id`); isolation:none deny (`agent_id` + repo-root cwd); D5 parity
-  test.
+  test; **keying/provision (A7): `create-fork` provisions the declared policy to
+  `jail/<name>.toml`; PreToolUse resolves it by `cwd → basename`**.
+- **V-plugin (FIRST execute step — gate on D-reg):** confirm a PreToolUse hook
+  registered via the plugin `hooks.json` fires for a worktree subagent (Bash +
+  Edit/Write), exactly as the probe proved via `settings.local.json`. Cross-check
+  hook-event/matcher/`updatedInput` semantics against `docs/claude`. Fail ⇒ fall
+  back to the settings.local.json path.
 - **End-to-end (VA/VH — the riskiest leg):** live claude `/dispatch`, one jailed
   worker, escape vectors denied + canaries intact + funnel completes green
   (working-tree-diff import). Covers OQ-2.
@@ -269,4 +332,39 @@ commit); relax the single-commit delta-check on this arm; `verify-worker` adjust
 
 ## 10. Review Notes
 
-(internal adversarial pass + any `/inquisition` findings recorded here)
+### Internal adversarial pass (2026-07-01) — 8 findings, all integrated
+
+- **A1 — fragile worktree recognition.** Path-prefix (`.worktrees/`) is a layout
+  coupling and misses `.dispatch/`-style trees. → §5.2 now git-topology-based
+  (`is_linked_worktree` + `git-common-dir == main .git`).
+- **A3 — shell-quoting in `opaque_wrap`.** Interpolated `wt`/`extra_rw` paths could
+  carry spaces/quotes and break the emitted command. → INV-5 + test.
+- **A6 — pathcheck trusts extra_rw.** Allowlist `{wt} ∪ extra_rw` is safe only
+  because `validate_policy` pre-rejected dangerous entries. → INV-4 cross-link.
+- **A7 — KEYING FLAW (substantive).** Original `agent_id`-keyed, orchestrator-
+  pre-writes model is impossible — `agent_id` is harness-assigned at spawn. →
+  §5.3 rewritten: key by worktree name; `create-fork` provisions the orchestrator's
+  pre-spawn declaration; `src/worktree/create.rs` added to touch-set.
+- **A2/R7 — orchestrator pass-through is god-mode.** Named as accepted residual
+  (OQ-5 deferred), not silent.
+- **A5/R8 — convergence efficiency regression.** Converging claude→pi funnel
+  inherits the verify-after-import cost; named as the IDE-024 driver.
+- **A4 — `network=true` default = no egress containment.** Stated explicitly (the
+  knob exists; the default does not close egress — consistent with the non-goal).
+- **A8 — D5 parity-test mechanism.** Compare the Rust core against a checked-in
+  expected vector + a cross-ref comment in `pi-spawn-confined.sh`; true shared
+  consumption is the D5-alt follow-up.
+
+Plus user steers integrated: D-reg flipped to the **plugin `hooks.json`** path
+(gated on V-plugin); verify hook semantics against `docs/claude` (local
+official-docs cache), not web/subagent.
+
+**`docs/claude` cross-check (2026-07-01):** plugin hooks support `PreToolUse`
+("same lifecycle events as user-defined hooks… Before a tool call executes. Can
+block it", `plugins-reference.md:111-119`) — de-risks R2/D-reg; matcher regex
+`Write|Edit` valid (`:98`); plugin `hooks/` not hot-reloaded, `/reload-plugins`
+suffices (`:394`). `updatedInput`/`agent_id` stdin remain **empirically** proven
+(probe-h1), not re-derived from docs.
+
+### `/inquisition` findings
+(pending — if run)
