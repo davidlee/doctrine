@@ -42,3 +42,31 @@ target = "ADR-011"
 label = "related"
 target = "ADR-012"
 
+[[relation]]
+label = "related"
+target = "PRD-015"
+
+[[relation]]
+label = "related"
+target = "SPEC-012"
+
+[[relation]]
+label = "related"
+target = "SPEC-021"
+
+[[relation]]
+label = "related"
+target = "PRD-005"
+
+[[relation]]
+label = "related"
+target = "IDE-025"
+
+[[relation]]
+label = "related"
+target = "IDE-024"
+
+[[relation]]
+label = "related"
+target = "IMP-004"
+
