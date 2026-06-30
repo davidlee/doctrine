@@ -58,6 +58,10 @@ intent = "design-target"
 selector = "plugins/doctrine/hooks/hooks.json"
 intent = "design-target"
 
+[[selector]]
+selector = "src/skills.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-008"

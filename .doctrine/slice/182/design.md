@@ -4,10 +4,12 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-Status: LOCKED (internal adversarial pass + `/inquisition` RV-200 both integrated; §10). Governed by ADR-008 (closes its claude-arm
-confinement gap), ADR-006 (D2b raw-tree confinement; D-sole-writer). Originates
-from RSK-014 (probe-h1, PROVEN). Path C deferred → IDE-024; selector-allowlist
-mode → IDE-025.
+Status: RECONCILING (RV-201 second inquisition — 5 findings, 1 option-bearing
+blocker resolved by User decision; reconciliation in progress, §10). Prior:
+LOCKED after internal adversarial pass + `/inquisition` RV-200. Governed by
+ADR-008 (closes its claude-arm confinement gap), ADR-006 (D2b raw-tree
+confinement; D-sole-writer). Originates from RSK-014 (probe-h1, PROVEN). Path C
+deferred → IDE-024; selector-allowlist mode → IDE-025.
 
 ## 1. Design Problem
 
@@ -83,7 +85,7 @@ Three new units under `src/worktree/`, layered:
 
 ```
  command      pretooluse.rs   (thin shell: stdin JSON in, hookSpecificOutput out,
-                               bwrap-presence probe, policy-file read, resolve_exec)
+                               bwrap-presence probe, policy-file read)
    |  calls
  engine/leaf  jail.rs         (PURE: Decision, JailPolicy, bwrap argv builder,
                                opaque wrap, pathcheck predicate, footgun validation)
@@ -170,17 +172,36 @@ impl Default { extra_rw: vec![], network: true }
 fn load_policy(main_root: &Path, worktree_name: &str) -> JailPolicy; // missing => Default
 ```
 
-**Keying — corrected (A7), serial-scoped (RV-200 F-1).** The original draft keyed
-by `agent_id` written by the orchestrator pre-spawn. **That is impossible:**
-`agent_id` is harness-assigned *at* spawn — the orchestrator cannot know it
-beforehand. Resolved by riding the existing spawn handshake: the orchestrator
-(`dispatch arm-spawn`) **pre-declares** the intended policy to a deterministic
-location alongside the `base` file the `WorktreeCreate` hook already reads; the
-**`worktree create-fork` hook** — which runs at spawn and *does* know the new
-worktree (`name = agent-<id>`, payload) — **provisions** that declaration into
-`<main>/.doctrine/state/dispatch/jail/<name>.toml`. The PreToolUse hook then resolves
-policy by `cwd → basename(worktree) → file`. So `src/worktree/create.rs` is in the
-touch-set (provision step), not just `src/dispatch.rs` (declare step).
+**Keying — corrected (A7), serial-scoped (RV-200 F-1), machinery named (RV-201
+F-4).** The original draft keyed by `agent_id` written by the orchestrator
+pre-spawn. **That is impossible:** `agent_id` is harness-assigned *at* spawn — the
+orchestrator cannot know it beforehand. Resolved by riding the existing spawn
+handshake across **two named files** with a defined lifecycle:
+
+| File | Written by | Read by | Lifecycle |
+|---|---|---|---|
+| `<coord>/.doctrine/state/dispatch/spawn/jail.toml` (the **arming declaration**, beside the existing `base` in `ARMING_SUBPATH`, `src/worktree/create.rs:202`) | orchestrator `dispatch arm-spawn` (`src/dispatch.rs`) | `create-fork` hook | overwritten on every (re-)arm, in the **same arming step** as `base`; absent ⇒ Default floor |
+| `<main>/.doctrine/state/dispatch/jail/<worktree-name>.toml` (the **provisioned policy**) | `create-fork` hook (`src/worktree/create.rs`, **NET-NEW** step) | `pretooluse` hook (`cwd → basename(worktree) → file`) | GC'd with worktree teardown |
+
+`create-fork` already knows the new worktree (`name = agent-<id>`, payload) and
+already runs `run_provision` + `write_marker`; the jail-policy provision is a
+**third, net-new** step beside them (`classify_create`/`fork_core` write nothing
+under `jail/` today — F-4). So the touch-set is `src/dispatch.rs` (declare,
+`arm-spawn` extended to write `jail.toml` alongside `base`) **and**
+`src/worktree/create.rs` (provision), patterned on `src/worktree/marker.rs`'s
+`write_marker`.
+
+**Pairing of `jail.toml` with `base` — by structure, not lock (RV-201 F-4).**
+`base` is overwritten idempotently on re-arm (`src/dispatch.rs`); a stale
+`jail.toml` paired with a fresh `base` (or vice versa) would mis-provision. The
+contract: **`arm-spawn` writes both in one arming step**, and re-arm rewrites both;
+there is no separate "update jail.toml" path. This is safe because **the
+orchestrator is single-threaded and every claude `Agent` spawn call BLOCKS until
+the worker completes** — a parallel batch issued in one turn blocks until *all* N
+return — so the orchestrator has **no turn between arming and batch-completion in
+which to re-arm**. The pairing atomicity is therefore enforced by the
+blocking-call structure, not by a filesystem lock or asserted discipline (this
+re-grounds the "must not interleave a second arming" claim below).
 
 **The single-slot constraint (RV-200 F-1, load-bearing).** The arming dir holds
 **one** `base` file, and `dispatch-agent` issues N parallel spawns off one arming
@@ -201,8 +222,10 @@ one shared profile (RV-200 F-1).**
 - **Serial drive** (one in-flight worker per arming): the single declared intent is
   unambiguous — `create-fork` binds the sole declaration to the sole new worktree, so
   per-arming *is* per-worker. Custom `extra_rw`/`network` is honoured. The
-  **arm → spawn → create-fork-provision** sequence is the named critical section; it
-  must not interleave a second arming.
+  **arm → spawn → create-fork-provision** sequence cannot interleave a second
+  arming — **not by discipline but by structure**: the blocking `Agent` call holds
+  the orchestrator's single thread from arm through worker-completion, so no
+  re-arm turn exists mid-sequence (the `jail.toml`↔`base` pairing above).
 - **Parallel fan-out** (N spawns off one arming): the one declared profile is
   **shared by every worker in the batch.** This is *intentional sharing at
   per-arming granularity, not a leak.* The reasoning, recorded so it can be
@@ -239,20 +262,53 @@ race to populate.
 already carries `SessionStart`/`WorktreeCreate`. Two PreToolUse entries: matcher
 `Bash` and matcher `Edit|Write`, both → `doctrine worktree pretooluse`.
 
-**Exec resolution must be FAIL-CLOSED (RV-200 F-2, blocker).** A PreToolUse hook
-that errors with any non-`2` exit is a *non-blocking* error and the tool call
-**proceeds** (`docs/claude/hooks.md:629-643` + Warning: "only exit code 2 blocks");
+**Exec resolution must be FAIL-CLOSED — by INSTALL-TIME TEMPLATING (RV-201 F-1,
+blocker; User-decided Option A).** A PreToolUse hook that errors with any non-`2`
+exit is a *non-blocking* error and the tool call **proceeds**
+(`docs/claude/hooks.md:629-643` + Warning: "only exit code 2 blocks");
 `command-not-found` (127) qualifies. So a **bare `doctrine` on PATH** that resolves
-to the RO `~/.cargo/bin/doctrine` predating this subcommand — or is simply absent —
-would let Bash/Edit/Write run **unconfined**: the exact RSK-014 hole this slice
-closes, reopened by the installer. Therefore the registration must invoke a
-**resolved, present executable** (the `resolve_exec` path already named in §5.1/D1):
-the materialized `hooks.json` carries an **absolute** `doctrine` path (or a tiny
-checked-in shim that `exit 2`s on exec/`not-found`), so a missing/stale binary
-**denies** rather than passes. This supersedes the earlier "bare exec on PATH, no
-resolve_exec" wording and reconciles §5.1/D1 ↔ §5.4 onto one fail-closed story.
+to a binary predating this subcommand — or is simply absent — lets Bash/Edit/Write
+run **unconfined**: the exact RSK-014 hole this slice closes, reopened by the
+installer.
+
+The fix lives at **materialization, not runtime** (the coherence twin F-5):
+`install_hooks_plugin_for_claude` (`src/skills.rs:1024-1052`) today **verbatim
+byte-copies** the embedded `hooks.json` (`PluginAssets::get` → `write_atomic`,
+no substitution), so its bare-`doctrine` commands ship fail-OPEN — whereas the
+*settings* path already bakes an absolute exec via `HookSpec::boot(resolve_exec())`
+(`src/boot.rs:1120`). The plugin path is the anomaly. **D-reg Option A
+(decided):** `install_hooks_plugin_for_claude` gains a **templating pass** —
+rewrite the **leading `doctrine` token** of *every* `command` string in the
+embedded `hooks.json` to `resolve_exec()`'s absolute path (`SessionStart`,
+`WorktreeCreate`, the two `PreToolUse` entries, the `SubagentStop` capture entry),
+bringing the plugin path to parity with the settings path. Leading-token replace
+(args untouched, so the checked-in asset stays valid as authored); the token
+`doctrine` and each subcommand string are **STD-001 named constants**; the
+absolute path is **single-quote-escaped** into the command string (it may contain
+spaces — same quoting discipline as INV-5). *Rejected: an embedded shim — it
+reintroduces the bash anomaly D1 explicitly rejected, needs a second materialized
+asset, and still bakes `resolve_exec` into the shim (templating, one layer down).*
+
+**Interaction with pre-baked installs (no client compilation assumed).**
+`resolve_exec` = `current_exe()` (the resolved real path) → `pick_exec`, which
+**bails** ("reinstall from a stable location") if that path is gone
+(`src/boot.rs:433-456`). For the 99% GitHub-release flow — prebuilt binary at a
+**stable location** (`~/.local/bin`, `/usr/local/bin`) — the baked path is fixed,
+present, and survives in-place upgrades: templating is strictly safer than bare
+PATH (which could resolve to a *different*, older binary). The one residual is
+**content-addressed installs** (nix store): `current_exe()` bakes the
+version-pinned store path, so a flake upgrade + store-GC *before* re-running
+`doctrine claude install` leaves `hooks.json` pointing at a GC'd path → `127` →
+fail-open for `pretooluse` (`SessionStart`/`WorktreeCreate` fail *closed* — the
+latter aborts on any non-zero). Two guards: **(a)** the **reinstall-on-upgrade
+invariant** — already required for memory/embed refresh, and asserted by
+`pick_exec`'s bail at every other bake site; **(b)** a **V-plugin-gated inline
+`|| exit 2` guard** appended to the `pretooluse` command (`<abs> worktree
+pretooluse || exit 2`), which converts the vanish-case `127` (and any
+mid-run crash) into a blocking `exit 2` → **deny** — closing even the nix window
+without a bash asset, *iff* V-plugin confirms hook `command` is shell-run (§9).
 (Bonus: an absolute resolved path also ensures V-plugin/e2e exercise the **dev
-build under test**, not the stale RO binary.)
+build under test**, not a stale RO binary.)
 
 D-reg is preferred on user steer (prior empirical tests show plugin hooks uniform
 with settings hooks) **but gated** — a re-test (V-plugin, §9) must confirm
@@ -288,26 +344,42 @@ remove`, and `WorktreeRemove` has **no decision control** — failures are debug
 only (`docs/claude/hooks.md:2442, :680, :814`). The hook **cannot block** teardown,
 so an uncommitted diff is destroyed in the race between subagent-done and removal.
 
-**Contingency (decided — snapshot before remove).** A doctrine **`WorktreeRemove`
-(and/or `SubagentStop`) hook** captures `git -C <worktree> diff` (and untracked
+**Contingency (decided — snapshot via `SubagentStop`, before remove; RV-201 F-2).**
+The capture **commits to `SubagentStop`**, not `WorktreeRemove`. `SubagentStop` is
+the only **blocking-capable** point: exit 2 "prevents the subagent from stopping"
+(`docs/claude/hooks.md:658`), so the harness **awaits the hook to completion** at
+the stop boundary, and it receives `agent_id` + `agent_transcript_path`
+(`hooks.md:1930-1957`) — exactly the worktree-correlation a capture needs.
+`WorktreeRemove`, by contrast, has **no decision control**, is side-effect-only,
+and failures are debug-log-only (`hooks.md:680/814/2442`) — nothing documents that
+Claude awaits it before `git worktree remove`, so capture on that hook is
+inherently racy. `WorktreeRemove` is therefore **demoted to best-effort cleanup**
+(it never gates the funnel).
+
+The committed `SubagentStop` hook captures `git -C <worktree> diff` (and untracked
 adds) into a patch at a path **outside** the worktree — under the coord tree's
-runtime state — *before* the harness removes the tree. The orchestrator imports
-**that captured patch**, not the live worktree. This finally makes the cadence
-genuinely identical on both arms (each imports a captured delta, not a live tree)
-and keeps Path L + ro-`.git` intact. Touch-set gains the `WorktreeRemove` capture
-hook alongside the existing `create-fork`. Edits to `dispatch-agent/SKILL.md`:
-import source = the captured patch against B (not the `B..S` commit); relax the
-single-commit delta-check on this arm; `verify-worker` adjusts. /plan confirms
-whether the delta-check is skill-orchestration or Rust (`src/dispatch.rs`) and
-scopes the touch.
+runtime state — *before* allowing the stop (after which `WorktreeRemove` →
+`git worktree remove` fires as a no-op wrt the already-captured delta). The
+orchestrator imports **that captured patch**, not the live worktree. This finally
+makes the cadence genuinely identical on both arms (each imports a captured delta,
+not a live tree) and keeps Path L + ro-`.git` intact. Touch-set gains the
+`SubagentStop` capture hook alongside the existing `create-fork`. Edits to
+`dispatch-agent/SKILL.md`: import source = the captured patch against B (not the
+`B..S` commit); relax the single-commit delta-check on this arm; `verify-worker`
+adjusts. /plan confirms whether the delta-check is skill-orchestration or Rust
+(`src/dispatch.rs`) and scopes the touch.
 
 **OQ-2 is a lock-time risk WITH a defined abort, not a bare "verify later".** The
-capture-before-remove timing (does the `WorktreeRemove` hook reliably run, with the
-worktree still on disk, before `git worktree remove` completes?) is the residual
-unknown. Abort criterion: if the capture hook cannot observe the tree intact, Path L
-is unworkable for the claude funnel and the slice **escalates to Path C / IDE-024**
-(standalone clone + self-commit + cherry-pick) — the named fallback. This is proven
-or refuted as the second execute gate (after V-plugin), §9.
+residual unknown is narrowed to the **blocking** hook: does the awaited
+`SubagentStop` hook observe the worktree **still on disk** before the harness's
+`git worktree remove` runs? (`subagents-reference.md` documents no SubagentStop
+timing, so this is unproven by docs — not assumed.) Abort criterion: if even the
+blocking hook cannot observe the tree intact, Path L is unworkable for the claude
+funnel and the slice **escalates to Path C / IDE-024** (standalone clone +
+self-commit + cherry-pick) — the named fallback. This is proven or refuted as the
+second execute gate (after V-plugin), §9 — the test attempts `git -C <wt> diff`
+from a `SubagentStop` hook on one `isolation:worktree` subagent and asserts
+tree-intact.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -342,12 +414,14 @@ or refuted as the second execute gate (after V-plugin), §9.
 
 - **OQ-1 (→/plan)** funnel delta-check location — skill-orchestration vs Rust
   (`src/dispatch.rs`). Scopes the objective-5 touch.
-- **OQ-2 (lock-time risk, DEFINED ABORT — RV-200 F-3)** the harness auto-removes the
-  worktree on subagent finish (`WorktreeRemove`, no decision control), so the worker
-  diff cannot be imported from a live tree. **Resolved by design** to a
-  capture-before-remove hook (§5.4); the residual unknown is purely whether that hook
-  observes the tree intact before `git worktree remove`. **Abort:** if not, escalate
-  to Path C / IDE-024. Second execute gate (§9), not an open-ended verify.
+- **OQ-2 (lock-time risk, DEFINED ABORT — RV-200 F-3, hook committed RV-201 F-2)**
+  the harness auto-removes the worktree on subagent finish (`WorktreeRemove`, no
+  decision control), so the worker diff cannot be imported from a live tree.
+  **Resolved by design** to a capture hook on the **blocking** `SubagentStop`
+  (§5.4 — `WorktreeRemove` demoted to cleanup); the residual unknown is purely
+  whether the awaited `SubagentStop` hook observes the tree intact before
+  `git worktree remove`. **Abort:** if not, escalate to Path C / IDE-024. Second
+  execute gate (§9), not an open-ended verify.
 - **OQ-3 → V-plugin (first step in execute).** Plugin `hooks.json` is the chosen
   registration home (D-reg). Confirm PreToolUse-via-plugin fires for a worktree
   subagent before building on it; cross-check hook semantics against `docs/claude`
@@ -356,9 +430,13 @@ or refuted as the second execute gate (after V-plugin), §9.
 ## 7. Decisions, Rationale & Alternatives
 
 - **D1 — Rust subcommand** (`doctrine worktree pretooluse`), not bash. Rides the
-  existing hook seam; reuses worktree resolution + `resolve_exec`; testable;
-  single bwrap-flag source. Startup ≈ 2 ms. *Alt: bash scripts — rejected
-  (anomaly, jq/bash dep, magic strings, untestable, DRY violation).*
+  existing hook seam; reuses worktree resolution; testable; single bwrap-flag
+  source. Startup ≈ 2 ms. (`resolve_exec` is **not** a runtime responsibility of
+  this subcommand — at hook-exec the binary is already running, so `current_exe()`
+  here would merely re-derive its own path; the only `resolve_exec` relevant to
+  this slice is the **install-time** templating in D-reg/§5.4 — RV-201 F-5.) *Alt:
+  bash scripts — rejected (anomaly, jq/bash dep, magic strings, untestable, DRY
+  violation).*
 - **D2 — policy file keyed by WORKTREE NAME, per-arming granularity** (RV-200 F-1/F-4;
   corrects the original `agent_id` keying §5.3 proved impossible). File at
   `<main>/.doctrine/state/dispatch/jail/<worktree-name>.toml`; orchestrator
@@ -379,24 +457,40 @@ or refuted as the second execute gate (after V-plugin), §9.
   extract `worktree jail-argv` consumed by both — true DRY but touches live pi
   dispatch → follow-up.*
 - **D-reg — register via the plugin `hooks.json`** (`plugins/doctrine/hooks/`),
-  invoking a **resolved absolute** `doctrine` (fail-closed exec, RV-200 F-2 — NOT
-  bare PATH). Preferred on user steer — prior empirical tests show plugin hooks
-  uniform with settings hooks; rides the existing auto-discovered seam. **Gated on
-  V-plugin** (re-test PreToolUse-via-plugin fires for a worktree subagent *and*
-  honours `updatedInput`). *Alt: `settings.local.json` via boot.rs `plan_hook` — the
-  probe's proven path. It is a **planned contingency of the V-plugin phase** (built
-  iff the plugin path fails the re-test), not pre-built and not merely "on failure"
-  — scoped and ready (RV-200 F-5).*
+  made fail-closed by **install-time templating (Option A, RV-201 F-1 — User
+  decided)**: `install_hooks_plugin_for_claude` rewrites every command's leading
+  `doctrine` token to `resolve_exec()`'s absolute path at materialization, so the
+  plugin path reaches parity with the settings path's `HookSpec` bake — NOT a bare
+  PATH, and NOT the false "the runtime subcommand reuses resolve_exec" framing the
+  reconcile previously carried (§5.4). Preferred on user steer — prior empirical
+  tests show plugin hooks uniform with settings hooks; rides the existing
+  auto-discovered seam. **Gated on V-plugin** (re-test PreToolUse-via-plugin fires
+  for a worktree subagent *and* honours `updatedInput`; also confirms hook
+  `command` is shell-run, gating the `|| exit 2` vanish-guard). *Alt-mechanism
+  (rejected): an embedded exit-2 shim — bash anomaly D1 rejected, second asset,
+  still templated. Alt-registration: `settings.local.json` via boot.rs `plan_hook`
+  — the probe's proven path; a **planned contingency of the V-plugin phase** (built
+  iff the plugin path fails the re-test), scoped and ready (RV-200 F-5).*
 - **D6 — schema = `extra_rw` + `network`.** Dropped `extra_ro` (redundant under
   `--ro-bind / /`) and `strict/loose mode` (the floor *is* strict; loosening ==
   `extra_rw`). Footgun violations **deny** (fail-closed).
+- **D7 — empirical harness probe BEFORE Rust (User steer).** Every unproven
+  harness behaviour (plugin-PreToolUse firing + `updatedInput`; `SubagentStop`
+  blocking + tree-intact timing; hook-`command` shell-run) is pinned by a
+  disposable-shell probe (RSK-014 idiom) as the slice's **first phase**, ahead of
+  any Rust. The `docs/claude` cache is a hypothesis, not proof — it documents none
+  of the timing. Rust graduates a *proven* shape (§9 Phase 1). *Alt: trust the
+  docs and build directly — rejected; the two tallest risks (R1 funnel-teardown,
+  R2 plugin-registration) are harness behaviours doc-unconfirmed and cheapest to
+  refute in shell.*
 
 ## 8. Risks & Mitigations
 
 - **R1 — funnel breakage.** Confinement removes claude self-commit → breaks the
   `B..S` delta-check, AND the harness tears the worktree down before import (RV-200
-  F-3). *Mit:* capture-before-remove convergence (§5.4) in scope; capture-before-remove
-  gate (§9, second execute gate) with a defined abort to Path C / IDE-024 before close.
+  F-3). *Mit:* capture-via-`SubagentStop`-before-remove convergence (§5.4, RV-201
+  F-2 — the blocking hook) in scope; pinned by the pre-Rust harness probe + the
+  second execute gate (§9) with a defined abort to Path C / IDE-024 before close.
 - **R2 — plugin registration unproven for PreToolUse.** D-reg chooses the plugin
   path (user steer: empirically uniform). *Mit:* V-plugin re-tests it as the first
   execute step; settings.local.json fallback **built in that same phase iff the
@@ -428,6 +522,31 @@ or refuted as the second execute gate (after V-plugin), §9.
 
 ## 9. Quality Engineering & Validation
 
+**Phase 1 — empirical harness probe (DISPOSABLE SHELL, PRE-RUST GATE; D7, User
+steer).** Before *any* Rust is written, a throwaway probe — in the RSK-014
+probe-h1 idiom (live `settings.local.json` hooks + shell scripts, `rm`-able) —
+**empirically pins every unproven harness behaviour the design leans on.** The
+`docs/claude` cache is treated as a hypothesis, not proof (it documents none of
+the timing below). The probe must confirm, on the live harness:
+1. **Plugin-PreToolUse fires** for an `isolation:worktree` subagent (Bash +
+   Edit|Write) **and honours `updatedInput`** — the D-reg registration path
+   (was "V-plugin"). Fail ⇒ settings.local fallback (planned same-phase, F-5).
+2. **`SubagentStop` is genuinely blocking/awaited** (exit-2 holds the stop;
+   `hooks.md:658` is doc-only, untested) **AND its hook observes the worktree
+   still on disk** before `git worktree remove` runs (OQ-2 / F-2) — the funnel's
+   load-bearing timing. Fail ⇒ abort to Path C / IDE-024.
+3. **Hook `command` is shell-run** — gates the F-1 `|| exit 2` vanish-guard; if
+   commands are exec'd directly (not via a shell), the guard is dropped and the
+   reinstall-on-upgrade invariant stands alone.
+
+Only once all three are **pinned green** does the design's mechanism (Rust
+`pretooluse.rs` + install templating + the `SubagentStop` capture) get built —
+the apparatus graduates a *proven* shape, never an assumed one. The Rust gates
+below (Unit/Integration) then re-express the probe's findings as durable tests.
+*(Phasing: /plan sequences this as the first phase; the two former "execute gates"
+fold into it. Rationale: harness behaviour is the slice's tallest risk and the
+cheapest to refute in shell — do it before sinking Rust into a refuted premise.)*
+
 - **Unit (pure, TDD red/green/refactor):** `resolve_target` (3 arms, topology-based
   recognition incl. a sibling-repo worktree → not-jailed-here, A1);
   `pathcheck` (⊆wt / escape / extra_rw-hit / `.git`-reject); `load_policy`
@@ -443,16 +562,17 @@ or refuted as the second execute gate (after V-plugin), §9.
   off one arming provisions the SAME profile to every sibling (shared, not leaked);
   absence ⇒ Default floor**; **fail-closed exec (F-2): a missing/non-resolving
   `doctrine` denies (exit 2 / shim), never passes through unconfined**.
-- **V-plugin (FIRST execute step — gate on D-reg):** confirm a PreToolUse hook
+- **V-plugin (pinned in Phase 1 probe — gate on D-reg):** confirm a PreToolUse hook
   registered via the plugin `hooks.json` fires for a worktree subagent (Bash +
   Edit/Write) **and honours `updatedInput`**, exactly as the probe proved via
   `settings.local.json`. Cross-check hook-event/matcher/`updatedInput` semantics
   against `docs/claude`. Fail ⇒ land the settings.local.json fallback **in this same
   phase** (F-5).
-- **Capture-before-remove (SECOND execute gate — OQ-2 / F-3):** confirm the doctrine
-  `WorktreeRemove`/`SubagentStop` hook captures the worker's worktree diff to an
-  outside-the-worktree patch **before** the harness's `git worktree remove`, and the
-  orchestrator imports that patch. Fail (tree gone before capture) ⇒ **abort to Path
+- **Capture-before-remove (pinned in Phase 1 probe — OQ-2 / F-3; hook = `SubagentStop`,
+  RV-201 F-2):** confirm the doctrine **`SubagentStop`** hook (blocking-capable,
+  awaited) captures the worker's worktree diff to an outside-the-worktree patch
+  **before** the harness's `git worktree remove`, and the orchestrator imports that
+  patch. Fail (tree gone before capture even on the blocking hook) ⇒ **abort to Path
   C / IDE-024** (the named fallback), do not ship a lossy funnel.
 - **End-to-end (VA/VH — the riskiest leg):** live claude `/dispatch`, one jailed
   worker, escape vectors denied + canaries intact + funnel completes green
@@ -533,3 +653,46 @@ reconciled into this revision. Two carried User-decided remediation options.
   OQ-5 deferral is sound. Soft-target-4 answered: accepted, not must-land. (R7 text
   may gain the unspoofability premise as cosmetic polish.)
 - **F-10 (nit) — §10 doc-coverage undersell.** → corrected in the cross-check above.
+
+### `/inquisition` findings (RV-201, 2026-07-01) — codex GPT-5.5 + inquisitor — reconcile-introduced heresy
+
+Second adversarial round on the post-RV-200 re-lock; 5 findings (1 option-bearing
+blocker), tried against the source seams not the prose. RV-200's 10 findings left
+settled. All reconciled in this revision.
+
+- **F-1 (blocker, option-bearing) — the PREFERRED registration shipped FAIL-OPEN.**
+  D-reg's "resolved absolute doctrine (NOT bare PATH)" was *false as-built*:
+  `install_hooks_plugin_for_claude` (`src/skills.rs:1046-1049`) verbatim byte-copies
+  the embedded `hooks.json` whose commands are **bare `doctrine`**
+  (`plugins/doctrine/hooks/hooks.json:7,18`); `resolve_exec` was never on that path.
+  Fail-closed held only on the settings.local fallback. **User decided Option A:**
+  template every plugin-`hooks.json` command's leading `doctrine` token through
+  `resolve_exec` at materialization (parity with the settings `HookSpec` bake) —
+  *rejected* the embedded-shim alternative (bash anomaly D1 rejected). → §5.4 / D-reg
+  rewritten; pre-baked-install interaction + V-plugin-gated `|| exit 2` vanish-guard +
+  reinstall-on-upgrade invariant documented; false "resolve_exec already provides this"
+  framing struck.
+- **F-2 (major) — capture led with the wrong hook.** §5.4 led with `WorktreeRemove`
+  (no decision control, not awaited, debug-log-only — `hooks.md:680/814/2442`) over
+  `SubagentStop` (blocking-capable, awaited, carries `agent_id`+`agent_transcript_path`
+  — `hooks.md:658/1930-1957`). → §5.4 / OQ-2 / §9 **commit to `SubagentStop`**;
+  `WorktreeRemove` demoted to cleanup; stop-vs-`git worktree remove` ordering stated
+  **unproven** (`subagents-reference.md` documents no timing) and pinned to the probe.
+- **F-3 (major) — scope split-brain; "scope doc corrected" was a false attestation.**
+  `slice-182.md` objective 3 still preached `agent_id` keying, "per-worker", `extra_ro`,
+  strict/loose — all repudiated by locked D2/D6/F-1. → objective 3 rewritten to
+  worktree-name key / per-arming / `extra_rw`+`network`; OQ-A's vestigial `resolve_exec`
+  struck (scope twin of F-5). The attestation is now true.
+- **F-4 (major) — shared-profile safety rested on unspecified machinery.** The
+  declaration file was unnamed, unpaired with `base`, and the create-fork provision
+  step net-new/unbuilt. → §5.3 names both files + lifecycle table; grounds the
+  `jail.toml`↔`base` pairing and "no second arming" in the **blocking `Agent` call**
+  (single-threaded orchestrator, batch blocks until all N return), not discipline;
+  marks the create-fork provision NET-NEW (patterned on `marker.rs:write_marker`).
+- **F-5 (minor) — vestigial `resolve_exec` in the runtime layer.** §5.1 + D1 still
+  listed it as a `pretooluse.rs` responsibility; the fix is install-time. → struck from
+  both (twin of F-1).
+
+Plus User steer integrated: **D7 — empirical harness probe (disposable shell) BEFORE
+Rust** pins every doc-unconfirmed harness behaviour (plugin firing, `SubagentStop`
+timing, shell-run) as the first phase; docs are hypothesis, not proof (§9 Phase 1).

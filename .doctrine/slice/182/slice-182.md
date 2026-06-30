@@ -44,14 +44,21 @@ Recipe + evidence: `mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinem
 2. **Edit/Write wall** — land the `PreToolUse(Edit|Write)` pathcheck
    (`realpath ⊆ cwd`, fail-closed). Pin the repo-root deny by the pathwall's own
    rule (ancestor-of-cwd), not by leaning on native's race-win.
-3. **Per-run config surface + worker correlation (OQ-3, in scope).** A way to
-   tune a run's jail (extra rw/ro binds, network, strict/loose) and correlate that
-   config with the *specific* worker. The binding key exists (`agent_id` and/or
-   `cwd`==worktree). The orchestrator (ADR-006 sole-writer) declares per-worker
-   policy at spawn time, written to a path **outside every worktree**; the hook
-   looks it up by `cwd`. To resolve in design: where the map lives, its schema,
-   authority, and lifecycle/GC alongside the worktree. A fixed default policy
-   (rw worktree, ro rest) is the floor; the config surface tunes from there.
+3. **Per-arming config surface (OQ-3, in scope).** A way to tune a run's jail
+   (`extra_rw` paths + `network`) at **per-arming granularity**, keyed by
+   **worktree name** (NOT `agent_id` — harness-assigns it at spawn, so the
+   orchestrator cannot pre-write it; corrected RV-200 F-1/F-4). The orchestrator
+   (ADR-006 sole-writer) pre-declares the intent beside the `base` file; the
+   `create-fork` hook provisions it under the name it learns at spawn to a path
+   **outside every worktree** (`<main>/.doctrine/state/dispatch/jail/<name>.toml`,
+   ro to the worker); the `pretooluse` hook looks it up by `cwd → basename`.
+   Granularity is **per-arming: serial ⇒ per-worker; parallel fan-out ⇒ one
+   profile shared by the batch** (a single arming carries a single intent). Schema
+   is `extra_rw` + `network` only — **`extra_ro` and `strict/loose` mode were
+   dropped** (D6: `extra_ro` is redundant under `--ro-bind / /`; the floor *is*
+   strict, loosening == `extra_rw`). The strictest default jail (rw worktree, ro
+   rest) is the floor; absence ⇒ that floor. Lifecycle/GC + the declaration↔`base`
+   pairing are resolved in design §5.3.
 4. **Install/reload contract.** Hook *registration* loads at session start only —
    no hot-reload. The install path + restart ritual must be designed in (and the
    orchestrator escape hatch: Edit/Write are not Bash-gated, so a broken Bash
@@ -70,8 +77,11 @@ Recipe + evidence: `mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinem
 - **OQ-A — altitude: RUST SUBCOMMAND.** `doctrine worktree pretooluse`,
   matcher-dispatched (Bash vs Edit|Write) off stdin `tool_name`. Rides the
   existing `HookSpec` + `plan_hook` + `hooks.json` seam; reuses worktree
-  resolution + `resolve_exec`; single-sources the bwrap core flags with the pi
-  arm. Binary startup ≈ 2 ms (measured) → per-call cost negligible.
+  resolution; single-sources the bwrap core flags with the pi arm. Binary startup
+  ≈ 2 ms (measured) → per-call cost negligible. (Fail-closed exec is an
+  **install-time** concern — `install_hooks_plugin_for_claude` templates the
+  plugin `hooks.json` commands through `resolve_exec`, RV-201 F-1/F-5 — not a
+  runtime responsibility of this subcommand.)
 - **Mechanism — policy file keyed by WORKTREE NAME, per-arming granularity**
   (corrected RV-200 F-1/F-4; the original `agent_id` keying was impossible —
   harness-assigns it at spawn, so the orchestrator cannot pre-write it).
