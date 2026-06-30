@@ -1,0 +1,192 @@
+# Implementation plan for SL-182 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-182"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ──────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Empirical harness probe (disposable shell, pre-Rust gate)"
+objective = """
+D7: before ANY Rust, pin every doc-unconfirmed harness behaviour the design leans \
+on with a throwaway probe in the RSK-014 probe-h1 idiom (live settings.local.json \
+hooks + shell scripts, rm-able). The docs/claude cache is a hypothesis, not proof. \
+Each probe item has a defined abort/fallback; the outcomes decide whether Path L \
+holds and which registration path PHASE-03 builds. Disposable apparatus only — no \
+installed machinery, no committed Rust.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md LOCKED; slice status ready" },
+  { id = "EN-2", text = "live claude-code harness on the Linux/bwrap arm (the probe target)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Probe item 1 settled: plugin-PreToolUse fires for an isolation:worktree subagent (Bash + Edit|Write) AND honours updatedInput — OR the settings.local fallback is selected for PHASE-03 (RV-200 F-5)" },
+  { id = "EX-2", text = "Probe item 2 settled: SubagentStop is blocking/awaited (exit-2 holds the stop), its hook observes the worktree still on disk before git worktree remove, AND a correlator resolves the worktree from the SubagentStop payload (no worktree_path field — RV-202) — OR the slice aborts to Path C / IDE-024" },
+  { id = "EX-3", text = "Probe item 3 settled: hook `command` is shell-run (gates the F-1 `|| exit 2` vanish-guard); if exec'd directly the guard is dropped and the reinstall-on-upgrade invariant stands alone" },
+  { id = "EX-4", text = "Findings recorded (notes + a durable memory if novel); probe apparatus removable; no committed Rust or installed hooks remain from this phase" },
+]
+verification = [
+  { id = "VA-1", expects = "Agent confirms, from live probe output, each of the three behaviours is pinned green or its defined abort/fallback is taken — and records which registration path (plugin vs settings.local) and which funnel path (Path L vs Path C) the rest of the slice proceeds on" },
+  { id = "VH-1", expects = "Human accepts the probe verdict and the resulting Path L/Path C + plugin/settings.local decision before any Rust is sunk" },
+]
+specs        = []
+requirements = []
+
+# ──────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure jail core (jail.rs)"
+objective = """
+Graduate the proven bwrap flag set + path logic into a PURE leaf/engine module \
+src/worktree/jail.rs (ADR-001: no clock/git/disk/rng — inputs passed in). \
+Decision/Target enums; resolve_target (3 arms, git-topology recognition via \
+shared::is_linked_worktree, not path-prefix — A1); decide_bash/decide_write; \
+bwrap_core_argv (== pi arm) + bwrap_argv (+ extra_rw + network); opaque_wrap \
+(base64, INV-5 single-quote-escape); pathcheck ({wt} ∪ extra_rw); JailPolicy + \
+load_policy (default/present/malformed); validate_policy (reject /, main-root \
+ancestor, .git — INV-3). TDD red/green/refactor throughout.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green: Path L confirmed viable (else this phase is moot pending Path C)" },
+  { id = "EN-2", text = "pi-spawn-confined.sh core flag set captured as the parity reference (scripts/pi-spawn-confined.sh:64-69)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "jail.rs exposes the pure surface in design §5.2 (resolve_target, decide_bash, decide_write, bwrap_core_argv, bwrap_argv, opaque_wrap, pathcheck, validate_policy, JailPolicy, load_policy) with no impure deps (ADR-001)" },
+  { id = "EX-2", text = "bwrap_core_argv is byte-equivalent to pi-spawn-confined.sh's core flags, asserted by a parity test (D5)" },
+  { id = "EX-3", text = "validate_policy rejects / , any main-root ancestor, and any .git-touching extra_rw (INV-3); pathcheck trusts only a validated policy (INV-4)" },
+  { id = "EX-4", text = "opaque_wrap round-trips a path containing a space AND a single quote, and the decoded command executes (INV-5)" },
+]
+verification = [
+  { id = "VT-1", expects = "resolve_target: 3 arms incl. a sibling-repo worktree → not-jailed-here (A1)", test_file = "src/worktree/jail.rs", keywords = ["resolve_target", "Orchestrator", "Reject", "sibling"] },
+  { id = "VT-2", expects = "pathcheck: ⊆wt / escape / extra_rw-hit / .git-reject", test_file = "src/worktree/jail.rs", keywords = ["pathcheck"] },
+  { id = "VT-3", expects = "load_policy: default / present / malformed", test_file = "src/worktree/jail.rs", keywords = ["load_policy", "Default"] },
+  { id = "VT-4", expects = "bwrap_argv: core + extra_rw + network=false ⇒ --unshare-net", test_file = "src/worktree/jail.rs", keywords = ["bwrap_argv", "unshare-net", "extra_rw"] },
+  { id = "VT-5", expects = "opaque_wrap base64 round-trip + INV-5 space-and-quote path", test_file = "src/worktree/jail.rs", keywords = ["opaque_wrap", "base64"] },
+  { id = "VT-6", expects = "validate_policy rejects / , root-ancestor, .git (INV-3)", test_file = "src/worktree/jail.rs", keywords = ["validate_policy"] },
+  { id = "VT-7", expects = "D5 parity: bwrap_core_argv == pi-spawn-confined.sh core flags", test_file = "src/worktree/jail.rs", keywords = ["bwrap_core_argv", "parity", "ro-bind"] },
+]
+specs        = []
+requirements = []
+
+# ──────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "pretooluse command, registration & fail-closed install"
+objective = """
+Land the thin shell src/worktree/pretooluse.rs (stdin PreToolUse JSON → \
+resolve_target → bash/write decision → hookSpecificOutput, exit 0 always) and \
+WorktreeCommand::Pretooluse in mod.rs (mirrors CreateFork dispatch). Register via \
+the plugin hooks.json (two net-new PreToolUse entries: Bash, Edit|Write) on the \
+PHASE-01-decided path (plugin OR settings.local fallback). Make the plugin path \
+FAIL-CLOSED by install-time templating (F-1, Option A): install_hooks_plugin_for_claude \
+rewrites every command's leading `doctrine` token to resolve_exec()'s absolute path \
+(STD-001 named constants, single-quote-escaped), reaching parity with the settings \
+HookSpec bake; append the V-plugin-gated `|| exit 2` vanish-guard iff PHASE-01 \
+proved shell-run. Both walls now enforced by an installed hook.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green: jail.rs pure core available to the shell" },
+  { id = "EN-2", text = "PHASE-01 settled the registration path (plugin vs settings.local) and whether the `|| exit 2` guard is shell-runnable" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine worktree pretooluse consumes the design §5.2 stdin subset and emits deny / allow+updatedInput / pass-through (no stdout) per Decision; exit 0 always" },
+  { id = "EX-2", text = "install_hooks_plugin_for_claude templates every embedded hooks.json command's leading `doctrine` to resolve_exec()'s absolute path at materialization (no longer a verbatim byte-copy); checked-in asset stays valid as authored (args untouched)" },
+  { id = "EX-3", text = "A missing/non-resolving doctrine binary DENIES (templated absolute exec + shell-form `|| exit 2`, gated on PHASE-01 shell-run), never passes through unconfined (F-1); shim alternative not used (RV-202)" },
+  { id = "EX-4", text = "Both PreToolUse walls (Bash bwrap-wrap, Edit|Write pathcheck) fire for a worktree subagent through the installed hook; the runbook documents no-hot-reload + /reload-plugins + the Edit/Write escape hatch" },
+]
+verification = [
+  { id = "VT-1", expects = "synthetic stdin → emitted JSON: bash-wrap, write-deny, orchestrator pass-through (no agent_id), isolation:none deny (agent_id + repo-root cwd), INV-2 repo-root-ancestor deny", test_file = "src/worktree/pretooluse.rs", keywords = ["pretooluse", "pass_through", "deny", "updatedInput"] },
+  { id = "VT-2", expects = "install templating bakes an absolute exec into every plugin hooks.json command's leading token (parity with settings HookSpec bake)", test_file = "src/skills.rs", keywords = ["install_hooks_plugin_for_claude", "resolve_exec", "doctrine"] },
+  { id = "VT-3", expects = "fail-closed exec: a missing/non-resolving doctrine denies, never unconfined pass-through (F-1)", test_file = "src/worktree/pretooluse.rs", keywords = ["fail", "closed", "deny"] },
+  { id = "VA-1", expects = "Agent confirms, on the installed hook, both walls fire for a live worktree subagent and honour updatedInput — the PHASE-01 proof re-expressed against the installed path" },
+]
+specs        = []
+requirements = []
+
+# ──────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Per-arming policy provision (objective 3)"
+objective = """
+Wire the per-arming jail config surface end to end (D2, worktree-name key, \
+per-arming granularity). arm-spawn (src/dispatch.rs) writes the arming declaration \
+jail.toml beside `base` in ARMING_SUBPATH, in ONE arming step (the jail.toml↔base \
+pairing, F-4). create-fork (src/worktree/create.rs) gains a NET-NEW provision step \
+beside run_provision + write_marker: copy the declaration to \
+<main>/.doctrine/state/dispatch/jail/<name>.toml (patterned on marker.rs:write_marker). \
+pretooluse resolves policy by cwd → basename(worktree) → file. Honour INV-6 (no \
+background Agent spawn while the arming slot is live). Absence ⇒ Default floor.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green: pretooluse exists to consume a resolved policy" },
+  { id = "EN-2", text = "PHASE-02 green: JailPolicy + load_policy + validate_policy available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "arm-spawn writes jail.toml alongside base in the same arming step; re-arm rewrites both (no separate update path — F-4)" },
+  { id = "EX-2", text = "create-fork provisions the declared policy to jail/<name>.toml before the worker's first tool call, outside every worktree and ro to the worker" },
+  { id = "EX-3", text = "pretooluse loads the provisioned policy by cwd→basename; absence ⇒ Default (strictest floor), never deny (objective 3)" },
+  { id = "EX-4", text = "Per-arming granularity holds: serial arming binds the sole intent per-worker; a parallel batch off one arming provisions the SAME profile to every sibling (shared, not leaked)" },
+]
+verification = [
+  { id = "VT-1", expects = "create-fork provisions the declared policy to jail/<name>.toml (provision step beside run_provision/write_marker)", test_file = "src/worktree/create.rs", keywords = ["jail", "provision"] },
+  { id = "VT-2", expects = "arm-spawn writes jail.toml beside base in one step (F-4 pairing)", test_file = "src/dispatch.rs", keywords = ["jail", "base", "arm_spawn"] },
+  { id = "VT-3", expects = "keying: pretooluse resolves provisioned policy by cwd→basename; absence ⇒ Default floor; parallel batch shares one profile (F-1)", test_file = "src/worktree/pretooluse.rs", keywords = ["basename", "Default", "policy"] },
+  { id = "VA-1", expects = "Agent confirms INV-6 holds in the dispatch path: no run_in_background Agent spawn is issued against a live arming slot (foreground-only template)" },
+]
+specs        = []
+requirements = []
+
+# ──────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "Funnel convergence — SubagentStop capture & dispatch integration"
+objective = """
+Close objective 5: ro-`.git` removes the worker's self-commit, so the claude \
+/dispatch funnel converges onto a captured working-tree-diff. Land the doctrine \
+SubagentStop capture hook (blocking-capable, awaited — RV-201 F-2) that captures \
+`git -C <worktree> diff` + untracked adds to a patch OUTSIDE the worktree before \
+allowing the stop, correlating the worktree by the PHASE-01-proven correlator \
+(no worktree_path on SubagentStop — RV-202); WorktreeRemove demoted to best-effort \
+cleanup. Add the SubagentStop entry to hooks.json (templated, PHASE-03). Edit \
+dispatch-agent/SKILL.md: import source = the captured patch against B (not B..S); \
+relax the single-commit delta-check on this arm; verify-worker adjusts. Resolve \
+OQ-1 (delta-check location: skill-orchestration vs src/dispatch.rs) and scope the \
+touch. E2E claude /dispatch with one jailed worker is the riskiest leg.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green on item 2: SubagentStop blocking + tree-intact + worktree-correlation proven (else this slice already aborted to Path C / IDE-024)" },
+  { id = "EN-2", text = "PHASE-03 + PHASE-04 green: the jail and policy surface are installed and enforcing" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The SubagentStop hook captures the worker's worktree diff (tracked + untracked) to a patch outside the worktree before the stop is allowed; WorktreeRemove never gates the funnel (demoted to cleanup)" },
+  { id = "EX-2", text = "The hook correlates to the correct worktree via the PHASE-01-proven correlator (agent_id→agent-<id>→provision-set, or the proven fallback)" },
+  { id = "EX-3", text = "dispatch-agent/SKILL.md import = the captured patch against B; the B..S single-commit delta-check is relaxed on the claude arm; verify-worker adjusts; OQ-1 resolved (delta-check location named, touch scoped)" },
+  { id = "EX-4", text = "Behaviour-preservation: existing worktree/dispatch suites stay green unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "SubagentStop capture: worker diff (tracked + untracked) lands in an outside-the-worktree patch before stop; correlator resolves the worktree", test_file = "src/worktree/pretooluse.rs", keywords = ["SubagentStop", "capture", "diff"] },
+  { id = "VT-2", expects = "behaviour-preservation: existing worktree/dispatch suites green unchanged", test_file = "src/worktree/create.rs", keywords = ["test"] },
+  { id = "VA-1", expects = "Agent confirms dispatch-agent/SKILL.md imports the captured patch, relaxes the B..S delta-check on the claude arm, and OQ-1 (delta-check location) is resolved with the touch scoped" },
+  { id = "VH-1", expects = "Human accepts a live claude /dispatch E2E with one jailed worker: escape vectors denied + canaries intact + funnel completes green via captured-patch import (covers OQ-2 end-to-end)" },
+]
+specs        = []
+requirements = []

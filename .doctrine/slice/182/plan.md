@@ -1,0 +1,103 @@
+# Implementation Plan SL-182: Claude-arm subagent write-confinement hooks
+
+Prose companion to `plan.toml`. Narrative only — no queried data lives here
+(the storage rule); the phase list, criteria, verification, and links are
+authored in the TOML. Use this for the plan's rationale and sequencing.
+<!-- Cite entities by padded id (SL-020, REQ-059); phases as PHASE-01,
+     criteria as EN-1/EX-1/VT-1/VA-1/VH-1. See .doctrine/glossary.md § reference forms. -->
+
+## Overview
+
+SL-182 graduates the RSK-014 probe-h1 apparatus — proven hard write-containment
+for a claude `isolation:worktree` subagent — from throwaway shell into installed
+doctrine machinery, closing the ADR-006 D2b / ADR-012 OQ-D impersonation gap on
+the Linux/bwrap claude arm. Five phases, strictly sequenced. The spine is the
+design's own §9 sequencing: **prove the harness first (D7), then build Rust onto a
+proven shape, then converge the funnel.**
+
+The five phases map onto the slice objectives:
+
+- **PHASE-01** — the D7 empirical probe (gates everything below).
+- **PHASE-02** — pure jail core (`jail.rs`) — objectives 1 + 2's logic.
+- **PHASE-03** — the `pretooluse` shell, registration, and fail-closed install —
+  objectives 1 + 2's enforcement + objective 4.
+- **PHASE-04** — the per-arming policy surface — objective 3.
+- **PHASE-05** — funnel convergence via `SubagentStop` capture — objective 5.
+
+## Sequencing & Rationale
+
+**Why probe-first (PHASE-01 before any Rust).** The two tallest risks (R1
+funnel-teardown, R2 plugin-registration) plus the RV-202 `SubagentStop`
+worktree-correlation gap are *harness behaviours* the `docs/claude` cache does not
+prove — it documents none of the timing, and SubagentStop carries no
+`worktree_path`. Sinking Rust into a refuted premise is the expensive failure mode.
+The probe is the RSK-014 idiom (live `settings.local.json` hooks + `rm`-able shell)
+and is the cheapest place to refute each premise. Crucially, **its outcomes branch
+the rest of the slice**: item 1 picks the PHASE-03 registration path (plugin vs the
+`settings.local` fallback); item 2 decides Path L vs the abort to Path C / IDE-024
+that would moot PHASE-02/03/04 as written; item 3 decides whether the `|| exit 2`
+vanish-guard is even shell-runnable. So PHASE-01 is a true gate, not a warm-up —
+its VA/VH exits record the decisions the later phases consume.
+
+**Why the pure core is its own phase (PHASE-02).** ADR-001 layering separates the
+pure jail logic (no clock/git/disk/rng) from the impure hook shell. The pure
+surface — `resolve_target`, `pathcheck`, `bwrap_argv`, `opaque_wrap`,
+`validate_policy`, `JailPolicy`/`load_policy` — is independently testable with
+TDD red/green/refactor and carries the load-bearing invariants (INV-3 `.git`/root
+rejection, INV-4 validated-allowlist trust, INV-5 shell-quoting, A1 topology
+recognition, D5 pi-arm parity). Landing and proving it before the shell means
+PHASE-03 wires a *trusted* core into stdin/stdout plumbing rather than debugging
+logic and I/O together.
+
+**Why registration + install fail-closed ride together (PHASE-03).** The
+`pretooluse` shell is meaningless until an installed hook invokes it, and the F-1
+blocker is precisely that the *installer* (`install_hooks_plugin_for_claude`) ships
+the plugin `hooks.json` as a verbatim byte-copy with bare `doctrine` commands —
+fail-OPEN. So the shell, its two PreToolUse registrations, and the install-time
+templating that bakes an absolute `resolve_exec()` path are one coherent unit: the
+wall is only real once it is both invoked and invoked through a resolved binary.
+The `settings.local` fallback (if PHASE-01 refuted the plugin path) lands here in
+the same phase (RV-200 F-5), not as a deferred contingency.
+
+**Why the policy surface follows enforcement (PHASE-04).** The per-arming config
+(`extra_rw` + `network`) only matters once `pretooluse` exists to consume a resolved
+policy. This phase is the plumbing that flows an orchestrator-declared intent through
+the spawn handshake: `arm-spawn` writes `jail.toml` beside `base` in one arming step
+(the F-4 pairing, made atomic by the blocking `Agent` call + INV-6), and the
+`create-fork` hook gains a net-new provision step (patterned on
+`marker.rs:write_marker`) that materializes `jail/<name>.toml` under the name it
+learns at spawn. Absence ⇒ the strictest floor, so the wall holds even with no
+declared policy.
+
+**Why funnel convergence is last (PHASE-05) and riskiest.** Confinement's
+*consequence* — ro-`.git` kills the worker's self-commit — only bites once the jail
+is actually enforcing (PHASE-03/04). Convergence onto a captured working-tree-diff
+depends on the PHASE-01 proof that `SubagentStop` is blocking, observes the tree
+intact, AND correlates to the right worktree (the RV-202 gap). The E2E leg (live
+claude `/dispatch`, one jailed worker, escape vectors denied + funnel green) is the
+VH acceptance and the slice's tallest verification. OQ-1 (delta-check location:
+skill-orchestration vs `src/dispatch.rs`) is resolved here, where the touch is
+concrete.
+
+**Dependency chain (linear):** PHASE-01 → PHASE-02 → PHASE-03 → PHASE-04 →
+PHASE-05. Each phase's EN criteria name its upstream green. PHASE-01 can abort the
+whole Path L approach (→ Path C / IDE-024) before any Rust is sunk; that is the
+point of putting it first.
+
+## Notes
+
+- **Net-new vs ride-existing.** `jail.rs` and `pretooluse.rs` are new modules;
+  `WorktreeCommand::Pretooluse` mirrors `CreateFork`. The `create-fork` provision
+  step is net-new beside the existing `run_provision`/`write_marker`
+  (`fork.rs`/`marker.rs`). The install templating modifies the existing
+  `install_hooks_plugin_for_claude` (`src/skills.rs:1024`). The two PreToolUse +
+  one SubagentStop entries are net-new in `plugins/doctrine/hooks/hooks.json`
+  (today: SessionStart + WorktreeCreate only).
+- **Behaviour-preservation gate.** PHASE-05 EX-4 / VT-2: the existing
+  worktree/dispatch suites are the proof that shared machinery (create-fork,
+  dispatch funnel) stays green; they must pass unchanged.
+- **STD-001.** The `doctrine` token, each subcommand string, the bwrap bind flags,
+  and the `ARMING_SUBPATH`/`jail/` path fragments are single-source named constants.
+- **Disposability (PHASE-01).** The probe apparatus is throwaway — its EX-4
+  requires no committed Rust or installed hooks survive the phase; only the
+  recorded findings + decisions persist (notes + a durable memory if novel).
