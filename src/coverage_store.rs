@@ -157,18 +157,47 @@ pub(crate) fn record(
 /// Returns `Some((key, erased_status))` of the removed cell, or `None` if no such
 /// cell exists. A deletion that flips a composite green must never be silent — the
 /// caller pairs this with [`withdrawal_line`] to name what it erased (F-IV).
-pub(crate) fn forget(
-    root: &Path,
-    slice_id: u32,
-    key: &CoverageKey,
-) -> Result<Option<(CoverageKey, CoverageStatus)>> {
+/// The outcome of a [`forget`] attempt (SL-179 §4.5, D2). The guard is atomic —
+/// a removal-then-return path can't be post-checked, so the refusal decision is
+/// made BEFORE any mutation: a `Failed`/`Blocked` cell yields `Refused` with no
+/// remove and no save.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ForgetOutcome {
+    /// The cell was erasable; removed + saved. Carries the erased key + status.
+    Erased(CoverageKey, CoverageStatus),
+    /// The cell is a live contradiction (`Failed`/`Blocked`); left untouched.
+    Refused(CoverageStatus),
+    /// No cell matched the key (idempotent miss).
+    NotFound,
+}
+
+/// Whether a cell at this status may be silently erased by `forget` (PURE).
+/// A live contradiction (`Failed` = a check ran and contradicted; `Blocked` =
+/// evidence unobtainable) is NOT erasable — erasing it would drop the
+/// requirement out of the closure gate's set unseen (SL-179 D2 / SPEC-002 D8).
+/// Exhaustive over [`CoverageStatus`] so a new variant forces an erasability
+/// decision here (STD-001 — compared via the enum, no string literals).
+fn is_erasable(status: CoverageStatus) -> bool {
+    match status {
+        CoverageStatus::Planned | CoverageStatus::InProgress | CoverageStatus::Verified => true,
+        CoverageStatus::Failed | CoverageStatus::Blocked => false,
+    }
+}
+
+pub(crate) fn forget(root: &Path, slice_id: u32, key: &CoverageKey) -> Result<ForgetOutcome> {
     let mut file = load(root, slice_id)?;
     let Some(pos) = file.entry.iter().position(|e| &e.key == key) else {
-        return Ok(None);
+        return Ok(ForgetOutcome::NotFound);
     };
+    let Some(status) = file.entry.get(pos).map(|e| e.status) else {
+        return Ok(ForgetOutcome::NotFound);
+    };
+    if !is_erasable(status) {
+        return Ok(ForgetOutcome::Refused(status));
+    }
     let removed = file.entry.remove(pos);
     save(root, slice_id, &file)?;
-    Ok(Some((removed.key, removed.status)))
+    Ok(ForgetOutcome::Erased(removed.key, removed.status))
 }
 
 /// The terse withdrawal line naming the erased 4-tuple + its status (PURE):
@@ -382,12 +411,24 @@ pub(crate) fn run_forget(
     };
     let mut out = std::io::stdout();
     match forget(&root, slice_id, &key)? {
-        Some((k, status)) => writeln!(out, "{}", withdrawal_line(&k, status))?,
-        None => writeln!(
+        ForgetOutcome::Erased(k, status) => writeln!(out, "{}", withdrawal_line(&k, status))?,
+        ForgetOutcome::NotFound => writeln!(
             out,
             "no coverage cell {}/{}/{}/{}",
             key.slice, key.requirement, key.contributing_change, key.mode,
         )?,
+        // D2 — a live contradiction is never silently erasable. The CLI offers
+        // zero erasure path; the remedies are the recorded routes.
+        ForgetOutcome::Refused(status) => anyhow::bail!(
+            "refusing to forget {}/{}/{}/{} [{status:?}] — a live contradiction is not \
+             erasable (SL-179 D2). Remedies: re-derive with `coverage verify`, re-attest \
+             with `coverage record`, withdraw the requirement via a recorded REC, or — for \
+             wrong-key garbage — a reviewed hand-edit of the authored coverage.toml.",
+            key.slice,
+            key.requirement,
+            key.contributing_change,
+            key.mode,
+        ),
     }
     Ok(())
 }
@@ -439,6 +480,25 @@ mod tests {
             check,
             touched_paths: Vec::new(),
         }
+    }
+
+    /// Seed a single cell at an exact stored `status` (bypasses `record`'s
+    /// VT-leans-Planned derivation) so forget-guard tests can stage a `Failed` /
+    /// `Blocked` cell directly.
+    fn seed_cell(root: &Path, slice_id: u32, key: CoverageKey, status: CoverageStatus) {
+        let mut file = CoverageFile::default();
+        coverage::upsert(
+            &mut file,
+            CoverageEntry {
+                key,
+                status,
+                git_anchor: String::new(),
+                attested_date: None,
+                touched_paths: Vec::new(),
+                check: None,
+            },
+        );
+        save(root, slice_id, &file).unwrap();
     }
 
     // --- VT-1: store load/save round-trip + atomic overwrite + NF-001 ---------
@@ -782,13 +842,70 @@ mod tests {
         let erased = forget(tmp.path(), 57, &k).unwrap();
         assert_eq!(
             erased,
-            Some((k.clone(), CoverageStatus::Planned)),
+            ForgetOutcome::Erased(k.clone(), CoverageStatus::Planned),
             "forget returns the erased key + status"
         );
         assert!(load(tmp.path(), 57).unwrap().entry.is_empty(), "cell gone");
 
         // A second forget of the same key finds nothing.
-        assert_eq!(forget(tmp.path(), 57, &k).unwrap(), None, "idempotent miss");
+        assert_eq!(
+            forget(tmp.path(), 57, &k).unwrap(),
+            ForgetOutcome::NotFound,
+            "idempotent miss"
+        );
+    }
+
+    // --- VT-1: forget guard — Failed/Blocked refused, Verified erased ----------
+
+    #[test]
+    fn forget_refuses_a_failed_cell_and_keeps_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let k = key("SL-057", "REQ-256", "SL-057", "VT");
+        seed_cell(tmp.path(), 57, k.clone(), CoverageStatus::Failed);
+
+        assert_eq!(
+            forget(tmp.path(), 57, &k).unwrap(),
+            ForgetOutcome::Refused(CoverageStatus::Failed),
+            "a live Failed cell is refused, not erased"
+        );
+        assert!(
+            !load(tmp.path(), 57).unwrap().entry.is_empty(),
+            "refused cell REMAINS in the store"
+        );
+    }
+
+    #[test]
+    fn forget_refuses_a_blocked_cell_and_keeps_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let k = key("SL-057", "REQ-256", "SL-057", "VH");
+        seed_cell(tmp.path(), 57, k.clone(), CoverageStatus::Blocked);
+
+        assert_eq!(
+            forget(tmp.path(), 57, &k).unwrap(),
+            ForgetOutcome::Refused(CoverageStatus::Blocked),
+            "a Blocked cell is refused, not erased"
+        );
+        assert!(
+            !load(tmp.path(), 57).unwrap().entry.is_empty(),
+            "refused cell REMAINS in the store"
+        );
+    }
+
+    #[test]
+    fn forget_erases_a_verified_cell() {
+        let tmp = tempfile::tempdir().unwrap();
+        let k = key("SL-057", "REQ-256", "SL-057", "VH");
+        seed_cell(tmp.path(), 57, k.clone(), CoverageStatus::Verified);
+
+        assert_eq!(
+            forget(tmp.path(), 57, &k).unwrap(),
+            ForgetOutcome::Erased(k.clone(), CoverageStatus::Verified),
+            "a Verified cell is still erasable"
+        );
+        assert!(
+            load(tmp.path(), 57).unwrap().entry.is_empty(),
+            "erased cell is gone"
+        );
     }
 
     #[test]
