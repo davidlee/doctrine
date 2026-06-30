@@ -5,7 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     devshell.url = "github:numtide/devshell";
-    pub.url = "path:/home/david/flakes/pub";
+    pub.url = "github:davidlee/nix-config?dir=flakes/pub";
     llm-agents.url = "github:numtide/llm-agents.nix";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
