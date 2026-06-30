@@ -66,6 +66,7 @@ owo-colors.workspace = true
 # gated, so OFF keeps zero new compiled weight (single crossterm v0.29.0 in the lock).
 crossterm = { version = "0.29", default-features = false }
 cordage = { path = "crates/cordage", version = "0.2.0" }
+walkdir.workspace = true
 webbrowser = "1"
 
 [dev-dependencies]
@@ -121,6 +122,9 @@ toml = "0.8"
 toml_edit = "0.22"
 glob = "0.3"
 regex = "1"
+# Desktop OS directory tree walking hot path; already a transitive dep via
+# rust-embed's walkdir → same-file chain.
+walkdir = "2"
 # Pure-Rust regex for the shared list `--regexp` filter (SL-025 D9). regex-lite
 # over full `regex` deliberately: no regex-automata/aho-corasick — id/slug/title
 # matching needs nothing fancy, and it keeps compile time + binary size down.

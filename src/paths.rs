@@ -4,10 +4,10 @@
 //! Provides file-classification, directory scanning, and selection logic
 //! for entity directories (SL-139 PHASE-01).
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use walkdir::WalkDir;
 
 // ---------------------------------------------------------------------------
 // Pure types (no clap)
@@ -63,13 +63,14 @@ pub(crate) fn is_excluded_name(name: &str) -> bool {
 // Directory scanner
 // ---------------------------------------------------------------------------
 
-/// Scan an entity directory and classify every regular file.
+/// Scan an entity directory recursively and classify every regular file.
 ///
-/// Only regular files are considered (symlinks and subdirectories are
-/// skipped). The exclusion filter ([`is_excluded_name`]) discards editor
-/// detritus. Files are classified by exact filename match against the
-/// identity TOML and optional identity MD; anything else becomes an "other"
-/// entry, sorted lexicographically.
+/// Descends into subdirectories (but does not follow symlinks). The exclusion
+/// filter ([`is_excluded_name`]) discards editor detritus at every depth.
+/// Files are classified by exact filename match against the identity TOML and
+/// optional identity MD **at the entity directory's direct children only** — a file with the same name
+/// in a subdirectory is treated as an "other". Everything else becomes an
+/// "other" entry, sorted lexicographically.
 ///
 /// Every returned path is **relative to `root`**. An error is returned if
 /// the identity TOML file is not found.
@@ -91,17 +92,11 @@ pub(crate) fn scan_entity_dir(
     let mut found_md: Option<PathBuf> = None;
     let mut others: Vec<PathBuf> = Vec::new();
 
-    let entries =
-        fs::read_dir(dir).with_context(|| format!("Failed to read directory {}", dir.display()))?;
+    for entry in WalkDir::new(dir).follow_links(false).sort_by_file_name() {
+        let entry = entry.with_context(|| format!("Failed to walk {}", dir.display()))?;
 
-    for entry in entries {
-        let entry = entry.with_context(|| format!("Failed to read entry in {}", dir.display()))?;
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("Failed to get file type for entry in {}", dir.display()))?;
-
-        // Only regular files — skip symlinks and subdirs.
-        if !file_type.is_file() {
+        // Only regular files — skip symlinks and directories.
+        if !entry.file_type().is_file() {
             continue;
         }
 
@@ -126,9 +121,12 @@ pub(crate) fn scan_entity_dir(
             })?
             .to_path_buf();
 
-        if name_str == toml_name {
+        // Identity files match only at the base level (depth == 1 — direct
+        // children of the entity directory, since depth 0 is the dir itself).
+        // A file with the same name in a subdirectory is an "other".
+        if entry.depth() == 1 && name_str == toml_name {
             found_toml = Some(rel_path);
-        } else if Some(name_str) == md_name {
+        } else if entry.depth() == 1 && Some(name_str) == md_name {
             found_md = Some(rel_path);
         } else {
             others.push(rel_path);
@@ -390,11 +388,11 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // VT-3: Scanner skips symlinks and subdirs, returns only regular files
+    // VT-3: Scanner skips symlinks; recurses into subdirectories
     // -----------------------------------------------------------------------
 
     #[test]
-    fn scanner_skips_symlinks_and_subdirs() {
+    fn scanner_skips_symlinks_and_recurses_into_subdirs() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let dir = root.join("ent");
@@ -415,7 +413,7 @@ mod tests {
         )
         .unwrap();
 
-        // Only regular files: item.toml + readme.md
+        // Identity files found; empty subdir contributes nothing.
         assert_eq!(set.toml.to_string_lossy(), "ent/item.toml");
         assert_eq!(set.md.as_ref().unwrap().to_string_lossy(), "ent/readme.md");
         assert!(set.others.is_empty());
@@ -541,6 +539,75 @@ mod tests {
         )
         .unwrap();
         assert_eq!(paths, vec!["dir/item.toml", "dir/extra.txt"]);
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-R1: Files in subdirectories appear in others
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn subdirectory_files_appear_in_others() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join("ent");
+        fs::create_dir_all(&dir).unwrap();
+
+        // Identity files at root.
+        fs::write(dir.join("item.toml"), "toml").unwrap();
+        fs::write(dir.join("item.md"), "md").unwrap();
+
+        // Nested subdirectory with files.
+        let sub = dir.join("probe-h1");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("results.md"), "results").unwrap();
+        fs::write(sub.join("prompt.txt"), "prompt").unwrap();
+
+        let set = scan_entity_dir(
+            &dir,
+            Path::new("item.toml"),
+            Some(Path::new("item.md")),
+            root,
+        )
+        .unwrap();
+
+        assert_eq!(set.others.len(), 2);
+        assert!(
+            set.others
+                .contains(&PathBuf::from("ent/probe-h1/results.md"))
+        );
+        assert!(
+            set.others
+                .contains(&PathBuf::from("ent/probe-h1/prompt.txt"))
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-R2: Identity filename collision in subdirectory is an other, not
+    //        identity file misclassification
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn identity_name_collision_in_subdir_is_other() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join("ent");
+        fs::create_dir_all(&dir).unwrap();
+
+        // Identity files at root.
+        fs::write(dir.join("item.toml"), "toml").unwrap();
+
+        // A file with the same name in a subdirectory.
+        let sub = dir.join("sub");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("item.toml"), "NOT identity").unwrap();
+
+        let set = scan_entity_dir(&dir, Path::new("item.toml"), None, root).unwrap();
+
+        // The root item.toml is still the identity TOML.
+        assert_eq!(set.toml.to_string_lossy(), "ent/item.toml");
+        // The subdirectory copy is an "other".
+        assert_eq!(set.others.len(), 1);
+        assert_eq!(set.others[0].to_string_lossy(), "ent/sub/item.toml");
     }
 
     // -----------------------------------------------------------------------

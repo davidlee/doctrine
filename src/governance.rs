@@ -534,7 +534,7 @@ pub(crate) fn run_paths(
         let lines = crate::paths::select_paths(&set, sel)?;
         all_lines.extend(lines);
     }
-    write!(io::stdout(), "{}", all_lines.join("\n"))?;
+    writeln!(io::stdout(), "{}", all_lines.join("\n"))?;
     Ok(())
 }
 

@@ -410,7 +410,7 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
                 let lines = crate::paths::select_paths(&set, &sel)?;
                 all_lines.extend(lines);
             }
-            write!(io::stdout(), "{}", all_lines.join("\n"))?;
+            writeln!(io::stdout(), "{}", all_lines.join("\n"))?;
             Ok(())
         }
         SliceCommand::Selector { command } => dispatch_selector(command),
