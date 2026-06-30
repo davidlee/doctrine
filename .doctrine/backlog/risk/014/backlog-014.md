@@ -97,5 +97,35 @@ enforcement path lands.
   path; the REV against ADR-012 retracts the "positive marker is the real close"
   framing and points here.
 
+## Considerations for the landing slice (H1 proven → graduate `probe-h1/`)
+
+Captured for the eventual slice that lifts the wrapper + pathcheck from
+`.harness/probe/` into the doctrine skill hooks. Design OQs, not yet decided:
+
+- **OQ-1 bwrap detection & platform fallback.** bwrap is a separate dependency
+  and Linux-only. The hook must *detect* bwrap and **fail-closed (deny)** if
+  absent — never degrade to unwrapped exec. Open: the non-Linux posture. macOS
+  has no vetted seatbelt/`sandbox-exec` equivalent yet (IMP-045 owns that seam).
+  Until one lands, the honest behaviour on macOS is "deny worktree-subagent Bash"
+  or "refuse to spawn confined workers," not silent pass-through. Decide the
+  degraded-mode contract explicitly.
+- **OQ-2 Rust subcommand vs installed bash scripts.** The hook fires on EVERY
+  tool call (Bash + Edit/Write). Per-call cost of `bash + jq` spawns adds up.
+  Weigh a Rust `doctrine` subcommand handler (e.g. `doctrine worktree pretooluse`)
+  — single-source with the existing `worktree create-fork` hook, faster parse,
+  testable — against bash-script simplicity + binary-startup cost per call.
+  Likely route through doctrine (DRY: hooks already shell `doctrine boot --emit`
+  and `worktree create-fork`). Measure both before deciding.
+- **OQ-3 per-run config surface + worker correlation.** Need a way to tune a
+  run's jail (extra rw/ro binds, network, strict/loose) and correlate that config
+  with the *specific* worker. The binding key exists (Exp 1): `agent_id` and/or
+  `cwd`==worktree, both in PreToolUse stdin. Candidate: the orchestrator declares
+  per-worker policy at spawn time, writing a `{worktree|agent_id → policy}` map to
+  a path OUTSIDE every worktree (the brief's `.harness/` map idea); the hook looks
+  it up by `cwd`. Open: where the map lives, its schema, who's authoritative
+  (orchestrator-sole-writer per ADR-006), and lifecycle/GC alongside the worktree.
+
+Recipe + evidence for the above: [[mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinement]], `probe-h1/`.
+
 Refs: SL-181, IMP-065, ADR-006 D2a/D2b, ADR-012 OQ-D, ADR-008 (jail isolation),
 ADR-011 D6/M2.
