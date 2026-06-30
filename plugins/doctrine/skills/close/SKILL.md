@@ -123,6 +123,29 @@ Inputs:
    `/reconcile`. If closure depends on tolerated drift with material
    tradeoffs, `/consult` before normalising around it.
 
+### Drift discharge recipe
+
+When `slice status <id> done` refuses with *undischarged residual drift*, each
+flagged requirement needs an `accept` REC **owned by the closing slice** that
+satisfies all three clauses:
+
+- **(a)** `move = accept` — an affirm, not `revise`/`redesign`.
+- **(b)** a `[[status_delta]]` naming the requirement whose `to` equals its
+  current authored status (the status the refusal prints).
+- **(c)** the REC's `[[evidence_ref]]` set ⊇ every distinct coverage key feeding
+  that requirement's composite, so fresh contradictory evidence cannot be excused
+  by a stale REC.
+
+Author it, then hand-edit the two tables:
+
+```bash
+doctrine rec new --move accept --owning-slice SL-NNN --title "accept REQ-NNN"
+# then hand-author the [[status_delta]] and [[evidence_ref]] tables
+```
+
+Full predicate, rationale, and a worked example:
+`doctrine memory show mem.pattern.doctrine.close-drift-discharge-rec`.
+
 ## Outcomes
 
 - The slice is `done`, with the rollup in agreement.
