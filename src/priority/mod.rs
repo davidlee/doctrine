@@ -31,27 +31,58 @@ use crate::listing::{Format, RenderOpts};
 /// The default `--limit` for `doctrine next` (SL-171 PHASE-02).
 pub(crate) const NEXT_LIMIT_DEFAULT: usize = 20;
 
+/// The default `--limit` for `doctrine survey` (IMP-218).
+pub(crate) const SURVEY_LIMIT_DEFAULT: usize = 20;
+
 /// Resolve the project root (default markers), shared by every priority verb.
 fn root(path: Option<PathBuf>) -> anyhow::Result<std::path::PathBuf> {
     crate::root::find(path, &crate::root::default_markers())
 }
 
-/// `doctrine survey [--all] [--json]` (design §5.4) — the importance survey. Builds
-/// the rows once via [`surface::survey`] and renders per `Format` (`--json` forces
-/// JSON). NO trailing newline on the JSON surface (the golden contract).
+/// Validate `--page`/`--limit`/`--offset` and resolve to a concrete offset.
+/// Single source for both `Survey` and `Next` dispatch in `cli.rs` (IMP-218 DRY
+/// extraction).
+pub(crate) fn resolve_page_offset(
+    page: Option<usize>,
+    limit: usize,
+    offset: usize,
+) -> anyhow::Result<usize> {
+    if page == Some(0) {
+        anyhow::bail!("--page must be >= 1");
+    }
+    if limit == 0 && page.is_some() {
+        anyhow::bail!("--page requires a positive --limit");
+    }
+    Ok(match page {
+        Some(p) => (p - 1) * limit,
+        None => offset,
+    })
+}
+
+/// `doctrine survey [--all] [--hide-blocked] [--json] [--limit N] [--offset N] [--page N]`
+/// (design §5.4 / IMP-218) — the importance survey with pagination. Builds the rows
+/// once via [`surface::survey`] and renders per `Format` (`--json` forces JSON).
+/// Pagination args are ignored under `--json`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "CLI surface: path+all+hide_blocked+format+json+render+limit+offset = 8 — each is independently meaningful, no natural sub-struct"
+)]
 pub(crate) fn run_survey(
     path: Option<PathBuf>,
     all: bool,
+    hide_blocked: bool,
     format: Format,
     json: bool,
     render: RenderOpts,
+    limit: usize,
+    offset: usize,
 ) -> anyhow::Result<()> {
     let root = root(path)?;
-    let rows = surface::survey(&root, all)?;
+    let rows = surface::survey(&root, all, hide_blocked)?;
     let out = if json || format == Format::Json {
         render::survey_json(&rows)?
     } else {
-        render::survey_human(&rows, render)
+        render::survey_human(&rows, render, limit, offset)
     };
     write!(io::stdout(), "{out}")?;
     Ok(())

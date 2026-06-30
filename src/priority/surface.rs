@@ -179,16 +179,22 @@ pub(crate) fn survey_for_map(g: &PriorityGraph, all: bool) -> Vec<SurveyRow> {
         .collect()
 }
 
-/// `survey [--all]` (design §5.4) — the eligible set in importance order (D10).
+/// `survey [--all] [--hide-blocked]` (design §5.4 / IMP-218) — the eligible set in
+/// importance order (D10).
 ///
 /// Set: every `eligible` node, MINUS `promoted` backlog items (excluded as their own
 /// reason, F1), UNLESS `all` reveals the full picture. With `all`, terminal +
-/// promoted nodes are included too (the complete view). Sort (the empty
+/// promoted nodes are included too (the complete view). `hide_blocked` drops blocked
+/// rows from the result (default false — blocked rows included). Sort (the empty
 /// authored-priority slot collapses to): `actionability(Actionable first) →
 /// consequence desc → canonical-id asc`.
-pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
+pub(crate) fn survey(root: &Path, all: bool, hide_blocked: bool) -> anyhow::Result<Vec<SurveyRow>> {
     let g = graph::build(root)?;
-    Ok(survey_for_map(&g, all))
+    let mut rows = survey_for_map(&g, all);
+    if hide_blocked {
+        rows.retain(|r| r.act == Actionability::Actionable);
+    }
+    Ok(rows)
 }
 
 /// Build the actionability graph view for the web UI from a [`PriorityGraph`]
@@ -802,7 +808,7 @@ mod tests {
         seed_issue(root, 3, "open", "", &[]);
 
         let g = build(root).unwrap();
-        let from_survey = survey(root, false).unwrap();
+        let from_survey = survey(root, false, false).unwrap();
         let from_for_map = survey_for_map(&g, false);
 
         assert_eq!(
@@ -870,7 +876,7 @@ mod tests {
     }
 
     fn survey_ids(root: &Path) -> Vec<String> {
-        survey(root, false)
+        survey(root, false, false)
             .unwrap()
             .into_iter()
             .map(|r| r.id)

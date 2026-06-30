@@ -150,11 +150,11 @@ fn survey_human_importance_order_blocked_last_terminal_promoted_excluded() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ kind │ status │         │ score │ blocker │ title\n\
-         RSK-001 │ RSK  │ open   │         │ 1.5   │         │ The prereq\n\
-         ISS-002 │ ISS  │ open   │         │ 1.0   │         │ Free work\n\
-         RV-001  │ RV   │ active │         │ 0.0   │         │ The review\n\
-         ISS-001 │ ISS  │ open   │ BLOCKED │ 1.0   │ RSK-001 │ Blocked work\n"
+        "id      │ kind │ status │ score │ blocker │ title\n\
+         RSK-001 │ RSK  │ open   │ 1.5   │         │ The prereq\n\
+         ISS-002 │ ISS  │ open   │ 1.0   │         │ Free work\n\
+         RV-001  │ RV   │ active │ 0.0   │         │ The review\n\
+         ISS-001 │ ISS  │ open   │ 1.0   │ RSK-001 │ Blocked work\n"
     );
 }
 

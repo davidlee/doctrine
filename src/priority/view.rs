@@ -74,15 +74,6 @@ pub(crate) enum Actionability {
 }
 
 impl Actionability {
-    /// The badge word for a row (`""` for actionable, `"BLOCKED"` for blocked) — the
-    /// single source so the human render stays consistent.
-    pub(crate) fn badge(self) -> &'static str {
-        match self {
-            Actionability::Actionable => "",
-            Actionability::Blocked => "BLOCKED",
-        }
-    }
-
     /// The JSON token for the actionability axis.
     pub(crate) fn token(self) -> &'static str {
         match self {

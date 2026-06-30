@@ -275,13 +275,18 @@ pub(crate) enum Command {
     /// Read-only cross-kind importance survey.
     ///
     /// Every ELIGIBLE entity in importance order (actionability, then consequence
-    /// desc, then canonical-id), each blocked row carrying a BLOCKED badge and its
-    /// direct blocker. Terminal and promoted-backlog items are excluded unless
-    /// `--all`. Advisory — never writes.
+    /// desc, then canonical-id). Blocked rows render their id in red (no separate
+    /// BLOCKED column). Terminal and promoted-backlog items are excluded unless
+    /// `--all`. `--hide-blocked` drops blocked rows entirely. Pagination via
+    /// `--limit`/`--offset`/`--page`. Advisory — never writes.
     Survey {
         /// Include terminal + promoted-backlog items (the complete view).
         #[arg(long)]
         all: bool,
+
+        /// Exclude blocked items.
+        #[arg(long)]
+        hide_blocked: bool,
 
         /// Output format (table | json).
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
@@ -294,6 +299,18 @@ pub(crate) enum Command {
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
+
+        /// Max rows to show (default 20). Use 0 for uncapped.
+        #[arg(long, default_value_t = crate::priority::SURVEY_LIMIT_DEFAULT)]
+        limit: usize,
+
+        /// Skip first N rows (default 0).
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+
+        /// Page number (1-based; sugar over --offset). Mutually exclusive with --offset.
+        #[arg(long, conflicts_with = "offset")]
+        page: Option<usize>,
     },
 
     /// Read-only advisory worklist.
@@ -1117,19 +1134,29 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         ),
         Command::Survey {
             all,
+            hide_blocked,
             format,
             json,
             path,
-        } => crate::priority::run_survey(
-            path,
-            all,
-            format,
-            json,
-            crate::listing::RenderOpts {
-                color,
-                term_width: crate::tty::stdout_terminal_width(),
-            },
-        ),
+            limit,
+            offset,
+            page,
+        } => {
+            let resolved_offset = crate::priority::resolve_page_offset(page, limit, offset)?;
+            crate::priority::run_survey(
+                path,
+                all,
+                hide_blocked,
+                format,
+                json,
+                crate::listing::RenderOpts {
+                    color,
+                    term_width: crate::tty::stdout_terminal_width(),
+                },
+                limit,
+                resolved_offset,
+            )
+        }
         Command::Next {
             format,
             json,
@@ -1139,21 +1166,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             offset,
             page,
         } => {
-            // Validate --page.
-            if page == Some(0) {
-                anyhow::bail!("--page must be >= 1");
-            }
-            if limit == 0 && page.is_some() {
-                anyhow::bail!("--page requires a positive --limit");
-            }
-            // Resolve offset: page sugar or explicit.
-            let resolved_offset = match page {
-                Some(p) => {
-                    let page_size = limit;
-                    (p - 1) * page_size
-                }
-                None => offset,
-            };
+            let resolved_offset = crate::priority::resolve_page_offset(page, limit, offset)?;
             crate::priority::run_next(
                 path,
                 format,

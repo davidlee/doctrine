@@ -11,7 +11,10 @@
 
 use crate::estimate::display::format_bound;
 use crate::listing::{self, Column, ColumnPaint, RenderOpts, TITLE_EVEN, TITLE_ODD, status_hue};
-use owo_colors::{AnsiColors::Cyan, DynColors};
+use owo_colors::{
+    AnsiColors::{Cyan, Red},
+    DynColors,
+};
 
 use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, ReasonKind, SurveyRow};
 
@@ -24,12 +27,18 @@ pub(crate) const PRIORITY_POLICY_VERSION: &str = "priority.v3";
 // Column definitions for priority human tables (SL-079 PHASE-02)
 // ---------------------------------------------------------------------------
 
-const SURVEY_COLS: [Column<SurveyRow>; 7] = [
+const SURVEY_COLS: [Column<SurveyRow>; 6] = [
     Column {
         name: "id",
         header: "id",
         cell: |r| r.id.clone(),
-        paint: ColumnPaint::Fixed(DynColors::Ansi(Cyan)),
+        paint: ColumnPaint::ByValue(|r| {
+            if matches!(r.act, super::view::Actionability::Blocked) {
+                Some(DynColors::Ansi(Red))
+            } else {
+                Some(DynColors::Ansi(Cyan))
+            }
+        }),
     },
     Column {
         name: "kind",
@@ -42,12 +51,6 @@ const SURVEY_COLS: [Column<SurveyRow>; 7] = [
         header: "status",
         cell: |r| r.status.clone(),
         paint: ColumnPaint::ByValue(|r| status_hue(&r.status)),
-    },
-    Column {
-        name: "act",
-        header: "",
-        cell: |r| r.act.badge().to_string(),
-        paint: ColumnPaint::ByValue(|r| status_hue(r.act.token())),
     },
     Column {
         name: "score",
@@ -73,7 +76,7 @@ const SURVEY_COLS: [Column<SurveyRow>; 7] = [
     dead_code,
     reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)"
 )]
-const SURVEY_DEFAULT: &[&str] = &["id", "kind", "status", "act", "score", "blocker", "title"];
+const SURVEY_DEFAULT: &[&str] = &["id", "kind", "status", "score", "blocker", "title"];
 
 const NEXT_COLS: [Column<NextRow>; 8] = [
     Column {
@@ -169,16 +172,50 @@ fn value_cell(r: &NextRow) -> String {
 // ---------------------------------------------------------------------------
 
 /// Render `survey` for human reading — one row per eligible node in importance order.
-/// Columns: id, kind, status, BLOCKED badge (or blank), score, direct blocker.
-/// Rides `listing::render_columns` (the shared list layout + colour seam). A blocked
-/// row shows its badge + first direct blocker (the rest live in `blockers`/`explain` —
-/// direct-only here, D11).
-pub(crate) fn survey_human(rows: &[SurveyRow], opts: RenderOpts) -> String {
+/// Columns: id, kind, status, score, direct blocker, title. Blocked rows render
+/// their `id` cell in red (replacing the old BLOCKED badge column). Rides
+/// `listing::render_columns` (the shared list layout + colour seam). Pagination via
+/// `limit`/`offset` mirrors `next_human` (IMP-218).
+pub(crate) fn survey_human(
+    rows: &[SurveyRow],
+    opts: RenderOpts,
+    limit: usize,
+    offset: usize,
+) -> String {
     if rows.is_empty() {
         return "(no eligible work)\n".to_string();
     }
+    let (visible, footer) = paginated(rows, limit, offset);
     let sel: Vec<&Column<SurveyRow>> = SURVEY_COLS.iter().collect();
-    listing::render_columns(rows, &sel, opts)
+    let mut out = listing::render_columns(visible, &sel, opts);
+    if let Some(f) = footer {
+        out.push_str(&f);
+    }
+    out
+}
+
+/// Slice rows into `(visible_page, optional_footer)` per limit/offset.
+/// Footer is `None` when uncapped (`limit == 0`) or all rows fit. Single source
+/// for the slice math + `limit == 0` guard — used by both `next_human` and
+/// `survey_human` (IMP-218 DRY extraction).
+fn paginated<T>(rows: &[T], limit: usize, offset: usize) -> (&[T], Option<String>) {
+    let total = rows.len();
+    let start = offset.min(total);
+    let end = if limit == 0 {
+        total
+    } else {
+        (start + limit).min(total)
+    };
+    let visible = rows.get(start..end).unwrap_or(&[]);
+    let shown = visible.len();
+    let footer = if limit != 0 && shown < total {
+        Some(listing::format_truncation_notice(
+            shown, total, offset, limit,
+        ))
+    } else {
+        None
+    };
+    (visible, footer)
 }
 
 /// Render `next` for human reading — actionable-only, in the score-aware
@@ -196,18 +233,10 @@ pub(crate) fn next_human(
     limit: usize,
     offset: usize,
 ) -> anyhow::Result<String> {
-    let total = rows.len();
-    if total == 0 {
+    if rows.is_empty() {
         return Ok("(nothing actionable)\n".to_string());
     }
-    let start = offset.min(total);
-    let end = if limit == 0 {
-        total
-    } else {
-        (start + limit).min(total)
-    };
-    let visible = rows.get(start..end).unwrap_or(&[]);
-    let shown = visible.len();
+    let (visible, footer) = paginated(rows, limit, offset);
 
     // D7 (SL-171 PHASE-02): any_tagged computed over the VISIBLE (post-slice) page.
     let any_tagged = visible.iter().any(|r| !r.tags.is_empty());
@@ -215,12 +244,8 @@ pub(crate) fn next_human(
     let sel = listing::select_columns(&NEXT_COLS, &effective, columns)?;
 
     let mut out = listing::render_columns(visible, &sel, opts);
-    // Footer: table mode only, when results are clipped AND limit is nonzero.
-    // `limit == 0` (uncapped) never foots — guards against division-by-zero (F1).
-    if limit != 0 && shown < total {
-        out.push_str(&listing::format_truncation_notice(
-            shown, total, offset, limit,
-        ));
+    if let Some(f) = footer {
+        out.push_str(&f);
     }
     Ok(out)
 }
