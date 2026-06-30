@@ -636,3 +636,13 @@ the actual reader is `backlog show` (CLI). Small id/verb-shape friction.
 - Minor CLI-shape guesses that erred: `slice status <id>` needs a positional STATE
   (no bare "show me status" form — that's `slice show`); `slice selector <id>` is a
   subcommand group, not an id arg. Both cost one round-trip each.
+
+[backlog/RSK-014; necessity+discriminator pressure-test, sess-rsk014b]
+results.md (Exp 1) recorded "every wrapper-hook iteration costs a session
+restart" because hook *registration* snapshots at session start. That over-
+generalised: the hook *script body* is re-read each call, so a guarded branch
+(`[ -f DISABLE_WRAP ]`) toggles behaviour live. Let the necessity control
+(disable→re-arm) + the fail-open discriminator both run in ONE session with no
+restart — saved a full re-onboard/context-rebuild cycle (the boot snapshot alone
+is ~thousands of tokens). General lesson: distinguish "registration snapshotted"
+from "logic re-read per call" before paying for a restart.

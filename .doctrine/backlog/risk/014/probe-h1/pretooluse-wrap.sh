@@ -42,6 +42,19 @@ case "$cwd" in
   *) deny "cwd-not-a-worktree:$cwd" ;;
 esac
 [ -d "$cwd" ] || deny "worktree-dir-missing:$cwd"
+
+# NECESSITY CONTROL (RSK-014 gap-1): while this sentinel exists, pass a *validated
+# worktree-subagent's* Bash THROUGH un-jailed — gives native's (hypothesised,
+# repo-only) Bash guard a chance to act so we can tell whether bwrap closes a real
+# hole or merely preempts a native block. Scoped to worktree-cwd ONLY: an
+# isolation:none subagent (cwd=repo root) never reaches here, so the gap-3
+# discriminator test still hits the real logic concurrently. Remove the sentinel
+# to re-arm. Logger hook records the un-jailed payload either way.
+if [ -f "$ROOT/.harness/probe/DISABLE_WRAP" ]; then
+  log "NECESSITY-BYPASS pass-through agent_id=$agent_id cwd=$cwd cmd=$cmd"
+  exit 0
+fi
+
 command -v bwrap >/dev/null 2>&1 || deny "bwrap-unavailable"
 
 # Opaque wrap: base64 the original (charset [A-Za-z0-9+/=] — safe inside the

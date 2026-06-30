@@ -73,6 +73,21 @@ Confinement altitude, by arm:
      — NEW machinery = the bwrap Bash wrapper + the Edit/Write pathcheck; graduate
      `.harness/probe/` into the doctrine skill hooks under a slice to land it.
      Linux/bwrap only (macOS still open — see IMP-045 seatbelt seam).
+   - **Necessity + fail-open closed (2026-07-01, Exp 3).** Two pressure-test gaps,
+     resolved live (no restart, via a sentinel-gated wrapper bypass):
+     (a) **Necessity** — disabled the bwrap wrapper and re-ran the battery from a
+     real worktree subagent: ALL writes succeeded un-jailed (repo-root, shared
+     `.git`, `/tmp`, `$HOME`) in the host mount-ns; re-arming flipped the same
+     vectors back to `Read-only file system`. So native imposes **zero** Bash
+     containment — bwrap is necessary everywhere, asymmetric with Edit/Write (the
+     "native produced no Bash block" claim now has its necessity leg, not just
+     sufficiency). No hidden native Bash guard was being preempted.
+     (b) **Fail-open discriminator** — an `isolation:none` subagent (RSK-014's
+     unconfined arm) DOES carry `agent_id` with `cwd` = repo root; both gates
+     **deny** it fail-closed (`cwd-not-a-worktree`). The pass-through rule is
+     correct in code (pass through ⟺ `agent_id` absent); only the prose framing
+     ("jail when in a worktree, else unjailed") was fail-open — corrected in
+     `results.md`. Detail: [`probe-h1/results.md`](./probe-h1/) Exp 3.
 2. A **gatekeeper-agent** enforcement model (auto-mode or a custom variant) that
    adjudicates the worker's actions.
 3. Manually-started sessions inside a worktree with reduced permissions, coordinated

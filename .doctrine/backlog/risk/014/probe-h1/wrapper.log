@@ -16,3 +16,46 @@
 1782827629.336208414	PASS-THROUGH orchestrator cwd=/workspace/doctrine
 1782827635.708967333	PASS-THROUGH orchestrator cwd=/workspace/doctrine
 1782827820.356685299	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827862.878457911	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827879.431106516	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827886.838043999	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827894.609670338	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827925.618829990	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827931.774378015	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827941.715627812	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827948.382587898	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782827953.651727808	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828104.336371719	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828220.033316288	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828250.563132420	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828294.734722706	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828332.773225646	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828386.079946250	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828401.818763725	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828629.811049476	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782828788.176497510	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829518.130154428	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829518.720636873	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829523.253646195	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829562.017129791	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829645.640579358	PASS-THROUGH orchestrator cwd=/workspace/doctrine/.harness/probe
+1782829698.502993710	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829719.423729048	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=readlink /proc/self/ns/mnt; pwd
+1782829720.364611569	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=echo NEC_A1 > /workspace/doctrine/.harness/probe/canaries/parent_canary
+1782829721.305050086	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=echo NEC_A2 > /workspace/doctrine/NEC_PROBE_A2
+1782829722.252178190	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=echo NEC_A3 > /tmp/nec_probe_a3
+1782829722.720545678	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=echo NEC_A4 > /home/david/nec_probe_a4
+1782829723.720145303	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=echo NEC_A5 > /workspace/doctrine/.git/PROBE_CANARY
+1782829724.066033961	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=echo NEC_W > ./nec_inside && cat ./nec_inside
+1782829724.193532933	DENY agent_id=a2b5480ab8add9162 cwd=/workspace/doctrine reason=cwd-not-a-worktree:/workspace/doctrine cmd=echo DISCRIM_BASH_OK; pwd
+1782829732.781596199	NECESSITY-BYPASS pass-through agent_id=abf12e91654adaf39 cwd=/workspace/doctrine/.worktrees/agent-abf12e91654adaf39 cmd=cat /workspace/doctrine/.harness/probe/canaries/parent_canary; echo "---A2---"; cat /workspace/doctrine/NEC_PROBE_A2; echo "---A3---"; cat /tmp/nec_probe_a3; echo "---A4---"; cat /home/david/nec_probe_a4; echo "---A5---"; cat /workspace/doctrine/.git/PROBE_CANARY
+1782829787.679775644	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829801.665685491	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829819.199686487	WRAP agent_id=a32bba58c7f272d96 cwd=/workspace/doctrine/.worktrees/agent-a32bba58c7f272d96 cmd=readlink /proc/self/ns/mnt; pwd
+1782829823.875352372	WRAP agent_id=a32bba58c7f272d96 cwd=/workspace/doctrine/.worktrees/agent-a32bba58c7f272d96 cmd=echo REARM_A1 > /workspace/doctrine/.harness/probe/canaries/parent_canary
+1782829826.689119230	WRAP agent_id=a32bba58c7f272d96 cwd=/workspace/doctrine/.worktrees/agent-a32bba58c7f272d96 cmd=echo REARM_A4 > /home/david/rearm_probe
+1782829831.340187491	WRAP agent_id=a32bba58c7f272d96 cwd=/workspace/doctrine/.worktrees/agent-a32bba58c7f272d96 cmd=echo REARM_W > ./rearm_inside && cat ./rearm_inside
+1782829837.677283591	WRAP agent_id=a32bba58c7f272d96 cwd=/workspace/doctrine/.worktrees/agent-a32bba58c7f272d96 cmd=rm -f /workspace/doctrine/.worktrees/agent-a32bba58c7f272d96/rearm_inside
+1782829855.917610469	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829926.806122976	PASS-THROUGH orchestrator cwd=/workspace/doctrine
+1782829955.104646427	PASS-THROUGH orchestrator cwd=/workspace/doctrine
