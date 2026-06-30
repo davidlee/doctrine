@@ -1,0 +1,42 @@
+memory_uid = "mem_019f15ef3b547cb3bf1f09d9a3873d85"
+memory_key = "mem.fact.project.history-rewrite-2026-06-30"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Public git history rewritten 2026-06-30; dogma = dirty backup, never push to origin"
+summary = "davidlee/doctrine history was scrubbed + recreated public on 2026-06-30; old SHAs are dead on origin; dogma remote holds the unscrubbed pre-surgery backup and must never seed/push to origin."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["release", "git-history", "backend-leak", "dogma"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "e920c2f521fee67973494c247a6f8e2bc28d71e3"
+tree = "8394fc0a325e1b73731c021cd6eeac50ce5fa86d"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "e920c2f521fee67973494c247a6f8e2bc28d71e3"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
