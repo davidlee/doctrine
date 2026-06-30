@@ -59,3 +59,22 @@ serial commits.
   reshape later criteria, edits append; PHASE-NN never renumbers.
 - **behaviour-preservation gate** binds PHASE-02/03 (shared entity machinery): the
   unchanged lag-discharge + drift-coherent suites are the proof.
+
+## Risks & mitigations (critical pass)
+
+- **PHASE-01 prose-vs-requirement (resolved-enough for /phase-plan).** REQ-113
+  (FR-006, active) and the `revision` vehicle are confirmed. D8 is spec *prose* (a
+  REV `prose` row, surfaced for manual handling); REQ-113 is a *modify* row. Open at
+  phase-plan time: whether the REV amends REQ-113's text in place or mints a
+  companion requirement for Failed-un-acceptability — both are supported; the
+  former is lighter and preferred unless the clause set wants its own id.
+- **PHASE-03 is the largest phase** (four policy strands in `undischarged_drift`).
+  Cohesive (one function, one concern — discharge policy) so kept whole for a single
+  clean diff; /phase-plan should split only if the task breakdown balloons.
+- **D4 changes the Coherent path.** The gate currently `continue`s on `Coherent`; D4
+  means a withdrawn req must still be coverage-scanned for a live contradiction —
+  a small, bounded addition, reusing `recs_owned_by` + `evidence_ref` for the
+  withdrawal-REC lookup.
+- **VA-1 is the heaviest verification** (candidate binary refuses SL-179's own close
+  over a seeded cell). Strongest evidence; operationally an agent-run integration
+  check, appropriately VA not VT.
