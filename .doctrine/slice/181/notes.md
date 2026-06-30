@@ -13,6 +13,25 @@ All `.doctrine/` committed promptly; **no code written** (gate N/A — design st
 **Next step: `/inquisition` on `design.md` with codex (GPT-5.5, default reviewer).**
 Then integrate findings → `/plan`.
 
+## Update (2026-07-01) — probe-h1 reframe integrated
+
+RSK-014 probe-h1 **proved** claude-arm confinement is achievable
+(`PreToolUse(Bash)→nested bwrap` + `Edit|Write` pathcheck; full escape battery
+contained, necessity + fail-open closed). Mechanism **unchanged**; three framing
+edits integrated into `design.md`:
+- **§5 REV** — residual is now "closable, not-yet-landed" (not "unclosable on
+  claude"). The genuine close = a forthcoming slice graduating `probe-h1/` into the
+  doctrine skill hooks. SL-181 = the anti-accident interim.
+- **§4** — claude branch-check is load-bearing *but time-bound* (demotes to
+  belt-and-suspenders once confinement lands; stays load-bearing on macOS claude
+  until `sandbox-exec`, IMP-045).
+- **§3 / OQ-A** — claude worker fork is **detached-HEAD** (probe finding 5), not
+  `worktree-agent-<id>`. Detached → `None` → refuse: verdict unchanged, OQ-A
+  *better-supported* (fork machinery owns the branch, not the harness).
+
+**Plan A (User, 2026-07-01): land SL-181 with this framing, then beeline the
+confinement slice (the real OQ-D close).**
+
 ## HANDOVER — for the inquisition agent
 
 Read in order: `doctrine slice show SL-181`, then `design.md` (the target),
@@ -44,18 +63,22 @@ ADR-006 D2a/D2b retracts "the real close."
 
 ### The sharp targets (where I want codex to push hardest)
 
-1. **OQ-A — the load-bearing assumption.** The guard only works on the claude arm
-   (its sole-fence arm) if an **unstamped claude worker runs on a non-`dispatch/N`
-   branch** (`worktree-agent-<id>`) *during execution* — the `dispatch/N` link is
+1. **OQ-A — the load-bearing assumption (now with fresh evidence).** The guard
+   only works on the claude arm (its sole-fence arm) if an **unstamped claude worker
+   runs on a non-`dispatch/N` branch** *during execution* — the `dispatch/N` link is
    collapse-time, after the worker exits. If a claude dispatch-worker ever executes
    with `HEAD` on `dispatch/N`, the branch-check **false-allows** it and the guard
-   is **void on the one arm that needs it**. Evidence: mem
-   `mem.pattern.dispatch.claude-subagentstart-worker-identity` (branch
-   `worktree-agent-<agentId>`) vs mem `mem.pattern.dispatch.claude-arm-isolation-fallback`
-   (commit lands on `dispatch/N`, worktree collapses onto parent). I rated this
-   ~85% and **harness-version-fragile**. **This is the #1 thing to break.** If codex
-   can show the claude worker runs on `dispatch/N`, the mechanism needs rework
-   (back to a marker, or a different signal).
+   is **void on the one arm that needs it**. **New evidence (RSK-014 probe-h1
+   finding 5):** doctrine's `WorktreeCreate → worktree create-fork` makes a
+   **detached-HEAD** tree (`cwd == .worktrees/agent-<id>`); detached → `None` →
+   refuse. So the assumption is *better-supported* — but the probe used a bare
+   `isolation: worktree` spawn, **not** the real dispatch-agent path. **#1 break
+   target for codex:** does `dispatch arm-spawn --base B` → `WorktreeCreate` also
+   yield detached/non-`dispatch/N` at execution time, or could `--base B` ride a
+   branch? If the real spawn path puts the worker on `dispatch/N`, the guard is void
+   on the load-bearing arm and the mechanism needs rework (marker or other signal).
+   Cross-check mems `…claude-subagentstart-worker-identity`,
+   `…claude-arm-isolation-fallback` against probe finding 5.
 2. **`--path` seam** — I claim the guard judging the *caller's* cwd branch closes
    it (an unstamped worker can't borrow coord identity via `-p /coord`). Verify the
    guard truly always resolves cwd (`root::find(None,…)`, guard.rs) and never the
@@ -90,7 +113,10 @@ second pass is useful for variety afterward.
 
 ### Related entities
 
-- **RSK-014** — claude-subagent confinement unsolved (the genuine close lives here).
+- **RSK-014** — claude-subagent confinement (the genuine close lives here). **No
+  longer "unsolved": probe-h1 proved it achievable; close = a forthcoming slice that
+  graduates `probe-h1/` → doctrine skill hooks. This is the post-SL-181 beeline.**
+- **IMP-045** — macOS `sandbox-exec` seam (the confinement slice's cross-platform leg).
 - **CHR-032** — STD-001 `dispatch/` prefix scatter (deliberately out of scope).
 - **IMP-065** — to be closed "reframed, not closed-by-marker" when this lands.
 - Researcher evidence (assumption ledger + verb table + OQ-1 branch analysis) is in
@@ -102,5 +128,6 @@ second pass is useful for variety afterward.
   boundary, except under bwrap (`--ro-bind / /`)." — likely already implied by
   ADR-006 D2a + RSK-014; check before recording a duplicate.
 - "Coord tree is identifiable by HEAD on `dispatch/<NNN>`; an unstamped worker never
-  is (codex `agent-*`, claude `worktree-agent-*`) — *during execution*." — record
-  only once OQ-A is confirmed by the inquisition (it's the fragile bit).
+  is (codex `agent-*`, claude **detached-HEAD** per probe-h1 finding 5) — *during
+  execution*." — record only once OQ-A is confirmed by the inquisition against the
+  real dispatch-agent spawn path (it's the fragile bit).

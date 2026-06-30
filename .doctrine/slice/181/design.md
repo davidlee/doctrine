@@ -129,7 +129,7 @@ class on an unreadable tree — the safe direction; general Write is unaffected)
 | coord tree (dispatch) | yes | absent | `dispatch/N` | **allow** (positive) | allow |
 | worker fork, stamped | yes | present | (any) | **refuse** (marker, unchanged) | refuse |
 | worker fork, unstamped — codex | yes | absent | `agent-<hex>` | **REFUSE (new)** | allow* |
-| worker fork, unstamped — claude | yes | absent | `worktree-agent-<id>` | **REFUSE (new)** | allow* |
+| worker fork, unstamped — claude | yes | absent | **detached** (`None`)§ | **REFUSE (new)** | allow* |
 | solo `/execute` fork | yes | absent | `slice/SL-N-…` | refuse (won't reach†) | **allow** (D6a) |
 | coord tree, detached HEAD | yes | absent | none | refuse (self-brick‡) | allow |
 
@@ -140,11 +140,22 @@ uncaught gap this slice closes.
 the spawner runs `land`/`gc` from root. So this row is unreachable in practice.
 ‡ self-brick, not regression: no normal op detaches the coord HEAD; cure printed
 in the refusal.
+§ **Probe-corrected (RSK-014 probe-h1, finding 5):** doctrine's `WorktreeCreate →
+worktree create-fork` makes a **detached-HEAD** tree at HEAD for a benign spawn —
+NOT a `worktree-agent-<id>` branch (the earlier assumption). `current_branch`
+returns `None` ⇒ predicate false ⇒ refuse. Verdict unchanged; the *fork machinery*
+(not the harness) owns the branch, which strengthens OQ-A.
 
 ## 4. Per-harness value (honest accounting)
 
-- **claude `Agent`** — no bwrap, no env seam: the branch-check is the **sole**
-  structural fence against an unstamped worker. **Load-bearing.**
+- **claude `Agent`** — no bwrap, no env seam *today*: the branch-check is the
+  **sole** structural fence against an unstamped worker. **Load-bearing — but
+  time-bound.** RSK-014 probe-h1 **proved** claude-arm confinement is achievable
+  (`PreToolUse(Bash)→nested bwrap` + `Edit|Write` pathcheck); once that lands as
+  its own slice the ro-`.git` wall hard-enforces no ref mutation (RSK-014 OQ-4) and
+  this check demotes to belt-and-suspenders, same as codex/pi. Until then,
+  load-bearing — and it stays so on the macOS claude arm until `sandbox-exec`
+  lands (IMP-045).
 - **codex/pi subprocess (bwrap)** — `--ro-bind / /` already makes shared `.git`
   read-only and `DOCTRINE_WORKER=1` already trips the env leg: the branch-check is
   **redundant / belt-and-braces.**
@@ -157,9 +168,16 @@ In all arms it is **anti-accident**, never impersonation-proof (RSK-014).
 A **REV** against ADR-012 (and the ADR-006 D2a/D2b notes):
 - Retract "the positive coordination marker (IMP-065) is **the real close**" of
   OQ-D — it is not; the genuine close is **confinement** (bwrap, linux-only;
-  `claude -p`, cost-untenable), which the claude arm structurally lacks.
-- Reclassify the residual as **enforcement-bound, consciously accepted**, pointing
-  at **RSK-014**.
+  `claude -p`, cost-untenable).
+- **Confinement is now proven-achievable on the claude `Agent` arm** (RSK-014
+  probe-h1: `PreToolUse(Bash)→nested bwrap` + `Edit|Write` pathcheck; full escape
+  battery contained, necessity + fail-open closed). So the residual is **not
+  "unclosable on claude"** — it is **"closable, not-yet-landed."** The genuine
+  close is a forthcoming slice that graduates `probe-h1/` into the doctrine skill
+  hooks (Linux now; macOS via `sandbox-exec`, IMP-045). SL-181 ships the
+  **anti-accident interim**; that slice ships the boundary.
+- Reclassify the residual as **enforcement-bound, consciously accepted *until the
+  confinement slice lands***, pointing at **RSK-014**.
 - Record that SL-181 delivers OQ-D plan-gate (i) (the "trusted orchestrator path"
   restriction — never shipped in SL-064; OQ-3) as an **anti-accident** branch-check,
   and plan-gate (ii) impersonation tests as **accident** tests, not malice proofs.
@@ -208,13 +226,20 @@ new-marker plan is dropped.
   the sole legitimate linked-worktree Orchestrator caller, so no legitimate flow
   breaks. **Locked.**
 - **D3 — general Write untouched.** D6a / anti-G2. **Locked.**
-- **OQ-A (residual, test-pinned).** The claude unstamped worker must run on a
-  non-`dispatch/N` branch (`worktree-agent-<id>`) during execution for the guard to
+- **OQ-A (residual, test-pinned — now better-supported).** The claude unstamped
+  worker must run on a non-`dispatch/N` branch during execution for the guard to
   catch it — the `dispatch/N` association happens at collapse-time, after the worker
-  process exits. Evidence supports this (mem `…claude-subagentstart-worker-identity`),
-  but it is **harness-version-fragile**. Pinned by the impersonation test (breaks
-  loudly if a future harness runs the worker directly on `dispatch/N`); residual in
-  RSK-014. **This is the inquisition's sharpest target.**
+  process exits. **RSK-014 probe-h1 finding 5 directly observed it: doctrine's
+  `WorktreeCreate → worktree create-fork` makes a detached-HEAD tree** (`cwd ==
+  .worktrees/agent-<id>`), so `current_branch` returns `None` ⇒ predicate false ⇒
+  refuse. The *fork machinery* (doctrine, not the harness) owns the branch — so the
+  "future harness runs the worker on `dispatch/N`" break is **less** likely than
+  first feared, but still **harness-version-fragile** (a harness that forks on a
+  branch, or a doctrine change to the fork verb, could shift it). Pinned by the
+  impersonation test (breaks loudly otherwise); residual in RSK-014. **Still the
+  inquisition's sharpest target** — verify the dispatch-agent spawn path (`arm-spawn
+  --base B`) also yields detached/non-`dispatch/N`, not just the bare `isolation:
+  worktree` spawn the probe used.
 - **OQ-B (accepted).** A hand-created `dispatch/N` branch in a worker tree forges the
   signal. Out of scope (D2b / capable-worker / RSK-014).
 - **OQ-C (minor).** Detached-HEAD in the coord tree self-bricks Orchestrator verbs.
