@@ -237,6 +237,8 @@ reference knowledge.
   sync → find path; the §5.2 table enumerates every field.
 - **R4 — dangling pointer** if the const and the shipped key diverge. Mitigation:
   single const; VT-2 asserts the key resolves.
+- **R5 — P1 releases ahead of P2** → the binary error points at an unshipped key
+  (POL-002 violation in the interim). Mitigation: landing order P2 → P1 (§9).
 
 ## 9. Quality Engineering & Validation
 
@@ -251,10 +253,40 @@ Behaviour-preservation anchor: gate refuse/pass behaviour unchanged.
 
 ### Phasing
 
-- **P1** — error + data shape (`slice.rs`, tests). Self-contained.
-- **P2** — promote/re-class memory (`memory/`, remove local item). Independent.
-- **P3** — skill subsection. Sequenced after P2 (points at the shipped key).
+- **P2** — promote/re-class memory (`memory/`, remove local item). Independent;
+  lands first.
+- **P1** — error + data shape (`slice.rs`, tests). Codeable independently, but its
+  binary error references the shipped key, so it must **not release ahead of P2**
+  (POL-002 — see R5).
+- **P3** — skill subsection. Points at the shipped key; lands after P2.
 
-P1 may land in any order; P2 → P3. The Fix 1 const and the Fix 3 key must match.
+Landing order: **P2 → {P1, P3}**. The Fix 1 const and the Fix 3 key must match.
 
 ## 10. Review Notes
+
+Internal adversarial pass (author):
+
+- **F1 (fixed) — release ordering.** P1's binary error names the shipped key;
+  honest only once P2 ships. Phasing tightened to P2 → {P1, P3} (§9); R5 added.
+- **F2 (no change) — embed visibility.** `rust-embed` carries `debug-embed`, so
+  debug/test builds read `memory/` from disk at runtime — VT-2 is feasible and a
+  hand-added master is live via `./target/debug/doctrine`. The release PATH
+  binary (`~/.cargo/bin/doctrine`) only sees a new master after reinstall; use
+  the debug binary during P2.
+- **F3 (test guard) — VT-1 brittleness.** Assert on substrings (each req id,
+  `authored:`, the status token, `accept`, the memory key), not the exact
+  multi-line copy, so the case survives copy edits.
+- **F4 (VA method) — VA-2.** Verify by grepping the shipped surfaces — error
+  literals in `src/`, shipped skills, shipped masters under `memory/` — for
+  `.doctrine/memory/items/` and local-only uids; expect none.
+- **F5 (author's call) — Unicode in copy.** The error uses `⊇` (and the existing
+  `→`). Acceptable; an ASCII `superset of` would be friendlier to grep/test
+  matching. Left to implementation taste.
+- **F6 (confirmed) — mechanic.** `embedded_assets` (`corpus.rs:288,310`) admits
+  only uid dirs and skips `mem.<key>` alias symlinks; key lookup resolves via the
+  `memory_key` field. The §5.4 mechanic (real content in the uid dir + key
+  symlink alias) is correct.
+
+Doctrinal pass: POL-002 (R5/§9), ADR-002 (§5.2 re-class table), ADR-005 (D2
+tiering), STD-001 (single const), ADR-001 (error stays in the slice shell) — all
+satisfied. No governance conflict found; no `/consult` trigger.
