@@ -1,9 +1,9 @@
 id = 167
 slug = "cli-uniform-id-acceptance"
 title = "Accept prefixed canonical ids on all CLI id:u32 args"
-status = "proposed"
+status = "reconcile"
 created = "2026-06-27"
-updated = "2026-06-27"
+updated = "2026-06-30"
 tags = []
 
 [relationships]

@@ -37,31 +37,25 @@ Five entity-kind command enums use `id: u32` CLI argument fields. Clap parses th
 
 ### 5.1 Approach
 
-Add a `parse_cli_id` function to each kind module (ADR, policy, standard, RFC) mirroring `slice::parse_cli_id`. Each wraps a kind-local `parse_ref` that strips the canonical prefix before parsing.
-
-For ADR: add `parse_ref` (strip `ADR-`/`adr-`) + `parse_cli_id` (clap wrapper).
-For policy: add `parse_ref` (strip `POL-`/`pol-`) + `parse_cli_id`.
-For standard: add `parse_ref` (strip `STD-`/`std-`) + `parse_cli_id`.  
-For RFC: add `parse_ref` (strip `RFC-`/`rfc-`) + `parse_cli_id`.
+Add a `parse_cli_id` function to each kind module (ADR, policy, standard, RFC) mirroring `slice::parse_cli_id`. Each wraps a per-module `parse_ref` that delegates to a shared `governance::parse_entity_ref(prefix, kind_label, reference)` — the prefix-strip + parse logic lives once, parameterized on prefix and error-message label.
 
 ### 5.2 Interfaces
 
-Each `parse_ref` function:
+Per-module `parse_ref` delegates to `governance::parse_entity_ref`:
 ```rust
+// src/adr.rs
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    let digits = reference
-        .strip_prefix("ADR-")
-        .or_else(|| reference.strip_prefix("adr-"))
-        .unwrap_or(reference);
-    digits.parse::<u32>().with_context(|| {
-        format!("not an ADR reference: `{reference}` (expected `ADR-007` or `7`)")
-    })
+    governance::parse_entity_ref("ADR", "an ADR", reference)
 }
 
 fn parse_cli_id(s: &str) -> Result<u32, String> {
     parse_ref(s).map_err(|e| format!("{e:#}"))
 }
 ```
+
+`governance::parse_entity_ref` strips either the canonical (`ADR-`) or lowercase
+(`adr-`) prefix, then parses the remaining digits. Each kind passes its own prefix
+and error-message label — the logic is shared, the identity is per-kind.
 
 Wire `#[arg(value_parser = parse_cli_id)]` on each `id: u32` field.
 
@@ -75,7 +69,7 @@ None — solution is mechanically identical to the already-committed slice fix.
 
 ## 7. Decisions
 
-**D1:** Per-kind `parse_ref` + `parse_cli_id` (not a global generic). Reuses the proven slice pattern; each kind controls its own error message formatting.
+**D1:** Per-kind `parse_ref` + `parse_cli_id`, delegating to a shared `governance::parse_entity_ref(prefix, kind_label, reference)`. Per-kind identity is preserved (each module exports its own `parse_ref`); the prefix-strip + parse logic is DRY. Error messages are per-kind by parameter, not per-kind by copy.
 
 **D2:** No change to `integrity::parse_canonical_ref`. Its contract is canonical-only; mixing concerns would be a regression risk.
 

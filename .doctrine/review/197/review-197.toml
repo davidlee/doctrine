@@ -1,0 +1,34 @@
+id    = 197
+slug  = "reconciliation-review-of-sl-167"
+title = "reconciliation review of SL-167"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-167"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design.md §5.1 describes duplicated per-kind parse_ref — actual impl delegates to governance::parse_entity_ref"
+detail = 'design.md §5.1 says: "Add a parse_cli_id function to each kind module (ADR, policy, standard, RFC) mirroring slice::parse_cli_id. Each wraps a kind-local parse_ref that strips the canonical prefix before parsing." The initial implementation did this (5 mechanically identical copies). Commit 11ca3f71 refactored: all five parse_ref functions now delegate to a shared governance::parse_entity_ref(prefix, kind_label, reference). The per-module parse_ref wrappers still exist (D1 contract preserved), but the design prose describes duplicated mechanics that no longer exist. The design should reflect the actual architecture.'
+disposition = "aligned"
+response = "D1 mandates per-kind parse_ref + parse_cli_id — and every module still exports its own parse_ref + parse_cli_id. The refactor to delegate to governance::parse_entity_ref is a pure DRY improvement that preserves the per-kind contract. The shared function is parameterized on prefix, not a generic that erases kind identity. The design's decision is upheld; the cost of maintaining identical copies was correctly identified as waste. The design.md can be tightened post-hoc to describe the actual delegation pattern, but no substantive design change is needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "No selectors declared — conformance unavailable; manual inspection substituted"
+detail = 'SL-167 declares zero [[selector]] entries, so review prime fails (no path-set to track) and slice conformance returns "unavailable — no recorded source deltas." The mechanical conformance path is unavailable. For a small, focused CLI change this is acceptable — manual inspection suffices — but it means the automated drift signal is absent.'
+disposition = "tolerated"
+response = "SL-167 is a small, focused CLI change touching 4 well-understood modules. The changed files are trivially identifiable from git history (2c08c594, c345bd81, 11ca3f71). Manual inspection covers the full scope. Adding selectors retrospectively would be make-work — the mechanical conformance signal's marginal value here is zero."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
