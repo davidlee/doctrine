@@ -1,0 +1,51 @@
+memory_uid = "mem_019f1ab6036173108c9668739a2cbaf4"
+memory_key = "mem.pattern.dispatch.seatbelt-write-floor-rule-ordering"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Seatbelt write-floor: SBPL rule ordering + device/temp surface (RSK-014 H2)"
+summary = "SBPL last-match-wins: emit deny-coarse-first, allow-specific-last, or deny /private/tmp shadows the worktree (which lives under /private/tmp)"
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = [".doctrine/backlog/risk/014/probe-h2-seatbelt/**"]
+commands = []
+tags = ["dispatch", "confinement", "macos", "seatbelt", "sl-183", "imp-045"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3d49f6640218de09764323999d5f3b2fd7ced3b8"
+ref_name = "refs/heads/main"
+checkout_state_id = "715beaef2b215b7032e92aeb0858d0182a8776b81c85fd46964430ab2bf2b552"
+base_commit = "2c0da5e9d40dfe2e5f14c1325dd11e22b6591cc2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "probe"
+ref = "RSK-014-H2"
+
+[[source]]
+kind = "slice"
+ref = "SL-183"
+
