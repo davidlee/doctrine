@@ -1,0 +1,50 @@
+memory_uid = "mem_019f18b6fc5e7c01ba57e020e17881e6"
+memory_key = "mem.pattern.audit.cli-seed-failed-coverage-cell"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Audit dogfood: seed a live Failed coverage cell from the CLI"
+summary = "Seed a live Failed coverage cell via CLI for an audit dogfood: record a VT cell with a failing --command + unmatched matcher, then coverage verify derives it to Failed"
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["coverage", "audit", "dogfood"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "aaed841b1025ba59d603a38819b60896cadf7aa8"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2f306afbc8861bead9c9b11fb847cf7a4326e2b809a1988171d5454b61b8a41a"
+base_commit = "aef187cdbb3939f78d999c6f5abf440dbb418abb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-179"
+
+[[source]]
+kind = "review"
+ref = "RV-198"
+

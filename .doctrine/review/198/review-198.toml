@@ -1,0 +1,34 @@
+id    = 198
+slug  = "reconciliation-review-of-sl-179"
+title = "reconciliation review of SL-179"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-179"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design §4.3 declares coverage_view.rs (PHASE-02) but conformance reports it undelivered"
+detail = "Expected: an edit to src/coverage_view.rs rendering the two new reasons + sharpening the verdict cell. Observed: no edit landed (conformance 'undelivered'). The reason-split is absorbed by existing delegation — coverage_view.rs:393 'Verdict::Divergent(r) => Some(r.label())' auto-renders the new ObservedFailure/ObservedBlocked labels ('observed-failure'/'observed-blocked'), and observed_state() keeps the combined any_failed_or_blocked health summary (:111). Both §4.3 clauses ('render the two new reasons'; 'keep combined summary if column coarse; sharpen verdict cell') are satisfied UNEDITED. Behaviour correct; design over-declared the target."
+disposition = "aligned"
+response = "Behaviour correct, no change needed. The reason-split renders via existing delegation (coverage_view.rs:393 r.label()) and the combined health summary is preserved (observed_state any_failed_or_blocked) — exactly design §4.3's own conditional ('keep combined if column coarse; sharpen verdict cell'). The 'undelivered' selector is a stale design declaration the delegation pattern absorbed; a one-line design-prose tidy is the only optional follow-up (brief, per-slice direct edit, minor)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "6 undeclared paths in conformance — all PHASE-01 governance/metadata, not code drift"
+detail = "Expected: design-target selectors cover only src/ code. Observed: conformance 'undeclared (6)' = REV-017 (×3 files), spec/tech/002/spec-002.md, requirement/113/requirement-113.toml, slice/179/slice-179.toml. All are PHASE-01 governance work mandated by scope objective 4 + design §5 (the D8/REQ-113 REV routed per ADR-013) plus the slice-179.toml [gate].extra_reqs=[REQ-113] seed (codex M8). They surface as 'undeclared' only because conformance tracks code path-selectors, not authored governance files. No scope creep, no missed code design-update."
+disposition = "aligned"
+response = "Expected work, no drift. All 6 undeclared paths are PHASE-01 governance (REV-017 + SPEC-002 D8 + REQ-113) mandated by scope objective 4 and authorized per ADR-013, plus the slice-179.toml extra_reqs seed (codex M8). Undeclared only because conformance tracks code path-selectors, not authored governance files. No code touched outside design-targets."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

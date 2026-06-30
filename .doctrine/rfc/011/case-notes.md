@@ -625,3 +625,14 @@ backlog_show / backlog_inspect not exposed as MCP tools (ToolSearch
 Minor: one extra ToolSearch round-trip before reaching for Bash. The
 boot snapshot's command spine lists `backlog inspect` but not a `show`;
 the actual reader is `backlog show` (CLI). Small id/verb-shape friction.
+
+[audit; SL-179-RV-198]
+- Two VA dogfoods (forget-refuse, close-refuse) were deferred to audit by the
+  executing phases. Re-deriving the live `Failed` cell from the CLI took a
+  discovery detour: `coverage record --status failed` is silently ignored for VT
+  (leans Planned), so the path is record-failing-check → `coverage verify`. Not
+  obvious from `record --help` alone; cost a couple of probe cycles. (Now captured
+  in mem.pattern.audit.cli-seed-failed-coverage-cell so the next audit skips it.)
+- Minor CLI-shape guesses that erred: `slice status <id>` needs a positional STATE
+  (no bare "show me status" form — that's `slice show`); `slice selector <id>` is a
+  subcommand group, not an id arg. Both cost one round-trip each.

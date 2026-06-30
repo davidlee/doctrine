@@ -1,7 +1,7 @@
 id = 179
 slug = "close-failed-cell-gate"
 title = "Closure gate hardens on live Failed coverage cell; close the forget evidence-erasure leak"
-status = "started"
+status = "reconcile"
 created = "2026-06-30"
 updated = "2026-06-30"
 tags = []
