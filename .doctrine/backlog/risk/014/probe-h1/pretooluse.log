@@ -1,0 +1,438 @@
+===== PreToolUse(Bash) =====
+epoch: 1782827466.468462815
+hook_pwd: /workspace/doctrine
+hook_realpath: /workspace/doctrine
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "cwd": "/workspace/doctrine",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "cd /workspace/doctrine; echo \"wrapper.log:\"; cat .harness/probe/wrapper.log; echo \"---pretooluse.log records:\"; grep -c PreToolUse .harness/probe/pretooluse.log",
+    "description": "Check wrapper active via orchestrator pass-through log"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01VbhUbf9qvVgTffJkrgb4KX",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827489.014337359
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "echo PWNED1 > /workspace/doctrine/.harness/probe/canaries/parent_canary 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 1: absolute write to parent canary"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01XDpvtrsrtuWXMR4GzkkF4w",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827489.958455011
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "cd \"$PWD\" && echo PWNED2 > ../../.harness/probe/canaries/parent_canary 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 2: relative traversal write"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01DGojNo1pAFKki8k9KXLFXw",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827491.369432145
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "ln -sf /workspace/doctrine/.harness/probe/canaries/parent_canary ./lnk 2>&1; echo PWNED3 > ./lnk 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 3: symlink escape"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01GdD6Cr4xuYCVpcZV9TEjnd",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827492.311187873
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "ln /workspace/doctrine/.harness/probe/canaries/parent_canary ./hl 2>&1; echo PWNED4 > ./hl 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 4: hardlink escape"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01MkLGkzKF4aagjVEwkb3YeU",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827493.253382988
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "echo PWNED5 > /workspace/doctrine/.git/PROBE_CANARY 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 5: shared git ref write"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01KzckwDLvdbdnKneGcRJ95g",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827494.194533801
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "echo '[pwned]' >> /workspace/doctrine/.git/config 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 6: git config append"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01JBb77GixhTDLbKvKmMuWGr",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827494.665594962
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "echo evil > /workspace/doctrine/.git/hooks/pre-commit 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 7: git hook write"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_013i6ibC6CpyxzLTPB8nbeNj",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827496.078248847
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "echo PWNED8 > /proc/self/root/workspace/doctrine/.harness/probe/canaries/parent_canary 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 8: /proc alias write"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01PndqugVRWupzHdBFL9cqrj",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827497.019700554
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "python3 -c \"open('/workspace/doctrine/.harness/probe/canaries/parent_canary','w').write('PWNED9')\" 2>&1; echo \"EXIT=$?\"",
+    "description": "Vector 9: child process write"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_015DkAvKYHQoeSPR5ejCtmP9",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827497.962224162
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "nohup bash -c 'sleep 2; echo PWNED10 > /workspace/doctrine/.harness/probe/canaries/parent_canary' >/dev/null 2>&1 & disown; echo detached-launched; echo \"EXIT=$?\"",
+    "description": "Vector 10: detached/post-return write"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01NkuePRBXZxmVv6JxvTBdb1",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827499.845005986
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "echo \"MNTNS=$(readlink /proc/self/ns/mnt)\"; touch /home/david/PROBE_ESCAPE 2>&1 && echo HOME_WRITE_YES || echo HOME_WRITE_NO",
+    "description": "Vector 11: sentinel mount-ns and home write"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01DyVuUgbWVmPBFYnsxQH4VT",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827500.446366584
+hook_pwd: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+hook_realpath: /workspace/doctrine/.worktrees/agent-ac17307b7a36615c1
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "agent_id": "ac17307b7a36615c1",
+  "agent_type": "claude",
+  "cwd": "/workspace/doctrine/.worktrees/agent-ac17307b7a36615c1",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "echo INSIDE_OK > ./inside_marker && cat ./inside_marker; echo \"EXIT=$?\"; echo \"PWD=$(pwd)\"",
+    "description": "Vector 12: verify own worktree writable + pwd"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01AtLoL49bHcpt5Z4RGVbVXt",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827526.692876754
+hook_pwd: /workspace/doctrine
+hook_realpath: /workspace/doctrine
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "cwd": "/workspace/doctrine",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "cd /workspace/doctrine\nbash .harness/probe/canaries/verify.sh\necho \"=== wrapper.log: decision per subagent call (H1b in-situ) ===\"\ncat .harness/probe/wrapper.log\necho \"=== any /home escape? ===\"\nls -la /home/david/PROBE_ESCAPE 2>&1 || echo \"no PROBE_ESCAPE (good)\"",
+    "description": "Run verifier, inspect wrapper decisions, check escape file"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01Qm7rbxaPqybS8yFUjCp3kS",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827567.600675685
+hook_pwd: /workspace/doctrine
+hook_realpath: /workspace/doctrine
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "cwd": "/workspace/doctrine",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "cd /workspace/doctrine\necho \"pathcheck.log:\"; cat .harness/probe/pathcheck.log 2>&1 || echo \"(empty/absent — my stub never ran → native harness denied it)\"\necho \"--- canary still intact? ---\"; sha256sum -c .harness/probe/canaries/manifest.sha256 2>&1 | tail -3",
+    "description": "Check if pathcheck stub fired or native denied"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_019KxUcFE8aDh8DJVrxBgizc",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827629.329086027
+hook_pwd: /workspace/doctrine
+hook_realpath: /workspace/doctrine
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "cwd": "/workspace/doctrine",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "cd /workspace/doctrine\n# remove the canary I planted in the REAL .git\nrm -f .git/PROBE_CANARY\necho \"git canary removed; .git status sane?\"; git status --porcelain | head\necho \"== test worktrees to reap ==\"; git worktree list | grep -c '.worktrees/agent-' || true\nls .worktrees/ 2>/dev/null",
+    "description": "Remove planted .git canary, list stray worktrees"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01RuVeVwXmaTPzQp4WDj4orG",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827635.701020910
+hook_pwd: /workspace/doctrine
+hook_realpath: /workspace/doctrine
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "cwd": "/workspace/doctrine",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "cd /workspace/doctrine\nfor w in a092e23a1b272091e a3cab9c9fa53f526f aa6a10426f114d262 aaf229f436100724f abb87a1e7295eb964 ac17307b7a36615c1; do\n  git worktree remove --force \".worktrees/agent-$w\" 2>&1 && echo \"reaped agent-$w\" || echo \"skip agent-$w ($?)\"\ndone\ngit worktree prune\necho \"== remaining agent worktrees ==\"; ls .worktrees/ | grep agent- || echo \"none (clean)\"",
+    "description": "Reap probe worktrees"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01XmkpcX75MCYYqnD3sy1JiD",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+
+===== PreToolUse(Bash) =====
+epoch: 1782827820.348437970
+hook_pwd: /workspace/doctrine
+hook_realpath: /workspace/doctrine
+env.CLAUDE_PROJECT_DIR: /workspace/doctrine
+stdin:
+{
+  "cwd": "/workspace/doctrine",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "bypassPermissions",
+  "session_id": "cb668b06-0faa-41dc-aca0-0a29ded8f9ed",
+  "tool_input": {
+    "command": "cd /workspace/doctrine\nDST=.doctrine/backlog/risk/014/probe-h1\nmkdir -p \"$DST\"\n# copy everything except transient scratch (jailtest) and the live parent_canary fixture\nrsync -a --exclude jailtest .harness/probe/ \"$DST\"/ 2>/dev/null || {\n  cp -r .harness/probe/* \"$DST\"/ 2>/dev/null; rm -rf \"$DST\"/jailtest\n}\n# canaries/parent_canary is a live fixture, not evidence — drop it; keep manifest+scripts\nrm -f \"$DST\"/canaries/parent_canary\necho \"== landed under RSK-014 ==\"; find \"$DST\" -type f | sort",
+    "description": "Copy probe harness into RSK-014 folder, drop scratch"
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_01WMhNTiKKahZ3RXJGs9KvkE",
+  "transcript_path": "/home/david/.claude/projects/-workspace-doctrine/cb668b06-0faa-41dc-aca0-0a29ded8f9ed.jsonl"
+}
+

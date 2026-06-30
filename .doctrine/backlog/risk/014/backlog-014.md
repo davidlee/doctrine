@@ -54,6 +54,21 @@ Confinement altitude, by arm:
      experiments: [`probe-brief-h1-pretooluse-bwrap.md`](./probe-brief-h1-pretooluse-bwrap.md).
      Two-wall caveat: validates the **Bash** wall only; Edit/Write need a separate
      `PreToolUse(Edit|Write)` path-check; reads/egress out of scope.
+   - **PROVEN (2026-06-30, claude-code 2.1.181, NixOS bwrap 0.11.2).** H1a/b/c/d
+     all held. Binding is deterministic: PreToolUse stdin carries `agent_id` (iff
+     subagent) and `cwd` == hook pwd == the worktree (concurrency-stable). The
+     live harness honours `updatedInput`; the full 11-vector escape battery
+     (absolute / traversal / symlink / hardlink / shared-`.git` / `/proc` alias /
+     child-proc / detached job / `$HOME`) was contained by `Read-only file system`.
+     Apparatus + raw logs + verdict: [`probe-h1/`](./probe-h1/) (`results.md`).
+   - **SURPRISE:** Edit/Write are **already natively worktree-confined** by this
+     harness (a subagent Write to a parent path is denied before any hook runs) —
+     contradicts the brief's "native sandbox covers Bash only" assumption. So the
+     `PreToolUse(Edit|Write)` path-check is redundant for shared-checkout paths;
+     the bwrap Bash wrapper is the only NEW machinery needed. Net: this path is a
+     **viable real close** of the claude-arm Bash hole — graduate `.harness/probe/`
+     into the doctrine skill hooks under a slice to land it. Linux/bwrap only
+     (macOS still open — see IMP-045 seatbelt seam).
 2. A **gatekeeper-agent** enforcement model (auto-mode or a custom variant) that
    adjudicates the worker's actions.
 3. Manually-started sessions inside a worktree with reduced permissions, coordinated
