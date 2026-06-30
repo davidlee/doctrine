@@ -189,3 +189,60 @@ subagent PASS-THROUGH/absent → updatedInput not honoured → H1b falsified.
 `pretooluse-pathcheck.sh` denies subagent Edit/Write whose realpath escapes cwd.
 In-situ: DENY fired for `/tmp` + `$HOME` writes (native ignores those); repo-root
 write preempted by native. Native = shared-checkout only; pathcheck = the rest.
+
+### Repo-root is closed by OUR rule, not native's race-win (assertion, 2026-07-01)
+The in-situ repo-root deny was attributed to native (it preempts our hook). But
+the pathwall ALSO catches repo-root by its own rule: for a worktree subagent the
+repo root is an ANCESTOR of cwd, so `realpath ⊄ cwd` already fires. Asserted by
+feeding the script synthetic worktree-subagent stdin (native cannot run in
+isolation): `AGENTS.md`, `.git/config`, `Cargo.toml` → all `deny
+escapes-worktree`; in-wt `src/foo.rs` → PASS. **So a harness update that drops the
+native checkout-guard cannot silently reopen repo-root** — our wall holds it.
+This belongs in the landed deny-branch test (don't lean on native winning a race).
+
+## Residual & hardening (remote review, 2026-07-01)
+Three forward items, not blockers on the H1 close:
+
+1. **Fail-open structural close (gap-2 deepening).** The `agent_id`-absent
+   pass-through trusts an UN-authenticated tell (no positively-authenticable
+   identity exists; `session_id` is shared). Sounder posture: **wrap the
+   orchestrator too** via the same `updatedInput` path — widest jail (repo-root
+   rw + `.git` rw, host ro) instead of god-mode. Pass-through then fails to
+   *repo-confined*, not bare host; a future phantom no-`agent_id` spawn lands in
+   the orchestrator's jail. "Everyone gets a jail; the orchestrator's is widest."
+   Aligns ADR-006 sole-writer (it still writes the repo, just not the box). Cost:
+   enumerate the orchestrator's legitimate out-of-repo writes (small).
+
+2. **The honest bwrap invariant.** `--ro-bind / /` makes the residual NOT "find
+   cron" (dead on a nix jail — cron/at/systemd-run aren't in the closure) but
+   **"delegate the write to a durable, socket-reachable, more-privileged peer
+   living outside your mount-ns."** Two nix-shaped peers:
+   - **Project datastore on a bound socket** — postgres canonical: `COPY (…) TO
+     PROGRAM 'sh -c "…"'` runs as the postgres user, writes wherever it can,
+     fully outside the ns. Mitigation = the service's least-privilege, not the jail.
+   - **nix-daemon** — if the worker can build (`nix build/develop`),
+     `/nix/var/nix/daemon-socket/socket` speaks to a root process. Store is
+     content-addressed + builds self-sandbox (won't scribble a canary directly),
+     but it's the most-privileged reachable peer; earns one explicit "can a
+     crafted derivation realize a path outside the store" check.
+   Invariant: *not* "nothing exists" but "nothing the jail itself brings in; the
+   residual is whatever socket-reachable privileged peer the project requires."
+   Close = per-project net-ns / socket hygiene.
+
+3. **macOS contract (OQ-1 / IMP-045) — sandbox-exec is closer to drop-in.** Use
+   allow-default / deny-write-except (mirrors bwrap ro-all/rw-worktree), NOT
+   default-deny (that's the allowlist drowning people hit):
+   ```
+   (version 1)(allow default)(deny file-write*)
+   (allow file-write* (subpath (param "WT")) (subpath (param "TMP")))
+   ```
+   Command runs normally; only writes fenced. **The one footgun:** `subpath`
+   matches the RESOLVED path and macOS aliases `/tmp`→`/private/tmp`,
+   `/var`→`/private/var` — feed realpaths via `-D WT=$(realpath …) -D
+   TMP=$(realpath "$TMPDIR")`, don't string-build. Wrap opaquely same as bwrap
+   (`sandbox-exec -p "$P" -D … -- bash -c "$ORIG"`); children inherit. Profile
+   sandbox not a namespace → denies writes, can't HIDE paths (reads already OOS);
+   network coarse (`(deny network*)`) → egress still a separate wall. Deprecated
+   since ~10.10 but drives Anthropic's own mac sandbox-runtime → low vanish risk.
+   → OQ-1's macOS posture becomes "wrap with sandbox-exec," not "deny Bash";
+   budget the realpath canonicalization.

@@ -119,11 +119,17 @@ Captured for the eventual slice that lifts the wrapper + pathcheck from
 
 - **OQ-1 bwrap detection & platform fallback.** bwrap is a separate dependency
   and Linux-only. The hook must *detect* bwrap and **fail-closed (deny)** if
-  absent — never degrade to unwrapped exec. Open: the non-Linux posture. macOS
-  has no vetted seatbelt/`sandbox-exec` equivalent yet (IMP-045 owns that seam).
-  Until one lands, the honest behaviour on macOS is "deny worktree-subagent Bash"
-  or "refuse to spawn confined workers," not silent pass-through. Decide the
-  degraded-mode contract explicitly.
+  absent — never degrade to unwrapped exec. macOS posture (remote review,
+  2026-07-01): **`sandbox-exec` is the drop-in for write-containment** — an
+  allow-default / deny-write-except profile mirrors bwrap's ro-all/rw-worktree
+  (NOT default-deny — that's the allowlist trap that earns the bad reputation).
+  One footgun: `subpath` matches the RESOLVED path and macOS aliases
+  `/tmp`→`/private/tmp`, so feed realpaths via `-D WT=… -D TMP=…`. Profile
+  sandbox not a namespace → denies writes, can't hide reads; egress stays a
+  separate wall. Drives Anthropic's own mac sandbox-runtime → low vanish risk.
+  Full contract: `probe-h1/results.md` §Residual item 3 (IMP-045 owns the seam).
+  So the macOS contract becomes "wrap with sandbox-exec," not "deny Bash" — but
+  until it's built, deny worktree-subagent Bash, never silent pass-through.
 - **OQ-2 Rust subcommand vs installed bash scripts.** The hook fires on EVERY
   tool call (Bash + Edit/Write). Per-call cost of `bash + jq` spawns adds up.
   Weigh a Rust `doctrine` subcommand handler (e.g. `doctrine worktree pretooluse`)
@@ -166,6 +172,29 @@ Captured for the eventual slice that lifts the wrapper + pathcheck from
     parallel workers, and trades away the clean "ro `.git`" invariant for a
     convenience the funnel doesn't need. Recommendation: don't loosen without a
     concrete driver.
+
+- **OQ-5 jail the orchestrator too (fail-open structural close).** Pass-through
+  today trusts `agent_id`-absent — an un-authenticable tell (no positive identity;
+  shared `session_id`). Wrap the orchestrator via the same `updatedInput` path
+  with the WIDEST jail (repo-root rw + `.git` rw, host ro), so pass-through fails
+  to *repo-confined* not god-mode, and a phantom no-`agent_id` spawn lands in a
+  jail rather than on the bare box. "Everyone gets a jail; the orchestrator's is
+  widest." Aligns ADR-006 sole-writer (still writes the repo, not the host).
+  Cost: enumerate the orchestrator's legitimate out-of-repo writes (small).
+  Also defense-in-depths the orchestrator against its own injection. Detail:
+  `probe-h1/results.md` §Residual item 1.
+- **OQ-6 the honest residual — socket-reachable privileged peers.** `--ro-bind /
+  /` kills the generic vector (cron/at/systemd-run absent from a nix closure) but
+  NOT "delegate the write to a durable, more-privileged peer on a bound socket
+  outside the mount-ns." Nix-shaped peers: a project datastore socket (postgres
+  `COPY … TO PROGRAM` runs as the postgres user, writes anywhere it can) and the
+  **nix-daemon** (`/nix/var/nix/daemon-socket/socket`, root, reachable if the
+  worker can `nix build/develop`; content-addressed store + self-sandboxed builds
+  blunt it, but it earns one "can a crafted derivation realize a path outside the
+  store" check). Invariant is NOT "nothing exists" but "nothing the jail itself
+  brings in; the residual is whatever socket-reachable privileged peer the project
+  requires." Close = per-project net-ns / socket hygiene; least-privilege the
+  service, not the jail. Detail: `probe-h1/results.md` §Residual item 2.
 
 Recipe + evidence for the above: [[mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinement]], `probe-h1/`.
 

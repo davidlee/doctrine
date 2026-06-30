@@ -47,6 +47,12 @@ A `PreToolUse(Edit|Write)` pathcheck (`realpath(file_path) ⊆ cwd`, fail-closed
 catches those — its deny is proven to enforce in-situ. So full Edit/Write
 containment needs BOTH: native (repo) + the pathcheck hook (entire non-repo fs).
 NEW machinery to land = bwrap Bash wrapper + Edit/Write pathcheck.
+**Repo-root is DOUBLY covered — don't lean on native's race-win.** Native
+preempts it, but the pathwall's own rule also denies it: repo root is an ANCESTOR
+of a worktree cwd → `realpath ⊄ cwd` fires (asserted offline 2026-07-01 for
+`AGENTS.md` / `.git/config` / `Cargo.toml` → all `deny escapes-worktree`). So a
+harness update that drops the native checkout-guard cannot silently reopen
+repo-root. Pin this in the landed deny-branch test.
 
 ## Operational gotcha
 **Hook *registration* loads at session start ONLY — no hot-reload.** Editing the
@@ -59,7 +65,25 @@ behaviour LIVE, no restart. Ran the necessity disable→re-arm control + the
 fail-open discriminator probe in ONE session this way (saved a full re-onboard).
 
 ## Scope / limits
-Linux + bwrap only (macOS seatbelt seam open — IMP-045). Write-containment only:
-reads stay open (exfil), network egress unaddressed. To LAND: graduate the
-wrapper from `.harness/probe/` into the doctrine skill hooks under a slice.
-Related OS-floor confinement on the pi arm: [[mem_019ec345c2d879f3bab52aa1dad7a401]].
+Linux + bwrap only. Write-containment only: reads stay open (exfil), network
+egress unaddressed. To LAND: graduate the wrapper from `.harness/probe/` into the
+doctrine skill hooks under a slice.
+
+**Honest residual (NOT "nothing exists").** `--ro-bind / /` kills the generic
+write vector (cron/at/systemd-run absent from a nix closure) but NOT "delegate
+the write to a durable, socket-reachable, more-privileged peer outside the
+mount-ns": postgres `COPY … TO PROGRAM` (writes as the postgres user), the
+nix-daemon socket (root, reachable if the worker can `nix build/develop`). The
+invariant is "nothing the jail itself brings in; the residual is whatever
+socket-reachable privileged peer the project requires" → close = per-project
+net-ns/socket hygiene + service least-privilege, not the jail.
+
+**macOS contract (IMP-045):** `sandbox-exec`, allow-default / deny-write-except
+(mirrors bwrap ro-all/rw-worktree; NOT default-deny). Footgun: `subpath` matches
+RESOLVED paths (`/tmp`→`/private/tmp`) → realpath the `-D` params. Drop-in for
+the wrapper; egress stays a separate wall.
+
+**Fail-open hardening:** jail the orchestrator too (widest jail: repo-root+`.git`
+rw, host ro) so `agent_id`-absent pass-through fails to *repo-confined*, not
+god-mode. Design detail: RSK-014 backlog OQ-5 (orchestrator jail), OQ-6 (socket
+peers). Related OS-floor confinement on the pi arm: [[mem_019ec345c2d879f3bab52aa1dad7a401]].
