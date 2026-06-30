@@ -1,0 +1,42 @@
+memory_uid = "mem_019f1acb14007a738d1ce6ff895cd643"
+memory_key = "mem.fact.claude.subagentstop-awaited-tree-intact-capture-seam"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SubagentStop fires awaited and tree-intact before WorktreeRemove — the capture seam"
+summary = "SubagentStop runs to completion (honours exit 2) while the isolation:worktree subagent's tree is still on disk, before git worktree remove — the diff-capture point. Payload has agent_id+transcript+cwd, no worktree_path."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "worktree"]
+tags = ["claude", "hooks", "dispatch", "subagentstop", "funnel", "sl-182"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "58e7a04b256ea10c051791a0ad7d3c1bad73b4ac"
+ref_name = "refs/heads/edge"
+checkout_state_id = "be75f1d37dd3d94862d9da6911ebc074b53cf05e3280f38a6e3fa341fe296c0a"
+base_commit = "1c47810c3fdf547c54351f643fb9c619a45b2bbc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

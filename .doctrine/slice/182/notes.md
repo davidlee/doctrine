@@ -178,3 +178,55 @@ Verified against `docs/claude` (authoritative cache), high confidence:
   spawns off one arming (all read the same B). The harness-assigned worktree `name`
   exists only at create-fork, not pre-spawn — so any per-worker pre-declared state
   through the arming dir is batch-shared, not per-worker. (Dispatch design fact.)
+
+## PHASE-01 LIVE BATTERY VERDICT (2026-07-01, post-restart) — SL-182
+
+claude-code 2.1.x / NixOS bwrap 0.11.2. Two `isolation:worktree` general-purpose
+subagents driven via the `Agent` tool. All three probe items GREEN; teardown clean.
+
+- **F-T1 (EX-1, item 1 — plugin PreToolUse fires + honours `updatedInput`).**
+  Plugin-registered (`.claude/skills/doctrine/hooks/hooks.json`) PreToolUse FIRES
+  for a worktree subagent and honours `updatedInput` — `wrapper.log` shows `WRAP`
+  for every subagent Bash (PASS-THROUGH for the orchestrator). Containment held
+  under live escape battery: parent-repo Bash write → `Read-only file system`
+  (bwrap `--ro-bind /`); `/tmp` Bash write → jail `--tmpfs /tmp` (host `/tmp`
+  untouched, verified absent); Write-tool parent escape → DENIED (native
+  shared-checkout guard); Write-tool `/tmp` escape → DENIED (`pathcheck`
+  `escapes-worktree`); in-worktree writes (Bash + Write) PASS and persist to the
+  real worktree (bind mount). Canaries ALL intact (`verify.sh` OK). ⇒ **VERDICT:
+  YES — PHASE-03 builds the plugin registration path. NOT S2.**
+  - Note: native harness ALSO guards Edit/Write against shared-checkout paths
+    (its own message: "This agent is isolated in the worktree … Edit the worktree
+    copy"). Our `pathcheck` is the strictly-wider wall (catches `/tmp`, `$HOME`,
+    anywhere the native guard does not). Both walls confirmed independently.
+
+- **F-T2 (EX-2, item 2 — SubagentStop blocking + tree-intact + correlation).**
+  ALL THREE sub-claims green:
+  - **Blocking/AWAITED:** one-shot `BLOCK_ONCE` exit-2 HELD the stop — two `STOP`
+    events ~3s apart for the same agent (capture → exit 2 → subagent re-activated,
+    acknowledged on stderr → stopped → capture again, sentinel consumed). The
+    harness runs SubagentStop to completion and honours exit 2.
+  - **Tree-intact:** `CAPTURE-OK tree-intact` — `git -C <wt> diff` succeeded at
+    hook time; patch (393 B) + untracked tar captured OUTSIDE the worktree under
+    `.harness/probe/captured/`. Capture lands BEFORE `git worktree remove` ⇒ the
+    funnel-import seam (PHASE-05) is viable.
+  - **Correlation:** payload carries `agent_id` + `agent_transcript_path` + `cwd`
+    (= worktree) and **NO `worktree_path`** (RV-202 confirmed live). All three
+    correlators resolve: (a) `<root>/.worktrees/agent-<agent_id>`, (b) hook
+    `cwd`/pwd, (c) SubagentStart `agent_id→cwd` map. Winner by probe order = **(a)**.
+  ⇒ **VERDICT: ALL YES — Path L holds. NOT S1.**
+
+- **F-T3 (EX-3, item 3 — hook `command` is shell-run).** `SHELLRUN_MARKER` present
+  (`printf shellrun > MARKER` redirection executed by a shell, not literal argv).
+  ⇒ **shell-run confirmed — the F-1 `|| exit 2` vanish-guard is viable in PHASE-03.**
+
+### Decisions resolved
+- **D-reg-path = plugin** (`.claude/skills/doctrine/hooks/hooks.json`) — F-T1.
+- **D-funnel-path = Path L** (SubagentStop awaited capture-before-remove) — F-T2.
+- **D-shellrun = shell-run ⇒ `|| exit 2` guard viable** — F-T3.
+- **D-correlator = (a) `agent-<id>` path**, with (c) SubagentStart map as the
+  robust fallback if the naming convention ever drifts (the map is harness-token-
+  independent). Both proven to resolve live.
+
+VA-1: items 1/2/3 each pinned-green; registration path = **plugin**, funnel path =
+**Path L**. Teardown clean (EX-4). Awaiting **VH-1** (User accept) before PHASE-02.
