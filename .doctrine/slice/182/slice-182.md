@@ -72,13 +72,18 @@ Recipe + evidence: `mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinem
   existing `HookSpec` + `plan_hook` + `hooks.json` seam; reuses worktree
   resolution + `resolve_exec`; single-sources the bwrap core flags with the pi
   arm. Binary startup ≈ 2 ms (measured) → per-call cost negligible.
-- **Mechanism — per-worker policy file keyed by `agent_id`.**
-  `<main>/.doctrine/state/dispatch/jail/<agent_id>.toml`, runtime state, **outside
-  every worktree**, ro to the worker. Orchestrator (ADR-006 sole-writer) writes it
-  at spawn, *before* the worker runs. **Absence ⇒ strictest default jail** (never
-  deny; the floor is the tightest jail, so a missing/forged-absent policy can only
-  tighten). GC with worktree teardown; per-worker file ⇒ no parallel-write
-  contention.
+- **Mechanism — policy file keyed by WORKTREE NAME, per-arming granularity**
+  (corrected RV-200 F-1/F-4; the original `agent_id` keying was impossible —
+  harness-assigns it at spawn, so the orchestrator cannot pre-write it).
+  `<main>/.doctrine/state/dispatch/jail/<worktree-name>.toml`, runtime state,
+  **outside every worktree**, ro to the worker. Orchestrator (ADR-006 sole-writer)
+  **pre-declares** the intent; the `create-fork` hook **provisions** it under the
+  name it learns at spawn, *before* the worker's first tool call. Granularity is
+  per-arming: **serial ⇒ per-worker; parallel fan-out ⇒ one profile shared by the
+  batch** (a single arming carries a single intent — intentional sharing, not a
+  leak; see design §5.3). **Absence ⇒ strictest default jail** (never deny; the floor
+  is the tightest jail, so a missing/forged-absent policy can only tighten the write
+  surface). GC with worktree teardown.
 - **OQ-B — `.git` posture: HARD RO, not tunable.** Loosening `.git/objects` rw
   would let the worker write arbitrary blobs into the shared store = defeating the
   jail (case-notes SL-171). So `.git` stays ro; the policy schema's `extra_rw`

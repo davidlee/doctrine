@@ -84,3 +84,24 @@ clear corrective direction. The nine answered charges are withheld from `verify`
 deliberately: the three blockers hold the close-gate until canon tells the truth.
 
 > Let the false guarantees be put to the fire; the floor that holds shall remain.
+
+### Reconcile (2026-07-01) — all 10 charges terminal, design re-locked
+
+The penance was done in the same sitting. All ten findings integrated into
+`design.md` (+ `slice-182.md` scope) and verified terminal; RV-200 `done ·
+await=none`. Two User decisions settled the option-bearing blockers:
+
+- **F-1 → serial-scope with shared parallel profile.** Profile granularity is
+  per-arming: serial ⇒ per-worker; parallel fan-out ⇒ one profile shared by the
+  batch. The User chose "parallel workers share one profile" over the stricter
+  "parallel workers get only the baseline floor" — the single arming slot carries a
+  single intent, so there is no differing-sibling to leak; rationale recorded durably
+  in design §5.3 for later challenge.
+- **F-3 → snapshot-before-remove.** A `WorktreeRemove`/`SubagentStop` capture hook
+  lifts the worker diff to an outside-the-worktree patch before the harness's
+  auto-removal; abort to Path C / IDE-024 if the capture cannot observe the tree
+  intact. Reframed OQ-2 as a lock-time risk with a defined abort.
+
+F-2 (fail-closed exec) and F-6 (drop NotebookEdit) took their clear corrective
+direction; the minors/nits swept. Design status flipped **draft → LOCKED**. The
+slice is clear to advance to `/plan`. *Doctrina manet.*

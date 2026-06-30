@@ -6,16 +6,17 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ---
 
-## ▶ STATE (2026-07-01) — INQUISITION COMPLETE (RV-200), design returns for reconcile
+## ▶ STATE (2026-07-01) — INQUISITION INTEGRATED (RV-200), design LOCKED → ready for `/plan`
 
-Lifecycle: **design**. `/inquisition` run against `design.md` (codex GPT-5.5 +
-inquisitor pass) → **RV-200: 10 findings, 3 BLOCKERS**. Design is NOT clean — it
-must be reconciled before `/plan`. The three blockers hold SL-182's close-gate
-(9 charges deliberately left answered-not-verified; F-9 acquitted/terminal).
-**Next step: reconcile design.md against RV-200** (two blockers carry remediation
-OPTIONS needing a User/`/design` steer), THEN `/plan`. Full verdict in
-`doctrine review show RV-200` → `## Synthesis`. Tree: as before (CLAUDE.md M;
-SL-181's stray mem trap not this slice).
+Lifecycle: **design** (design.md now Status: LOCKED). `/inquisition` (codex GPT-5.5
++ inquisitor) → **RV-200: 10 findings, 3 blockers** — ALL reconciled into design.md
++ scope this session; RV-200 findings verified terminal. Two User decisions taken:
+**F-1 = serial-scope, parallel workers SHARE ONE PROFILE** (User steer: prefer
+"share one profile" over "baseline-only" — rationale durable in design §5.3);
+**F-3 = snapshot-before-remove** (capture worker diff in a `WorktreeRemove`/
+`SubagentStop` hook before the harness auto-removes the tree; abort to Path C/IDE-024
+if the capture can't observe the tree intact). **Next step: `/plan`.** Verdict +
+synthesis: `doctrine review show RV-200`.
 
 ### RV-200 verdict (the heresy)
 
@@ -121,7 +122,10 @@ clone alternative is **IDE-024**; selector-sourced write-allowlist is **IDE-025*
   (gated V-plugin).
 - **Touch-set (design-target selectors):** `src/worktree/{jail,pretooluse,mod,
   shared,create}.rs`, `src/dispatch.rs`, `.claude/skills/dispatch-agent/SKILL.md`,
-  `plugins/doctrine/hooks/hooks.json`.
+  `plugins/doctrine/hooks/hooks.json`. **+ a `WorktreeRemove` capture hook** (F-3
+  snapshot-before-remove; new hook handler alongside `create-fork`) and the
+  **fail-closed exec resolution** at install (F-2; `src/skills.rs` / `boot.rs`
+  materialization emits an absolute `doctrine` path or exit-2 shim).
 
 ### Durable harness gotchas confirmed by RV-200 (→ `/record-memory` candidates)
 
