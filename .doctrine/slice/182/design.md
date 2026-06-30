@@ -4,12 +4,14 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-Status: RECONCILING (RV-201 second inquisition — 5 findings, 1 option-bearing
-blocker resolved by User decision; reconciliation in progress, §10). Prior:
-LOCKED after internal adversarial pass + `/inquisition` RV-200. Governed by
-ADR-008 (closes its claude-arm confinement gap), ADR-006 (D2b raw-tree
-confinement; D-sole-writer). Originates from RSK-014 (probe-h1, PROVEN). Path C
-deferred → IDE-024; selector-allowlist mode → IDE-025.
+Status: LOCKED (internal adversarial pass + `/inquisition` RV-200 + RV-201 +
+RV-202 codex pass all integrated; §10). Two harness unknowns remain **by design**,
+gated to the Phase-1 empirical probe (D7, §9), not to prose: `SubagentStop`
+blocking/tree-intact/worktree-correlation, and plugin-PreToolUse firing — each with
+a defined abort to Path C / IDE-024. Governed by ADR-008 (closes its claude-arm
+confinement gap), ADR-006 (D2b raw-tree confinement; D-sole-writer). Originates
+from RSK-014 (probe-h1, PROVEN). Path C deferred → IDE-024; selector-allowlist
+mode → IDE-025.
 
 ## 1. Design Problem
 
@@ -36,9 +38,12 @@ claude arm with a hard wall, not the cooperative marker (RSK-014).
   [[mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinement]].
 - **Existing hook machinery is Rust subcommands** — `boot --emit`, `worktree
   create-fork`, `worktree marker --stamp-subagent` — read stdin JSON, emit
-  `hookSpecificOutput`, installed via `plan_hook` (settings) / embedded
-  `hooks.json` (plugin), exec-path-injected (`resolve_exec`). The probe scripts are
-  the anomaly.
+  `hookSpecificOutput`. Installed two ways with **divergent exec resolution**: the
+  **settings** path bakes an absolute exec via `HookSpec::boot(resolve_exec())`
+  (`src/boot.rs:1120`); the embedded **plugin `hooks.json`** path **byte-copies the
+  asset verbatim** (`install_hooks_plugin_for_claude` → `write_atomic`,
+  `src/skills.rs:1046`), so it ships **bare `doctrine`** — the F-1 fail-open anomaly
+  D-reg closes by templating (§5.4). The probe scripts are the other anomaly.
 - **Claude `/dispatch` funnel expects a worker commit** — delta-check (step 2):
   "net diff `B..S`, single non-merge commit, `S^ == B`" (`dispatch/SKILL.md:46`).
   Today the claude worker self-commits (`.git` writable).
@@ -203,6 +208,18 @@ which to re-arm**. The pairing atomicity is therefore enforced by the
 blocking-call structure, not by a filesystem lock or asserted discipline (this
 re-grounds the "must not interleave a second arming" claim below).
 
+**INV-6 — no background spawn while the arming slot is live (RV-202).** The
+blocking-call structure above holds **only** for foreground `Agent` calls. The
+claude `Agent` tool supports `run_in_background: true`, which returns immediately
+(`docs/claude/hooks.md:1428`) — a background spawn would hand the orchestrator a
+turn mid-sequence and reopen the re-arm race. The structural guarantee is therefore
+conditioned on a hard invariant: **`/dispatch` MUST NOT issue a `run_in_background`
+`Agent` spawn against a live arming slot.** Today's `dispatch-agent` template omits
+the field (foreground — `dispatch-agent/SKILL.md`), so the invariant holds by
+construction; it is stated here so a future background-spawn optimisation cannot
+silently void the pairing atomicity. (A per-spawn policy token — out of scope, the
+pi-arm asymmetry — is the only thing that would make background spawns safe.)
+
 **The single-slot constraint (RV-200 F-1, load-bearing).** The arming dir holds
 **one** `base` file, and `dispatch-agent` issues N parallel spawns off one arming
 (`dispatch-agent/SKILL.md`: "arm once, then issue N spawns … all read the same B").
@@ -349,12 +366,30 @@ The capture **commits to `SubagentStop`**, not `WorktreeRemove`. `SubagentStop` 
 the only **blocking-capable** point: exit 2 "prevents the subagent from stopping"
 (`docs/claude/hooks.md:658`), so the harness **awaits the hook to completion** at
 the stop boundary, and it receives `agent_id` + `agent_transcript_path`
-(`hooks.md:1930-1957`) — exactly the worktree-correlation a capture needs.
-`WorktreeRemove`, by contrast, has **no decision control**, is side-effect-only,
+(`hooks.md:1930-1957`). `WorktreeRemove`, by contrast, has **no decision control**,
+is side-effect-only,
 and failures are debug-log-only (`hooks.md:680/814/2442`) — nothing documents that
 Claude awaits it before `git worktree remove`, so capture on that hook is
 inherently racy. `WorktreeRemove` is therefore **demoted to best-effort cleanup**
 (it never gates the funnel).
+
+**Worktree correlation is the F-2 trade's open seam (RV-202).** The trade bought
+blocking and lost the free correlator: `SubagentStop` carries `agent_id` +
+`agent_transcript_path` but **no `worktree_path`** (`hooks.md:1930-1957`);
+`worktree_path` is delivered **only** on the unusable non-blocking `WorktreeRemove`
+(`hooks.md:2465`). So the capture hook must **derive** which worktree to
+`git -C <worktree> diff` — it is not handed one. Candidate correlators, in
+preference order: **(a)** `agent_id` → worktree name — `create-fork` already mints
+the name as `agent-<id>` from the spawn payload, so if that `<id>` is the same token
+the harness reports as `agent_id`, the hook reconstructs the path from the
+orchestrator-owned `jail/<name>.toml` provision set (the mapping the orchestrator,
+ADR-006 sole-writer, already wrote); **(b)** `agent_transcript_path` / hook `cwd`
+inspection as a fallback if (a)'s token identity does not hold. **Which correlator
+is real is doc-unconfirmed and load-bearing** — if neither resolves the worktree
+from a `SubagentStop` payload, the capture cannot target its tree and the funnel is
+unworkable on this hook → **abort to Path C / IDE-024** (same fallback as the
+tree-intact unknown). This is pinned by the Phase-1 probe (§9), which now asserts
+**correlation**, not merely tree-intact.
 
 The committed `SubagentStop` hook captures `git -C <worktree> diff` (and untracked
 adds) into a patch at a path **outside** the worktree — under the coord tree's
@@ -418,10 +453,13 @@ tree-intact.
   the harness auto-removes the worktree on subagent finish (`WorktreeRemove`, no
   decision control), so the worker diff cannot be imported from a live tree.
   **Resolved by design** to a capture hook on the **blocking** `SubagentStop`
-  (§5.4 — `WorktreeRemove` demoted to cleanup); the residual unknown is purely
-  whether the awaited `SubagentStop` hook observes the tree intact before
-  `git worktree remove`. **Abort:** if not, escalate to Path C / IDE-024. Second
-  execute gate (§9), not an open-ended verify.
+  (§5.4 — `WorktreeRemove` demoted to cleanup); **two** residual unknowns remain,
+  both probe-pinned: **(i)** whether the awaited `SubagentStop` hook observes the
+  tree intact before `git worktree remove`, and **(ii)** whether `SubagentStop`'s
+  payload lets the hook **correlate to the right worktree** at all — it carries no
+  `worktree_path` (RV-202; §5.4 correlator candidates). **Abort (either fails):**
+  escalate to Path C / IDE-024. Pinned in the Phase-1 probe (§9), not an open-ended
+  verify.
 - **OQ-3 → V-plugin (first step in execute).** Plugin `hooks.json` is the chosen
   registration home (D-reg). Confirm PreToolUse-via-plugin fires for a worktree
   subagent before building on it; cross-check hook semantics against `docs/claude`
@@ -532,11 +570,16 @@ the timing below). The probe must confirm, on the live harness:
    Edit|Write) **and honours `updatedInput`** — the D-reg registration path
    (was "V-plugin"). Fail ⇒ settings.local fallback (planned same-phase, F-5).
 2. **`SubagentStop` is genuinely blocking/awaited** (exit-2 holds the stop;
-   `hooks.md:658` is doc-only, untested) **AND its hook observes the worktree
-   still on disk** before `git worktree remove` runs (OQ-2 / F-2) — the funnel's
-   load-bearing timing. Fail ⇒ abort to Path C / IDE-024.
-3. **Hook `command` is shell-run** — gates the F-1 `|| exit 2` vanish-guard; if
-   commands are exec'd directly (not via a shell), the guard is dropped and the
+   `hooks.md:658` is doc-only, untested), **observes the worktree still on disk**
+   before `git worktree remove` runs (OQ-2 / F-2), **AND its payload correlates to
+   the right worktree** — it carries no `worktree_path` (RV-202), so the probe must
+   prove a correlator resolves (`agent_id`→`agent-<id>`→provision-set, or
+   transcript/`cwd` fallback; §5.4). Any of the three fails ⇒ abort to Path C /
+   IDE-024 — the funnel's load-bearing timing *and* targeting.
+3. **Hook `command` is shell-run** — gates the F-1 `|| exit 2` vanish-guard. Lower
+   risk than (1)/(2): `docs/claude/hooks.md:337` shows shell-form when `args` is
+   omitted (RV-202). The probe confirms it on the live harness; if commands are
+   exec'd directly (not via a shell), the guard is dropped and the
    reinstall-on-upgrade invariant stands alone.
 
 Only once all three are **pinned green** does the design's mechanism (Rust
@@ -560,8 +603,9 @@ cheapest to refute in shell — do it before sinking Rust into a refuted premise
   `jail/<name>.toml`; PreToolUse resolves it by `cwd → basename`**; **per-arming
   granularity (F-1): serial arming binds the sole intent per-worker; a parallel batch
   off one arming provisions the SAME profile to every sibling (shared, not leaked);
-  absence ⇒ Default floor**; **fail-closed exec (F-2): a missing/non-resolving
-  `doctrine` denies (exit 2 / shim), never passes through unconfined**.
+  absence ⇒ Default floor**; **fail-closed exec (F-1): the templated absolute exec
+  plus the shell-form `|| exit 2` vanish-guard denies on a missing/non-resolving
+  `doctrine` (shim rejected — RV-202), never passes through unconfined**.
 - **V-plugin (pinned in Phase 1 probe — gate on D-reg):** confirm a PreToolUse hook
   registered via the plugin `hooks.json` fires for a worktree subagent (Bash +
   Edit/Write) **and honours `updatedInput`**, exactly as the probe proved via
@@ -572,8 +616,9 @@ cheapest to refute in shell — do it before sinking Rust into a refuted premise
   RV-201 F-2):** confirm the doctrine **`SubagentStop`** hook (blocking-capable,
   awaited) captures the worker's worktree diff to an outside-the-worktree patch
   **before** the harness's `git worktree remove`, and the orchestrator imports that
-  patch. Fail (tree gone before capture even on the blocking hook) ⇒ **abort to Path
-  C / IDE-024** (the named fallback), do not ship a lossy funnel.
+  patch. Fail (tree gone before capture, **or no correlator resolves the worktree
+  from the `SubagentStop` payload** — RV-202) ⇒ **abort to Path C / IDE-024** (the
+  named fallback), do not ship a lossy funnel.
 - **End-to-end (VA/VH — the riskiest leg):** live claude `/dispatch`, one jailed
   worker, escape vectors denied + canaries intact + funnel completes green
   (captured-patch import). Covers OQ-2 end-to-end after the second gate.
@@ -696,3 +741,44 @@ settled. All reconciled in this revision.
 Plus User steer integrated: **D7 — empirical harness probe (disposable shell) BEFORE
 Rust** pins every doc-unconfirmed harness behaviour (plugin firing, `SubagentStop`
 timing, shell-run) as the first phase; docs are hypothesis, not proof (§9 Phase 1).
+
+### codex pass (RV-202, 2026-07-01) — reconciled directly, no ledger
+
+Third adversarial pass (codex GPT-5.5, read-only, source-verified) on the
+post-RV-201 surfaces. 3 majors + 2 minors, no option-bearing blocker — all
+mechanical or invariant-shaped, so **reconciled directly** rather than via a fourth
+ledger cycle. Rationale: RV-200→201→202 each healed the cited surface and left an
+unswept twin; breaking that prose-polishing loop, the **D7 probe** is the real
+verification of the load-bearing harness unknowns, not another markdown read. This
+pass re-swept for twins explicitly.
+
+- **M1 (major) — §2 still carried the F-1 lie.** Current-state said the embedded
+  plugin `hooks.json` is "exec-path-injected (`resolve_exec`)" — contradicting the
+  F-1 reconcile (§5.4) and source (`write_atomic(&hooks.data)`, raw byte-copy,
+  `src/skills.rs:1046`; asset bare `doctrine`, `hooks.json:8`). The RV-201 fix swept
+  §5.4/D-reg but not §2. → §2 rewritten: settings path bakes `resolve_exec`, plugin
+  path byte-copies bare (the F-1 anomaly). The unswept twin of F-1.
+- **M2 (major) — `SubagentStop` worktree correlation overclaimed.** §5.4 called
+  `agent_id`+`agent_transcript_path` "exactly the worktree-correlation a capture
+  needs", then ran `git -C <worktree> diff`. But `SubagentStop` carries **no
+  `worktree_path`** (`hooks.md:1930-1957`); `worktree_path` ships only on the
+  unusable non-blocking `WorktreeRemove` (`hooks.md:2465`). F-2's trade bought
+  blocking and lost the free correlator. → §5.4 adds the correlator-candidate
+  analysis (`agent_id`→`agent-<id>`→provision-set; transcript/`cwd` fallback);
+  OQ-2 + §9 probe now assert **correlation**, not just tree-intact; no correlator ⇒
+  abort to Path C / IDE-024. The substantive finding of this pass.
+- **M3 (major) — F-4 blocking premise overbroad.** "Every claude `Agent` spawn
+  BLOCKS" ignores `run_in_background: true` (returns immediately, `hooks.md:1428`),
+  which would hand the orchestrator a re-arm turn mid-sequence. Today's template is
+  foreground, so it holds by construction. → **INV-6** added (§5.3): no background
+  `Agent` spawn against a live arming slot; the structural atomicity is conditioned
+  on it, so a future background optimisation can't silently void the pairing.
+- **m1 (minor) — §9 "exit 2 / shim".** Shim was rejected (D-reg). → narrowed to
+  templated absolute exec + shell-form `|| exit 2`.
+- **m2 (minor) — slice-182.md summary residue.** "per-run … keyed on the worker
+  binding" survived the objective-3 rewrite. → corrected to per-arming / worktree-name.
+- **Acquittals:** F-1 leading-token replace coherent for the actual asset (both
+  commands start bare `doctrine`, args trailing). Nix-GC window correctly framed.
+  Shell-form is actually doc-proven (`hooks.md:337`) ⇒ D7 item 3 is *lower* risk
+  than the prose implied (noted in §9). slice-182.md objective 3 confirmed matching
+  locked D2/D6/F-1.

@@ -133,8 +133,9 @@ Recipe + evidence: `mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinem
 
 Graduate the proven two-wall confinement apparatus (`PreToolUse(Bash)` bwrap
 wrapper + `PreToolUse(Edit|Write)` pathcheck) from probe scripts into installed
-doctrine skill hooks, plus a per-run jail config surface keyed on the worker
-binding (OQ-3). Linux/bwrap arm; fail-closed when bwrap absent. Closes the
+doctrine skill hooks, plus a per-arming jail config surface keyed by worktree name
+(D2; serial ⇒ per-worker, parallel ⇒ one shared profile). Linux/bwrap arm;
+fail-closed when bwrap absent. Closes the
 claude-arm holes of RSK-014 / ADR-006 D2b on its arm.
 
 ## Follow-Ups
