@@ -32,6 +32,7 @@ use crate::ledger::{
 };
 use crate::listing::render_table;
 use crate::root;
+use crate::worktree::run_provision;
 
 #[derive(Subcommand)]
 pub(crate) enum DispatchCommand {
@@ -1204,7 +1205,17 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
     //     user can resolve); a clean create only on the opt-in --worktree. -----
     let worktree_path = if req.worktree {
         match add_candidate_worktree(root, &id, &target_ref) {
-            Ok(path) => Some(path),
+            Ok(path) => {
+                // CHR-030: provision gitignored embed assets (web/map/dist/)
+                // so the candidate compiles out of the box. run_provision
+                // reads .worktreeinclude and copies allowlisted files — the
+                // same machinery used by `worktree fork`.
+                if let Err(e) = run_provision(Some(root.to_path_buf()), &path) {
+                    rollback_ref(root, &target_ref, &branch_oid);
+                    return Err(e.context("provision candidate worktree"));
+                }
+                Some(path)
+            }
             Err(e) => {
                 // Roll back the branch we just created — no partial durable state.
                 rollback_ref(root, &target_ref, &branch_oid);

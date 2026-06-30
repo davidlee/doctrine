@@ -5,11 +5,11 @@ id = 30
 slug = "candidate-worktree-lacks-gitignored-embed-assets-webmapdist-bin-fails-to-compile-until-copied-in"
 title = "Candidate worktree lacks gitignored embed assets (web/map/dist); bin fails to compile until copied in"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "fixed"
 created = "2026-06-28"
-updated = "2026-06-28"
-tags = []
+updated = "2026-06-30"
+tags = ["area:dispatch", "area:worktree", "area:build"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
