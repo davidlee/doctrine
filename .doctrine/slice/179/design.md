@@ -109,8 +109,10 @@ ADR-001 downward edge (`slice.rs:1229`); no new cross-module coupling.
 - `UndischargedReq` (`:1320`): carry the `DivergentReason` so the bail copy is
   per-req accurate.
 - bail copy (`:841-849`): three registers —
-  - failure: "REQ-X has a Failed coverage cell — fix the check (`coverage verify
-    SL-N`) or withdraw the requirement; a Failed cell is not accept-dischargeable."
+  - failure: "REQ-X has a Failed coverage cell — re-derive it (VT: `coverage verify
+    SL-N`) or re-attest it (VA/VH: `coverage record`), or withdraw the requirement;
+    a Failed cell is not accept-dischargeable." (Remedy is mode-aware: VT cells
+    re-derive via `verify`; VA/VH cells are overwritten via `record` same-key — F4.)
   - blocked-no-verified: "REQ-X is Blocked with no confirming evidence — record a
     VH/VA Verified attestation, then accept-REC; or withdraw."
   - blocked-with-verified / lag: existing accept-REC recipe (SL-178 legibility
@@ -160,8 +162,12 @@ first. Routed per ADR-013 (governance edit → Revision).
   discharges it (regression vs the current accept path).
 - VT: `Blocked` + fresh `Verified` + accept-REC → closes; `Blocked` without
   `Verified` → refuses.
-- VT: status-lag accept path unchanged (existing SL-044 suites green —
-  behaviour-preservation proof).
+- VT: status-lag accept path unchanged. The existing discharge tests (VT-4
+  `vt4_matching_accept_rec_discharges_the_drift`, VT-5) exercise
+  `EvidenceOutrunsAuthored` (a `Verified` cell on a `Pending` req), **not** a
+  contradiction — they stay green untouched. No existing test discharges a
+  `Failed`/`Blocked` cell, so the hard-refuse *adds* tests rather than flipping
+  them (behaviour-preservation proof; adversarial F2).
 - VT: `coverage forget` of `Failed`/`Blocked` refused; of `Planned`/`Verified`
   still works.
 - VT: `drift`/label/prompt goldens updated for the two new reasons.
@@ -176,5 +182,31 @@ first. Routed per ADR-013 (governance edit → Revision).
   `reconcile→design`). Documented in the bail copy.
 - **R3 — wrong-key garbage Failed cell.** Removable only by reviewed hand-edit (D2).
   Accepted: rare authoring error, git-auditable remedy.
+- **R4 — stale Failed/Blocked treated as live (fail-closed).** `any_failed()` /
+  `any_blocked()` ignore staleness (as `any_failed_or_blocked` does today). A stale
+  Failed VT cell refuses until re-derived — the operator runs `coverage verify`,
+  which either re-confirms or flips it. Conservative and behaviour-preserving
+  (adversarial F5).
 - **OQ (carried to /plan):** whether PHASE-03 and PHASE-04 merge (file-disjoint,
   both small).
+
+## 9. Adversarial review (internal pass — integrated)
+
+Hostile pass against the code, findings folded above:
+- **F1 — `forget` blast radius contained.** Only `run_forget` + two unit tests call
+  `forget`; the `ForgetOutcome` enum change is bounded.
+- **F2 — behaviour-preservation claim verified** (see §7): existing discharge tests
+  are lag-based; none discharge a contradiction cell.
+- **F3 — NF-001 intact.** Reason-consumers in `reconcile.rs` are display-only
+  (`divergent_label`/`build_prompt`); `select_status` takes no `Verdict`. The gate
+  reading `Composite`/`Verdict` for a *refuse* decision is not a status derivation —
+  it returns `bool`, never writes `ReqStatus`. `slice → coverage` is the established
+  ADR-001 downward edge.
+- **F4 — bail copy made mode-aware** (§4.4): VT re-derive vs VA/VH re-attest.
+- **F5 — stale-cell fail-closed documented** (R4).
+- **Trust note — `any_fresh_verified` for Blocked discharge.** A falsely-recorded VH
+  Verified cell could satisfy the bar — but that is the same human-attestation trust
+  model as every VH cell (attributable, git-anchored, dated). Not a new hole; the
+  bar is "honest recorded confirmation," consistent with NF-001. Predicate is
+  mode-agnostic (any fresh `Verified`); the canonical case is a VH/VA manual
+  attestation.

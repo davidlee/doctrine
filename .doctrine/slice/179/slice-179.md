@@ -86,15 +86,14 @@ Blocked cell to close — the very erasure this slice kills.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 — forget fix shape.** Refuse outright on Failed/Blocked, vs admit only
-  through a recorded path (REC/tombstone). Leaning refuse-outright (simplest;
-  "deletion that flips green is never silent" → "never possible unrecorded").
-  *Design to settle.*
-- **OQ-2 — Blocked override strictness.** Explicit `--accept-contradiction` flag,
-  mandatory rationale prose, and/or a required backing VH cell. *Design to settle.*
-- **OQ-3 — does the Failed/Blocked split surface as a new `DivergentReason`** (two
-  reasons instead of one `ObservedContradiction`), or as a composite-level
-  predicate the gate queries directly? Affects the read API the gate consumes.
+- **OQ-1 — forget fix shape. RESOLVED (design D2):** refuse outright on
+  Failed/Blocked; wrong-key garbage remedied by a reviewed hand-edit (git-auditable).
+  No `--force` (it would re-open the leak).
+- **OQ-2 — Blocked override strictness. RESOLVED (design D3):** an accept-REC
+  discharges `ObservedBlocked` only if the req also carries a fresh `Verified` cell.
+- **OQ-3 — distinction site. RESOLVED (design D1):** split `DivergentReason` into
+  `ObservedFailure` + `ObservedBlocked` (one named source the gate reads), not a
+  parallel composite predicate.
 - **Assumption:** behaviour-preservation gate applies — existing coverage/close
   suites must stay green where behaviour is unchanged (the lag-accept path).
 - **Assumption:** "live" excludes withdrawn-status reqs (Retire/Supersede already
