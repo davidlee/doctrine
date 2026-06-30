@@ -369,11 +369,9 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             // Hooks install as a skills-directory plugin — Claude auto-discovers
             // `.claude/skills/doctrine/.claude-plugin/plugin.json` and loads hooks
             // with no marketplace install step.
-            if let Err(e) = crate::skills::install_hooks_plugin_for_claude(
-                root,
-                args.global,
-                &mut io::stdout(),
-            ) {
+            if let Err(e) =
+                crate::skills::install_hooks_plugin_for_claude(root, args.global, &mut io::stdout())
+            {
                 writeln!(io::stdout(), "  hooks plugin install failed: {e:#}")?;
             }
         } else {
@@ -1183,7 +1181,7 @@ mod tests {
         assert!(
             fs::read_to_string(&dest)
                 .unwrap()
-                .contains("Governance (project)"),
+                .contains("Project-Specific Governance"),
             "seeded from the embedded template",
         );
 
