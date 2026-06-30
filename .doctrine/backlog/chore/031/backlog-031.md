@@ -42,23 +42,17 @@ out of sync with them.
 
 ## Required changes
 
-### 1. Decide versioning strategy
+### 1. Decide versioning strategy ✅ DECIDED
 
-Two paths per Claude docs:
+**Decision**: track the same semver as the doctrine crate. Plugin `version`
+field mirrors the crate version from `Cargo.toml` (currently `0.9.1`). Every
+crate release bumps the plugin version identically.
 
-| Path | How | Update behaviour |
-|---|---|---|
-| **Explicit semver** | Keep `version` in plugin.json, bump on each release | `claude plugin update` only pulls when version changes |
-| **Git-SHA tracking** | Remove `version` field entirely | Every commit treated as new version; `update` always pulls latest |
+### 2. Sync version from Cargo.toml to all plugin.json manifests
 
-**Recommendation**: keep explicit semver. Doctrine has stable releases; users
-shouldn't re-fetch on every commit. But this requires a release process to bump
-the version.
-
-### 2. Bump manifests to reflect current release
-
-Set `version` to the current doctrine crate version (0.9.1), or implement a
-build/release step that syncs it from `Cargo.toml`.
+Set `version` in all three `plugin.json` manifests to match the crate version.
+Implement a build step or `just` recipe that syncs `Cargo.toml`'s `version`
+into all `plugins/*/plugin.json` manifests so it can't drift again.
 
 ### 3. Bring marketplace.json entries into parity with plugin.json
 
@@ -74,10 +68,10 @@ Required: `name` ✅ (all three)
 Optional to add: `displayName`, `author`, `homepage`, `repository`, `license`,
 `keywords`, `$schema`
 
-### 5. (Stretch) Automate version sync
+### 5. Wire into `just release`
 
-A `just` recipe or build script that syncs `version` from crate version into all
-three `plugin.json` manifests (and optionally marketplace entries).
+The version-sync step must be part of the `just release` pipeline — bump crate
+version, sync into `plugins/*/plugin.json`, commit, tag.
 
 ## Dependencies
 
