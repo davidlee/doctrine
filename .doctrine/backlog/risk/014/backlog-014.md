@@ -125,6 +125,33 @@ Captured for the eventual slice that lifts the wrapper + pathcheck from
   it up by `cwd`. Open: where the map lives, its schema, who's authoritative
   (orchestrator-sole-writer per ADR-006), and lifecycle/GC alongside the worktree.
 
+- **OQ-4 doctrine CLI confinement + shared-`.git` posture (interacts with SL-181).**
+  The doctrine CLI needs **no separate confinement** — it's just a process inside
+  the jail, inheriting RO-everything-but-worktree; it cannot write banned paths by
+  construction. The live question is the **shared `.git`**: the wrapper ro-binds
+  ALL of `.git` (battery vectors 5–7 confirmed refs/config/hooks denied). For a
+  linked worktree, its own git metadata lives in `<main>/.git/worktrees/<name>`,
+  also under that ro bind → **the worker cannot self-commit** — which is exactly
+  the established funnel (CLAUDE.md: "worker CANNOT self-commit → orchestrator
+  imports the working-tree diff"). So bwrap **hard-enforces** what was cooperative.
+  - **SL-181 interaction.** SL-181's cheap ref-corruption guard is a *cooperative*
+    anti-accident check. On the Linux/bwrap arm, the ro-`.git` wall makes it
+    **belt-and-suspenders** (a hard wall already forbids ref writes). But it
+    remains the *only* protection on UNCONFINED arms (claude-default today,
+    macOS, no-bwrap). Land order: SL-181 guards now; bwrap subsumes its hard goal
+    later, on its arm only. Neither obsoletes the other.
+  - **The real design fork — keep `.git` fully ro, or selectively loosen?**
+    Keeping all `.git` ro is the strongest, simplest invariant and the import
+    funnel already works on it; **default to keeping it.** IF worker self-commit
+    is ever wanted, the *minimum* safe loosening is rw-bind only `.git/objects`
+    (content-addressed, low risk) + `.git/worktrees/<name>` (own HEAD/index/refs)
+    while keeping `.git/refs`, `packed-refs`, `config`, and **`.git/hooks` (exec
+    vector — must stay ro)** read-only. Downsides to evaluate before doing so:
+    shared object-store rw enables disk exhaustion + concurrent-gc races across
+    parallel workers, and trades away the clean "ro `.git`" invariant for a
+    convenience the funnel doesn't need. Recommendation: don't loosen without a
+    concrete driver.
+
 Recipe + evidence for the above: [[mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinement]], `probe-h1/`.
 
 Refs: SL-181, IMP-065, ADR-006 D2a/D2b, ADR-012 OQ-D, ADR-008 (jail isolation),
