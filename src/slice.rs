@@ -833,19 +833,11 @@ pub(crate) fn run_status(
     if from == "reconcile" && to == "done" {
         let undischarged = undischarged_drift(&root, id)?;
         if !undischarged.is_empty() {
-            let reqs = undischarged
-                .iter()
-                .map(|u| format!("  {} (authored: {})", u.req, u.authored.as_str()))
-                .collect::<Vec<_>>()
-                .join("\n");
             anyhow::bail!(
-                "slice {} → {to}: refused — undischarged residual drift:\n{reqs}\n\
-                 discharge each with an `accept` REC owned by this slice, all three:\n\
-                 \x20 (a) move = accept\n\
-                 \x20 (b) a [[status_delta]] naming the REQ with to == its authored status above\n\
-                 \x20 (c) [[evidence_ref]] superset of every coverage key feeding that REQ's composite\n\
+                "slice {} → {to}: refused — undischarged residual drift:\n{}\n\
                  recipe + worked example: doctrine memory show {CLOSE_DRIFT_RECIPE_MEMORY}",
                 canonical_id(id),
+                render_undischarged(&undischarged),
             );
         }
     }
@@ -1294,32 +1286,189 @@ fn undischarged_drift(root: &Path, id: u32) -> anyhow::Result<Vec<UndischargedRe
         let authored = crate::requirement::load(root, &req)
             .with_context(|| format!("closure gate: requirement {req} not found"))?
             .status;
-        // Residual drift: anything but Coherent. Coherent ⇒ nothing to discharge.
-        if matches!(
-            crate::coverage::drift(authored, &composite),
-            crate::coverage::Verdict::Coherent
-        ) {
-            continue;
-        }
         // The CURRENT residual-drift evidence keys feeding R's composite — the keys
         // `scan_coverage` returned, DEDUPED (ISS-006: the corpus double-walks a
         // slice's dir + slug symlink, so a key can recur; do not over-demand).
         let residual_keys = crate::coverage::distinct_keys(entries.into_iter().map(|(e, _)| e.key));
-        let latest = latest_owning_rec_for(&owned_recs, &req);
-        if !rec_discharges(latest, &req, authored, &residual_keys) {
-            undischarged.push(UndischargedReq { req, authored });
+        if let Some(reason) =
+            classify_undischarged(authored, &composite, &residual_keys, &owned_recs, &req)
+        {
+            undischarged.push(UndischargedReq {
+                req,
+                authored,
+                reason,
+            });
         }
     }
     Ok(undischarged)
 }
 
-/// One requirement the close gate flags as undischarged residual drift, paired
-/// with the authored status the discharging `accept` REC must name in its
-/// `status_delta` `to` (clause (b)). Carries the status the bail copy reports so
-/// the caller need not re-load it (design §5.2 Fix 1, D1).
+/// The pure per-requirement discharge decision (SL-179 §4.4, D3/D4, M7). `None` ⇒ the
+/// gate-set requirement is clear; `Some(reason)` ⇒ undischarged, tagged for its bail
+/// register. The reason-branching, the VH bar, the M7 empty-keys guard and the D4
+/// withdrawal check all live HERE — [`rec_discharges`] stays the frozen 3-clause
+/// `accept` predicate (codex M10), and this is a refuse-read, never a status write
+/// (NF-001).
+fn classify_undischarged(
+    authored: crate::requirement::ReqStatus,
+    composite: &crate::coverage::Composite,
+    residual_keys: &[crate::coverage::CoverageKey],
+    owned_recs: &[crate::rec::RecDoc],
+    req: &str,
+) -> Option<UndischargeReason> {
+    use crate::coverage::{DivergentReason, Verdict};
+    use crate::requirement::ReqStatus::{Retired, Superseded};
+    let latest = latest_owning_rec_for(owned_recs, req);
+    match crate::coverage::drift(authored, composite) {
+        // Coherent normally clears — EXCEPT D4: `drift` short-circuits a withdrawn
+        // status to Coherent BEFORE inspecting coverage, so a req flipped to
+        // Retired/Superseded over a live Failed/Blocked cell would close silently.
+        // Require a slice-owned revise/redesign REC citing the evidence instead.
+        Verdict::Coherent => {
+            if matches!(authored, Retired | Superseded)
+                && composite.any_failed_or_blocked()
+                && !withdrawal_discharged(owned_recs, residual_keys)
+            {
+                Some(UndischargeReason::Withdrawal)
+            } else {
+                None
+            }
+        }
+        // A Failed cell ran and contradicted — never accept-dischargeable; the gate
+        // never even consults `rec_discharges` (D1).
+        Verdict::Divergent(DivergentReason::ObservedFailure) => Some(UndischargeReason::Failure),
+        // Blocked discharges only with fresh human (VH) evidence AND the frozen accept
+        // predicate. The "REC cites the confirming VH key" requirement (D3) rides
+        // clause (c) for free: the fresh VH cell's key is in `residual_keys`, so
+        // `rec_discharges` already demands the REC cite it.
+        Verdict::Divergent(DivergentReason::ObservedBlocked) => {
+            if composite.has_fresh_vh() && rec_discharges(latest, req, authored, residual_keys) {
+                None
+            } else {
+                Some(UndischargeReason::BlockedNoVh)
+            }
+        }
+        // Status-lag / Indeterminate: the frozen accept predicate PLUS the M7 guard —
+        // an empty residual-key set makes clause (c) vacuously true, so an
+        // empty-evidence accept must NOT discharge.
+        Verdict::Divergent(DivergentReason::EvidenceOutrunsAuthored) | Verdict::Indeterminate => {
+            if !residual_keys.is_empty() && rec_discharges(latest, req, authored, residual_keys) {
+                None
+            } else {
+                Some(UndischargeReason::Lag)
+            }
+        }
+    }
+}
+
+/// D4 (SL-179): a withdrawn requirement's live contradiction is discharged only by a
+/// slice-owned `revise`/`redesign` REC whose `evidence_ref` covers the contradiction's
+/// keys. NOT [`rec_discharges`] — that demands `move == accept` AND a `status_delta`
+/// naming R, and a `redesign` REC carries neither (F7) — so this scans the owned
+/// corpus directly for the recorded withdrawal act.
+fn withdrawal_discharged(
+    owned_recs: &[crate::rec::RecDoc],
+    residual_keys: &[crate::coverage::CoverageKey],
+) -> bool {
+    owned_recs.iter().any(|rec| {
+        matches!(rec.rec.r#move.as_str(), "revise" | "redesign")
+            && evidence_covers(rec, residual_keys)
+    })
+}
+
+/// `rec`'s `evidence_ref` covers every key in `keys` — the clause-(c) superset test,
+/// reused by the D4 [`withdrawal_discharged`] check. [`rec_discharges`] keeps its own
+/// inline form frozen (codex M10), so this is a deliberately small shared helper.
+fn evidence_covers(rec: &crate::rec::RecDoc, keys: &[crate::coverage::CoverageKey]) -> bool {
+    keys.iter().all(|k| rec.evidence_ref.iter().any(|e| e == k))
+}
+
+/// One requirement the close gate flags as undischarged residual drift, paired with
+/// the authored status the bail copy reports (so the caller need not re-load it,
+/// design §5.2 Fix 1, D1) and the [`UndischargeReason`] selecting its bail register
+/// (SL-178 per-reason legibility).
 struct UndischargedReq {
     req: String,
     authored: crate::requirement::ReqStatus,
+    reason: UndischargeReason,
+}
+
+/// Why a gate-set requirement is undischarged — selects the bail-copy register
+/// (SL-179 §4.4). Each variant single-sources its register header and operator
+/// remedy (STD-001: copy lives here, not inlined at the bail site).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UndischargeReason {
+    /// A live `Failed` cell — a check ran and contradicted (D1). Not
+    /// accept-dischargeable: fix it or withdraw the requirement.
+    Failure,
+    /// A `Blocked` cell with no fresh human (VH) confirmation, or an accept REC that
+    /// fails to cite it (D3).
+    BlockedNoVh,
+    /// A withdrawn req (`Retired`/`Superseded`) still carrying a live `Failed`/`Blocked`
+    /// cell, with no slice-owned revise/redesign REC citing the evidence (D4).
+    Withdrawal,
+    /// Status-lag / `Indeterminate` not excused by an `accept` REC — including the M7
+    /// empty-residual-keys guard (an empty-evidence accept cannot discharge).
+    Lag,
+}
+
+impl UndischargeReason {
+    /// The register header naming this kind of undischarged drift.
+    fn header(self) -> &'static str {
+        match self {
+            Self::Failure => {
+                "Failed coverage cell — a check ran and contradicted (not accept-dischargeable):"
+            }
+            Self::BlockedNoVh => "Blocked with no confirming human (VH) evidence:",
+            Self::Withdrawal => "withdrawn over a live Failed/Blocked cell, no recorded act:",
+            Self::Lag => "status-lag drift not excused by an accept REC:",
+        }
+    }
+
+    /// The operator remedy for this register.
+    fn remedy(self) -> &'static str {
+        match self {
+            Self::Failure => {
+                "re-derive the cell (VT: `coverage verify SL-N`) or re-attest it (VA/VH: `coverage record`), or withdraw the requirement via a recorded revise/redesign REC; a Failed cell is not accept-dischargeable."
+            }
+            Self::BlockedNoVh => {
+                "record a fresh VH `Verified` attestation that it works, then an `accept` REC whose `evidence_ref` cites BOTH the blocked and the confirming VH keys; or use the withdrawal path."
+            }
+            Self::Withdrawal => {
+                "record a slice-owned `revise`/`redesign` REC citing the live evidence keys — a bare status flip cannot retire a live contradiction."
+            }
+            Self::Lag => {
+                "discharge with an `accept` REC owned by this slice, all three: (a) move = accept; (b) a [[status_delta]] naming the REQ with to == its authored status; (c) [[evidence_ref]] a (non-empty) superset of every coverage key feeding that REQ's composite."
+            }
+        }
+    }
+}
+
+/// Group the undischarged gate-set requirements by [`UndischargeReason`] and render
+/// one register per kind present — its header, the offending reqs (with authored
+/// status), and the remedy — so the bail copy is per-reason accurate (SL-178
+/// legibility). Pure over the gate output; built `Vec`-then-`join` (no
+/// `push_str(&format!)`, repo lint).
+fn render_undischarged(undischarged: &[UndischargedReq]) -> String {
+    use UndischargeReason::{BlockedNoVh, Failure, Lag, Withdrawal};
+    let mut sections = Vec::new();
+    for reason in [Failure, BlockedNoVh, Withdrawal, Lag] {
+        let reqs = undischarged
+            .iter()
+            .filter(|u| u.reason == reason)
+            .map(|u| format!("    {} (authored: {})", u.req, u.authored.as_str()))
+            .collect::<Vec<_>>();
+        if reqs.is_empty() {
+            continue;
+        }
+        let section = [
+            format!("  {}", reason.header()),
+            reqs.join("\n"),
+            format!("  → {}", reason.remedy()),
+        ];
+        sections.push(section.join("\n"));
+    }
+    sections.join("\n\n")
 }
 
 /// R's LATEST owning-slice REC naming R in a `status_delta` (D-B3 / ADR-004):
@@ -4990,6 +5139,204 @@ mod tests {
         assert!(
             err.contains(&req),
             "foreign-slice REC does not discharge: {err}"
+        );
+    }
+
+    // --- SL-179 PHASE-03: closure-gate hardening (Failed / VH-Blocked / D4 / M7). -
+
+    /// Append one coverage `[[entry]]` to slice `dir_id`'s `coverage.toml` (created
+    /// if absent), returning the stable [`CoverageKey`] it carries — what a citing
+    /// REC's `evidence_ref` must cover. Generalises `write_own_coverage` over
+    /// `mode`/`status`/`contributing_change` so a test can stage Failed / Blocked /
+    /// fresh-VH cells; multiple calls accumulate (append, never overwrite).
+    fn write_cell(
+        root: &Path,
+        dir_id: u32,
+        cov_slice: &str,
+        req: &str,
+        change: &str,
+        mode: &str,
+        status: &str,
+        anchor: &str,
+    ) -> CoverageKey {
+        let d = root.join(SLICE_DIR).join(format!("{dir_id:03}"));
+        fs::create_dir_all(&d).unwrap();
+        let entry = format!(
+            "[[entry]]\nslice = \"{cov_slice}\"\nrequirement = \"{req}\"\n\
+             contributing_change = \"{change}\"\nmode = \"{mode}\"\n\
+             status = \"{status}\"\ngit_anchor = \"{anchor}\"\n\
+             touched_paths = [\"src.rs\"]\n"
+        );
+        let p = d.join("coverage.toml");
+        let mut body = fs::read_to_string(&p).unwrap_or_default();
+        body.push_str(&entry);
+        fs::write(&p, body).unwrap();
+        CoverageKey {
+            slice: cov_slice.to_owned(),
+            requirement: req.to_owned(),
+            contributing_change: change.to_owned(),
+            mode: mode.to_owned(),
+        }
+    }
+
+    // --- VT-1 (D1): a live Failed cell is NOT accept-dischargeable. The gate reads
+    //     `ObservedFailure` and hard-refuses even with an otherwise-valid accept REC.
+
+    #[test]
+    fn vt1_failed_cell_refuses_even_with_matching_accept_rec() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        let key = write_cell(root, 1, "SL-001", &req, "SL-001", "VT", "failed", &anchor);
+        // An accept REC satisfying all three rec_discharges clauses — yet a Failed
+        // cell (ObservedFailure) is hard-refused and never reaches rec_discharges.
+        mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![key],
+        );
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "names the offending req: {err}");
+        assert!(err.contains("Failed"), "failure register surfaces: {err}");
+    }
+
+    // --- VT-2 (D3): ObservedBlocked discharges ONLY with a fresh VH Verified cell
+    //     AND the accept REC citing it (the VH key rides rec_discharges clause c).
+
+    #[test]
+    fn vt2_blocked_with_fresh_vh_and_cited_keys_closes() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        let blocked = write_cell(root, 1, "SL-001", &req, "SL-001", "VT", "blocked", &anchor);
+        let vh = write_cell(root, 1, "SL-001", &req, "SL-001", "VH", "verified", &anchor);
+        // has_fresh_vh holds and the accept REC cites BOTH keys ⇒ discharges.
+        mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![blocked, vh],
+        );
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None).unwrap();
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
+    }
+
+    #[test]
+    fn vt2_blocked_without_vh_refuses() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        // Blocked, NO fresh VH Verified cell — has_fresh_vh false ⇒ refuse regardless
+        // of an accept REC citing the blocked key.
+        let blocked = write_cell(root, 1, "SL-001", &req, "SL-001", "VT", "blocked", &anchor);
+        mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![blocked],
+        );
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "blocked-no-VH refuses: {err}");
+    }
+
+    #[test]
+    fn vt2_blocked_with_vh_but_rec_omits_vh_key_refuses() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        let blocked = write_cell(root, 1, "SL-001", &req, "SL-001", "VT", "blocked", &anchor);
+        let _vh = write_cell(root, 1, "SL-001", &req, "SL-001", "VH", "verified", &anchor);
+        // has_fresh_vh holds, but the accept REC omits the VH key — clause (c) demands
+        // evidence ⊇ residual_keys (which includes the VH cell), so it cannot discharge.
+        mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![blocked],
+        );
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "uncited VH key refuses: {err}");
+    }
+
+    // --- VT-3 (D4): a withdrawn req (Retired/Superseded) over a live Failed/Blocked
+    //     cell refuses unless a slice-owned revise/redesign REC cites the keys.
+
+    #[test]
+    fn vt3_withdrawn_over_live_failure_refuses_without_rec() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        // Retired short-circuits drift→Coherent, but the live Failed cell remains —
+        // a bare status flip cannot retire it (D4).
+        let req = mint_req(root, ReqStatus::Retired);
+        write_cell(root, 1, "SL-001", &req, "SL-001", "VT", "failed", &anchor);
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "withdrawal-without-REC refuses: {err}");
+    }
+
+    #[test]
+    fn vt3_withdrawn_with_slice_owned_redesign_rec_closes() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Retired);
+        let key = write_cell(root, 1, "SL-001", &req, "SL-001", "VT", "failed", &anchor);
+        // A slice-owned redesign REC citing the live evidence is the recorded
+        // withdrawal act — discharges the D4 check.
+        mint_rec(
+            root,
+            "SL-001",
+            "redesign",
+            &req,
+            ReqStatus::Retired,
+            ReqStatus::Retired,
+            vec![key],
+        );
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None).unwrap();
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
+    }
+
+    // --- VT-4 (M7): an accept with EMPTY residual keys cannot discharge (clause c is
+    //     otherwise vacuously true). Active req + empty composite ⇒ Indeterminate.
+
+    #[test]
+    fn m7_empty_residual_keys_accept_does_not_discharge() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        // Active req, NO coverage cell ⇒ drift Indeterminate with empty residual keys.
+        // The req enters the gate set via the REC reconciling it (status_delta names it).
+        let req = mint_req(root, ReqStatus::Active);
+        mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Active,
+            ReqStatus::Active,
+            vec![],
+        );
+        let err = expect_close_refused(root);
+        assert!(
+            err.contains(&req),
+            "empty-residual accept refuses (M7): {err}"
         );
     }
 

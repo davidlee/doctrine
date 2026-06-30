@@ -236,17 +236,8 @@ impl Composite {
 
     /// Some cell is `Verified`, [`IsStale::Fresh`], AND cited by mode `VH` — live
     /// confirming **human** evidence (SL-179 D3: the bar that lets an accept-REC
-    /// discharge a `Blocked` cell).
-    // Tested here in PHASE-02; the non-test consumer is the closure gate
-    // (`undischarged_drift`) landing in SL-179 PHASE-03 — dead in non-test builds
-    // until then.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "consumed by the closure gate (undischarged_drift) in SL-179 PHASE-03"
-        )
-    )]
+    /// discharge a `Blocked` cell). Consumed by the closure gate
+    /// ([`crate::slice`]'s `undischarged_drift`, SL-179 PHASE-03).
     pub(crate) fn has_fresh_vh(&self) -> bool {
         self.cells.iter().any(|(e, s)| {
             e.status == CoverageStatus::Verified && *s == IsStale::Fresh && e.key.mode == MODE_VH
