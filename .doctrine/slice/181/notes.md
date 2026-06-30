@@ -4,6 +4,40 @@ Durable per-slice scratchpad — tracked in git. The place to lift anything from
 disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 `rm -rf` before the slice close-out audit harvests it.
 
+---
+
+## ⏸ PARKED (2026-07-01) — resume AFTER hard-containment work lands
+
+**Status: design, BLOCKED on RV-199 F-1 (blocker, open). Do NOT proceed to
+`/plan`.** Parked deliberately by the User pending the **confinement slice** (the
+real OQ-D close — graduate `probe-h1/` → doctrine skill hooks; RSK-014 / IMP-045).
+
+**Why parked, not killed.** The inquisition (RV-199) voided SL-181's mechanism
+*and* cast doubt on its residual value (F-2: the accident gap may be near-empty).
+Both questions are better answered AFTER containment lands — confinement reshapes
+what's left for an anti-accident guard to do, and the F-2 marker-lifecycle trace is
+shared input. Resolving SL-181 now would be premature.
+
+**Re-entry (when you return):**
+1. Read this banner → the **INQUISITION VERDICT** section below → `design.md` §0–§4.
+2. `doctrine review show RV-199` — the 3 charges (F-1 blocker open, F-2/F-3 major).
+3. **First decide A1 vs A2** (bottom of the verdict section) using the **F-2 trace**:
+   is an unstamped claude worker actually reachable, and on what branch?
+   - gap real → A1: `/design` rework the coord signal (anchor on the *registered
+     coordination-worktree dispatch state*, NOT the `dispatch/` prefix — Scope obj-1
+     already specced this), pin F-2 with a test, repair F-3, re-inquisition, `/plan`.
+   - gap near-empty → A2: retire/shrink SL-181; fold any residual into the
+     confinement slice's anti-accident corner.
+4. Durable trap that sank the design:
+   `mem.fact.dispatch.dispatch-branch-prefix-not-coord-unique`.
+
+**Don't lose:** the §5 REV (retract ADR-012 OQ-D "marker is the real close") is the
+slice's *primary* deliverable and is still owed regardless of A1/A2 — confinement
+being proven-achievable (probe-h1) only strengthens it. Even if SL-181's guard is
+retired, the REV (or its content) must still land to make ADR-012 honest.
+
+---
+
 ## Status (2026-06-30)
 
 Lifecycle: **design** (design.md written + self-reviewed; no plan/phases yet).
