@@ -6,9 +6,38 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ---
 
-## ▶ STATE (2026-07-01) — INQUISITION INTEGRATED (RV-200), design LOCKED → ready for `/plan`
+## ▶ STATE (2026-07-01) — SECOND INQUISITION (RV-201), design LOCK BROKEN → reconcile before `/plan`
 
-Lifecycle: **design** (design.md now Status: LOCKED). `/inquisition` (codex GPT-5.5
+Lifecycle: **design** (LOCK CONTESTED). Second adversarial round on the *reconciled*
+design (codex GPT-5.5 + inquisitor) → **RV-201: 5 findings, 1 blocker, 3 majors, 1
+minor** — all verified against the SOURCE SEAMS, not the prose. `/plan` is **NOT**
+clear until reconciled. Ledger: `doctrine review show RV-201`.
+
+- **F-1 (BLOCKER, option-bearing) — preferred registration ships FAIL-OPEN.** D-reg's
+  "resolved absolute doctrine (fail-closed)" is false as-built: the plugin `hooks.json`
+  is a verbatim byte-copy (src/skills.rs:1046-1049) of bare-`doctrine`
+  (plugins/doctrine/hooks/hooks.json:7,18); `resolve_exec` is never invoked there.
+  Fail-closed holds ONLY on the settings.local fallback. **User decision needed:**
+  template the embedded JSON through resolve_exec at materialization, OR embed+
+  materialize an exit-2 shim (and name what invokes it). Mirrors RV-200 option-bearing.
+- **F-2 (major) — capture-before-remove leads with the wrong hook.** §5.4 leads with
+  WorktreeRemove (no decision control, fire-and-forget, hooks.md:680/814/2442);
+  SubagentStop is the blocking-capable/awaited capture point (hooks.md:658,1930-1957).
+  Commit to SubagentStop; demote WorktreeRemove to cleanup; re-pin OQ-2 abort to it.
+- **F-3 (major) — scope split-brain.** slice-182.md objective 3 (47-50) STILL says
+  agent_id keying / per-worker / extra_ro / strict-loose — RV-200 F-4's "scope doc
+  corrected" is a false attestation. Finish the scope rewrite.
+- **F-4 (major) — shared-profile safety rests on unspecified machinery.** Declaration
+  file unnamed, no atomicity contract with `base`, create-fork provision step is
+  net-new (classify_create writes nothing under jail/ today, create.rs:166-187). MODEL
+  is sound; ground "must not interleave" in the blocking-Agent structure, not discipline.
+- **F-5 (minor) — vestigial resolve_exec** in §5.1/D1 runtime layer; install-time fix.
+- **Acquitted:** V-plugin deferral defensible; OQ-2 defined-abort holds; per-arming
+  keying MODEL is right. Next: `/reconcile` (or a `/design` sitting) on F-1's option.
+
+### Prior round — RV-200 (reconciled, terminal; design was LOCKED)
+
+`/inquisition` (codex GPT-5.5
 + inquisitor) → **RV-200: 10 findings, 3 blockers** — ALL reconciled into design.md
 + scope this session; RV-200 findings verified terminal. Two User decisions taken:
 **F-1 = serial-scope, parallel workers SHARE ONE PROFILE** (User steer: prefer
