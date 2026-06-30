@@ -63,7 +63,12 @@ shared::is_linked_worktree, not path-prefix — A1); decide_bash/decide_write; \
 bwrap_core_argv (== pi arm) + bwrap_argv (+ extra_rw + network); opaque_wrap \
 (base64, INV-5 single-quote-escape); pathcheck ({wt} ∪ extra_rw); JailPolicy + \
 load_policy (default/present/malformed); validate_policy (reject /, main-root \
-ancestor, .git — INV-3). TDD red/green/refactor throughout.
+ancestor, .git — INV-3). TDD red/green/refactor throughout. \
+Factor the D8 `Jailer` seam NOW (SL-183 cross-arm parity): the platform-agnostic \
+core sits above one named fork point; only the bwrap argv builder sits below it \
+(trait Jailer + Bwrap impl + capability-keyed select_jailer). opaque_wrap stays \
+wrapper-agnostic (takes argv as input, B); validate_policy stays strictly \
+platform-agnostic (D). No macOS impl — just the seam it hangs off.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 green: Path L confirmed viable (else this phase is moot pending Path C)" },
@@ -74,15 +79,17 @@ exit_criteria = [
   { id = "EX-2", text = "bwrap_core_argv is byte-equivalent to pi-spawn-confined.sh's core flags, asserted by a parity test (D5)" },
   { id = "EX-3", text = "validate_policy rejects / , any main-root ancestor, and any .git-touching extra_rw (INV-3); pathcheck trusts only a validated policy (INV-4)" },
   { id = "EX-4", text = "opaque_wrap round-trips a path containing a space AND a single quote, and the decoded command executes (INV-5)" },
+  { id = "EX-5", text = "The D8 Jailer seam is factored (SL-183 parity, no Linux behaviour change): bwrap argv lives behind trait Jailer + Bwrap; select_jailer is capability-keyed (macOS ⇒ None ⇒ deny, not a hardcoded else); opaque_wrap consumes an arbitrary argv (B); validate_policy carries zero namespace assumptions (D)" },
 ]
 verification = [
   { id = "VT-1", expects = "resolve_target: 3 arms incl. a sibling-repo worktree → not-jailed-here (A1)", test_file = "src/worktree/jail.rs", keywords = ["resolve_target", "Orchestrator", "Reject", "sibling"] },
   { id = "VT-2", expects = "pathcheck: ⊆wt / escape / extra_rw-hit / .git-reject", test_file = "src/worktree/jail.rs", keywords = ["pathcheck"] },
   { id = "VT-3", expects = "JailPolicy: Default floor + parse present + reject malformed (PURE parse only; the disk read is the shell's, design §5.1)", test_file = "src/worktree/jail.rs", keywords = ["JailPolicy", "Default"] },
   { id = "VT-4", expects = "bwrap_argv: core + extra_rw + network=false ⇒ --unshare-net", test_file = "src/worktree/jail.rs", keywords = ["bwrap_argv", "unshare-net", "extra_rw"] },
-  { id = "VT-5", expects = "opaque_wrap base64 round-trip + INV-5 space-and-quote path", test_file = "src/worktree/jail.rs", keywords = ["opaque_wrap", "base64"] },
-  { id = "VT-6", expects = "validate_policy rejects / , root-ancestor, .git (INV-3)", test_file = "src/worktree/jail.rs", keywords = ["validate_policy"] },
+  { id = "VT-5", expects = "opaque_wrap base64 round-trip + INV-5 space-and-quote path; wrapper-agnostic — assembles an arbitrary given argv, not a bwrap-shaped one (B)", test_file = "src/worktree/jail.rs", keywords = ["opaque_wrap", "base64"] },
+  { id = "VT-6", expects = "validate_policy rejects / , root-ancestor, .git (INV-3); carries no namespace assumptions — the shared cross-arm contract (D)", test_file = "src/worktree/jail.rs", keywords = ["validate_policy"] },
   { id = "VT-7", expects = "D5 parity: bwrap_core_argv == pi-spawn-confined.sh core flags", test_file = "src/worktree/jail.rs", keywords = ["bwrap_core_argv", "parity", "ro-bind"] },
+  { id = "VT-8", expects = "select_jailer capability dispatch (D8/C): Linux+bwrap ⇒ Bwrap; macOS ⇒ None ⇒ decide_bash denies (no-jail-backend), never pass-through", test_file = "src/worktree/jail.rs", keywords = ["select_jailer", "Jailer"] },
 ]
 specs        = []
 requirements = []
