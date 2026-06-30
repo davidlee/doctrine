@@ -431,6 +431,11 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
 /// Relative dir of the slice tree inside the project root.
 const SLICE_DIR: &str = ".doctrine/slice";
 
+/// Shipped recipe master for discharging undischarged residual drift — the
+/// single source the close-gate refusal points at (STD-001; design §5.2 Fix 1).
+/// Must match the key the PHASE-01 master ships (R5/POL-002: no unshipped key).
+const CLOSE_DRIFT_RECIPE_MEMORY: &str = "mem.pattern.doctrine.close-drift-discharge-rec";
+
 /// The top-level reserved slice kind: toml + md + slug symlink.
 pub(crate) const SLICE_KIND: Kind = Kind {
     dir: SLICE_DIR,
@@ -828,12 +833,19 @@ pub(crate) fn run_status(
     if from == "reconcile" && to == "done" {
         let undischarged = undischarged_drift(&root, id)?;
         if !undischarged.is_empty() {
+            let reqs = undischarged
+                .iter()
+                .map(|u| format!("  {} (authored: {})", u.req, u.authored.as_str()))
+                .collect::<Vec<_>>()
+                .join("\n");
             anyhow::bail!(
-                "slice {} → {to}: refused — undischarged residual drift on \
-                 requirement(s): {} (reconcile each via an `accept` REC whose evidence \
-                 covers the current drift, or resolve the drift, then retry)",
+                "slice {} → {to}: refused — undischarged residual drift:\n{reqs}\n\
+                 discharge each with an `accept` REC owned by this slice, all three:\n\
+                 \x20 (a) move = accept\n\
+                 \x20 (b) a [[status_delta]] naming the REQ with to == its authored status above\n\
+                 \x20 (c) [[evidence_ref]] superset of every coverage key feeding that REQ's composite\n\
+                 recipe + worked example: doctrine memory show {CLOSE_DRIFT_RECIPE_MEMORY}",
                 canonical_id(id),
-                undischarged.join(", "),
             );
         }
     }
@@ -1272,7 +1284,7 @@ fn gate_requirement_set(
 /// `Divergent`/`Indeterminate` ⇒ residual drift — EXCUSED iff R's latest
 /// owning-slice REC discharges it ([`rec_discharges`]); otherwise R is undischarged.
 /// Impure (disk+git resolution); the per-req discharge DECISION is pure.
-fn undischarged_drift(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+fn undischarged_drift(root: &Path, id: u32) -> anyhow::Result<Vec<UndischargedReq>> {
     let canonical = canonical_id(id);
     let owned_recs = crate::rec::recs_owned_by(root, &canonical)?;
     let mut undischarged = Vec::new();
@@ -1295,10 +1307,19 @@ fn undischarged_drift(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
         let residual_keys = crate::coverage::distinct_keys(entries.into_iter().map(|(e, _)| e.key));
         let latest = latest_owning_rec_for(&owned_recs, &req);
         if !rec_discharges(latest, &req, authored, &residual_keys) {
-            undischarged.push(req);
+            undischarged.push(UndischargedReq { req, authored });
         }
     }
     Ok(undischarged)
+}
+
+/// One requirement the close gate flags as undischarged residual drift, paired
+/// with the authored status the discharging `accept` REC must name in its
+/// `status_delta` `to` (clause (b)). Carries the status the bail copy reports so
+/// the caller need not re-load it (design §5.2 Fix 1, D1).
+struct UndischargedReq {
+    req: String,
+    authored: crate::requirement::ReqStatus,
 }
 
 /// R's LATEST owning-slice REC naming R in a `status_delta` (D-B3 / ADR-004):
@@ -4655,6 +4676,18 @@ mod tests {
         let err = expect_close_refused(root);
         assert!(err.contains("undischarged residual drift"), "{err}");
         assert!(err.contains(&req), "names the offending req: {err}");
+        // Richer payload (PHASE-02): each req carries its authored status, the
+        // accept-REC clauses, and the shipped-recipe pointer. Substrings only
+        // (design F-3/F-4) — never the exact multi-line copy.
+        assert!(
+            err.contains(&format!("authored: {}", ReqStatus::Pending.as_str())),
+            "names authored status: {err}"
+        );
+        assert!(err.contains("accept"), "names the accept-REC clause: {err}");
+        assert!(
+            err.contains(CLOSE_DRIFT_RECIPE_MEMORY),
+            "points at the shipped recipe key: {err}"
+        );
         // Refused BEFORE the write — status stays at reconcile.
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
