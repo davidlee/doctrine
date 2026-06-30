@@ -15,3 +15,7 @@ tags = ["area:review", "area:skills", "scope:all-unrouted-skills"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[estimate]
+lower = 2.0
+upper = 5.0

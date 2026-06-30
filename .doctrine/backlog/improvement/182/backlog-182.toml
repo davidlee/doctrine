@@ -34,3 +34,10 @@ target = "SPEC-019"
 label = "references"
 role = "concerns"
 target = "RFC-008"
+
+[value]
+value = 3.0
+
+[estimate]
+lower = 2.0
+upper = 5.0

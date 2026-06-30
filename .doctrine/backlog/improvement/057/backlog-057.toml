@@ -17,5 +17,12 @@ tags = ["area:skills", "area:spec"]
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = [{ to = "IMP-060", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-060", rank = 0 }, { to = "IMP-096", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[value]
+value = 3.0
+
+[estimate]
+lower = 1.0
+upper = 2.0

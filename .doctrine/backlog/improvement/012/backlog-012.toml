@@ -25,3 +25,10 @@ target = "PRD-011"
 label = "references"
 role = "concerns"
 target = "PRD-009"
+
+[value]
+value = 5.0
+
+[estimate]
+lower = 3.0
+upper = 8.0

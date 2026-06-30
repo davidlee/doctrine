@@ -31,3 +31,7 @@ target = "IMP-024"
 [[relation]]
 label = "related"
 target = "IDE-017"
+
+[estimate]
+lower = 3.0
+upper = 13.0
