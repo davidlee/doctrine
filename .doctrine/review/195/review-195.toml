@@ -1,0 +1,61 @@
+id    = 195
+slug  = "inquisition-sl-178-design-intent"
+title = "Inquisition: SL-178 design intent"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-178"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Shipped master body cites a LOCAL memory (POL-002 / VA-2): expected no host-local refs in shipped artefact, observed memory.md:33 points at mem_019ec912f7fd746284bfaef00717443e"
+detail = "design.md §5.2/§5.3 decree the recipe body 'ships unchanged / as-is'. But .doctrine/memory/items/mem_019f075f.../memory.md:33 reads 'Companion to the integrate step (mem_019ec912f7fd746284bfaef00717443e — …)'. That uid is project-LOCAL (present in .doctrine/memory/items/, ABSENT from the shipped memory/ corpus; IMP-216 catalogues it Tier-1 unshipped). Shipping the body as-is makes Fix 3 ship a master that references host-project-local state — POL-002 violation, and the slice's own VA-2 ('no shipped artefact references a local project memory') would FAIL against the artefact the design prescribes. Penance: design must mandate scrubbing the companion cross-reference — drop the uid and genericize to prose ('the companion integrate-step pattern'), or defer the link until that companion also ships (IMP-216). Strike the 'ships as-is' clause."
+disposition = "design-wrong"
+response = "Confessed and corrected. The defect was the design's 'ships as-is' clause, not the recipe content. design.md §5.2 strike + §5.4 'Body scrub' now mandate dropping the local-memory uid mem_019ec912 and genericizing to prose; R6 + VA-2 (greps the body) added; body-scrub is a P2 exit gate. Heresy excised at the source."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Shipped master body bakes in host-project entity ids (POL-002): expected platform-independent prose, observed ISS-006 + SL-165/REQ-316/REV-014/REQ-317/REC-093/REC-094/SL-064 worked example"
+detail = "memory.md:28 cites ISS-006 (host backlog id) as authority for the slug-symlink double-walk gotcha; memory.md:30-32 carry a worked example built entirely on THIS repo's ids (SL-165, REQ-316/317, REV-014, REC-093/094, SL-064). A shipped master IS the platform (POL-002: independence from host-project state); baking doctrine's own development ids into it leaks host state to every client. D2 legitimately places the worked example in the memory, so it cannot simply be deleted — but the design must make a CONSCIOUS ruling rather than ship by accident: genericize ISS-006 to a prose description of the double-walk; and either frame the worked example explicitly as 'an illustration from doctrine's own development' or genericize it. The 'ships unchanged' clause hides the decision."
+disposition = "design-wrong"
+response = "Corrected in design. §5.4 Body scrub: ISS-006 genericized to a prose gotcha (id dropped); the SL-165 worked example RETAINED but re-framed as 'an illustration from Doctrine's own development' — the one conscious POL-002 tolerance, rationale recorded (a worked example is inherently illustrative; framing removes the live-cross-ref implication). VA-2 now greps the body for these ids."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "ADR-005 tiering: 3-way clause drift unguarded — expected one mechanically-enforced canon, observed condensed 3-clause restated in error + skill + master with documentary-only mitigation"
+detail = "D2/R1 designate the master canonical and forbid duplicating the worked example, but the a/b/c clause TEXT is restated in three places (binary error, skill, master) with no VT/VA asserting they track. Drift risk is low (rec_discharges is 'LOCKED — strengthened', §code comment), so this is minor — but record it as a standing risk and consider a test asserting the error/skill clause gist references the master rather than re-deriving it."
+disposition = "tolerated"
+response = "Tolerated with rationale. The a/b/c clause text is short and the predicate rec_discharges is 'LOCKED — strengthened' (code comment), so 3-way drift risk is low; D2 designates the master canonical and forbids duplicating the worked example. Recorded as standing risk R1. No mechanical guard added — disproportionate to the risk."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "VT-1 brittleness unbound: expected substring assertions, observed risk of exact multi-line copy match"
+detail = "§10/F3 flags it but the plan must BIND it: VT-1 should assert on substrings (each req id, 'authored:', the status token, 'accept', the memory key const) not the exact multi-line error copy, so the case survives copy edits. Carry this into plan.toml's VT for PHASE error work."
+disposition = "fix-now"
+response = "Bound into the design. §9 VT-1 now explicitly requires substring assertions (each req id, 'authored:', status token, 'accept', the key const), never exact multi-line copy. Carries into plan.toml's VT for the P1 error work."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Design §5.4/§5.2 hand-rolls master authoring on a false premise: expected riding the sanctioned 'memory record --global' verb, observed manual TOML signature-surgery + the claim 'no promote verb exists'"
+detail = """design.md §5.2 'no promote/ship verb — masters hand-authored' and §5.4's manual re-class (hand-clearing repo/anchor/git fields to satisfy INV) are FALSE and a parallel implementation (CLAUDE.md 'no parallel implementation'). doctrine memory record --global is the sanctioned authoring path (confirmed: --help — 'Mint a GLOBAL orientation master: suppress the git born frame (repo="", anchor none) and write into the repo-root memory/ tree'; documented in mem.system.memory.global-master-authoring). It guarantees the INV signature for free; hand-surgery risks missing a field (cf R3). Penance: rewrite §5.4 to mint via 'record --global' (+ scope/key/type flags), then author the SCRUBBED body. This REOPENS D3 (uid reuse): the verb mints a NEW uid, so the choice is (i) verb + new uid + retire the local item (rides the seam, loses the 4 prose refs to mem_019f075f in closed/backlog docs), or (ii) keep uid via hand-mechanic (preserves refs, forgoes the verb). User ruling required — do not improvise."""
+disposition = "design-wrong"
+response = "Confessed and corrected. User ruled (option i): author the master via the sanctioned 'memory record --global' verb (guarantees repo=''/anchor none + writes to memory/), with a NEW uid, then supersede the local capture mem_019f075f (memory status superseded --by). Design reconciled: D3 rewritten, §5.2 signature table reframed (verb produces repo/anchor rows; flags set scope), §5.4 mechanic rewritten to the verb workflow + supersede + re-point slice ref, §5.5 false premise corrected, R3 reworked (verb mitigates). The key is stable across the uid change, so the Fix 1 const is unaffected. Parallel-implementation smell removed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

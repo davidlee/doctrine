@@ -129,16 +129,18 @@ recipe + worked example: doctrine memory show mem.pattern.doctrine.close-drift-d
 
 (The key in the last line is the const, not a literal.)
 
-**Fix 3 — re-class (ADR-002).** Rewrite `memory.toml` for the promoted master:
+**Fix 3 — author the master (ADR-002, D3).** `doctrine memory record --global`
+guarantees the global-orientation signature (`repo=""`, `anchor_kind=none`, write
+to `memory/`); the scope floor + key + type are set via flags. Required signature
+of the resulting master (the verb produces the repo/anchor rows; flags set scope):
 
-| field | from | to |
+| field | value | source |
 |---|---|---|
-| `scope.repo` | `github.com/davidlee/doctrine` | `""` |
-| `anchor.kind` | `checkout_state` | `none` |
-| `git.commit/tree/checkout_state_id/base_commit/normalizer` | set | `""` |
-| `repo_id_kind` | `remote` | `local_root` |
-| `repo_id_confidence` | `high` | `low` |
-| scope (paths/globs/commands) | tag-only | floor below |
+| `scope.repo` | `""` | verb (born-frame suppressed) |
+| `anchor.kind` | `none` | verb |
+| `memory_type` | `pattern` | `--type pattern` |
+| `memory_key` | `mem.pattern.doctrine.close-drift-discharge-rec` | `--key` |
+| scope (paths/commands) | floor below | scope flags |
 
 ```toml
 [scope]
@@ -148,8 +150,12 @@ commands = ["doctrine slice", "doctrine rec"]
 tags = ["area:close", "area:reconciliation"]
 ```
 
-`memory_type = "pattern"` and the body (`memory.md`, the canonical recipe +
-SL-165 → REC-093/094 worked example) ship unchanged.
+The scope floor (≥1 of paths/globs/commands, never tag-only) is the one INV the
+flags must satisfy — the verb does not invent scope.
+
+`memory_type = "pattern"` stays. The body (`memory.md`) is the canonical recipe —
+but it does **not** ship unchanged; it carries host-project state and must be
+scrubbed first (§5.4 *Body scrub*, R5/R6).
 
 **Fix 2 — skill subsection.** `.agents/skills/close/SKILL.md`, near `:123`: when
 the gate fires, the condensed a/b/c, the `rec new --move accept …` line, and a
@@ -166,18 +172,50 @@ worked example duplicated (it lives in the memory, single source).
 - The promoted memory has a single physical home after Fix 3:
   `memory/mem_019f075f…` (+ key symlink). The local
   `.doctrine/memory/items/mem_019f075f…` is removed — no double-load.
+- The master *body* carries no live host-project reference after the §5.4 scrub;
+  the sole retained concrete ids are the explicitly-framed worked example
+  (POL-002 tolerance, RV-195 F-2).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-Fix 3 mechanic (re-home + re-class, uid reused):
-1. move content `.doctrine/memory/items/mem_019f075f…/` →
-   `memory/mem_019f075f…/`;
-2. add key→uid symlink
-   `memory/mem.pattern.doctrine.close-drift-discharge-rec → mem_019f075f…`;
-3. remove the local item (+ any slug alias);
-4. re-class `memory.toml` per §5.2;
+Fix 3 mechanic (mint via verb + body-scrub + supersede, new uid — D3):
+1. `doctrine memory record --global --type pattern --key
+   mem.pattern.doctrine.close-drift-discharge-rec --summary … ` plus the scope
+   flags (§5.2) → mints a new master under `memory/<new-uid>/` with the INV
+   signature; the verb may also write the key-alias symlink (verify, else add it,
+   mirroring other masters);
+2. author the **scrubbed** recipe body (below) into the new master's `memory.md`;
+3. `doctrine memory status superseded --by <new-uid>` on the local item
+   `mem_019f075f…` (retire the capture; it is not shipped);
+4. re-point this slice's prose reference at the new uid (historical refs in
+   SL-165/IMP-202/RFC-011 stay — they still resolve via `memory show`);
 5. `memory sync` (dev binary) regenerates `.doctrine/memory/shipped/`;
-   `memory find` then discovers it.
+   `memory find` then discovers the master.
+
+**Body scrub (POL-002, RV-195 F-1/F-2).** A shipped master *is* the platform; its
+body must carry no host-project-local state. The captured `memory.md` violates
+this on three counts — scrub each:
+
+- **Local-memory cross-reference (F-1, blocker).** `memory.md:33` cites
+  `mem_019ec912f7fd…`, a project-LOCAL (unshipped) memory. Drop the uid;
+  genericize to prose ("companion to the integrate step — land the admitted
+  `close_target` via `dispatch sync --integrate`") with no local pointer. When
+  IMP-216 ships that companion as a master, a key-wikilink may be restored.
+- **Host backlog id (F-2, major).** `memory.md:28` cites `ISS-006` as authority
+  for the dir + slug-symlink double-walk. Replace with a prose description of the
+  gotcha; drop the id.
+- **Worked example (F-2, tolerated).** `memory.md:30-32` (SL-165 / REQ-316 /
+  REV-014 / REQ-317 / REC-093 / REC-094 / SL-064) is **retained** — D2 places the
+  worked example in the master, and concreteness is its pedagogical value — but
+  re-framed explicitly as *"an illustration from Doctrine's own development"* so a
+  client reader knows the ids are historical, not a live cross-reference into
+  their repo. This is the one conscious POL-002 tolerance (rationale: a worked
+  example is inherently illustrative; the framing removes the implication of a
+  resolvable local ref).
+
+Framework-relative paths in the body (`.doctrine/slice/*/coverage.toml`,
+`.doctrine/rec/`, `src/slice.rs`) are **not** host-local state — every client
+carries them — and stay.
 
 Uid reuse keeps the prose references in SL-165 PIR, IMP-202, RFC-011, and this
 slice valid; no supersede chain.
@@ -189,8 +227,10 @@ slice valid; no supersede chain.
   return type + copy.
 - INV: no shipped artefact references host-project-local state (POL-002) — the
   error/skill pointers resolve only after Fix 3 ships the master.
-- Assumption: masters are hand-authored under `memory/` — there is no
-  promote/ship verb (confirmed against the `memory` CLI surface).
+- Fact (corrected, RV-195 F-5): masters are authored via the sanctioned
+  `doctrine memory record --global` verb (suppresses the born-frame, writes to
+  `memory/`); there is no *promote-in-place* verb, so a local capture becomes a
+  master by minting fresh + superseding the capture (D3), not by re-homing.
 - Edge: the const in Fix 1 and the shipped key in Fix 3 must match exactly; a
   mismatch makes the error's pointer dangle. Single const + VT-2 guard it.
 
@@ -215,11 +255,22 @@ slice valid; no supersede chain.
   round-trips, so it carries the condensed full 3-clause inline + pointer.
   Alternative: pure-pointer error (one extra lookup, rejected); skill-canonical
   (inverts ADR-005, rejected).
-- **D3 — promote by re-home + re-class, uid reused.** The captured item is the
-  wrong *class* (ADR-002), not wrong content; re-class its signature and move it
-  into the embed. Reuse the uid to keep existing prose references valid.
-  Alternative: mint a new uid + supersede the old (audit trail, but breaks
-  references and adds churn — rejected, no memory-graph backlinks exist).
+- **D3 — author the master via `memory record --global`, new uid, supersede the
+  local item.** (Revised after RV-195 F-5; supersedes the earlier "re-home +
+  re-class, uid reused" decision.) `doctrine memory record --global` is the
+  *sanctioned* master-authoring verb — it suppresses the git born-frame
+  (`repo=""`, `anchor_kind=none`) and writes into the repo-root `memory/` tree,
+  guaranteeing the ADR-002 INV signature for free (documented in
+  `mem.system.memory.global-master-authoring`). Hand-rewriting the TOML signature
+  was a parallel implementation of this path on a false "no promote verb"
+  premise. The verb mints a **new uid**; the captured local item is a genuinely
+  different entity (a repo-local capture, not a platform master), so it is
+  **superseded** (`memory status superseded --by <new>`), not re-homed. The key
+  `mem.pattern.doctrine.close-drift-discharge-rec` is stable across the uid change,
+  so the Fix 1 const (which references the *key*, not the uid) is unaffected.
+  Cost: the 4 prose refs to `mem_019f075f` (SL-165 PIR, IMP-202, RFC-011, this
+  slice) point at a superseded local memory; re-point slice-178 at the new uid,
+  the rest are historical and still resolve via `memory show`.
 
 Relation: SL-178 `related` IMP-216 — Fix 3 is the concrete first instance of
 IMP-216's broad migration of ~46 project-local operational memories to shipped
@@ -232,29 +283,35 @@ reference knowledge.
   worked example; error/skill carry only the condensed clauses + the shared key.
 - **R2 — return-type ripple** to `vt1`/`vt2_*`. Mitigation: behaviour-preservation
   gate — the cases keep asserting refuse/pass; only the payload assertions change.
-- **R3 — re-class misses an INV field** → `lint_master`/`is_inv` reject the
-  master and `memory find` can't see it. Mitigation: VT-2 exercises the full
-  sync → find path; the §5.2 table enumerates every field.
+- **R3 — INV signature wrong** → `lint_master`/`is_inv` reject the master and
+  `memory find` can't see it. Mitigation: `memory record --global` guarantees the
+  repo/anchor rows (D3, F-5), leaving only the scope floor to the author; VT-2
+  exercises the full sync → find path.
 - **R4 — dangling pointer** if the const and the shipped key diverge. Mitigation:
   single const; VT-2 asserts the key resolves.
 - **R5 — P1 releases ahead of P2** → the binary error points at an unshipped key
   (POL-002 violation in the interim). Mitigation: landing order P2 → P1 (§9).
+- **R6 — unscrubbed body ships host-local state** (RV-195 F-1/F-2) → the master
+  references a local memory / host ids, failing VA-2 and POL-002. Mitigation: the
+  §5.4 body scrub is a P2 exit condition; VA-2 (below) greps the *body*, not just
+  the error/skill.
 
 ## 9. Quality Engineering & Validation
 
 | id | mode | criterion |
 |---|---|---|
-| VT-1 | test | `slice status <id> done` on a drifted slice errors naming each undischarged REQ with its authored status, the 3-clause, and the memory-key pointer (extends `vt1`/`vt2_*`) |
+| VT-1 | test | `slice status <id> done` on a drifted slice errors naming each undischarged REQ with its authored status, the 3-clause, and the memory-key pointer (extends `vt1`/`vt2_*`). **Assert on substrings** (each req id, `authored:`, the status token, `accept`, the key const) — never the exact multi-line copy (RV-195 F-4) |
 | VT-2 | test | shipped master `mem.pattern.doctrine.close-drift-discharge-rec` exists and is discoverable via `memory find` after `memory sync` (requires INV + scope-floor pass) |
 | VA-1 | agent | `/close` skill carries the drift-discharge subsection pointing at the memory |
-| VA-2 | agent | no shipped artefact references a local project memory (POL-002) |
+| VA-2 | agent | no shipped artefact references host-project-local state (POL-002): grep error literals (`src/`), the shipped skill, AND the promoted master **body** (`memory/mem_019f075f…/memory.md`) for local memory uids / `ISS-`/`SL-`/`REC-`/`REQ-` refs — expect none save the explicitly-framed worked example (RV-195 F-1/F-2) |
 
 Behaviour-preservation anchor: gate refuse/pass behaviour unchanged.
 
 ### Phasing
 
-- **P2** — promote/re-class memory (`memory/`, remove local item). Independent;
-  lands first.
+- **P2** — author master via `record --global` + **body-scrub** + supersede the
+  local item (`memory/`). Independent; lands first. **Exit gate:** the scrubbed
+  body carries no live host-local reference (VA-2, R6).
 - **P1** — error + data shape (`slice.rs`, tests). Codeable independently, but its
   binary error references the shipped key, so it must **not release ahead of P2**
   (POL-002 — see R5).
@@ -287,6 +344,23 @@ Internal adversarial pass (author):
   `memory_key` field. The §5.4 mechanic (real content in the uid dir + key
   symlink alias) is correct.
 
-Doctrinal pass: POL-002 (R5/§9), ADR-002 (§5.2 re-class table), ADR-005 (D2
-tiering), STD-001 (single const), ADR-001 (error stays in the slice shell) — all
-satisfied. No governance conflict found; no `/consult` trigger.
+Formal inquisition (RV-195) — beyond the internal pass:
+
+- **F-1 (blocker, fixed) — body cites a local memory.** The "ships as-is" clause
+  would have shipped `mem_019ec912…` (a local, unshipped memory) inside the
+  master — POL-002 + the slice's own VA-2. Fixed: §5.4 Body scrub + R6 + VA-2 now
+  greps the body.
+- **F-2 (major, fixed + tolerated) — host ids in the body.** `ISS-006` scrubbed to
+  prose; the SL-165 worked example retained, re-framed as an explicit illustration
+  (the one conscious POL-002 tolerance).
+- **F-5 (major, fixed) — false "no promote verb" premise + parallel impl.** Design
+  hand-rolled the master signature; the sanctioned path is `memory record
+  --global`. Fixed: D3 revised (verb + new uid + supersede the local item), §5.2,
+  §5.4, §5.5, R3 reworked.
+- **F-3 (minor, tolerated), F-4 (minor, fixed).** Clause-drift documentary
+  mitigation; VT-1 substring assertions bound into §9.
+
+Doctrinal pass: POL-002 (R5/R6/§5.4/§9), ADR-002 (§5.2 signature, D3 via the
+sanctioned verb), ADR-005 (D2 tiering), STD-001 (single const), ADR-001 (error
+stays in the slice shell), CLAUDE.md no-parallel-implementation (F-5) — all
+satisfied after reconciliation.
