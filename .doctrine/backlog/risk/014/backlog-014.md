@@ -45,6 +45,15 @@ Confinement altitude, by arm:
    writes — **AND** disallowing the `Bash` tool (which trivially circumvents any
    tool-level gate). Blocker: no hook/cue hard enough to serve as the constraint
    has been found.
+   - **Active probe (H1):** rather than *disallow* Bash, opaquely *rewrite* it via
+     `PreToolUse(Bash).updatedInput` to wrap the command in a nested `bwrap` jail —
+     rw-bound to only the spawning subagent's worktree, everything else ro. Closes
+     the Bash hole the tool-level gate leaves open, if the harness exposes a
+     deterministic worktree binding at hook time (`cwd` or identity↔`WorktreeCreate`
+     correlation) and honours `updatedInput`. Falsification-first brief +
+     experiments: [`probe-brief-h1-pretooluse-bwrap.md`](./probe-brief-h1-pretooluse-bwrap.md).
+     Two-wall caveat: validates the **Bash** wall only; Edit/Write need a separate
+     `PreToolUse(Edit|Write)` path-check; reads/egress out of scope.
 2. A **gatekeeper-agent** enforcement model (auto-mode or a custom variant) that
    adjudicates the worker's actions.
 3. Manually-started sessions inside a worktree with reduced permissions, coordinated
