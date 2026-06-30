@@ -78,7 +78,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "resolve_target: 3 arms incl. a sibling-repo worktree → not-jailed-here (A1)", test_file = "src/worktree/jail.rs", keywords = ["resolve_target", "Orchestrator", "Reject", "sibling"] },
   { id = "VT-2", expects = "pathcheck: ⊆wt / escape / extra_rw-hit / .git-reject", test_file = "src/worktree/jail.rs", keywords = ["pathcheck"] },
-  { id = "VT-3", expects = "load_policy: default / present / malformed", test_file = "src/worktree/jail.rs", keywords = ["load_policy", "Default"] },
+  { id = "VT-3", expects = "JailPolicy: Default floor + parse present + reject malformed (PURE parse only; the disk read is the shell's, design §5.1)", test_file = "src/worktree/jail.rs", keywords = ["JailPolicy", "Default"] },
   { id = "VT-4", expects = "bwrap_argv: core + extra_rw + network=false ⇒ --unshare-net", test_file = "src/worktree/jail.rs", keywords = ["bwrap_argv", "unshare-net", "extra_rw"] },
   { id = "VT-5", expects = "opaque_wrap base64 round-trip + INV-5 space-and-quote path", test_file = "src/worktree/jail.rs", keywords = ["opaque_wrap", "base64"] },
   { id = "VT-6", expects = "validate_policy rejects / , root-ancestor, .git (INV-3)", test_file = "src/worktree/jail.rs", keywords = ["validate_policy"] },
@@ -138,7 +138,7 @@ background Agent spawn while the arming slot is live). Absence ⇒ Default floor
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 green: pretooluse exists to consume a resolved policy" },
-  { id = "EN-2", text = "PHASE-02 green: JailPolicy + load_policy + validate_policy available" },
+  { id = "EN-2", text = "PHASE-02 green: JailPolicy parse/Default + validate_policy available (the policy-file disk read is wired here in the shell, design §5.1)" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "arm-spawn writes jail.toml alongside base in the same arming step; re-arm rewrites both (no separate update path — F-4)" },
@@ -183,7 +183,7 @@ exit_criteria = [
   { id = "EX-4", text = "Behaviour-preservation: existing worktree/dispatch suites stay green unchanged" },
 ]
 verification = [
-  { id = "VT-1", expects = "SubagentStop capture: worker diff (tracked + untracked) lands in an outside-the-worktree patch before stop; correlator resolves the worktree", test_file = "src/worktree/pretooluse.rs", keywords = ["SubagentStop", "capture", "diff"] },
+  { id = "VT-1", expects = "SubagentStop capture: worker diff (tracked + untracked) lands in an outside-the-worktree patch before stop; correlator resolves the worktree (module home decided at PHASE-05 phase-plan; capture.rs is the intended default)", test_file = "src/worktree/capture.rs", keywords = ["capture", "diff"] },
   { id = "VT-2", expects = "behaviour-preservation: existing worktree/dispatch suites green unchanged", test_file = "src/worktree/create.rs", keywords = ["test"] },
   { id = "VA-1", expects = "Agent confirms dispatch-agent/SKILL.md imports the captured patch, relaxes the B..S delta-check on the claude arm, and OQ-1 (delta-check location) is resolved with the touch scoped" },
   { id = "VH-1", expects = "Human accepts a live claude /dispatch E2E with one jailed worker: escape vectors denied + canaries intact + funnel completes green via captured-patch import (covers OQ-2 end-to-end)" },

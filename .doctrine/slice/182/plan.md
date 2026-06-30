@@ -101,3 +101,32 @@ point of putting it first.
 - **Disposability (PHASE-01).** The probe apparatus is throwaway — its EX-4
   requires no committed Rust or installed hooks survive the phase; only the
   recorded findings + decisions persist (notes + a durable memory if novel).
+
+## Critical review (post-author)
+
+Surfaced authoring this plan; resolved here without re-`/design` (none is an
+architecture change — they are placement/branch clarifications the design left
+loose):
+
+- **`load_policy` pure/impure split.** Design §5.2 lists `load_policy(main_root,
+  worktree_name) -> JailPolicy` under the *pure* `jail.rs` core, but a fn that
+  defaults on a missing file must read disk — it cannot be pure. §5.1 already
+  assigns "policy-file read" to the shell. Resolution: PHASE-02 tests the **pure**
+  `JailPolicy` parse / Default / `validate_policy`; the disk read is wired in the
+  shell (PHASE-03/04). VT-3 + PHASE-04 EN-2 reworded accordingly.
+- **SubagentStop capture module home is unspecified.** §5.1's System Model names
+  only `jail.rs`/`pretooluse.rs`/`shared.rs`; the capture hook (§5.4) has no module
+  placement and its subcommand name is unstated. Defaulted to `src/worktree/capture.rs`
+  (capture is a worktree subcommand, like `create-fork`); the home + subcommand name
+  are a **PHASE-05 phase-plan decision** (PHASE-05 VT-1 notes this).
+- **Path-C abort is a slice exit, not a re-plan.** PHASE-01 EX-2 can refute Path L
+  (`SubagentStop` unworkable: not blocking, tree gone, or no correlator). That abort
+  **stops this slice and hands the funnel to IDE-024 (Path C)** — it does not spawn
+  an alternate plan in-place. PHASE-02..05 as authored are Path L only; if Path L
+  falls, they are mooted, not rewritten.
+- **Fattest phases: PHASE-03 and PHASE-05.** 03 bundles the shell + two
+  registrations + install-time templating + runbook; 05 bundles the capture hook +
+  dispatch-skill edits + E2E + OQ-1. Kept whole deliberately (a wall is not real
+  until invoked through a resolved binary; the E2E needs capture *and* dispatch
+  edits together), but they carry the most risk and should be watched closely at
+  phase-plan — split only if execution shows them oversized.
