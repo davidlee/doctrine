@@ -5,8 +5,9 @@
      R1 (§10), Q1. -->
 
 Status: LOCKED (internal adversarial pass + `/inquisition` RV-200 + RV-201 +
-RV-202 codex pass + SL-183 cross-arm seam upstream all integrated; §10). Two
-harness unknowns remain **by design**,
+SL-183 cross-arm seam upstream + RV-202 codex pass — which corrected the upstream's
+`select_jailer` to capability-as-data — all integrated; §10). Two harness unknowns
+remain **by design**,
 gated to the Phase-1 empirical probe (D7, §9), not to prose: `SubagentStop`
 blocking/tree-intact/worktree-correlation, and plugin-PreToolUse firing — each with
 a defined abort to Path C / IDE-024. Governed by ADR-008 (closes its claude-arm
@@ -101,16 +102,16 @@ Three new units under `src/worktree/`, layered:
 
 ```
  command      pretooluse.rs   (thin shell: stdin JSON in, hookSpecificOutput out,
-                               backend-presence probe, policy-file read)
-   |  calls
+                               host probe ⇒ `Backend` descriptor, policy-file read)
+   |  calls (passes Backend in — capability is DATA, never read in the leaf)
  engine/leaf  jail.rs         (PURE)
                 ├─ platform-agnostic core (ABOVE the seam): Decision, Target,
                 │   JailPolicy, resolve_target, decide_bash, decide_write,
                 │   opaque_wrap, pathcheck, validate_policy
-                └─ Jailer seam (the SINGLE fork point, D8) — selects a backend:
+                └─ Jailer seam (the SINGLE fork point, D8) — maps `Backend` → impl:
                     · Bwrap  → bwrap_core_argv / bwrap_argv          (this slice)
                     · Seatbelt → seatbelt_profile / sandbox_exec_argv (SL-183, deferred)
-                    · (no supported backend) → deny  (capability-keyed, C/§5.5)
+                    · Deny{reason} → deny  (absent / unsupported / degraded; C/§5.5)
    |  reuses
  leaf         shared.rs       (is_linked_worktree, worktree recognition)
 ```
@@ -148,10 +149,12 @@ fn resolve_target(agent_id: Option<&str>, cwd: &Path, worktrees_root: &Path) -> 
 //  Some & is_worktree(cwd)      => Jail(cwd)
 //  Some & !is_worktree(cwd)     => Reject("cwd-not-a-worktree")
 
-// decide_* are backend-neutral: they take the SELECTED jailer (None ⇒ no supported
-// backend on this platform ⇒ Deny — capability-keyed, never a hardcoded else, C/§5.5).
+// decide_* are backend-neutral: capability arrives as DATA from the shell (`Backend`,
+// below), never read from the host here — the pure/imperative split (AGENTS.md). A
+// `Deny{reason}` backend ⇒ `Decision::Deny` carrying that reason; capability-keyed,
+// never a hardcoded else (C/§5.5). The shell owns host detection; the core only maps.
 fn decide_bash(target: &Target, cmd: &str, desc: &str, policy: &JailPolicy,
-               jailer: Option<&dyn Jailer>) -> Decision;
+               backend: &Backend) -> Decision;
 fn decide_write(target: &Target, file_path: Option<&Path>, policy: &JailPolicy) -> Decision;
 
 fn opaque_wrap(orig_cmd: &str, argv: &[OsString]) -> String;   // wrapper-agnostic (B): quotes+
@@ -164,7 +167,7 @@ fn validate_policy(policy: &JailPolicy, main_root: &Path) -> Result<(), String>;
 
 **Jailer seam (`jail.rs`) — the SINGLE fork point (D8), BELOW which backends differ:**
 ```rust
-trait Jailer {                       // selected once per call by platform capability
+trait Jailer {                       // selected once per call from the `Backend` descriptor
     fn wrap_argv(&self, wt: &Path, policy: &JailPolicy) -> Vec<OsString>; // the wrapper argv
 }                                    // opaque_wrap consumes whatever this returns
 
@@ -176,8 +179,19 @@ fn bwrap_argv(wt: &Path, policy: &JailPolicy) -> Vec<OsString>;
 // struct Seatbelt;  — SL-183 / IMP-045 (deferred): seatbelt_profile + sandbox_exec_argv
 //                     behind THIS trait; no core change.
 
-fn select_jailer() -> Option<Box<dyn Jailer>>;  // capability lookup: Linux+bwrap ⇒ Bwrap;
-//  macOS ⇒ None today (a NAMED arm pending SL-183), other ⇒ None. None ⇒ deny (§5.5).
+// Capability is DATA, resolved by the shell's host probe (§5.1) and passed in — the
+// pure core never reads OS / binary-presence / nesting state (AGENTS.md pure/imperative
+// split). THREE states, not a bare Option: a backend that is *present-but-degraded*
+// (e.g. SL-183 Seatbelt nesting refused, brief §3a) is a `Deny{reason}` — distinct from
+// absent, so SL-183 widens nothing. The deny reason rides per-arm, so no flattening.
+enum Backend {
+    Bwrap,                   // Linux + bwrap present
+    Seatbelt,                // macOS + sandbox-exec present + nesting OK (SL-183; never built today)
+    Deny { reason: String }, // unsupported / absent / probed-but-degraded; e.g.
+}                            //   Linux-no-bwrap ⇒ "bwrap-unavailable"; macOS-today ⇒ "seatbelt-unavailable"
+
+fn select_jailer(backend: &Backend) -> Option<Box<dyn Jailer>>;  // PURE map, NO host read:
+//  Bwrap ⇒ Some(Bwrap); Seatbelt ⇒ Some(Seatbelt) (SL-183); Deny{..} ⇒ None ⇒ deny (§5.5).
 ```
 
 `is_worktree(cwd)` is **git-topology-based**, not path-prefix: `cwd` is a linked
@@ -480,14 +494,19 @@ tree-intact.
   GC. In both, `/tmp` is denied for Edit/Write by restrictive default; loosen a run
   via `extra_rw`. Do **not** state "/tmp is private" as a cross-arm guarantee — it is
   false on macOS.
-- **Edge — capability-keyed backend, not `else: deny` (C, brief §1/§6).** Platform
-  dispatch is a capability lookup (`select_jailer`): a platform with **no supported
-  backend ⇒ `deny "no-jail-backend"`** (fail-closed), never unwrapped pass-through.
-  **macOS is a NAMED arm that currently denies** (pending IMP-045/SL-183), not a
-  hardcoded `else`. SL-183 is therefore a **capability flip** (deny → Seatbelt
-  behind the same seam), not a control-flow rewrite. This degrade contract aligns
-  with RFC-012's capability ladder (`none` / `contained-writes` / …): "no backend"
-  is the `none` rung, the bwrap/Seatbelt arms the `contained-writes` rung.
+- **Edge — capability-keyed backend, not `else: deny` (C, brief §1/§6).** The shell's
+  host probe resolves a **`Backend` descriptor** (data); `select_jailer` maps it. A
+  platform with **no usable backend ⇒ `Backend::Deny{reason}` ⇒ `deny`** (fail-closed),
+  never unwrapped pass-through. The reason rides the descriptor **per arm** —
+  `"bwrap-unavailable"` on Linux, `"seatbelt-unavailable"` on macOS-today — not a
+  flattened generic string. The `Deny{reason}` state is **three-valued, not a bare
+  `None`**: it also carries *present-but-degraded* (SL-183 Seatbelt nesting refused,
+  brief §3a), so SL-183 adds a variant arm, not a type change. **macOS is a NAMED arm
+  that currently denies** (pending IMP-045/SL-183), not a hardcoded `else`. SL-183 is
+  therefore a **capability flip** (a `Deny` reason → `Backend::Seatbelt` behind the same
+  seam), not a control-flow rewrite. Aligns with RFC-012's capability ladder (`none` /
+  `contained-writes` / …): a `Deny` backend is the `none` rung, the bwrap/Seatbelt arms
+  the `contained-writes` rung.
 - **Assumption (verify):** PreToolUse via `settings.local.json` fires for worktree
   subagents — proven (probe). The plugin `hooks.json` path is **not** assumed — it is
   V-plugin-gated with the settings.local path as a planned same-phase fallback
@@ -578,9 +597,12 @@ tree-intact.
   SL-183, deferred). Three concrete shape commitments fall out, all **zero Linux
   behaviour change** — they only prevent SL-183 from having to refactor this core:
   **(i)** `opaque_wrap` is wrapper-agnostic — takes the jailer's argv as input (B);
-  **(ii)** backend selection is a **capability lookup** (`select_jailer`), so "no
-  supported backend ⇒ deny" with macOS a named-but-denying arm, not a hardcoded
-  `else` (C, §5.5); **(iii)** `validate_policy` carries **zero** bwrap/namespace
+  **(ii)** backend selection is **capability-as-data** — the shell resolves a `Backend`
+  descriptor (`Bwrap | Seatbelt | Deny{reason}`) and `select_jailer(&Backend)` is a pure
+  map, so host detection stays in the shell (pure/imperative split), the deny reason
+  rides per-arm, and the three-valued `Deny{reason}` reserves the *present-but-degraded*
+  state SL-183 needs (brief §3a) — macOS a named-but-denying arm, not a hardcoded `else`
+  (C, §5.5); **(iii)** `validate_policy` carries **zero** bwrap/namespace
   assumptions and is the shared cross-arm contract, reused unchanged as SL-183's
   parity proof (D). The macOS decisions themselves (D-mac1 *allow-default-deny-write-
   except*, D-mac3 `TMPDIR` scratch, D-mac4 `network`→`(deny network*)`) live in the
@@ -675,9 +697,11 @@ cheapest to refute in shell — do it before sinking Rust into a refuted premise
   round-trips & executes; **wrapper-agnostic — asserts it assembles an arbitrary
   given argv, not a bwrap-shaped one, B**); `validate_policy` (reject `/`,
   root-ancestor, `.git` — **+ a no-namespace-assumption assertion locking it as the
-  shared cross-arm contract, D**); **`select_jailer` capability dispatch (D8/C):
-  Linux+bwrap ⇒ `Bwrap`; macOS ⇒ `None` ⇒ deny `"no-jail-backend"`; the `decide_*`
-  None-jailer arm denies, never passes through**.
+  shared cross-arm contract, D**); **`select_jailer` capability dispatch (D8/C) — a
+  PURE map over an injected `Backend` descriptor, so it runs on the Linux CI host with
+  no macOS dependency: `Bwrap ⇒ Some(Bwrap)`; `Seatbelt ⇒ Some` (SL-183 stub);
+  `Deny{reason} ⇒ None`; `decide_bash` on a `Deny{reason}` emits `Decision::Deny` with
+  that reason (per-arm, e.g. `"bwrap-unavailable"`), never passes through**.
 - **Integration (synthetic stdin → emitted JSON):** the probe escape battery
   re-expressed as cases; INV-2 repo-root-ancestor deny; orchestrator pass-through
   (no `agent_id`); isolation:none deny (`agent_id` + repo-root cwd); D5 parity
@@ -880,10 +904,13 @@ contract/altitude shape, **zero Linux behaviour change** (brief:
 - **B (load-bearing) — `opaque_wrap` wrapper-agnostic.** Already took `argv` as a
   param (§5.2); now locked as a contract (§4 Opaque-wrap bullet, §5.2 comment, §9
   unit asserts arbitrary argv).
-- **C (load-bearing) — capability-keyed dispatch, not `else: deny`.** → §5.5 +
-  `select_jailer` (§5.2): "no supported backend ⇒ deny"; macOS a named-but-denying
-  arm; SL-183 = a capability flip, not a control-flow rewrite; aligned to RFC-012's
-  ladder. *Was: "non-bwrap platform → deny bwrap-unavailable" hardcoded else.*
+- **C (load-bearing) — capability-as-data dispatch, not `else: deny`.** The shell
+  resolves a `Backend` descriptor (`Bwrap | Seatbelt | Deny{reason}`); `select_jailer`
+  (§5.2) is a pure map; a `Deny{reason}` denies with a per-arm reason. macOS a
+  named-but-denying arm; SL-183 = a capability flip, not a control-flow rewrite;
+  aligned to RFC-012's ladder. *Was (pre-RV-202): a zero-arg `select_jailer() ->
+  Option<Box<dyn Jailer>>` host lookup in the leaf — see the RV-202 correction below.
+  Was (pre-upstream): "non-bwrap platform → deny bwrap-unavailable" hardcoded else.*
 - **D (contract-framing) — `validate_policy` strictly platform-agnostic.** Locked as
   the shared cross-arm parity proof, zero bwrap/namespace assumptions (§5.2 + §9
   no-namespace-assumption assertion + D8.iii).
@@ -897,3 +924,26 @@ contract/altitude shape, **zero Linux behaviour change** (brief:
 
 The macOS-side decisions themselves (D-mac1..4, OQ-mac1/2) stay in the SL-183 brief;
 this slice guarantees only the seam they hang off.
+
+### RV-202 correction — capability is data, not a host lookup (2026-07-01, codex GPT-5.5)
+
+Codex's pass on the upstream caught one real regression (F-1, major) + a wording flat
+(F-2, minor). The upstream had introduced `fn select_jailer() -> Option<Box<dyn
+Jailer>>` — a **zero-arg host lookup inside the PURE leaf**, which (a) regressed the
+project's pure/imperative split (host detection in `jail.rs`, contra AGENTS.md / the
+already-correct `bwrap_present: bool` it replaced), (b) collapsed *absent /
+unsupported / present-but-degraded* into one opaque `None`, leaving no room for the
+"Seatbelt present but nesting refused ⇒ deny" state the brief §3a requires — forcing
+SL-183 to widen the type and refactor the very seam this upstream exists to freeze,
+and (c) made EX-5/VT-8 ("macOS ⇒ deny") un-exercisable on a Linux CI host.
+
+Fix (all three at once): capability is **data resolved by the shell** — `enum Backend
+{ Bwrap, Seatbelt, Deny{reason} }` — passed into the core; `select_jailer(&Backend)`
+is a pure map and `decide_bash(.., &Backend)` denies with the descriptor's per-arm
+reason. Pure core stays pure; the three-valued `Deny{reason}` carries the degrade
+state (SL-183 adds a variant arm, not a type change); VT-8 becomes a pure table test
+over injected descriptors; and the Linux missing-bwrap reason stays `"bwrap-unavailable"`
+(F-2 — no flattening). Landed in §5.1 diagram, §5.2 (`Backend` + signatures), §5.5
+edge, D8.ii, §9 VT, plan EX-5/VT-8. Still **zero Linux happy-path behaviour change** —
+the corrected claim wording (F-2): the seam shape moved, the bwrap arm's deny reason
+and decisions did not.
