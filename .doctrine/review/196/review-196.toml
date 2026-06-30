@@ -1,0 +1,70 @@
+id    = 196
+slug  = "reconciliation-audit-of-sl-178-close-drift-discharge-legibility"
+title = "Reconciliation audit of SL-178 — close drift-discharge legibility"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-178"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "D3 + §5.4 step3 retire mechanism (`memory status superseded --by <shipped master>`) is unimplementable as designed"
+detail = """Expected (design D3, §5.4 step 3): retire the local capture via `doctrine memory status superseded --by <new-uid>`. Observed (PHASE-01 F-B): `memory status superseded --by` resolves the successor against `items/` only (`src/memory.rs` resolve_uid_prefix; "items/ wins any uid collision"). A shipped master lives under `memory/`→`shipped/`, never `items/`, so it can never be named as a supersession successor → "memory not found". The mechanism rests on a second false premise (after RV-195 F-5 corrected the first). As-built (user-approved /consult, PHASE-01 F-D): drop the items/ `mem.<key>` alias symlink (`git rm`) + `memory status archived` on the capture uid dir. This honours design §5.3's stated outcome ("the local item is removed") over D3/§5.4's unimplementable "superseded". Evidence: commit 326ebd75 deletes the items/ key symlink; conformance shows `D .doctrine/memory/items/mem.pattern.doctrine.close-drift-discharge-rec`."""
+disposition = "design-wrong"
+response = """Confirmed: the as-built retire mechanism (drop items/ key-alias symlink + archive the capture) is correct; design D3 + §5.4 step 3 are the defect. Reconcile (per-slice direct edit of design.md): revise D3 and §5.4 step 3 to the as-built drop-symlink+archive mechanism; align with §5.3's already-correct "removed" outcome. No code change."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Key→uid resolution ignores memory status — `show <key>` returns an archived items/ capture; retiring requires dropping the alias symlink"
+detail = "Expected (implicit in design §5.4): marking the capture superseded/archived makes `<key>` resolve to the master. Observed (PHASE-01 F-C, the crux that forced the /consult): `memory show <key>` returns the items/ capture even when it is archived/superseded — the `hidden` flag filters `find` only, NOT key→uid resolution via the items/ alias symlink. Therefore retiring a capture so `<key>`→master REQUIRES physically removing the items/ key-alias symlink; a status change alone is insufficient. Design §5.4 did not know this. This is durable platform semantics (a record-memory candidate), and §5.4's step-3 prose must reflect it."
+disposition = "design-wrong"
+response = "Confirmed durable semantics: key→uid resolution via the items/ alias symlink ignores memory status; only physical symlink removal re-points `<key>`. Reconcile (per-slice design.md §5.4): state this as the reason the retire step removes the symlink. ALSO harvest as a platform-level record-memory candidate (memory subsystem behaviour), captured at the audit harvest step."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = 'design §5.3:172 + §5.4:220 "uid reused / no supersede chain" is stale — master is a fresh uid mem_019f176f'
+detail = 'Expected vs observed: design §5.3 ("single physical home after Fix 3: memory/mem_019f075f…") and §5.4 ("Uid reuse keeps the prose references … valid; no supersede chain") describe a uid-reuse outcome. D3 was revised (RV-195 F-5) to mint a FRESH uid via `memory record --global`; PHASE-01 minted `mem_019f176f71537d12b1b09826a003a602`. The §5.3/§5.4 uid-reuse prose was left un-updated and now contradicts both revised D3 and the as-built. Reconcile: correct §5.3/§5.4 to name the new uid and drop the "uid reuse / no supersede chain" claim.'
+disposition = "design-wrong"
+response = 'Confirmed stale. Reconcile (per-slice design.md): correct §5.3 ("single physical home") and §5.4 ("Uid reuse … no supersede chain") to name the fresh uid mem_019f176f71537d12b1b09826a003a602 and remove the uid-reuse claim, consistent with revised D3.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "design §10 F2 is inverted — `debug-embed` embeds the corpus at COMPILE time, not runtime-from-disk"
+detail = 'Expected (design §10 F2): "rust-embed carries debug-embed, so debug/test builds read memory/ from disk at runtime." Observed (PHASE-01 F-A): `rust-embed` with `debug-embed` (Cargo.toml:119) embeds the corpus at COMPILE time. A newly-added `memory/<uid>/` only enters the embed when `src/corpus.rs` (the file bearing `#[derive(RustEmbed)]`) recompiles. Clean/CI builds are always fresh; a local incremental build after authoring a master needs `touch src/corpus.rs` before VT-2 goes green (observed in PHASE-01 T3). The §10 F2 note is factually wrong and should be corrected; the timing gotcha is a record-memory candidate.'
+disposition = "design-wrong"
+response = 'Confirmed inverted. Reconcile (per-slice design.md §10 F2): correct to "debug-embed embeds the corpus at COMPILE time; a new memory/<uid>/ enters the embed only when src/corpus.rs recompiles — local incremental builds need `touch src/corpus.rs`." ALSO harvest the build-timing gotcha as a record-memory candidate at the harvest step.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Authored close-skill source path is wrong in design + plan + slice selector — `.agents/skills/close/SKILL.md` is gitignored; real source is `plugins/doctrine/skills/close/SKILL.md`"
+detail = "Expected (design §2/§5.2 Fix2/§5.4, plan PHASE-03 EX-1, slice-178.toml `[[selector]]`): authored close-skill source is `.agents/skills/close/SKILL.md`. Observed (PHASE-03 F-E): `.agents/` is gitignored (installed/derived copy). The committed authored source is `plugins/doctrine/skills/close/SKILL.md`, where PHASE-03 actually landed (commit f7bf67f7). Conformance confirms: `.agents/skills/close/SKILL.md` undelivered, `plugins/doctrine/skills/close/SKILL.md` undeclared. This also broke `review prime` on RV-196 (the selector resolves to no tracked file → internal error). Reconcile: correct design §2/§5.2/§5.4 prose + plan PHASE-03 EX-1 + the slice selector to the `plugins/…` path."
+disposition = "design-wrong"
+response = "Confirmed: authored source is plugins/doctrine/skills/close/SKILL.md; .agents/ is gitignored/derived. Reconcile (per-slice direct edit): (a) design §2/§5.2 Fix2/§5.4 prose .agents→plugins; (b) plan PHASE-03 EX-1 path; (c) slice-178.toml `[[selector]]` `.agents/skills/close/SKILL.md` → `plugins/doctrine/skills/close/SKILL.md` (this also fixes the broken `review prime`). No code change — PHASE-03 already landed at the correct path."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Selectors under-declare the delivered surface — corpus.rs (VT-2 seam) and the memory mechanism paths land undeclared"
+detail = "Conformance undeclared cells (all expected as-built, none scope creep): `M src/corpus.rs` (the VT-2 test seam, design §9), `A memory/mem_019f176f…/{memory.md,memory.toml}` (the new master uid dir — the selector anchored on the stable key-alias `memory/mem.pattern.…rec`, which IS conformant), `D .doctrine/memory/items/…key` + `M …/memory.toml` (the retire mechanism, §5.4). The design deliberately anchored the master selector on the key alias and did not enumerate the test seam or the items/ retire churn. Reconcile decision: either broaden the slice selectors to add `src/corpus.rs` (a genuine deliverable) — paired with the F-5 `.agents`→`plugins` fix — or tolerate the mechanism-path churn as inherent. Low stakes; flagged for selector hygiene only."
+disposition = "tolerated"
+response = "Accepted as-is. The master selector deliberately anchors on the stable key-alias `memory/mem.pattern.…rec` (conformant); the uid dir, the items/ retire churn, and the corpus.rs test seam are mechanism/test paths the design intentionally did not enumerate as design-targets. No scope creep — every undeclared path is expected per §5.3/§5.4/§9. Reconcile MAY optionally add `src/corpus.rs` to the selectors alongside the F-5 fix; not required. Tolerance rationale: design-target selectors track where design changes land, not test seams or mint mechanics."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

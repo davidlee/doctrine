@@ -1,7 +1,7 @@
 id = 178
 slug = "close-drift-discharge-legibility"
 title = "Close drift-discharge legibility: richer error + skill recipe + shipped memory"
-status = "design"
+status = "reconcile"
 created = "2026-06-30"
 updated = "2026-06-30"
 tags = []

@@ -582,3 +582,31 @@ saved the round.
 [audit; SL-177-audit-session] CLI-shape friction cost several probe round-trips: `slice conformance SL-177` and `dispatch candidate status` both reject the prefixed id / require bare `177` + `--slice` (the boot guardrail says cite prefixed ids everywhere, but these verbs want bare) — the prefixed-vs-bare split is unsignposted at the call site. `dispatch candidate admit` compounded it: the `status` "next:" hint prints a stale `--id <candidate-id>` form while `--help`/the binary want `--candidate <full-ref>` (worktree-id rejected with "does not resolve to a committed tip"). Token cost: 3 retries across conformance/status/admit to discover bare-id, --slice, and ref-not-id. Fix: align the "next:" hint string with the actual flag, and/or accept both prefixed and bare ids uniformly.
 
 [audit; SL-177-audit-session] Auditing a dispatched slice against a freshly-created candidate worktree hit the known `coord-worktree-missing-build-artifacts` gotcha: `just check` failed to COMPILE (map_server/assets.rs RustEmbed `Assets::get` not found) because gitignored `web/map/dist/` is absent in a fresh worktree. Had to `cp -r web/map/dist` from the primary tree before the regression gate would run. The candidate-create flow provisions code but not gitignored build embeds — same root cause the memory documents for coordination worktrees, now also biting `dispatch candidate create --worktree`. Auto-provisioning known embed roots on candidate/worktree creation would remove a recurring manual step.
+[dreaming; dispatch-memory-audit-2026-06-30]
+- `doctrine memory show` CLI takes only positional REFERENCE, no flags (no --view, --reference). Tool schema mismatch overhead: multiple failed invocations before discovering.
+- `doctrine memory find --query` BM25 search returns 30 per page — had to paginate twice to get full dispatch domain coverage. 273 total memories; 46 dispatch-relevant.
+- Two near-duplicates: `mem_019ee33fa5517e838785bb5976a8f939` and `mem_019f096865257123b3663db5086ca0f8` both cover "candidate worktree is detached HEAD" — separate recordings of same pattern. Not caught by validate.
+- `mem_019eeac33cf373d3949d04a6f9780351` (coord worktree missing build artifacts) and `mem_019eec3285e471c287a0c3d74c235b25` (worker fork missing build artifacts) are siblings of the same root cause (gitignored embed artifacts not provisioned). Could be merged.
+- No shipped dispatch signpost exists. The `signpost`-keyed `mem.signpost.doctrine.dispatch-claude-arm-wrong-base` is project-local (has repo scope).
+
+[/audit SL-178; audit-rv196-a3f1]
+- `slice conformance 178` read a PARTIAL source-delta registry: only PHASE-01
+  had auto-bound (its files showed; slice.rs/plugins skill from PHASE-02/03 were
+  absent → slice.rs misreported as `undelivered`). Had to manually
+  `record-delta` PHASE-02/03 (start=prev tip, end=phase tip) before conformance
+  was trustworthy. Solo phase-binding apparently only captured the first phase —
+  every subsequent phase's delta needs manual bootstrap at audit (the F-2 backstop
+  the skill warns about, but cost ~3 extra round-trips to diagnose vs a clean
+  registry). If solo-binding is meant to auto-record every completed phase, this
+  is a bug; if not, audit should auto-bootstrap from each phase toml's
+  code_start_oid chain rather than make the auditor hand-record.
+- `review prime RV-196` died with bare "MCP error -32603: Internal error" — root
+  cause was the slice selector pointing at a gitignored path
+  (`.agents/skills/close/SKILL.md`, the F-5 finding). A selector that resolves to
+  no tracked file should yield a named diagnostic ("selector X resolves to no
+  tracked file"), not an opaque internal error. Cost: a few minutes confirming
+  prime is non-gating before proceeding.
+- `ToolSearch select:mcp__doctrine__review_*` returned "No matching deferred
+  tools found" — the `select:` form did not resolve the MCP review verbs by name;
+  a keyword search ("doctrine review ledger raise dispose") loaded them fine.
+  Minor: cost one extra search round-trip.

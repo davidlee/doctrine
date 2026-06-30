@@ -1,0 +1,42 @@
+memory_uid = "mem_019f179725c17680ab977ab7650f1707"
+memory_key = "mem.pattern.doctrine.key-resolution-ignores-status"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Memory key→uid resolution ignores status — retiring a capture needs the items/ alias symlink physically removed"
+summary = "`memory show <key>` resolves via the items/ alias symlink and returns the local capture even when it is archived/superseded; status filters `find` only, not key→uid resolution. To re-point <key> at a shipped master you must `git rm` the items/ mem.<key> symlink — a status change alone is insufficient. Corollary: `memory status superseded --by <successor>` resolves the successor against items/ only, so a shipped master under memory/ can never be named as a supersession successor."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = ["src/memory.rs"]
+globs = []
+commands = ["memory show", "memory status", "memory find"]
+tags = ["area:memory", "footgun", "supersede"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "893c2232f136e29a1289386ffcf0c89351944b8d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "e82d190ca5312e219691006b2152901c7736d9b0bc16bbbacdc8b08789bde343"
+base_commit = "f7bf67f7acb5e064a14ed611e9dc34fc9cddbec3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
