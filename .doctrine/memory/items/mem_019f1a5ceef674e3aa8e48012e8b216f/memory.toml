@@ -1,0 +1,43 @@
+memory_uid = "mem_019f1a5ceef674e3aa8e48012e8b216f"
+memory_key = "mem.fact.dispatch.single-slot-arming-rendezvous"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Dispatch arming is single-slot — per-arming policy granularity"
+summary = "arm-spawn writes ONE base per arming dir; N parallel spawns share it. No pre-spawn key distinguishes siblings — policy granularity is per-arming, not per-worker."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = ["src/dispatch.rs", "src/worktree/create.rs", ".claude/skills/dispatch-agent/**"]
+commands = []
+tags = ["dispatch", "arming", "claude-arm", "jail-policy"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c04d5d70b334b3f1608a94019e35d9f5c079cd3d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1731c033e4906c9c3da3f80402cc6d2109522610b18690c7aa76401fb67c66f4"
+base_commit = "8513f7526e9be14a629863251bc0552d57e30cc9"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

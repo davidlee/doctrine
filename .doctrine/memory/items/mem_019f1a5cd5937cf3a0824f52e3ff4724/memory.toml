@@ -1,0 +1,43 @@
+memory_uid = "mem_019f1a5cd5937cf3a0824f52e3ff4724"
+memory_key = "mem.fact.claude.pretooluse-hook-fail-open"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "PreToolUse hooks fail OPEN — only exit 2 blocks"
+summary = "A PreToolUse hook that errors with any non-2 exit (incl. missing-binary 127) is non-blocking — the tool call PROCEEDS unconfined."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = ["plugins/doctrine/hooks/**", "src/worktree/pretooluse.rs", "src/boot.rs"]
+commands = []
+tags = ["claude-hooks", "pretooluse", "confinement", "fail-closed"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c04d5d70b334b3f1608a94019e35d9f5c079cd3d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "60a5b21c905f02cb678db1c12786c1123270814ceb53b6ae5ec7fec44013a865"
+base_commit = "8513f7526e9be14a629863251bc0552d57e30cc9"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

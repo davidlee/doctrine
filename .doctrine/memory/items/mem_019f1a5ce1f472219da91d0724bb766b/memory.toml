@@ -1,0 +1,43 @@
+memory_uid = "mem_019f1a5ce1f472219da91d0724bb766b"
+memory_key = "mem.fact.claude.worktree-remove-auto-teardown"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "WorktreeRemove auto-destroys a subagent worktree on finish"
+summary = "When an isolation:worktree subagent finishes, Claude auto-`git worktree remove`s it; the hook has NO decision control. Capture any diff before teardown."
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = ["src/worktree/**", ".claude/skills/dispatch-agent/**", "src/dispatch.rs"]
+commands = []
+tags = ["claude-hooks", "worktree", "dispatch", "claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c04d5d70b334b3f1608a94019e35d9f5c079cd3d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "656c6acfa8a75a4a053714f8c83059c19638ce8dd189c3a29ada30a18e39c504"
+base_commit = "8513f7526e9be14a629863251bc0552d57e30cc9"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

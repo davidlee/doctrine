@@ -2,8 +2,8 @@ schema = "doctrine.backlog"
 version = 1
 
 id = 220
-slug = "memory-find-listing-spine"
-title = "memory find: adopt shared listing spine (--columns, header, colours, pagination)"
+slug = "rename-find-to-search-and-listing-spine"
+title = "Rename memory find → search + adopt shared listing spine"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
@@ -20,3 +20,10 @@ tags = ["area:cli", "area:memory", "area:ux"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[value]
+value = 2.5
+
+[estimate]
+lower = 0.5
+upper = 1.5
