@@ -28,7 +28,10 @@ use crate::requirement::{CoverageStatus, ReqStatus};
 /// **agent** (`VA`), or by **human** (`VH`). Membership is validated at the coverage
 /// layer (see [`mode_is_valid`]), not by the key's type — `mode` stays a `String`
 /// so the `rec` ledger keeps round-tripping arbitrary mode tokens verbatim.
-const MODES: &[&str] = &["VT", "VA", "VH"];
+const MODE_VT: &str = "VT";
+const MODE_VA: &str = "VA";
+const MODE_VH: &str = "VH";
+const MODES: &[&str] = &[MODE_VT, MODE_VA, MODE_VH];
 
 /// The stable 4-tuple identity/citation key of a coverage entry (design §5.3 F3):
 /// `(slice, requirement, contributing_change, mode)`. Owned here (coverage is the
@@ -207,11 +210,47 @@ impl Composite {
             .any(|(e, s)| e.status == CoverageStatus::Verified && *s == IsStale::Fresh)
     }
 
-    /// Some cell contradicts (`Failed`) or is `Blocked` — an observed problem.
-    pub(crate) fn any_failed_or_blocked(&self) -> bool {
+    /// Some cell ran and contradicted (`Failed`) — the un-acceptable drift source
+    /// (SL-179 D1): a check that executed and disagreed. Outranks `Blocked`.
+    pub(crate) fn any_failed(&self) -> bool {
         self.cells
             .iter()
-            .any(|(e, _)| matches!(e.status, CoverageStatus::Failed | CoverageStatus::Blocked))
+            .any(|(e, _)| e.status == CoverageStatus::Failed)
+    }
+
+    /// Some cell is `Blocked` — evidence unobtainable (the check could not run).
+    /// The acceptable-but-strict drift source (SL-179 D3).
+    pub(crate) fn any_blocked(&self) -> bool {
+        self.cells
+            .iter()
+            .any(|(e, _)| e.status == CoverageStatus::Blocked)
+    }
+
+    /// Some cell contradicts (`Failed`) or is `Blocked` — an observed problem. The
+    /// coarse health summary (the view's `Contradicted` column); the closure gate
+    /// reads the sharper [`any_failed`](Self::any_failed) /
+    /// [`any_blocked`](Self::any_blocked) split instead.
+    pub(crate) fn any_failed_or_blocked(&self) -> bool {
+        self.any_failed() || self.any_blocked()
+    }
+
+    /// Some cell is `Verified`, [`IsStale::Fresh`], AND cited by mode `VH` — live
+    /// confirming **human** evidence (SL-179 D3: the bar that lets an accept-REC
+    /// discharge a `Blocked` cell).
+    // Tested here in PHASE-02; the non-test consumer is the closure gate
+    // (`undischarged_drift`) landing in SL-179 PHASE-03 — dead in non-test builds
+    // until then.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "consumed by the closure gate (undischarged_drift) in SL-179 PHASE-03"
+        )
+    )]
+    pub(crate) fn has_fresh_vh(&self) -> bool {
+        self.cells.iter().any(|(e, s)| {
+            e.status == CoverageStatus::Verified && *s == IsStale::Fresh && e.key.mode == MODE_VH
+        })
     }
 
     /// Every cell is still forward-intent (`Planned`/`InProgress`) — nothing yet
@@ -244,8 +283,12 @@ pub(crate) enum Verdict {
 /// Why a [`Verdict::Divergent`] fired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DivergentReason {
-    /// Evidence actively contradicts (`Failed`/`Blocked` cell present).
-    ObservedContradiction,
+    /// A check ran and contradicted (`Failed` cell present) — the un-acceptable
+    /// drift source (SL-179 D1): no accept-REC discharges it; fix or withdraw.
+    ObservedFailure,
+    /// Evidence is unobtainable (`Blocked` cell, no live `Failed`) — acceptable
+    /// only via a recorded override citing fresh human (VH) evidence (SL-179 D3).
+    ObservedBlocked,
     /// Live confirming evidence exists while authored status still trails it
     /// (the accept case — authoring should catch up).
     EvidenceOutrunsAuthored,
@@ -271,7 +314,8 @@ impl DivergentReason {
     pub(crate) fn label(self) -> &'static str {
         match self {
             DivergentReason::EvidenceOutrunsAuthored => "evidence-outruns-authored",
-            DivergentReason::ObservedContradiction => "observed-contradiction",
+            DivergentReason::ObservedFailure => "observed-failure",
+            DivergentReason::ObservedBlocked => "observed-blocked",
         }
     }
 }
@@ -287,9 +331,13 @@ pub(crate) fn drift(authored: ReqStatus, composite: &Composite) -> Verdict {
     if matches!(authored, Retired | Superseded) {
         return Verdict::Coherent;
     }
-    // An observed contradiction outranks every in-force reading.
-    if composite.any_failed_or_blocked() {
-        return Verdict::Divergent(DivergentReason::ObservedContradiction);
+    // An observed contradiction outranks every in-force reading; a `Failed` cell (a
+    // check that ran and disagreed) outranks a `Blocked` one (SL-179 D1 precedence).
+    if composite.any_failed() {
+        return Verdict::Divergent(DivergentReason::ObservedFailure);
+    }
+    if composite.any_blocked() {
+        return Verdict::Divergent(DivergentReason::ObservedBlocked);
     }
     match authored {
         Pending | InProgress => {
@@ -564,6 +612,19 @@ mod tests {
         stale: IsStale,
     ) -> (CoverageEntry, IsStale) {
         (entry(key(slice, req, change, "VT"), status, None), stale)
+    }
+
+    /// A synthetic cell with an explicit verification `mode` — for the `has_fresh_vh`
+    /// predicate, which keys on mode (`VH` vs `VT`/`VA`).
+    fn cell_mode(
+        slice: &str,
+        req: &str,
+        change: &str,
+        mode: &str,
+        status: CoverageStatus,
+        stale: IsStale,
+    ) -> (CoverageEntry, IsStale) {
+        (entry(key(slice, req, change, mode), status, None), stale)
     }
 
     // --- VT-1: render → parse round-trip preserves every field ---------------
@@ -858,13 +919,14 @@ git_anchor = "anchor-abc123"
 
     #[test]
     fn verdict_matrix_matches_the_decision_tree() {
-        use DivergentReason::{EvidenceOutrunsAuthored, ObservedContradiction};
+        use DivergentReason::{EvidenceOutrunsAuthored, ObservedFailure};
         use ReqStatus::{Active, Deprecated, InProgress, Pending, Retired, Superseded};
         use Verdict::{Coherent, Divergent, Indeterminate};
 
         // Expected verdict per (authored, composite-state) — the §5.2 tree.
         // Order of states: empty, fresh-verified, stale-verified,
-        // failed-or-blocked, forward-only.
+        // failed-or-blocked (a `Failed` cell ⇒ ObservedFailure post-SL-179),
+        // forward-only.
         let expect: Vec<(ReqStatus, [Verdict; 5])> = vec![
             (
                 Pending,
@@ -872,7 +934,7 @@ git_anchor = "anchor-abc123"
                     Coherent,                           // empty
                     Divergent(EvidenceOutrunsAuthored), // fresh-verified
                     Indeterminate,                      // stale-verified
-                    Divergent(ObservedContradiction),   // failed-or-blocked
+                    Divergent(ObservedFailure),         // failed-or-blocked
                     Coherent,                           // forward-only
                 ],
             ),
@@ -882,18 +944,18 @@ git_anchor = "anchor-abc123"
                     Coherent,
                     Divergent(EvidenceOutrunsAuthored),
                     Indeterminate,
-                    Divergent(ObservedContradiction),
+                    Divergent(ObservedFailure),
                     Coherent,
                 ],
             ),
             (
                 Active,
                 [
-                    Indeterminate,                    // empty (in-force, bare)
-                    Coherent,                         // fresh-verified
-                    Indeterminate,                    // stale-verified
-                    Divergent(ObservedContradiction), // failed-or-blocked
-                    Indeterminate,                    // forward-only (only-stale/mix)
+                    Indeterminate,              // empty (in-force, bare)
+                    Coherent,                   // fresh-verified
+                    Indeterminate,              // stale-verified
+                    Divergent(ObservedFailure), // failed-or-blocked
+                    Indeterminate,              // forward-only (only-stale/mix)
                 ],
             ),
             (
@@ -902,7 +964,7 @@ git_anchor = "anchor-abc123"
                     Indeterminate,
                     Coherent,
                     Indeterminate,
-                    Divergent(ObservedContradiction),
+                    Divergent(ObservedFailure),
                     Indeterminate,
                 ],
             ),
@@ -976,6 +1038,129 @@ git_anchor = "anchor-abc123"
         assert!(
             !stale_verified.any_fresh_verified(),
             "stale Verified is not fresh-verified"
+        );
+    }
+
+    // --- VT-1 (SL-179 PHASE-02): the Failed/Blocked split + has_fresh_vh -------
+
+    #[test]
+    fn any_failed_and_any_blocked_read_distinct_statuses() {
+        let failed = composite(&[cell(
+            "SL-042",
+            "REQ-111",
+            "SL-042",
+            CoverageStatus::Failed,
+            IsStale::Fresh,
+        )]);
+        assert!(failed.any_failed(), "a Failed cell reads any_failed");
+        assert!(!failed.any_blocked(), "a Failed cell is not blocked");
+        assert!(failed.any_failed_or_blocked(), "OR still true");
+
+        let blocked = composite(&[cell(
+            "SL-042",
+            "REQ-111",
+            "SL-042",
+            CoverageStatus::Blocked,
+            IsStale::Fresh,
+        )]);
+        assert!(blocked.any_blocked(), "a Blocked cell reads any_blocked");
+        assert!(!blocked.any_failed(), "a Blocked cell is not failed");
+        assert!(blocked.any_failed_or_blocked(), "OR still true");
+    }
+
+    #[test]
+    fn drift_failed_outranks_blocked() {
+        // A composite carrying BOTH a Failed and a Blocked cell ⇒ ObservedFailure
+        // (Failed outranks Blocked, SL-179 D1 precedence).
+        let both = composite(&[
+            cell(
+                "SL-042",
+                "REQ-111",
+                "SL-042",
+                CoverageStatus::Failed,
+                IsStale::Fresh,
+            ),
+            cell(
+                "SL-043",
+                "REQ-111",
+                "SL-043",
+                CoverageStatus::Blocked,
+                IsStale::Fresh,
+            ),
+        ]);
+        assert_eq!(
+            drift(ReqStatus::Active, &both),
+            Verdict::Divergent(DivergentReason::ObservedFailure),
+            "Failed outranks Blocked"
+        );
+
+        // Blocked-only ⇒ ObservedBlocked.
+        let blocked_only = composite(&[cell(
+            "SL-042",
+            "REQ-111",
+            "SL-042",
+            CoverageStatus::Blocked,
+            IsStale::Fresh,
+        )]);
+        assert_eq!(
+            drift(ReqStatus::Active, &blocked_only),
+            Verdict::Divergent(DivergentReason::ObservedBlocked),
+            "Blocked-only ⇒ ObservedBlocked"
+        );
+    }
+
+    #[test]
+    fn has_fresh_vh_keys_on_mode_status_and_freshness() {
+        // A fresh Verified cell cited by VH ⇒ true.
+        let vh = composite(&[cell_mode(
+            "SL-042",
+            "REQ-111",
+            "SL-042",
+            "VH",
+            CoverageStatus::Verified,
+            IsStale::Fresh,
+        )]);
+        assert!(vh.has_fresh_vh(), "fresh Verified VH ⇒ has_fresh_vh");
+
+        // Same cell cited by VT or VA ⇒ false (not a human attestation).
+        for mode in ["VT", "VA"] {
+            let non_vh = composite(&[cell_mode(
+                "SL-042",
+                "REQ-111",
+                "SL-042",
+                mode,
+                CoverageStatus::Verified,
+                IsStale::Fresh,
+            )]);
+            assert!(
+                !non_vh.has_fresh_vh(),
+                "{mode} Verified is not a human (VH) attestation"
+            );
+        }
+
+        // A STALE VH Verified cell ⇒ false (not live).
+        let stale_vh = composite(&[cell_mode(
+            "SL-042",
+            "REQ-111",
+            "SL-042",
+            "VH",
+            CoverageStatus::Verified,
+            IsStale::Stale,
+        )]);
+        assert!(!stale_vh.has_fresh_vh(), "stale VH is not live");
+
+        // A fresh VH cell that is NOT Verified (e.g. Failed) ⇒ false.
+        let vh_failed = composite(&[cell_mode(
+            "SL-042",
+            "REQ-111",
+            "SL-042",
+            "VH",
+            CoverageStatus::Failed,
+            IsStale::Fresh,
+        )]);
+        assert!(
+            !vh_failed.has_fresh_vh(),
+            "a non-Verified VH cell is not confirming"
         );
     }
 

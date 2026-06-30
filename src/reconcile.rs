@@ -105,8 +105,11 @@ fn build_prompt(verdict: Verdict) -> String {
 /// The human-readable cause of a [`Verdict::Divergent`].
 fn divergent_label(reason: coverage::DivergentReason) -> &'static str {
     match reason {
-        coverage::DivergentReason::ObservedContradiction => {
-            "observed evidence contradicts the authored status (failed/blocked cell)"
+        coverage::DivergentReason::ObservedFailure => {
+            "a check ran and contradicted the authored status (failed cell) — fix it or withdraw the requirement"
+        }
+        coverage::DivergentReason::ObservedBlocked => {
+            "evidence is unobtainable (blocked cell) — confirm with a human (VH) Verified attestation or withdraw the requirement"
         }
         coverage::DivergentReason::EvidenceOutrunsAuthored => {
             "live confirming evidence exists while authored status trails it"
@@ -634,9 +637,31 @@ mod tests {
         let p = build_prompt(Verdict::Coherent);
         assert!(p.contains("coherent"));
         let d = build_prompt(Verdict::Divergent(
-            coverage::DivergentReason::ObservedContradiction,
+            coverage::DivergentReason::ObservedFailure,
         ));
         assert!(d.contains("divergent"));
+    }
+
+    /// VT-2 (SL-179 PHASE-02): the prompt register distinguishes the two
+    /// contradiction reasons — a `Failed` cell reads differently from a `Blocked`
+    /// one (the operator's remedy differs: fix-or-withdraw vs attest-or-withdraw).
+    #[test]
+    fn divergent_label_distinguishes_failure_from_blocked() {
+        let failure = build_prompt(Verdict::Divergent(
+            coverage::DivergentReason::ObservedFailure,
+        ));
+        let blocked = build_prompt(Verdict::Divergent(
+            coverage::DivergentReason::ObservedBlocked,
+        ));
+        assert_ne!(failure, blocked, "the two reasons must read distinctly");
+        assert!(
+            failure.contains("ran and contradicted"),
+            "failure prompt names the run-and-contradict cause: {failure}"
+        );
+        assert!(
+            blocked.contains("unobtainable") && blocked.contains("VH"),
+            "blocked prompt names unobtainable evidence + the VH attestation remedy: {blocked}"
+        );
     }
 
     // --- VT-5: NF-001 behavioural — verdict-independence (the key test) -------
