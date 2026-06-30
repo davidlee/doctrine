@@ -1,5 +1,13 @@
 # CHR-031: Claude plugin manifest versioning, parity, and spec compliance
 
+**Closed 2026-06-30 — wont-do.** Hooks are now installed as a skills-directory
+plugin (SL-152 / IMP-215) — no marketplace delegation, no `claude plugin install`
+needed. `marketplace.json` parity and the `just release` version sync for it are
+therefore moot. If `plugin.json` version tracking for the skills-directory copy is
+desired later, open a focused item.
+
+---
+
 The three doctrine Claude plugins (`doctrine`, `doctrine-memory`,
 `doctrine-partner`) have stale/pinned manifests and the marketplace entry is
 out of sync with them.
