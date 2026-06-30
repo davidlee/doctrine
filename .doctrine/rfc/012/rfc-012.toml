@@ -1,0 +1,44 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 12
+slug = "fanout-safety"
+title = "Parallel Fan-out Safety: Containment, Disjointness, and Shared Responsibility"
+status = "open"
+created = "2026-06-30"
+updated = "2026-06-30"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "SL-182"
+
+[[relation]]
+label = "related"
+target = "RSK-014"
+
+[[relation]]
+label = "related"
+target = "IMP-045"
+
+[[relation]]
+label = "related"
+target = "ADR-006"
+
+[[relation]]
+label = "related"
+target = "ADR-008"
+
+[[relation]]
+label = "related"
+target = "ADR-011"
+
+[[relation]]
+label = "related"
+target = "ADR-012"
+
