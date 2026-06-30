@@ -6,14 +6,42 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ---
 
-## ▶ STATE (2026-07-01) — design integrated, AWAITING `/inquisition` (codex)
+## ▶ STATE (2026-07-01) — INQUISITION COMPLETE (RV-200), design returns for reconcile
 
-Lifecycle: **design**. `design.md` written + internal adversarial pass integrated
-(§10). No code yet. **Next step: `/inquisition` on `design.md` with codex
-(GPT-5.5, default reviewer per CLAUDE.md).** Then integrate findings → `/plan`.
-All `.doctrine/` committed; tree clean (CLAUDE.md M = User's `docs/claude` note;
-the stray `mem.fact.dispatch.dispatch-branch-prefix-not-coord-unique` is SL-181's
-trap, not this slice).
+Lifecycle: **design**. `/inquisition` run against `design.md` (codex GPT-5.5 +
+inquisitor pass) → **RV-200: 10 findings, 3 BLOCKERS**. Design is NOT clean — it
+must be reconciled before `/plan`. The three blockers hold SL-182's close-gate
+(9 charges deliberately left answered-not-verified; F-9 acquitted/terminal).
+**Next step: reconcile design.md against RV-200** (two blockers carry remediation
+OPTIONS needing a User/`/design` steer), THEN `/plan`. Full verdict in
+`doctrine review show RV-200` → `## Synthesis`. Tree: as before (CLAUDE.md M;
+SL-181's stray mem trap not this slice).
+
+### RV-200 verdict (the heresy)
+
+- **F-1 (blocker)** per-worker custom policy is UNBUILDABLE through the single-slot
+  arming rendezvous (`arm-spawn` = one shared `base`; `dispatch-agent` allows N
+  parallel spawns/arming). Cut to strict default floor (rec) or serial-scope it.
+  → couples F-4 (D2 §7 + authored scope still say `agent_id` keying §5.3 repudiated).
+- **F-2 (blocker)** installer fails OPEN: bare-PATH plugin exec + only `exit 2`
+  blocks (hooks.md:629-643) ⇒ stale/missing binary runs UNCONFINED (RSK-014
+  reopened). §5.1/D1 (resolve_exec) contradicts §5.4 (bare PATH). Fail closed:
+  absolute resolved exec or a shim that `exit 2`s on not-found.
+- **F-3 (blocker)** funnel convergence rests on doc-DISFAVORED teardown:
+  `WorktreeRemove` auto-`git worktree remove`s the subagent worktree on finish,
+  NO decision control (hooks.md:2442/680/814) ⇒ uncommitted diff destroyed;
+  "identical on both arms" is FALSE (pi orchestrator owns lifecycle, claude harness
+  doesn't). Name a contingency: snapshot `git diff` in WorktreeRemove/SubagentStop
+  before removal (rec), or Path C/IDE-024, or defer ro-`.git`.
+- **majors** F-5 V-plugin fallback forbidden→make D-reg conditional, fallback
+  same-phase · F-6 Edit/Write wall matches UNDOCUMENTED `NotebookEdit`/`notebook_path`
+  (drop or pin schema first).
+- **minor/nit** F-7 `network=true` default vs §4 "strictest floor" wording · F-8
+  policy file's false "ancestor" rationale (ro-ness is `--ro-bind / /`) · F-10 §10
+  understates doc coverage (agent_id hooks.md:595, updatedInput :818 ARE doc'd).
+- **F-9 ACQUITTED** R7 orchestrator pass-through residual is defensible — agent_id
+  harness-stamped present-iff-subagent (probe), worker can't forge absence; OQ-5
+  deferral sound. Soft-target-4 answered: accepted, not must-land.
 
 ## HANDOVER — for the inquisition agent
 
@@ -94,3 +122,26 @@ clone alternative is **IDE-024**; selector-sourced write-allowlist is **IDE-025*
 - **Touch-set (design-target selectors):** `src/worktree/{jail,pretooluse,mod,
   shared,create}.rs`, `src/dispatch.rs`, `.claude/skills/dispatch-agent/SKILL.md`,
   `plugins/doctrine/hooks/hooks.json`.
+
+### Durable harness gotchas confirmed by RV-200 (→ `/record-memory` candidates)
+
+Verified against `docs/claude` (authoritative cache), high confidence:
+
+- **PreToolUse hooks fail OPEN.** Only `exit 2` blocks a tool call; ANY other
+  non-zero exit (incl. command-not-found 127 from a missing/stale binary) is a
+  NON-blocking error and the tool PROCEEDS (`docs/claude/hooks.md:629-643` + the
+  Warning). A hook meant to enforce confinement MUST resolve to a guaranteed-present
+  absolute binary or use a shim that `exit 2`s on exec failure — bare-PATH exec is
+  not fail-closed. (Exception: `WorktreeCreate`, where any non-zero aborts.)
+- **`WorktreeRemove` auto-destroys an `isolation:worktree` subagent's tree on
+  finish.** Fires when the subagent completes; Claude runs `git worktree remove`
+  automatically; the hook has NO decision control and failures are debug-log-only
+  (`hooks.md:2442`, `:680`, `:814`). Uncommitted worktree changes are LOST unless
+  snapshotted before removal. Consequence: a harness-owned worktree (claude Agent
+  arm) is NOT lifecycle-equivalent to an orchestrator-owned worktree (pi/subprocess
+  arm) — any "import the worker's diff" cadence must capture before teardown.
+- **Single-slot arming rendezvous can't key per-worker state.** `dispatch arm-spawn`
+  writes ONE shared `base` file per arming dir; `dispatch-agent` issues N parallel
+  spawns off one arming (all read the same B). The harness-assigned worktree `name`
+  exists only at create-fork, not pre-spawn — so any per-worker pre-declared state
+  through the arming dir is batch-shared, not per-worker. (Dispatch design fact.)

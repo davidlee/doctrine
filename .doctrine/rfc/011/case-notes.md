@@ -646,3 +646,12 @@ generalised: the hook *script body* is re-read each call, so a guarded branch
 restart — saved a full re-onboard/context-rebuild cycle (the boot snapshot alone
 is ~thousands of tokens). General lesson: distinguish "registration snapshotted"
 from "logic re-read per call" before paying for a restart.
+
+[inquisition; SL-182/RV-200]
+Adjudicating F-2 cost a docs/claude round-trip because the design carried an
+internal contradiction over its single most load-bearing wire: §5.1/D1 list
+`resolve_exec` as a pretooluse responsibility while §5.4 (D-reg) registers a bare
+PATH exec with "no resolve_exec". Neither is wrong in isolation; the cohesion gap
+(two sections, two exec stories) forced an external doc check to decide which is
+canon — token cost that a single-sourced exec-resolution clause in the design
+would have avoided. Cohesion defect in the artifact, not the inquisition tooling.
