@@ -14,6 +14,12 @@ worktree, `--ro-bind / /` everything else. Flags mirror
   parse the command to inject flags (parsing reintroduces shell-undecidability).
 - **Fail closed:** unresolved worktree / missing bwrap / parse error → `deny`.
 - Working wrapper: `probe-h1/pretooluse-wrap.sh`.
+- **bwrap is NECESSARY, proven by control (2026-07-01):** disabling the wrapper
+  let a worktree subagent's Bash write EVERYWHERE un-jailed (repo-root, shared
+  `.git`, `/tmp`, `$HOME`, host mount-ns); re-arming flipped the same vectors to
+  `Read-only file system`. Native imposes **zero** Bash containment — asymmetric
+  with Edit/Write (below). No hidden native Bash guard exists to lean on; the
+  wrapper is the sole cause of Bash confinement, not a preemptor of a native one.
 
 ## Binding facts (PreToolUse stdin) — how to tell who's calling
 - `agent_id` present **iff** the call is from a subagent; absent for the
