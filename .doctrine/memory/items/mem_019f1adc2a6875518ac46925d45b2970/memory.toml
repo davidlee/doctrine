@@ -1,0 +1,50 @@
+memory_uid = "mem_019f1adc2a6875518ac46925d45b2970"
+memory_key = "mem.pattern.dispatch.seatbelt-insitu-subagent-nesting"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Seatbelt write-floor confines a real isolation:worktree subagent in-situ (RSK-014 H2 pass 2)"
+summary = "macOS Seatbelt write-floor composes inside a real worktree subagent; updatedInput honoured; derive worktree from cwd via git; measure under bypassPermissions"
+created = "2026-06-30"
+updated = "2026-06-30"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine"]
+tags = ["seatbelt", "macos", "confinement", "dispatch", "rsk-014"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9bad286835472f26dafa263c0d64cc170caf624f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c318cb1fb14839a7e524f88dd95030315ab166aadf88b105174b9955ebc7fad4"
+base_commit = "21a48ee0f6bdef97b471e4eb15e1bbd1272a886b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "probe"
+ref = "RSK-014-H2-pass2"
+
+[[source]]
+kind = "slice"
+ref = "SL-183"
+

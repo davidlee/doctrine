@@ -121,27 +121,46 @@ Pinned empirically (RSK-014 H2 pass 1, orchestrator context):
   sufficient: absolute, `../`, symlink-deref, **hardlink** (`ln` to outside target
   denied — Seatbelt resolves the link target), `/tmp` alias, shared-`.git`, `$HOME`
   — all denied. No extra canonicalization needed.
-- **ASSUMPTION (M1-sub) — UNPROVEN.** Composition was proven from the
-  *orchestrator* Seatbelt context only. Nesting inside a *real* `isolation:worktree`
-  subagent (where Claude's own native Seatbelt is active) is **pass-2 outstanding**
-  and gates lock. Abort/degrade contract: nesting-refused ⇒ `deny worktree-subagent
-  Bash`, never unwrapped.
-- **EDGE — `updatedInput` on macOS (H1b analog).** Whether the live harness honours
-  the rewritten command on macOS is pass-2 (in-situ) — proven on Linux only.
+- **INV (M1-sub) — PROVEN (pass 2, 2026-07-01).** The floor composes inside a real
+  `isolation:worktree` subagent where Claude's own native Seatbelt is active. Under
+  the clean **yolo (bypassPermissions)** leg: every external vector denied by the
+  nested floor, all canaries intact; floor-bypassed control (same mode) ⇒ all four
+  canaries breached. Sole difference = the floor ⇒ Seatbelt is the cause. Degrade
+  contract NOT triggered. Evidence: `probe-h2-seatbelt/results.md` (Pass 2). The
+  abort/degrade contract (nesting-refused ⇒ `deny worktree-subagent Bash`, never
+  unwrapped) remains the standing failure posture, now un-exercised.
+- **INV — `updatedInput` honoured on macOS (H1b analog) — PROVEN (pass 2).** All
+  15 armed-yolo subagent Bash calls logged `WRAP`; the harness ran the rewritten
+  `sandbox-exec` command, the original never ran. Previously proven on Linux only.
+- **INV (F-G) — derive the worktree from PreToolUse `cwd` via git, NOT a path
+  template.** macOS Agent-tool worktrees land at `<repo>/.claude/worktrees/agent-<id>`
+  (≠ Linux `.worktrees/`, ≠ the `/private/tmp` location pass-1 assumed). The git
+  relationship (toplevel ≠ main checkout, realpath'd) is the invariant; the path is
+  harness-version surface. The `Jailer` MUST bind via git, load-bearing for the
+  cross-arm seam.
+- **ASSUMPTION (M1-sub permission-mode) — RESOLVED (F-F).** In the *subagent*
+  context the permission gate is NOT transparent to writes (unlike pass-1
+  orchestrator F-C): under `auto`, gate/operator-popup denials mask most vectors
+  before Seatbelt. In-situ containment claims MUST be measured under
+  `bypassPermissions` — which the verdict does.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-mac1 — nesting vs harness Seatbelt (THE GATE).** Orchestrator-context ✓;
-  subagent-context (M1-sub) pass-2 outstanding.
+- **OQ-mac1 — nesting vs harness Seatbelt (THE GATE). CLOSED (pass 2, 2026-07-01):
+  SUPPORTED.** Subagent-context M1-sub proven under bypassPermissions; nesting
+  composes, `updatedInput` honoured. See §5.5 INV(M1-sub) + `results.md` Pass 2.
 - **OQ-mac2 — launchd IPC residual.** MEASURED LOWER than the brief feared:
   `launchctl submit` is **denied by Seatbelt default** (rc=1, no launchd job;
   control proves it works rc=0 unsandboxed); `at` denied too. Record as
   *measured-low residual* (OS-version variance unmeasured), owned by the
   IPC/egress wall (non-goal), not *open*.
-- **OQ-mac3 — SL-182 seam ordering.** SL-182 is designed-but-unbuilt. Does SL-183's
-  design *specify* the `Jailer` fork-point contract SL-182 must expose (so macOS
-  slots in), or design against SL-182 as-is and absorb a later refactor? **NOT yet
-  decided with the user.**
+- **OQ-mac3 — SL-182 seam ordering. RESOLVED (with user, 2026-07-01): design
+  against SL-182's seam AS-IS.** SL-182 already upstreamed the cross-arm `Jailer`
+  seam + capability-as-data `select_jailer` fork point (commits `6f97b50e`,
+  `a7707b48`). SL-183 slots the Seatbelt argv/profile builder into that existing
+  seam; no SL-183-driven refactor of SL-182. (See §7 D-mac2.) Note F-G constrains
+  the seam: the `Jailer` derives the worktree from `cwd` via git, not a path
+  template.
 - **OQ-mac4 (F-E) — second temp surface** redirect-or-accept (see 5.5).
 
 ## 7. Decisions, Rationale & Alternatives
