@@ -120,3 +120,58 @@ only the authored prose and one selector need to catch up to the as-built.
   removing the alias symlink, not just a status change.
 - **F-4**: `rust-embed` + `debug-embed` embeds the corpus at compile time; adding a
   master needs `touch src/corpus.rs` for a local incremental build to see it.
+
+## Reconciliation Outcome
+
+All 6 findings terminal at reconcile (5 `verified`, 1 `tolerated`). No REV surface
+— every write is a per-slice direct edit. No new gaps discovered (audit↔reconcile
+seam intact); two corrections extended brief-adjacent for internal consistency
+(user-approved).
+
+### Direct edits applied
+- **design.md D3 (§7) + §5.4 step 3** (RV-196 F-1): retire mechanism rewritten from
+  the unimplementable `memory status superseded --by <master>` to the as-built
+  `git rm` items/ key-alias symlink + `memory status archived`. Why stated: a
+  shipped master under `memory/` can never be a supersession successor
+  (`superseded --by` resolves against `items/` only). §5.3 "removed" outcome
+  already correct — aligned.
+- **design.md §5.4 step 3** (RV-196 F-2): added that key→uid resolution via the
+  items/ alias symlink ignores memory status (`hidden` filters `find`, not
+  `show <key>`), so physical symlink removal is the operative re-point step.
+- **design.md §5.3 + §5.4** (RV-196 F-3): "single physical home memory/mem_019f075f…"
+  and "Uid reuse … no supersede chain" corrected to the fresh uid
+  `mem_019f176f71537d12b1b09826a003a602`; uid-reuse claim dropped (consistent with
+  revised D3).
+- **design.md §10 F2** (RV-196 F-4): inverted embed-timing note corrected —
+  `debug-embed` embeds the corpus at COMPILE time; a new `memory/<uid>/` enters the
+  embed only on `src/corpus.rs` recompile (local incremental needs
+  `touch src/corpus.rs`).
+- **design.md §2 + §5.2 Fix 2, plan.toml PHASE-03 EX-1, slice-178.toml `[[selector]]`**
+  (RV-196 F-5): `.agents/skills/close/SKILL.md` → `plugins/doctrine/skills/close/SKILL.md`
+  (authored source; `.agents/` is the gitignored install copy). Selector fix also
+  repairs the broken `review prime` on RV-196.
+- **slice-178.toml `[[selector]]`** (RV-196 F-6, optional — user-approved): added
+  `src/corpus.rs` design-target selector (genuine VT embed seam, §9).
+
+### Brief-adjacent corrections (same defect class, user-approved for consistency)
+- **design.md §9 VA-2** (extends F-3): master body path `memory/mem_019f075f…/memory.md`
+  → `memory/mem_019f176f…/memory.md`. Same uid-staleness as F-3; left stale it made
+  the design self-contradictory and VA-2 point at a non-existent path.
+- **plan.md §Phasing** (extends F-5): file-disjoint note `.agents/…` →
+  `plugins/doctrine/skills/close/SKILL.md`. Same path defect in authored plan prose.
+
+### REVs completed
+- None. No governance/spec (ADR/policy/standard/spec/REQ) surface touched.
+
+### Harvest (already durable — no new record needed)
+- F-2 platform fact → `mem_019f179725c17680ab977ab7650f1707` (key→uid resolution
+  ignores status). Exact match, pre-recorded.
+- F-4 build-timing gotcha → covered by `mem_019e9a21f97a7d228c78013b3e8323c0`
+  (RustEmbed re-embeds at compile time) + `mem_019e98a783ea7471ac4bfcefdc04ae5e`
+  (re-embed footgun). No duplicate authored.
+
+### Withdrawn / tolerated
+- RV-196 F-6: `tolerated` (rationale in finding disposition); the optional selector
+  add was nonetheless applied per user decision.
+
+Reconcile pass complete — handoff to /close.

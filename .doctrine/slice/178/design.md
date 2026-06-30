@@ -39,9 +39,9 @@ Three independently-shippable legibility fixes collapse that cost:
   → `mem_019e9a12…`). `memory sync` diffs the embed against the gitignored
   consumer cache `.doctrine/memory/shipped/`. `corpus.rs` `lint_master`/`is_inv`
   enforce the global-orientation INV signature + scope floor.
-- **Skill.** `.agents/skills/close/SKILL.md` is the authored source
-  (`.pi/`/`.claude/skills/close` symlink in; `.doctrine/skills/close` is the
-  gitignored install copy). It mentions drift once (`:123`) but carries no
+- **Skill.** `plugins/doctrine/skills/close/SKILL.md` is the authored source
+  (the `.agents/`/`.claude/skills/close` + `.doctrine/skills/close` copies are
+  gitignored install/derived artefacts). It mentions drift once but carries no
   discharge recipe.
 
 ## 3. Forces & Constraints
@@ -157,7 +157,7 @@ flags must satisfy — the verb does not invent scope.
 but it does **not** ship unchanged; it carries host-project state and must be
 scrubbed first (§5.4 *Body scrub*, R5/R6).
 
-**Fix 2 — skill subsection.** `.agents/skills/close/SKILL.md`, near `:123`: when
+**Fix 2 — skill subsection.** `plugins/doctrine/skills/close/SKILL.md`, near the existing drift mention: when
 the gate fires, the condensed a/b/c, the `rec new --move accept …` line, and a
 pointer `doctrine memory show mem.pattern.doctrine.close-drift-discharge-rec`. No
 worked example duplicated (it lives in the memory, single source).
@@ -170,8 +170,9 @@ worked example duplicated (it lives in the memory, single source).
 - The memory key is owned by one const in `slice.rs`; the skill and the master
   must spell the same key (verified by VT-2 + VA-1).
 - The promoted memory has a single physical home after Fix 3:
-  `memory/mem_019f075f…` (+ key symlink). The local
-  `.doctrine/memory/items/mem_019f075f…` is removed — no double-load.
+  `memory/mem_019f176f71537d12b1b09826a003a602/` (+ key symlink). The local
+  capture `.doctrine/memory/items/mem_019f075f…` is removed (its key-alias
+  symlink dropped) — no double-load.
 - The master *body* carries no live host-project reference after the §5.4 scrub;
   the sole retained concrete ids are the explicitly-framed worked example
   (POL-002 tolerance, RV-195 F-2).
@@ -185,8 +186,15 @@ Fix 3 mechanic (mint via verb + body-scrub + supersede, new uid — D3):
    signature; the verb may also write the key-alias symlink (verify, else add it,
    mirroring other masters);
 2. author the **scrubbed** recipe body (below) into the new master's `memory.md`;
-3. `doctrine memory status superseded --by <new-uid>` on the local item
-   `mem_019f075f…` (retire the capture; it is not shipped);
+3. retire the local capture `mem_019f075f…` — **not** via `memory status
+   superseded --by <new-uid>`: a shipped master under `memory/` can never be a
+   supersession successor (`superseded --by` resolves the successor against
+   `items/` only → "memory not found"). Instead `git rm` the items/ `mem.<key>`
+   alias symlink + `memory status archived` on the capture uid dir. The symlink
+   removal is the operative step: key→uid resolution via the items/ alias symlink
+   **ignores memory status** (`hidden` filters `find` only, not `show <key>`), so
+   archiving alone leaves `<key>` resolving to the capture — only physically
+   dropping the symlink re-points `<key>` to the master;
 4. re-point this slice's prose reference at the new uid (historical refs in
    SL-165/IMP-202/RFC-011 stay — they still resolve via `memory show`);
 5. `memory sync` (dev binary) regenerates `.doctrine/memory/shipped/`;
@@ -217,8 +225,9 @@ Framework-relative paths in the body (`.doctrine/slice/*/coverage.toml`,
 `.doctrine/rec/`, `src/slice.rs`) are **not** host-local state — every client
 carries them — and stay.
 
-Uid reuse keeps the prose references in SL-165 PIR, IMP-202, RFC-011, and this
-slice valid; no supersede chain.
+The fresh uid `mem_019f176f71537d12b1b09826a003a602` (minted by `record --global`,
+not reused) means slice-178's prose reference is re-pointed (step 4); the
+historical refs in SL-165 PIR, IMP-202, RFC-011 stay valid via `memory show`.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -255,22 +264,31 @@ slice valid; no supersede chain.
   round-trips, so it carries the condensed full 3-clause inline + pointer.
   Alternative: pure-pointer error (one extra lookup, rejected); skill-canonical
   (inverts ADR-005, rejected).
-- **D3 — author the master via `memory record --global`, new uid, supersede the
-  local item.** (Revised after RV-195 F-5; supersedes the earlier "re-home +
-  re-class, uid reused" decision.) `doctrine memory record --global` is the
-  *sanctioned* master-authoring verb — it suppresses the git born-frame
-  (`repo=""`, `anchor_kind=none`) and writes into the repo-root `memory/` tree,
-  guaranteeing the ADR-002 INV signature for free (documented in
+- **D3 — author the master via `memory record --global`, new uid, retire the
+  local capture by dropping its key-alias symlink + archiving.** (Revised after
+  RV-195 F-5; supersedes the earlier "re-home + re-class, uid reused" decision.
+  Retire mechanism corrected after RV-196 F-1/F-2 — `superseded --by` is
+  unimplementable here.) `doctrine memory record --global` is the *sanctioned*
+  master-authoring verb — it suppresses the git born-frame (`repo=""`,
+  `anchor_kind=none`) and writes into the repo-root `memory/` tree, guaranteeing
+  the ADR-002 INV signature for free (documented in
   `mem.system.memory.global-master-authoring`). Hand-rewriting the TOML signature
   was a parallel implementation of this path on a false "no promote verb"
-  premise. The verb mints a **new uid**; the captured local item is a genuinely
-  different entity (a repo-local capture, not a platform master), so it is
-  **superseded** (`memory status superseded --by <new>`), not re-homed. The key
-  `mem.pattern.doctrine.close-drift-discharge-rec` is stable across the uid change,
-  so the Fix 1 const (which references the *key*, not the uid) is unaffected.
-  Cost: the 4 prose refs to `mem_019f075f` (SL-165 PIR, IMP-202, RFC-011, this
-  slice) point at a superseded local memory; re-point slice-178 at the new uid,
-  the rest are historical and still resolve via `memory show`.
+  premise. The verb mints a **new uid** (`mem_019f176f71537d12b1b09826a003a602`);
+  the captured local item is a genuinely different entity (a repo-local capture,
+  not a platform master), so it is **retired**, not re-homed. `memory status
+  superseded --by <master>` cannot express this — `superseded --by` resolves the
+  successor against `items/` only, and a shipped master lives under `memory/`,
+  never `items/`, so it can never be named as a supersession successor ("memory
+  not found"). The as-built retire (PHASE-01, user-approved /consult): `git rm`
+  the items/ `mem.<key>` alias symlink + `memory status archived` on the capture
+  uid dir (key→uid resolution ignores memory status, so the physical symlink drop
+  is what re-points `<key>` to the master — see §5.4). The key
+  `mem.pattern.doctrine.close-drift-discharge-rec` is stable across the uid
+  change, so the Fix 1 const (which references the *key*, not the uid) is
+  unaffected. Cost: the 4 prose refs to `mem_019f075f` (SL-165 PIR, IMP-202,
+  RFC-011, this slice) point at the retired local capture; re-point slice-178 at
+  the new uid, the rest are historical and still resolve via `memory show`.
 
 Relation: SL-178 `related` IMP-216 — Fix 3 is the concrete first instance of
 IMP-216's broad migration of ~46 project-local operational memories to shipped
@@ -303,7 +321,7 @@ reference knowledge.
 | VT-1 | test | `slice status <id> done` on a drifted slice errors naming each undischarged REQ with its authored status, the 3-clause, and the memory-key pointer (extends `vt1`/`vt2_*`). **Assert on substrings** (each req id, `authored:`, the status token, `accept`, the key const) — never the exact multi-line copy (RV-195 F-4) |
 | VT-2 | test | shipped master `mem.pattern.doctrine.close-drift-discharge-rec` exists and is discoverable via `memory find` after `memory sync` (requires INV + scope-floor pass) |
 | VA-1 | agent | `/close` skill carries the drift-discharge subsection pointing at the memory |
-| VA-2 | agent | no shipped artefact references host-project-local state (POL-002): grep error literals (`src/`), the shipped skill, AND the promoted master **body** (`memory/mem_019f075f…/memory.md`) for local memory uids / `ISS-`/`SL-`/`REC-`/`REQ-` refs — expect none save the explicitly-framed worked example (RV-195 F-1/F-2) |
+| VA-2 | agent | no shipped artefact references host-project-local state (POL-002): grep error literals (`src/`), the shipped skill, AND the promoted master **body** (`memory/mem_019f176f…/memory.md`) for local memory uids / `ISS-`/`SL-`/`REC-`/`REQ-` refs — expect none save the explicitly-framed worked example (RV-195 F-1/F-2) |
 
 Behaviour-preservation anchor: gate refuse/pass behaviour unchanged.
 
@@ -325,11 +343,14 @@ Internal adversarial pass (author):
 
 - **F1 (fixed) — release ordering.** P1's binary error names the shipped key;
   honest only once P2 ships. Phasing tightened to P2 → {P1, P3} (§9); R5 added.
-- **F2 (no change) — embed visibility.** `rust-embed` carries `debug-embed`, so
-  debug/test builds read `memory/` from disk at runtime — VT-2 is feasible and a
-  hand-added master is live via `./target/debug/doctrine`. The release PATH
-  binary (`~/.cargo/bin/doctrine`) only sees a new master after reinstall; use
-  the debug binary during P2.
+- **F2 (corrected, RV-196 F-4) — embed visibility.** `rust-embed` with
+  `debug-embed` (`Cargo.toml`) embeds the corpus at **compile time**, not
+  runtime-from-disk. A newly-added `memory/<uid>/` enters the embed only when
+  `src/corpus.rs` (the file bearing `#[derive(RustEmbed)]`) recompiles —
+  clean/CI builds are always fresh, but a local incremental build after authoring
+  a master needs `touch src/corpus.rs` before VT-2 goes green (observed PHASE-01
+  T3). The release PATH binary (`~/.cargo/bin/doctrine`) only sees a new master
+  after reinstall; use the debug binary during P2.
 - **F3 (test guard) — VT-1 brittleness.** Assert on substrings (each req id,
   `authored:`, the status token, `accept`, the memory key), not the exact
   multi-line copy, so the case survives copy edits.

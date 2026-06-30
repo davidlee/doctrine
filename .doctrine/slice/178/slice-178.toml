@@ -15,11 +15,15 @@ selector = "src/slice.rs"
 intent = "design-target"
 
 [[selector]]
-selector = ".agents/skills/close/SKILL.md"
+selector = "plugins/doctrine/skills/close/SKILL.md"
 intent = "design-target"
 
 [[selector]]
 selector = "memory/mem.pattern.doctrine.close-drift-discharge-rec"
+intent = "design-target"
+
+[[selector]]
+selector = "src/corpus.rs"
 intent = "design-target"
 
 [[relation]]

@@ -86,7 +86,7 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 landed — the master ships the key the skill pointer names (R5/POL-002)." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = ".agents/skills/close/SKILL.md (authored source) carries a drift-discharge subsection near the existing drift mention: condensed a/b/c, the rec-new accept line, and the `memory show <key>` pointer." },
+  { id = "EX-1", text = "plugins/doctrine/skills/close/SKILL.md (authored source; .agents/ is the gitignored install copy) carries a drift-discharge subsection near the existing drift mention: condensed a/b/c, the rec-new accept line, and the `memory show <key>` pointer." },
   { id = "EX-2", text = "No worked example duplicated into the skill (single source = master)." },
 ]
 verification = [

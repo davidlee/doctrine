@@ -56,7 +56,7 @@ the `rec new` line, and the key pointer. The worked example is never duplicated 
 it has one home (the master). Smallest of the three; gates only on PHASE-01.
 
 PHASE-02 and PHASE-03 are file-disjoint (`src/slice.rs` vs
-`.agents/skills/close/SKILL.md`) and both depend only on PHASE-01, so they may run
+`plugins/doctrine/skills/close/SKILL.md`) and both depend only on PHASE-01, so they may run
 in parallel once the master ships.
 
 ## Notes
