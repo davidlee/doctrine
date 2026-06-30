@@ -26,7 +26,7 @@ tree = "bd91a4ecc25d4c96492b618c13f207f6142f930f"
 ref_name = "refs/heads/edge"
 checkout_state_id = "07d50ad2be44c7d9a6d21b3ff413ba9835717e6d6a4d9b9183a2a616b8582a60"
 base_commit = "14b74c0bc9090f14063c5bba18633f76fe7b9399"
-verified_sha = "c7ed483933e2e1e54ae54e07d582d1378da76578"
+verified_sha = "8542ae904731233ccc7e09949ae994f4496b8792"
 normalizer = "forget.checkout.v1"
 
 [review]
