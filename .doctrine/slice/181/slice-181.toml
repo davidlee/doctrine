@@ -24,11 +24,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/guard.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/subagent.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/shared.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
@@ -46,6 +58,10 @@ target = "IMP-065"
 [[relation]]
 label = "related"
 target = "RSK-014"
+
+[[relation]]
+label = "related"
+target = "CHR-032"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

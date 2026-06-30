@@ -69,38 +69,45 @@ honest worker is the common case.
   reverted-G2 hazard (SL-056 PHASE-05, owner-locked VH).
 - Not a dispatch **topology** change (ADR-012, shipped).
 
-## Affected Surface (coarse — `/design` refines)
+## Affected Surface (locked — see `design.md` §6)
 
-- `src/commands/guard.rs` — `worker_guard` / `write_class`: the Orchestrator-class
-  refusal gains the not-the-coord-tree check.
-- `src/worktree/coordinate.rs` — `run_coordinate`: source of the registered-coord
-  identity the guard checks (and/or the stamp point, if a marker is chosen).
-- `src/worktree/marker.rs` — only if the mechanism needs a new predicate; minimise.
-- `src/dispatch.rs` — Orchestrator dispatch verbs (`sync`/`candidate`/`arm-spawn`)
-  share the guard.
-- **REV** against `ADR-012` (+ ADR-006 D2a/D2b notes) — governance deliverable.
+- `src/commands/guard.rs` — the Orchestrator-only branch-check clause in `worker_guard`.
+- `src/worktree/shared.rs` — new `is_coordination_worktree` predicate.
+- `src/git.rs` — promote `current_branch` here (DRY); `DISPATCH_BRANCH_PREFIX` const.
+- `src/dispatch.rs` — drop the private `current_branch`, call `git::current_branch`.
+- `src/worktree/mod.rs` — `pub(crate)` re-exports for `guard.rs`.
+- **REV** against `ADR-012` (+ ADR-006 D2a/D2b notes) — the primary governance deliverable.
+- **Not touched:** `marker.rs` / `subagent.rs` — the new-marker plan is dropped.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 (the one real design decision).** Mechanism for "is this the coordination
-  tree?": (a) derive from existing dispatch state / `dispatch/<slice>` branch
-  registration (preferred — no new artefact); (b) a new presence-only orchestrator
-  marker stamped at `coordinate` (rejected unless (a) proves unworkable — adds a
-  second forgeable file). Decide in design.
-- **OQ-2 (verify, researcher thread 1).** Is the `coordinate`-created coord tree the
-  **sole** legitimate caller of an Orchestrator verb from inside a *linked*
-  worktree? If yes, the guard is unconditional on the class; if any other legit
-  flow runs one from a linked tree, narrow it. (Determines correctness, not value.)
-- **OQ-3.** Does SL-064's OQ-D plan-gate (i) "trusted orchestrator path" restriction
-  exist in code? If so, this guard replaces/retires it; if not, this is the first
-  implementation of that obligation.
+**Resolved in `design.md` (mechanism locked):**
+- **OQ-1 → branch-pattern, not a marker** (design D1). Coord tree identified by
+  `HEAD` on `dispatch/<NNN>` (`is_coordination_worktree` in `worktree/shared.rs`);
+  no new marker file, no `Cause` variant, no stamp/teardown verb.
+- **OQ-2 → YES, unconditional gate** (design D2). Researcher verdict: the coord
+  tree is the *sole* legitimate linked-worktree Orchestrator caller; no legit flow
+  breaks.
+- **OQ-3 → trusted-path never shipped** (design §5). No positive trusted-orchestrator
+  gate exists in `src/`; this guard is the first delivery of OQ-D plan-gate (i),
+  framed as anti-accident.
+
+**Carried into execute / inquisition:**
+- **OQ-A (residual, test-pinned, harness-fragile).** The claude unstamped worker
+  must run on a non-`dispatch/N` branch (`worktree-agent-<id>`) during execution
+  for the guard to catch it (the `dispatch/N` association is collapse-time). Pinned
+  by the impersonation test; **the inquisition's primary target.** Residual → RSK-014.
+- **OQ-C (minor).** Detached-HEAD in the coord tree self-bricks Orchestrator verbs
+  (cure printed). Confirm no merge-conflict path leaves the coord HEAD detached.
+
+**Assumptions:**
 - **A1.** `needs: ISS-011` closed (SL-124/SL-125) — actionable.
 - **A2 (governance).** ADR-006 D2a/D2b owner-locked (VH). The REV is the sanctioned
-  amendment path; the guard's value-claim must match the REV's honest framing.
+  amendment path; the guard's value-claim matches the REV's honest framing.
 - **A3 (premise of the value).** Anti-accident guard is worth it because honest
-  failure (ISS-011 stamp drift) is real and the model is well-aligned against
-  malice. If ISS-011 stamp reliability post-SL-124/125 made unstamped workers rare,
-  the guard is near-pure DiD — still cheap, still honest, lower urgency.
+  failure (ISS-011 stamp drift) is still live post-SL-124/125 (`SubagentStart` is
+  un-failclosable), and Anthropic models are well-aligned against malice, so the
+  honest case dominates.
 
 ## Verification / Closure Intent
 
