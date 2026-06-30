@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 215
-slug = "fix-claude-plugin-install-instructions-in-post-install-printout-add-s-project-use-configtoml-repo"
-title = "Fix Claude plugin install instructions in post-install printout: add -s project, use config.toml repo, make executable"
-kind = "improvement"
+id = 31
+slug = "claude-plugin-manifest-versioning-parity-and-spec-compliance"
+title = "Claude plugin manifest versioning, parity, and spec compliance"
+kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-30"
 updated = "2026-06-30"
-tags = ["area:cli", "area:install"]
+tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -18,9 +18,5 @@ tags = ["area:cli", "area:install"]
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = [{ to = "IMP-213", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-215", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "related"
-target = "CHR-031"
