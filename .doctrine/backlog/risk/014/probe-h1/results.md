@@ -55,7 +55,7 @@ Bash-gated, so a broken Bash wrapper can always be disabled via Edit + restart
 root; deny (fail-closed) when worktree can't be resolved; pass through unjailed
 when `agent_id` absent (orchestrator/interactive).
 
-## VERDICT — H1 SUPPORTED (Bash wall); Edit/Write wall is ALREADY NATIVE
+## VERDICT — H1 SUPPORTED (Bash wall via our bwrap); Edit/Write wall = native(repo) + our pathcheck(rest)
 
 Harness claude-code 2.1.181. H1a ✓ H1b ✓ H1c ✓ H1d ✓ — every sub-claim held.
 - **H1b decisive proof:** wrapper.log shows all 12 subagent Bash calls `WRAP`'d,
