@@ -56,25 +56,47 @@ Recipe + evidence: `mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinem
    no hot-reload. The install path + restart ritual must be designed in (and the
    orchestrator escape hatch: Edit/Write are not Bash-gated, so a broken Bash
    wrapper can always be disabled and the session restarted).
+5. **Claude funnel convergence (consequence of confinement).** bwrap ro-`.git`
+   removes the claude worker's self-commit (its object store is the ro main
+   `.git`), breaking the claude `/dispatch` funnel's `B..S` single-commit
+   delta-check. Converge the claude import onto the pi arm's **working-tree-diff**
+   path — which the dispatch skill already *claims* is "identical on both arms"
+   but isn't yet. Touches `dispatch-agent` orchestration + the import/delta-check/
+   `verify-worker` seam. End-to-end claude dispatch with a jailed worker is a
+   verification target.
 
-## Open Questions (resolve in /design)
+## Design decisions (locked in /design)
 
-- **OQ-A (was OQ-2) — altitude.** Rust `doctrine` subcommand (e.g. `doctrine
-  worktree pretooluse`) vs installed bash scripts. The hook fires on **every**
-  tool call; per-call `bash + jq` spawn cost adds up. DRY pull: hooks already
-  shell `doctrine boot --emit` and `worktree create-fork`. Lean Rust subcommand;
-  measure startup cost both ways before locking.
-- **OQ-B (was OQ-4) — shared-`.git` posture.** The wrapper ro-binds **all** of
-  `.git` (battery vectors 5–7 confirmed refs/config/hooks denied). For a linked
-  worktree its git metadata lives under `<main>/.git/worktrees/<name>`, also ro →
-  the worker **cannot self-commit**, which is exactly the established funnel
-  (orchestrator imports the working-tree diff). **Question to resolve:** keep all
-  `.git` ro (strongest, simplest invariant — recommended default), or selectively
-  loosen (rw `.git/objects` + `.git/worktrees/<name>`, keep refs/packed-refs/
-  config/**hooks** ro) if worker self-commit is ever wanted. Recommendation:
-  don't loosen without a concrete driver. **Interacts with SL-181** — on the
-  bwrap arm the ro-`.git` wall makes SL-181's ref-corruption guard
+- **OQ-A — altitude: RUST SUBCOMMAND.** `doctrine worktree pretooluse`,
+  matcher-dispatched (Bash vs Edit|Write) off stdin `tool_name`. Rides the
+  existing `HookSpec` + `plan_hook` + `hooks.json` seam; reuses worktree
+  resolution + `resolve_exec`; single-sources the bwrap core flags with the pi
+  arm. Binary startup ≈ 2 ms (measured) → per-call cost negligible.
+- **Mechanism — per-worker policy file keyed by `agent_id`.**
+  `<main>/.doctrine/state/dispatch/jail/<agent_id>.toml`, runtime state, **outside
+  every worktree**, ro to the worker. Orchestrator (ADR-006 sole-writer) writes it
+  at spawn, *before* the worker runs. **Absence ⇒ strictest default jail** (never
+  deny; the floor is the tightest jail, so a missing/forged-absent policy can only
+  tighten). GC with worktree teardown; per-worker file ⇒ no parallel-write
+  contention.
+- **OQ-B — `.git` posture: HARD RO, not tunable.** Loosening `.git/objects` rw
+  would let the worker write arbitrary blobs into the shared store = defeating the
+  jail (case-notes SL-171). So `.git` stays ro; the policy schema's `extra_rw`
+  footgun-validation **rejects** any entry touching `.git`. The no-self-commit
+  consequence is the established funnel (objective 5). **Interacts with SL-181** —
+  on the bwrap arm the ro-`.git` wall makes SL-181's ref-corruption guard
   belt-and-suspenders; SL-181 stays sole protection on unconfined arms.
+- **Jail composition.** Shared bwrap **core-flag builder** single-sourced with
+  `scripts/pi-spawn-confined.sh` (`--ro-bind / / --dev /dev --proc /proc --tmpfs
+  /tmp --bind <wt> <wt> --chdir <wt> --die-with-parent`). Policy schema (minimal):
+  `extra_rw = [abs paths]` (footgun-validated: reject `/`, main-root ancestors,
+  `.git`), `network = true` default (`false` ⇒ `--unshare-net`). `/tmp` is a
+  private `--tmpfs` for Bash + denied for Edit/Write by **restrictive default**;
+  loosen a run via `extra_rw`. Footgun violations **deny** (fail-closed ethos).
+- **Path L chosen; Path C deferred → IDE-024.** This slice lands the proven
+  linked-worktree + ro-`.git` path. The standalone-clone alternative
+  (worker self-commits, orchestrator cherry-picks — for orchestrator time/token
+  efficiency) is deferred to IDE-024, to prioritise on observed cost.
 
 ## Non-Goals
 
@@ -102,6 +124,10 @@ claude-arm holes of RSK-014 / ADR-006 D2b on its arm.
 
 ## Follow-Ups
 
+- **IDE-024 — Path C** (standalone-clone confined worker; self-commit +
+  cherry-pick; orchestrator efficiency). Prioritise on observed cost.
+- **IDE-025 — selector-sourced write-allowlist jail mode** (anti-drift; confine
+  writes to the slice's design-target touch-set via the OQ-3 policy schema).
 - IMP-045 — macOS sandbox-exec backend for the same seam.
 - OQ-5 — orchestrator-jail (widest-jail pass-through).
 - OQ-6 — socket-reachable privileged-peer residual (per-project hygiene).

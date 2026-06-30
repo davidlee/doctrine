@@ -10,6 +10,22 @@ tags = []
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[selector]]
+selector = ".claude/skills/doctrine/hooks/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "scripts/pi-spawn-confined.sh"
+intent = "scope-relevant"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-008"
@@ -32,21 +48,13 @@ target = "IMP-045"
 label = "related"
 target = "SL-181"
 
-[[selector]]
-selector = ".claude/skills/doctrine/hooks/**"
-intent = "scope-relevant"
+[[relation]]
+label = "related"
+target = "IDE-024"
 
-[[selector]]
-selector = "src/commands/**"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/worktree/**"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "scripts/pi-spawn-confined.sh"
-intent = "scope-relevant"
+[[relation]]
+label = "related"
+target = "IDE-025"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
