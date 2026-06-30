@@ -1,0 +1,144 @@
+# Implementation plan for SL-179 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-179"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Governance — amend D8 via a REV"
+objective = """
+Author + approve + apply the Revision that narrows SPEC-002 D8 and REQ-113: a \
+`Failed` cell is not acceptable residual drift (fix or withdraw via a recorded \
+act); a `Blocked` cell is acceptable only with a fresh human (VH) Verified cell \
+cited by the accept-REC; withdrawing a req over a live contradiction is a recorded \
+revise/redesign REC, not a bare status flip; and the closure gate is the `done` \
+path (abandoned is a distinct giving-up terminal, not coverage-gated). Lands FIRST \
+— spec authorizes the code (canon: no code ahead of governance). Also seed \
+SL-179's own `[gate].extra_reqs` with the governed reqs so the dogfood (PHASE-03 \
+VA) is non-vacuous. (design §5, D3/D4, codex M6/M8)
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-179 design is locked (internal + codex passes integrated); SPEC-002 D8 + REQ-113 are the amendment targets." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A REV exists (`doctrine revision …`) targeting SPEC-002 D8 + REQ-113, amended to carry the four narrowings (Failed-un-acceptable, VH-Blocked bar, withdrawal-act rule, abandon-not-gated clarification); REV transitioned change → approve → apply." },
+  { id = "EX-2", text = "spec-002.md D8 prose and REQ-113 carry the amended clauses (read via `doctrine spec show` / `requirement show`)." },
+  { id = "EX-3", text = "SL-179 `slice-179.toml [gate].extra_reqs` includes the governed requirement(s) (REQ-113 + any companion minted by the REV), so SL-179's own close gate is answerable for them." },
+]
+verification = [
+  { id = "VA-1", expects = "Agent reads SPEC-002 D8 + REQ-113 post-apply: the four narrowings are present and internally consistent with the design's D3/D4; no residual 'all residual drift uniformly acceptable' wording remains." },
+  { id = "VH-1", expects = "Human approves the governance change (the REV is a spec amendment — human sign-off, ADR-013)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Verdict model — split the contradiction reason"
+objective = """
+Split `DivergentReason::ObservedContradiction` into `ObservedFailure` + \
+`ObservedBlocked`; give `drift` Failed-outranks-Blocked precedence; add Composite \
+predicates `any_failed()` / `any_blocked()` (keep `any_failed_or_blocked` as their \
+OR for the view summary) and a `has_fresh_vh()` predicate (fresh Verified cell with \
+mode == VH); update the labels and the `reconcile.rs divergent_label` register to \
+two arms; render the two reasons in `coverage_view.rs`. Behaviour-preserving except \
+the named split. (design §4.1–4.3, D1/D3)
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 applied — the REV governs the Failed/Blocked distinction the type now encodes." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`DivergentReason` has `ObservedFailure` + `ObservedBlocked`; `ObservedContradiction` is gone; every match site is total (no `_` swallow of the new variants)." },
+  { id = "EX-2", text = "`drift` returns `ObservedFailure` when `any_failed()`, else `ObservedBlocked` when `any_blocked()` (Failed outranks Blocked); withdrawn short-circuit and the lag/Indeterminate arms unchanged." },
+  { id = "EX-3", text = "`Composite` gains `any_failed()`, `any_blocked()`, `has_fresh_vh()`; `any_failed_or_blocked()` retained as `any_failed() || any_blocked()`." },
+  { id = "EX-4", text = "`DivergentReason::label` → `observed-failure` / `observed-blocked`; `reconcile.rs divergent_label` has a failure arm and a blocked arm; `coverage_view.rs` renders both reasons." },
+  { id = "EX-5", text = "Existing drift/label/prompt tests + goldens (coverage.rs ~861-905,966; reconcile.rs ~637) updated for the two reasons; refuse/coherent verdicts otherwise unchanged (behaviour-preservation)." },
+]
+verification = [
+  { id = "VT-1", expects = "coverage.rs tests assert drift precedence (a Failed+Blocked composite → ObservedFailure; a Blocked-only → ObservedBlocked) and the new predicates incl. has_fresh_vh (a VH Verified cell true; a VT/VA Verified false).", test_file = "src/coverage.rs", keywords = ["ObservedFailure", "ObservedBlocked", "has_fresh_vh", "any_failed"] },
+  { id = "VT-2", expects = "reconcile.rs divergent_label test asserts distinct human-readable text for the failure vs blocked reasons.", test_file = "src/reconcile.rs", keywords = ["ObservedFailure", "ObservedBlocked"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Closure gate — hard-refuse Failed, VH-Blocked, withdrawal & empty-keys"
+objective = """
+Branch the closure gate on the verdict reason in `undischarged_drift` \
+(`slice.rs`): `ObservedFailure` is always undischarged (never calls \
+`rec_discharges`); `ObservedBlocked` discharges only if `has_fresh_vh()` AND the \
+3-clause `rec_discharges` AND the REC cites the confirming VH key; lag/Indeterminate \
+keep `rec_discharges` PLUS the M7 empty-residual-keys guard; and a Coherent-via- \
+withdrawal req that still carries a live Failed/Blocked cell requires a slice-owned \
+revise/redesign REC citing the keys (D4). `rec_discharges` signature is unchanged — \
+all policy lives in `undischarged_drift`. `UndischargedReq` carries the reason (+ a \
+withdrawal marker) so the bail copy is per-reason accurate (SL-178 legibility \
+preserved). (design §4.4, §2, D3/D4, codex M7/M10)
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed — the gate reads `ObservedFailure`/`ObservedBlocked`/`has_fresh_vh`." },
+  { id = "EN-2", text = "PHASE-01 applied — the gate behaviour is governed by the amended D8/REQ-113." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`undischarged_drift` classifies per gate-set req: ObservedFailure → always pushed (no rec_discharges call); ObservedBlocked → undischarged unless has_fresh_vh() && rec_discharges() && the REC's evidence_ref cites the VH key." },
+  { id = "EX-2", text = "M7: an accept with empty `residual_keys` does NOT discharge (clause (c) no longer vacuously true) for the lag/Indeterminate arms." },
+  { id = "EX-3", text = "D4: a gate-set req with authored ∈ {Retired, Superseded} AND a live `any_failed()||any_blocked()` cell is undischarged unless a slice-owned revise/redesign REC cites those evidence keys." },
+  { id = "EX-4", text = "`rec_discharges` signature + 3-clause body unchanged; `UndischargedReq` carries `DivergentReason` (+ withdrawal marker); bail copy renders failure / blocked-no-VH / withdrawal-without-REC / lag registers, each with its remedy." },
+  { id = "EX-5", text = "Existing lag-discharge tests (vt4_matching_accept_rec_discharges_the_drift, vt5, vt6) stay green unchanged — status-lag path behaviour-preserved." },
+]
+verification = [
+  { id = "VT-1", expects = "slice.rs gate test: a live Failed cell on a gate-set req refuses reconcile→done AND an accept-REC over it does NOT discharge (the key regression vs the current accept path).", test_file = "src/slice.rs", keywords = ["ObservedFailure", "accept"] },
+  { id = "VT-2", expects = "slice.rs gate test: Blocked + fresh VH Verified + accept-REC citing both keys → closes; Blocked with only a VT/VA Verified or no Verified → refuses.", test_file = "src/slice.rs", keywords = ["has_fresh_vh", "blocked"] },
+  { id = "VT-3", expects = "slice.rs gate test (D4): a req flipped to Retired/Superseded over a live Failed/Blocked cell refuses unless a slice-owned revise/redesign REC cites the evidence keys.", test_file = "src/slice.rs", keywords = ["Retired", "redesign"] },
+  { id = "VT-4", expects = "slice.rs gate test (M7): an accept with empty residual keys does not discharge.", test_file = "src/slice.rs", keywords = ["residual", "empty"] },
+  { id = "VA-1", expects = "Dogfood: with SL-179's [gate].extra_reqs seeded (PHASE-01), seed a declared cross-slice Failed cell and prove the CANDIDATE binary refuses SL-179's own reconcile→done; then clear it and confirm close passes." },
+  { id = "VA-2", expects = "NF-001 verdict-independence: confirm the reconcile writer's `select_status` still takes no Verdict/Composite after the reason split — the gate's coverage reads are refuse-only, never a status write (design §5.6, codex M9)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Forget guard — refuse erasing a Failed/Blocked cell"
+objective = """
+Make `coverage forget` refuse to erase a `Failed`/`Blocked` cell atomically (the \
+removal-then-return path can't be post-checked): `forget` returns a `ForgetOutcome` \
+{ Erased, Refused(status), NotFound }; Failed/Blocked ⇒ Refused (no remove, no \
+save). `run_forget` bails on Refused naming the cell + remedies (re-derive via \
+`coverage verify`, re-attest via `coverage record`, withdraw via a recorded REC, \
+or a reviewed hand-edit for wrong-key garbage). Erasable predicate named once over \
+the `CoverageStatus` enum (STD-001, no string literals). (design §4.5, D2)
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 applied — the forget-refusal is governed by the amended D8 (evidence-erasure prohibition). File-disjoint from PHASE-02/03; orderable any time after PHASE-01." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`forget` returns `ForgetOutcome` and refuses (no removal, no save) when the cell status is `Failed` or `Blocked`; a pure `is_erasable(status)` helper names the set once over the enum." },
+  { id = "EX-2", text = "`run_forget` matches the outcome: Refused → bails naming the 4-tuple + the remedies; Erased/NotFound behave as today." },
+  { id = "EX-3", text = "Existing forget test (forget_removes_the_keyed_cell_and_returns_its_status, ~765) retargeted to a Planned/Verified cell; the idempotent-miss test preserved." },
+]
+verification = [
+  { id = "VT-1", expects = "coverage_store.rs test: forget of a Failed (and a Blocked) cell is refused and the cell REMAINS in the store; forget of a Planned/Verified cell still erases.", test_file = "src/coverage_store.rs", keywords = ["ForgetOutcome", "Refused"] },
+]
+specs        = []
+requirements = []
