@@ -11,7 +11,7 @@ native plugin management — we should use it instead.
 Instead of manual file-copy, drive Claude's plugin CLI:
 
 ```
-claude plugin add marketplace $$REPO
+claude plugin marketplace add $$REPO
 claude plugin install doctrine --scope project
 ```
 

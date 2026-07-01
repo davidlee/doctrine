@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::Context;
 use rust_embed::RustEmbed;
@@ -263,8 +264,8 @@ fn print_forward_summary(root: &Path, args: &InstallArgs<'_>) -> anyhow::Result<
             if agent == "claude" {
                 writeln!(
                     stdout,
-                    "  {:<12} install skills + agent def for claude",
-                    "skills"
+                    "  {:<12} register marketplace + install plugin + agent def for claude",
+                    "claude"
                 )?;
             } else {
                 writeln!(
@@ -338,6 +339,10 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
 
     let mut non_claude_agents: Vec<String> = Vec::new();
 
+    // Track which plugin steps were skipped-but-needed for the final reminder.
+    let mut skipped_marketplace = false;
+    let mut skipped_plugin = false;
+
     for agent in &agents {
         let question: String = if agent == "claude" {
             "Install skills + agent def for claude? [y/N/a]".to_string()
@@ -349,13 +354,48 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
         }
         if agent == "claude" {
             let mut out = io::stdout();
-            if let Err(e) =
-                crate::skills::install_for_claude(root, &catalog, &selected, args.global, &mut out)
-            {
-                writeln!(io::stdout(), "  claude skills install failed: {e:#}")?;
-                continue;
+
+            // 1. Marketplace registration.
+            let has_marketplace = claude_marketplace_has_doctrine();
+            if !has_marketplace {
+                if prompt_step(
+                    &format!("claude plugin marketplace add {repo}? [y/N/a]"),
+                    args.yes,
+                    &mut all_yes,
+                )? {
+                    match claude_plugin_add_marketplace(repo) {
+                        Ok(()) => writeln!(out, "  marketplace {repo} registered")?,
+                        Err(e) => {
+                            writeln!(out, "  marketplace add failed: {e:#}")?;
+                            skipped_marketplace = true;
+                        }
+                    }
+                } else {
+                    skipped_marketplace = true;
+                }
             }
-            // Agent-def install rides the Claude skills step.
+
+            // 2. Plugin install.
+            let has_plugin = claude_plugin_installed("doctrine");
+            if !has_plugin {
+                if prompt_step(
+                    "claude plugin install doctrine --scope project? [y/N/a]",
+                    args.yes,
+                    &mut all_yes,
+                )? {
+                    match claude_plugin_install("doctrine") {
+                        Ok(()) => writeln!(out, "  doctrine plugin installed")?,
+                        Err(e) => {
+                            writeln!(out, "  plugin install failed: {e:#}")?;
+                            skipped_plugin = true;
+                        }
+                    }
+                } else {
+                    skipped_plugin = true;
+                }
+            }
+
+            // 3. Agent-def install (kept as-is).
             if let Err(e) = crate::skills::install_agents_for(
                 root,
                 "claude",
@@ -365,14 +405,6 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                 &mut out,
             ) {
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
-            }
-            // Hooks install as a skills-directory plugin — Claude auto-discovers
-            // `.claude/skills/doctrine/.claude-plugin/plugin.json` and loads hooks
-            // with no marketplace install step.
-            if let Err(e) =
-                crate::skills::install_hooks_plugin_for_claude(root, args.global, &mut io::stdout())
-            {
-                writeln!(io::stdout(), "  hooks plugin install failed: {e:#}")?;
             }
         } else {
             non_claude_agents.push(agent.clone());
@@ -408,10 +440,73 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
         }
     }
 
-    // SL-152 PHASE-06: Hooks are now installed directly as a skills-directory
-    // plugin (see the Claude agent branch above). No post-install delegation needed.
-    // Non-Claude skills are handled by the per-agent loop above.
+    // Final reminder: if the user skipped a needed plugin step, print how to
+    // install it manually.
+    if skipped_marketplace || skipped_plugin {
+        writeln!(io::stdout())?;
+        writeln!(
+            io::stdout(),
+            "Claude Code requires the doctrine plugin. To install:"
+        )?;
+        if skipped_marketplace {
+            writeln!(io::stdout(), "  claude plugin marketplace add {repo}")?;
+        }
+        if skipped_plugin {
+            writeln!(
+                io::stdout(),
+                "  claude plugin install doctrine --scope project"
+            )?;
+        }
+    }
 
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Claude plugin helpers (IMP-223)
+// ---------------------------------------------------------------------------
+
+/// Check whether the doctrine marketplace is registered in Claude.
+fn claude_marketplace_has_doctrine() -> bool {
+    claude_cmd_output_contains(&["plugin", "marketplace", "list"], "doctrine")
+}
+
+/// Check whether the named Claude plugin is installed.
+fn claude_plugin_installed(name: &str) -> bool {
+    claude_cmd_output_contains(&["plugin", "list"], name)
+}
+
+/// Run `claude <args>` and check whether stdout contains `needle`.
+fn claude_cmd_output_contains(args: &[&str], needle: &str) -> bool {
+    Command::new("claude")
+        .args(args)
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains(needle))
+}
+
+/// Run `claude plugin marketplace add <repo>`.
+fn claude_plugin_add_marketplace(repo: &str) -> anyhow::Result<()> {
+    let status = Command::new("claude")
+        .args(["plugin", "marketplace", "add", repo])
+        .status()
+        .context("failed to execute claude plugin marketplace add")?;
+    anyhow::ensure!(
+        status.success(),
+        "claude plugin marketplace add exited with {status}"
+    );
+    Ok(())
+}
+
+/// Run `claude plugin install <name> --scope project`.
+fn claude_plugin_install(name: &str) -> anyhow::Result<()> {
+    let status = Command::new("claude")
+        .args(["plugin", "install", name, "--scope", "project"])
+        .status()
+        .context("failed to execute claude plugin install")?;
+    anyhow::ensure!(
+        status.success(),
+        "claude plugin install exited with {status}"
+    );
     Ok(())
 }
 

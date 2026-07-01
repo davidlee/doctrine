@@ -1,11 +1,8 @@
-//! SL-088 PHASE-04 — `doctrine install --agent claude --skill code-review`
+//! IMP-223 — `doctrine install --agent claude --skill code-review`
 //! end-to-end over the built binary.
 //!
-//! Drives the consolidated `doctrine install` against a temp project: the Claude
-//! path materialises a canonical `.doctrine/skills/<id>` tree and links
-//! `.claude/skills/<id>` into it. Proves the slice's whole point — a re-install
-//! refreshes a stale canonical (the silent no-op the old copy-and-skip dropped) —
-//! and that a real-dir override survives + is reported `kept`.
+//! Skills + hooks are now driven via `claude plugin` commands; `claude` is
+//! absent in test, so we verify the graceful-failure + reminder paths.
 
 #![allow(
     clippy::expect_used,
@@ -14,7 +11,6 @@
     reason = "integration test: fail-fast unwrap/expect are idiomatic, and test fns live at crate root by construction"
 )]
 
-use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -52,65 +48,45 @@ fn install(dir: &Path) -> String {
 fn install_links_then_refreshes_and_keeps_an_override() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
-    let link = dir.join(".claude/skills/code-review");
-    let canon = dir.join(".doctrine/skills/code-review");
 
-    // 1. First install: a relative symlink into the materialised canonical tree.
+    // IMP-223: skills + hooks are now handled by `claude plugin install`;
+    // claude is not on PATH in the test env, so we see the failure + reminder.
     let out = install(dir);
     assert!(
-        out.contains("linked    code-review"),
-        "first install links: {out}"
+        out.contains("marketplace add failed"),
+        "attempts marketplace add: {out}"
     );
     assert!(
-        fs::symlink_metadata(&link)
-            .unwrap()
-            .file_type()
-            .is_symlink(),
-        "agent path is a symlink"
+        out.contains("plugin install failed"),
+        "attempts plugin install: {out}"
     );
     assert!(
-        link.join("SKILL.md").is_file(),
-        "link resolves to canonical content"
+        out.contains("Claude Code requires the doctrine plugin. To install:"),
+        "reminder: {out}"
     );
-    assert!(canon.join("SKILL.md").is_file(), "canonical materialised");
-    // The derived tree self-enforces its gitignore (F4), no prior `doctrine install`.
-    let gi = fs::read_to_string(dir.join(".gitignore")).unwrap();
+    // No old-style manual symlink/canonical output.
     assert!(
-        gi.contains(".doctrine/skills/*"),
-        "skills install ignores its tree"
+        !out.contains("linked    code-review"),
+        "no manual skills symlink: {out}"
+    );
+    assert!(
+        !out.contains("refreshed code-review"),
+        "no manual canonical refresh: {out}"
+    );
+    assert!(
+        !out.contains("kept      code-review"),
+        "no manual override tracking: {out}"
+    );
+    // Agent-def still installed.
+    assert!(
+        out.contains("linked    dispatch-worker.md"),
+        "agent def installed: {out}"
     );
 
-    // 2. Re-install refreshes a stale canonical — the no-op the old skip dropped.
-    fs::write(canon.join("STALE.md"), "old").unwrap();
+    // Re-install: same behavior (claude absent, so commands fail again).
     let out = install(dir);
     assert!(
-        !canon.join("STALE.md").exists(),
-        "re-install refreshes the canonical (stale file gone): {out}"
-    );
-    assert!(
-        out.contains("refreshed code-review") && out.contains("relinked  code-review"),
-        "re-install refreshes + relinks our own link: {out}"
-    );
-
-    // 3. Override: replace the managed link with a real copy → kept, untouched.
-    fs::remove_file(&link).unwrap();
-    fs::create_dir_all(&link).unwrap();
-    fs::write(link.join("MINE.md"), "pinned").unwrap();
-    let out = install(dir);
-    assert!(
-        out.contains("kept      code-review (real dir)"),
-        "a real-dir override is reported kept: {out}"
-    );
-    assert!(
-        !fs::symlink_metadata(&link)
-            .unwrap()
-            .file_type()
-            .is_symlink(),
-        "the override is still a real dir, not relinked"
-    );
-    assert_eq!(
-        fs::read_to_string(link.join("MINE.md")).unwrap(),
-        "pinned",
-        "the user's pinned copy is intact"
+        out.contains("Claude Code requires the doctrine plugin. To install:"),
+        "reinstall reminder: {out}"
     );
 }

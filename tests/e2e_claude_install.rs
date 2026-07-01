@@ -117,51 +117,49 @@ fn install_wires_skills_agent_and_hooks_directly() {
     let dir = tmp.path();
 
     let out = install(dir);
-    assert!(out.contains("linked    code-review"), "skills leg: {out}");
+    // IMP-223: skills + hooks via claude plugin commands (claude not on PATH
+    // in test env, so we see the failure + reminder paths).
+    assert!(
+        out.contains("marketplace add failed"),
+        "attempts marketplace add: {out}"
+    );
+    assert!(
+        out.contains("plugin install failed"),
+        "attempts plugin install: {out}"
+    );
+    assert!(
+        out.contains("Claude Code requires the doctrine plugin. To install:"),
+        "reminder message: {out}"
+    );
+    assert!(
+        out.contains("claude plugin marketplace add davidlee/doctrine"),
+        "reminder: marketplace line: {out}"
+    );
+    assert!(
+        out.contains("claude plugin install doctrine --scope project"),
+        "reminder: install line: {out}"
+    );
+    // Agent def still installed manually.
     assert!(
         out.contains("linked    dispatch-worker.md"),
         "agents leg: {out}"
     );
-    // Hooks are installed as a skills-directory plugin — no marketplace delegation.
+    // Old-style hooks/skills copypasta gone.
     assert!(
-        out.contains("hooks (skills-dir plugin):"),
-        "hooks plugin install header: {out}"
+        !out.contains("hooks (skills-dir plugin):"),
+        "no old-style hooks header: {out}"
     );
     assert!(
-        out.contains("refreshed .claude-plugin/plugin.json"),
-        "plugin manifest refreshed: {out}"
-    );
-    assert!(
-        out.contains("refreshed hooks/hooks.json"),
-        "hooks config refreshed: {out}"
-    );
-    assert!(
-        !out.contains("worktree hook: wired"),
-        "no settings-wired hook line: {out}"
-    );
-    assert!(
-        !out.contains("/plugin marketplace add"),
-        "no delegated marketplace add: {out}"
-    );
-    assert!(
-        !out.contains("/plugin install"),
-        "no delegated plugin install: {out}"
+        !out.contains("linked    code-review"),
+        "no old-style skills symlink: {out}"
     );
     assert_installed(dir);
 
-    // Reinstall is idempotent: skills/agent/hooks re-reconcile.
+    // Reinstall: idempotent — still attempts commands (claude absent in test).
     let out = install(dir);
     assert!(
-        out.contains("hooks (skills-dir plugin):"),
-        "reinstall refreshes hooks plugin: {out}"
-    );
-    assert!(
-        !out.contains("worktree hook:"),
-        "reinstall wires no settings hook: {out}"
-    );
-    assert!(
-        !out.contains("/plugin install"),
-        "reinstall prints no plugin delegation: {out}"
+        out.contains("Claude Code requires the doctrine plugin. To install:"),
+        "reinstall reminder: {out}"
     );
     assert_installed(dir);
 }

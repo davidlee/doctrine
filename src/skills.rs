@@ -6,7 +6,7 @@
 // run_install() and its call chain are pub(crate) but not currently called
 // from main.rs (PHASE-01 consolidated the CLI surface). They are preserved
 // for the standalone skills install path and are reachable via the extracted
-// install_for_claude/install_for_other functions (SL-088 PHASE-02).
+// install_for_other functions (SL-088 PHASE-02).
 #![cfg_attr(
     not(test),
     expect(
@@ -755,66 +755,6 @@ fn execute(
 
     if !failed.is_empty() {
         bail!("npx skills failed for agent(s): {}", failed.join(", "));
-    }
-    Ok(())
-}
-
-/// Install skills for Claude: refresh canonical tree + reconcile agent symlinks.
-/// Extracted from `execute()` for reuse from the consolidated `install::run()`
-/// forward-step dispatch (SL-088 PHASE-02).
-pub(crate) fn install_for_claude(
-    root: &Path,
-    catalog: &[Entry],
-    selected: &[&Entry],
-    global: bool,
-    out: &mut dyn Write,
-) -> anyhow::Result<()> {
-    let agent_dir = claude_dir(root, global)?;
-    let canon_dir = canonical_dir(root, global)?;
-    let canonical: Vec<Canonical> = selected
-        .iter()
-        .map(|e| Canonical {
-            id: e.id.clone(),
-            dest: canon_dir.join(&e.id),
-        })
-        .collect();
-    let links = claude_links(selected, &agent_dir, &canon_dir);
-
-    writeln!(out, "agent claude (direct):")?;
-    // 1. Refresh the canonical tree (always overwrite — derived).
-    for c in &canonical {
-        let entry = catalog
-            .iter()
-            .find(|e| e.id == c.id)
-            .with_context(|| format!("Skill '{}' vanished from catalog", c.id))?;
-        materialise_canonical(entry, &c.dest)?;
-        writeln!(out, "  refreshed {}", c.id)?;
-    }
-    // 2. Reconcile the agent links by proven ownership.
-    for link in &links {
-        let (id, dest, target) = match link {
-            Link::Create { id, dest, target } | Link::Relink { id, dest, target } => {
-                (id, dest, target)
-            }
-            Link::KeepForeign { id, dest, reason } => {
-                let _ = dest;
-                writeln!(out, "  kept      {id} ({})", foreign_reason(reason))?;
-                continue;
-            }
-        };
-        match classify_link(id, dest, target) {
-            Link::Create { .. } => {
-                write_link(dest, target)?;
-                writeln!(out, "  linked    {id}")?;
-            }
-            Link::Relink { .. } => {
-                write_link(dest, target)?;
-                writeln!(out, "  relinked  {id}")?;
-            }
-            Link::KeepForeign { reason, .. } => {
-                writeln!(out, "  kept      {id} ({})", foreign_reason(&reason))?;
-            }
-        }
     }
     Ok(())
 }
