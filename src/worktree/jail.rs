@@ -99,8 +99,29 @@ const REASON_ESCAPES_WORKTREE: &str = "escapes-worktree";
 /// preferred). Never a panic — fail-closed to a deny.
 const REASON_NO_BACKEND: &str = "no-jail-backend";
 
+// ---- SL-183 PHASE-03 fail-closed derivation reason stems (STD-001, §5.5 F-B4).
+//      Every `resolve_inputs` failure branch (a–f) renders one of these; the arm
+//      emits `deny worktree-subagent Bash` carrying the stem. NEVER a fallback path
+//      template, NEVER unwrapped pass-through (POL-002). -----------------------------
+/// (a) `cwd` is not inside any git worktree — `git rev-parse --show-toplevel` failed.
+const REASON_MAC_NOT_WORKTREE: &str = "seatbelt-cwd-not-a-worktree";
+/// (b) toplevel IS the main checkout, not a linked subagent worktree — no per-arming
+/// policy is provisioned for the primary tree.
+const REASON_MAC_MAIN_CHECKOUT: &str = "seatbelt-cwd-is-main-checkout";
+/// (d) ambiguous / multiple gitdirs — the derivation cannot pick one worktree.
+const REASON_MAC_AMBIGUOUS_GITDIRS: &str = "seatbelt-ambiguous-gitdirs";
+/// (c/e) no per-arming policy for the resolved basename — absent, unreadable, or a
+/// nested-repo/submodule basename that was never provisioned.
+const REASON_MAC_POLICY_MISSING: &str = "seatbelt-policy-missing";
+/// (f) policy present but malformed / schema-invalid (covers the network ambiguity,
+/// F-B6). A malformed policy DENIES — it never silently defaults network open.
+const REASON_MAC_POLICY_MALFORMED: &str = "seatbelt-policy-malformed";
+
 /// The `.git` directory name — an `extra_rw` touching it is rejected (INV-3).
 const GIT_DIR: &str = ".git";
+/// The per-worktree scratch subdir materialized under the worktree and pointed at by
+/// `TMPDIR` (D-mac3). Realpath'd into `ResolvedMac.tmp`.
+const WT_TMP_SUBDIR: &str = ".tmp";
 
 // ---- SL-183 macOS Seatbelt vocabulary (STD-001: single-sourced, no inline
 //      literals; §5.2 constant catalog). The base profile shape is probe-proven
@@ -128,6 +149,9 @@ const PARAM_DUTMP: &str = "DUTMP";
 const PARAM_RW_PREFIX: &str = "RW";
 /// The `TMPDIR` env var name (`env TMPDIR=<tmp>` prefixes the wrapped command).
 const ENV_TMPDIR: &str = "TMPDIR";
+/// The materialized `.sb` profile filename, under `<wt>/.tmp` (`resolve_inputs` sets
+/// `profile_path = <tmp>/jail.sb`; PHASE-04 provision writes the body there).
+const SEATBELT_PROFILE_FILE: &str = "jail.sb";
 
 /// `/private/tmp` — coarse-denied FIRST (F-A). A literal, not a resolved param:
 /// macOS `/tmp` symlinks here, and the private-tmp deny collapses scratch into the
@@ -562,6 +586,237 @@ pub(crate) fn select_jailer(backend: &Backend) -> Option<Box<dyn Jailer>> {
             resolved: mac.clone(),
         })),
         Backend::Deny { .. } => None,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────
+// SL-183 PHASE-03 — impure `resolve_inputs` (fail-closed) + `Backend` mapper.
+//
+// The macOS twin of SL-182's fail-closed posture (§5.5 F-B4). `resolve_inputs` is the
+// THIN IMPURE SHELL that derives a `ResolvedMac` from the PreToolUse `cwd`: git topology
+// → realpath → basename → per-arming policy → getconf DUTMP → `<wt>/.tmp`. Every
+// impurity is injected via `ResolveEnv` so the branch LOGIC is pure and unit-testable on
+// any host (Linux CI included — no real `getconf`). `RealEnv` is the only site that
+// actually touches git/fs/getconf (D-p3-1). Any ambiguity ⇒ `Err(ResolveDeny)` ⇒
+// `Backend::Deny{reason}` ⇒ `Decision::Deny` — NEVER a fallback path template, NEVER
+// unwrapped pass-through (POL-002, F-B4). SL-182's shared surface is reused UNCHANGED.
+// ─────────────────────────────────────────────────────────────────────────────────
+
+/// Why the macOS `cwd`→worktree derivation failed. Typed (not stringly) so tests assert
+/// on VARIANTS and the security boundary is not a prose match (STD-001, mirrors
+/// `PolicyError`). Each maps 1:1 to a §5.5 F-B4 branch; `reason()` renders the named-const
+/// stem the arm surfaces to the user. There is NO permissive variant — the enum's very
+/// shape is the fail-closed guarantee.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ResolveDeny {
+    /// (a) `cwd` not inside a git worktree (`--show-toplevel` failed).
+    NotAWorktree,
+    /// (b) toplevel == the main checkout (no policy provisioned for the primary tree).
+    IsMainCheckout,
+    /// (d) ambiguous / multiple gitdirs.
+    AmbiguousGitDirs,
+    /// (c/e) policy for the resolved basename is missing, unreadable, or was never
+    /// provisioned (nested-repo / submodule basename). The security outcome is identical.
+    PolicyMissing,
+    /// (f) policy present but malformed / schema-invalid — carries the parse detail.
+    PolicyMalformed(String),
+}
+
+impl ResolveDeny {
+    /// The reason string the arm surfaces (`deny worktree-subagent Bash: <reason>`).
+    /// Single-sourced named-const stems (STD-001).
+    pub(crate) fn reason(&self) -> String {
+        match self {
+            ResolveDeny::NotAWorktree => REASON_MAC_NOT_WORKTREE.to_string(),
+            ResolveDeny::IsMainCheckout => REASON_MAC_MAIN_CHECKOUT.to_string(),
+            ResolveDeny::AmbiguousGitDirs => REASON_MAC_AMBIGUOUS_GITDIRS.to_string(),
+            ResolveDeny::PolicyMissing => REASON_MAC_POLICY_MISSING.to_string(),
+            ResolveDeny::PolicyMalformed(detail) => {
+                format!("{REASON_MAC_POLICY_MALFORMED}: {detail}")
+            }
+        }
+    }
+}
+
+/// The injected impurity seam (D-p3-1). `resolve_inputs` takes a `&dyn ResolveEnv` so its
+/// branch logic stays PURE and every fail-closed branch is unit-testable off-host. The
+/// real implementation (`RealEnv`) is the ONLY place git / getconf / realpath / mkdir /
+/// policy-file reads actually run — the thin shell the design names (§5.2). Each method's
+/// `Result` failure is a distinct fail-closed branch; the shell never invents a default.
+pub(crate) trait ResolveEnv {
+    /// `git -C <cwd> rev-parse --show-toplevel`, realpath'd. `Err` ⇒ branch (a). An
+    /// `Ok` with ambiguity signalled out-of-band is branch (d) — see `worktree_topology`.
+    fn worktree_topology(&self, cwd: &Path) -> Result<Topology, ResolveDeny>;
+    /// `getconf DARWIN_USER_TEMP_DIR`, realpath'd (`/private/var/folders/…`). Impure.
+    fn getconf_dutmp(&self) -> Result<PathBuf, ResolveDeny>;
+    /// `realpath -e` a path that must already exist (WT, `extra_rw`). Impure.
+    fn realpath(&self, path: &Path) -> Result<PathBuf, ResolveDeny>;
+    /// `mkdir -p <path>` then realpath it (the `<wt>/.tmp` scratch dir). Impure.
+    fn ensure_dir(&self, path: &Path) -> Result<PathBuf, ResolveDeny>;
+    /// Read the per-arming policy body for `basename`. `Ok(None)` ⇒ absent ⇒ branch (e);
+    /// `Err` ⇒ unreadable ⇒ branch (e); `Ok(Some(body))` ⇒ parse it (branch (f) on
+    /// malformed). Impure (disk read).
+    fn read_policy(&self, basename: &std::ffi::OsStr) -> std::io::Result<Option<String>>;
+}
+
+/// The resolved git topology for a `cwd` (the pure output of the impure probe). Carries
+/// the realpath'd linked-worktree root and whether it is the main checkout, so the
+/// branch (b)/(d) decisions are made in the PURE `resolve_inputs`, not the env impl.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Topology {
+    /// Realpath'd `--show-toplevel`.
+    pub toplevel: PathBuf,
+    /// `true` ⇒ toplevel is a linked worktree; `false` ⇒ it is the main checkout
+    /// (`is_linked_worktree`). Branch (b) denies when `false`.
+    pub is_linked: bool,
+}
+
+/// The thin impure shell (§5.2, D-p3-1). Derive a `ResolvedMac` from the `PreToolUse` `cwd`
+/// and the per-arming policy, FAIL-CLOSED on every ambiguity (§5.5 F-B4 branches a–f).
+/// `profile_dir` is where the materialized `.sb` lives (`<wt>/.tmp`); the actual profile
+/// write is the caller's (PHASE-04 provision), so this returns the intended `profile_path`
+/// without writing it — keeping the resolver free of the profile-body concern.
+///
+/// PURE branch logic over the injected `env`; the ONLY impurity is behind `ResolveEnv`.
+/// `Ok` ⇒ a fully realpath'd `ResolvedMac` (INV-M2 fence honoured for the PHASE-02
+/// builders); `Err(ResolveDeny)` ⇒ the arm denies. There is NO code path that returns a
+/// permissive/template `ResolvedMac` on a failure — the `?` short-circuits every branch to
+/// a Deny.
+pub(crate) fn resolve_inputs(
+    cwd: &Path,
+    main_root: &Path,
+    env: &dyn ResolveEnv,
+) -> Result<ResolvedMac, ResolveDeny> {
+    // (a)/(d): derive + realpath the worktree via git topology.
+    let topo = env.worktree_topology(cwd)?;
+    // (b): the main checkout has no per-arming policy — deny, never guess one.
+    if !topo.is_linked {
+        return Err(ResolveDeny::IsMainCheckout);
+    }
+    let wt = topo.toplevel;
+    // (c)/(e): per-arming policy lookup by basename. Absent/unreadable ⇒ Deny.
+    let basename = wt
+        .file_name()
+        .ok_or(ResolveDeny::PolicyMissing)?
+        .to_os_string();
+    // absent (`Ok(None)`) OR unreadable (`Err`) ⇒ branch (e) Deny — never a permissive
+    // default (the PreToolUse fail-OPEN memory: an absent policy must DENY).
+    let Ok(Some(body)) = env.read_policy(&basename) else {
+        return Err(ResolveDeny::PolicyMissing);
+    };
+    // (f): malformed / unknown-key ⇒ Deny (never a silent permissive default). Reuses
+    // SL-182's `from_toml_str` + `validate_policy` UNCHANGED.
+    let policy = JailPolicy::from_toml_str(&body)
+        .map_err(|e| ResolveDeny::PolicyMalformed(format!("{e:?}")))?;
+    validate_policy(&policy, main_root)
+        .map_err(|e| ResolveDeny::PolicyMalformed(format!("{e:?}")))?;
+
+    // realpath every path the PHASE-02 builders will bind (INV-M2 fence).
+    let dutmp = env.getconf_dutmp()?;
+    let tmp = env.ensure_dir(&wt.join(WT_TMP_SUBDIR))?;
+    let mut extra_rw = Vec::with_capacity(policy.extra_rw.len());
+    for grant in &policy.extra_rw {
+        extra_rw.push(env.realpath(grant)?);
+    }
+    let profile_path = tmp.join(SEATBELT_PROFILE_FILE);
+
+    Ok(ResolvedMac {
+        wt,
+        tmp,
+        dutmp,
+        extra_rw,
+        network: policy.network,
+        profile_path,
+    })
+}
+
+/// Map a `resolve_inputs` outcome onto SL-182's existing `Backend` so the funnel's Deny
+/// path is reused UNCHANGED (D-p3-2): `Ok ⇒ Seatbelt(resolved)` (⇒ `select_jailer` yields
+/// the Seatbelt jailer); `Err ⇒ Deny{reason}` (⇒ `select_jailer` yields `None` ⇒
+/// `decide_bash` denies with the reason — fail-closed, never pass-through). No new decision
+/// surface; the macOS routing IS this two-line map plus the untouched `select_jailer`.
+pub(crate) fn seatbelt_backend(resolved: Result<ResolvedMac, ResolveDeny>) -> Backend {
+    match resolved {
+        Ok(mac) => Backend::Seatbelt(mac),
+        Err(deny) => Backend::Deny {
+            reason: deny.reason(),
+        },
+    }
+}
+
+/// The per-arming policy directory under the main checkout (design §5.3, SL-182
+/// convention): `<main>/.doctrine/state/dispatch/jail/<worktree-name>.toml`. Segments are
+/// single-sourced (STD-001); the provisioning WRITE is PHASE-04/SL-182's, this is only the
+/// READ location.
+const POLICY_DIR_SEGMENTS: &[&str] = &[".doctrine", "state", "dispatch", "jail"];
+const POLICY_FILE_EXT: &str = "toml";
+
+/// The real impure `ResolveEnv` — the ONLY site in this module that touches git / getconf /
+/// realpath / mkdir / disk (D-p3-1, the "thin shell" the design names, §5.2). Everything
+/// else in the PHASE-03 surface (`resolve_inputs`, `seatbelt_backend`, the two PHASE-02
+/// builders) is PURE over its output. Holds the realpath'd `main_root` (to locate policy
+/// and to feed `validate_policy`'s ancestor check upstream).
+pub(crate) struct RealEnv {
+    /// Realpath'd main checkout root — the base for the policy dir lookup.
+    pub main_root: PathBuf,
+}
+
+impl ResolveEnv for RealEnv {
+    /// `git -C <cwd> rev-parse --show-toplevel` (⇒ branch a on failure), realpath'd, then
+    /// `is_linked_worktree` (⇒ branch b when it is the main checkout). A non-worktree cwd
+    /// makes git exit non-zero ⇒ `CaptureError` ⇒ `NotAWorktree`. Genuine gitdir ambiguity
+    /// (`$GIT_DIR` pollution) surfaces as an `is_linked_worktree` error ⇒ `AmbiguousGitDirs`.
+    fn worktree_topology(&self, cwd: &Path) -> Result<Topology, ResolveDeny> {
+        let toplevel_raw = crate::git::git_text(cwd, &["rev-parse", "--show-toplevel"])
+            .map_err(|_e| ResolveDeny::NotAWorktree)?;
+        let toplevel =
+            std::fs::canonicalize(&toplevel_raw).map_err(|_e| ResolveDeny::NotAWorktree)?;
+        let is_linked = crate::worktree::is_linked_worktree(&toplevel)
+            .map_err(|_e| ResolveDeny::AmbiguousGitDirs)?;
+        Ok(Topology {
+            toplevel,
+            is_linked,
+        })
+    }
+
+    fn getconf_dutmp(&self) -> Result<PathBuf, ResolveDeny> {
+        let out = std::process::Command::new("getconf")
+            .arg("DARWIN_USER_TEMP_DIR")
+            .output()
+            .map_err(|_e| ResolveDeny::NotAWorktree)?;
+        if !out.status.success() {
+            return Err(ResolveDeny::NotAWorktree);
+        }
+        let raw = String::from_utf8(out.stdout)
+            .map_err(|_e| ResolveDeny::NotAWorktree)?
+            .trim()
+            .to_string();
+        std::fs::canonicalize(&raw).map_err(|_e| ResolveDeny::NotAWorktree)
+    }
+
+    fn realpath(&self, path: &Path) -> Result<PathBuf, ResolveDeny> {
+        // extra_rw grants MUST already exist (bwrap-arm existence obligation, INV-4 twin):
+        // a non-existent grant fails closed rather than binding a phantom path.
+        std::fs::canonicalize(path).map_err(|_e| ResolveDeny::PolicyMissing)
+    }
+
+    fn ensure_dir(&self, path: &Path) -> Result<PathBuf, ResolveDeny> {
+        std::fs::create_dir_all(path).map_err(|_e| ResolveDeny::PolicyMissing)?;
+        std::fs::canonicalize(path).map_err(|_e| ResolveDeny::PolicyMissing)
+    }
+
+    fn read_policy(&self, basename: &std::ffi::OsStr) -> std::io::Result<Option<String>> {
+        let mut path = self.main_root.clone();
+        for seg in POLICY_DIR_SEGMENTS {
+            path.push(seg);
+        }
+        path.push(basename);
+        path.set_extension(POLICY_FILE_EXT);
+        match std::fs::read_to_string(&path) {
+            Ok(body) => Ok(Some(body)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -1267,5 +1522,350 @@ mod tests {
             !s.contains("subpath"),
             "argv must not carry profile-body tokens"
         );
+    }
+
+    // ---- SL-183 PHASE-03: resolve_inputs fail-closed (VT-1) + wiring (VT-2) ------
+    //
+    // Every branch is driven through an injected `FakeEnv` — no real git/getconf/fs,
+    // so the whole fail-closed matrix runs on Linux CI (the design's pure/shell split).
+
+    /// A programmable `ResolveEnv` double. Each field models one impure result; the
+    /// default is the happy path (linked worktree, present valid policy, resolvable
+    /// dutmp/tmp/realpath). Tests override ONE field to drive ONE branch — keeping each
+    /// test's failure attributable to a single injected condition.
+    struct FakeEnv {
+        topology: Result<Topology, ResolveDeny>,
+        dutmp: Result<PathBuf, ResolveDeny>,
+        policy: std::io::Result<Option<String>>,
+        realpath_ok: bool,
+        ensure_ok: bool,
+    }
+
+    impl Default for FakeEnv {
+        fn default() -> Self {
+            FakeEnv {
+                topology: Ok(Topology {
+                    toplevel: pb("/private/tmp/wt-abc"),
+                    is_linked: true,
+                }),
+                dutmp: Ok(pb("/private/var/folders/xy/T")),
+                policy: Ok(Some(String::new())), // empty ⇒ JailPolicy::default (valid)
+                realpath_ok: true,
+                ensure_ok: true,
+            }
+        }
+    }
+
+    impl ResolveEnv for FakeEnv {
+        fn worktree_topology(&self, _cwd: &Path) -> Result<Topology, ResolveDeny> {
+            self.topology.clone()
+        }
+        fn getconf_dutmp(&self) -> Result<PathBuf, ResolveDeny> {
+            self.dutmp.clone()
+        }
+        fn realpath(&self, path: &Path) -> Result<PathBuf, ResolveDeny> {
+            if self.realpath_ok {
+                Ok(path.to_path_buf())
+            } else {
+                Err(ResolveDeny::PolicyMissing)
+            }
+        }
+        fn ensure_dir(&self, path: &Path) -> Result<PathBuf, ResolveDeny> {
+            if self.ensure_ok {
+                Ok(path.to_path_buf())
+            } else {
+                Err(ResolveDeny::PolicyMissing)
+            }
+        }
+        fn read_policy(&self, _basename: &std::ffi::OsStr) -> std::io::Result<Option<String>> {
+            match &self.policy {
+                Ok(o) => Ok(o.clone()),
+                Err(e) => Err(std::io::Error::new(e.kind(), e.to_string())),
+            }
+        }
+    }
+
+    const MAC_MAIN: &str = "/home/u/project";
+
+    fn resolve(env: &FakeEnv) -> Result<ResolvedMac, ResolveDeny> {
+        resolve_inputs(&pb("/private/tmp/wt-abc"), Path::new(MAC_MAIN), env)
+    }
+
+    // branch (a) — cwd not a worktree.
+    #[test]
+    fn resolve_inputs_branch_a_not_a_worktree_denies() {
+        let env = FakeEnv {
+            topology: Err(ResolveDeny::NotAWorktree),
+            ..Default::default()
+        };
+        assert_eq!(resolve(&env), Err(ResolveDeny::NotAWorktree));
+        assert_eq!(resolve(&env).unwrap_err().reason(), REASON_MAC_NOT_WORKTREE);
+    }
+
+    // branch (b) — toplevel is the main checkout.
+    #[test]
+    fn resolve_inputs_branch_b_main_checkout_denies() {
+        let env = FakeEnv {
+            topology: Ok(Topology {
+                toplevel: pb("/private/tmp/wt-abc"),
+                is_linked: false,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(resolve(&env), Err(ResolveDeny::IsMainCheckout));
+    }
+
+    // branch (d) — ambiguous gitdirs (the env probe reports it).
+    #[test]
+    fn resolve_inputs_branch_d_ambiguous_gitdirs_denies() {
+        let env = FakeEnv {
+            topology: Err(ResolveDeny::AmbiguousGitDirs),
+            ..Default::default()
+        };
+        assert_eq!(resolve(&env), Err(ResolveDeny::AmbiguousGitDirs));
+    }
+
+    // branch (c/e) — policy absent (None) OR a nested-repo basename never provisioned.
+    #[test]
+    fn resolve_inputs_branch_e_policy_absent_denies() {
+        let env = FakeEnv {
+            policy: Ok(None),
+            ..Default::default()
+        };
+        assert_eq!(resolve(&env), Err(ResolveDeny::PolicyMissing));
+    }
+
+    // branch (c/e) — policy unreadable (io error) also denies (never a permissive default).
+    #[test]
+    fn resolve_inputs_policy_unreadable_denies() {
+        let env = FakeEnv {
+            policy: Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "boom",
+            )),
+            ..Default::default()
+        };
+        assert_eq!(resolve(&env), Err(ResolveDeny::PolicyMissing));
+    }
+
+    // branch (f) — malformed / unknown-key policy denies (covers the network ambiguity).
+    #[test]
+    fn resolve_inputs_branch_f_malformed_policy_denies() {
+        let env = FakeEnv {
+            policy: Ok(Some("network = \"maybe\"\n".to_string())), // wrong type
+            ..Default::default()
+        };
+        match resolve(&env) {
+            Err(ResolveDeny::PolicyMalformed(_)) => {}
+            other => panic!("expected PolicyMalformed, got {other:?}"),
+        }
+        // an UNKNOWN key also denies (deny_unknown_fields, F-B6) — never a silent open.
+        let env2 = FakeEnv {
+            policy: Ok(Some("network_egress = true\n".to_string())),
+            ..Default::default()
+        };
+        match resolve(&env2) {
+            Err(ResolveDeny::PolicyMalformed(_)) => {}
+            other => panic!("expected PolicyMalformed for unknown key, got {other:?}"),
+        }
+    }
+
+    // branch (f-adjacent) — a dangerous extra_rw (root-ancestor) is rejected by the
+    // reused validate_policy, still a Deny (behaviour-preservation of the shared check).
+    #[test]
+    fn resolve_inputs_dangerous_extra_rw_denies() {
+        let env = FakeEnv {
+            policy: Ok(Some("extra_rw = [\"/\"]\n".to_string())),
+            ..Default::default()
+        };
+        match resolve(&env) {
+            Err(ResolveDeny::PolicyMalformed(_)) => {}
+            other => panic!("expected Deny for root extra_rw, got {other:?}"),
+        }
+    }
+
+    // happy path (EX-1) — Ok ⇒ a fully realpath'd ResolvedMac; network defaults open.
+    #[test]
+    fn resolve_inputs_happy_path_builds_resolved_mac() {
+        let env = FakeEnv::default();
+        let mac = resolve(&env).expect("happy path resolves");
+        assert_eq!(mac.wt, pb("/private/tmp/wt-abc"));
+        assert_eq!(mac.tmp, pb("/private/tmp/wt-abc/.tmp"));
+        assert_eq!(mac.dutmp, pb("/private/var/folders/xy/T"));
+        assert!(mac.extra_rw.is_empty());
+        assert!(mac.network, "a policy omitting network defaults OPEN");
+        assert_eq!(mac.profile_path, pb("/private/tmp/wt-abc/.tmp/jail.sb"));
+    }
+
+    // happy path with extra_rw — each grant is realpath'd and carried through.
+    #[test]
+    fn resolve_inputs_happy_path_carries_validated_extra_rw() {
+        let env = FakeEnv {
+            policy: Ok(Some("extra_rw = [\"/opt/cache\"]\n".to_string())),
+            ..Default::default()
+        };
+        let mac = resolve(&env).expect("valid extra_rw resolves");
+        assert_eq!(mac.extra_rw, vec![pb("/opt/cache")]);
+    }
+
+    // ---- VT-2: seatbelt_backend map + select_jailer macOS routing ---------------
+
+    // Ok(resolved) ⇒ Seatbelt ⇒ select_jailer Some ⇒ wrap_argv delegates to the builder.
+    #[test]
+    fn seatbelt_backend_ok_routes_to_seatbelt_jailer() {
+        let mac = resolve(&FakeEnv::default()).unwrap();
+        let backend = seatbelt_backend(Ok(mac.clone()));
+        assert_eq!(backend, Backend::Seatbelt(mac.clone()));
+        let jailer = select_jailer(&backend).expect("Seatbelt ⇒ Some");
+        assert_eq!(
+            jailer.wrap_argv(&mac.wt, &JailPolicy::default()),
+            sandbox_exec_argv(&mac)
+        );
+    }
+
+    // Err(deny) ⇒ Backend::Deny ⇒ select_jailer None ⇒ decide_bash DENIES, never wraps.
+    #[test]
+    fn seatbelt_backend_err_denies_never_passes_through() {
+        let backend = seatbelt_backend(Err(ResolveDeny::PolicyMalformed("bad".into())));
+        assert!(matches!(backend, Backend::Deny { .. }));
+        assert!(select_jailer(&backend).is_none());
+        let decision = decide_bash(
+            &Target::Jail(pb("/private/tmp/wt-abc")),
+            "rm -rf /",
+            "danger",
+            &JailPolicy::default(),
+            &backend,
+        );
+        match decision {
+            Decision::Deny { reason } => {
+                assert!(reason.starts_with(REASON_MAC_POLICY_MALFORMED));
+            }
+            other => panic!("malformed policy MUST deny, got {other:?}"),
+        }
+    }
+
+    // EX-4 / T10 — the network bool flows resolver → profile: false ⇒ deny line,
+    // omitted ⇒ default open ⇒ no deny line. Malformed already covered (branch f).
+    #[test]
+    fn network_bool_flows_from_policy_to_profile() {
+        let closed = FakeEnv {
+            policy: Ok(Some("network = false\n".to_string())),
+            ..Default::default()
+        };
+        let mac = resolve(&closed).expect("valid closed-network policy");
+        assert!(!mac.network);
+        assert!(
+            seatbelt_profile(&mac).contains(DENY_NETWORK),
+            "network=false MUST emit the deny line"
+        );
+
+        let open = resolve(&FakeEnv::default()).unwrap();
+        assert!(open.network);
+        assert!(
+            !seatbelt_profile(&open).contains(DENY_NETWORK),
+            "default-open policy MUST NOT emit the deny line"
+        );
+    }
+
+    // ---- RealEnv host-agnostic legs (git topology + policy read) ----------------
+    //
+    // The getconf leg is macOS-only (PHASE-04 in-situ); these prove the git-topology
+    // (branch a/b) and policy-read (branch e/f) legs against REAL repos on any host,
+    // reusing the subsystem's init_repo/git helpers (no parallel test infra).
+    use crate::worktree::test_helpers::{git, init_repo};
+
+    // branch (b) real — the primary tree is NOT a linked worktree ⇒ IsMainCheckout.
+    #[test]
+    fn real_env_topology_main_checkout_is_branch_b() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("src"));
+        let env = RealEnv {
+            main_root: primary.clone(),
+        };
+        let topo = env
+            .worktree_topology(&primary)
+            .expect("primary is a worktree");
+        assert!(!topo.is_linked, "primary tree is the main checkout");
+        // and the full resolver denies at branch b (no getconf/policy reached).
+        assert_eq!(
+            resolve_inputs(&primary, &primary, &env),
+            Err(ResolveDeny::IsMainCheckout)
+        );
+    }
+
+    // branch (a) real — a non-git dir ⇒ NotAWorktree.
+    #[test]
+    fn real_env_topology_non_git_is_branch_a() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plain = tmp.path().join("not-a-repo");
+        std::fs::create_dir_all(&plain).unwrap();
+        let env = RealEnv {
+            main_root: plain.clone(),
+        };
+        assert_eq!(
+            env.worktree_topology(&plain),
+            Err(ResolveDeny::NotAWorktree)
+        );
+    }
+
+    // linked worktree real — is_linked true; then read_policy absent ⇒ branch e.
+    #[test]
+    fn real_env_linked_worktree_then_policy_absent_is_branch_e() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("src"));
+        let fork = tmp.path().join("wt-xyz");
+        git(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "feat",
+                fork.to_str().unwrap(),
+            ],
+        );
+        let fork = std::fs::canonicalize(&fork).unwrap();
+        let env = RealEnv {
+            main_root: primary.clone(),
+        };
+        let topo = env.worktree_topology(&fork).expect("fork is a worktree");
+        assert!(topo.is_linked, "a linked worktree");
+        // no policy provisioned under <main>/.doctrine/state/dispatch/jail/ ⇒ branch e.
+        assert_eq!(
+            resolve_inputs(&fork, &primary, &env),
+            Err(ResolveDeny::PolicyMissing)
+        );
+    }
+
+    // read_policy present+valid, malformed, and unknown-key — the disk read → parse legs.
+    #[test]
+    fn real_env_read_policy_present_absent_malformed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let main = init_repo(&tmp.path().join("src"));
+        let mut jail_dir = main.clone();
+        for seg in POLICY_DIR_SEGMENTS {
+            jail_dir.push(seg);
+        }
+        std::fs::create_dir_all(&jail_dir).unwrap();
+        std::fs::write(jail_dir.join("wt-good.toml"), "network = false\n").unwrap();
+        std::fs::write(jail_dir.join("wt-bad.toml"), "network = \"x\"\n").unwrap();
+        let env = RealEnv {
+            main_root: main.clone(),
+        };
+        assert_eq!(
+            env.read_policy(std::ffi::OsStr::new("wt-good")).unwrap(),
+            Some("network = false\n".to_string())
+        );
+        assert_eq!(
+            env.read_policy(std::ffi::OsStr::new("wt-missing")).unwrap(),
+            None
+        );
+        // the malformed body parses to a branch-f Deny through from_toml_str.
+        let bad = env
+            .read_policy(std::ffi::OsStr::new("wt-bad"))
+            .unwrap()
+            .unwrap();
+        assert!(JailPolicy::from_toml_str(&bad).is_err());
     }
 }

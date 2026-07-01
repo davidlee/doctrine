@@ -129,3 +129,57 @@ accepted as a code-free probe phase per the boundary note above).
   pattern, got boolean` — misleading text; it's an undefined-param fail-CLOSED).
 - `-D DUTMP` MUST be the realpath (`/var/folders/$USER/T` → `/private/var/folders/…`);
   `subpath` matches the resolved path (INV-M2).
+
+## PHASE-03 (impure resolve_inputs + macOS wiring) — implemented
+
+`resolve_inputs` + `seatbelt_backend` + `RealEnv` landed in `jail.rs` behind an
+injected `ResolveEnv` trait. 16 new tests (12 `FakeEnv` branch/wiring + 4 `RealEnv`
+real-git legs); 57 jail tests green, clippy clean.
+
+### Injected-effects seam (D-p3-1, user-ratified 2026-07-01)
+
+`resolve_inputs(cwd, main_root, env: &dyn ResolveEnv) -> Result<ResolvedMac,
+ResolveDeny>` is PURE branch logic; ALL impurity (git `rev-parse --show-toplevel`,
+`is_linked_worktree`, `getconf`, `fs::canonicalize`, `create_dir_all`, policy file
+read) lives ONLY in `RealEnv`. This keeps jail.rs's module-header pure-leaf claim
+honest — the "thin shell" the design (§5.2) names IS `RealEnv`. Every branch a–f is
+unit-testable off-host (no real getconf on Linux CI). VA-1 grep-audit passed.
+
+`ResolveEnv` collapsed the design's separate `git_toplevel`+`is_main_checkout` into
+one `worktree_topology(cwd) -> Topology{toplevel, is_linked}`, so branch (a)/(b)/(d)
+decisions are made in the PURE resolver, not the env impl.
+
+### Branch c/e collapse (RV-p3 resolved — carry to /audit)
+
+`ResolveDeny` has 5 variants (`NotAWorktree`, `IsMainCheckout`, `AmbiguousGitDirs`,
+`PolicyMissing`, `PolicyMalformed`) — NOT a distinct branch-c `BasenameMismatch`.
+Branch c (nested-repo/submodule basename never provisioned) is mechanically identical
+to branch e (policy absent): both surface as `read_policy → Ok(None)` ⇒ `PolicyMissing`.
+The §5.5 enumeration lists a–f as SIX branches; the impl realises c and e through one
+mechanism because the security outcome (Deny) is invariant. **At /audit:** note the
+c≡e mechanism-merge against EX-2's "all 6 fail-closed branches" — 6 *conditions*, 5
+*typed reasons*; every condition still denies. Not a scope cut.
+
+### Deny path reuses the SL-182 funnel UNCHANGED (D-p3-2)
+
+`seatbelt_backend(Result) -> Backend`: `Ok ⇒ Seatbelt(mac)`, `Err ⇒ Deny{reason}`.
+Feeds the EXISTING `select_jailer`→`decide_bash` chain — `Err`⇒`Deny`⇒`None`⇒
+`Decision::Deny{reason}`. No new decision surface; EX-3 behaviour-preservation held
+(all SL-182 shared fns — `select_jailer`/`from_toml_str`/`validate_policy` — reused
+verbatim). Malformed/unknown-key policy ⇒ branch-f Deny, never a silent network-open
+default (EX-4, covers F-B6).
+
+### Policy location (SL-182 convention, single-sourced)
+
+`RealEnv::read_policy` reads `<main>/.doctrine/state/dispatch/jail/<basename>.toml`
+(design §5.3), segments as `POLICY_DIR_SEGMENTS` const. The provisioning WRITE is
+PHASE-04/SL-182's; PHASE-03 only READs. `NotFound` ⇒ `Ok(None)` ⇒ branch e; other io
+errors propagate ⇒ also branch e (fail-closed).
+
+### PHASE-04 carry-forward
+
+The macOS getconf leg + the whole in-situ containment matrix are host-gated to
+PHASE-04. `resolve_inputs`'s getconf/realpath failures currently map to fail-closed
+Denies reusing `NotAWorktree`/`PolicyMissing` reasons (no new a–f branch — the
+enumeration is `cwd`→policy derivation, not host-tool availability). If PHASE-04 wants
+a distinct "sandbox-env-unavailable" reason surfaced, add a variant then.
