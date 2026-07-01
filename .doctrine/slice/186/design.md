@@ -106,10 +106,10 @@ the band, and naming it can never move the band (position is fixed).
 **Two roots, layered (D1):**
 
 ```
-install/scriptures/     compile-embedded (rust_embed), framework-authored, the SUPERSET
+install/hymns/     compile-embedded (rust_embed), framework-authored, the SUPERSET
       │  install-time projection via corpus::sync_corpus — the SEAL FILTER
       ▼
-.doctrine/scriptures/   user-customisable, read at runtime; holds only exposed + user snippets
+.doctrine/hymns/   user-customisable, read at runtime; holds only exposed + user snippets
 ```
 
 The resolver **unions** embedded-framework ⊕ on-disk-user at read time. Provenance
@@ -119,8 +119,10 @@ override it → it wins by absence. `EXPOSED` framework content is projected as 
 editable starter; a user edit at the same path wins (provenance dominates
 specificity). This is doctrine's existing shipped-corpus ⊕ project-overlay pattern.
 
-> **Name.** `scriptures` is provisional (a dir name + one const); rename is cheap
-> and late. `canon`/`corpus` are taken (skill / `src/corpus.rs`).
+> **Name.** `hymns` (const `HYMNS_ROOT`). `canon`/`corpus` are taken (skill /
+> `src/corpus.rs`). Bands parse *relative* to the root, so the name is a mount
+> point — a `doctrine.toml` override is a trivial later addition (OQ-1); default-only
+> const for now (STD-001 single-source, YAGNI on the knob).
 
 ### 5.2 Interfaces & Contracts
 
@@ -140,7 +142,7 @@ doctrine prompt model-keys --harness <name>
     · Reflects authored guidance only — NOT a registry. Empty ⇒ don't ask.
 ```
 
-**Engine (pure) — `src/scriptures.rs`:**
+**Engine (pure) — `src/hymns.rs`:**
 
 ```rust
 struct ContextVector { role: Role, harness: Option<Harness>, model: Option<ModelKey>,
@@ -154,8 +156,8 @@ fn matches(sel: &Selector, ctx: &ContextVector) -> bool
 fn specificity(sel: &Selector) -> u32   // Σ concrete pinned segment-depths (D3)
 ```
 
-**Loader (impure shell, command edge):** walk embedded `install/scriptures/**` +
-disk `.doctrine/scriptures/**`; derive `Slot`+`Selector` from path; overlay sidecar
+**Loader (impure shell, command edge):** walk embedded `install/hymns/**` +
+disk `.doctrine/hymns/**`; derive `Slot`+`Selector` from path; overlay sidecar
 `<file>.toml` (supersede per-axis, carries `replaces`); tag `provenance` by source
 root. Reuses `corpus::embedded_assets()`, `fsutil`, `globmatch`, `dtoml`.
 
@@ -167,8 +169,8 @@ sections are untouched (behaviour-preservation).
 
 | Surface | Owner | Consumer | When |
 |---|---|---|---|
-| `install/scriptures/**` (+ sidecar `.toml`) | framework (committed) | resolver (embedded) | compile |
-| `.doctrine/scriptures/**` | user (+ projected starters) | resolver (disk) | runtime |
+| `install/hymns/**` (+ sidecar `.toml`) | framework (committed) | resolver (embedded) | compile |
+| `.doctrine/hymns/**` | user (+ projected starters) | resolver (disk) | runtime |
 | `install/manifest.toml` seal/expose section | framework | installer (`sync_corpus`) | install |
 | assembled markdown | resolver | agent / boot.md tail | on demand / boot |
 
@@ -219,13 +221,14 @@ orchestrator stops hand-rolling context (the token win).
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 — Corpus name.** `scriptures` provisional. RESOLVE before install wiring
-  lands (cheap to change until then).
+- **OQ-1 — Corpus name / config.** Name RESOLVED: `hymns`. Open sub-point: expose
+  the disk root as a `doctrine.toml` override, or const-only? Leaning const-only
+  (root-relative bands make a later override trivial).
 - **OQ-2 — Stage-label vocabulary source.** The locked set of valid `stage/` labels
   = the shipped skill/verb names. Where is the authoritative list read from (a
   const, the skills manifest)? Design detail for the validator.
 - **OQ-3 — Migration timing.** Do the existing `agents/*/dispatch-worker.md` defs
-  migrate to `scriptures/role/worker/…` in *this* slice, or after? Leaning:
+  migrate to `hymns/role/worker/…` in *this* slice, or after? Leaning:
   retire `install/agents` and move them here (keeps one corpus), but the static
   shell injection-hole (`{{ resolve … }}`) is minimal — confirm at plan.
 
@@ -244,8 +247,8 @@ orchestrator stops hand-rolling context (the token win).
   Rejected: lexicographic per-axis tuple (forces an axis-priority ranking that every
   new axis re-opens). Scalar sum needs no axis priority; cross-axis ties fall to
   alpha (only within a band, already a smell).
-- **D4 — Separate pure engine (`src/scriptures.rs`); boot calls it for baked bands.**
-  Rejected: generalize boot into a scriptures assembly — boot's governance sections
+- **D4 — Separate pure engine (`src/hymns.rs`); boot calls it for baked bands.**
+  Rejected: generalize boot into a hymns assembly — boot's governance sections
   are entity-derived (not files) and the rewrite risks the behaviour gate.
 - **D5 — Model band live via `--band` filter; floor=baked standing directive
   (scope), ceiling=per-harness auto-inject (deferred).**
@@ -295,17 +298,17 @@ _(adversarial pass pending — §Adversarial review)_
 
 ## Code Impact (design-target)
 
-- **`src/scriptures.rs`** — NEW pure engine (`resolve`, `matches`, `specificity`,
+- **`src/hymns.rs`** — NEW pure engine (`resolve`, `matches`, `specificity`,
   types).
 - **`src/commands/prompt.rs`** — NEW command (`resolve`, `model-keys`) + the impure
   loader (embedded⊕disk walk, sidecar overlay).
 - **`src/boot.rs`** — call the engine for baked bands, append tail section; omit
   model band.
 - **`src/install.rs` / `install/manifest.toml`** — seal/expose projection section;
-  `sync_corpus` projects `scriptures/`.
-- **`install/scriptures/**`** — NEW seed corpus (universal/harness/model/role/stage
+  `sync_corpus` projects `hymns/`.
+- **`install/hymns/**`** — NEW seed corpus (universal/harness/model/role/stage
   examples) + convention doc; **retire `install/agents/`** (migrate defs in as
   static shells — OQ-3).
 - **`src/main.rs`** — wire the `prompt` command.
-- **Tests** — `src/scriptures.rs` unit + goldens; e2e prompt-resolve golden; boot
+- **Tests** — `src/hymns.rs` unit + goldens; e2e prompt-resolve golden; boot
   golden update.

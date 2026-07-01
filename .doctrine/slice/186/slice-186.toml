@@ -36,10 +36,6 @@ selector = "src/**/prompt*"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "src/scriptures.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/commands/prompt.rs"
 intent = "design-target"
 
@@ -56,11 +52,15 @@ selector = "install/manifest.toml"
 intent = "design-target"
 
 [[selector]]
-selector = "install/scriptures/**"
+selector = "src/main.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/main.rs"
+selector = "src/hymns.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/hymns/**"
 intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
