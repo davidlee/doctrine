@@ -314,3 +314,23 @@ ritual (the Fork path that auto-copies `spawn/jail.toml` → `jail/<name>.toml`)
 provision trigger on the non-dispatch spawn path* remains proven only by unit test
 (`provision_jail_policy_copies_declaration_to_named_file`). Note it; don't chase it
 here — it's a spawn-path seam, not a containment gap. S2 clear throughout.
+
+### T4 / EX-4 — gate green modulo one UNRELATED perf flake (record, don't chase)
+`doctrine check gate` (2026-07-01): fmt clean, clippy zero warnings, build ok, all
+suites pass EXCEPT `cordage::scale_cliffs::many_small_cycles_evict_in_linear_time`
+(67.3s vs the linear-eviction perf budget). NOT SL-183's:
+- **Out of diff:** SL-183 touches `src/worktree/{jail,pretooluse}.rs` + `.doctrine/`
+  only; `git diff b2cd1000~1..HEAD -- crates/cordage` is empty.
+- **Timing, not logic:** the correctness sibling on the same workload
+  (`many_small_cycles_evict_set_identical_to_global_loop`) PASSED — this is a
+  slow-host perf gate, not a regression. Pre-existing; owned elsewhere (cordage).
+At /audit: record EX-4 as satisfied-for-this-slice with the flake noted as a
+known, unrelated, host-timing failure. Do not gate SL-183 closure on it.
+
+### T5 / VH-1 — human accept RECORDED 2026-07-01
+The VH-1 owner (human) ACCEPTED the macOS in-situ containment + degrade evidence at
+phase wrap-up: the live EX-2 battery (deny leg `seatbelt-policy-missing` fail-closed
++ allow-and-confine leg — all outside/alias/symlink/child-proc writes BLOCKED, wt
+writable, 6/6 canaries intact) and the EX-3 degrade-to-Deny unit test. VH-1 is thus
+pre-satisfied going into /close (re-confirmable there). PHASE-04 completed; slice
+transitioned started → audit.
