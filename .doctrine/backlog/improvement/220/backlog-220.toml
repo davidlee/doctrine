@@ -5,10 +5,10 @@ id = 220
 slug = "rename-find-to-search-and-listing-spine"
 title = "Rename memory find → search + adopt shared listing spine"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-07-01"
 tags = ["area:cli", "area:memory", "area:ux"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
