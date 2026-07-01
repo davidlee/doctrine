@@ -592,10 +592,7 @@ mod tests {
     /// wrongly capture it. Filter by excluding pi-specific token groups instead — a
     /// script edit to the core flags then breaks this test loudly (R2).
     fn pi_spawn_core_tokens() -> Vec<String> {
-        let path = format!(
-            "{}/scripts/pi-spawn-confined.sh",
-            env!("CARGO_MANIFEST_DIR")
-        );
+        let path = crate::test_support::repo_root().join("scripts/pi-spawn-confined.sh");
         let raw = std::fs::read_to_string(&path).expect("read pi-spawn-confined.sh");
         // Drop comment lines (they mention "bwrap"), then splice `\`-continuations.
         let code = raw
