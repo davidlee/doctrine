@@ -1,0 +1,46 @@
+memory_uid = "mem_019f1ce020fb7a5180104b2eef54dd47"
+memory_key = "mem.pattern.dispatch.jail-resolve-inputs-injected-env"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "resolve_inputs pure-leaf via injected ResolveEnv (jail.rs)"
+summary = "Impure jail resolve_inputs stays a pure leaf via an injected ResolveEnv trait; all git/getconf/fs behind RealEnv"
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = []
+globs = ["src/worktree/jail.rs"]
+commands = []
+tags = ["dispatch", "confinement", "macos", "seatbelt", "sl-183", "purity"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "58e733cf6f0d9324e9041bf8467b5f9ef4d2fa21"
+tree = "b6458d692b7c76114abb4cd472ab27b5f4c5265c"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "58e733cf6f0d9324e9041bf8467b5f9ef4d2fa21"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "commit"
+ref = "58e733cf"
+
