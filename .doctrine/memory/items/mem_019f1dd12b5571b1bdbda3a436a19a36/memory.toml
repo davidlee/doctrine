@@ -1,0 +1,42 @@
+memory_uid = "mem_019f1dd12b5571b1bdbda3a436a19a36"
+memory_key = "mem.thread.sl-183.ex2-live-battery-resolved-macos"
+schema_version = 1
+memory_type = "thread"
+status = "active"
+title = "SL-183 EX-2 live containment battery PASSED on macOS: proper plugin install + plain-task framing cleared both walls"
+summary = "EX-2 live in-situ battery ran both legs (deny + allow-and-confine) through the firing pretooluse hook on a nested Haiku subagent; canaries intact. Supersedes the blocked thread."
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = [".doctrine/backlog/risk/014/probe-h2-seatbelt/", ".harness/probe/h2-live-ex2/", "src/worktree/pretooluse.rs", "src/worktree/create.rs"]
+globs = []
+commands = []
+tags = ["sl-183", "ex-2", "seatbelt", "hooks", "macos", "subagent", "resolved", "live-battery"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "953cdb58aed0417a34e8e3525f59f8f85bbe7a15"
+ref_name = "refs/heads/edge"
+checkout_state_id = "6439f0051050fd35e25705e74902426e5186897e643ba06a6141e250dd975566"
+base_commit = "5c6f341dda1663492908aa3ba855f314bdcacbb3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

@@ -279,9 +279,38 @@ See `mem.thread.sl-183.ex2-live-battery-blocked-macos` (full detail). Summary:
    is verified from OUTSIDE (canary checksums), so subagent cooperation is not
    load-bearing.
 
-**Net EX-2 status for /audit:** discharged by T3a+T3b wiring + offline floor
-validation (shipped binary confines end-to-end) + live deny-path + pass-2's
-STANDING INV(M1-sub) (nesting already SUPPORTED, promoted to design INV). The live
-subagent battery is re-confirmation, not the sole proof — defer to VH-1 (human) or
-a next-session settings.local.json-surface run. NOT a containment defect (S2): all
-canaries intact throughout; nothing escaped.
+**Net EX-2 status for /audit:** ~~discharged by T3a+T3b wiring + offline floor
+validation…defer to VH-1 or a next-session run~~ **SUPERSEDED — LIVE BATTERY RAN,
+BOTH LEGS PASSED (2026-07-01, later same session).** Left above for the trail.
+
+### EX-2 live battery — RESOLVED (both walls down; ran through the firing hook)
+Both blockers cleared this session:
+- **Wall 1 (hook not firing) DOWN.** The doctrine plugin was properly *installed*
+  (project scope, `~/.claude/plugins/cache/doctrine/doctrine/0.1.0`; in
+  `installed_plugins.json`), replacing the skill-dir auto-discovery that never
+  intercepted subagent Bash. Its `Bash → doctrine worktree pretooluse` hook now
+  fires for `isolation:worktree` subagents on macOS — proven by the `.sb` tell.
+- **Wall 2 (refusal) DOWN.** Reframed as an ordinary "test the hook, run this
+  script, report, exit" task (a fixed WROTE/BLOCKED probe, no red-team language) —
+  a **Haiku** subagent complied. No jailbreak. Containment read from OUTSIDE via
+  canary checksums (rig F-D), so the subagent's self-report was never load-bearing.
+
+**Both decision legs exercised LIVE through the shipped consumer, nested subagent:**
+- **Deny leg** (no policy): 2 spawns → consumer returned `seatbelt-policy-missing`
+  (F-B4 fail-closed) → Bash denied before the script ran; canaries intact.
+- **Allow-and-confine leg** (policy provisioned for the wt basename): consumer
+  resolved WRAP → materialized the 540B `<wt>/.tmp/jail.sb` (the real SL-183 floor)
+  → the probe ran UNDER the floor: outside `parent_canary`, shared-.git analog,
+  `/tmp`-alias, `$HOME`, symlink-deref, and python child-proc writes all **BLOCKED**
+  (`Operation not permitted`); in-cwd marker **WROTE** (sentinel). Independent
+  verifier: all 6 canaries `OK`, zero stray writes. Rig+profile:
+  `.harness/probe/h2-live-ex2/` (canary manifest + `hook-check.sh`).
+
+**Carry to /audit (provisioning-trigger caveat):** the live leg used the Agent-tool
+spawn, which takes the create-fork **Passthrough** path (`cwd_is_arming=false`), so
+the per-wt `jail/<name>.toml` was provisioned MANUALLY, not via the dispatch arming
+ritual (the Fork path that auto-copies `spawn/jail.toml` → `jail/<name>.toml`). The
+*consumer* (resolve→wrap→materialize→confine) is now fully proven live; the *auto-
+provision trigger on the non-dispatch spawn path* remains proven only by unit test
+(`provision_jail_policy_copies_declaration_to_named_file`). Note it; don't chase it
+here — it's a spawn-path seam, not a containment gap. S2 clear throughout.

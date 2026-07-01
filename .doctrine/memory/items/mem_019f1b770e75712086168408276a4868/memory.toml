@@ -4,7 +4,7 @@ schema_version = 1
 memory_type = "fact"
 status = "active"
 title = "/reload-plugins registers plugin PreToolUse hooks, no restart"
-summary = '/reload-plugins reporting "N hooks" does NOT reliably register a firing plugin PreToolUse(Bash) wall — CONTRADICTED on macOS SL-183 PHASE-04 (subagent Bash ran unwrapped after reload). Prefer a full restart + confirm the hook actually fires; the original Linux/settings.local.json evidence did not reproduce on the macOS skill/plugin hooks.json path.'
+summary = "macOS: /reload-plugins does NOT reliably make skill-dir-discovered pretooluse hooks intercept SUBAGENT Bash. The working surface is a PROPERLY INSTALLED plugin (installed_plugins.json, project scope) — that fires for isolation:worktree subagents. See mem.thread.sl-183.ex2-live-battery-resolved-macos."
 created = "2026-07-01"
 updated = "2026-07-01"
 
