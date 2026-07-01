@@ -230,6 +230,12 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             | WorktreeCommand::BranchPointCheck { .. }
             | WorktreeCommand::VerifyWorker { .. }
             | WorktreeCommand::Pretooluse
+            // subagent-stop is the claude `SubagentStop` capture hook verb (SL-182
+            // PHASE-05) — it reads stdin + `git -C <wt> diff` and writes ONLY runtime
+            // state OUTSIDE the worktree (the captured patch), no authored state. It
+            // fires at the confined subagent's stop boundary (worker context), so it
+            // MUST be open under worker-mode — Read, like `Pretooluse`.
+            | WorktreeCommand::SubagentStop
             | WorktreeCommand::Status { .. } => Read,
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.

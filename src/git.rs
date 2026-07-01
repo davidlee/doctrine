@@ -531,6 +531,16 @@ pub(crate) fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CaptureEr
     }
 }
 
+/// Run a git command and return raw stdout REGARDLESS of exit code — for commands
+/// whose non-zero exit is INFORMATIONAL, not a failure. `git diff --no-index`
+/// exits 1 whenever the inputs differ, which is the normal case for the SL-182
+/// capture's index-free untracked synthesis (`/dev/null` vs an untracked file
+/// always differs). A spawn failure still errors; the stream is handed back
+/// verbatim (trailing newline intact — the caller feeds it to `git apply`).
+pub(crate) fn git_bytes_lenient(root: &Path, args: &[&str]) -> Result<Vec<u8>, CaptureError> {
+    Ok(run_git(root, args)?.stdout)
+}
+
 /// Run a git command expecting trimmed UTF-8 stdout (errors on non-zero exit).
 /// `pub(crate)` for the worktree provisioner's `rev-parse --git-common-dir`
 /// sibling-worktree check (SL-029 T6).

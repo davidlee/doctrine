@@ -36,6 +36,7 @@ pub(crate) use jail::{JailPolicy, shell_single_quote};
 // core (leaf) with impure inputs resolved here: git topology, host capability,
 // path canonicalization. `run_pretooluse` is the `WorktreeCommand::Pretooluse` entry.
 mod pretooluse;
+pub(crate) use capture::run_subagent_stop;
 pub(crate) use pretooluse::run_pretooluse;
 
 mod marker;
@@ -171,6 +172,16 @@ pub(crate) enum WorktreeCommand {
     /// nothing) on stdout; **exit 0 always** — deny is data, not an exit code
     /// (`mem.fact.claude.pretooluse-hook-fail-open`).
     Pretooluse,
+
+    /// Capture a finishing subagent's worktree delta for the claude `SubagentStop`
+    /// hook (stdin payload). Reads `{agent_id?, cwd}` JSON on stdin (no
+    /// `worktree_path` — RV-202); correlates the worker worktree, writes its diff
+    /// (tracked + untracked, index-free) to a patch OUTSIDE the worktree under the
+    /// coord runtime tier, then **exits 0 always** so the harness stop is never
+    /// deadlocked (D-capture-failmode — a capture failure is caught downstream by
+    /// the orchestrator's `--patch` import halt). Fires INSIDE the confined subagent
+    /// on stop ⇒ open under worker-mode, like `Pretooluse`.
+    SubagentStop,
 
     /// Create or resume a coordination worktree.
     /// For a slice on branch `dispatch/<slice>` off the resolved trunk.
@@ -329,6 +340,12 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
         } => run_fork(path, &base, &branch, &dir, worker),
         WorktreeCommand::CreateFork => run_create_fork(),
         WorktreeCommand::Pretooluse => run_pretooluse(),
+        WorktreeCommand::SubagentStop => {
+            // Never fails the process — exit 0 always (D-capture-failmode); the verb
+            // logs loud on a capture error, the downstream `--patch` import halts.
+            run_subagent_stop();
+            Ok(())
+        }
         WorktreeCommand::Coordinate { slice, dir, path } => {
             // Resolve the g2 authoring-branch VALUE here (command tier) — not in
             // coordinate.rs, which must stay off the config loader (ADR-001/VA-1).

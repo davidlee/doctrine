@@ -650,6 +650,22 @@ mod write_class_tests {
         );
     }
 
+    // SL-182 PHASE-05: `worktree subagent-stop` is the claude `SubagentStop` capture
+    // hook verb — Read-classed (open under worker-mode, like `pretooluse`): it fires
+    // at the confined subagent's stop boundary and writes ONLY the captured patch
+    // outside the tree, never authored state.
+    #[test]
+    fn worktree_subagent_stop_is_read() {
+        let c = Cli::try_parse_from(["doctrine", "worktree", "subagent-stop"])
+            .unwrap()
+            .command;
+        assert!(
+            matches!(write_class(&c), WriteClass::Read),
+            "subagent-stop must be Read (open under worker-mode)"
+        );
+        assert_eq!(cls(&["doctrine", "worktree", "subagent-stop"]), None);
+    }
+
     // SL-064 PHASE-04: `dispatch sync --prepare-review` is Orchestrator-classed —
     // refused under worker-mode, carries the "dispatch-sync" verb label (EX-1).
     #[test]
