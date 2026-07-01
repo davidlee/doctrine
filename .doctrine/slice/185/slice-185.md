@@ -90,6 +90,16 @@ the load-bearing intent: parity, not a mac-shaped special case.
 - **ASSUMPTION:** SL-183's probe findings (nesting, canonicalization, child
   inheritance) hold for the subprocess spawn shape. Re-probe only if the launcher
   changes the nesting/exec assumptions.
+- **OQ-3 / IDE-025 adjacency (for `/design`):** [[IDE-025]] proposes a
+  selector-sourced write-allowlist *jail mode*. It does NOT fold into this slice —
+  its mechanism is a per-path Edit/Write-wall predicate (claude PreToolUse
+  `pathcheck`), which the subprocess arm cannot host: pi/codex have no per-tool
+  hook, so the Seatbelt floor here (like bwrap) rw-binds whole subtrees, not glob
+  sets — the exact limitation IDE-025 already names. SL-185 thus *confirms*
+  IDE-025 is claude-arm-only, not enabled by this work. The one genuine shared
+  seam is the **per-worker policy schema** (SL-183 OQ-3): whatever seatbelt policy
+  this slice stamps for the subprocess worker should leave room for a future
+  `mode`/`write_allowlist` field (forward-compat), without implementing it here.
 
 ## Verification / closure intent
 
