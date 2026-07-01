@@ -1,0 +1,42 @@
+memory_uid = "mem_019f1c7c26777121be21c19a1d1ce705"
+memory_key = "mem.pattern.doctrine.phase-complete-clobbers-boundary"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Completing a phase from main tree clobbers worktree source-delta boundaries"
+summary = "Flipping a phase to `completed` from the main tree auto-stamps a degenerate source-delta boundary (start==end==HEAD), overwriting real worktree-recorded deltas; recover with `slice record-delta`."
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = []
+globs = []
+commands = ["slice"]
+tags = ["dispatch", "conformance", "audit", "boundary", "worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a0d76799cf94ca52af9ac00217b0b3b87c1ec7f1"
+ref_name = "refs/heads/edge"
+checkout_state_id = "81f140da82d801dd03a2575824f2ba68f8af9af71f40650db14a6fdef6870fee"
+base_commit = "aff282e7259b56ffc96cd8f3903c3602fcb9d07e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+

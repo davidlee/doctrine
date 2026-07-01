@@ -1,0 +1,43 @@
+id    = 207
+slug  = "audit-reconciliation-of-sl-184"
+title = "Audit (reconciliation) of SL-184"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-184"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "IMP-220 origin premise stale — stderr redirect notice superseded by silent alias"
+detail = 'Expected: the originating improvement IMP-220 should describe the alias behaviour actually shipped. Observed: IMP-220 scope §1 mandates "Keep `memory find` as a hidden alias (deprecated, prints a redirect notice to stderr)." SL-184 design §1 consciously overrode this to a SILENT clap alias (`#[command(alias = "find")]`, no stderr notice) — "simpler and avoids noise for users who type find from habit." Design §1 explicitly states "IMP-220 should be updated to reflect this resolution." IMP-220 is still `open` with the stale stderr-notice text. Reconciliation target: backlog edit IMP-220 §1 (per-slice-adjacent, not a REV — backlog item, not governance). Also, IMP-220 is the `originates_from` of SL-184 → fulfils at close.'
+disposition = "verified"
+response = "Observation confirmed. IMP-220 §1 stderr-notice premise is superseded by design §1's silent-alias resolution. Remediation is a spec/governance-adjacent write delegated to /reconcile — recorded in the Reconciliation Brief as a direct backlog edit to IMP-220 (not a REV: IMP-220 is a backlog improvement, not governance). No code change; the shipped silent alias is correct per design."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "RV-206 fix-now remediation was ledger-only; F-1/F-2 applied in audit, F-5 rejected as false finding"
+detail = "Expected: RV-206 (code-review) marked F-1/F-2/F-5 `fix-now` and `done`, implying the code was fixed. Observed: RV-206 was ledger-only — the worktree code was never changed (confirmed by author). Audit applied the real fixes in commit 1397d2b4: F-1 (stale `find` prose in `run_search` doc comment → `search`) and F-2 (`page_size = limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT=5)` → `limit.unwrap_or(shown)`; the 5 was a lie for search's unbounded `--limit`-unset default). F-5 (remove `.min(ranked.len())`) was REJECTED as a false finding: `slice.get(offset..end)` returns None (→ empty) when end > len, so the clamp is load-bearing for the `--limit`-unset case (end == usize::MAX). The existing test `writer_capture_run_search` failed when F-5 was applied, and design §2 line 100 independently mandates the `.min(ranked.len())` clamp. Reverted + documented inline."
+disposition = "fix-now"
+response = "Fixed within audit scope in commit 1397d2b4 (worktree SL-184/phase-01). F-1 (doc prose) and F-2 (page_size constant) applied; F-5 rejected as a false finding — the `.min(ranked.len())` clamp is load-bearing (get(range) does not clamp; empties output when end>len) and is independently mandated by design §2. Green after remediation. RV-206's code findings are thereby resolved: 2 fixed, 1 correctly rejected, 3 tolerated stand."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Mechanical conformance clean; green baseline holds post-remediation"
+detail = "Expected: implementation matches declared design-target surface with no scope creep or dropped work, and stays green. Observed: `slice conformance SL-184` reports 7/7 conformant, 0 undeclared, 0 undelivered — every declared selector (src/memory.rs, src/retrieve.rs, src/mcp_server/tools.rs, tests/e2e_mcp_server.rs, tests/e2e_memory_sync.rs, src/commands/guard.rs, src/main.rs) matched an actual edit and nothing was touched outside the design. `cargo build` + `check gate` (clippy zero-warnings + full suite, 2900+ tests) green at remediation tip 1397d2b4. No behavioural drift from design.md."
+disposition = "aligned"
+response = "No drift. Conformance 7/7, green baseline at 1397d2b4. Implementation matches design.md. No action."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

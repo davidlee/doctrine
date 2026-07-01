@@ -736,3 +736,42 @@ without an explicit applicability-boundary field ("applies to: agent Bash calls,
 NOT in-process subprocess") invites over-defensive planning against code paths it
 never touched. Suggest memories for harness-proxy gotchas record the interception
 layer explicitly.
+
+[execute; SL-182-PH05-derived-skill-edit-2026-07-01]
+Edited `.claude/skills/dispatch-agent/SKILL.md` — the Edit succeeded silently, but
+`git add` refused ("beyond a symbolic link"). `.claude/skills` → `.doctrine/skills/`
+is a DERIVED install copy; the authored/tracked source is
+`plugins/doctrine/skills/<name>/SKILL.md`. So the edit landed on the disposable
+install artifact, not the committed source — a full round-trip (edit → attempt commit
+→ diagnose symlink → diff → cp derived→source → commit) wasted vs editing the source
+directly. Root cause: no signposting that `.claude/`|`.doctrine/skills` are derived;
+the Read/Edit tools resolve the symlink transparently so nothing flags "you are
+editing a build output." Suggest: skill-authoring memory should name
+`plugins/doctrine/skills/` as the ONLY editable source, and hooks.json/skills edits
+should target plugins/ then re-install.
+
+[audit; SL-184-worktree-blindspot-2026-07-01]
+`/audit SL-184`: the slice's implementation lived in a `/dispatch` worktree
+(`.worktrees/SL-184/phase-01`, provenance=solo), but the audit skill's evidence
+steps read the MAIN tree first. Main tree showed status=ready, phases=planned,
+zero SL-184 commits, code unchanged → I concluded "nothing to audit" and nearly
+asked the user to re-route to /execute. Wrong: the work was fully committed on the
+worktree branch. Cost a full false-negative round-trip (status/phase/conformance/
+code greps + an AskUserQuestion) before the user said "find the worktree." Root
+cause: the audit skill's "prepare subject: use a worktree" note is about WRITING
+evidence safely, and doesn't prompt the auditor to DISCOVER an existing dispatch
+worktree first. Suggest: audit step 2 should lead with `git worktree list` /
+`dispatch candidate status --slice N` to locate the subject surface before reading
+the main tree, especially for solo-provenance dispatch where no candidate
+interaction branch is recorded.
+
+[audit; SL-184-phase-complete-clobber-2026-07-01]
+Second foot-gun same session: to make `slice conformance` compute (it read
+"incomplete — phases not completed"), I flipped both phases to `completed` FROM THE
+MAIN TREE. That re-stamped the source-delta registry with degenerate
+start==end==HEAD boundaries (the F-2 "completed phase must carry a row" backstop),
+clobbering the real worktree-recorded ranges — conformance then reported all 7
+selectors undelivered. Recovered with `slice record-delta`. The completion
+auto-stamp has no guard against "you are on the main tree with no worktree delta to
+bind" — it silently writes a degenerate row over a good one. Captured as memory
+mem.pattern.doctrine.phase-complete-clobbers-boundary.

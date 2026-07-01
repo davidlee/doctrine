@@ -1,7 +1,7 @@
 id = 184
 slug = "memory-find-to-search"
 title = "Rename memory find → search + adopt shared listing spine"
-status = "ready"
+status = "reconcile"
 created = "2026-07-01"
 updated = "2026-07-01"
 tags = ["area:cli", "area:memory", "area:ux", "listing"]
