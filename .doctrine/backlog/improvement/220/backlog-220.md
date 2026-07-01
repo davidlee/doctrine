@@ -29,8 +29,9 @@ shared listing spine so it matches every other list surface.
   `format_search_table`/`format_search_json`, `MemoryFindRow` → `MemorySearchRow`.
 - Tests: update all references to the old verb (`find_for_mcp` → `search_for_mcp`,
   test function names, golden strings).
-- Keep `memory find` as a hidden alias (deprecated, prints a redirect notice to
-  stderr).
+- Keep `memory find` as a **silent** hidden alias (`#[command(alias = "find")]`,
+  no stderr notice) — SL-184 design §1 superseded the stderr-redirect proposal
+  (simpler; avoids noise for users typing `find` from habit).
 
 ### 2. Shared listing spine
 

@@ -84,3 +84,25 @@ foot-gun is not repeated.
   SL-184 design §1. Edit IMP-220's scope text to match what shipped (RV-207 F-1).
 - **IMP-220 lifecycle** — SL-184 `originates_from` IMP-220; mark IMP-220 fulfilled
   / resolved at close (Axis B, ADR-018) once SL-184 lands on main.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- IMP-220 §1 (`backlog-220.md`): stale alias premise ("hidden alias, prints a
+  redirect notice to stderr") → **silent** clap alias, no stderr notice, per
+  SL-184 design §1 (RV-207 F-1). Applied with user agreement.
+
+### REVs completed
+- None — no governance/spec drift in the brief.
+
+### Withdrawn / tolerated
+- None new. RV-206's tolerated items (F-3/F-4/F-6) stand with rationale in that
+  ledger; RV-207 F-2 remediation (code fixes F-1/F-2, F-5 rejected) landed in
+  worktree commit 1397d2b4; RV-207 F-3 aligned.
+
+### Deferred to /close
+- IMP-220 lifecycle: SL-184 `originates_from` IMP-220 → mark fulfilled/resolved
+  (Axis B, ADR-018) when SL-184 lands on main.
+- Land worktree branch `SL-184/phase-01` (tip 1397d2b4) onto main.
+
+Reconcile pass complete — handoff to /close.
