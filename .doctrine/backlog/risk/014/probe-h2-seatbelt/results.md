@@ -226,3 +226,119 @@ arm/disarm `$PROBE_BASE/DISABLE_WRAP`, spawn ONE `isolation:worktree` subagent w
 `insitu/redteam-prompt.md`, run `canaries/verify.sh` (truth), `tail wrapper.log`
 (WRAP/CONTROL-BYPASS + `mode=`). Run under BOTH auto and **yolo**; the yolo pair is
 the boundary-clean evidence.
+
+# Pass 3 — SL-183 PHASE-01: final DUTMP/xcrun_db profile + SBPL regex semantics
+
+Orchestrator-context shell probe (like pass 1). Discharges the RV-203 **F-2**
+(profile design-decided-but-unprobed) and **F-3** (unanchored substring → anchored
+regex) verification obligations carried into `/plan`. The base profile shape was
+already proven (pass 1); this pass pins the DUTMP-deny + `xcrun_db` re-allow
+additions and the SBPL `regex` match semantics BEFORE any Rust. Host: Darwin
+arm64 `fusillade` (macOS 26.4.1), `/usr/bin/sandbox-exec`. Rig:
+`seatbelt-jail.sh` (extended: `-D DUTMP` + coarse DUTMP deny + anchored re-allow),
+`canaries/setup.sh` (extended: DUTMP canaries + deeper-subpath decoy).
+
+## VERDICT — F-2 / F-3 DISCHARGED. Final profile + regex semantics pinned.
+The locked design *decision* holds; the *exact SBPL form* is now empirical. One
+correction to §5.1's illustrative profile line surfaced (see F-P3-A): the shipped
+re-allow MUST be `require-all`-scoped, not a bare regex.
+
+## Final profile (verbatim, as emitted by `emit_profile true 1 0`)
+```scheme
+(version 1)
+(allow default)
+(deny file-write*)
+(deny file-write* (subpath (param "PTMP")))
+(deny file-write* (subpath (param "DUTMP")))
+(allow file-write* (literal "/dev/null"))
+(allow file-write* (literal "/dev/zero"))
+(allow file-write* (literal "/dev/dtracehelper"))
+(allow file-write* (subpath "/dev/fd"))
+(allow file-write* (regex #"^/dev/tty"))
+(allow file-write* (literal "/dev/stdout"))
+(allow file-write* (literal "/dev/stderr"))
+(allow file-write* (subpath (param "WT")))
+(allow file-write* (subpath (param "TMP")))
+(allow file-write* (require-all (subpath (param "DUTMP")) (regex #"/xcrun_db[^/]*$")))
+```
+Invoked with the COMPLETE `-D` param set (`WT`,`TMP`,`PTMP`,`DUTMP` realpath'd).
+Missing ANY referenced param ⇒ `sandbox-exec: invalid data type of path filter;
+expected pattern, got boolean` (undefined-param, not a rule error — see F-P3-C).
+
+## Deny/allow matrix (EX-1) — complete param set, independently canary-verified
+| vector | expect | got |
+|---|---|---|
+| in-wt write (`<wt>/…`) | ALLOW | ALLOW ✓ |
+| `<wt>/.tmp/…` write | ALLOW | ALLOW ✓ |
+| `/private/tmp/…` write | DENY | DENY ✓ |
+| DUTMP non-`xcrun_db` (`…/T/h2_dutmp…`) | DENY | DENY ✓ |
+| DUTMP `xcrun_db-<hash>` | ALLOW | ALLOW ✓ |
+| DUTMP `xcrun_db_x/deep` (deeper subpath) | DENY | DENY ✓ |
+
+Canary integrity: all 6 (parent, fake-.git, /private/tmp, $HOME, DUTMP
+non-xcrun_db, DUTMP `xcrun_db_x/canary`) **intact** via the independent verifier.
+The WT here lived UNDER `/private/tmp` — so the deny-first (F-A) ordering was
+exercised against the real worktree-under-scratch case, not a synthetic one.
+
+## xcrun tool works — F-E breakage silenced (EX-2)
+- Cold `xcrun --find` under DUTMP-deny **WITHOUT** the re-allow reproduced:
+  `xcrun: error: couldn't create cache file
+  '/var/folders/.../T/xcrun_db-<hash>' (errno=Operation not permitted)`.
+- Under the FINAL (require-all re-allow) profile: **no error line**, and the
+  cache file `…/T/xcrun_db` is created. `/usr/bin/python3` runs clean.
+- Name detail: the *temp* names are `xcrun_db-<hash>`; the *committed* cache is
+  plain `xcrun_db`. `xcrun_db[^/]*$` covers both (empty + suffix tail).
+
+## SBPL regex semantics pinned (EX-3)
+- `(regex #"…")` matches the **resolved FULL PATH**, not the basename.
+- **`require-all (subpath P) (regex R)` is LOAD-BEARING.** BARE unscoped
+  `(regex #"/xcrun_db[^/]*$")` **LEAKED**: it allowed `/private/tmp/xcrun_db-*`
+  — a write entirely OUTSIDE DUTMP. Scoping with `require-all (subpath DUTMP)`
+  confines the hole to the per-user temp. This is the F-3 "narrowest hole"
+  realized correctly.
+- Anchor `/xcrun_db[^/]*$` constrains ONLY the final path segment and is
+  **depth-agnostic** within the scope:
+
+  | path under DUTMP | result |
+  |---|---|
+  | `xcrun_db` (plain) | ALLOW |
+  | `xcrun_db-abc123` | ALLOW |
+  | `xcrun_db_x` (file) | ALLOW (over-match) |
+  | `xcrun_dbEVIL` | ALLOW (over-match) |
+  | `xcrun_db_x/xcrun_db` (nested, final seg `xcrun_db`) | ALLOW (depth-agnostic) |
+  | `prefix_xcrun_db` | DENY (must follow `/`) |
+  | `xcrun_db_x/deep` | DENY (`/` in tail) |
+
+- **Over-match caveat (carry to the Rust `XCRUN_DB_REGEX` const comment):** the
+  hole is "any basename beginning `xcrun_db`, at any depth under DUTMP" — wider
+  than the single OS-owned filename the §5.5 caveat implies. xcrun writes only at
+  DUTMP top level, so safe in practice; documented, not tightened (tightening to a
+  literal would break the `-<hash>` temp family).
+
+### F-P3-A — §5.1 illustrative profile line is a floor breach as written
+The design shows `(allow file-write* (regex #"/xcrun_db[^/]*$"))` bare. Proven to
+leak outside DUTMP. The prose already requires scoping ("under a DUTMP subpath
+scope", "not the substring `DUTMP/xcrun_db`"). **Correction:** ship
+`require-all`. Reconcile §5.1's line illustrative→proven at close; PHASE-02's
+const + emit site encode `require-all`. (Rig already carries the corrected form.)
+
+### F-P3-B — DUTMP realpath footgun (INV-M2 re-confirmed)
+`getconf DARWIN_USER_TEMP_DIR` = `/var/folders/$USER/T`, realpaths to
+`/private/var/folders/…`. `subpath` matches the resolved path → `-D DUTMP` MUST be
+the realpath. PHASE-03 `resolve_inputs` realpaths it.
+
+### F-P3-C — undefined `-D` param ⇒ hard profile-load refusal
+A profile referencing `(param "X")` with no `-D X` bound fails with `invalid data
+type of path filter; expected pattern, got boolean` — a fail-CLOSED refusal (the
+sandbox never starts). Reassuring for the fail-closed posture, but note the error
+text is misleading (reads like a rule-syntax error). PHASE-02/03 emit every
+referenced param unconditionally or omit the rule that needs it.
+
+## How to re-run (pass 3)
+On a macOS host (NOT the bwrap jail): `export PROBE_BASE=<scratch>/h2-phase01`;
+`bash canaries/setup.sh` (plants the 6 canaries incl. DUTMP + deeper decoy); then
+source `seatbelt-jail.sh` and drive with the complete `-D` param set
+(`WT`/`TMP`/`PTMP`/`DUTMP`, all realpath'd). Use `require-all` for the xcrun_db
+re-allow. Verify truth with `canaries/verify.sh` (the battery self-report is
+untrusted, F-D). The one-shot matrix driver is disposable session scratch (not
+committed); its logic is reproduced by the matrix + regex tables above.
