@@ -666,3 +666,25 @@ build-read-fix cycle each. A "new WorktreeCommand variant" checklist (enum +
 dispatch + guard class + layering tier + clap doc) in the dispatch/worktree
 subsystem docs would pre-empt ~2 round-trips. Otherwise the seam pointers in the
 handover/sheet were accurate and saved substantial search.
+
+[phase-plan; SL-182-P05-phaseplan]
+OQ-1 delta-check location: design named "skill-orchestration vs src/dispatch.rs"
+as the two candidates. Neither was right — the single-commit check is in
+src/worktree/import.rs (classify_import → run_import). dispatch.rs carries only
+record-boundary. Disambiguating cost ~3 extra file reads (import.rs, subagent.rs,
+mod.rs dispatch) to prove the real home before pinning. A design that names the
+actual Rust symbol/file for a delegated OQ (not a guessed file) would save the
+rediscovery. Low-severity: the reads were needed for scoping anyway.
+
+[preflight; SL-182-PHASE-05-warmup]
+Preflight found a T2↔T5 coupling the phase sheet leaves implicit: the belt in
+classify_import prefix-matches ".doctrine/"/".claude/" on delta_paths. On the
+--fork arm those paths are hardened at gather time (-c core.quotePath=false
+--no-renames) so a non-ASCII governance path can't C-quote past the belt and a
+governance rename can't collapse its source leg. On the --patch arm delta_paths
+come from the CAPTURED patch, so the SAME hardening must ride the SubagentStop
+capture-time `git -C <wt> diff` (T2), not import (T5) — else the belt weakens on
+the claude arm. Sheet T2 says only "git -C <wt> diff"; flag=uncarried.
+Minor: design.md is 950 lines, tripped the 25k Read truncation cap (read §1-742,
+§5.4 funnel is in-window; §7 decisions partially past the cut). Cost one extra
+paged read to confirm nothing downstream contradicted the funnel plan.
