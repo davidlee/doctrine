@@ -25,6 +25,20 @@ const DOCTRINE_PREFIX: &str = ".doctrine/";
 
 const CLAUDE_PREFIX: &str = ".claude/";
 
+// ---- git belt-hardening flags (STD-001; shared by the live-worktree gather) ------
+// The claude arm imports the worker's LIVE working-tree diff, so the SAME hardening
+// the fork arm's belt uses must ride at gather time — the belt cannot un-mangle a
+// path the diff already C-quoted or a rename it already collapsed:
+//   * quotePath off — a non-ASCII `.doctrine/` path emits verbatim, not C-quoted past
+//     the `starts_with(".doctrine/")` belt;
+//   * `--no-renames` — a governance-file rename shows BOTH legs (delete + add), so the
+//     `.doctrine/` SOURCE cannot hide behind a same-content destination.
+// (The fork arm keeps its own inline literals — BEHAVIOUR-FROZEN, EX-4 — so these are
+// used only by the additive `--from-worktree` path, accepting that narrow duplication.)
+const QUOTE_PATH_OFF: [&str; 2] = ["-c", "core.quotePath=false"];
+const NO_RENAMES: &str = "--no-renames";
+const DEV_NULL: &str = "/dev/null";
+
 /// Verdict of the PURE import classifier: apply the delta, or fail closed with a
 /// distinct named refusal token. The shell ([`run_import`]) gathers the FACTS and
 /// acts on this verdict — never the other way round (ADR-001 leaf, gather →
@@ -126,15 +140,15 @@ pub(crate) fn run_import(
     path: Option<PathBuf>,
     base: &str,
     fork: Option<&str>,
-    patch: Option<&Path>,
+    from_worktree: Option<&Path>,
 ) -> anyhow::Result<()> {
     // Exactly one source. clap `conflicts_with` already rejects both-given at parse;
     // this rejects neither-given and dispatches to the arm's body.
-    match (fork, patch) {
+    match (fork, from_worktree) {
         (Some(fork), None) => run_import_fork(path, base, fork),
-        (None, Some(patch)) => run_import_patch(path, base, patch),
-        (Some(_), Some(_)) => bail!("import: --fork and --patch are mutually exclusive"),
-        (None, None) => bail!("import: exactly one of --fork / --patch is required"),
+        (None, Some(dir)) => run_import_from_worktree(path, base, dir),
+        (Some(_), Some(_)) => bail!("import: --fork and --from-worktree are mutually exclusive"),
+        (None, None) => bail!("import: exactly one of --fork / --from-worktree is required"),
     }
 }
 
@@ -214,26 +228,33 @@ fn run_import_fork(path: Option<PathBuf>, base: &str, fork: &str) -> anyhow::Res
     Ok(())
 }
 
-/// The claude arm (SL-182 PHASE-05, OQ-1): import the worker's CAPTURED PATCH.
-/// ro-`.git` blocks the worker's self-commit, so the fork tip stays at `B` and the
-/// committed-fork path is a dead end here (`<fork>^ == B^ != B` ⇒ `MultiCommit`).
-/// The delta rides the captured patch instead. Reuses [`classify_import`] UNCHANGED:
-/// the `single_commit` precond is **vacuously true** (a patch carries zero commits,
-/// trivially ≤ 1), so the LOAD-BEARING checks on this arm are the belt
+/// The claude arm (SL-182 PHASE-05, symmetric live-import): import the worker's
+/// **live** working-tree delta directly from the persisted worktree `dir`. ro-`.git`
+/// blocks the worker's self-commit, so the fork tip stays at `B` and the committed-fork
+/// path is a dead end here (`<fork>^ == B^ != B` ⇒ `MultiCommit`). With `create-fork`
+/// as the `WorktreeCreate` hook and NO `WorktreeRemove` hook, the worker tree PERSISTS
+/// on disk post-return with its diff intact (`mem_019f1a5c…`, corrected against
+/// `docs/claude/hooks.md:2442`), so the orchestrator gathers the live delta itself —
+/// no `SubagentStop` capture, no file hop. Reuses [`classify_import`] UNCHANGED: the
+/// `single_commit` precond is **vacuously true** (a working-tree diff carries zero
+/// commits, trivially ≤ 1), so the LOAD-BEARING checks on this arm are the belt
 /// (`.doctrine/`/`.claude/` reject) + `head_at_base` + `tree_clean` — all still run
 /// through the pure core. Gather → pure-classify → act, same shape as the fork arm.
-fn run_import_patch(path: Option<PathBuf>, base: &str, patch: &Path) -> anyhow::Result<()> {
+///
+/// The caller (`/dispatch-agent` funnel) reaps the worktree with `git worktree remove
+/// --force` ONLY after this returns 0 (F-3): a nonzero exit halts the funnel and LEAVES
+/// the tree, so a failed import never `--force`-destroys the sole copy of the delta.
+fn run_import_from_worktree(path: Option<PathBuf>, base: &str, dir: &Path) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
 
-    // A missing/empty patch means the worker produced no capturable delta (the
-    // SubagentStop capture failed or lost the tree). Report-and-halt — never launder
-    // an empty import green (R-capture-lossy, design §5.4 / the funnel's halt).
-    let patch_bytes =
-        fs::read(patch).with_context(|| format!("read captured patch {}", patch.display()))?;
+    // Gather the worker's LIVE working-tree delta (tracked + untracked) as one
+    // applyable patch. An empty patch means the worker produced no delta — report-
+    // and-halt, never launder an empty import green (design §5.4 / the funnel's halt).
+    let patch_bytes = gather_worktree_patch(dir)?;
     if patch_bytes.is_empty() {
         bail!(
-            "import: captured patch {} is empty — worker produced no delta; halting",
-            patch.display()
+            "import: worker worktree {} carries no delta; halting",
+            dir.display()
         );
     }
 
@@ -243,34 +264,14 @@ fn run_import_patch(path: Option<PathBuf>, base: &str, patch: &Path) -> anyhow::
     let head_at_base = matches(&base_sha, &head_sha);
     let tree_clean = gather_tree_clean(&root)?;
 
-    // --- precond 2 — single_commit VACUOUS: a captured patch carries no commits ---
+    // --- precond 2 — single_commit VACUOUS: a working-tree diff carries no commits ---
     let single_commit = true;
 
-    // --- belt input — the patch's touched paths, via `git apply --numstat` (a DRY
-    // inspection: it mutates nothing). Same hardening as the fork arm's belt so a
-    // non-ASCII `.doctrine/` path emits verbatim (quotePath off) and no rename hides
-    // a governance source leg (--no-renames). The capture side already hardened the
-    // diff (SL-182 T2); this is belt-and-suspenders on the read-back. numstat line =
-    // `<added>\t<removed>\t<path>` — the path is the segment after the last tab. ---
-    // NB: `git apply` has no `--no-renames` (that is a `git diff` flag) — the capture
-    // side already hardened the diff, so the patch carries no rename pairs; here we
-    // only keep quotePath off so a non-ASCII path in the numstat output is verbatim.
-    let numstat = git::git_text(
-        &root,
-        &[
-            "-c",
-            "core.quotePath=false",
-            "apply",
-            "--numstat",
-            &patch.to_string_lossy(),
-        ],
-    )
-    .with_context(|| format!("git apply --numstat {}", patch.display()))?;
-    let delta_paths: Vec<String> = numstat
-        .lines()
-        .filter_map(|line| line.rsplit('\t').next())
-        .map(str::to_owned)
-        .collect();
+    // --- belt input — the worker tree's touched paths (tracked diff + untracked adds),
+    // read straight from the LIVE tree (`-C dir`) with the same hardening the fork arm's
+    // belt uses (quotePath off + --no-renames) so a non-ASCII `.doctrine/` path emits
+    // verbatim and no rename hides a governance source leg. ---
+    let delta_paths = gather_worktree_delta_paths(dir)?;
 
     // --- pure classify (belt lives in the pure core, reused unchanged) ---
     match classify_import(head_at_base, tree_clean, single_commit, &delta_paths) {
@@ -278,16 +279,159 @@ fn run_import_patch(path: Option<PathBuf>, base: &str, patch: &Path) -> anyhow::
         Ok(Apply::Ok) => {}
     }
 
-    // --- act: apply the captured patch into the index, NON-committing (ADR-006 D7).
+    // --- act: apply the gathered patch into the index, NON-committing (ADR-006 D7).
     // Same `git apply --3way --index` as the fork arm; the orchestrator commits
     // separately. The raw bytes carry the trailing newline `git apply` requires. ---
     git::git_apply_index(&root, &patch_bytes)
-        .with_context(|| format!("git apply --3way --index {}", patch.display()))?;
+        .with_context(|| format!("git apply --3way --index from {}", dir.display()))?;
 
     writeln!(
         io::stdout(),
-        "imported patch {}: delta staged (uncommitted)",
-        patch.display()
+        "imported worktree {}: delta staged (uncommitted)",
+        dir.display()
     )?;
     Ok(())
+}
+
+/// Gather a worker worktree's full working-tree delta as one applyable patch. The
+/// **tracked** leg is `git -C <wt> diff HEAD` (staged + unstaged in one stream),
+/// belt-hardened, RAW bytes (trailing newline preserved for `git apply`). The
+/// **untracked** leg synthesizes an index-free `new file` hunk per untracked path via
+/// `git diff --no-index /dev/null <f>` (the ro `.git` index is NEVER written — no
+/// `git add`/`-N`) and concatenates it onto the same stream. Impure (git reads only,
+/// all `-C <wt>`); nothing under `.git` is mutated. Relocated from the retired
+/// `capture.rs` (SL-182 PHASE-05 symmetric-import amendment).
+fn gather_worktree_patch(wt: &Path) -> anyhow::Result<Vec<u8>> {
+    let mut patch = git::git_bytes(
+        wt,
+        &[
+            QUOTE_PATH_OFF[0],
+            QUOTE_PATH_OFF[1],
+            "diff",
+            NO_RENAMES,
+            "HEAD",
+        ],
+    )
+    .with_context(|| format!("git diff HEAD in {}", wt.display()))?;
+
+    let untracked = git::git_text(wt, &["ls-files", "--others", "--exclude-standard"])
+        .with_context(|| format!("list untracked in {}", wt.display()))?;
+    for rel in untracked.lines().filter(|l| !l.is_empty()) {
+        // `--no-index` exits 1 whenever the inputs differ (always, vs /dev/null) —
+        // lenient runner keeps the stdout that carries the new-file hunk.
+        let hunk = git::git_bytes_lenient(
+            wt,
+            &[
+                QUOTE_PATH_OFF[0],
+                QUOTE_PATH_OFF[1],
+                "diff",
+                NO_RENAMES,
+                "--no-index",
+                "--",
+                DEV_NULL,
+                rel,
+            ],
+        )
+        .with_context(|| format!("synthesize untracked hunk for {rel} in {}", wt.display()))?;
+        patch.extend_from_slice(&hunk);
+    }
+    Ok(patch)
+}
+
+/// The worker tree's belt input — the names of every touched path, TRACKED (`diff
+/// --name-only HEAD`) plus UNTRACKED adds (`ls-files --others`), quotePath off so a
+/// non-ASCII governance path is verbatim past the pure belt. Untracked paths must ride
+/// the belt too: an untracked `.doctrine/foo` the worker dropped is still a governance
+/// touch and must be rejected, exactly like a tracked one.
+fn gather_worktree_delta_paths(wt: &Path) -> anyhow::Result<Vec<String>> {
+    let tracked = git::git_text(
+        wt,
+        &[
+            QUOTE_PATH_OFF[0],
+            QUOTE_PATH_OFF[1],
+            "diff",
+            "--name-only",
+            NO_RENAMES,
+            "HEAD",
+        ],
+    )
+    .with_context(|| format!("git diff --name-only HEAD in {}", wt.display()))?;
+    let untracked = git::git_text(
+        wt,
+        &[
+            QUOTE_PATH_OFF[0],
+            QUOTE_PATH_OFF[1],
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+        ],
+    )
+    .with_context(|| format!("list untracked in {}", wt.display()))?;
+    Ok(tracked
+        .lines()
+        .chain(untracked.lines())
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::worktree::test_helpers::{git, init_repo};
+    use std::fs;
+
+    /// VT-3 round-trip: the live-worktree gather carries BOTH a tracked change and an
+    /// untracked add, and re-applies cleanly onto the base tree it was cut from —
+    /// proving the index-free untracked synthesis is applyable, not just gatherable.
+    /// Relocated from the retired `capture.rs` (symmetric live-import amendment).
+    #[test]
+    fn gather_from_worktree_captures_tracked_and_untracked_and_reapplies() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("primary"));
+        // A linked worktree off HEAD (the worker's live tree).
+        let wt = tmp.path().join("wt");
+        git(
+            &primary,
+            &["worktree", "add", "-q", wt.to_str().unwrap(), "HEAD"],
+        );
+        let wt = fs::canonicalize(&wt).unwrap();
+
+        // Worker mutates a tracked file and drops an untracked one.
+        fs::write(wt.join("seed"), "mutated\n").unwrap();
+        fs::write(wt.join("newfile"), "brand new\n").unwrap();
+
+        let patch = gather_worktree_patch(&wt).unwrap();
+        assert!(!patch.is_empty(), "patch must be non-empty");
+        let text = String::from_utf8_lossy(&patch);
+        assert!(text.contains("seed"), "tracked change captured");
+        assert!(text.contains("newfile"), "untracked add captured");
+
+        // The belt-input names cover both the tracked change and the untracked add.
+        let names = gather_worktree_delta_paths(&wt).unwrap();
+        assert!(names.iter().any(|p| p == "seed"), "tracked path listed");
+        assert!(
+            names.iter().any(|p| p == "newfile"),
+            "untracked path listed"
+        );
+
+        // Re-apply onto a fresh checkout of the SAME base ⇒ both deltas reconstruct.
+        let target = tmp.path().join("apply");
+        git(
+            &primary,
+            &["worktree", "add", "-q", target.to_str().unwrap(), "HEAD"],
+        );
+        let patch_file = tmp.path().join("captured.patch");
+        fsutil::write_atomic(&patch_file, &patch).unwrap();
+        git(&target, &["apply", patch_file.to_str().unwrap()]);
+
+        assert_eq!(
+            fs::read_to_string(target.join("seed")).unwrap(),
+            "mutated\n"
+        );
+        assert_eq!(
+            fs::read_to_string(target.join("newfile")).unwrap(),
+            "brand new\n"
+        );
+    }
 }

@@ -503,18 +503,27 @@ fn import_refused_under_worker_mode() {
 }
 
 // ---------------------------------------------------------------------------
-// SL-182 PHASE-05 T5 — `import --base <B> --patch <file>` (the claude arm, OQ-1)
+// SL-182 PHASE-05 — `import --base <B> --from-worktree <dir>` (the claude arm)
 // ---------------------------------------------------------------------------
-// ro-`.git` blocks the worker's self-commit, so its delta rides a captured patch
-// instead of a fork commit. The `--patch` arm reuses the pure `classify_import`
-// belt UNCHANGED (single_commit vacuous); the `--fork` goldens above are frozen
-// (EX-4). These pin: happy apply, the belt on patch paths, head-moved, empty-halt,
-// and the clap mutual-exclusion.
+// ro-`.git` blocks the worker's self-commit, so the fork tip stays at B and its
+// delta lives ONLY in the persisted live worktree (no WorktreeRemove hook ⇒ the
+// tree survives the subagent's return). The orchestrator gathers that live delta
+// straight from the dir — no capture file hop. The arm reuses the pure
+// `classify_import` belt UNCHANGED (single_commit vacuous); the `--fork` goldens
+// above are frozen (EX-4). These pin: happy apply (tracked + untracked legs), the
+// belt on live paths, head-moved, no-delta halt (F-3 pre-reap gate), and the clap
+// mutual-exclusion.
 
-/// Build a captured working-tree patch (raw bytes, trailing newline intact — the
-/// `git()` helper trims, which would corrupt an EOF hunk) off `B`, touching `files`
-/// (intent-to-add surfaces new files in the diff). Returns `(B, patch_file)`.
-fn make_patch(src: &Path, holder: &Path, name: &str, files: &[(&str, &str)]) -> (String, PathBuf) {
+/// Create the worker's persisted live worktree off `B`: a linked worktree carrying an
+/// UNCOMMITTED delta (the worker's ro-`.git` blocks `git add`/commit, so new files stay
+/// untracked and tracked edits stay unstaged — exactly what the gather's two legs read).
+/// Returns `(B, worktree_dir)`.
+fn make_worker_worktree(
+    src: &Path,
+    holder: &Path,
+    name: &str,
+    files: &[(&str, &str)],
+) -> (String, PathBuf) {
     let base = git(src, &["rev-parse", "HEAD"]);
     let wt = holder.join(name);
     git(src, &["worktree", "add", wt.to_str().unwrap(), &base]);
@@ -525,31 +534,24 @@ fn make_patch(src: &Path, holder: &Path, name: &str, files: &[(&str, &str)]) -> 
         }
         std::fs::write(&p, body).unwrap();
     }
-    let mut add = vec!["add", "-N", "--"];
-    add.extend(files.iter().map(|(r, _)| *r));
-    git(&wt, &add);
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(&wt)
-        .args(["-c", "core.quotePath=false", "diff", "--no-renames", "HEAD"])
-        .output()
-        .expect("spawn git diff");
-    assert!(out.status.success(), "git diff for patch capture failed");
-    let patch_file = holder.join(format!("{name}.patch"));
-    std::fs::write(&patch_file, &out.stdout).unwrap();
-    (base, patch_file)
+    // Deliberately NO `git add` — mimic the worker's ro-`.git`. The gather reads the
+    // tracked leg via `diff HEAD` (unstaged edits) and the untracked leg via
+    // `ls-files --others` (new files), index-free.
+    (base, wt)
 }
 
 #[test]
-fn import_patch_happy_stages_delta_uncommitted() {
+fn import_from_worktree_happy_stages_tracked_and_untracked() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let (base, patch) = make_patch(
+    // a.txt is tracked (from init_repo) → an unstaged edit exercises the diff-HEAD leg;
+    // feature.rs is new → an untracked add exercises the index-free synthesis leg.
+    let (base, wt) = make_worker_worktree(
         src.path(),
         holder.path(),
-        "pat-ok",
-        &[("feature.rs", "fn f() {}\n")],
+        "wt-ok",
+        &[("a.txt", "edited\n"), ("feature.rs", "fn f() {}\n")],
     );
 
     let out = run(
@@ -560,13 +562,13 @@ fn import_patch_happy_stages_delta_uncommitted() {
             "import",
             "--base",
             &base,
-            "--patch",
-            patch.to_str().unwrap(),
+            "--from-worktree",
+            wt.to_str().unwrap(),
         ],
     );
     assert!(
         out.status.success(),
-        "happy --patch import must succeed; stderr: {}",
+        "happy --from-worktree import must succeed; stderr: {}",
         stderr(&out)
     );
     // import != commit: HEAD unchanged == B.
@@ -574,19 +576,23 @@ fn import_patch_happy_stages_delta_uncommitted() {
     let staged = git(src.path(), &["diff", "--cached", "--name-only"]);
     assert!(
         staged.lines().any(|l| l == "feature.rs"),
-        "delta staged; got {staged:?}"
+        "untracked add staged; got {staged:?}"
+    );
+    assert!(
+        staged.lines().any(|l| l == "a.txt"),
+        "tracked edit staged; got {staged:?}"
     );
 }
 
 #[test]
-fn import_patch_refuses_doctrine_touch() {
+fn import_from_worktree_refuses_doctrine_touch() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let (base, patch) = make_patch(
+    let (base, wt) = make_worker_worktree(
         src.path(),
         holder.path(),
-        "pat-doc",
+        "wt-doc",
         &[(".doctrine/state/leak.txt", "sneaky\n")],
     );
     let out = run(
@@ -597,22 +603,22 @@ fn import_patch_refuses_doctrine_touch() {
             "import",
             "--base",
             &base,
-            "--patch",
-            patch.to_str().unwrap(),
+            "--from-worktree",
+            wt.to_str().unwrap(),
         ],
     );
     assert_refusal(&out, "doctrine-touch");
 }
 
 #[test]
-fn import_patch_refuses_claude_touch() {
+fn import_from_worktree_refuses_claude_touch() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let (base, patch) = make_patch(
+    let (base, wt) = make_worker_worktree(
         src.path(),
         holder.path(),
-        "pat-cla",
+        "wt-cla",
         &[(".claude/settings.local.json", "{}\n")],
     );
     let out = run(
@@ -623,22 +629,22 @@ fn import_patch_refuses_claude_touch() {
             "import",
             "--base",
             &base,
-            "--patch",
-            patch.to_str().unwrap(),
+            "--from-worktree",
+            wt.to_str().unwrap(),
         ],
     );
     assert_refusal(&out, "claude-touch");
 }
 
 #[test]
-fn import_patch_refuses_head_moved() {
+fn import_from_worktree_refuses_head_moved() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let (base, patch) = make_patch(
+    let (base, wt) = make_worker_worktree(
         src.path(),
         holder.path(),
-        "pat-hm",
+        "wt-hm",
         &[("feature.rs", "fn f() {}\n")],
     );
     // Advance the coordination HEAD past B ⇒ head_at_base false.
@@ -654,21 +660,23 @@ fn import_patch_refuses_head_moved() {
             "import",
             "--base",
             &base,
-            "--patch",
-            patch.to_str().unwrap(),
+            "--from-worktree",
+            wt.to_str().unwrap(),
         ],
     );
     assert_refusal(&out, "head-moved");
 }
 
+// F-3: a worker worktree with NO delta must report-and-halt — never launder an empty
+// import green. The `/dispatch-agent` funnel `&&`-gates the `git worktree remove
+// --force` reap on this exit, so a nonzero here LEAVES the tree (no --force data loss).
 #[test]
-fn import_patch_empty_halts() {
+fn import_from_worktree_no_delta_halts() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
-    let base = git(src.path(), &["rev-parse", "HEAD"]);
     let holder = tempfile::tempdir().unwrap();
-    let patch = holder.path().join("empty.patch");
-    std::fs::write(&patch, b"").unwrap();
+    // A clean worktree off B — no edits, no untracked adds.
+    let (base, wt) = make_worker_worktree(src.path(), holder.path(), "wt-clean", &[]);
 
     let out = run(
         src.path(),
@@ -678,20 +686,24 @@ fn import_patch_empty_halts() {
             "import",
             "--base",
             &base,
-            "--patch",
-            patch.to_str().unwrap(),
+            "--from-worktree",
+            wt.to_str().unwrap(),
         ],
     );
     assert!(
         !out.status.success(),
-        "an empty captured patch must report-and-halt (R-capture-lossy); stderr: {}",
+        "a delta-free worktree must report-and-halt; stderr: {}",
         stderr(&out)
     );
-    assert!(stderr(&out).contains("empty"), "halt names the empty patch");
+    assert!(
+        stderr(&out).contains("no delta"),
+        "halt names the absent delta; stderr: {}",
+        stderr(&out)
+    );
 }
 
 #[test]
-fn import_rejects_both_fork_and_patch() {
+fn import_rejects_both_fork_and_from_worktree() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let base = git(src.path(), &["rev-parse", "HEAD"]);
@@ -699,11 +711,18 @@ fn import_rejects_both_fork_and_patch() {
         src.path(),
         None,
         &[
-            "worktree", "import", "--base", &base, "--fork", "x", "--patch", "/tmp/p",
+            "worktree",
+            "import",
+            "--base",
+            &base,
+            "--fork",
+            "x",
+            "--from-worktree",
+            "/tmp/d",
         ],
     );
     assert!(
         !out.status.success(),
-        "clap must reject --fork and --patch together"
+        "clap must reject --fork and --from-worktree together"
     );
 }

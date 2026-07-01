@@ -22,7 +22,6 @@ mod shared;
 pub(crate) use shared::is_linked_worktree;
 
 mod allowlist;
-mod capture;
 
 // SL-182 PHASE-02: pure jail core (leaf). Skeleton (T0) → TDD-filled T1..T8;
 // consumed by the PHASE-03 `pretooluse` shell. Dead-code is held by a module-inner
@@ -36,7 +35,6 @@ pub(crate) use jail::{JailPolicy, shell_single_quote};
 // core (leaf) with impure inputs resolved here: git topology, host capability,
 // path canonicalization. `run_pretooluse` is the `WorktreeCommand::Pretooluse` entry.
 mod pretooluse;
-pub(crate) use capture::run_subagent_stop;
 pub(crate) use pretooluse::run_pretooluse;
 
 mod marker;
@@ -173,16 +171,6 @@ pub(crate) enum WorktreeCommand {
     /// (`mem.fact.claude.pretooluse-hook-fail-open`).
     Pretooluse,
 
-    /// Capture a finishing subagent's worktree delta for the claude `SubagentStop`
-    /// hook (stdin payload). Reads `{agent_id?, cwd}` JSON on stdin (no
-    /// `worktree_path` — RV-202); correlates the worker worktree, writes its diff
-    /// (tracked + untracked, index-free) to a patch OUTSIDE the worktree under the
-    /// coord runtime tier, then **exits 0 always** so the harness stop is never
-    /// deadlocked (D-capture-failmode — a capture failure is caught downstream by
-    /// the orchestrator's `--patch` import halt). Fires INSIDE the confined subagent
-    /// on stop ⇒ open under worker-mode, like `Pretooluse`.
-    SubagentStop,
-
     /// Create or resume a coordination worktree.
     /// For a slice on branch `dispatch/<slice>` off the resolved trunk.
     /// MARKERLESS — the coordination tree IS the orchestrator. A live worktree
@@ -215,15 +203,17 @@ pub(crate) enum WorktreeCommand {
 
         /// The fork branch carrying the single non-merge commit `S` (`S^ == B`) —
         /// the pi/subprocess arm's committed-fork source. Mutually exclusive with
-        /// `--patch`.
-        #[arg(long, conflicts_with = "patch")]
+        /// `--from-worktree`.
+        #[arg(long, conflicts_with = "from_worktree")]
         fork: Option<String>,
 
-        /// A captured working-tree patch file (the claude arm, SL-182 PHASE-05):
-        /// the worker's delta as an applyable patch, since ro-`.git` blocks its
-        /// self-commit. Mutually exclusive with `--fork`; exactly one is required.
-        #[arg(long)]
-        patch: Option<PathBuf>,
+        /// The worker's persisted live worktree dir (the claude arm, SL-182 PHASE-05):
+        /// the orchestrator gathers the working-tree delta straight from it, since
+        /// ro-`.git` blocks the worker's self-commit and the tree persists post-return
+        /// (no `WorktreeRemove` hook). Mutually exclusive with `--fork`; exactly one
+        /// is required.
+        #[arg(long = "from-worktree")]
+        from_worktree: Option<PathBuf>,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -348,12 +338,6 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
         } => run_fork(path, &base, &branch, &dir, worker),
         WorktreeCommand::CreateFork => run_create_fork(),
         WorktreeCommand::Pretooluse => run_pretooluse(),
-        WorktreeCommand::SubagentStop => {
-            // Never fails the process — exit 0 always (D-capture-failmode); the verb
-            // logs loud on a capture error, the downstream `--patch` import halts.
-            run_subagent_stop();
-            Ok(())
-        }
         WorktreeCommand::Coordinate { slice, dir, path } => {
             // Resolve the g2 authoring-branch VALUE here (command tier) — not in
             // coordinate.rs, which must stay off the config loader (ADR-001/VA-1).
@@ -366,9 +350,9 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
         WorktreeCommand::Import {
             base,
             fork,
-            patch,
+            from_worktree,
             path,
-        } => run_import(path, &base, fork.as_deref(), patch.as_deref()),
+        } => run_import(path, &base, fork.as_deref(), from_worktree.as_deref()),
         WorktreeCommand::Land { fork, path } => run_land(path, &fork),
         WorktreeCommand::Gc {
             fork,

@@ -1390,32 +1390,30 @@ mod tests {
     }
 
     #[test]
-    fn subagent_stop_hook_templated_without_exit2_guard() {
-        // SL-182 PHASE-05 T4: the SubagentStop capture entry is baked to an absolute
-        // exec like every other command, but MUST NOT carry `|| exit 2` — a blocking
-        // guard on the stop boundary would DEADLOCK the harness if the binary vanished
-        // (R-deadlock / D-capture-failmode: the lost delta is caught downstream by the
-        // --patch import halt, not by walling the stop).
+    fn materialized_hooks_ship_no_worktree_remove_or_subagent_stop_entry() {
+        // SL-182 PHASE-05 (symmetric live-import, RV-205 F-2 / AF-3): the funnel relies
+        // on the worker worktree PERSISTING post-return so the orchestrator can import
+        // its live delta. That persistence holds ONLY because doctrine ships `create-fork`
+        // as the `WorktreeCreate` hook with NO paired `WorktreeRemove` hook — a
+        // WorktreeRemove entry would reap the tree (and its uncommitted delta) before the
+        // import runs (`docs/claude/hooks.md:2442`, `mem_019f1a5c…`). This install-time
+        // boundary asserts no such hook — and no retired `SubagentStop` capture entry —
+        // ever materializes. (The runtime boundary is `verify-worker --dir`'s
+        // absence-catch; two boundaries per RV-205 F-2.)
         let tmp = tempfile::tempdir().unwrap();
         let mut sink = Vec::new();
         install_hooks_plugin_for_claude(tmp.path(), false, &mut sink).unwrap();
         let body = fs::read_to_string(tmp.path().join(".claude/skills/doctrine/hooks/hooks.json"))
             .unwrap();
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-        let cmd = v["hooks"]["SubagentStop"][0]["hooks"][0]["command"]
-            .as_str()
-            .expect("SubagentStop entry materialized");
+        let events = v["hooks"].as_object().expect("hooks object materialized");
         assert!(
-            cmd.contains("worktree subagent-stop"),
-            "SubagentStop capture verb materialized: {cmd}"
+            !events.contains_key("WorktreeRemove"),
+            "no WorktreeRemove hook may ship — it would reap the worker tree pre-import (AF-3)"
         );
         assert!(
-            cmd.starts_with('\''),
-            "baked absolute exec, not fail-open bare PATH: {cmd}"
-        );
-        assert!(
-            !cmd.ends_with(HOOK_EXIT2_GUARD),
-            "capture hook must NOT carry the exit-2 guard (deadlock risk): {cmd}"
+            !events.contains_key("SubagentStop"),
+            "the retired SubagentStop capture entry must not materialize"
         );
     }
 
