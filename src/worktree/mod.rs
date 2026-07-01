@@ -23,6 +23,11 @@ pub(crate) use shared::is_linked_worktree;
 
 mod allowlist;
 
+// SL-182 PHASE-02: pure jail core (leaf). Skeleton (T0) → TDD-filled T1..T8;
+// consumed by the PHASE-03 `pretooluse` shell. Dead-code is held by a module-inner
+// `expect` in jail.rs (covers both cfg while items are unconsumed).
+mod jail;
+
 mod marker;
 #[cfg(test)]
 pub(crate) use marker::{Cause, DISPATCH_WORKER_AGENT_TYPE, describe_mode};
