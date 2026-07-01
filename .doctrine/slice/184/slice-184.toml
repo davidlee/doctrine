@@ -1,0 +1,41 @@
+id = 184
+slug = "memory-find-to-search"
+title = "Rename memory find → search + adopt shared listing spine"
+status = "design"
+created = "2026-07-01"
+updated = "2026-07-01"
+tags = ["area:cli", "area:memory", "area:ux", "listing"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-220"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "scope-relevant"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

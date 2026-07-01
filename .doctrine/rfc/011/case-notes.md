@@ -655,3 +655,14 @@ PATH exec with "no resolve_exec". Neither is wrong in isolation; the cohesion ga
 (two sections, two exec stories) forced an external doc check to decide which is
 canon — token cost that a single-sourced exec-resolution clause in the design
 would have avoided. Cohesion defect in the artifact, not the inquisition tooling.
+
+[execute; SL-182-P03-exec]
+Two compile-error-driven discoveries the phase sheet's reading list didn't
+pre-surface: (1) `WorktreeCommand` is matched in `src/commands/guard.rs` (worker-
+mode class) as well as `mod.rs` dispatch — a new variant needs BOTH arms; (2) a
+new `worktree::<mod>` needs a tier entry in `.doctrine/adr/001/layering.toml` or
+the architecture_layering gate goes red. Both are mechanical but cost a
+build-read-fix cycle each. A "new WorktreeCommand variant" checklist (enum +
+dispatch + guard class + layering tier + clap doc) in the dispatch/worktree
+subsystem docs would pre-empt ~2 round-trips. Otherwise the seam pointers in the
+handover/sheet were accurate and saved substantial search.
