@@ -6,7 +6,9 @@
 
 Status: LOCKED, then AMENDED at PHASE-05 (§10 amendment entry — funnel pivoted to
 symmetric live-import after the teardown premise was disproved by live probe;
-D-funnel-path / D-import-verb / INV-6; OQ-1 + OQ-2 resolved). Prior lock: internal
+D-funnel-path / D-import-verb / INV-6; OQ-1 + OQ-2 resolved; then hardened by the
+RV-205 inquisition — footer datum cited to `mem P2`, INV-6 made two-boundary, reap
+gated on import success, Fork-path ASM grounded in hook-presence). Prior lock: internal
 adversarial pass + `/inquisition` RV-200 + RV-201 + SL-183 cross-arm seam upstream +
 RV-202 codex pass (corrected the upstream's `select_jailer` to capability-as-data) —
 all integrated; §10. The Phase-1 probe (D7, §9) resolved the harness unknowns:
@@ -430,24 +432,35 @@ wrongly generalised it into the teardown premise. See
 Both arms are now **lifecycle-symmetric**: the **orchestrator** owns the worktree
 on both (pi: `worktree fork --worker` → import → remove; claude: harness-born tree
 left on disk → import → remove). On the claude arm the Agent tool returns the
-worker's `worktreePath` in its footer and the tree is still on disk, so the
+worker's `worktreePath` in its footer (**PROVEN** —
+`mem_019efe28d60b7d51998f1f7912b8e7b8` P2, wtc-cwd probe on claude-code 2.1.181,
+2026-06-25: a `WorktreeCreate`-hook-created worktree still returns `worktreePath`
+as the normative datum plus `agentId`) and the tree is still on disk, so the
 orchestrator:
 
-1. reads `worktreePath` from the footer;
+1. reads `worktreePath` from the footer (`name = basename(worktreePath)`). **No
+   correlator, no enumeration**: the footer is per-return, so each blocking Agent
+   call — including every sibling of a parallel fan-out — self-identifies its own
+   `worktreePath` + `agentId` (RV-205 F-1; the footer datum is proven, `mem P2`
+   above; `docs/claude` is silent on it, doctrine's own probe is the proof);
 2. `verify-worker --dir <worktreePath> --base B --branch dispatch/<name>` — the
    identity/base belt on the **live** tree (HEAD==B, isolated, marker,
    base-ancestor, dir↔branch coherence). **Unchanged Rust**; fail-closes
-   (`no-worker-head`) if the tree is unexpectedly gone (this is what makes the
-   no-WorktreeRemove-hook invariant *enforced*, INV-6);
+   (`no-worker-head`) if the tree is unexpectedly gone (INV-6);
 3. `worktree import --from-worktree <worktreePath> --base B` — reads the live
    worker diff and applies it onto the coord tree (verb below);
-4. `git worktree remove --force <worktreePath>` — reaps the spent tree (symmetric
-   with the pi arm's orchestrator-removes). `--force` is required: the tree is
-   **intentionally dirty** (its uncommitted diff was just imported), which plain
-   `git worktree remove` refuses.
+4. **iff step 3 succeeded** (`classify_import` belt green **and** `git apply
+   --index` exit 0), `git worktree remove --force <worktreePath>` — reaps the
+   spent tree (symmetric with the pi arm's orchestrator-removes). `--force` is
+   required: the tree is **intentionally dirty** (its uncommitted diff was just
+   imported), which plain `git worktree remove` refuses. **On import failure the
+   funnel HALTS and LEAVES the tree** (diagnostic, symmetric with `verify-worker`'s
+   leave-in-place) — never `--force`-reaps the sole copy of an unimported delta
+   (RV-205 F-3; a VT pins the import-fails path).
 
-No `SubagentStop` hook, **no correlator** (the footer hands the path — the RV-202
-open seam is void), no capture file, no teardown race.
+No `SubagentStop` hook, no capture file, no teardown race. The RV-202 correlator
+seam is genuinely **void** — the footer supplies the path per-return, proven (not
+assumed) by `mem P2`.
 
 **The import verb — stable interface, swappable strategy (D-import-verb).**
 `worktree import --from-worktree <worker_wt> --base <B>` (cwd = coord tree, the
@@ -528,28 +541,40 @@ installed (INV-6).
   (RV-200 F-5). The wire fields it relies on are doc-backed: `agent_id`
   (`hooks.md:595`), `updatedInput` (`hooks.md:818`), `permissionDecision`
   (`hooks.md:806`); only the plugin-*registration* firing is unproven.
-- **INV-6 (A, PHASE-05) — no `WorktreeRemove` hook; enforced by `verify-worker`.**
-  The symmetric live-import funnel (§5.4) depends on the worker worktree
-  **persisting** on disk post-return. This holds iff `create-fork` is the
-  `WorktreeCreate` hook (replaces default git behavior ⇒ Claude does not auto-remove)
-  **and no `WorktreeRemove` hook is installed** (`hooks.md:2390/2442` — "without one,
-  the directory is left on disk"). Not merely documented: the funnel runs
-  `verify-worker --dir <worktreePath>` *before* import, which **fail-closes**
-  (`no-worker-head`) if the tree is unexpectedly gone, halting the funnel loud rather
-  than importing an empty/absent delta. The installer MUST NOT ship a `WorktreeRemove`
-  hook; the orchestrator reaps each tree explicitly (`git worktree remove`) after
-  import. Leaked trees on an orchestrator crash mid-drive are an operability concern,
-  not a correctness one (IMP-222: doctor warn + gc).
-- **ASM (PHASE-05) — Fork-path teardown parity.** The persistence probe exercised
-  `create-fork`'s **Passthrough** path (unarmed spawn). Real dispatch uses the
-  **Fork** path (armed at explicit B, `dispatch/<name>`). Teardown is a
-  **harness-level** decision (a subagent's `isolation:worktree` tree removed or not),
-  independent of *which* branch `create-fork` produced ⇒ persistence is assumed
-  identical on the Fork path. Pinned at VH-1 (live Fork-path dispatch), not asserted.
-  **Fails safe if wrong:** should the Fork-path tree be torn down after all, the
-  pre-import `verify-worker --dir` fail-closes (`no-worker-head`, INV-6) — the funnel
-  **halts loud**, never imports an empty/absent delta. So the assumption is not
-  load-bearing-without-a-net; a wrong ASM costs a halt, not silent data loss.
+- **INV-6 (A, PHASE-05) — no `WorktreeRemove` hook; enforced at two boundaries,
+  limits named (RV-205 F-2).** The symmetric live-import funnel (§5.4) depends on the
+  worker worktree **persisting** on disk post-return. This holds iff `create-fork` is
+  the `WorktreeCreate` hook (replaces default git behavior ⇒ Claude does not
+  auto-remove) **and no `WorktreeRemove` hook is installed** (`hooks.md:2390/2442` —
+  "without one, the directory is left on disk"). Enforcement is **two-boundary**, and
+  its blind spot is stated rather than papered over: **(i) install-time** — the
+  installer MUST NOT ship a `WorktreeRemove` hook, pinned by an **assertion that no
+  `WorktreeRemove` entry exists in the materialized `hooks.json`** (AF-3, a VT); **(ii)
+  runtime** — the funnel runs `verify-worker --dir <worktreePath>` *before* import,
+  which **fail-closes** (`no-worker-head`) if the tree is **gone**, halting loud rather
+  than importing an absent delta. Boundary (ii) catches tree-**absence**, **not**
+  tree-**mutation**: a hook that reset/cleaned the tree yet left it registered at
+  HEAD==B would pass `verify-worker` while silently dropping the (esp. untracked)
+  delta. That case is shut out by boundary (i) — no such hook ships — and by the
+  ADR-006 sole-writer trust model; it is **not** claimed to be caught by
+  `verify-worker`. The orchestrator reaps each tree explicitly (`git worktree remove`)
+  after import. Leaked trees on an orchestrator crash mid-drive are an operability
+  concern, not a correctness one (IMP-222: doctor warn + gc).
+- **ASM (PHASE-05) — Fork-path teardown parity, grounded in hook-presence (RV-205
+  F-4).** The persistence probe exercised `create-fork`'s **Passthrough** path (unarmed
+  spawn); real dispatch uses the **Fork** path (armed at explicit B, `dispatch/<name>`).
+  Persistence follows from **`WorktreeCreate`-hook presence** (`hooks.md:2390/2442` — a
+  custom hook + no `WorktreeRemove` hook leaves the tree on disk), and `create-fork` is
+  the **single `WorktreeCreate` binary for both classify outcomes** (Fork / Passthrough
+  — they differ only in the checked-out branch, not in whether a `WorktreeRemove` hook
+  exists). So the probe **did exercise the persistence mechanism**; Fork-path
+  persistence transfers **by construction**, not by bare assumption. The one Fork-path
+  delta still worth live confirmation is the **footer on the branch case** (`mem P2`
+  probed a *detached* tree, `worktreeBranch: undefined`; `worktreePath` remained the
+  normative datum) — VH-1 confirms both persistence and footer on the armed branch
+  path, as **confirmation, not sole support**. **Fail-safe net remains:** were the
+  Fork-path tree somehow torn down, the pre-import `verify-worker --dir` fail-closes
+  (`no-worker-head`, INV-6) — the funnel halts loud, never a silent lossy import.
 
 ## 6. Open Questions & Unknowns
 
@@ -562,12 +587,14 @@ installed (INV-6).
   imported from a live tree — is **false for the shipped config**. With `create-fork`
   as the `WorktreeCreate` hook and **no** `WorktreeRemove` hook, the tree is **left on
   disk** post-return, diff intact (probe: `.worktrees/agent-<id>` persisted, HEAD==B,
-  tracked+untracked present). The SubagentStop capture contingency (RV-201 F-2) and
-  its correlator seam (RV-202) are therefore **retired** — the orchestrator imports
-  the live tree directly (§5.4, D-funnel-path). The Path-C/IDE-024 escalation is no
-  longer a lock-time risk; it survives only as the *foreseen future strategy* behind
-  the `--from-worktree` verb (D-import-verb). Residual: Fork-path parity (§5.5 ASM),
-  pinned at VH-1.
+  tracked+untracked present). The SubagentStop capture contingency (RV-201 F-2) **and**
+  its correlator seam (RV-202) are therefore **retired** — the orchestrator reads
+  `worktreePath` straight from the Agent footer (proven per-return datum,
+  `mem_019efe28…` P2; RV-205 F-1) and imports the live tree directly (§5.4,
+  D-funnel-path). The Path-C/IDE-024 escalation is no longer a lock-time risk; it
+  survives only as the *foreseen future strategy* behind the `--from-worktree` verb
+  (D-import-verb). Residual: Fork-path parity — persistence **and** the branch-case
+  footer (§5.5 ASM), pinned at VH-1.
 - **OQ-3 → V-plugin (first step in execute).** Plugin `hooks.json` is the chosen
   registration home (D-reg). Confirm PreToolUse-via-plugin fires for a worktree
   subagent before building on it; cross-check hook semantics against `docs/claude`
@@ -655,8 +682,9 @@ installed (INV-6).
   SubagentStop-capture funnel, RV-201 F-2 / RV-202).** Both dispatch arms are
   lifecycle-symmetric: the orchestrator owns the worker worktree and imports its
   **live** working-tree diff post-return, then reaps it. The claude arm's Agent
-  footer hands `worktreePath` and the tree persists on disk (INV-6), so no
-  `SubagentStop` capture, no correlator, no teardown race. *Rationale:* the PHASE-05
+  footer hands `worktreePath` per-return (proven — `mem_019efe28…` P2, wtc-cwd probe
+  2026-06-25; RV-205 F-1) and the tree persists on disk (INV-6), so no `SubagentStop`
+  capture, no correlator, no teardown race. *Rationale:* the PHASE-05
   live probe (2026-07-01) disproved the teardown premise the capture design rested on
   (§5.4, OQ-2) — a custom `WorktreeCreate` hook + no `WorktreeRemove` hook leaves the
   tree on disk. *Alt (retired): SubagentStop awaited capture-before-remove — solved a
@@ -828,6 +856,37 @@ provenance. Retirement of the capture apparatus (capture.rs, `subagent-stop` com
 `hooks.json` SubagentStop entry, file-based `import --patch`) and the refactor to
 `--from-worktree` are the amended PHASE-05 touch-set. Corrected memory:
 `mem.fact.claude.worktree-remove-auto-teardown`. Case note: RFC-011.
+
+### `/inquisition` findings (RV-205, 2026-07-01) — hostile pass on the PHASE-05 amendment
+
+Fourth adversarial round, arraigning the symmetric-live-import amendment itself
+(commits `49dd6144` + `36e5b669`). Tried on the ledger (`doctrine review show
+RV-205`); 4 findings (1 raised blocker, refuted on evidence). All reconciled here.
+
+- **F-1 (raised blocker → resolved minor) — the footer datum was uncited, not
+  unproven.** The amendment declared the RV-202 correlator "void" because "the footer
+  hands the path," a field `docs/claude` documents nowhere. The inquisition forced the
+  proof to surface: `mem_019efe28d60b7d51998f1f7912b8e7b8` P2 (wtc-cwd probe,
+  claude-code 2.1.181, **2026-06-25**, SL-152) already proved a `WorktreeCreate`-hook-
+  created worktree returns `worktreePath` (normative) **plus `agentId`** in the Agent
+  footer. So RV-202 "void" is *justified*, and the parallel-fan-out worry dissolves
+  (each blocking return self-identifies). The real defect was a **citation gap** — the
+  proof was uncited, so the claim read as faith. → §5.4 step 1 / D-funnel-path / OQ-2 /
+  the corrected memory now cite `mem P2`; the Fork-path **branch-case footer** joins
+  persistence as the VH-1 residual (P2 probed a detached tree).
+- **F-2 (major) — INV-6 enforcement boundary overclaimed.** "Enforced by
+  `verify-worker` fail-close" covers tree-*absence*, not tree-*mutation*. → INV-6
+  rewritten as **two-boundary** (install-time AF-3 assert no `WorktreeRemove` entry;
+  runtime `verify-worker` absence-catch) with the mutation blind spot named and shut
+  out by boundary (i) + sole-writer trust, not falsely claimed caught.
+- **F-3 (minor) — ungated `--force` reap.** `git worktree remove --force` could
+  immolate the sole copy of an unimported delta. → §5.4 step 4 gated on import success;
+  halt-and-leave on failure; VT on the import-fails path.
+- **F-4 (minor, acquitted upward) — Fork-path ASM was timid.** Persistence follows
+  from `WorktreeCreate`-hook presence, and `create-fork` is one binary across both
+  classify outcomes → the probe *did* exercise the mechanism. → ASM reworded to ground
+  persistence in hook-presence (transfers by construction); VH-1 demoted to
+  confirmation.
 
 ### Internal adversarial pass (2026-07-01) — 8 findings, all integrated
 

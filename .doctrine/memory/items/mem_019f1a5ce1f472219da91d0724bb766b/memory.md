@@ -34,13 +34,18 @@ design's teardown premise.
 
 The claude `Agent`-arm and pi/subprocess-arm are now **lifecycle-symmetric**: the
 **orchestrator** owns the worktree on both. Post-return the orchestrator reads the
-Agent footer's `worktreePath` (tree still alive), runs `verify-worker --dir` on
-it, imports the live working-tree diff (`git -C <wt> diff HEAD` + untracked →
-`worktree import --patch`), then `git worktree remove`s it. **"Import the live
+Agent footer's `worktreePath` — a **proven per-return datum** even under
+hook-creation ([[mem_019efe28d60b7d51998f1f7912b8e7b8]] P2: footer carries
+`worktreePath`+`agentId`; `name = basename(worktreePath)`), so **no correlator is
+needed** (RV-202 seam void) — runs `verify-worker --dir` on the live tree, imports
+the live working-tree diff (`git -C <wt> diff HEAD` + untracked → `worktree import
+--from-worktree`), then `git worktree remove --force`s it (the tree is
+intentionally dirty; reap only **after** import succeeds). **"Import the live
 worktree after the worker returns" is safe on BOTH arms** — no capture-before-
-teardown machinery is required. `verify-worker --dir` fail-closes
-(`no-worker-head`) if a tree is ever unexpectedly gone, so "no WorktreeRemove
-hook" is an enforced invariant, not just documented.
+teardown machinery is required. "No `WorktreeRemove` hook" is enforced at **two
+boundaries** (RV-205 F-2): an install-time assert that no such hook ships, and the
+runtime `verify-worker --dir` fail-close (`no-worker-head`) if a tree is ever
+unexpectedly **gone** — the latter catches tree-absence, not tree-mutation.
 
 The SubagentStop diff-capture funnel ([[mem.fact.claude.subagentstop-awaited-tree-intact-capture-seam]])
 is therefore **not needed** for the claude arm (its timing facts remain valid
