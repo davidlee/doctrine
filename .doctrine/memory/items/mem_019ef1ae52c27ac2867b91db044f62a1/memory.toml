@@ -6,7 +6,7 @@ status = "active"
 title = "Project Orientation"
 summary = ""
 created = "2026-06-22"
-updated = "2026-06-24"
+updated = "2026-07-01"
 
 [scope]
 paths = []
@@ -25,12 +25,12 @@ tree = ""
 ref_name = ""
 checkout_state_id = ""
 base_commit = ""
-verified_sha = "6be1617ce2aee5271f842f8b7c5208fa0bedbcd7"
+verified_sha = "8b629c7dc4d5c23558afd41a6e029e23c292af35"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-24"
+reviewed = "2026-07-01"
 review_by = ""
 
 [trust]
