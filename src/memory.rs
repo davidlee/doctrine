@@ -78,6 +78,10 @@ pub(crate) struct FindRetrieveArgs {
     #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
     pub(crate) format: Format,
 
+    /// Column projection for search table output (ignored by retrieve).
+    #[arg(long)]
+    pub(crate) columns: Option<Vec<String>>,
+
     /// Shorthand for `--format json`.
     #[arg(long)]
     pub(crate) json: bool,
@@ -591,6 +595,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 resolved_format,
                 offset,
                 args.limit,
+                args.columns.as_deref(),
             )
         }
         MemoryCommand::Retrieve { args, min_trust } => {

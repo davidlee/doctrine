@@ -25,6 +25,7 @@ use serde_json::json;
 
 use crate::lexical::{Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker};
 use crate::links::{extract_wikilinks, resolve_wikilink};
+use crate::listing::Column;
 use crate::memory::{
     self, Lifespan, Memory, MemoryType, Status, collect_all, normalize_key, sort_default,
 };
@@ -630,61 +631,6 @@ pub(crate) fn query<'a>(
     rank(cands, &snap.today)
 }
 
-/// Format `find` rows: aligned `uid type status staleness trust sev spec title`.
-/// The **full** uid is printed (F-A11 — actionable for `show`/`verify`, and v7
-/// short prefixes collide, F-A12), overriding design §5.2's `uid-short` wording.
-/// `trust`+`sev` are always present so a holdback-exempt `find` keeps risk visible
-/// (B8/D8/D17). `spec` is the matched dimension (`-` for a bare `--query`). Every
-/// free value is `scrub_line`d (F-A10) so a newline cannot forge a row.
-/// Render find results as a human-readable column-aligned table.
-fn format_search_table(cands: &[&Candidate<'_>]) -> String {
-    let scrub = |s: &str| crate::memory::scrub_line(s);
-    let rows: Vec<[String; 8]> = cands
-        .iter()
-        .map(|c| {
-            let m = c.memory;
-            [
-                m.uid.clone(),
-                m.kind.as_str().to_owned(),
-                m.status.as_str().to_owned(),
-                c.staleness.label().to_owned(),
-                scrub(&m.trust_level),
-                scrub(&m.severity),
-                c.scope_match.map_or("-", |s| s.dim.label()).to_owned(),
-                scrub(&m.title),
-            ]
-        })
-        .collect();
-    // Width-align every column but the last (title) for a scannable table. The
-    // zips stop at `widths.len()` (7), so the title (`r`'s 8th cell) is excluded.
-    let mut widths = [0usize; 7];
-    for r in &rows {
-        for (w, cell) in widths.iter_mut().zip(r.iter()) {
-            *w = (*w).max(cell.len());
-        }
-    }
-    let lines: Vec<String> = rows
-        .iter()
-        .map(|r| {
-            let mut parts: Vec<String> = r
-                .iter()
-                .take(widths.len())
-                .zip(widths.iter())
-                .map(|(cell, w)| format!("{cell:<w$}", w = *w))
-                .collect();
-            if let Some(title) = r.last() {
-                parts.push(title.clone());
-            }
-            parts.join("  ")
-        })
-        .collect();
-    if lines.is_empty() {
-        String::new()
-    } else {
-        lines.join("\n") + "\n"
-    }
-}
-
 /// A serde row for `memory search --json`, mirroring the search table columns.
 #[derive(Serialize)]
 struct MemorySearchRow {
@@ -720,6 +666,129 @@ fn format_search_json(cands: &[&Candidate<'_>]) -> Result<String> {
     let rows: Vec<MemorySearchRow> = cands.iter().map(MemorySearchRow::from).collect();
     crate::listing::json_envelope("memory_search", &rows)
 }
+
+/// The 15-column search table definition over the shared listing spine.
+/// `Candidate<'a>` borrows `Memory`, so this is a function (not a `const` —
+/// the return type pins `'a` to `'static`). All cell closures are non-capturing
+/// fn pointers; the array is effectively static.
+fn search_columns<'a>() -> [Column<Candidate<'a>>; 15] {
+    use crate::listing::{ABSENT_CELL, ColumnPaint, TITLE_EVEN, TITLE_ODD};
+    use crate::memory::scrub_line;
+    use owo_colors::{AnsiColors, DynColors};
+    [
+        Column {
+            name: "uid",
+            header: "uid",
+            cell: |c| c.memory.uid.clone(),
+            paint: ColumnPaint::Fixed(DynColors::Ansi(AnsiColors::Cyan)),
+        },
+        Column {
+            name: "type",
+            header: "type",
+            cell: |c| c.memory.kind.as_str().to_owned(),
+            paint: ColumnPaint::ByValue(|c| {
+                crate::listing::memory_type_hue(c.memory.kind.as_str())
+            }),
+        },
+        Column {
+            name: "status",
+            header: "status",
+            cell: |c| c.memory.status.as_str().to_owned(),
+            paint: ColumnPaint::ByValue(|c| crate::listing::status_hue(c.memory.status.as_str())),
+        },
+        Column {
+            name: "staleness",
+            header: "staleness",
+            cell: |c| c.staleness.label().to_owned(),
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "trust",
+            header: "trust",
+            cell: |c| scrub_line(&c.memory.trust_level),
+            paint: ColumnPaint::ByValue(|c| crate::listing::trust_hue(&c.memory.trust_level)),
+        },
+        Column {
+            name: "severity",
+            header: "severity",
+            cell: |c| scrub_line(&c.memory.severity),
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "spec",
+            header: "spec",
+            cell: |c| {
+                c.scope_match
+                    .map_or(String::from("-"), |s| s.dim.label().to_owned())
+            },
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "title",
+            header: "title",
+            cell: |c| scrub_line(&c.memory.title),
+            paint: ColumnPaint::Alternate([TITLE_EVEN, TITLE_ODD]),
+        },
+        Column {
+            name: "key",
+            header: "key",
+            cell: |c| c.memory.key.as_deref().unwrap_or(ABSENT_CELL).to_owned(),
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "created",
+            header: "created",
+            cell: |c| c.memory.created.clone(),
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "updated",
+            header: "updated",
+            cell: |c| c.memory.updated.clone(),
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "weight",
+            header: "weight",
+            cell: |c| c.memory.weight.to_string(),
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "verification",
+            header: "verification",
+            cell: |c| c.memory.verification_state.clone(),
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "lifespan",
+            header: "lifespan",
+            cell: |c| {
+                c.memory
+                    .lifespan
+                    .map_or(ABSENT_CELL.to_owned(), |l| l.to_string())
+            },
+            paint: ColumnPaint::None,
+        },
+        Column {
+            name: "reviewed",
+            header: "reviewed",
+            cell: |c| c.memory.reviewed.clone(),
+            paint: ColumnPaint::None,
+        },
+    ]
+}
+
+/// Default search columns: the 8-column view matching the legacy `format_find_table`.
+const SEARCH_DEFAULT: &[&str] = &[
+    "uid",
+    "type",
+    "status",
+    "staleness",
+    "trust",
+    "severity",
+    "spec",
+    "title",
+];
 
 /// The frozen-snapshot bundle the `find`/`retrieve` verbs both stand on. The two
 /// surfaces diverge ONLY after `query()` (find renders rows, retrieve renders
@@ -778,7 +847,7 @@ fn load_query(
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_search(
     writer: &mut impl Write,
-    _color: bool,
+    color: bool,
     path: Option<PathBuf>,
     paths: Vec<String>,
     globs: Vec<String>,
@@ -792,6 +861,7 @@ pub(crate) fn run_search(
     format: crate::listing::Format,
     offset: usize,
     limit: Option<usize>,
+    columns: Option<&[String]>,
 ) -> Result<()> {
     // Validate limit (moved from CLI).
     if let Some(0) = limit {
@@ -812,16 +882,29 @@ pub(crate) fn run_search(
     // Total = all candidates (holdback-exempt for find — D6).
     let total = ranked.len();
     // Paginate: skip(offset).take(limit).
-    let visible: Vec<&Candidate<'_>> = ranked
-        .iter()
-        .skip(offset)
-        .take(limit.unwrap_or(usize::MAX))
-        .collect();
+    let end = ranked
+        .len()
+        .min(offset.saturating_add(limit.unwrap_or(usize::MAX)));
+    let visible = ranked.get(offset..end).unwrap_or(&[]);
     let shown = visible.len();
     let mut parts: Vec<String> = Vec::new();
     let body = match format {
-        crate::listing::Format::Table => format_search_table(&visible),
-        crate::listing::Format::Json => format_search_json(&visible)?,
+        crate::listing::Format::Table => {
+            let cols = search_columns();
+            let sel = crate::listing::select_columns(&cols, SEARCH_DEFAULT, columns)?;
+            crate::listing::render_columns(
+                visible,
+                &sel,
+                crate::listing::RenderOpts {
+                    color,
+                    term_width: None,
+                },
+            )
+        }
+        crate::listing::Format::Json => {
+            let visible_refs: Vec<&Candidate<'_>> = visible.iter().collect();
+            format_search_json(&visible_refs)?
+        }
     };
     parts.push(body);
     // Truncation notice: table mode only, when results are truncated or offset exceeds total.
@@ -2673,8 +2756,87 @@ weight = {weight}
         );
     }
 
+    // === PHASE-02: search column model ========================================
+
     #[test]
-    fn format_search_row_carries_full_uid_and_required_columns() {
+    fn search_columns_has_15_columns_with_correct_names() {
+        let cols = search_columns();
+        assert_eq!(cols.len(), 15);
+        let names: Vec<&str> = cols.iter().map(|c| c.name).collect();
+        assert_eq!(
+            names,
+            [
+                "uid",
+                "type",
+                "status",
+                "staleness",
+                "trust",
+                "severity",
+                "spec",
+                "title",
+                "key",
+                "created",
+                "updated",
+                "weight",
+                "verification",
+                "lifespan",
+                "reviewed"
+            ]
+        );
+    }
+
+    #[test]
+    fn search_default_has_8_columns() {
+        assert_eq!(SEARCH_DEFAULT.len(), 8);
+        assert_eq!(
+            SEARCH_DEFAULT,
+            &[
+                "uid",
+                "type",
+                "status",
+                "staleness",
+                "trust",
+                "severity",
+                "spec",
+                "title"
+            ]
+        );
+    }
+
+    #[test]
+    fn search_column_uid_is_fixed_cyan() {
+        let cols = search_columns();
+        let uid = cols.iter().find(|c| c.name == "uid").unwrap();
+        assert!(matches!(
+            uid.paint,
+            crate::listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+                owo_colors::AnsiColors::Cyan
+            ))
+        ));
+    }
+
+    #[test]
+    fn search_column_title_is_alternate() {
+        let cols = search_columns();
+        let title = cols.iter().find(|c| c.name == "title").unwrap();
+        assert!(matches!(
+            title.paint,
+            crate::listing::ColumnPaint::Alternate([
+                crate::listing::TITLE_EVEN,
+                crate::listing::TITLE_ODD
+            ])
+        ));
+    }
+
+    #[test]
+    fn search_column_type_is_by_value_memory_type_hue() {
+        let cols = search_columns();
+        let typ = cols.iter().find(|c| c.name == "type").unwrap();
+        assert!(matches!(typ.paint, crate::listing::ColumnPaint::ByValue(_)));
+    }
+
+    #[test]
+    fn search_row_carries_full_uid_and_required_columns() {
         let m = memory(&Fixture {
             paths: &["src/main.rs"],
             trust_level: "low",
@@ -2684,7 +2846,16 @@ weight = {weight}
         });
         let mut c = cand(&m, 0, false, Some(Dimension::Paths));
         c.staleness = Staleness::Unknown;
-        let out = format_search_table(&[&c]);
+        let cols = search_columns();
+        let sel = crate::listing::select_columns(&cols, SEARCH_DEFAULT, None).unwrap();
+        let out = crate::listing::render_columns(
+            &[c],
+            &sel,
+            crate::listing::RenderOpts {
+                color: false,
+                term_width: None,
+            },
+        );
         // full uid (not a short prefix), the matched dim, and the risk columns.
         assert!(out.contains(UID), "full uid printed");
         assert!(out.contains("paths"), "spec column = matched dim");
@@ -2692,31 +2863,67 @@ weight = {weight}
         assert!(out.contains("high"), "severity visible");
         assert!(out.contains("unknown"), "staleness column");
         assert!(out.contains("be careful"), "title");
-        assert!(out.ends_with('\n'));
+        // comfy-table output: has header row and column separators.
+        assert!(out.contains('│'), "comfy-table separator present");
+        assert!(out.contains("uid"), "header row present");
     }
 
     #[test]
-    fn format_search_scrubs_a_newline_title() {
+    fn search_table_scrubs_a_newline_title() {
         let m = memory(&Fixture {
             title: "real",
             ..Default::default()
         });
-        // Inject a newline post-parse to prove the row formatter scrubs it (F-A10).
         let mut m2 = m.clone();
         m2.title = "row1\nforged-row2".to_owned();
         let c = cand(&m2, 0, false, None);
-        let out = format_search_table(&[&c]);
+        let cols = search_columns();
+        let sel = crate::listing::select_columns(&cols, SEARCH_DEFAULT, None).unwrap();
+        let out = crate::listing::render_columns(
+            &[c],
+            &sel,
+            crate::listing::RenderOpts {
+                color: false,
+                term_width: None,
+            },
+        );
         assert!(
             !out.contains("\nforged-row2"),
             "newline must not forge a row"
         );
+        // scrub_line turns \n → \\n in the visible cell.
         assert!(out.contains("\\nforged-row2"), "newline rendered as escape");
     }
 
     #[test]
-    fn format_search_empty_is_empty_string() {
-        let empty: [&Candidate<'_>; 0] = [];
-        assert_eq!(format_search_table(&empty), "");
+    fn search_table_empty_is_empty_string() {
+        let empty: [Candidate<'_>; 0] = [];
+        let cols = search_columns();
+        let sel = crate::listing::select_columns(&cols, SEARCH_DEFAULT, None).unwrap();
+        let out = crate::listing::render_columns(
+            &empty,
+            &sel,
+            crate::listing::RenderOpts {
+                color: false,
+                term_width: None,
+            },
+        );
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn search_columns_rejects_unknown_column_name() {
+        let cols = search_columns();
+        let result =
+            crate::listing::select_columns(&cols, SEARCH_DEFAULT, Some(&["nope".to_string()]));
+        match result {
+            Ok(_) => panic!("expected error for unknown column"),
+            Err(e) => {
+                let msg = format!("{:#}", e);
+                assert!(msg.contains("unknown column `nope`"));
+                assert!(msg.contains("available: "));
+            }
+        }
     }
 
     // === PHASE-05: the retrieve holdback, floor, and suppress-then-take. =======
@@ -2957,6 +3164,7 @@ weight = {weight}
             crate::listing::Format::Table,
             0,
             None,
+            None,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -2965,6 +3173,8 @@ weight = {weight}
             output.contains("Writer capture test"),
             "output must contain the seeded memory title"
         );
+        // comfy-table output has column separator.
+        assert!(output.contains('│'), "comfy-table separator present");
     }
 
     /// VT-2: writer-capture — run_retrieve with &mut Vec<u8> writes framed blocks.
@@ -3016,6 +3226,7 @@ weight = {weight}
             crate::listing::Format::Table,
             0,
             Some(0),
+            None,
         )
         .unwrap_err();
         assert!(
