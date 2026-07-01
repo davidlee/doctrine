@@ -1,0 +1,42 @@
+memory_uid = "mem_019f1d2d48a07d12bc22025929576e3f"
+memory_key = "mem.pattern.dispatch.pretooluse-macos-seatbelt-wiring"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "macOS pretooluse consumer wires to Seatbelt via cfg-split probe_backend"
+summary = "The claude pretooluse consumer reaches the SL-183 Seatbelt jailer via a cfg(macos)-split probe_backend calling seatbelt_backend(resolve_inputs(...)); pre-SL-183 it only produced Bwrap/Deny."
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = ["src/worktree/pretooluse.rs", "src/worktree/jail.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "confinement", "macos", "seatbelt", "sl-183", "adr-001", "adr-011"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3b52b75d2933cbfbb6ea526a2e7e74a356704ef4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3ce8ce46d54648af57a675fec13784fe431c5aab087d3ac35e27a4215e0deb9b"
+base_commit = "03e72425436ce92a68cebb07a18e468f224f3257"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
