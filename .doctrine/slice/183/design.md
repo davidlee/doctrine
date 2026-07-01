@@ -104,8 +104,9 @@ which fails closed. The two builders are PURE: resolved paths/strings in,
 - **Pure — `seatbelt_profile(resolved) -> String`** — emits the profile body, **rules
   ordered deny-coarse-first / allow-specific-last** (F-A). Device-sink allow-set and
   the `xcrun_db` filename regex (F-E) are named constants (§ constant catalog below).
-  The `(deny network*)` line is emitted **only** when `resolved.network == Deny` —
-  default-open on a VALID policy; network rides the same policy→profile pass as
+  The `(deny network*)` line is emitted **only** when `resolved.network == false`
+  (SL-182's bool, reused as-is) — default-open on a VALID policy; network rides the
+  same policy→profile pass as
   `extra_rw`, never a hardcoded special case (D-mac4). *(Ambiguity handling: an
   unreadable/malformed policy never reaches here — `resolve_inputs` already denied
   the arm, F-B6.)*
@@ -258,10 +259,13 @@ RATIFIED with the user 2026-07-01.**
 - **D-mac4 — RATIFIED (default-open thin seam).** Network defaults **open** (the
   operating default) **on a VALID policy**. `(deny network*)` is emitted **only** on
   `policy.network == deny`, via the same policy→profile pass as `extra_rw` — not a
-  hardcoded special case. **Ambiguity (F-B6, POL-002):** the `network` field is a
-  closed enum; a missing/malformed/unknown-valued policy does NOT silently default
-  open — `resolve_inputs` fails closed and the *whole arm* denies (§5.5 F-B4 branch
-  f). Default-open is a property of a validated policy only. A finer host/port/iface
+  hardcoded special case. **Ambiguity (F-B6, POL-002):** reuse SL-182's `network`
+  field AS-IS — a **bool** (`true` default = open, `false` = deny), a closed 2-value
+  domain (NOT widened to an enum — that would be the forbidden SL-182 refactor,
+  OQ-mac3). A missing/malformed policy does NOT silently default open — `resolve_inputs`
+  fails closed and the *whole arm* denies (§5.5 F-B4 branch f). Default-open is a
+  property of a validated policy only; on the Seatbelt arm `network == false` emits
+  `(deny network*)`. A finer host/port/iface
   egress model later is a policy-schema extension, not a seam refactor (forward-compat
   by design). Coarseness caveat stands: syscall-deny, not iface removal (asymmetric
   with bwrap's netns by design); egress wall remains a non-goal (IPC/egress territory).

@@ -112,7 +112,11 @@ checkout; c: nested repo/submodule basename mismatch; d: ambiguous gitdirs; e: p
 missing/unreadable; f: policy malformed / unknown network enum) ⇒ Deny ⇒ the arm \
 emits `deny worktree-subagent Bash`, NEVER a fallback template or pass-through \
 (POL-002, F-B4). Wire the Seatbelt builders into SL-182's select_jailer as the macOS \
-branch — no SL-182 refactor (OQ-mac3). network defaults open only on a VALID policy.
+branch — no SL-182 refactor (OQ-mac3). REUSE SL-182's existing `network` field AS-IS: \
+it is a bool (`true` default = open, `false` = deny), a closed 2-value domain — do \
+NOT widen it to an enum (that would be the forbidden SL-182 schema refactor). On the \
+Seatbelt arm `network == false` emits `(deny network*)`; a valid policy defaults open. \
+Fail-closed-on-malformed is a policy-LOAD concern (branch f), not a schema change.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 pure builders green (resolve_inputs feeds them resolved inputs)." },
@@ -122,11 +126,11 @@ exit_criteria = [
   { id = "EX-1", text = "resolve_inputs derives the worktree from cwd via git (realpath'd toplevel != main checkout), looks up the per-arming policy by basename, ensures <wt>/.tmp, resolves DUTMP via getconf." },
   { id = "EX-2", text = "All 6 fail-closed branches (a–f) return Deny; the arm emits `deny worktree-subagent Bash` — no fallback path template, no unwrapped pass-through." },
   { id = "EX-3", text = "select_jailer routes macOS to the Seatbelt builder; SL-182's shared functions (resolve_target/decide_bash/decide_write/pathcheck/opaque_wrap/validate_policy) reused UNCHANGED." },
-  { id = "EX-4", text = "network is a closed enum; a valid policy defaults open (no deny line); a missing/malformed policy ⇒ branch (e)/(f) Deny — never a silent network default." },
+  { id = "EX-4", text = "SL-182's `network` bool reused unchanged (true=open default ⇒ no deny line; false ⇒ `(deny network*)`); a missing/malformed policy ⇒ branch (e)/(f) Deny — never a silent network default. No schema widening." },
 ]
 verification = [
   { id = "VT-1", text = "resolve_inputs fail-closed branch tests — each of a–f yields Deny", test_file = "src/worktree/jail.rs", keywords = ["resolve_inputs", "Deny", "rev-parse", "toplevel"] },
-  { id = "VT-2", text = "select_jailer macOS routing + network closed-enum default-open-on-valid / deny-on-malformed", test_file = "src/worktree/jail.rs", keywords = ["select_jailer", "network", "malformed"] },
+  { id = "VT-2", text = "select_jailer macOS routing + network bool: false ⇒ deny line, malformed policy ⇒ Deny", test_file = "src/worktree/jail.rs", keywords = ["select_jailer", "network", "malformed"] },
   { id = "VA-1", text = "Agent confirms impurity (git/realpath/getconf/mkdir/fs) lives ONLY in resolve_inputs, not the pure builders; no fallback path template exists on any deny branch." },
 ]
 specs        = []
