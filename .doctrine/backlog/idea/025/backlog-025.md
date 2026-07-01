@@ -40,6 +40,20 @@ phase at spawn and written into the worker's policy file.
   a hard write boundary (the bwrap jail rw-binds the whole worktree).
 - Glob matching in the hook (selector globs vs realpath).
 
+## Correction — the floor CAN host an allowlist (added during SL-185 scoping)
+
+The "mount-ns rw-binds whole subtrees, not glob sets" claim above is too strong
+for the **Seatbelt** floor (SL-183). `seatbelt_profile` already emits a regex path
+filter (`(allow file-write* (require-all (subpath …) (regex XCRUN_DB_REGEX)))`,
+`jail.rs:506`). A selector allowlist is the same shape per-selector —
+`(allow file-write* (require-all (subpath WT) (regex <glob→regex>)))` — and, being
+a `file-write*` syscall floor, it governs **new-file creation under a glob** and
+**every write incl. Bash**. That makes the Seatbelt form *stronger* than the
+claude Edit/Write-tool predicate described here (which a `Bash` write slips). So
+this mode is NOT claude-arm-only; the profile builder is a second insertion point
+alongside the policy schema. bwrap can only approximate (per-file rw-bind of the
+point-in-time set; new-file/atomic-rename break). See [[SL-185]] OQ-3.
+
 ## Decision basis
 
 Out of scope for SL-182 (which lands the floor: confine-to-worktree). Pull forward

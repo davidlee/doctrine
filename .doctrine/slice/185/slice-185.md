@@ -91,15 +91,26 @@ the load-bearing intent: parity, not a mac-shaped special case.
   inheritance) hold for the subprocess spawn shape. Re-probe only if the launcher
   changes the nesting/exec assumptions.
 - **OQ-3 / IDE-025 adjacency (for `/design`):** [[IDE-025]] proposes a
-  selector-sourced write-allowlist *jail mode*. It does NOT fold into this slice —
-  its mechanism is a per-path Edit/Write-wall predicate (claude PreToolUse
-  `pathcheck`), which the subprocess arm cannot host: pi/codex have no per-tool
-  hook, so the Seatbelt floor here (like bwrap) rw-binds whole subtrees, not glob
-  sets — the exact limitation IDE-025 already names. SL-185 thus *confirms*
-  IDE-025 is claude-arm-only, not enabled by this work. The one genuine shared
-  seam is the **per-worker policy schema** (SL-183 OQ-3): whatever seatbelt policy
-  this slice stamps for the subprocess worker should leave room for a future
-  `mode`/`write_allowlist` field (forward-compat), without implementing it here.
+  selector-sourced write-allowlist *jail mode*. It stays a separate slice (distinct
+  config-surface feature, currently an unscoped idea) — but its mechanism IS
+  hostable on this arm, contrary to IDE-025's own "mount-ns can't express glob
+  sets" framing. Two corrections that bear on the schema:
+  - **Seatbelt CAN express a glob allowlist at the profile floor.** SL-183's
+    `seatbelt_profile` already emits a regex path filter
+    (`(allow file-write* (require-all (subpath …) (regex XCRUN_DB_REGEX)))`,
+    `jail.rs:506`). A selector allowlist is the same shape per-selector:
+    `(allow file-write* (require-all (subpath WT) (regex <glob→regex>)))`. It even
+    covers **new-file creation** under a glob (file-write* matches the new path
+    against the regex — no pre-existing inode, unlike a bwrap bind). And it governs
+    **every** write syscall (Bash included), so it is *stronger* than IDE-025's
+    claude-arm form (a per-path Edit/Write-tool predicate a `Bash` write can slip).
+  - **bwrap** can approximate via per-file rw-binds of the point-in-time set, but
+    degrades: new-file-under-glob needs parent-dir write (subtree), and
+    atomic-rename saves cross the file's own bind mount → `EXDEV`. Partial, brittle.
+  Consequence for THIS slice: the shared seam is not just the per-worker **policy
+  schema** but the **profile builder** itself. Design the seatbelt policy this slice
+  stamps so a future `mode = "selector-strict"` / `write_allowlist` field can drive
+  a per-selector regex allow-rule — leave the room, don't implement it here.
 
 ## Verification / closure intent
 
