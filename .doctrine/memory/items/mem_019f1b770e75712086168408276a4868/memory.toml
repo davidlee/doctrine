@@ -4,7 +4,7 @@ schema_version = 1
 memory_type = "fact"
 status = "active"
 title = "/reload-plugins registers plugin PreToolUse hooks, no restart"
-summary = "/reload-plugins alone registers newly-installed doctrine plugin PreToolUse hooks (no full session restart needed); subsequent Agent-tool subagents hit the live hook"
+summary = '/reload-plugins reporting "N hooks" does NOT reliably register a firing plugin PreToolUse(Bash) wall — CONTRADICTED on macOS SL-183 PHASE-04 (subagent Bash ran unwrapped after reload). Prefer a full restart + confirm the hook actually fires; the original Linux/settings.local.json evidence did not reproduce on the macOS skill/plugin hooks.json path.'
 created = "2026-07-01"
 updated = "2026-07-01"
 
@@ -34,7 +34,7 @@ reviewed = ""
 review_by = ""
 
 [trust]
-trust_level = "medium"
+trust_level = "low"
 
 [ranking]
 severity = "none"

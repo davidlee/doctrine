@@ -236,3 +236,52 @@ fresh `~/.cargo/bin` path by absolute string — it knows `worktree pretooluse` 
 carries `Seatbelt::Jailer::wrap_argv` + profile strings. `.claude/settings.local.json`
 `hooks:{}` empty; the skill hooks.json is the live source. So the EX-2 live in-situ
 leg is genuinely runnable through the real consumer (not just the pass-2 rig).
+
+### T3b — Seatbelt profile materialization gap CLOSED (2nd consult-approved increment)
+**Discovery (sibling of T3a):** the shipped consumer emitted `sandbox-exec -f
+<wt>/.tmp/jail.sb` but NOTHING in prod ever wrote the profile body —
+`seatbelt_profile()` (jail.rs:503) had ZERO prod call sites (tests only). Every
+wrapped Bash call would fail `sandbox-exec: .../jail.sb: No such file or directory`
+BEFORE Seatbelt engaged → the floor never applied. Contradictory doc comments
+(jail.rs 243/264/153/677) each punted the write to "the other phase"; neither did.
+Root cause: bwrap confinement is inline argv flags (no external file), Seatbelt's
+`-f <profile>` is a disk file — so the macOS arm carries a materialization
+obligation parity-by-reuse never covered.
+
+**Fix (command tier, leaf pure):** `materialize_seatbelt_profile(&Backend,
+Decision) -> Decision` in `pretooluse.rs`, wired into `run_pretooluse` after
+`decide()`. On `Backend::Seatbelt` + `WrapBash` ⇒ write `seatbelt_profile(resolved)`
+to `resolved.profile_path`. **Fail-closed (F-B4):** io error ⇒ `Deny{seatbelt-
+profile-write-failed}`, never an allow+wrap over a missing floor. No-op for every
+other backend/decision. clippy `#[expect(disallowed_methods)]` — the `.sb` is
+runtime/derived under gitignored `<wt>/.tmp`. TDD: 3 tests (writes-body-keeps-wrap,
+fail-closed-denies, noop-non-seatbelt). pretooluse 18→21 green; jail 59 UNCHANGED
+(parity intact, leaf untouched — only doc comments corrected). Commit `c5908cc6`.
+
+**Offline floor validation (the proof T3a+T3b make containment REAL):** simulated
+agent worktree + provisioned policy → shipped consumer wraps → `.sb` materialized
+(540B) → OUTSIDE write `Operation not permitted` (canary PRISTINE), IN-WT write
+`INSIDE_OK`. The floor engages end-to-end through the shipped `worktree pretooluse`.
+
+### EX-2 live-subagent battery — BLOCKED (handoff point; two independent walls)
+See `mem.thread.sl-183.ex2-live-battery-blocked-macos` (full detail). Summary:
+1. **Plugin hook not firing (macOS, S1).** After reboot + `/reload-plugins`
+   ("3 hooks"), an `isolation:worktree` subagent's in-wt `echo` ran UNWRAPPED — no
+   `<wt>/.tmp/jail.sb` materialized (the T3b tell proves the hook never wrapped).
+   The proven-working RSK-014 surface was a `settings.local.json` `hooks` block
+   (now empty); the doctrine skill/plugin hooks.json path did not intercept subagent
+   Bash here. Falsified the medium-trust `reload-plugins-registers-pretooluse`
+   memory (now downgraded to low + trust-corrected).
+2. **Subagent refuses the red-team battery.** 3 spawns (Opus×1, Sonnet×2), all
+   framings, refused as sandbox-escape recon even under bypassPermissions. Model
+   posture shifted since pass-2 (which got compliant subagents). Do NOT jailbreak
+   past a safety refusal. The subagents' sound point (matches rig F-D): containment
+   is verified from OUTSIDE (canary checksums), so subagent cooperation is not
+   load-bearing.
+
+**Net EX-2 status for /audit:** discharged by T3a+T3b wiring + offline floor
+validation (shipped binary confines end-to-end) + live deny-path + pass-2's
+STANDING INV(M1-sub) (nesting already SUPPORTED, promoted to design INV). The live
+subagent battery is re-confirmation, not the sole proof — defer to VH-1 (human) or
+a next-session settings.local.json-surface run. NOT a containment defect (S2): all
+canaries intact throughout; nothing escaped.

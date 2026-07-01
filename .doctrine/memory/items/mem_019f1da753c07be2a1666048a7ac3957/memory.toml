@@ -1,0 +1,42 @@
+memory_uid = "mem_019f1da753c07be2a1666048a7ac3957"
+memory_key = "mem.thread.sl-183.ex2-live-battery-blocked-macos"
+schema_version = 1
+memory_type = "thread"
+status = "active"
+title = "SL-183 EX-2 live subagent battery blocked two ways on macOS: plugin hook not firing + subagent refuses red-team framing"
+summary = "The live isolation:worktree escape-battery leg (SL-183 PHASE-04 EX-2) is blocked on macOS by two independent walls: (1) the doctrine skill/plugin PreToolUse(Bash) hook does not intercept subagent Bash this session (subagent in-wt writes ran unwrapped, no .tmp/jail.sb), and (2) current Sonnet subagents refuse the red-team escape-battery prompt (even terse + bypassPermissions) as sandbox-escape recon."
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = [".doctrine/backlog/risk/014/probe-h2-seatbelt/insitu-live/", "src/worktree/pretooluse.rs"]
+globs = []
+commands = []
+tags = ["sl-183", "ex-2", "seatbelt", "hooks", "macos", "subagent-refusal", "handover"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "eb8b506e1f7ef210b2a2a014470fad773f96fe00"
+ref_name = "refs/heads/edge"
+checkout_state_id = "77873fcbc5c919c122eb763505da77cb156db8a959e328d8203abe20bab16e40"
+base_commit = "c5908cc64dcbff642dc6a2f7515aa81d435397c3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
