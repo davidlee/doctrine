@@ -1,0 +1,187 @@
+# Implementation plan for SL-185 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-185"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-01 — Factor the shared resolver (Linux-safe, behaviour-preserving).
+# Design §3 + XR-1/XR-3. Splits resolve_inputs into acquire_policy ∘
+# resolve_with_policy over ONE threaded Topology, moves validate_policy into the
+# shared core, extracts write_seatbelt_profile from pretooluse. Pure/command-tier
+# only — no new backend, no mac code. The existing suites are the behaviour proof.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Factor shared resolver — acquire_policy ∘ resolve_with_policy, one Topology"
+objective = """
+Refactor src/worktree/jail.rs so the disk-policy lookup and the policy→resolved \
+core are separable, WITHOUT changing claude-arm behaviour. Split resolve_inputs \
+into acquire_policy(topo, env) -> JailPolicy (disk lookup by basename, claude \
+only) and resolve_with_policy(policy, topo, main_root, env) -> ResolvedMac (the \
+SHARED core: validate_policy + realpaths). Thread a SINGLE Topology through both \
+(XR-3/OQ-a) — resolve_inputs probes worktree_topology once and passes it down; no \
+second git call, no read-A/resolve-B window. Move validate_policy from \
+resolve_inputs into resolve_with_policy so BOTH policy sources are validated \
+identically (the from_toml → validate → realpath order is preserved for the \
+claude arm). Extract write_seatbelt_profile(resolved) -> io::Result<()> from \
+pretooluse::materialize_seatbelt_profile (the fs::write of seatbelt_profile(resolved)); \
+materialize now calls it. Pure leaf builders untouched (ADR-001).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design LOCKED (SL-185 in `plan`); AR-1..4 + XR-1..5 integrated." },
+  { id = "EN-2", text = "src/worktree/jail.rs resolve_inputs/validate_policy/worktree_topology/Topology and pretooluse::materialize_seatbelt_profile exist on disk as design §3 names them (re-grepped)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "resolve_inputs is a recomposition: one worktree_topology probe, then resolve_with_policy(acquire_policy(topo,env)?, topo, main_root, env). No second topology probe (XR-3)." },
+  { id = "EX-2", text = "validate_policy runs inside resolve_with_policy for BOTH disk and supplied-policy sources; the from_toml → validate → realpath ordering is preserved (behaviour-preserved)." },
+  { id = "EX-3", text = "write_seatbelt_profile(resolved) is the single profile writer; materialize_seatbelt_profile calls it (no inline fs::write of the body remains)." },
+  { id = "EX-4", text = "Pure builders (seatbelt_profile/sandbox_exec_argv/bwrap_argv/bwrap_core_argv) unchanged; no new magic strings (STD-001)." },
+]
+verification = [
+  { id = "VT-1", text = "Existing resolve_inputs + pretooluse suites stay GREEN UNCHANGED (behaviour-preservation gate).", test_file = "src/worktree/jail.rs", keywords = ["resolve_inputs", "resolve_with_policy", "Topology"] },
+  { id = "VT-2", text = "resolve_with_policy resolves from a SUPPLIED inline policy (no disk read) and rejects a dangerous inline extra_rw (root/ancestor/.git) via the moved validate_policy.", test_file = "src/worktree/jail.rs", keywords = ["resolve_with_policy", "validate_policy", "extra_rw"] },
+  { id = "VT-3", text = "write_seatbelt_profile writes exactly seatbelt_profile(resolved) to profile_path; io error → Err. Pure fs::write, no sandbox-exec.", test_file = "src/worktree/pretooluse.rs", keywords = ["write_seatbelt_profile", "seatbelt_profile"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-02 — jail-prefix command: Linux branch, inline-canon (XR-1), --out contract.
+# Design §3 mod.rs + §4. New WorktreeCommand::JailPrefix. Canonicalize inline
+# --extra-rw BEFORE validate (XR-1 D-canon). Linux cfg branch emits the bwrap
+# prefix via the factored bwrap-presence helper (AR-4) → select_jailer(Bwrap) →
+# wrap_argv, NUL-delim to --out, fail-closed. Exercises the WHOLE command shell
+# on Linux — the cfg-rot mitigation (D2). No mac code yet.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "jail-prefix command — Linux emit, inline canonicalization, fail-closed --out"
+objective = """
+Add WorktreeCommand::JailPrefix { dir, main_root: Option, out, network, \
+extra_rw } + dispatch, and run_jail_prefix() in the command tier. run_jail_prefix \
+FIRST env.realpaths each inline --extra-rw (nonexistent ⇒ fail-closed) and builds \
+JailPolicy from the canonicalized set (default = worktree floor), meeting the \
+D-canon precondition validate_policy assumes (XR-1). Linux cfg branch: reuse the \
+bwrap-presence helper factored out of probe_backend (AR-4, no parallel check) — \
+present ⇒ select_jailer(Backend::Bwrap) → wrap_argv(realpath(dir), &policy); \
+absent ⇒ fail-closed. Emit the prefix NUL-delimited to --out, written ONLY on \
+full success (any Deny ⇒ nonzero + reason on stderr, no/partial-free --out file). \
+NUL delimiter, command name, reason strings are named constants (STD-001).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: acquire_policy/resolve_with_policy/write_seatbelt_profile factored, suites green." },
+  { id = "EN-2", text = "A bwrap-presence helper is factored out of probe_backend (AR-4) — jail-prefix reuses it, not probe_backend (whose macOS branch reads the disk policy D3 rejects)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "jail-prefix Linux arm emits the bwrap prefix, NUL-delimited, terminating in `--` (FLAG_ARG_SEP), for a given --dir/policy; equals bwrap_core_argv (no re-authored argv)." },
+  { id = "EX-2", text = "Inline --extra-rw is env.realpath'd BEFORE validate_policy; a ../ or symlinked grant resolving to /, a main-root ancestor, or .git is REJECTED (XR-1)." },
+  { id = "EX-3", text = "Fail-closed: bwrap absent ⇒ nonzero exit, empty stdout, and NO --out file written (never a partial/empty file mistakable for success)." },
+  { id = "EX-4", text = "--out is written NUL-delimited and split-on-\\0 round-trips to the wrap_argv tokens (non-UTF-8 safe)." },
+]
+verification = [
+  { id = "VT-1", text = "e2e: `doctrine worktree jail-prefix --dir <wt> --out <f>` on Linux writes a NUL-delim bwrap prefix ending in `--`; round-trips to wrap_argv tokens.", test_file = "tests/e2e_worktree_jail_prefix.rs", keywords = ["jail-prefix", "--out", "\\0"] },
+  { id = "VT-2", text = "e2e: a dangerous inline --extra-rw (../ or symlink escaping the worktree, or touching .git) is rejected nonzero (XR-1 canonicalize-before-validate).", test_file = "tests/e2e_worktree_jail_prefix.rs", keywords = ["extra-rw", "reject"] },
+  { id = "VT-3", text = "e2e: fail-closed — bwrap absent ⇒ nonzero, no --out file written; --out present ⇒ command succeeded.", test_file = "tests/e2e_worktree_jail_prefix.rs", keywords = ["fail-closed", "--out"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-03 — Shell reader wiring + Linux-runnable reader test (XR-5); Darwin stub.
+# Design §1/§3 pi-spawn-confined.sh + §4 XR-5. Add the uname case: the `*` branch
+# keeps the existing inline bwrap array (D1, Linux UNTOUCHED); the mapfile-from-
+# --out reader + empty-guard is added and tested on Linux against a REAL
+# jail-prefix --out file. The Darwin arm is a FAIL-CLOSED STUB (aborts "mac path
+# pending RISK-1") — the real sandbox-exec wiring is PHASE-04, gated behind the
+# pi-rpc probe (XR-4). No mac-dependent enforcement code lands here.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Shell reader + Linux reader test; Darwin arm fail-closed stub"
+objective = """
+Wire the spawn seam in scripts/pi-spawn-confined.sh: a `case $(uname)` where the \
+default `*` branch keeps the existing inline bwrap PREFIX array UNTOUCHED (D1), \
+and a shared reader consumes the --out file per the §1 contract — truncate/remove \
+--out before the call, `mapfile -d '' PREFIX < "$D/.tmp/jail.argv"`, then the \
+`[ "${#PREFIX[@]}" -gt 0 ] || abort` empty-guard, then the single \
+`timeout "${PREFIX[@]}" pi …` exec site. The Darwin arm calls jail-prefix but is \
+a FAIL-CLOSED STUB that aborts pending the RISK-1 mac probe (XR-4) — no \
+sandbox-exec dependency yet. Prove the reader on Linux (XR-5): a jail-prefix \
+--out file (Linux ⇒ bwrap prefix) round-trips through the mapfile reader + \
+empty-guard; a stale/empty/absent --out aborts, never an unconfined exec.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed: jail-prefix emits a NUL-delim --out prefix on Linux, fail-closed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "pi-spawn-confined.sh has a single `timeout \"${PREFIX[@]}\" pi …` exec site; the `*` branch is the existing inline bwrap array, byte-unchanged (D1)." },
+  { id = "EX-2", text = "The reader truncates/removes --out first, mapfiles NUL-delim, and the empty-PREFIX guard aborts; a stale prior-run --out cannot be mistaken for success." },
+  { id = "EX-3", text = "The Darwin arm aborts fail-closed (\"pending RISK-1\") — NO sandbox-exec/mac enforcement code lands in this phase (XR-4)." },
+]
+verification = [
+  { id = "VT-1", text = "e2e (Linux): a real `jail-prefix --out` file round-trips through the mapfile -d '' reader to a non-empty PREFIX ending in `--`; empty/absent/stale --out ⇒ guard aborts, no exec (XR-5).", test_file = "tests/e2e_worktree_jail_prefix.rs", keywords = ["mapfile", "PREFIX", "abort"] },
+  { id = "VA-1", text = "Agent confirms the `*` (Linux) bwrap branch of pi-spawn-confined.sh is byte-unchanged from HEAD and the Darwin arm is a fail-closed stub (no sandbox-exec call).", test_file = "scripts/pi-spawn-confined.sh", keywords = ["uname", "PREFIX"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-04 — Mac-branch wiring (RISK-1 GATED). Design §1/§3/§7, OQ-b, VH.
+# ENTRANCE-GATED on the RISK-1 falsification probe (pi --mode rpc survives
+# sandbox-exec) — the go/no-go a mac must answer (XR-4). Fills run_jail_prefix's
+# macOS cfg branch + the real Darwin arm, resolves OQ-b (does pi write ~/.pi?),
+# and discharges the VH enforcement gate. cfg-rot tripwire: cargo check --target.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Mac wiring + enforcement gate (RISK-1 gated)"
+objective = """
+BEHIND the RISK-1 probe: implement run_jail_prefix's #[cfg(target_os=\"macos\")] \
+branch — probe topo = worktree_topology(dir) ONCE, resolve_with_policy(&policy, \
+&topo, main_root, RealEnv) (main_root REQUIRED, absent ⇒ fail-closed) → \
+Backend::Seatbelt(resolved) via select_jailer → write_seatbelt_profile (io error \
+⇒ fail-closed Deny) → wrap_argv → emit. Replace the PHASE-03 Darwin stub with \
+the real jail-prefix --out invocation. Resolve OQ-b: probe whether pi writes \
+~/.pi at runtime with the session redirected under $D; grant extra_rw ONLY if it \
+does (else no grant — Seatbelt reads are open). OQ-c: main_root sourced from the \
+script's explicit --main-root \"$ROOT\". cfg-rot tripwire: cargo check --target \
+aarch64-apple-darwin type-checks this branch off-mac.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "RISK-1 CLEARED on a macOS host: a disposable `sandbox-exec -f <floor.sb> -- pi --mode rpc … < fifo` proves pi's fifo/rpc/child-spawn functions under Seatbelt (VH — the go/no-go; if it fails, reconsider the launcher per §7)." },
+  { id = "EN-2", text = "PHASE-01..03 landed: factoring, Linux jail-prefix, shell reader + Darwin stub all green." },
+  { id = "EN-3", text = "macOS host available for enforcement verification (VH cannot run in the Linux jail)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "run_jail_prefix macOS branch: single topology probe → resolve_with_policy(inline policy) → Seatbelt(resolved) → write_seatbelt_profile → wrap_argv → NUL-delim --out; every Deny (missing main_root, profile-write io error) fail-closed." },
+  { id = "EX-2", text = "pi-spawn-confined.sh Darwin arm calls the real jail-prefix --out (stub replaced); on nonzero it aborts (no unconfined pi)." },
+  { id = "EX-3", text = "OQ-b resolved: pi's ~/.pi write behaviour probed with session under $D; extra_rw granted iff pi actually writes there, else no grant (documented in the phase sheet)." },
+  { id = "EX-4", text = "cargo check --target aarch64-apple-darwin passes (mac branch type-checks off-mac)." },
+]
+verification = [
+  { id = "VA-1", text = "cargo check --target aarch64-apple-darwin type-checks the macOS run_jail_prefix branch (cfg-rot tripwire, dev/CI).", test_file = "src/worktree/mod.rs", keywords = ["JailPrefix", "run_jail_prefix"] },
+  { id = "VH-1", text = "On a real mac: profile materializes at $D/.tmp/jail.sb; a write OUTSIDE $D is denied; a write INSIDE $D succeeds; pi children (bash/cargo/git) inherit the sandbox." },
+  { id = "VH-2", text = "On a real mac: fail-closed live — corrupt/absent policy or a jail-prefix Deny ⇒ nonzero ⇒ the spawn script ABORTS, never falling through to an unconfined pi." },
+  { id = "VH-3", text = "On a real mac: OQ-b settled — pi run under the sandbox with --session-dir under $D either needs no ~/.pi write grant, or exactly the probed extra_rw (existence/realpath-checked)." },
+]
+specs        = []
+requirements = []
