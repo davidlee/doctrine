@@ -59,7 +59,11 @@ SL-182 §5.5 / POL-002). Reuse the **same** `Decision`/`Target`/policy/funnel �
 
 ### 5.1 System Model
 
-The profile (proven shape, RSK-014 H2 pass 1):
+The profile. The **base** shape (allow-default, floor, PTMP deny, device sinks, WT/
+TMP/RWn allows) is **probe-proven** (RSK-014 H2 pass 1). The **DUTMP deny + xcrun_db
+re-allow** (L68/L75) are **design-decided post-probe (OQ-mac4), NOT yet probed** —
+their exact ordering + canary-preservation + xcrun-tool-works verification is
+DEFERRED to `/plan` / first-impl (§9, F-B2). Do not read them as pass-1 evidence.
 ```scheme
 (version 1)
 (allow default)                                 ; reads open (parity: reads OOS)
@@ -70,9 +74,12 @@ The profile (proven shape, RSK-014 H2 pass 1):
 (allow file-write* (literal "/dev/null")) … (regex #"^/dev/tty") …
 (allow file-write* (subpath (param "WT")))      ; worktree rw — SPECIFIC, LAST
 (allow file-write* (subpath (param "TMP")))     ; TMPDIR=<wt>/.tmp (D-mac3)
-; F-E: re-allow ONLY the xcrun_db cache file under the per-user temp, NOT the
-; whole surface — narrowest hole that fixes the proven breakage (OQ-mac4):
-(allow file-write* (regex (string-append (param "DUTMP") "/xcrun_db")))
+; F-E: re-allow ONLY the xcrun_db cache FILE FAMILY under the per-user temp, NOT
+; the whole surface — narrowest hole that fixes the proven breakage (OQ-mac4).
+; ANCHORED to one path segment (F-3): observed file is `xcrun_db-<hash>`, so the
+; pattern is DUTMP + "/xcrun_db" + non-slash* + end — never a deeper subpath.
+; XCRUN_DB_REGEX (named const); SBPL regex-match semantics pinned at /plan-probe:
+(allow file-write* (regex #"/xcrun_db[^/]*$"))  ; applied under a DUTMP subpath scope
 (allow file-write* (subpath (param "RWn")))     ; per validated extra_rw
 ; (deny network*)  iff policy.network == deny   ; default OPEN; emitted only on
 ;                                               ; opt-in, via the same policy→profile
@@ -84,21 +91,39 @@ Invoked: `sandbox-exec -D WT=<realpath> -D TMP=<realpath> -D PTMP=/private/tmp
 
 ### 5.2 Interfaces & Contracts
 
-Two new pure functions behind the `Jailer` seam (shell analogs proven in
-`probe-h2-seatbelt/seatbelt-jail.sh`):
-- `seatbelt_profile(policy) -> String` — emits the profile body, **rules ordered
-  deny-coarse-first / allow-specific-last** (F-A). Device-sink allow-set is a
-  constant; the `xcrun_db` cache-file allow (F-E) is a named constant (STD-001).
-  The `(deny network*)` line is emitted **only** when `policy.network == deny` —
-  default-open; network rides the same policy→profile pass as `extra_rw`, never a
-  hardcoded special case (D-mac4).
-- `sandbox_exec_argv(wt, policy) -> Vec<OsString>` — realpaths WT/TMP/DUTMP/extra_rw
-  into `-D` params (F-A footgun mitigation), opaque base64 body, sets
-  `TMPDIR=<wt>/.tmp`. `DUTMP` = realpath of `getconf DARWIN_USER_TEMP_DIR`.
+**Pure/impure split (ADR-001, F-B1).** Realpath, `getconf`, `<wt>/.tmp` creation,
+and policy-file reads are IMPURE — they live in the thin shell (`resolve_inputs`),
+which fails closed. The two builders are PURE: resolved paths/strings in,
+`String`/`Vec` out. No clock/exec/disk in the pure layer.
 
-Seam shape: reuse all of SL-182's `jail.rs`; fork **only** the argv/profile builder
-behind SL-182's existing capability-as-data `select_jailer` fork point (D-mac2,
-RATIFIED — OQ-mac3 resolved: slot in as-is, no SL-182 refactor).
+- **Impure — `resolve_inputs(cwd, policy) -> Result<ResolvedInputs, Deny>` (shell).**
+  Derives the worktree from `cwd` via git (§5.5 F-G / F-B4 fail-closed contract),
+  realpaths WT/TMP/DUTMP/extra_rw, runs `getconf DARWIN_USER_TEMP_DIR`, ensures
+  `<wt>/.tmp`. **Any failure ⇒ `Deny` (arm denies `worktree-subagent Bash`).**
+- **Pure — `seatbelt_profile(resolved) -> String`** — emits the profile body, **rules
+  ordered deny-coarse-first / allow-specific-last** (F-A). Device-sink allow-set and
+  the `xcrun_db` filename regex (F-E) are named constants (§ constant catalog below).
+  The `(deny network*)` line is emitted **only** when `resolved.network == Deny` —
+  default-open on a VALID policy; network rides the same policy→profile pass as
+  `extra_rw`, never a hardcoded special case (D-mac4). *(Ambiguity handling: an
+  unreadable/malformed policy never reaches here — `resolve_inputs` already denied
+  the arm, F-B6.)*
+- **Pure — `sandbox_exec_argv(resolved) -> Vec<OsString>`** — splices realpath'd
+  `-D` params (F-A footgun mitigation), opaque base64 body, sets `TMPDIR=<wt>/.tmp`.
+
+**Named-constant catalog (STD-001, F-minor9).** The design commits `/plan` to
+single-source these as Rust `const`s (identifiers illustrative; values are the
+contract): `PARAM_WT`/`PARAM_TMP`/`PARAM_PTMP`/`PARAM_DUTMP`/`PARAM_RW_PREFIX`
+(`-D` names); `PTMP_LITERAL = "/private/tmp"`; `DEVICE_SINK_ALLOWS` (the F-B set);
+`XCRUN_DB_REGEX` (the anchored filename pattern, F-3); `DENY_NETWORK = "(deny
+network*)"`. §5.1's profile shows literals for readability ONLY — none ship inline.
+
+**Seam shape (D-mac2, RATIFIED — a CONSTRAINT on SL-182, not landed code).** SL-182
+is `ready` but UNBUILT: its `select_jailer` capability-as-data fork point exists in
+SL-182's *design*, not on disk (§2, F-B5). SL-183 forks **only** the argv/profile
+builder behind that fork point; OQ-mac3 resolved *slot-in-as-is* (no SL-183-driven
+SL-182 refactor). D-mac2 is therefore a requirement SL-182's implementation MUST
+satisfy — SL-183 planning stays blocked on `needs SL-182` until the API lands.
 
 ### 5.3 Data, State & Ownership
 
@@ -127,11 +152,14 @@ Pinned empirically (RSK-014 H2 pass 1, orchestrator context):
 - **EDGE (F-E) — `/var/folders/$USER/T` is a SECOND temp surface. RESOLVED
   (OQ-mac4, 2026-07-01).** macOS per-user temp (`DARWIN_USER_TEMP_DIR`, `$TMPDIR`
   default), distinct from `/tmp`; xcrun hardcodes an `xcrun_db` cache there. The
-  `TMPDIR=<wt>/.tmp` redirect does NOT cover it (xcrun reads it via
-  `confstr(_CS_DARWIN_USER_TEMP_DIR)`, not `$TMPDIR`) → denied, noisy (cosmetic for
-  python; breaks cache-dependent tools). **Decision:** coarse-deny the whole
-  surface, then re-allow **only** the `xcrun_db` cache file via a narrow regex
-  (`DUTMP/xcrun_db`) — the smallest hole that fixes the proven breakage. The rest of
+  `TMPDIR=<wt>/.tmp` redirect does NOT cover it (OBSERVED: the `xcrun_db-<hash>`
+  write escaped the `$TMPDIR` redirect — results.md F-E; mechanism *likely*
+  `confstr(_CS_DARWIN_USER_TEMP_DIR)`-derived, **unverified**, F-minor8) → denied,
+  noisy (cosmetic for python; breaks cache-dependent tools). **Decision:** coarse-deny
+  the whole surface, then re-allow **only** the `xcrun_db` cache-file family via an
+  ANCHORED filename regex (`/xcrun_db[^/]*$` under a DUTMP subpath scope, F-3), NOT
+  the substring `DUTMP/xcrun_db` — the smallest hole that fixes the proven breakage.
+  The rest of
   the per-user temp stays denied. **Caveat (load-bearing):** this is a deliberate
   containment tradeoff — `/var/folders/$USER/T` is host-shared and GC-uncontrolled,
   so the allowed cache file is a cross-subagent write surface OUTSIDE the floor;
@@ -158,6 +186,18 @@ Pinned empirically (RSK-014 H2 pass 1, orchestrator context):
   relationship (toplevel ≠ main checkout, realpath'd) is the invariant; the path is
   harness-version surface. The `Jailer` MUST bind via git, load-bearing for the
   cross-arm seam.
+- **INV (F-B4) — the `cwd`→worktree derivation is FAIL-CLOSED (POL-002).** The
+  derivation algorithm (in the impure `resolve_inputs`): `git -C <cwd> rev-parse
+  --show-toplevel` → realpath → `basename` → per-arming policy lookup
+  (§5.3). **Every failure branch ⇒ `Deny` (arm emits `deny worktree-subagent Bash`);
+  NEVER a fallback path template, NEVER unwrapped pass-through.** Enumerated denies:
+  (a) `cwd` not inside a git worktree (rev-parse fails); (b) toplevel == the main
+  checkout (not a subagent worktree — no policy provisioned); (c) nested repo /
+  submodule where toplevel is the inner repo (basename ≠ a provisioned arming); (d)
+  ambiguous / multiple gitdirs; (e) policy file for the resolved basename missing or
+  unreadable; (f) policy present but malformed / schema-invalid (covers the network
+  ambiguity, F-B6). This is the macOS twin of SL-182's fail-closed posture and the
+  POL-002 discharge for the whole arm.
 - **ASSUMPTION (M1-sub permission-mode) — RESOLVED (F-F).** In the *subagent*
   context the permission gate is NOT transparent to writes (unlike pass-1
   orchestrator F-C): under `auto`, gate/operator-popup denials mask most vectors
@@ -175,16 +215,21 @@ Pinned empirically (RSK-014 H2 pass 1, orchestrator context):
   *measured-low residual* (OS-version variance unmeasured), owned by the
   IPC/egress wall (non-goal), not *open*.
 - **OQ-mac3 — SL-182 seam ordering. RESOLVED (with user, 2026-07-01): design
-  against SL-182's seam AS-IS.** SL-182 already upstreamed the cross-arm `Jailer`
-  seam + capability-as-data `select_jailer` fork point (commits `6f97b50e`,
-  `a7707b48`). SL-183 slots the Seatbelt argv/profile builder into that existing
-  seam; no SL-183-driven refactor of SL-182. (See §7 D-mac2.) Note F-G constrains
-  the seam: the `Jailer` derives the worktree from `cwd` via git, not a path
-  template.
+  against SL-182's seam AS-IS.** SL-182's *design* specifies the cross-arm `Jailer`
+  seam + capability-as-data `select_jailer` fork point (SL-182 commits `6f97b50e`,
+  `a7707b48` author the DESIGN; the seam is **not yet built** — jail.rs does not
+  exist on disk, §2/F-B5). SL-183 slots the Seatbelt argv/profile builder into that
+  fork point *as-is* — a CONSTRAINT SL-182's implementation must satisfy, not
+  landed API; no SL-183-driven refactor of SL-182 (See §7 D-mac2). F-G constrains
+  the seam: the `Jailer` derives the worktree from `cwd` via git (fail-closed,
+  F-B4), not a path template.
 - **OQ-mac4 (F-E) — second temp surface. RESOLVED (with user, 2026-07-01):**
-  coarse-deny `/var/folders/$USER/T`, re-allow ONLY the `xcrun_db` cache file via a
-  narrow regex (not the whole surface, not redirect — `confstr`-derived, not
-  `$TMPDIR`-overridable). Documented cross-subagent caveat + case-by-case
+  coarse-deny `/var/folders/$USER/T`, re-allow ONLY the `xcrun_db` cache-file family
+  via an ANCHORED filename regex (F-3; not the whole surface, not a redirect — the
+  write escapes the `$TMPDIR` redirect, mechanism likely `confstr`-derived but
+  UNVERIFIED, F-minor8). **Decision made, exact final profile NOT yet probed** —
+  ordering + canary + xcrun-works verification deferred to `/plan`/first-impl
+  (F-B2). Documented cross-subagent caveat + case-by-case
   re-surfacing for other Xcode caches. See §5.5 EDGE(F-E), §5.1 profile.
 
 ## 7. Decisions, Rationale & Alternatives
@@ -195,27 +240,36 @@ RATIFIED with the user 2026-07-01.**
 - **D-mac1 — RATIFIED.** Seatbelt = allow-default-deny-write-except, not
   default-deny (the SBPL footgun this design sidesteps). *(Probe-confirmed feasible.)*
 - **D-mac2 — RATIFIED.** Single `Jailer` seam; reuse all of SL-182's `jail.rs`
-  except the argv/profile builder, slotting into SL-182's existing capability-as-data
-  `select_jailer` fork point as-is — no SL-183-driven SL-182 refactor (OQ-mac3
-  resolved). **Constraint (F-G):** the seam derives the worktree from PreToolUse
-  `cwd` via git (toplevel ≠ main checkout, realpath'd), NOT a path template —
+  except the argv/profile builder, slotting into SL-182's `select_jailer` fork point
+  as-is — no SL-183-driven SL-182 refactor (OQ-mac3 resolved). **This is a CONSTRAINT
+  on SL-182's eventual implementation, not landed API** — SL-182 is `ready` but
+  UNBUILT; the fork point exists in SL-182's design, not on disk. SL-183 planning
+  stays `needs SL-182`-blocked until it lands (F-B5). **Constraint (F-G/F-B4):** the
+  seam derives the worktree from PreToolUse `cwd` via git (toplevel ≠ main checkout,
+  realpath'd), **fail-closed on every ambiguity** (§5.5 F-B4), NOT a path template —
   macOS Agent worktrees land at `<repo>/.claude/worktrees/agent-<id>`, a
   harness-version surface; the git relationship is the invariant.
-- **D-mac3 — RATIFIED.** `TMPDIR=<wt>/.tmp` + deny `/private/tmp`. Folds OQ-mac4:
-  coarse-deny `/var/folders/$USER/T`, re-allow ONLY the `xcrun_db` cache file
-  (narrow regex). *(Probe-confirmed working; F-E resolved — see §5.5.)*
+- **D-mac3 — RATIFIED (verification deferred).** `TMPDIR=<wt>/.tmp` + deny
+  `/private/tmp`. Folds OQ-mac4: coarse-deny `/var/folders/$USER/T`, re-allow ONLY
+  the `xcrun_db` cache-file family (anchored regex, F-3). *(Base profile
+  probe-confirmed; the DUTMP/xcrun_db terms are design-decided, NOT yet probed —
+  verify at /plan, F-B2. See §5.5.)*
 - **D-mac4 — RATIFIED (default-open thin seam).** Network defaults **open** (the
-  operating default). `(deny network*)` is emitted **only** on `policy.network ==
-  deny`, via the same policy→profile pass as `extra_rw` — not a hardcoded special
-  case. A finer host/port/iface egress model later is a policy-schema extension, not
-  a seam refactor (forward-compat by design). Coarseness caveat stands: syscall-deny,
-  not iface removal (asymmetric with bwrap's netns by design); egress wall remains a
-  non-goal (IPC/egress territory).
+  operating default) **on a VALID policy**. `(deny network*)` is emitted **only** on
+  `policy.network == deny`, via the same policy→profile pass as `extra_rw` — not a
+  hardcoded special case. **Ambiguity (F-B6, POL-002):** the `network` field is a
+  closed enum; a missing/malformed/unknown-valued policy does NOT silently default
+  open — `resolve_inputs` fails closed and the *whole arm* denies (§5.5 F-B4 branch
+  f). Default-open is a property of a validated policy only. A finer host/port/iface
+  egress model later is a policy-schema extension, not a seam refactor (forward-compat
+  by design). Coarseness caveat stands: syscall-deny, not iface removal (asymmetric
+  with bwrap's netns by design); egress wall remains a non-goal (IPC/egress territory).
 
 ## 8. Risks & Mitigations
 
-- **R-mac1 — nesting refused (M1-sub).** Mitigation: degrade contract (`deny`,
-  never unwrapped); pass-2 probe gates lock. *(Top risk.)*
+- **R-mac1 — nesting refused (M1-sub).** **RETIRED to standing posture** — pass-2
+  proved nesting composes (SUPPORTED); the degrade contract (`deny`, never unwrapped)
+  is now the un-exercised failure posture, not an open gate. *(Was top risk.)*
 - **R-mac2 — Seatbelt vanish (deprecated ~10.10, SBPL undocumented).** Mitigated by
   Anthropic's own sandbox-runtime + system `.sb` profiles depending on it. Low,
   not zero.
@@ -226,11 +280,19 @@ RATIFIED with the user 2026-07-01.**
 
 ## 9. Quality Engineering & Validation
 
-- Probe-first gate: RSK-014 H2 (`probe-h2-seatbelt/`) — pass 1 DONE (orchestrator),
-  pass 2 (M1-sub in-situ, both permission modes) OUTSTANDING.
+- Probe-first gate: RSK-014 H2 (`probe-h2-seatbelt/`) — **pass 1 DONE (orchestrator)
+  + pass 2 DONE (M1-sub in-situ, bypassPermissions leg), both SUPPORTED.** The gate
+  is discharged. **One item remains UNVERIFIED (not a re-probe of the gate):** the
+  exact final DUTMP-deny + anchored-`xcrun_db`-allow profile (OQ-mac4) was
+  design-decided *after* the probes — its ordering, canary-preservation, and
+  xcrun-tool-still-works must be confirmed at `/plan`/first-impl before the arm
+  ships that profile (F-B2/F-3). This is a bounded verification obligation carried
+  INTO planning, not a lock blocker for the design decision itself.
 - `validate_policy` behaviour-preserved (shared, unchanged) — SL-182 suites green.
 - Pass criterion (identical to H1): every external vector `denied`, wt writable,
   wrapper confirmed applied via `updatedInput`. Degrade contract asserted.
+- Fail-closed derivation (F-B4) verified: each enumerated `cwd`→worktree failure
+  branch ⇒ `deny worktree-subagent Bash` (unit-testable in the pure/shell split).
 
 ## 10. Review Notes
 

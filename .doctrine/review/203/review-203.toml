@@ -1,0 +1,97 @@
+id    = 203
+slug  = "inquisition-sl-183-macos-seatbelt-design-pre-lock"
+title = "Inquisition: SL-183 macOS Seatbelt design (pre-lock)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-183"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "EXPECTED pure builders (ADR-001); OBSERVED sandbox_exec_argv owns realpath+getconf impurity"
+detail = "§3 (design.md:36) declares builders pure, impurity (realpath/exec) in the shell. But §5.2 (design.md:95) defines sandbox_exec_argv(wt,policy) as realpathing WT/TMP/DUTMP/extra_rw AND deriving DUTMP via getconf DARWIN_USER_TEMP_DIR — clock/exec-adjacent impurity in the pure layer. Self-contradicting per ADR-001. PENANCE: split an impure resolver/preflight (creates <wt>/.tmp, runs getconf, canonicalizes, fails closed) from pure seatbelt_profile(resolved_policy)/sandbox_exec_argv(resolved_inputs) string/vec builders. Corroborated: external GPT-5.5 + Inquisitor."
+disposition = "fix-now"
+response = "§5.2 rewritten: impure resolve_inputs (git-derive, realpath, getconf, mkdir <wt>/.tmp, policy read — fails closed) split from pure seatbelt_profile(resolved)/sandbox_exec_argv(resolved). ADR-001 pure/impure split now explicit in the design."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "EXPECTED OQ-mac4 resolved by evidence; OBSERVED final DUTMP/xcrun_db profile is UNPROVEN, yet §5.1 calls it 'proven shape'"
+detail = "§5.1 (design.md:62) labels the profile 'proven shape (RSK-014 H2 pass 1)' while adding the DUTMP deny (L68) and xcrun_db re-allow (L75) — terms that appear in NO probe. results.md:66 (F-E) only proves the breakage exists; results.md:216 still lists OQ-mac4 OPEN; the shell analog seatbelt-jail.sh:25 has no DUTMP/xcrun_db terms. Confidence inflated beyond evidence. PENANCE: either run+cite a probe pass proving the exact final profile (ordering + canary preservation + xcrun tool works), OR relabel OQ-mac4 as a design-decided-but-unverified refinement (not 'probe-confirmed') and gate verification to /plan or a follow-up probe."
+disposition = "design-wrong"
+response = "The provenance CLAIM was the defect, not the decision. §5.1 profile intro now labels the base shape probe-proven (pass 1) and the DUTMP-deny + xcrun_db-allow as design-decided post-probe, NOT probed. §9 + D-mac3 + OQ-mac4 carry the deferred verification obligation (ordering/canary/xcrun-works at /plan). No re-probe now (honours 'design-side only'); the false 'proven shape' confidence is removed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "EXPECTED narrow xcrun_db hole; OBSERVED regex unanchored + not proven to match observed file family"
+detail = """§5.1 (design.md:75): (regex (string-append (param DUTMP) "/xcrun_db")). SBPL regex is an unanchored substring match on the resolved path — matches the intended xcrun_db-<hash> but ALSO any path CONTAINING /xcrun_db at any depth (e.g. .../T/xcrun_db_x/attacker-canary), a wider floor breach than §5.5:133 claims ('ONLY the xcrun_db cache file'). Conversely the observed denial was 'xcrun_db-...' (results.md:201) not exactly 'xcrun_db' — so an over-tight literal would miss it. PENANCE: empirically pin SBPL regex semantics; replace with a named ANCHORED filename pattern bounded to one path segment, e.g. #"/xcrun_db[^/]*$" prefixed by DUTMP; single-source as a named constant (STD-001). Corroborated: external GPT-5.5 + Inquisitor's own read."""
+disposition = "fix-now"
+response = """Regex replaced with anchored filename pattern #"/xcrun_db[^/]*$" under a DUTMP subpath scope (one path segment, matches observed xcrun_db-<hash>, never a deeper subpath). Named XCRUN_DB_REGEX const (catalog, §5.2). SBPL regex-match semantics flagged for /plan-probe pinning. Corroborated by Inquisitor's own read."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "EXPECTED fail-closed cwd→git derivation (POL-002); OBSERVED load-bearing F-G has no failure contract"
+detail = "§5.5 (design.md:155)/D-mac2 (design.md:200): Jailer MUST bind the worktree from PreToolUse cwd via git, not a path template. But NO behaviour is specified when cwd is not in a git worktree, is the main checkout, is a nested repo/submodule, has ambiguous gitdirs, or when the per-arming policy basename lookup (§5.3:105) misses. POL-002 mandates: ambiguity ⇒ deny worktree-subagent Bash, never pass-through. PENANCE: add the exact derivation algorithm (git rev-parse --show-toplevel from cwd, realpath, basename→policy) and enumerate EVERY failure branch as fail-closed deny — no fallback template, no unwrapped pass-through."
+disposition = "fix-now"
+response = "New §5.5 INV(F-B4): explicit cwd->worktree derivation algorithm (git rev-parse --show-toplevel -> realpath -> basename -> policy lookup) with all 6 failure branches (a-f) enumerated as fail-closed deny worktree-subagent Bash. POL-002 discharged for the arm. Wired into D-mac2 + §9 verification."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "EXPECTED SL-182 seam stated as FUTURE constraint; OBSERVED non-existent select_jailer treated as landed code"
+detail = "§2 (design.md:23) correctly states SL-182 is not implemented and jail.rs does not exist. But §5.2 (design.md:99) and D-mac2 (design.md:177) say SL-183 slots into SL-182's 'existing/upstreamed' select_jailer fork point 'as-is'; scope repeats it (slice-183.md:88). The seam is asserted as landed when it is only designed. PENANCE: reframe D-mac2 as a CONSTRAINT on SL-182's eventual impl (the seam SL-182 MUST expose), not an existing API; keep the needs-SL-182 planning block; drop 'existing/upstreamed' unless backed by landed code."
+disposition = "fix-now"
+response = "'existing/upstreamed as-is' reframed everywhere (§5.2, §6 OQ-mac3, §7 D-mac2, §2) as a CONSTRAINT on SL-182's eventual impl; the select_jailer fork point exists in SL-182's DESIGN not on disk; SL-183 stays needs-SL-182-blocked until it lands."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "EXPECTED fail-closed network ambiguity (POL-002); OBSERVED default-open with undefined missing/malformed-policy handling"
+detail = "D-mac4 (design.md:77,92,207): network defaults OPEN, (deny network*) only when policy.network==deny. The DEFAULT-OPEN VALUE is a ratified decision (user, forward-compat) and stands. The heresy is the AMBIGUITY path: the design never says what happens when the policy file is missing, malformed, or carries an unknown network value — POL-002 requires ambiguity⇒fail-closed. NOTE: fail-closed here means the whole arm denies (deny worktree-subagent Bash) on unreadable policy, NOT flipping network to deny — the network value itself legitimately defaults open only on a VALID policy. PENANCE: define a closed network enum; require validated explicit defaulting at policy load; unreadable/malformed policy ⇒ arm denies (consistent with B4's fail-closed contract)."
+disposition = "fix-now"
+response = "D-mac4 amended: network is a closed enum; default-open holds ONLY on a valid policy. Missing/malformed/unknown-valued policy ⇒ resolve_inputs fails closed and the WHOLE arm denies (§5.5 F-B4 branch f) — NOT a silent network default. The ratified default-open VALUE stands; the ambiguity gap is closed. POL-002 satisfied."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "EXPECTED §9 reflects discharged probe gate; OBSERVED §9 still says pass-2 OUTSTANDING, contradicting header/§5.5/§6"
+detail = "Header (design.md:7) + §5.5 (design.md:144, M1-sub PROVEN) + §6 (design.md:169, OQ-mac1 CLOSED) all state pass 2 is DONE. But §9 Quality Engineering (design.md:229) still reads 'pass 2 (M1-sub in-situ...) OUTSTANDING'. Stale internal contradiction — missed in the ratification edit. PENANCE: rewrite §9's probe-gate bullet to: pass 1 + pass 2 both DONE (SUPPORTED); separate the discharged evidence from the ONE remaining unproven item (OQ-mac4's final DUTMP/xcrun_db profile, per F-2)."
+disposition = "fix-now"
+response = "§9 rewritten: pass 1 + pass 2 both DONE (SUPPORTED), gate discharged; the ONE remaining unverified item (final DUTMP/xcrun_db profile, F-2) separated out as a bounded /plan obligation. R-mac1 in §8 also retired to standing posture. Internal contradiction resolved."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "EXPECTED empirical confstr provenance; OBSERVED confstr(_CS_DARWIN_USER_TEMP_DIR) mechanism asserted beyond the probe"
+detail = "§5.5 (design.md:130) + §6 (design.md:186) assert xcrun reads DARWIN_USER_TEMP_DIR via confstr(_CS_DARWIN_USER_TEMP_DIR), NOT $TMPDIR — used to justify why the redirect fails. results.md (66,201) proves ONLY the symptom: TMPDIR=<wt>/.tmp did not cover the observed /var/folders/.../T/xcrun_db-... write. The confstr causal mechanism is inferred, not measured. PENANCE: cite a source/probe for the confstr mechanism, or rephrase as 'observed to escape the $TMPDIR redirect (mechanism: likely confstr-derived, unverified)'."
+disposition = "fix-now"
+response = "§5.5 F-E + §6 OQ-mac4 rephrased: OBSERVED = the xcrun_db-<hash> write escaped the $TMPDIR redirect (results.md); confstr(_CS_DARWIN_USER_TEMP_DIR) mechanism marked 'likely, UNVERIFIED'. No longer asserted as measured fact."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "EXPECTED STD-001 named-constant catalog; OBSERVED literals remain inline in §5.1 examples"
+detail = "§3 (design.md:41) requires profile tokens, -D param names, device-sink set, xcrun_db regex, and network deny as single-sourced named constants. §5.1 examples (design.md:67+) still inline PTMP/DUTMP/'/private/tmp'/'/xcrun_db'/device paths/(deny network*). Narrative single-sourcing is not a constant catalog. PENANCE: add a small named-constant catalog to §5.2 (identifier → literal value) so /plan implements against names, not example strings; this is design-doc precision, the Rust impl still owns the actual consts."
+disposition = "fix-now"
+response = "§5.2 now carries a named-constant catalog (PARAM_* / PTMP_LITERAL / DEVICE_SINK_ALLOWS / XCRUN_DB_REGEX / DENY_NETWORK) with an explicit note that §5.1's inline literals are for readability only and none ship inline. /plan implements against the names."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
