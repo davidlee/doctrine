@@ -19,13 +19,18 @@ emit_profile() {
   # args: <network:true|false> <deny_private_tmp:0|1> <n_extra_rw>
   local network="$1" deny_ptmp="$2" n_rw="$3" i
   # SBPL is LAST-MATCH-WINS (probe F-A). Order matters:
-  #   floor deny -> coarse scratch deny -> SPECIFIC re-allows last (so they win).
+  #   floor deny -> coarse scratch denies -> SPECIFIC re-allows last (so they win).
   # If the WT lives UNDER /private/tmp (where macOS temp worktrees land), an
-  # earlier `deny PTMP` would otherwise shadow the WT allow. Emit deny FIRST.
+  # earlier `deny PTMP` would otherwise shadow the WT allow. Emit denies FIRST.
   echo '(version 1)'
   echo '(allow default)'                                   # nothing hidden; reads open (parity: reads OOS)
   echo '(deny file-write*)'                                # the floor
   [ "$deny_ptmp" = "1" ] && echo '(deny file-write* (subpath (param "PTMP")))'  # collapse global scratch (BEFORE allows)
+  # F-E (SL-183, OQ-mac4): /var/folders/$USER/T is a SECOND temp surface distinct
+  # from /tmp; xcrun hardcodes an `xcrun_db` cache there that escapes the $TMPDIR
+  # redirect. Coarse-deny the whole DUTMP surface FIRST (deny-first, F-A) — the
+  # anchored xcrun_db re-allow below is the ONLY hole punched back through it.
+  echo '(deny file-write* (subpath (param "DUTMP")))'      # /var/folders/$USER/T — coarse FIRST
   # device write surface MUST stay open or tooling breaks (probe F-B: /dev/null
   # denial broke python3/xcrun). Re-allow the standard device sinks.
   echo '(allow file-write* (literal "/dev/null"))'
@@ -39,6 +44,11 @@ emit_profile() {
   # the floor deny AND any coarse PTMP deny above (WT-under-/private/tmp case).
   echo '(allow file-write* (subpath (param "WT")))'        # the worktree, rw
   echo '(allow file-write* (subpath (param "TMP")))'       # TMPDIR=<wt>/.tmp (D-mac3), realpath'd
+  # F-E re-allow: ONLY the `xcrun_db` cache FILE FAMILY under DUTMP, NOT the whole
+  # surface. ANCHORED to one path segment (RV-203 F-3): DUTMP + "/xcrun_db" +
+  # non-slash* + END — matches `xcrun_db-<hash>`, never a deeper subpath. The
+  # regex applies under the DUTMP subpath scope so it can't leak outside the temp.
+  echo '(allow file-write* (require-all (subpath (param "DUTMP")) (regex #"/xcrun_db[^/]*$")))'
   for ((i=0; i<n_rw; i++)); do
     echo "(allow file-write* (subpath (param \"RW$i\")))"  # one per validated extra_rw
   done
@@ -56,15 +66,18 @@ seatbelt_run() {
   local cmd="$*"
 
   # realpath the floor params (THE footgun mitigation)
-  local rwt rtmp rptmp
+  local rwt rtmp rptmp rdutmp
   rwt="$(realpath "$wt")" || { echo "FAIL realpath wt=$wt" >&2; return 2; }
   mkdir -p "$rwt/.tmp"
   rtmp="$(realpath "$rwt/.tmp")"
   rptmp="$(realpath /tmp)"           # /private/tmp
+  # DUTMP: /var/folders/$USER/T realpaths to /private/var/folders/... (INV-M2
+  # canonicalization footgun — subpath matches the RESOLVED path). Bind realpath.
+  rdutmp="$(realpath "$(getconf DARWIN_USER_TEMP_DIR)")" || { echo "FAIL realpath DUTMP" >&2; return 2; }
 
   # validated extra_rw -> -D RW0.. (realpath each; footgun-validation is shared
   # Rust `validate_policy`, out of scope for the probe — we just realpath here)
-  local -a dflags=(-D "WT=$rwt" -D "TMP=$rtmp" -D "PTMP=$rptmp")
+  local -a dflags=(-D "WT=$rwt" -D "TMP=$rtmp" -D "PTMP=$rptmp" -D "DUTMP=$rdutmp")
   local n_rw=0 e
   if [ "${EXTRA_RW+set}" = set ]; then
     for e in "${EXTRA_RW[@]}"; do
