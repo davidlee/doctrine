@@ -53,6 +53,7 @@ rust-embed = { workspace = true }
 toml.workspace = true
 toml_edit.workspace = true
 glob.workspace = true
+base64.workspace = true
 bm25.workspace = true
 regex.workspace = true
 regex-lite.workspace = true
@@ -121,6 +122,9 @@ rust-embed = { version = "8", features = ["debug-embed"] }
 toml = "0.8"
 toml_edit = "0.22"
 glob = "0.3"
+# Leaf-legal external (cf. glob) — pure base64 for the opaque bwrap command wrap
+# (SL-182 PHASE-02, INV-5). Standard alphabet matches the probe's `base64 -w0`/`-d`.
+base64 = "0.22"
 regex = "1"
 # Desktop OS directory tree walking hot path; already a transitive dep via
 # rust-embed's walkdir → same-file chain.
