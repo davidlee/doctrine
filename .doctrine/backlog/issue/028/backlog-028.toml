@@ -17,5 +17,12 @@ tags = ["area:dispatch", "area:testing", "area:worktree"]
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = []                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "SL-182", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[value]
+value = 2.2
+
+[estimate]
+lower = 1.5
+upper = 3.0

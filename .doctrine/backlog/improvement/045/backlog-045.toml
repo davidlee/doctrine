@@ -13,10 +13,13 @@ tags = ["area:dispatch"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite
-after    = [{ to = "IMP-004", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-004", rank = 0 }, { to = "SL-182", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
 label = "references"
 role = "originates_from"
 target = "SL-056"
+
+[value]
+value = 1.4

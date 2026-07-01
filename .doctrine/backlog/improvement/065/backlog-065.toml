@@ -26,7 +26,7 @@ role = "originates_from"
 target = "SL-064"
 
 [value]
-value = 3.0
+value = 1.4
 
 [estimate]
 lower = 3.0

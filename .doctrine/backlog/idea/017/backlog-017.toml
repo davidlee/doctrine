@@ -19,3 +19,10 @@ tags = ["area:dispatch", "area:worktree"]
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "CHR-017", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[value]
+value = 2.5
+
+[estimate]
+lower = 3.0
+upper = 6.0
