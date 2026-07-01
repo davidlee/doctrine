@@ -26,14 +26,24 @@ filesystem winner-takes-one lookup:
   `preamble · harness · model · role · stage · project`. **Label** = free identity
   within the band. Open bands (`model`, `project`) take any label; locked bands
   validate against known hooks (stage = real skills/verbs).
-- **Composition** = uniform append; every match concatenates; specificity orders
-  (general first, specific = last word), alpha tiebreak; opt-in `replaces` is the
-  only suppressor.
-- **Resolver** = `doctrine prompt resolve <context>` → assembled markdown. Two
-  callers: harness @ boot (`role=orchestrator`), orchestrator @ spawn
-  (`role=worker`, +model +arm +stage). `role` selects the assembly shape.
-- **Live model band** = every band bakes into boot.md except `model`, which is
-  never baked (model is mutable post-boot) and re-resolved on demand.
+- **Composition** = uniform append; every match concatenates. Precedence
+  `band → specificity → provenance(fw<user) → alpha` (specificity leads with the
+  band's own axis; provenance is the equal-specificity tiebreak — post-review flip,
+  see design D1/D3). Seal = framework hard-win (resolution-enforced). `replaces`
+  (unique-most-specific) is the only other suppressor.
+- **Resolver** = `doctrine prompt resolve --context <orchestrator|worker>` → refreshes
+  the universal on-disk `boot.md` (write-if-changed, context-invariant) **and** emits
+  `universal ++ context hymns` to stdout. Two callers: harness @ session start
+  (`--context orchestrator`), orchestrator @ spawn (`--context worker`, +model +arm
+  +stage). `--context` names the assembly shape (first-class, not sugar).
+- **Delivery = stdout-preferred, file-fallback** (per-harness altitude, ADR-011).
+  Harness-/context-specific hymns ride the stdout emit only — **never** the shared
+  `boot.md` (harness prose can't live on a file two harnesses `@`-import). tier-1: claude/
+  codex SessionStart hook, pi `before_agent_start` extension; tier-2: `@`-import the
+  universal `boot.md` (governance + universal hymns, no harness hymns).
+- **Live model band** = the `model` band is never baked/emitted at session start; a
+  **universal** standing directive tells the agent to self-identify and re-resolve
+  `--band model` on demand (reaches both tiers).
 
 ## Scope & Objectives
 
@@ -45,8 +55,11 @@ filesystem winner-takes-one lookup:
    selector+band from path; overlay sidecar `.toml` where present.
 3. **`doctrine prompt resolve` verb.** Thin shell over 1+2. Read-only, idempotent,
    stateless. Emits assembled markdown to stdout for a given context vector.
-4. **Boot integration.** `doctrine boot` composes the non-`model` bands via the
-   resolver; the `model` band stays a separate live resolve (never baked).
+4. **Delivery.** `prompt resolve` unstales the universal disk `boot.md` (reusing boot's
+   generator) and emits `universal ++ context hymns` to stdout; disk stays universal
+   (harness-agnostic), hymns for a harness ride stdout only. Wire tier-1 delivery: claude/
+   codex SessionStart hook + pi `before_agent_start` extension. Model band never emitted
+   at session start (live-resolve on demand). Full boot-subsumption deferred (OQ-4).
 5. **Seed corpus + convention docs.** Enough real snippets (universal/harness/
    model) to prove the world, plus the directory-layout + authoring convention.
 
@@ -68,9 +81,12 @@ filesystem winner-takes-one lookup:
 
 - `.doctrine/agents/**` — new `harness/`, `model/`, `role/`, `stage/` snippet trees
   + convention (exact root TBD at design: reuse `agents/` vs new `prompts/`).
-- Boot pipeline — `doctrine boot` + the boot-snapshot machinery (SPEC-011).
-- New command surface `doctrine prompt resolve` (+ its engine/leaf modules per
-  ADR-001 layering).
+- Boot pipeline — `src/boot.rs` generator reused (expose universal-snapshot fn; add
+  universal-hymns disk section); no rewrite of entity-derived sections (SPEC-011).
+- New command surface `doctrine prompt {resolve,model-keys,explain,check}` (+ its
+  engine/leaf modules per ADR-001 layering).
+- Per-harness delivery wiring — claude/codex SessionStart hook + the pi
+  `before_agent_start` system-extension (extend the existing one).
 
 ## Risks / Assumptions / Open Questions
 
@@ -85,6 +101,8 @@ filesystem winner-takes-one lookup:
   conflating the two surfaces.
 - **OQ-3 Resolver output & caching.** Context-vector → assembled-markdown cache
   keying (the token win depends on not recomputing). Design detail.
+- **OQ-4 Boot-subsumption.** `prompt resolve --boot/--check` could replace `doctrine
+  boot` entirely. Deferred follow-up; this slice reuses boot's generator, keeps the verb.
 - **OQ-4 Specificity metric.** Precise definition of "specificity" for path- and
   toml-derived selectors (segment depth? axis count?) — needs a crisp, testable rule.
 - **ASM-1** boot already has a composition/injection seam (IMP-116, IMP-159
