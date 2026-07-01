@@ -36,14 +36,20 @@ filesystem winner-takes-one lookup:
   `universal ++ context hymns` to stdout. Two callers: harness @ session start
   (`--context orchestrator`), orchestrator @ spawn (`--context worker`, +model +arm
   +stage). `--context` names the assembly shape (first-class, not sugar).
-- **Delivery = stdout-preferred, file-fallback** (per-harness altitude, ADR-011).
-  Harness-/context-specific hymns ride the stdout emit only — **never** the shared
-  `boot.md` (harness prose can't live on a file two harnesses `@`-import). tier-1: claude/
-  codex SessionStart hook, pi `before_agent_start` extension; tier-2: `@`-import the
-  universal `boot.md` (governance + universal hymns, no harness hymns).
-- **Live model band** = the `model` band is never baked/emitted at session start; a
-  **universal** standing directive tells the agent to self-identify and re-resolve
-  `--band model` on demand (reaches both tiers).
+- **Delivery = two channels by cache property** (per-harness altitude, ADR-011).
+  *Cache-stable boot sector* (MODEL-AGNOSTIC): governance + universal hymns + **inlined
+  onboarding memories** — rides the token cache. tier-1 claude/codex hook + pi
+  `before_agent_start` extension (session-stable harness hymns); tier-2 `@`-import the
+  universal `boot.md` (universal-only). *Cache-busting supplement* (MODEL-SPECIFIC): the
+  MCP `doctrine_onboard` tool — model identification + model band, where dynamic content is
+  free (a tool call busts cache anyway). Harness-/model-specific prose **never** touches the
+  shared `boot.md`.
+- **Live model band** = never in the cached sector (cache stability). Floor: a **universal**
+  standing directive to self-identify + re-resolve `--band model`. Ceiling: `doctrine_onboard`
+  (model-id + model band) — **in scope**.
+- **Onboarding memories → cached sector.** boot inlines the bodies of memories carrying the
+  `onboarding` tag (across **shipped + local** corpora), retiring the footer round-trip;
+  `doctrine_onboard` sheds the memory load. Tag the shipped `overview`+`orientation` memories.
 
 ## Scope & Objectives
 
@@ -56,11 +62,15 @@ filesystem winner-takes-one lookup:
 3. **`doctrine prompt resolve` verb.** Thin shell over 1+2. Read-only, idempotent,
    stateless. Emits assembled markdown to stdout for a given context vector.
 4. **Delivery.** `prompt resolve` unstales the universal disk `boot.md` (reusing boot's
-   generator) and emits `universal ++ context hymns` to stdout; disk stays universal
-   (harness-agnostic), hymns for a harness ride stdout only. Wire tier-1 delivery: claude/
-   codex SessionStart hook + pi `before_agent_start` extension. Model band never emitted
-   at session start (live-resolve on demand). Full boot-subsumption deferred (OQ-4).
-5. **Seed corpus + convention docs.** Enough real snippets (universal/harness/
+   generator) and emits `universal ++ context hymns` to stdout; disk stays universal +
+   model-agnostic (cache-stable), hymns for a harness ride stdout only. Wire tier-1
+   delivery: claude/codex SessionStart hook + pi `before_agent_start` extension. Full
+   boot-subsumption deferred (OQ-4).
+5. **Model ceiling + onboarding via `doctrine_onboard`.** Extend the MCP onboard tool:
+   model identification + emit the model band (cache-busting side); **drop** its memory load.
+   Inline `onboarding`-tagged memory bodies into the cached boot sector (union shipped +
+   local); tag the shipped `overview`+`orientation` memories; retire the footer round-trip.
+6. **Seed corpus + convention docs.** Enough real snippets (universal/harness/
    model) to prove the world, plus the directory-layout + authoring convention.
 
 ## Non-Goals (the NARROW boundary)

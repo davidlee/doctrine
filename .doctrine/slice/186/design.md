@@ -266,11 +266,23 @@ slice *reuses* boot's generator and leaves the `boot` verb standing.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Delivery tiers (§5.2):** the *universal* band (governance snapshot + harness-agnostic
-universal hymns) lands on disk (`.doctrine/state/boot.md`) and reaches both tiers;
-`harness/model/role/stage` bands ride the tier-1 stdout enrichment only. "Any call
-unstales boot" (INV-8) keeps the disk fallback fresh; harness-agnostic content only, so
-the shared `@`-import stays valid.
+**Two delivery channels, split by cache property (D8):**
+
+- **Cache-stable boot sector — MODEL-AGNOSTIC.** governance snapshot + universal hymns +
+  the **inlined onboarding memories**. Rides the token cache, so it must not churn
+  mid-session → `model` is excluded *on purpose* (survives `/model` swaps). tier-1: the
+  SessionStart hook stdout / pi extension (session-stable harness/role hymns are fine to
+  cache); tier-2: `@`-import of the universal disk `boot.md` (universal-only). "Any call
+  unstales boot" (INV-8) keeps it fresh; harness-agnostic on disk, so `@`-import stays valid.
+- **Cache-busting supplement — MODEL-SPECIFIC.** the MCP `doctrine_onboard` tool: model
+  identification + the **model band**. A tool call busts cache regardless, so dynamic model
+  content lives here for free, never polluting the cacheable sector.
+
+**Onboarding memories move into the cached sector.** They are stable, model-agnostic, and
+loaded every session — so boot **inlines the bodies** of memories carrying the `onboarding`
+tag (single-source: memories stay the source, no parallel hymn copy), retiring the footer's
+"load these next turn" round-trip. Every other memory stays a lazy signpost. `doctrine_onboard`
+correspondingly **sheds the memory load** and does one thing: the model ceiling.
 
 **Live model band (D5) — capability altitude:**
 - **Floor (in scope, works everywhere incl. Claude `/model`):** the **universal band**
@@ -279,8 +291,12 @@ the shared `@`-import stays valid.
   --band model --model <id>`; re-resolve on change."* Universal (not harness) prose, so it
   rides the disk snapshot and reaches **both delivery tiers**. Agent-driven, always in
   context, degrades gracefully (unknown model ⇒ universal-only).
-- **Ceiling (deferred follow-up, per harness):** harnesses with an init/on-change
-  seam (pi env) auto-inject. Not core — incremental like boot delivery (SL-119).
+- **Ceiling (in scope for MCP; per-harness elsewhere):** the MCP `doctrine_onboard`
+  tool is the concrete ceiling — it identifies the model (offers `model-keys` / reads the
+  client's model) and emits the **model band** on the **cache-busting** side (§5.4
+  two-channel). A tool call busts cache anyway, so dynamic model content is free there while
+  the cached sector stays model-agnostic. Non-MCP harnesses with an init/on-change seam
+  (pi env) may auto-inject later — incremental, like boot delivery (SL-119).
 - **Advisory-by-construction (finding 6).** The floor is best-effort; on a mid-session
   model swap the agent *may* fail to re-resolve, leaving stale model guidance. That is
   accepted, because **no correctness invariant may rest on the model band** — it is
@@ -321,14 +337,20 @@ context (the token win).
 - **INV-5** Pure engine: no disk/clock/env (SealSet passed in); loader is the only impurity.
 - **INV-6** A disk snippet whose slot is in the SealSet is dropped before matching
   (seal hard-win, finding 1).
-- **INV-7** The on-disk `.doctrine/state/boot.md` is **always the universal composition**
-  (governance + universal-band hymns) — **context-invariant**: `--context`/`--harness`/…
-  extend the *stdout* stream only, never the disk artifact. This is what keeps the shared
-  `@`-import contract valid across harnesses.
+- **INV-7** The on-disk `.doctrine/state/boot.md` is **always the universal, MODEL-AGNOSTIC
+  composition** (governance + universal-band hymns + inlined `onboarding`-tagged memory
+  bodies) — **context-invariant**: `--context`/`--harness`/… extend the *stdout* stream
+  only, never the disk artifact. Model-agnostic for two reasons: the shared `@`-import
+  contract, and **cache stability** (model content would churn the cache on `/model` — it
+  rides the cache-busting `doctrine_onboard` path instead).
 - **INV-8** Every `prompt resolve` regenerates the universal disk snapshot
   (write-if-changed) — unconditionally. No-op under stable governance; a refresh exactly
   when an input changed. Freshness beats cache-preservation; concurrent regens converge
   (same committed governance ⇒ identical bytes).
+- **INV-9** `onboarding`-tag selection **unions the shipped + local memory corpora** —
+  a shipped memory and a user memory are both eligible, resolved the same way boot's Memory
+  section already enumerates both. A shipped inline and a user inline compose; neither shadows
+  the other (memories are keyed, not slotted — no seal/replaces semantics here).
 - **Edge — non-match ≠ override:** `harness=claude` snippets simply don't match a
   pi context; that's absence, not suppression.
 - **Edge — equal specificity:** provenance breaks it (framework<user), then alpha on
@@ -381,8 +403,10 @@ context (the token win).
   generator for the disk write.** Rejected: generalize boot into a hymns assembly —
   boot's governance sections are entity-derived (not files) and the rewrite risks the
   behaviour gate. The engine stays pure; boot's generator is called, not rewritten.
-- **D5 — Model band live via `--band` filter; floor=universal-band standing directive
-  (scope, reaches both tiers), ceiling=per-harness auto-inject (deferred).**
+- **D5 — Model band live via `--band` filter; kept OFF the cached sector for cache
+  stability. Floor** = universal-band standing directive (both tiers). **Ceiling** = MCP
+  `doctrine_onboard` (in scope): model-id + model band on the cache-busting path; per-harness
+  env auto-inject deferred elsewhere.
 - **D7 — Delivery: stdout-preferred, disk-fallback; `--context` a first-class named
   shape; hymns never touch disk.** Harness-/context-specific prose can't ride the shared
   `@`-imported `boot.md`, and `--emit`-to-stdout is preferred over baking files (user
@@ -394,6 +418,17 @@ context (the token win).
   per-harness `boot.md` tail (harness prose on a shared file — the original F8);
   `--boot`-gated disk write (INV-8 makes the gate pointless — unstale is free under
   stable governance). Deferred: full boot-subsumption under `prompt` (OQ-4).
+- **D8 — Two delivery channels by cache property; onboarding memories inlined into the
+  cached sector; `doctrine_onboard` = model ceiling.** The cache-stable boot sector is
+  model-agnostic (governance + universal hymns + inlined `onboarding` memories), so it
+  survives `/model` without busting cache; model-specific content rides the cache-busting
+  `doctrine_onboard` tool (identification + model band). Onboarding memories move from a
+  cache-busting signpost-fetch *into* the cached sector — inlined, single-source via an
+  `onboarding` tag (designation checked: the ADR-002 orientation class is too broad; the
+  current footer id-list is unstructured). Rejected: model/memories on the cached sector
+  (churns cache on every model change / every session); `doctrine_onboard` as a third
+  boot-*sector* arm (a tool call can't seed the cache it busts — it's the ceiling, not the
+  sector).
 - **D6 — No cache.** Boot's content-diff key covers baked bands; on-demand resolves
   are cheap, pure, stateless. (Confirmed: doctrine hot-loads far larger entity sets
   per page view without caching.)
@@ -437,6 +472,10 @@ context (the token win).
   `doctrine prompt model-keys` reflects only authored keys, as full relative keys.
 - **Boot behaviour-preservation:** existing boot suites green unchanged; one new
   golden for the hymns section; model band demonstrably absent from `boot.md`.
+- **Onboarding inline (INV-9):** a golden with a **shipped** `onboarding`-tagged memory
+  AND a **local** one — both bodies inline into the cached sector; a local memory sharing a
+  shipped uid inlines the local body (collect_all local-wins); model-agnostic (no model
+  content). `doctrine_onboard` no longer emits the memory bodies (they moved to the sector).
 - **Layering gate:** `tests/architecture_layering.rs` stays green (command ← engine
   ← leaf; no cycle).
 
@@ -471,8 +510,16 @@ context (the token win).
   `resolve` unstales the universal disk snapshot (reuse boot generator) + emits
   `universal ++ context hymns` to stdout.
 - **`src/boot.rs`** — expose its universal-snapshot generator for `resolve` to reuse;
-  add the universal-band hymns section to the disk snapshot (harness-agnostic); harness/
-  model/role/stage bands are stdout-only, not baked.
+  add the universal-band hymns section to the disk snapshot (harness-agnostic); **inline
+  the bodies of `onboarding`-tagged memories** into the cached sector — reusing
+  `memory::collect_all` (items ∪ shipped, local-wins dedup) + a tag filter, so shipped +
+  local are covered with **no new union code** — retiring the footer "load these next turn"
+  instruction; harness/model/role/stage bands are stdout-only, not baked.
+- **MCP `doctrine_onboard` handler** — model identification + emit the **model band**
+  (cache-busting ceiling); **drop** the two-memory load (now inlined into the cached sector).
+- **Onboarding designation (data)** — tag the shipped `overview` + `orientation`
+  memories `onboarding` in `install/memory/**`; boot's selection unions shipped + local so a
+  user may tag their own (INV-9).
 - **Per-harness delivery wiring** — claude/codex SessionStart hook + **pi
   `before_agent_start` system-extension** (extend the existing extension: execSync
   `prompt resolve --context orchestrator`, append to systemPrompt). In scope.
