@@ -31,7 +31,8 @@ use serde::Deserialize;
 
 use super::create::{JAIL_SUBPATH, WORKTREES_SUBDIR};
 use super::jail::{
-    Backend, Decision, JailPolicy, decide_bash, decide_write, resolve_target, validate_policy,
+    Backend, Decision, JailPolicy, decide_bash, decide_write, resolve_target, seatbelt_profile,
+    validate_policy,
 };
 #[cfg(target_os = "macos")]
 use super::jail::{RealEnv, resolve_inputs, seatbelt_backend};
@@ -80,6 +81,11 @@ const REASON_NO_BWRAP: &str = "bwrap-unavailable";
 /// Placeholder backend reason for the Edit/Write path, where the backend is never
 /// read (`decide_write` walls on `pathcheck`). Never surfaced to a user.
 const REASON_BACKEND_UNUSED: &str = "backend-unused-on-write-path";
+/// Fail-closed reason (F-B4) when the macOS Seatbelt profile body cannot be written
+/// to `resolved.profile_path`: the arm DENIES rather than emit an allow+wrap whose
+/// `sandbox-exec -f <profile>` points at a missing/partial floor. A wrap we cannot
+/// back with a real profile is strictly worse than a deny.
+const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
 
 /// The `PreToolUse` stdin subset consumed (design §5.2). Every field is optional
 /// so a malformed / partial payload folds to `Default` — fail-closed: a subagent
@@ -328,6 +334,38 @@ fn probe_backend(cwd: &Path) -> Backend {
     seatbelt_backend(resolve_inputs(cwd, &env.main_root, &env))
 }
 
+/// Materialize the macOS Seatbelt `.sb` profile on the wrap path — the impure
+/// command-tier IO the pure `decide`/`sandbox_exec_argv` cannot do (INV-M2 keeps the
+/// leaf pure). The wrap argv references `sandbox-exec -f <resolved.profile_path>`, so
+/// the profile BODY (`seatbelt_profile(resolved)`) must exist on disk before the
+/// harness runs the rewritten command, or `sandbox-exec` aborts and the floor never
+/// engages. Runs ONLY when the resolved backend is `Seatbelt` AND the decision is a
+/// `WrapBash` (a Seatbelt deny/passthrough, or any non-Seatbelt backend, needs no
+/// file — no-op). **Fail-closed (F-B4):** a write failure downgrades the wrap to a
+/// `Deny` — never an allow+wrap backed by a missing/partial floor. The `<wt>/.tmp`
+/// parent is created by `resolve_inputs` (`ensure_dir`), so a same-run write normally
+/// succeeds; the deny guards the residual (fs error, races, a stale resolved path).
+fn materialize_seatbelt_profile(backend: &Backend, decision: Decision) -> Decision {
+    let Backend::Seatbelt(resolved) = backend else {
+        return decision; // bwrap / deny backends carry no external profile file.
+    };
+    let Decision::WrapBash { .. } = &decision else {
+        return decision; // a Seatbelt deny/passthrough has nothing to back.
+    };
+    // The `.sb` profile is a runtime/derived artifact under the worktree's gitignored
+    // `<wt>/.tmp` — regenerated each wrap, never an authored entity — so a plain
+    // `fs::write` is the sanctioned form (clippy policy: authored writes route through
+    // `fsutil::write_atomic`, runtime/derived sites carry an explicit `#[expect]`).
+    #[expect(clippy::disallowed_methods, reason = "runtime seatbelt profile")]
+    let written = fs::write(&resolved.profile_path, seatbelt_profile(resolved));
+    match written {
+        Ok(()) => decision,
+        Err(_e) => Decision::Deny {
+            reason: REASON_PROFILE_WRITE_FAILED.to_string(),
+        },
+    }
+}
+
 /// `doctrine worktree pretooluse` — the `PreToolUse` hook entry. Reads stdin,
 /// resolves impure inputs, prints the decision, exits 0 always.
 pub(crate) fn run_pretooluse() -> anyhow::Result<()> {
@@ -385,6 +423,9 @@ pub(crate) fn run_pretooluse() -> anyhow::Result<()> {
         &backend,
         &policy,
     );
+    // On the Seatbelt wrap path, materialize the `.sb` profile the argv references
+    // (impure IO; fail-closed to Deny). No-op for every other backend/decision.
+    let decision = materialize_seatbelt_profile(&backend, decision);
     if let Some(json) = render(&decision) {
         writeln!(io::stdout(), "{json}").context("emit hook decision")?;
     }
@@ -767,5 +808,105 @@ mod tests {
         let stray = root.join("not-worktrees").join("agent-abc");
         fs::create_dir_all(&stray).unwrap();
         assert_eq!(resolve_provisioned_policy(&stray), JailPolicy::default());
+    }
+
+    // ── SL-183 PHASE-04 T3b: Seatbelt profile materialization on the wrap path ────
+    // The macOS wrap argv references `sandbox-exec -f <wt>/.tmp/jail.sb`; the profile
+    // BODY must be written to that path in the impure shell before the harness runs
+    // the wrapped command, or sandbox-exec aborts and the floor never engages. This
+    // is command-tier IO (mirrors the T3a wiring); the leaf stays pure.
+
+    use crate::worktree::jail::ResolvedMac;
+
+    /// A `ResolvedMac` whose `.tmp` exists and whose `profile_path` sits under it —
+    /// the shape `resolve_inputs` produces (`<wt>/.tmp/jail.sb`).
+    fn resolved_at(tmp_dir: &Path) -> ResolvedMac {
+        ResolvedMac {
+            wt: tmp_dir.parent().unwrap().to_path_buf(),
+            tmp: tmp_dir.to_path_buf(),
+            dutmp: PathBuf::from("/private/var/folders/x/T"),
+            extra_rw: vec![],
+            network: false,
+            profile_path: tmp_dir.join("jail.sb"),
+        }
+    }
+
+    #[test]
+    fn materialize_writes_profile_body_and_keeps_wrap() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dot_tmp = fs::canonicalize(tmp.path()).unwrap().join(".tmp");
+        fs::create_dir_all(&dot_tmp).unwrap();
+        let resolved = resolved_at(&dot_tmp);
+        let backend = Backend::Seatbelt(resolved.clone());
+        let wrap = Decision::WrapBash {
+            command: "sandbox-exec -f jail.sb -- bash -c ...".to_string(),
+            description: "d".to_string(),
+        };
+
+        let out = materialize_seatbelt_profile(&backend, wrap.clone());
+
+        // Wrap is preserved (the shell did not downgrade a successful materialization).
+        assert_eq!(out, wrap, "successful materialize leaves the wrap intact");
+        // The profile file now exists on disk with the exact `seatbelt_profile` body.
+        let body = fs::read_to_string(&resolved.profile_path).expect("profile written");
+        assert_eq!(
+            body,
+            seatbelt_profile(&resolved),
+            "materialized body == seatbelt_profile(resolved)"
+        );
+    }
+
+    #[test]
+    fn materialize_fail_closed_denies_when_profile_unwritable() {
+        // profile_path under a directory that does not exist ⇒ write fails ⇒ the arm
+        // must DENY, never emit an allow+wrap backed by a missing floor (F-B4).
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let mut resolved = resolved_at(&root.join(".tmp"));
+        // .tmp was never created ⇒ the write to <.tmp>/jail.sb cannot succeed.
+        resolved.profile_path = root.join("nonexistent-dir").join("jail.sb");
+        let backend = Backend::Seatbelt(resolved);
+        let wrap = Decision::WrapBash {
+            command: "sandbox-exec ...".to_string(),
+            description: "d".to_string(),
+        };
+
+        let out = materialize_seatbelt_profile(&backend, wrap);
+
+        match out {
+            Decision::Deny { reason } => {
+                assert!(
+                    reason.contains(REASON_PROFILE_WRITE_FAILED),
+                    "fail-closed reason: {reason}"
+                );
+            }
+            other => panic!("expected fail-closed Deny, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn materialize_is_noop_for_non_seatbelt_backends() {
+        // bwrap wrap needs no external profile file — the materialize step must pass
+        // the decision through untouched for any non-Seatbelt backend.
+        let wrap = Decision::WrapBash {
+            command: "bwrap ...".to_string(),
+            description: "d".to_string(),
+        };
+        assert_eq!(
+            materialize_seatbelt_profile(&Backend::Bwrap, wrap.clone()),
+            wrap,
+            "bwrap wrap is untouched"
+        );
+        // A Seatbelt backend but a non-wrap decision (deny/passthrough) is also a
+        // no-op — nothing to back with a profile.
+        let deny = Decision::Deny {
+            reason: "x".to_string(),
+        };
+        let backend = Backend::Seatbelt(ResolvedMac::default());
+        assert_eq!(
+            materialize_seatbelt_profile(&backend, deny.clone()),
+            deny,
+            "a Seatbelt deny needs no profile"
+        );
     }
 }

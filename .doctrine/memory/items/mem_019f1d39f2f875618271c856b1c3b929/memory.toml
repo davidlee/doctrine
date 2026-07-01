@@ -1,0 +1,42 @@
+memory_uid = "mem_019f1d39f2f875618271c856b1c3b929"
+memory_key = "mem.pattern.macos.doctrine-hook-reinstall-resign"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reinstalling ~/.cargo/bin/doctrine on macOS needs an ad-hoc re-sign or the hook binary SIGKILLs (exit 137)"
+summary = "cp a fresh cargo build over ~/.cargo/bin/doctrine on macOS invalidates the code signature → kernel kills every invocation with exit 137; codesign --force --sign - fixes it."
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = [".claude/skills/doctrine/hooks/hooks.json"]
+globs = []
+commands = []
+tags = ["macos", "codesign", "pretooluse", "hook", "install", "sl-183"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "881dcb9ef2eda62e230f40946b66eebd516ee9f2"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1a7b6d74182e5cca3503a2b4215ea7c14183d8daf4673a5eaa4a6966751154a8"
+base_commit = "a8f9abb532a9eef8f9c903fa29a4fdcdbf1c9843"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

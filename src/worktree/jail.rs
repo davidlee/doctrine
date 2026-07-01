@@ -150,7 +150,8 @@ const PARAM_RW_PREFIX: &str = "RW";
 /// The `TMPDIR` env var name (`env TMPDIR=<tmp>` prefixes the wrapped command).
 const ENV_TMPDIR: &str = "TMPDIR";
 /// The materialized `.sb` profile filename, under `<wt>/.tmp` (`resolve_inputs` sets
-/// `profile_path = <tmp>/jail.sb`; PHASE-04 provision writes the body there).
+/// `profile_path = <tmp>/jail.sb`; the command tier's `materialize_seatbelt_profile`
+/// writes the `seatbelt_profile` body there on the wrap path, fail-closed).
 const SEATBELT_PROFILE_FILE: &str = "jail.sb";
 
 /// `/private/tmp` — coarse-denied FIRST (F-A). A literal, not a resolved param:
@@ -239,8 +240,9 @@ pub(crate) enum Backend {
 /// SL-183 macOS Seatbelt inputs, shell-resolved. The ADDITIVE data channel on
 /// `Backend::Seatbelt` — SL-183 slots its builders in with NO SL-182 signature
 /// refactor (OQ-mac3 / D-mac2). PHASE-03's `resolve_inputs` populates these
-/// (impure: `getconf DARWIN_USER_TEMP_DIR`, realpath, `<wt>/.tmp` creation, profile
-/// materialization); the PHASE-02 pure builders consume them. **Every path is
+/// (impure: `getconf DARWIN_USER_TEMP_DIR`, realpath, `<wt>/.tmp` creation); the
+/// PHASE-02 pure builders consume them, and the command tier writes the profile BODY
+/// to `profile_path` on the wrap path (PHASE-04). **Every path is
 /// already shell-canonicalized (realpath'd)** — the purity fence: no resolution in
 /// this layer (INV-M2, D-canon). `#[derive(Default)]` is retained so SL-182's
 /// `ResolvedMac {}` / `..Default::default()` test constructors compile unchanged
@@ -261,8 +263,9 @@ pub(crate) struct ResolvedMac {
     /// `false` ⇒ append `DENY_NETWORK`. Mirrors `JailPolicy.network` (bool, default
     /// open — reused as-is, never widened).
     pub network: bool,
-    /// The materialized `.sb` profile file → `sandbox-exec -f <profile_path>`
-    /// (PHASE-03 writes the `seatbelt_profile` output here).
+    /// The materialized `.sb` profile file → `sandbox-exec -f <profile_path>`. The
+    /// command tier writes the `seatbelt_profile` body here on the wrap path
+    /// (`pretooluse::materialize_seatbelt_profile`); this is only the intended path.
     pub profile_path: PathBuf,
 }
 
@@ -674,8 +677,9 @@ pub(crate) struct Topology {
 /// The thin impure shell (§5.2, D-p3-1). Derive a `ResolvedMac` from the `PreToolUse` `cwd`
 /// and the per-arming policy, FAIL-CLOSED on every ambiguity (§5.5 F-B4 branches a–f).
 /// `profile_dir` is where the materialized `.sb` lives (`<wt>/.tmp`); the actual profile
-/// write is the caller's (PHASE-04 provision), so this returns the intended `profile_path`
-/// without writing it — keeping the resolver free of the profile-body concern.
+/// write is the caller's (the command tier's `materialize_seatbelt_profile`, PHASE-04), so
+/// this returns the intended `profile_path` without writing it — keeping the resolver free
+/// of the profile-body concern.
 ///
 /// PURE branch logic over the injected `env`; the ONLY impurity is behind `ResolveEnv`.
 /// `Ok` ⇒ a fully realpath'd `ResolvedMac` (INV-M2 fence honoured for the PHASE-02
