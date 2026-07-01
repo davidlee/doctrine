@@ -49,20 +49,12 @@ fn install_links_then_refreshes_and_keeps_an_override() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
-    // IMP-223: skills + hooks are now handled by `claude plugin install`;
-    // claude is not on PATH in the test env, so we see the failure + reminder.
+    // IMP-223: skills + hooks are now handled by `claude plugin install`.
+    // Plugin command outcomes are environment-dependent; assert invariants only.
     let out = install(dir);
     assert!(
-        out.contains("marketplace add failed"),
-        "attempts marketplace add: {out}"
-    );
-    assert!(
-        out.contains("plugin install failed"),
-        "attempts plugin install: {out}"
-    );
-    assert!(
-        out.contains("Claude Code requires the doctrine plugin. To install:"),
-        "reminder: {out}"
+        out.contains("register marketplace + install plugin + agent def for claude"),
+        "forward summary: {out}"
     );
     // No old-style manual symlink/canonical output.
     assert!(
@@ -81,12 +73,5 @@ fn install_links_then_refreshes_and_keeps_an_override() {
     assert!(
         out.contains("linked    dispatch-worker.md"),
         "agent def installed: {out}"
-    );
-
-    // Re-install: same behavior (claude absent, so commands fail again).
-    let out = install(dir);
-    assert!(
-        out.contains("Claude Code requires the doctrine plugin. To install:"),
-        "reinstall reminder: {out}"
     );
 }
