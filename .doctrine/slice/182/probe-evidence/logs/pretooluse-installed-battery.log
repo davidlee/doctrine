@@ -1,0 +1,101 @@
+# SL-182 PHASE-03 VA-1 — installed-hook battery (Tier A), 2026-07-01
+
+Exec under test: the F-1 install-templated command, verbatim from
+`.claude/skills/doctrine/hooks/hooks.json`:
+  '/workspace/doctrine/target/debug/doctrine' worktree pretooluse || exit 2
+(both walls registered: matcher "Bash" AND matcher "Edit|Write"; absolute exec
+single-quoted via INV-5 shell_single_quote; `|| exit 2` fail-closed guard.)
+
+Env: claude-code jail / NixOS bwrap 0.11.2 (present on PATH). Real linked
+worktree probe target: /workspace/doctrine/.worktrees/va1-probe (git worktree
+add --detach HEAD). Anchor CLAUDE_PROJECT_DIR=/workspace/doctrine.
+
+Payloads fed on stdin to the baked exec; stdout + exit captured. All exit 0
+(deny is DATA, never an exit code — mem.fact.claude.pretooluse-hook-fail-open).
+
+B1  Bash subagent, in-worktree, cmd="echo hi"
+    → allow + updatedInput.command = bwrap-wrapped, confined to the worktree:
+      'bwrap' '--ro-bind' '/' '/' '--dev' '/dev' '--proc' '/proc' '--tmpfs' '/tmp'
+      '--bind' <wt> <wt> '--chdir' <wt> '--die-with-parent' '--'
+      bash -c 'printf %s ZWNobyBoaQ== | base64 -d | bash'   (ZWNobyBoaQ== = "echo hi")
+    VERDICT: Bash wall fires; honours updatedInput. GREEN.
+
+B2  Write escape → file_path=/tmp/evil
+    → deny "worktree-jail: escapes-worktree: /tmp/evil"
+    VERDICT: Edit|Write wall fires on escape. GREEN.
+
+B3  Write in-worktree → file_path=<wt>/foo.txt
+    → no output (silent allow). GREEN.
+
+B4  Orchestrator (no agent_id), Write /tmp/evil
+    → no output (INV-1 fast-path pass-through, pre-subprocess). GREEN.
+
+B5  Anchor ABSENT (env -u CLAUDE_PROJECT_DIR), Write in-worktree
+    → deny "worktree-jail: cwd-not-a-worktree: <wt>"
+    VERDICT: FAIL-CLOSED on absent anchor — a subagent whose project cannot be
+    confirmed is Rejected (over-confine, safe), never silently jailed-nowhere.
+    Resolves the D-anchor safety half of the EMPIRICAL GATE. GREEN.
+
+B6  bwrap absent (PATH="") Bash → deny "cwd-not-a-worktree"
+    NOTE: empty PATH also removes `git`, so is_linked_worktree fails and topology
+    short-circuits BEFORE the backend probe. Still fail-closed (deny). The
+    bwrap-specific Backend::Deny{bwrap-unavailable} arm stays covered by unit test
+    jailed_bash_with_no_bwrap_backend_denies. Live assertion redundant; deny holds.
+
+B7  R4-canon relative escape → file_path="../../etc/passwd" (from wt)
+    → deny "worktree-jail: escapes-worktree: /workspace/doctrine/etc/passwd"
+    VERDICT: canonicalize_missing (realpath -m) resolves `..` before decide_write;
+    escape denied. GREEN. (complements the T4 tempdir unit tests, live.)
+
+B8  R4-canon symlink escape → <wt>/lnk -> /tmp, file_path=<wt>/lnk/evil
+    → deny "worktree-jail: escapes-worktree: /tmp/evil"
+    VERDICT: symlink resolved to real target before decide_write; escape denied.
+    GREEN. (live symlink-boundary proof.)
+
+CONCLUSION (Tier A): the INSTALLED, F-1-templated hook exec enforces both walls
+end-to-end through the full impure seam (topology equality, realpath -m
+canonicalization, bwrap capability probe, anchor gate) — not just the pure
+`decide`. Every §5.2 shape + both R4-canon escape classes pinned green; fail-closed
+on absent anchor and (via unit) absent bwrap.
+
+## Tier B — harness registration & D-anchor hook-env gate (2026-07-01)
+
+Probe: one isolation:worktree general-purpose subagent (ac800f3cb64e85f0), via
+the Agent tool. Its worktree: .worktrees/agent-ac800f3cb64e85f03,
+git-common-dir=/workspace/doctrine/.git (a genuine linked worktree of THIS repo).
+
+FINDING B-reg (registration): the subagent's Write to /tmp/va1-escape-probe.txt
+SUCCEEDED (not denied); bash ran unwrapped. ⇒ the freshly-installed plugin
+PreToolUse hook is NOT live in this already-running session. Confirms
+NO-HOT-RELOAD: the installed hook needs /reload-plugins or a session restart to
+register (matches the runbook + PHASE-01, which needed a restart). Expected;
+in-session live registration is structurally unreachable.
+
+FINDING B-anchor (the D-anchor EMPIRICAL GATE — CAUTION, MISMEASURE):
+the subagent reported CLAUDE_PROJECT_DIR=[] (empty) — BUT it read its own
+TOOL-EXEC env, NOT the hook-process env. Per docs/claude/hooks.md:366 Claude Code
+exports CLAUDE_PROJECT_DIR into the *hook* spawned-process env (a distinct
+process); hooks.md:462 lists hooks/stdio-MCP/LSP as where it is set — the
+subagent's Bash tool is none of these. So the empty tool-env value is NOT
+evidence the hook lacks the anchor. The gate remains OPEN: it requires the HOOK
+process's own env, which needs a LIVE-registered hook.
+
+REMAINING LIVE GATE (needs /reload-plugins or restart, then re-probe):
+Re-express against the REGISTERED hook with a worktree subagent battery:
+  L1 (Bash wall):   subagent runs `echo x` → expect it to run but CONFINED
+                    (bwrap-wrapped via updatedInput). Confirms Bash wall live.
+  L2 (D-ANCHOR DISCRIMINATOR): subagent writes a file INSIDE its worktree →
+                    ALLOWED  ⇒ CLAUDE_PROJECT_DIR present in hook env ⇒ D-anchor
+                                CONFIRMED, dispatch works. VA-1 GREEN.
+                    DENIED "cwd-not-a-worktree" ⇒ anchor ABSENT in hook env ⇒
+                                over-confinement (all worker writes/bash deny) ⇒
+                                /consult + fallback (is_linked_worktree-only),
+                                NOT a silent change (per notes EMPIRICAL GATE).
+  L3 (Edit|Write wall): subagent writes to /tmp (escape) → expect DENY. Confirms
+                    the write wall live.
+L2 is the sole discriminator: only the anchor-present path allows an in-worktree
+write; both anchor-absent and escape deny.
+
+STATUS: Tier A GREEN (installed exec correct end-to-end). Registration + D-anchor
+hook-env gate PENDING the one live re-probe above. Do NOT flip PHASE-03 completed
+until L1-L3 run green (or L2's abort/fallback is taken via /consult).
