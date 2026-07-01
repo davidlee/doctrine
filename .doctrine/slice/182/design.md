@@ -571,8 +571,11 @@ installed (INV-6).
   persistence transfers **by construction**, not by bare assumption. The one Fork-path
   delta still worth live confirmation is the **footer on the branch case** (`mem P2`
   probed a *detached* tree, `worktreeBranch: undefined`; `worktreePath` remained the
-  normative datum) — VH-1 confirms both persistence and footer on the armed branch
-  path, as **confirmation, not sole support**. **Fail-safe net remains:** were the
+  normative datum) — **VH-1 CONFIRMED (2026-07-01) both persistence and the footer on
+  the armed branch path** (worker `agent-a29cf7c4dba0cac86` @ B=9441ca9f: footer
+  `worktreePath` present, tree persisted HEAD==B, `import --from-worktree` green, gated
+  reap) — the assumption is now a **proven fact**, no longer pinned (RV-208 F-1).
+  **Fail-safe net remains:** were the
   Fork-path tree somehow torn down, the pre-import `verify-worker --dir` fail-closes
   (`no-worker-head`, INV-6) — the funnel halts loud, never a silent lossy import.
 
@@ -593,8 +596,8 @@ installed (INV-6).
   `mem_019efe28…` P2; RV-205 F-1) and imports the live tree directly (§5.4,
   D-funnel-path). The Path-C/IDE-024 escalation is no longer a lock-time risk; it
   survives only as the *foreseen future strategy* behind the `--from-worktree` verb
-  (D-import-verb). Residual: Fork-path parity — persistence **and** the branch-case
-  footer (§5.5 ASM), pinned at VH-1.
+  (D-import-verb). Fork-path parity — persistence **and** the branch-case footer
+  (§5.5) — was the last residual, **now closed: VH-1 proved both live 2026-07-01** (RV-208 F-1).
 - **OQ-3 → V-plugin (first step in execute).** Plugin `hooks.json` is the chosen
   registration home (D-reg). Confirm PreToolUse-via-plugin fires for a worktree
   subagent before building on it; cross-check hook semantics against `docs/claude`

@@ -47,10 +47,6 @@ selector = "src/dispatch.rs"
 intent = "design-target"
 
 [[selector]]
-selector = ".claude/skills/dispatch-agent/SKILL.md"
-intent = "design-target"
-
-[[selector]]
 selector = "src/worktree/create.rs"
 intent = "design-target"
 
@@ -79,11 +75,11 @@ selector = "src/main.rs"
 intent = "design-target"
 
 [[selector]]
-selector = ".claude/skills/dispatch/SKILL.md"
+selector = "tests/e2e_worktree_import.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "tests/e2e_worktree_import.rs"
+selector = "plugins/doctrine/skills/dispatch-agent/SKILL.md"
 intent = "design-target"
 
 [[relation]]

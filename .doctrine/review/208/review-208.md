@@ -97,3 +97,28 @@ governance changes. No REV needed — SL-182 owns no ADR/spec edits here.
 
 ### Governance/spec (REV)
 - None.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §5.5 ASM** (RV-208 F-1): "VH-1 confirms … as confirmation, not sole
+  support" → "**VH-1 CONFIRMED (2026-07-01)** … the assumption is now a **proven
+  fact**, no longer pinned." Fork-path persistence + armed-branch footer are now canon.
+- **design.md §6 OQ-2** (RV-208 F-1): "Residual: Fork-path parity … pinned at VH-1" →
+  "was the last residual, **now closed: VH-1 proved both live 2026-07-01**."
+- **slice-182.toml design-target selectors** (RV-208 F-2): removed the two derived
+  `.claude/` selectors (`dispatch-agent/SKILL.md`, `dispatch/SKILL.md`); added the
+  authored source `plugins/doctrine/skills/dispatch-agent/SKILL.md`. Verified:
+  `slice conformance 182` now reports `undelivered (0)` and the path conformant. The
+  `dispatch/SKILL.md` light-touch was confirmed unneeded (no `--patch`/SubagentStop
+  refs in the authored file) — a stale selector, not missed work.
+
+### REVs completed
+- None — both findings were per-slice design/metadata truth-updates; no governance
+  or spec artefact changed.
+
+### Withdrawn / tolerated
+- **RV-208 F-3**: tolerated — conformance undeclared noise is SL-184 edge-interleave,
+  not SL-182 scope creep; rationale in the finding disposition. No write needed.
+
+Reconcile pass complete — handoff to /close.
