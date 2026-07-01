@@ -204,6 +204,30 @@ teeth. "nesting-refused" and "resolve-Deny" framings both collapse to `Err ⇒ D
 so one parameterised test discharges both (design §9). Contract un-triggered live
 (pass-2: nesting composed) — this is the posture proof.
 
+### T3a — consumer wiring gap CLOSED (consult-approved scope increment)
+**Discovery (load-bearing):** the shipped `doctrine worktree pretooluse` consumer
+NEVER routed macOS→Seatbelt. `probe_backend()` only produced `Bwrap`/`Deny{bwrap-
+unavailable}`; PHASE-03 built + unit-tested the Seatbelt jailer in jail.rs (leaf)
+but never wired the command shell to reach it. So on macOS every worktree-subagent
+Bash denied `bwrap-unavailable` — the jailer was DEAD CODE from the hook entry, and
+EX-2's "through the live consumer" was physically impossible. This was a missed
+PHASE-03 increment (PHASE-03's EX-3 "select_jailer routes macOS to Seatbelt" was
+true at the `select_jailer` level but the upstream `probe_backend` never produced a
+`Seatbelt` backend). Commit `b2cd1000`.
+
+**Fix (option A, ADR-001-respecting):** `cfg`-split `probe_backend` in
+`worktree::pretooluse` (command tier). macOS arm builds `RealEnv{main_root}` (the
+leaf's injected `ResolveEnv` seam) → `seatbelt_backend(resolve_inputs(cwd,
+main_root, real))`. `main_root` = realpath'd `CLAUDE_PROJECT_DIR` anchor (legit —
+this module IS the claude `PreToolUse` handler, ADR-011 per-harness altitude;
+factored to shared `project_anchor()`). Leaf jail.rs UNCHANGED. `cfg`-split not
+runtime (bwrap Linux-only / Seatbelt macOS-only). **Lazy backend:** resolve only on
+the Bash path — `decide_write` walls Edit/Write on `pathcheck` and ignores the
+backend, so running `resolve_inputs` (git/getconf + `<wt>/.tmp` mkdir side effect)
+on every Edit/Write would burden the hot hook path (INV-1). Test boundary
+(user-agreed): thin impure glue, NOT unit-tested here (would dup leaf coverage);
+proof = the live in-situ run (T3/VA-1). 169 worktree tests green, clippy/fmt clean.
+
 ### Binary/hook topology resolved (was a session blocker)
 Three `doctrine` binaries existed; confusion was PATH. RESOLVED: stale
 `~/.local/bin/doctrine` removed; `which doctrine` → fresh `~/.cargo/bin/doctrine`
