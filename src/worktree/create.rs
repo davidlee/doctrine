@@ -18,7 +18,7 @@ use super::provision::run_provision;
 use crate::git;
 use anyhow::{Context, bail};
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Verdict of the PURE create classifier: positional arming says fork-or-passthrough.
@@ -195,6 +195,15 @@ pub(crate) fn classify_create(
 /// before a dispatch-worker spawn, and writes `base` inside it (design §5.3). The
 /// payload cwd BEING this dir is the positional Fork discriminator (D3/D4).
 pub(crate) const ARMING_SUBPATH: &str = ".doctrine/state/dispatch/spawn";
+/// The arming jail-policy DECLARATION, written beside `base` in [`ARMING_SUBPATH`] by
+/// `dispatch arm-spawn` in the SAME arming step (F-4 pairing) and read here to
+/// provision. Absent ⇒ no provision ⇒ the pretooluse Default floor (design §5.3).
+pub(crate) const ARMING_JAIL_FILE: &str = "jail.toml";
+/// Where the PROVISIONED per-worktree policy lives under the coord-tree root:
+/// `<root>/`⟨`JAIL_SUBPATH`⟩`/<worktree-name>.toml` — OUTSIDE every worktree and ro to
+/// the worker (design §5.3). Written by `create-fork`, read by `pretooluse` (keyed
+/// `cwd → basename(worktree)`). Runtime state: gitignored, GC'd with teardown.
+pub(crate) const JAIL_SUBPATH: &str = ".doctrine/state/dispatch/jail";
 /// Where every created tree lives under the coord-tree root: `<root>/.worktrees/<name>`.
 const WORKTREES_SUBDIR: &str = ".worktrees";
 
@@ -221,6 +230,33 @@ fn resolve_root(cwd: &Path) -> Option<PathBuf> {
         .and_then(|top| fs::canonicalize(top.trim()).ok())
 }
 
+/// Provision the arming jail-policy DECLARATION to the per-worktree PROVISIONED policy
+/// (design §5.3, NET-NEW step beside `run_provision`/`write_marker`). Copies the arming
+/// declaration ([`ARMING_SUBPATH`]/[`ARMING_JAIL_FILE`] under `root`) to
+/// [`JAIL_SUBPATH`]/`<name>.toml` under `root`, keyed by the harness-assigned worktree
+/// `name`. The destination is OUTSIDE the fork (under the coord root) and ro to the
+/// worker under the bwrap ro-bind blanket. Declaration ABSENT ⇒ no-op ⇒ pretooluse
+/// resolves the Default floor (never a deny; objective 3). Declaration present but the
+/// copy fails ⇒ propagate: `create-fork` is fail-closed, so a failed provision aborts
+/// the spawn loudly rather than silently under-confining or dropping the intent.
+fn provision_jail_policy(root: &Path, name: &str) -> anyhow::Result<()> {
+    let decl = root.join(ARMING_SUBPATH).join(ARMING_JAIL_FILE);
+    let body = match fs::read(&decl) {
+        Ok(body) => body,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(e) => {
+            return Err(e).with_context(|| format!("read jail declaration {}", decl.display()));
+        }
+    };
+    let dir = root.join(JAIL_SUBPATH);
+    fs::create_dir_all(&dir)
+        .with_context(|| format!("create jail provision dir {}", dir.display()))?;
+    let dest = dir.join(format!("{name}.toml"));
+    crate::fsutil::write_atomic(&dest, &body)
+        .with_context(|| format!("provision jail policy {}", dest.display()))?;
+    Ok(())
+}
+
 /// Act on the pure verdict — the only worktree-mutating step (design §5.2 step 4).
 /// Returns the CANONICALISED created dir (stable for the harness to adopt as the
 /// session cwd and for PHASE-05's `basename(worktreePath)` derivation).
@@ -241,6 +277,11 @@ fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
             // fork_core owns the dir/branch collision refusal (`fork-refused: …`) —
             // do NOT re-check here (no parallel impl against shared machinery).
             fork_core(root, &base, &branch, &dir, true)?;
+            // NET-NEW (PHASE-04): provision the arming jail declaration to the
+            // per-worktree policy BEFORE the worker's first tool call — outside the
+            // fork, ro to the worker (design §5.3). Absent declaration ⇒ no-op.
+            provision_jail_policy(root, &name)
+                .with_context(|| format!("provision jail policy for {name}"))?;
             fs::canonicalize(&dir)
                 .with_context(|| format!("canonicalize fork dir {}", dir.display()))
         }
@@ -504,6 +545,47 @@ mod tests {
             Ok(CreateAction::Passthrough {
                 name: "agent-abc123".to_string(),
             })
+        );
+    }
+
+    // ---- VT-1: create-fork provision step (PHASE-04) ---------------------------
+
+    #[test]
+    fn provision_jail_policy_copies_declaration_to_named_file() {
+        // A present arming declaration is copied verbatim to jail/<name>.toml under the
+        // coord root — outside the fork, keyed by the harness worktree name.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let arming = root.join(ARMING_SUBPATH);
+        fs::create_dir_all(&arming).unwrap();
+        let body = b"extra_rw = [\"/nix/store\"]\nnetwork = false\n";
+        fs::write(arming.join(ARMING_JAIL_FILE), body).unwrap();
+
+        provision_jail_policy(root, "agent-abc123").unwrap();
+
+        let dest = root.join(JAIL_SUBPATH).join("agent-abc123.toml");
+        assert!(
+            dest.exists(),
+            "provisioned policy exists under jail/<name>.toml"
+        );
+        assert_eq!(
+            fs::read(&dest).unwrap(),
+            body,
+            "verbatim copy of the declaration"
+        );
+    }
+
+    #[test]
+    fn provision_jail_policy_absent_declaration_is_noop() {
+        // No declaration ⇒ no-op (⇒ pretooluse Default floor), NOT an error and no file.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        provision_jail_policy(root, "agent-abc123").expect("absent declaration is a no-op");
+
+        assert!(
+            !root.join(JAIL_SUBPATH).exists(),
+            "no jail dir materialised when nothing was declared"
         );
     }
 }
