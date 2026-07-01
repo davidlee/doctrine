@@ -62,6 +62,30 @@ intent = "design-target"
 selector = "src/skills.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/worktree/import.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".claude/skills/dispatch/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_import.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-008"

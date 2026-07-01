@@ -4,16 +4,19 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-Status: LOCKED (internal adversarial pass + `/inquisition` RV-200 + RV-201 +
-SL-183 cross-arm seam upstream + RV-202 codex pass — which corrected the upstream's
-`select_jailer` to capability-as-data — all integrated; §10). Two harness unknowns
-remain **by design**,
-gated to the Phase-1 empirical probe (D7, §9), not to prose: `SubagentStop`
-blocking/tree-intact/worktree-correlation, and plugin-PreToolUse firing — each with
-a defined abort to Path C / IDE-024. Governed by ADR-008 (closes its claude-arm
-confinement gap), ADR-006 (D2b raw-tree confinement; D-sole-writer). Originates
-from RSK-014 (probe-h1, PROVEN). Path C deferred → IDE-024; selector-allowlist
-mode → IDE-025.
+Status: LOCKED, then AMENDED at PHASE-05 (§10 amendment entry — funnel pivoted to
+symmetric live-import after the teardown premise was disproved by live probe;
+D-funnel-path / D-import-verb / INV-6; OQ-1 + OQ-2 resolved). Prior lock: internal
+adversarial pass + `/inquisition` RV-200 + RV-201 + SL-183 cross-arm seam upstream +
+RV-202 codex pass (corrected the upstream's `select_jailer` to capability-as-data) —
+all integrated; §10. The Phase-1 probe (D7, §9) resolved the harness unknowns:
+plugin-PreToolUse firing (PROVEN), `SubagentStop` blocking/tree-intact (PROVEN but
+now moot — the capture funnel is retired), and the tree persists on disk post-return
+(PHASE-05 probe) — so the claude arm imports the live tree, no capture. Governed by
+ADR-008 (closes its claude-arm confinement gap), ADR-006 (D2b raw-tree confinement;
+D-sole-writer). Originates from RSK-014 (probe-h1, PROVEN). Path C deferred → IDE-024
+(now also the foreseen future gather strategy behind `--from-worktree`, D-import-verb);
+selector-allowlist mode → IDE-025.
 
 ## 1. Design Problem
 
@@ -349,7 +352,8 @@ no substitution), so its bare-`doctrine` commands ship fail-OPEN — whereas the
 (decided):** `install_hooks_plugin_for_claude` gains a **templating pass** —
 rewrite the **leading `doctrine` token** of *every* `command` string in the
 embedded `hooks.json` to `resolve_exec()`'s absolute path (`SessionStart`,
-`WorktreeCreate`, the two `PreToolUse` entries, the `SubagentStop` capture entry),
+`WorktreeCreate`, the two `PreToolUse` entries — the `SubagentStop` capture entry
+is **removed** at PHASE-05, no longer templated),
 bringing the plugin path to parity with the settings path. Leading-token replace
 (args untouched, so the checked-in asset stays valid as authored); the token
 `doctrine` and each subcommand string are **STD-001 named constants**; the
@@ -400,73 +404,82 @@ clean slate.)
 `resolve_target` → bash/write decision → emit. Binary startup ≈ 2 ms (measured),
 negligible per call.
 
-**Funnel convergence (objective 5) — diff captured BEFORE teardown (RV-200 F-3,
-blocker).** With ro-`.git`, the jailed worker cannot self-commit (its object store
-is the ro main `.git`), so the claude `/dispatch` funnel converges onto a
-**working-tree-diff** import. The naïve "import the worker's worktree after it
-returns" is **unsafe**, and the prior "already identical on both arms" premise was
-**false**: the two arms are *not* lifecycle-equivalent. On the pi/subprocess arm the
-**orchestrator** owns the worktree (`worktree fork --worker` → import → orchestrator
-removes), so the tree persists until import. On the claude arm the **harness** owns
-it: when the `isolation:worktree` subagent finishes, Claude auto-runs `git worktree
-remove`, and `WorktreeRemove` has **no decision control** — failures are debug-log
-only (`docs/claude/hooks.md:2442, :680, :814`). The hook **cannot block** teardown,
-so an uncommitted diff is destroyed in the race between subagent-done and removal.
+**Funnel convergence (objective 5) — orchestrator imports the LIVE worktree
+(AMENDED 2026-07-01, PHASE-05 live probe — supersedes the SubagentStop-capture
+design; §10 amendment entry + git history carry the retired text).** With
+ro-`.git`, the jailed worker cannot self-commit, so the claude `/dispatch` funnel
+still converges onto a **working-tree-diff** import. What changed is *where the
+diff is read from*. The retired design assumed the harness auto-tears-down the
+worker worktree on subagent finish, forcing a capture-before-teardown hook. **A
+PHASE-05 live probe disproved that premise for the shipped config.**
 
-**Contingency (decided — snapshot via `SubagentStop`, before remove; RV-201 F-2).**
-The capture **commits to `SubagentStop`**, not `WorktreeRemove`. `SubagentStop` is
-the only **blocking-capable** point: exit 2 "prevents the subagent from stopping"
-(`docs/claude/hooks.md:658`), so the harness **awaits the hook to completion** at
-the stop boundary, and it receives `agent_id` + `agent_transcript_path`
-(`hooks.md:1930-1957`). `WorktreeRemove`, by contrast, has **no decision control**,
-is side-effect-only,
-and failures are debug-log-only (`hooks.md:680/814/2442`) — nothing documents that
-Claude awaits it before `git worktree remove`, so capture on that hook is
-inherently racy. `WorktreeRemove` is therefore **demoted to best-effort cleanup**
-(it never gates the funnel).
+**The teardown premise was false (probe, 2026-07-01).** Claude auto-runs `git
+worktree remove` only for worktrees **it created natively**. Doctrine ships
+`create-fork` **as** the `WorktreeCreate` hook, which "replaces the default git
+behavior entirely" (`hooks.md:2390`) — Claude receives only a path and cannot
+assume git. Per `hooks.md:2442`, a custom WorktreeCreate hook with **no**
+WorktreeRemove hook leaves the directory **on disk**. Probe: one
+`isolation:worktree` subagent under production hooks (create-fork present, no
+WorktreeRemove) → post-return the worktree **persisted** (`.worktrees/agent-<id>`
+in `git worktree list`, HEAD==B), tracked + untracked diff **intact**. PHASE-01's
+F-T2 observed auto-remove only in the **native** path (no WorktreeCreate hook) and
+wrongly generalised it into the teardown premise. See
+`mem.fact.claude.worktree-remove-auto-teardown` (corrected).
 
-**Worktree correlation is the F-2 trade's open seam (RV-202).** The trade bought
-blocking and lost the free correlator: `SubagentStop` carries `agent_id` +
-`agent_transcript_path` but **no `worktree_path`** (`hooks.md:1930-1957`);
-`worktree_path` is delivered **only** on the unusable non-blocking `WorktreeRemove`
-(`hooks.md:2465`). So the capture hook must **derive** which worktree to
-`git -C <worktree> diff` — it is not handed one. Candidate correlators, in
-preference order: **(a)** `agent_id` → worktree name — `create-fork` already mints
-the name as `agent-<id>` from the spawn payload, so if that `<id>` is the same token
-the harness reports as `agent_id`, the hook reconstructs the path from the
-orchestrator-owned `jail/<name>.toml` provision set (the mapping the orchestrator,
-ADR-006 sole-writer, already wrote); **(b)** `agent_transcript_path` / hook `cwd`
-inspection as a fallback if (a)'s token identity does not hold. **Which correlator
-is real is doc-unconfirmed and load-bearing** — if neither resolves the worktree
-from a `SubagentStop` payload, the capture cannot target its tree and the funnel is
-unworkable on this hook → **abort to Path C / IDE-024** (same fallback as the
-tree-intact unknown). This is pinned by the Phase-1 probe (§9), which now asserts
-**correlation**, not merely tree-intact.
+**Symmetric live-import (decided — D-funnel-path, supersedes the Path-L capture).**
+Both arms are now **lifecycle-symmetric**: the **orchestrator** owns the worktree
+on both (pi: `worktree fork --worker` → import → remove; claude: harness-born tree
+left on disk → import → remove). On the claude arm the Agent tool returns the
+worker's `worktreePath` in its footer and the tree is still on disk, so the
+orchestrator:
 
-The committed `SubagentStop` hook captures `git -C <worktree> diff` (and untracked
-adds) into a patch at a path **outside** the worktree — under the coord tree's
-runtime state — *before* allowing the stop (after which `WorktreeRemove` →
-`git worktree remove` fires as a no-op wrt the already-captured delta). The
-orchestrator imports **that captured patch**, not the live worktree. This finally
-makes the cadence genuinely identical on both arms (each imports a captured delta,
-not a live tree) and keeps Path L + ro-`.git` intact. Touch-set gains the
-`SubagentStop` capture hook alongside the existing `create-fork`. Edits to
-`dispatch-agent/SKILL.md`: import source = the captured patch against B (not the
-`B..S` commit); relax the single-commit delta-check on this arm; `verify-worker`
-adjusts. /plan confirms whether the delta-check is skill-orchestration or Rust
-(`src/dispatch.rs`) and scopes the touch.
+1. reads `worktreePath` from the footer;
+2. `verify-worker --dir <worktreePath> --base B --branch dispatch/<name>` — the
+   identity/base belt on the **live** tree (HEAD==B, isolated, marker,
+   base-ancestor, dir↔branch coherence). **Unchanged Rust**; fail-closes
+   (`no-worker-head`) if the tree is unexpectedly gone (this is what makes the
+   no-WorktreeRemove-hook invariant *enforced*, INV-6);
+3. `worktree import --from-worktree <worktreePath> --base B` — reads the live
+   worker diff and applies it onto the coord tree (verb below);
+4. `git worktree remove <worktreePath>` — reaps the spent tree (symmetric with the
+   pi arm's orchestrator-removes).
 
-**OQ-2 is a lock-time risk WITH a defined abort, not a bare "verify later".** The
-residual unknown is narrowed to the **blocking** hook: does the awaited
-`SubagentStop` hook observe the worktree **still on disk** before the harness's
-`git worktree remove` runs? (`subagents-reference.md` documents no SubagentStop
-timing, so this is unproven by docs — not assumed.) Abort criterion: if even the
-blocking hook cannot observe the tree intact, Path L is unworkable for the claude
-funnel and the slice **escalates to Path C / IDE-024** (standalone clone +
-self-commit + cherry-pick) — the named fallback. This is proven or refuted as the
-second execute gate (after V-plugin), §9 — the test attempts `git -C <wt> diff`
-from a `SubagentStop` hook on one `isolation:worktree` subagent and asserts
-tree-intact.
+No `SubagentStop` hook, **no correlator** (the footer hands the path — the RV-202
+open seam is void), no capture file, no teardown race.
+
+**The import verb — stable interface, swappable strategy (D-import-verb).**
+`worktree import --from-worktree <worker_wt> --base <B>` (cwd = coord tree, the
+apply target) is the load-bearing **contract**; the delta-extraction is a strategy
+*behind* it. **Today's strategy = orchestrator working-tree diff:** gather
+`git -C <worker_wt> diff HEAD` — belt-hardened (`core.quotePath=false`,
+`--no-renames`) — plus untracked files via the index-free `git diff --no-index
+/dev/null <f>` synthesis, into one unified patch; run the **unchanged** pure
+`classify_import` (belt: `.doctrine/`/`.claude/` reject, `head_at_base` = coord
+HEAD==B, `tree_clean`; `single_commit` **vacuously true** — a working-tree diff
+carries no commits); `git apply --index` onto the coord tree, non-committing (the
+funnel commits separately). **Future strategy** (foreseen, not built): cherry-pick
+from a standalone clone (Path C / IDE-024), config-selected — rides the *same
+verb*, swapping only the gather step. The gather logic + hardening flags are the
+former `capture.rs::gather_worktree_patch`, **relocated** into `import.rs` (T2's
+tested code survives, moved); the apply core is the former `run_import_patch`, fed
+live instead of from a file. `import` router = **`--fork`** (pi/subprocess, frozen,
+EX-4) **XOR** `--from-worktree` (claude); the file-based `--patch` surface is
+removed.
+
+**Delta-check home (OQ-1 resolved — Rust, `import.rs`).** The single-commit /
+`B..S` check is the pure `classify_import` in `src/worktree/import.rs`, **not**
+`src/dispatch.rs`. The `--from-worktree` arm reuses it unchanged; the **belt**
+(`.doctrine/`/`.claude/` reject + `head_at_base` + `tree_clean`) is the
+load-bearing check on this arm. The router funnel's "delta check `B..S` single
+non-merge commit" / "import net-diff" steps are the pi-arm phrasing; the claude arm
+reads `single_commit` vacuously and imports the live diff.
+
+Retirement (touch-set): the whole `SubagentStop` capture apparatus — `capture.rs`,
+the `worktree subagent-stop` command + guard classification, the `hooks.json`
+`SubagentStop` entry + its install-templating test, and the file-based `import
+--patch` surface — is **removed** (git history is the archive). `create-fork`
+(WorktreeCreate) is unchanged; crucially **no** `WorktreeRemove` hook is ever
+installed (INV-6).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -513,22 +526,42 @@ tree-intact.
   (RV-200 F-5). The wire fields it relies on are doc-backed: `agent_id`
   (`hooks.md:595`), `updatedInput` (`hooks.md:818`), `permissionDecision`
   (`hooks.md:806`); only the plugin-*registration* firing is unproven.
+- **INV-6 (A, PHASE-05) — no `WorktreeRemove` hook; enforced by `verify-worker`.**
+  The symmetric live-import funnel (§5.4) depends on the worker worktree
+  **persisting** on disk post-return. This holds iff `create-fork` is the
+  `WorktreeCreate` hook (replaces default git behavior ⇒ Claude does not auto-remove)
+  **and no `WorktreeRemove` hook is installed** (`hooks.md:2390/2442` — "without one,
+  the directory is left on disk"). Not merely documented: the funnel runs
+  `verify-worker --dir <worktreePath>` *before* import, which **fail-closes**
+  (`no-worker-head`) if the tree is unexpectedly gone, halting the funnel loud rather
+  than importing an empty/absent delta. The installer MUST NOT ship a `WorktreeRemove`
+  hook; the orchestrator reaps each tree explicitly (`git worktree remove`) after
+  import. Leaked trees on an orchestrator crash mid-drive are an operability concern,
+  not a correctness one (IMP-222: doctor warn + gc).
+- **ASM (PHASE-05) — Fork-path teardown parity.** The persistence probe exercised
+  `create-fork`'s **Passthrough** path (unarmed spawn). Real dispatch uses the
+  **Fork** path (armed at explicit B, `dispatch/<name>`). Teardown is a
+  **harness-level** decision (a subagent's `isolation:worktree` tree removed or not),
+  independent of *which* branch `create-fork` produced ⇒ persistence is assumed
+  identical on the Fork path. Pinned at VH-1 (live Fork-path dispatch), not asserted.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 (→/plan)** funnel delta-check location — skill-orchestration vs Rust
-  (`src/dispatch.rs`). Scopes the objective-5 touch.
-- **OQ-2 (lock-time risk, DEFINED ABORT — RV-200 F-3, hook committed RV-201 F-2)**
-  the harness auto-removes the worktree on subagent finish (`WorktreeRemove`, no
-  decision control), so the worker diff cannot be imported from a live tree.
-  **Resolved by design** to a capture hook on the **blocking** `SubagentStop`
-  (§5.4 — `WorktreeRemove` demoted to cleanup); **two** residual unknowns remain,
-  both probe-pinned: **(i)** whether the awaited `SubagentStop` hook observes the
-  tree intact before `git worktree remove`, and **(ii)** whether `SubagentStop`'s
-  payload lets the hook **correlate to the right worktree** at all — it carries no
-  `worktree_path` (RV-202; §5.4 correlator candidates). **Abort (either fails):**
-  escalate to Path C / IDE-024. Pinned in the Phase-1 probe (§9), not an open-ended
-  verify.
+- **OQ-1 (RESOLVED — PHASE-05).** Funnel delta-check location = **Rust**, the pure
+  `classify_import` in `src/worktree/import.rs` (NOT `src/dispatch.rs`, which carries
+  only record-boundary/arming). The `--from-worktree` claude arm and the `--fork` pi
+  arm both drive it; the belt is the load-bearing check on the claude arm (§5.4).
+- **OQ-2 (RESOLVED — PHASE-05 live probe, 2026-07-01).** The original fear — the
+  harness auto-removes the worktree on subagent finish, so the worker diff cannot be
+  imported from a live tree — is **false for the shipped config**. With `create-fork`
+  as the `WorktreeCreate` hook and **no** `WorktreeRemove` hook, the tree is **left on
+  disk** post-return, diff intact (probe: `.worktrees/agent-<id>` persisted, HEAD==B,
+  tracked+untracked present). The SubagentStop capture contingency (RV-201 F-2) and
+  its correlator seam (RV-202) are therefore **retired** — the orchestrator imports
+  the live tree directly (§5.4, D-funnel-path). The Path-C/IDE-024 escalation is no
+  longer a lock-time risk; it survives only as the *foreseen future strategy* behind
+  the `--from-worktree` verb (D-import-verb). Residual: Fork-path parity (§5.5 ASM),
+  pinned at VH-1.
 - **OQ-3 → V-plugin (first step in execute).** Plugin `hooks.json` is the chosen
   registration home (D-reg). Confirm PreToolUse-via-plugin fires for a worktree
   subagent before building on it; cross-check hook semantics against `docs/claude`
@@ -559,6 +592,9 @@ tree-intact.
 - **D4 — Path L (linked worktree + ro-`.git`).** Proven; converges both arms onto
   one funnel. *Alt: Path C (standalone clone, self-commit, cherry-pick) — better
   orchestrator efficiency but a topology change, likely ADR-altitude → IDE-024.*
+  (The topology stands; **funnel convergence within Path L is now live-import**, not
+  SubagentStop-capture — D-funnel-path, §5.4. Path C survives as the foreseen future
+  gather strategy behind the `--from-worktree` verb — D-import-verb.)
 - **D5 — single-sourced bwrap core flags** via `bwrap_core_argv` + a **parity
   test** against `pi-spawn-confined.sh`; leave the live pi script untouched. *Alt:
   extract `worktree jail-argv` consumed by both — true DRY but touches live pi
@@ -609,14 +645,40 @@ tree-intact.
   SL-183 brief, not here — this slice only guarantees the seam they hang off.
   *Alt: inline the bwrap argv into the decision logic — rejected; forces SL-183 to
   refactor a locked, behaviour-frozen core (behaviour-preservation gate).*
+- **D-funnel-path — symmetric live-import (PHASE-05; SUPERSEDES the Path-L
+  SubagentStop-capture funnel, RV-201 F-2 / RV-202).** Both dispatch arms are
+  lifecycle-symmetric: the orchestrator owns the worker worktree and imports its
+  **live** working-tree diff post-return, then reaps it. The claude arm's Agent
+  footer hands `worktreePath` and the tree persists on disk (INV-6), so no
+  `SubagentStop` capture, no correlator, no teardown race. *Rationale:* the PHASE-05
+  live probe (2026-07-01) disproved the teardown premise the capture design rested on
+  (§5.4, OQ-2) — a custom `WorktreeCreate` hook + no `WorktreeRemove` hook leaves the
+  tree on disk. *Alt (retired): SubagentStop awaited capture-before-remove — solved a
+  non-problem; correlator (RV-202) and blocking-hook analysis (RV-201) were cost
+  against a teardown that does not occur.*
+- **D-import-verb — stable CLI verb, swappable gather strategy (PHASE-05).**
+  `worktree import --from-worktree <dir> --base <B>` is the load-bearing interface;
+  the delta-extraction sits behind it as a strategy the design expects to evolve into
+  a config surface. Today: orchestrator working-tree diff (gather `diff HEAD` +
+  index-free untracked → unchanged `classify_import` belt → `git apply --index`).
+  Foreseen: cherry-pick from a standalone clone (Path C / IDE-024), config-selected —
+  same verb, swap the gather. `import` router = `--fork` (pi, frozen) XOR
+  `--from-worktree` (claude); file-based `--patch` removed. *Rationale:* the user
+  flagged this mechanism will change and become configurable, so the **verb is the
+  contract**, not the mechanism. `classify_import` pure core never moves
+  (behaviour-preservation, EX-4). *Alt: keep the file-based `--patch` + shell gather —
+  rejected; pushes the delicate untracked `--no-index` synthesis into untested skill
+  prose and duplicates logic Rust already got right.*
 
 ## 8. Risks & Mitigations
 
 - **R1 — funnel breakage.** Confinement removes claude self-commit → breaks the
-  `B..S` delta-check, AND the harness tears the worktree down before import (RV-200
-  F-3). *Mit:* capture-via-`SubagentStop`-before-remove convergence (§5.4, RV-201
-  F-2 — the blocking hook) in scope; pinned by the pre-Rust harness probe + the
-  second execute gate (§9) with a defined abort to Path C / IDE-024 before close.
+  `B..S` delta-check. *Mit (AMENDED PHASE-05):* the claude arm imports the worker's
+  **live** working-tree diff via `worktree import --from-worktree` (D-funnel-path,
+  §5.4) — `single_commit` vacuous, belt intact. The companion fear (harness tears the
+  tree down before import, RV-200 F-3) was **disproved** by the PHASE-05 probe (tree
+  persists on disk, INV-6); the SubagentStop capture is retired. Pinned by VH-1 (live
+  Fork-path funnel green).
 - **R2 — plugin registration unproven for PreToolUse.** D-reg chooses the plugin
   path (user steer: empirically uniform). *Mit:* V-plugin re-tests it as the first
   execute step; settings.local.json fallback **built in that same phase iff the
@@ -675,6 +737,12 @@ the timing below). The probe must confirm, on the live harness:
    prove a correlator resolves (`agent_id`→`agent-<id>`→provision-set, or
    transcript/`cwd` fallback; §5.4). Any of the three fails ⇒ abort to Path C /
    IDE-024 — the funnel's load-bearing timing *and* targeting.
+   **[AMENDED PHASE-05 — this probe item is superseded.]** PHASE-01 confirmed all
+   three, but the PHASE-05 persistence probe then showed the worktree is **left on
+   disk** post-return (no auto-teardown under `create-fork` + no WorktreeRemove hook,
+   INV-6), so the funnel imports the **live** tree and the `SubagentStop` capture +
+   correlator are retired. The surviving validation is the "tree-persists +
+   live-import" gate below.
 3. **Hook `command` is shell-run** — gates the F-1 `|| exit 2` vanish-guard. Lower
    risk than (1)/(2): `docs/claude/hooks.md:337` shows shell-form when `args` is
    omitted (RV-202). The probe confirms it on the live harness; if commands are
@@ -718,19 +786,42 @@ cheapest to refute in shell — do it before sinking Rust into a refuted premise
   `settings.local.json`. Cross-check hook-event/matcher/`updatedInput` semantics
   against `docs/claude`. Fail ⇒ land the settings.local.json fallback **in this same
   phase** (F-5).
-- **Capture-before-remove (pinned in Phase 1 probe — OQ-2 / F-3; hook = `SubagentStop`,
-  RV-201 F-2):** confirm the doctrine **`SubagentStop`** hook (blocking-capable,
-  awaited) captures the worker's worktree diff to an outside-the-worktree patch
-  **before** the harness's `git worktree remove`, and the orchestrator imports that
-  patch. Fail (tree gone before capture, **or no correlator resolves the worktree
-  from the `SubagentStop` payload** — RV-202) ⇒ **abort to Path C / IDE-024** (the
-  named fallback), do not ship a lossy funnel.
+- **Tree-persists + live-import (AMENDED PHASE-05 — supersedes the capture-before-remove
+  gate; OQ-2 resolved).** Confirm the worker `isolation:worktree` tree **persists on
+  disk post-return** under production hooks (`create-fork` WorktreeCreate, no
+  WorktreeRemove — INV-6), and the orchestrator imports its **live** working-tree diff
+  via `worktree import --from-worktree` after `verify-worker --dir`. The Passthrough
+  path is probe-proven (2026-07-01); the **Fork** path is pinned at VH-1 (§5.5 ASM).
+  Fail (tree gone despite INV-6) ⇒ `verify-worker` fail-closes (`no-worker-head`), funnel
+  halts loud — never a lossy import.
 - **End-to-end (VA/VH — the riskiest leg):** live claude `/dispatch`, one jailed
-  worker, escape vectors denied + canaries intact + funnel completes green
-  (captured-patch import). Covers OQ-2 end-to-end after the second gate.
+  worker on the **Fork** path, escape vectors denied + canaries intact + funnel
+  completes green (live `--from-worktree` import + orchestrator reap). Covers OQ-2
+  end-to-end.
 - **Behaviour-preservation:** existing worktree/dispatch suites stay green.
 
 ## 10. Review Notes
+
+### PHASE-05 amendment — teardown premise disproved, funnel pivoted to live-import (2026-07-01)
+
+Mid-PHASE-05 execution, a `/consult` on the T6 SKILL.md funnel surfaced a tension
+(verify-worker targeting a torn-down tree), which on investigation exposed a **false
+premise** in §5.4: the design assumed the harness auto-runs `git worktree remove`
+on subagent finish. That was observed only in PHASE-01's **native** probe (no
+`WorktreeCreate` hook); production ships `create-fork` **as** the WorktreeCreate
+hook. A targeted live probe (one `isolation:worktree` subagent, production hooks,
+no WorktreeRemove) showed the worktree **persists on disk** post-return, diff intact
+— matching `docs/claude/hooks.md:2390/2442`.
+
+Consequence — reversed **D-funnel-path** (Path-L SubagentStop-capture → symmetric
+live-import), added **D-import-verb** (`import --from-worktree`, stable verb /
+swappable gather), **INV-6** (enforced no-WorktreeRemove-hook), and the Fork-path
+parity **ASM**. OQ-1 and OQ-2 resolved. The retired §5.4 capture design (correlator
+RV-202, blocking-hook RV-201 F-2) is superseded — git history + this entry are its
+provenance. Retirement of the capture apparatus (capture.rs, `subagent-stop` command,
+`hooks.json` SubagentStop entry, file-based `import --patch`) and the refactor to
+`--from-worktree` are the amended PHASE-05 touch-set. Corrected memory:
+`mem.fact.claude.worktree-remove-auto-teardown`. Case note: RFC-011.
 
 ### Internal adversarial pass (2026-07-01) — 8 findings, all integrated
 
