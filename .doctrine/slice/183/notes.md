@@ -106,6 +106,22 @@ lands the fix. If SL-182's fix touches jail.rs concurrently, expect a rebase/mer
 this file — my additions are append-only (new consts block, new `ResolvedMac` fields,
 two new fns, new tests), so conflicts should be localized.
 
+### RESOLVED 2026-07-01 — ISS-204 fixed in SL-183 context (ownership deviation, sanctioned)
+
+The SL-182-thread fix never reached the `edge` checkout (verified: no other worktree,
+clean tree, `main` behind, gate re-run still red). On explicit direction (David, "try
+now"), the ISS-204-mandated swap was applied HERE: `env!("CARGO_MANIFEST_DIR")` →
+`crate::test_support::repo_root().join("scripts/pi-spawn-confined.sh")` in
+`pi_spawn_core_tokens`. Test-only, behaviour-identical, no jail logic touched
+(`8abcaae0`). Full `doctrine check commit` EXIT=0; `no_baked_paths` guard + 41 jail
+unit tests green. **Deviation from the original "SL-182 owns this surface" note is
+deliberate and user-sanctioned** — if the SL-182 thread also lands a fix, expect a
+trivial dup/conflict on this one line (same target form). ISS-204 → resolved/fixed.
+
+**PHASE-02 flipped `completed`** (`code_start 3a760f92`, forward-intact; conformance
+confirms the PHASE-02 source-delta row registered — only PHASE-01 remains registry-gap,
+accepted as a code-free probe phase per the boundary note above).
+
 ### Probe hygiene notes
 
 - Every `(param "X")` the profile references MUST have a `-D X` bound or
