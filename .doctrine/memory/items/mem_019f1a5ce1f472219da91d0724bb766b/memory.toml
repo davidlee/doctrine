@@ -4,10 +4,10 @@ schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
 status = "active"
-title = "WorktreeRemove auto-destroys a subagent worktree on finish"
+title = "isolation:worktree teardown is conditional on the WorktreeCreate hook"
 summary = "When an isolation:worktree subagent finishes, Claude auto-`git worktree remove`s it; the hook has NO decision control. Capture any diff before teardown."
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-07-01"
 
 [scope]
 paths = []

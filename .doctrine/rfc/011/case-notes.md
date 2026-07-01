@@ -688,3 +688,18 @@ the claude arm. Sheet T2 says only "git -C <wt> diff"; flag=uncarried.
 Minor: design.md is 950 lines, tripped the 25k Read truncation cap (read §1-742,
 §5.4 funnel is in-window; §7 decisions partially past the cut). Cost one extra
 paged read to confirm nothing downstream contradicted the funnel plan.
+
+[consult/design; SL-182-PH05-teardown-probe-2026-07-01]
+Design §5.4 built the SubagentStop-capture funnel (D-funnel-path=Path L, ~5
+committed tasks T1-T4) against an UNPROBED premise: "claude auto-runs `git
+worktree remove` when an isolation:worktree subagent finishes". PHASE-01's F-T2
+observed that teardown — but in the NATIVE path (no WorktreeCreate hook). Prod
+ships create-fork AS the WorktreeCreate hook. A 1-subagent live probe (isolation
+:worktree + create-fork + no WorktreeRemove hook) shows the worktree is LEFT ON
+DISK post-return, diff intact — Claude does NOT auto-remove. Docs (hooks.md:2442
+"without a [WorktreeRemove] hook the directory is left on disk"; :2390 WorktreeCreate
+"replaces default git behavior entirely") stated this; the design assumed the
+native behavior instead. Token cost: whole capture apparatus + correlator (RV-202)
++ blocking-hook analysis (RV-201) built & reverting. Root cause: probed the wrong
+config (native, not the shipped WorktreeCreate-hook path). Lesson: probe the
+PRODUCTION hook manifest, not a stripped probe harness.
