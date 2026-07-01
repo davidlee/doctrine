@@ -1,0 +1,52 @@
+id    = 205
+slug  = "inquisition-sl-182-phase-05-amendment-symmetric-live-import-pivot-footer-worktreepath-inv-6-fork"
+title = "Inquisition: SL-182 PHASE-05 amendment — symmetric live-import pivot (footer worktreePath / INV-6 / Fork-path ASM)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-182"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "EXPECTED: the mechanism by which the orchestrator learns the worker worktree path is proven (slice's own D7 — harness facts are probed, not assumed). OBSERVED: §5.4 step 1 / D-funnel-path rest on 'reads worktreePath from the Agent footer', a field docs/claude documents NOWHERE as an Agent-tool return; the RV-202 correlator is declared 'void' on that unproven basis."
+detail = "docs/claude/hooks.md records worktreePath/worktree_path in only two roles: WorktreeCreate RETURNING a path to Claude (:809,:2394,:2436) and WorktreeRemove RECEIVING worktree_path as INPUT (:2444-:2473). There is NO documented Agent/Task-tool return-footer field named worktreePath. The PHASE-05 live probe proved the tree PERSISTS on disk (git worktree list, HEAD==B) — it did NOT capture or cite a footer field; the orchestrator located the tree by enumerating .worktrees/agent-*. Consequence: for SERIAL dispatch, enumeration alone suffices (footer unnecessary). For PARALLEL fan-out — explicitly supported (§5.3: N spawns off one arming) — enumeration yields N indistinguishable trees, and binding each Agent return to its tree REQUIRES either the footer or a correlator (agent_id -> agent-<id> -> tree). So RV-202 M2's correlator seam is NOT 'void'; it is load-bearing for the parallel arm and unproven. The pivot holds the live-import path to a LAXER standard than the capture path it retired: D7 (§9, D7) demanded a disposable-shell probe for every unproven harness behaviour on the SubagentStop path (timing, plugin firing, shell-run), yet the footer-worktreePath claim — equally a harness fact, and not even doc-backed — is accepted with no probe. Penance: add a Phase-05 disposable-shell probe that captures the actual Agent return payload for an isolation:worktree subagent and confirms whether it carries the worktree path; if absent, restore the correlator (git worktree list delta + agent_id->name) as the documented targeting mechanism and strike 'the footer hands the path — RV-202 seam void' from §5.4/D-funnel-path/the corrected memory. Gate the pivot on that probe exactly as D7 gates the capture path."
+disposition = "design-wrong"
+response = "CONCEDED. The design artifact declares 'the footer hands the path — the RV-202 open seam is void' (§5.4, D-funnel-path) on a harness fact that docs/claude does not document and the PHASE-05 probe did not capture. Under the slice's own D7 discipline this is the same sin the capture path was probed against. Remediation has a USER-STEER fork (functional, so NOT decided unilaterally — /consult ethos): (a) PROBE-THE-FOOTER — add a Phase-05 disposable-shell probe that captures the actual Agent return payload for an isolation:worktree subagent; if it carries the path, keep live-import and cite the probe as the proof (D7-compliant); if not, fall to (b). (b) RESTORE-THE-CORRELATOR — reinstate git-worktree-list-delta + agent_id->agent-<id> as the documented targeting mechanism (RV-202 M2 was correct), strike the 'seam void' claim, and keep live-import with the correlator supplying worktreePath. EITHER WAY the 'footer void' absolute must leave §5.4/D-funnel-path/the corrected memory. LEFT OPEN pending user steer; correctly gates the slice close until the targeting mechanism is proven."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "EXPECTED: INV-6's claim 'not merely documented — ENFORCED by verify-worker fail-close' matches what verify-worker actually proves. OBSERVED: verify-worker --dir proves tree PRESENCE + HEAD==B + marker, not diff INTEGRITY; a WorktreeRemove hook (or any process) that resets/cleans the tree but leaves it registered at HEAD==B passes the belt while silently dropping the worker delta."
+detail = "§5.5 INV-6 asserts the no-WorktreeRemove-hook invariant is 'enforced' because verify-worker --dir fail-closes (no-worker-head) 'if the tree is unexpectedly gone.' True for tree ABSENCE. But the failure mode INV-6 must guard is broader: a WorktreeRemove hook that fires and MUTATES the tree without deleting it (git clean of untracked, git reset, checkout) leaves .worktrees/agent-<id> present, HEAD==B, marker intact — verify-worker passes green — yet the worker's uncommitted delta (esp. untracked files, which the funnel imports via --no-index synthesis) is gone. Then import --from-worktree applies an empty/partial diff SILENTLY. So verify-worker enforces presence, not integrity; INV-6's 'enforced, not merely documented' overclaims. The real enforcement of 'no WorktreeRemove hook' is the installer assertion (deferred to /plan as AF-3: assert no WorktreeRemove entry in hooks.json). Penance: (a) reword INV-6 so the enforcement boundary is honest — verify-worker catches tree-absence; the installer-assert (AF-3) catches hook-presence; neither catches a third-party mutating hook, which is out of scope by the sole-writer trust model; (b) promote AF-3 from a plan note to an INV-6 clause so the invariant names its true enforcer."
+disposition = "design-wrong"
+response = "AGREED. INV-6's 'enforced by verify-worker fail-close' is scoped to tree-ABSENCE, not tree-MUTATION. Remediation (design-artifact truth-fix, no functional fork): reword INV-6 so the enforcement boundary is honest — verify-worker --dir catches tree-absence (no-worker-head); the installer-assert (AF-3, currently a /plan note) catches WorktreeRemove-hook PRESENCE; a third-party mutating-but-not-deleting hook is out of scope by the ADR-006 sole-writer trust model. Promote AF-3 from plan-note to an INV-6 clause so the invariant names its true enforcer. Applied in the coherent reconcile pass after the F-1 steer."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "EXPECTED: the destructive 'git worktree remove --force' (§5.4 step 4) is gated on import success, so it never reaps the sole copy of an unimported delta. OBSERVED: the 4-step sequence lists remove --force after import with no stated success-gate; a partial/failed 'git apply --index' (step 3) followed by --force is unrecoverable data loss."
+detail = "§5.4 step 3 = worktree import --from-worktree (git apply --index onto coord tree); step 4 = git worktree remove --force <worktreePath>. --force is correctly required (tree is intentionally dirty). But the sequence does not state that step 4 is CONDITIONAL on step 3 succeeding. If git apply partially applies or rejects (e.g. a hunk conflict against a non-B coord HEAD, an untracked-collision), the worker's work exists ONLY in that dirty tree — and --force destroys it. Penance: state the ordering invariant explicitly — import must succeed (classify_import belt green + git apply --index exit 0) before the reap; on import failure the funnel HALTS and LEAVES the tree (diagnostic, symmetric with verify-worker's leave-in-place discipline), never --force-reaps. Cheap to encode in the T6 SKILL.md funnel prose and worth a VT on the import-fails path."
+disposition = "design-wrong"
+response = "AGREED. §5.4 must state the ordering invariant: the reap (step 4, git worktree remove --force) is CONDITIONAL on import success (step 3 classify_import belt green + git apply --index exit 0). On import failure the funnel HALTS and LEAVES the tree in place (diagnostic, symmetric with verify-worker's leave-in-place discipline), never --force-reaps the sole copy of an unimported delta. Add a VT on the import-fails path. Applied in the reconcile pass."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "EXPECTED: the Fork-path parity ASM (§5.5) is grounded on the actual mechanism of persistence. OBSERVED: the ASM timidly 'assumes persistence identical on the Fork path' and defers ALL confidence to VH-1, understating that persistence is a function of WorktreeCreate-hook PRESENCE — the same create-fork binary handles both Fork and Passthrough — so the property transfers by construction, not by assumption."
+detail = "§5.5 ASM: 'The persistence probe exercised create-fork's Passthrough path (unarmed). Real dispatch uses the Fork path ... persistence is assumed identical.' The design under-claims. Per docs/claude/hooks.md:2390/2442 the tree is left on disk BECAUSE a custom WorktreeCreate hook replaces default git behaviour and no WorktreeRemove hook exists — a property of hook PRESENCE, invariant to whatever the hook returns. create-fork is the single WorktreeCreate binary for BOTH classify outcomes (Fork armed-at-B / Passthrough detached-at-HEAD — mem: classify_create). So Passthrough-persistence and Fork-persistence share one cause; the probe DID exercise the mechanism, differing only in the branch the hook checks out. This is stronger than 'assumed' and the fail-safe (verify-worker no-worker-head) already nets a wrong guess. Penance (cosmetic, tightens the record): reword the ASM to ground persistence in WorktreeCreate-hook presence (mechanism-shared across Fork/Passthrough), keep VH-1 as confirmation not sole support. Acquits the ASM as low-risk rather than an open unpinned dependency."
+disposition = "design-wrong"
+response = "AGREED (strengthens, not weakens). The ASM is timid: persistence is a function of WorktreeCreate-hook PRESENCE (docs/claude/hooks.md:2390/2442), and create-fork is the single WorktreeCreate binary for BOTH Fork and Passthrough classify outcomes — so the probe DID exercise the mechanism; Fork/Passthrough differ only in the checked-out branch, not in whether a WorktreeRemove hook exists. Reword the ASM to ground persistence in hook-presence (mechanism shared across both paths), keeping VH-1 as confirmation rather than sole support. Applied in the reconcile pass."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
