@@ -1390,6 +1390,36 @@ mod tests {
     }
 
     #[test]
+    fn subagent_stop_hook_templated_without_exit2_guard() {
+        // SL-182 PHASE-05 T4: the SubagentStop capture entry is baked to an absolute
+        // exec like every other command, but MUST NOT carry `|| exit 2` — a blocking
+        // guard on the stop boundary would DEADLOCK the harness if the binary vanished
+        // (R-deadlock / D-capture-failmode: the lost delta is caught downstream by the
+        // --patch import halt, not by walling the stop).
+        let tmp = tempfile::tempdir().unwrap();
+        let mut sink = Vec::new();
+        install_hooks_plugin_for_claude(tmp.path(), false, &mut sink).unwrap();
+        let body = fs::read_to_string(tmp.path().join(".claude/skills/doctrine/hooks/hooks.json"))
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let cmd = v["hooks"]["SubagentStop"][0]["hooks"][0]["command"]
+            .as_str()
+            .expect("SubagentStop entry materialized");
+        assert!(
+            cmd.contains("worktree subagent-stop"),
+            "SubagentStop capture verb materialized: {cmd}"
+        );
+        assert!(
+            cmd.starts_with('\''),
+            "baked absolute exec, not fail-open bare PATH: {cmd}"
+        );
+        assert!(
+            !cmd.ends_with(HOOK_EXIT2_GUARD),
+            "capture hook must NOT carry the exit-2 guard (deadlock risk): {cmd}"
+        );
+    }
+
+    #[test]
     fn embedded_hooks_asset_ships_bare_doctrine_and_both_pretooluse_walls() {
         // The checked-in asset stays authored-bare (EX-2); templating is install-time.
         // Also pins T7: both PreToolUse matchers (Bash + Edit|Write) are registered.

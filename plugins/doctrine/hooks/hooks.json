@@ -41,6 +41,17 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "doctrine worktree subagent-stop"
+          }
+        ]
+      }
     ]
   }
 }
