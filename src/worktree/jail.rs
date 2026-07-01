@@ -13,10 +13,28 @@
 //! import engine, so the git-topology recognition CANNOT live here. The layering
 //! gate enforces the pure/imperative split: the PHASE-03 shell (`pretooluse.rs`,
 //! command tier) performs the git-topology check + the policy disk read + the host
-//! capability probe, and passes the *resolved* answers in as data:
+//! capability probe + **all path canonicalization**, and passes the *resolved*
+//! answers in as data:
 //!   - `cwd_is_project_worktree: bool`  (was `worktrees_root` in design §5.2 — see R1)
 //!   - `JailPolicy`                     (parsed from the ro policy file by the shell)
 //!   - `Backend`                        (capability-as-data descriptor, RV-202)
+//!   - **canonical paths**             (see D-canon below)
+//!
+//! ## D-canon — the canonicalization cut (twin of R1, MF-1/MF-2)
+//! `realpath` resolves symlinks against the live filesystem — a **disk read**, so it
+//! cannot live in this leaf, exactly as the git-topology read cannot (R1). Every path
+//! the pure surface compares MUST arrive already **symlink-resolved and absolute**,
+//! canonicalized by the shell with `realpath -m` semantics (non-existent-safe — a
+//! write target or `extra_rw` entry need not exist yet), matching the proven probe
+//! (`pretooluse-pathcheck.sh`: relative→`cwd`-join, then `realpath -m` on both `real`
+//! and `wt`). This is **security-load-bearing**: without it a symlinked / `..`-bearing
+//! / relative `file_path` or `extra_rw` bypasses the INV-2 (repo-root) / INV-3 (`.git`)
+//! / INV-4 (allowlist) walls. The leaf therefore does PURE component-wise prefix /
+//! ancestor tests (`Path::starts_with`, NOT string prefix — the sibling-prefix guard
+//! the probe spelled with a trailing slash: `/wt` must not match `/wt-evil`). The
+//! *contract* is locked here in T0; the canonicalization *impl* is the PHASE-03/04
+//! shell's, tested at that boundary. (`decide_write`'s param is `real`, not the raw
+//! stdin `file_path`, to make the precondition load-bearing at the type site.)
 //!
 //! ## Open interface decisions for the codex pass (recorded in the phase sheet)
 //! - **R1 / D-resolve-purity.** `resolve_target` takes `cwd_is_project_worktree: bool`
@@ -102,7 +120,11 @@ pub(crate) enum Backend {
 
 /// Per-arming jail policy (design §5.3). Parsed here (pure); the disk read is the
 /// shell's. Default is the permissive floor that preserves current behaviour.
+// `deny_unknown_fields` (MF-4): the policy is an orchestrator-authored SECURITY
+// document; a typo'd key (`network`, `extra_rws`) must be a loud parse `Err`, not a
+// silent fall-through to the *permissive* Default floor (network=true). Fail-closed.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct JailPolicy {
     /// Absolute paths granted rw inside the jail (beyond the worktree). Default `[]`.
     #[serde(default)]
@@ -138,6 +160,11 @@ impl JailPolicy {
 /// `cwd_is_project_worktree` is computed by the shell via `is_linked_worktree` +
 /// git-common-dir == this project's main `.git` (A1, git-topology not path-prefix);
 /// see the module R1 note. A sibling repo's worktree ⇒ `false` ⇒ `Reject`.
+/// **Precondition (D-canon, codex-blocker-1): `cwd` is already shell-canonicalized**
+/// (symlink-resolved, absolute). `Target::Jail(cwd)` carries it forward AS `wt` into
+/// both `pathcheck` and `bwrap_argv`, so a non-canonical `cwd` here poisons every
+/// downstream wall — the canonicality obligation is the shell's, load-bearing at the
+/// entry to the whole pure surface.
 pub(crate) fn resolve_target(
     _agent_id: Option<&str>,
     _cwd: &Path,
@@ -146,10 +173,12 @@ pub(crate) fn resolve_target(
     unimplemented!("PHASE-02 T2")
 }
 
-/// `real ∈ {wt} ∪ extra_rw` (VT-2). PURE prefix test over already-canonical dirs.
-/// INV-4: safe as the Edit/Write allowlist ONLY because `validate_policy` has already
-/// rejected dangerous `extra_rw` (root-ancestors / `.git`) — the pathcheck trusts a
-/// validated policy.
+/// `real ∈ {wt} ∪ extra_rw` (VT-2). PURE **component-wise** prefix test
+/// (`Path::starts_with`, never string prefix — sibling-prefix guard: `/wt` must not
+/// match `/wt-evil`). **Precondition (D-canon): all args are shell-canonicalized**
+/// (symlink-resolved, absolute); this leaf does not touch disk. INV-4: safe as the
+/// Edit/Write allowlist ONLY because `validate_policy` has already rejected dangerous
+/// `extra_rw` (root-ancestors / `.git`) — the pathcheck trusts a validated policy.
 pub(crate) fn pathcheck(_real: &Path, _wt: &Path, _extra_rw: &[PathBuf]) -> bool {
     unimplemented!("PHASE-02 T3")
 }
@@ -157,6 +186,17 @@ pub(crate) fn pathcheck(_real: &Path, _wt: &Path, _extra_rw: &[PathBuf]) -> bool
 /// Reject an `extra_rw` equal to `/`, an ancestor of `main_root`, or touching `.git`
 /// (INV-3, VT-6). STRICTLY platform-agnostic (D): zero bwrap/namespace assumptions —
 /// this is the shared cross-arm contract SL-183 reuses UNCHANGED as its parity proof.
+/// **Precondition (D-canon, MF-2): `policy.extra_rw` and `main_root` are already
+/// shell-canonicalized** (symlink-resolved, absolute). This check is a PURE lexical
+/// ancestor test; a relative / symlinked / `..`-bearing `extra_rw` reaching it
+/// un-canonicalized would silently bypass the `.git` / root-ancestor rejection — that
+/// canonicalization is the shell's job, asserted at the PHASE-03/04 boundary.
+/// **Existence obligation (codex-blocker-2): each `extra_rw` is ALSO a bwrap `--bind`
+/// SOURCE** (`bwrap_argv`), and bind of a non-existent source fails at runtime — so the
+/// shell MUST materialize-then-canonicalize (`realpath -m` is not enough for a bind
+/// source) each `extra_rw` BEFORE both this validation and argv construction, closing
+/// the create-after-validate TOCTOU. Leaf-side this stays a pure lexical check; the
+/// materialization contract is pinned to PHASE-04 provision (see phase sheet R4-canon).
 pub(crate) fn validate_policy(_policy: &JailPolicy, _main_root: &Path) -> Result<(), String> {
     unimplemented!("PHASE-02 T7")
 }
@@ -234,9 +274,12 @@ pub(crate) fn decide_bash(
 /// Compose an Edit/Write decision. PURE. `Jail(wt)` ⇒ `pathcheck(real, wt, extra_rw)`
 /// ⇒ `PassThrough` / `Deny`. Edit/Write bypass the bwrap wrap entirely, so this is the
 /// second wall (design §5.4). Orchestrator ⇒ `PassThrough`; `Reject` ⇒ `Deny`.
+/// `real` is the write target **already canonicalized by the shell** (cwd-joined +
+/// `realpath -m`, D-canon/MF-1) — NOT the raw stdin `file_path`; the param name pins
+/// the precondition at the type site. `None` (no path in the tool input) ⇒ `Deny`.
 pub(crate) fn decide_write(
     _target: &Target,
-    _file_path: Option<&Path>,
+    _real: Option<&Path>,
     _policy: &JailPolicy,
 ) -> Decision {
     unimplemented!("PHASE-02 T8")
