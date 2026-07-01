@@ -1,7 +1,7 @@
 id = 186
 slug = "prompt-cascade-resolver"
 title = "Prompt cascade: per-context instruction resolver"
-status = "proposed"
+status = "design"
 created = "2026-07-01"
 updated = "2026-07-01"
 tags = []
@@ -9,6 +9,59 @@ tags = []
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "governed_by"
+target = "ADR-011"
+
+[[relation]]
+label = "related"
+target = "PRD-007"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-155"
+
+[[selector]]
+selector = ".doctrine/agents/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/**/boot*"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/**/prompt*"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/scriptures.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/prompt.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/boot.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/install.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/manifest.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/scriptures/**"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
