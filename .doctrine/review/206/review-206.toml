@@ -1,0 +1,162 @@
+id    = 206
+slug  = "code-review-review-of-sl-184"
+title = "code-review review of SL-184"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "code-reviewer"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-184"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = 'Doc comment on run_search still references "find" surface — stale docs'
+detail = """
+Expected: The doc comment on `pub(crate) fn run_search()` should describe the "search" surface, using consistent "search" terminology throughout.
+
+Observed: The doc comment (line ~840 in the worktree) still reads:
+```
+/// `doctrine memory find [--path-scope/...]`
+...
+/// find applies NO holdback (D8/D17); `base_filter`
+...
+/// (find renders rows, not framed bodies).
+```
+Three occurrences of "find" in the doc comment of a function renamed to `run_search`. This is a stale-docs regression — the comment was mechanically preserved from the rename but the prose inside it wasn't updated.
+
+Evidence: `git show e2972622:src/retrieve.rs` lines ~840-848."""
+disposition = "fix-now"
+response = 'Agreed — stale-docs regression. The doc comment on `run_search` was mechanically carried through the rename but the prose inside retained "find" terminology. Fix: replace all "find" references with "search" in the doc comment, and update the usage line to `doctrine memory search`.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Search truncation notice conflates RETRIEVE_LIMIT_DEFAULT as search page_size default"
+detail = """
+Expected: When `limit = None` (no `--limit` flag on search, meaning "show all"), the truncation notice's `page_size` should reflect the actual behaviour — either the displayed count or a sentinel indicating "unlimited".
+
+Observed: In `run_search`, the truncation notice computes:
+```rust
+let page_size = limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT);
+```
+`RETRIEVE_LIMIT_DEFAULT` is 5 — the retrieve surface's default. Search has no default limit; when `--limit` is unset, all results are shown.
+
+Trigger: `offset > 0, limit = None` with results beyond offset. Then `shown < total`, the truncation notice fires, and reports "page size 5" despite the actual page being effectively unlimited.
+
+Example: `doctrine memory search --offset 2` with 10 results → "Showing 8 of 10 results (offset 2, page size 5)" — the page size 5 is a lie.
+
+The `unwrap_or` fallback is dead code for the common case (truncation only fires when `limit` is set AND results exceed it), but fires with a wrong value in the offset-without-limit edge case.
+
+Evidence: `src/retrieve.rs` line 828 in the worktree: `let page_size = limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT);`"""
+disposition = "fix-now"
+response = """
+Good catch. `RETRIEVE_LIMIT_DEFAULT` is the wrong constant for the search surface. For `limit = None, offset > 0` with results beyond offset, the truncation notice incorrectly reports a page size of 5.
+
+Fix: Change `limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT)` to `limit.unwrap_or(shown)` in the truncation notice — when `limit` is `None`, the effective page size is the number shown. Or alternatively, omit the page-size clause from the notice when `limit` is `None` since it's semantically meaningless for an unbounded search.
+
+The simplest correct fix: `limit.unwrap_or(shown)` — this reports the actual number of results shown as the page size when no limit was requested."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "JSON path builds unnecessary intermediate Vec&lt;&amp;Candidate&gt; — allocation waste"
+detail = """
+Expected: `format_search_json` should accept `&[Candidate<'_>]` directly, since `Candidate` is the owned row type and the function only reads from it. This would eliminate the intermediate Vec allocation.
+
+Observed: The JSON rendering path collects an intermediate Vec:
+```rust
+let visible_refs: Vec<&Candidate<'_>> = visible.iter().collect();
+format_search_json(&visible_refs)?
+```
+where `format_search_json` takes `&[&Candidate<'_>]`. The existing design uses `&[&Candidate]` because `MemorySearchRow::from` was written for `&&Candidate<'_>` — but refactoring the `From` impl to `&Candidate<'_>` would be a trivial signature change (the impl already dereferences `c.memory`).
+
+This is a minor issue — the Vec allocation is proportional to result count and happens once per invocation — but it's unnecessary ceremony for a surface that otherwise emphasises borrowing efficiency (the table path avoids this collect entirely).
+
+Evidence: `src/retrieve.rs` lines ~905-907 in the worktree."""
+disposition = "tolerated"
+response = """
+The intermediate Vec allocation is proportional to result count and happens once per invocation. The `From<&&Candidate<'_>>` impl is shared with the MCP path (`search_for_mcp`) which also constructs rows from `&Candidate` refs — refactoring the `From` impl would touch both surfaces.
+
+Cost is negligible (a Vec of fat pointers, not data clones). Not worth the signature churn for a minor efficiency gain. Tolerated."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "--columns flag bleeds into retrieve --help with no indication it's silently ignored"
+detail = """
+Expected: A flag that is silently ignored should not appear in help output, or at minimum its help text should indicate the scope restriction (e.g., "table output (search only)" or "ignored by retrieve").
+
+Observed: `--columns` is defined on `FindRetrieveArgs` which is `#[command(flatten)]`'d into both `MemoryCommand::Search` and `MemoryCommand::Retrieve`. Running `doctrine memory retrieve --help` shows:
+```
+--columns <COLUMNS>  Column projection for search table output (ignored by retrieve)
+```
+The help text does say "(ignored by retrieve)" — correction: the current help text reads "Column projection for search table output (ignored by retrieve)." This is actually adequate documentation. However, the flag still appears in the retrieve help surface at all, which is a minor UX noise — users of retrieve see a flag they cannot use.
+
+The design (§2) acknowledges this: "The `--columns` flag also appears in `retrieve --help` (shared struct), but retrieve ignores it — acceptable per scope." The design decision is documented, but the UX wart remains.
+
+Evidence: `src/memory.rs` in the worktree — `FindRetrieveArgs.columns` field, help text."""
+disposition = "tolerated"
+response = 'Design §2 explicitly acknowledges this: "The `--columns` flag also appears in `retrieve --help` (shared struct), but retrieve ignores it — acceptable per scope." The help text already reads "(ignored by retrieve)". Splitting `FindRetrieveArgs` would create parallel arg structs (duplication) or require a three-tier struct hierarchy — both worse than the current state for a single flag. Tolerated per design decision DD-4.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Redundant .min(ranked.len()) in pagination end-bound calculation"
+detail = """
+Expected: Clean pagination logic without defensive redundancy.
+
+Observed:
+```rust
+let end = ranked.len().min(offset.saturating_add(limit.unwrap_or(usize::MAX)));
+let visible = ranked.get(offset..end).unwrap_or(&[]);
+```
+The `.min(ranked.len())` is redundant — `ranked.get(offset..end)` already handles the case where `end > ranked.len()` by returning `None`, which the `unwrap_or(&[])` catches. The `.min()` doesn't cause incorrect behaviour but adds a line of reasoning the reader must work through (is it needed? what edge case does it guard against that `get` doesn't?).
+
+If the intent was clarity, a comment would serve better. If defensive, it should be consistent — the old code used `.skip(offset).take(limit.unwrap_or(usize::MAX))` which is self-documenting.
+
+Evidence: `src/retrieve.rs` lines ~885-887 in the worktree."""
+disposition = "fix-now"
+response = """
+Fair. The `.min(ranked.len())` is defensive but redundant — `ranked.get(offset..end)` already returns `None` for out-of-bounds ranges. Remove it for clarity. The simpler form:
+```rust
+let end = offset.saturating_add(limit.unwrap_or(usize::MAX));
+```
+is sufficient; `ranked.get(offset..end).unwrap_or(&[])` handles the bound."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "search_columns() allocates 15-element Column array on every invocation"
+detail = """
+Expected: The column definitions should be computed once and reused, since they are invariant across all search invocations.
+
+Observed: `search_columns()` is called inside `run_search` on every invocation:
+```rust
+let cols = search_columns();
+```
+The function returns `[Column<Candidate<'_>>; 15]` — 15 structs, each containing a `&'static str`, a fn pointer, and a `ColumnPaint` enum — allocated on the stack. Cost is trivial for a CLI tool (a few hundred bytes of stack + 15 fn pointer stores), but the design claims "the closures are non-capturing fn pointers, so the array is static data regardless" which implies zero runtime cost.
+
+The design is technically correct that the closures are non-capturing, but the array is NOT static — it's constructed on every call. A `LazyLock<[Column<Candidate<'static>>; 15]>` would make it truly static (Candidate<'static> requires a static Memory ref which isn't possible, so this approach is sound).
+
+This is a nit because the cost is negligible for a CLI invocation.
+
+Evidence: `src/retrieve.rs` line 893 in the worktree; design.md adversarial finding #1."""
+disposition = "tolerated"
+response = """
+`Candidate<'a>` borrows `Memory` with a non-static lifetime — a `LazyLock` would require `Candidate<'static>` which can't be satisfied without unsafe transmutation or Arcing the Memory store. The design's adversarial finding #1 already identified this: "'Candidate<'a> borrows Memory, so a const would pin 'a to 'static. Instead, a function returns the array."
+
+The per-invocation cost is 15 Column structs on the stack (~720 bytes + 15 fn pointer stores). For a CLI tool that runs once per user command, this is invisible. Tolerated."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

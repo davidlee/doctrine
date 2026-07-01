@@ -718,3 +718,21 @@ when a design asserts a harness fact, it should CITE the proving memory inline
 (or a fresh context) re-litigating settled empiricism. The retrieve-memory step at
 design time should have surfaced mem_019efe28; it did not, because the amendment was
 authored mid-execution without a fresh /retrieve-memory sweep over the footer seam.
+
+[phase-plan; SL-182-PH05-rtk-void-2026-07-01]
+Phase-05 sheet carried R-rtk-diff-corruption as a load-bearing execution risk,
+sourced from 3 memories (mem_019ebf75/019ec65e/019ed44c). Two independent reasons
+it was a phantom, neither caught until the User flagged "rtk uninstalled for weeks":
+(1) SCOPE MISATTRIBUTION — rtk is a Claude-Code *Bash-tool* hook that rewrites the
+    agent's shell git invocations; it never intercepts the doctrine binary's
+    in-process std::process::Command git (git_bytes_lenient). The gather code the
+    risk was pinned to was never actually exposed — only my own ad-hoc Bash
+    `git diff` inspections were. The memory's applicability boundary (Bash-tool vs
+    in-process) was never recorded, so it over-generalised onto compiled code.
+(2) ENV STALENESS — the shim is uninstalled regardless.
+Token cost: a full risk entry + an A2 sub-obligation ("gather MUST bypass rtk")
+authored, reviewed across two sessions, then reverted. Root cause: a gotcha memory
+without an explicit applicability-boundary field ("applies to: agent Bash calls,
+NOT in-process subprocess") invites over-defensive planning against code paths it
+never touched. Suggest memories for harness-proxy gotchas record the interception
+layer explicitly.
