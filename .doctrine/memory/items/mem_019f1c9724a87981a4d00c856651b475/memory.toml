@@ -1,0 +1,50 @@
+memory_uid = "mem_019f1c9724a87981a4d00c856651b475"
+memory_key = "mem.fact.doctrine.gather-untracked-honors-global-excludes"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Gather untracked leg respects host global gitignore"
+summary = "worktree import --from-worktree gather's untracked leg (ls-files --others --exclude-standard) honors the host global core.excludesFile"
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = ["src/worktree/import.rs", "tests/e2e_worktree_import.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "worktree", "import", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "f7f88a0f788e0becab0eac8f862ee26d5ee1b55b"
+tree = "827bdacfad478dba226f142ae65c35f5983a5417"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "f7f88a0f788e0becab0eac8f862ee26d5ee1b55b"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-182"
+
+[[source]]
+kind = "commit"
+ref = "f7f88a0f"
+
