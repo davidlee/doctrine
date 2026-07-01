@@ -10,8 +10,7 @@ Originates from IMP-220.
 
 ### 1. Rename `memory find` → `memory search`
 
-- CLI: `MemoryCommand::Find` → `MemoryCommand::Search`, update help text.
-  Keep `memory find` as a hidden alias (deprecated, prints redirect notice).
+- CLI: `MemoryCommand::Find` → `MemoryCommand::Search` with `alias = "find"` (silent hidden alias, no stderr notice).
 - MCP server tool: `memory_find` → `memory_search` (tool name, handler,
   documentation comment, onboard mapping table).
 - Internal: `run_find` → `run_search`, `format_find_table`/`format_find_json` →
@@ -29,7 +28,7 @@ Originates from IMP-220.
   layout, colour).
 - Colour: uid cyan (Fixed), status by value (status_hue), type by value, title
   zebra (Alternate).
-- Replace `format_find_json` with `listing::json_envelope` or keep typed rows.
+- JSON output keeps typed `MemorySearchRow` / `format_search_json` (same schema, renamed struct).
 - Pagination: use shared footer rendering from listing spine.
 
 ### 3. MCP tool mapping

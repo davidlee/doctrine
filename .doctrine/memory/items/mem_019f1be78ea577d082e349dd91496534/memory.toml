@@ -1,0 +1,43 @@
+memory_uid = "mem_019f1be78ea577d082e349dd91496534"
+memory_key = "mem.pattern.retrieve.search-columns-typeclosure"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "search_columns type ByValue closure: as_str() already returns &str — extra & produces &&str compile error"
+summary = "When defining a ColumnPaint::ByValue closure that calls a function expecting &str, and the cell data comes from an as_str() that already returns &'static str, the extra & before as_str() produces &&str which Rust rejects. Follow the backlog precedent: backlog_kind_hue(i.kind.as_str()) — no extra &."
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = ["src/retrieve.rs", "src/backlog.rs"]
+globs = []
+commands = []
+tags = ["retrieve", "listing", "column-model", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "296fd9490ef2e3ae54ef50f91e1ac0a158095fb0"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5dfae3d60fea37ebabd8ac571684e0ee775346e2a1452148d2c87c4ad9768dee"
+base_commit = "39a96cb17183caa503d5551c75b072a867180902"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

@@ -14,7 +14,8 @@ All verb references shift uniformly:
 | `MemoryFindRow` | `MemorySearchRow` | `src/retrieve.rs` |
 | `find_for_mcp` | `search_for_mcp` | `src/retrieve.rs` |
 | `FindForMcp` | `SearchForMcp` | `src/retrieve.rs` |
-| MCP tool `memory_find` | `memory_search` | `src/mcp_server/tools.rs` def + handler + onboard table |
+| MCP tool `memory_find` | `memory_search` | `src/mcp_server/tools.rs` def + handler + onboard table + sibling tool description prose refs |
+| MCP sibling tool description `memory_find` refs | `memory_search` | `memory_retrieve`, `memory_show`, `memory_list` tool descriptions |
 | MCP golden `kind: "memory_find"` | `"memory_search"` | `src/mcp_server/tools.rs` handler envelope |
 | E2E test `memory_find` | `memory_search` | `tests/e2e_mcp_server.rs` |
 | E2E test fn name | rename | `tests/e2e_mcp_server.rs`, `tests/e2e_memory_sync.rs` |
@@ -25,6 +26,10 @@ All verb references shift uniformly:
 `#[command(alias = "find")]` on `MemoryCommand::Search` — clap's hidden alias, no stderr
 notice (adversarial finding: the doc comment on the variant should say `Search` not `Find`).
 The `Find` variant is removed entirely (no separate redirect dead code).
+
+This overrides IMP-220's original proposal of a stderr deprecation notice — a silent
+alias is simpler and avoids noise for users who type `find` from habit. IMP-220 should
+be updated to reflect this resolution.
 
 ## 2. Shared listing spine
 
@@ -42,10 +47,8 @@ fn search_columns() -> [Column<Candidate<'_>>; 15] {
     [
         Column { name: "uid",       header: "uid",       cell: |c| c.memory.uid.clone(),
             paint: ColumnPaint::Fixed(DynColors::Ansi(AnsiColors::Cyan)) },
-    Column { name: "uid",       header: "uid",       cell: |c| c.memory.uid.clone(),
-        paint: ColumnPaint::Fixed(DynColors::Ansi(AnsiColors::Cyan)) },
     Column { name: "type",      header: "type",      cell: |c| c.memory.kind.as_str().to_owned(),
-        paint: ColumnPaint::ByValue(|c| listing::memory_type_hue(&c.memory.kind.as_str())) },
+        paint: ColumnPaint::ByValue(|c| listing::memory_type_hue(c.memory.kind.as_str())) },
     Column { name: "status",    header: "status",    cell: |c| c.memory.status.as_str().to_owned(),
         paint: ColumnPaint::ByValue(|c| listing::status_hue(c.memory.status.as_str())) },
     Column { name: "staleness", header: "staleness", cell: |c| c.staleness.label().to_owned(),
@@ -82,7 +85,7 @@ const SEARCH_DEFAULT: &[&str] = &["uid", "type", "status", "staleness", "trust",
 
 Added to `FindRetrieveArgs` in `src/memory.rs`:
 ```rust
-#[arg(long)]
+#[arg(long, help = "Column projection for search table output (ignored by retrieve)")]
 pub(crate) columns: Option<Vec<String>>,
 ```
 
@@ -119,6 +122,8 @@ Envelope kind string: `"memory_search"`.
 Tool def: name `"memory_find"` → `"memory_search"`, description updated.
 Handler: match arm, inner envelope `kind`, calls `search_for_mcp`.
 Onboard table: `|doctrine memory search|memory_search||`.
+Sibling tool descriptions: `memory_retrieve`, `memory_show`, `memory_list` prose
+references to `memory_find` → `memory_search`.
 
 ## 4. Code impact summary
 
@@ -128,7 +133,7 @@ Onboard table: `|doctrine memory search|memory_search||`.
 |---|---|
 | `src/memory.rs` | Rename `MemoryCommand::Find` → `Search` with `alias = "find"`. Add `columns` field to `FindRetrieveArgs`. Update dispatch arm. |
 | `src/retrieve.rs` | `run_find` → `run_search`. Remove `format_find_table`. Add `SEARCH_COLUMNS` + `SEARCH_DEFAULT`. `format_find_json` → `format_search_json`. `MemoryFindRow` → `MemorySearchRow`. `find_for_mcp` → `search_for_mcp`. `FindForMcp` → `SearchForMcp`. Wire `listing::render_columns` in `run_search`. |
-| `src/mcp_server/tools.rs` | Tool def + handler + onboard table rename. |
+| `src/mcp_server/tools.rs` | Tool def + handler + onboard table + sibling tool description prose rename. |
 | `tests/e2e_mcp_server.rs` | Tool name strings, test fn names, golden values. |
 | `tests/e2e_memory_sync.rs` | Test fn name. |
 | `src/commands/guard.rs` | Update `MemoryCommand::Find` match arm ref. |

@@ -1,0 +1,80 @@
+# Implementation plan for SL-184 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-184"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id = "PHASE-01"
+name = "Rename find → search across all surfaces"
+objective = "Mechanical rename of CLI variant, internal functions, MCP tool, and all test references. No behavioural change — tests pass identically after this phase."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-184 design.md locked and slice at `design` status" },
+  { id = "EN-2", text = "Working tree is clean (committed or stashed unrelated changes)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`MemoryCommand::Find` → `MemoryCommand::Search` with `alias = \"find\"`" },
+  { id = "EX-2", text = "`run_find` → `run_search`, `format_find_table`/`format_find_json` → `format_search_table`/`format_search_json`, `MemoryFindRow` → `MemorySearchRow`, `FindForMcp` → `SearchForMcp`, `find_for_mcp` → `search_for_mcp`" },
+  { id = "EX-3", text = "MCP tool `memory_find` → `memory_search` (def + handler dispatch + onboard table + sibling tool description prose refs in memory_retrieve, memory_show, memory_list)" },
+  { id = "EX-4", text = "`color: bool` threaded into `run_search` signature from dispatch" },
+  { id = "EX-5", text = "`MemoryCommand::Find` removed from guard match + main.rs test refs" },
+  { id = "EX-6", text = "All test fns and references renamed; tests pass" },
+]
+verification = [
+  { id = "VT-1", expects = "CLI `doctrine memory search --help` shows the new variant; `doctrine memory find` still works via alias", test_file = "src/retrieve.rs", keywords = ["run_search", "SearchForMcp", "MemorySearchRow"] },
+  { id = "VT-2", expects = "MCP tool listed as `memory_search`, not `memory_find`", test_file = "src/mcp_server/tools.rs", keywords = ["memory_search"] },
+  { id = "VT-3", expects = "`doctrine memory find` silently delegates (no error)", test_file = "src/memory.rs", keywords = ["alias = \"find\"", "MemoryCommand::Search"] },
+  { id = "VA-1", expects = "`cargo build --workspace` compiles; `just check` passes" },
+  { id = "VA-2", expects = "`cargo test` — all existing tests pass (behaviour-preservation gate)" },
+]
+specs = []
+requirements = []
+
+[[phase]]
+id = "PHASE-02"
+name = "Adopt shared listing spine for search output"
+objective = "Replace hand-rolled `format_search_table` with `listing::render_columns` + `search_columns()` column definitions + `--columns` flag. Update JSON output and pagination. Rewrite format-related tests for the new spine."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and merged (all renames in place)" },
+  { id = "EN-2", text = "`listing::render_columns`, `select_columns`, `ColumnPaint` patterns visible from REC and REVIEW precedents" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`fn search_columns()` returns 15 `Column<Candidate<'_>>` definitions with correct extractors and paint" },
+  { id = "EX-2", text = "`SEARCH_DEFAULT = &[\"uid\", \"type\", \"status\", \"staleness\", \"trust\", \"severity\", \"spec\", \"title\"]` constant defined" },
+  { id = "EX-3", text = "`--columns` flag added to `FindRetrieveArgs`" },
+  { id = "EX-4", text = "`format_search_table` removed; `run_search` uses `listing::render_columns` with sliced `&[Candidate]`" },
+  { id = "EX-5", text = "`format_search_json` updated to use renamed `MemorySearchRow`" },
+  { id = "EX-6", text = "`format_find_row_carries_full_uid…`, `format_find_scrubs_a_newline_title`, `format_find_empty_is_empty_string` rewritten or removed" },
+  { id = "EX-7", text = "Pagination footer uses shared `listing::format_truncation_notice` (already does, no change)" },
+  { id = "EX-8", text = "All tests pass" },
+]
+verification = [
+  { id = "VT-1", expects = "`search_columns()` defined and has 15 columns with uid, type, status, staleness, trust, severity, spec, title as default", test_file = "src/retrieve.rs", keywords = ["fn search_columns", "SEARCH_DEFAULT"] },
+  { id = "VT-2", expects = "`run_search` renders table via `listing::render_columns` not `format_search_table`", test_file = "src/retrieve.rs", keywords = ["render_columns", "search_columns"] },
+  { id = "VT-3", expects = "`--columns` flag plumbed through `FindRetrieveArgs` and consumed in `run_search`", test_file = "src/memory.rs", keywords = ["columns", "FindRetrieveArgs"] },
+  { id = "VT-4", expects = "Column `type` uses `ColumnPaint::ByValue` with `listing::memory_type_hue`", test_file = "src/retrieve.rs", keywords = ["memory_type_hue", "ByValue"] },
+  { id = "VT-5", expects = "Title column uses `ColumnPaint::Alternate` with `TITLE_EVEN`/`TITLE_ODD`", test_file = "src/retrieve.rs", keywords = ["Alternate", "TITLE_EVEN"] },
+  { id = "VT-6", expects = "UID column uses `ColumnPaint::Fixed` with Cyan", test_file = "src/retrieve.rs", keywords = ["Fixed", "Cyan"] },
+  { id = "VA-1", expects = "`cargo build --workspace` compiles; `just check` passes" },
+  { id = "VA-2", expects = "`cargo test` — all tests pass" },
+  { id = "VA-3", expects = "Table output includes header row and comfy-table `│` separators" },
+]
+specs = []
+requirements = []

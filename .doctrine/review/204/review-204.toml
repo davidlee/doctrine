@@ -1,0 +1,115 @@
+id    = 204
+slug  = "inquisition-on-sl-184-rename-memory-find-search-shared-listing-spine"
+title = "Inquisition on SL-184: Rename memory find → search + shared listing spine"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-184"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "search_columns() has duplicate uid column — 16 elements in a 15-element array"
+detail = """
+Expected: `fn search_columns() -> [Column<Candidate<'_>>; 15]` returns exactly 15 column definitions, one per distinct field — uid, type, status, staleness, trust, severity, spec, title, key, created, updated, weight, verification, lifespan, reviewed.
+
+Observed: The `design.md` §2 body defines the `uid` column TWICE (identical copy-paste), producing 16 entries in a `[Column<Candidate<'_>>; 15]` array literal. The extra uid would be both an array-size mismatch compile error AND a duplicate `name: "uid"` collision in `select_columns()`.
+
+Evidence: `design.md` lines in the `search_columns()` fn body show:
+```
+Column { name: "uid", header: "uid", cell: |c| c.memory.uid.clone(), paint: ColumnPaint::Fixed(DynColors::Ansi(AnsiColors::Cyan)) },
+Column { name: "uid", header: "uid", cell: |c| c.memory.uid.clone(), paint: ColumnPaint::Fixed(DynColors::Ansi(AnsiColors::Cyan)) },
+Column { name: "type", ...
+```
+The second `uid` column must be excised. The function body should contain exactly 15 column definitions matching the declared return type."""
+disposition = "fix-now"
+response = """The confessor speaks true. The duplicate `uid` column is a copy-paste taint — excise it from `design.md` §2's `search_columns()` body. The function signature promises 15 columns; the body must deliver exactly 15. Remove the second `uid` entry. Verification: the body's column count must equal 15; `select_columns()` must see exactly one column named `"uid"`."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "type column ByValue closure: extra & on as_str() produces &&str, won't compile"
+detail = """
+Expected: `ColumnPaint::ByValue(|c| listing::memory_type_hue(c.memory.kind.as_str()))` — `as_str()` on `MemoryType` returns `&'static str`, matching `memory_type_hue(&str)`. This is the pattern proven by the backlog surface: `backlog_kind_hue(i.kind.as_str())` (no extra `&`).
+
+Observed: The design writes `&c.memory.kind.as_str()` — the extra `&` on the already-referenced return of `as_str()` produces `&&str`, which Rust will not coerce to `&str` for the function argument. This is a compile error.
+
+Evidence: `design.md` §2, type column definition:
+```
+paint: ColumnPaint::ByValue(|c| listing::memory_type_hue(&c.memory.kind.as_str())),
+```
+Contrast with `status` column (correct):
+```
+paint: ColumnPaint::ByValue(|c| listing::status_hue(c.memory.status.as_str())),
+```
+And the backlog precedent in `src/backlog.rs`:
+```
+paint: listing::ColumnPaint::ByValue(|i| listing::backlog_kind_hue(i.kind.as_str())),
+```
+
+The fix is mechanical: remove the `&` before `c.memory.kind.as_str()`."""
+disposition = "fix-now"
+response = "The type-column paint closure carries an extra `&` that Rust will reject. The `memory_type_hue` function expects `&str`; `c.memory.kind.as_str()` already returns `&'static str`, so the outer `&` produces `&&str` — a type mismatch. The fix: remove the `&` before `c.memory.kind.as_str()`, matching the `status` column precedent and the backlog surface pattern. Penance: `s/&c.memory.kind.as_str()/c.memory.kind.as_str()/` in `design.md` §2, type column definition."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "IMP-220 and design disagree on deprecation behaviour; discrepancy not reconciled"
+detail = """
+IMP-220 (the originating backlog item) states: "Keep `memory find` as a hidden alias (deprecated, prints a redirect notice to stderr)."
+
+The design overrides this: "Silent clap alias — no deprecation stderr notice; simplest path." (design.md §1, under "Deprecation alias").
+
+The design is the authoritative artifact per ADR-003 (design locks before plan). However, the design does not reference or explicitly reconcile the IMP-220 text it overrides — it simply states the decision. This is a traceability gap: a future reader reconciling IMP-220 against SL-184 would find an unresolved discrepancy.
+
+The silent clap alias is the correct approach (simpler, avoids stderr noise for users who type `find` out of habit), but the design should either cite IMP-220 and explain the override, or IMP-220 should be updated to reflect the resolved decision."""
+disposition = "follow-up"
+response = 'The design is the authority over the backlog item — ADR-003 says design locks before plan. The silent clap alias is the correct choice. However, the design should cite IMP-220 and note the override explicitly in its decision log. Penance: add a sentence to `design.md` §1 under "Deprecation alias" referencing IMP-220 and stating the override rationale. Update IMP-220 to reflect the resolved decision (silent alias) to close the traceability gap.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "MCP tool descriptions for memory_retrieve, memory_show, memory_list still reference memory_find — not in rename scope"
+detail = """
+Expected: All references to `memory_find` in MCP tool descriptions are updated to `memory_search` as part of the rename surface.
+
+Observed: The design's rename table covers the tool definition, handler dispatch, and onboard mapping table for `memory_find` → `memory_search`. However, three sibling tool descriptions carry cross-references in prose that are not explicitly scoped:
+
+- `memory_retrieve` (tools.rs:217): "Use after `memory_find` identified relevant candidates."
+- `memory_show` (tools.rs:240): "Use only after selecting an exact uid via `memory_find`."
+- `memory_list` (tools.rs:254): "Prefer scoped `memory_find` for targeted discovery."
+
+These would become stale after the rename — the tool `memory_find` no longer exists, but the descriptions still instruct users to use it. The plan's EX-3 covers "MCP tool `memory_find` → `memory_search` (def + handler dispatch + onboard table)" but omits these description texts.
+
+The fix is mechanical: s/`memory_find`/`memory_search`/ in these three description strings. Add a line to the design's rename table for "sibling tool description prose references" or expand EX-3."""
+disposition = "fix-now"
+response = """The cross-reference prose in `memory_retrieve`, `memory_show`, and `memory_list` descriptions will become stale after the rename. These are stringly references, not structural — they won't break compilation, but they will mislead MCP consumers. Penance: add a line to the design's rename table for these three description strings, and expand PHASE-01 exit criterion EX-3 to cover "def + handler dispatch + onboard table + sibling tool description prose references." The fix itself is a mechanical s/`memory_find`/`memory_search`/ in three description strings."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "--columns flag bleeds into retrieve --help; UX inconsistency acknowledged but unmitigated"
+detail = """
+Expected: Either `--columns` does not appear in `retrieve --help` (separate args struct), or its inertness is documented in the flag's help text.
+
+Observed: The design adds `--columns` to the shared `FindRetrieveArgs` struct. Since `retrieve` also uses this struct, `doctrine memory retrieve --help` will display `--columns` — a flag that `retrieve` silently ignores. The design acknowledges this as "adversarial finding #3" with the note "acceptable per scope" but provides no decision rationale or mitigation.
+
+The flag's help text should at minimum clarify its scope (e.g., "Column projection for search table output (ignored by retrieve)") to prevent user confusion. Better: a separate `FindSearchArgs` struct or `#[arg(hide = true)]` if clap's flatten model supports it.
+
+Precedent: no other shared arg struct in the codebase has a surface-specific-only flag that bleeds into sibling surfaces."""
+disposition = "tolerated"
+response = 'The `--columns` bleed is a known, documented tradeoff — the design explicitly acknowledges it as adversarial finding #3. The cost of a separate args struct (code duplication, breaking the shared scope/filter contract between search and retrieve) outweighs the UX papercut of an inert flag in `retrieve --help`. However, mitigation is cheap: add help text to the `columns` field clarifying its scope (`#[arg(long, help = "Column projection for search table output (ignored by retrieve)")]`). This costs nothing and prevents user confusion. Tolerate the architectural tradeoff; add the help text.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
