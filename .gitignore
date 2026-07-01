@@ -1,14 +1,12 @@
 # use flake:
-.direnv
-.envrc
-.claude
-.agents
-.pi
-.codex
-.dirge
-.mcp.json
-
-doctrine.toml
+/.direnv
+/.envrc
+/.claude
+/.agents
+/.pi
+/.codex
+/.dirge
+/.mcp.json
 
 *.tmp
 *.temp
@@ -71,4 +69,4 @@ handover.md
 
 web/map/dist/
 web/map/node_modules/
-.harness/
+/.harness/
