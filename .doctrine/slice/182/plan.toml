@@ -167,35 +167,56 @@ requirements = []
 # ──────────────────────────────────────────────────────────────────────────────
 [[phase]]
 id        = "PHASE-05"
-name      = "Funnel convergence — SubagentStop capture & dispatch integration"
+name      = "Funnel convergence — symmetric live-import (worktree import --from-worktree)"
+# AMENDED 2026-07-01 (design §10 PHASE-05 amendment + RV-205 inquisition). The
+# teardown premise was disproved by live probe: with create-fork as the
+# WorktreeCreate hook and no WorktreeRemove hook, the worker isolation:worktree
+# tree PERSISTS on disk post-return, diff intact. So the funnel imports the LIVE
+# tree — no SubagentStop capture, no correlator (the Agent footer hands worktreePath
+# per-return, PROVEN: mem_019efe28 P2, wtc-cwd probe 2026-06-25). The capture
+# apparatus (T1–T4) is retired; T2 gather + T5 apply refactor into the live verb.
+# Criteria ids are immutable: EN-1 / EX-1 / EX-2 / VT-1 are RETIRED-in-place (kept
+# for traceability, superseded by the appended EX-5..EX-7 / VT-3..VT-5); EX-3 / VA-1
+# / VH-1 are AMENDED to the live-import funnel; EX-4 / VT-2 survive unchanged.
 objective = """
 Close objective 5: ro-`.git` removes the worker's self-commit, so the claude \
-/dispatch funnel converges onto a captured working-tree-diff. Land the doctrine \
-SubagentStop capture hook (blocking-capable, awaited — RV-201 F-2) that captures \
-`git -C <worktree> diff` + untracked adds to a patch OUTSIDE the worktree before \
-allowing the stop, correlating the worktree by the PHASE-01-proven correlator \
-(no worktree_path on SubagentStop — RV-202); WorktreeRemove demoted to best-effort \
-cleanup. Add the SubagentStop entry to hooks.json (templated, PHASE-03). Edit \
-dispatch-agent/SKILL.md: import source = the captured patch against B (not B..S); \
-relax the single-commit delta-check on this arm; verify-worker adjusts. Resolve \
-OQ-1 (delta-check location: skill-orchestration vs src/dispatch.rs) and scope the \
-touch. E2E claude /dispatch with one jailed worker is the riskiest leg.
+/dispatch funnel converges onto the worker's LIVE working-tree diff. The tree \
+persists on disk post-return (INV-6) and the Agent footer hands its worktreePath \
+per-return (proven, mem_019efe28 P2), so the orchestrator: reads worktreePath → \
+verify-worker --dir (identity/base belt on the live tree, unchanged Rust, T7 done) \
+→ worktree import --from-worktree <dir> --base B (live gather + unchanged \
+classify_import belt + git apply --index) → git worktree remove --force IFF import \
+succeeded. Refactor: relocate gather_worktree_patch capture.rs → import.rs; feed \
+run_import_patch's apply core live instead of from a file; import router becomes \
+--fork (pi, frozen) XOR --from-worktree (claude); file-based --patch removed. RETIRE \
+the capture apparatus: delete capture.rs, the SubagentStop command + guard \
+classification + hooks.json SubagentStop entry + its install-templating test. \
+Installer asserts NO WorktreeRemove entry ships (F-2/AF-3). Rewrite \
+dispatch-agent/SKILL.md to the 5-step symmetric funnel (reap gated on import success \
+— F-3); light-touch dispatch/SKILL.md. OQ-1 resolved: delta-check is the pure \
+classify_import in import.rs. E2E live claude /dispatch (Fork path) is the riskiest leg.
 """
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01 green on item 2: SubagentStop blocking + tree-intact + worktree-correlation proven (else this slice already aborted to Path C / IDE-024)" },
+  { id = "EN-1", text = "[AMENDED — RETIRES the SubagentStop premise] Footer worktreePath is proven (mem_019efe28 P2) and the worker tree persists post-return (PHASE-05 live probe, 2026-07-01, INV-6) — so the funnel imports the LIVE tree; no SubagentStop blocking/correlator proof is required" },
   { id = "EN-2", text = "PHASE-03 + PHASE-04 green: the jail and policy surface are installed and enforcing" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "The SubagentStop hook captures the worker's worktree diff (tracked + untracked) to a patch outside the worktree before the stop is allowed; WorktreeRemove never gates the funnel (demoted to cleanup)" },
-  { id = "EX-2", text = "The hook correlates to the correct worktree via the PHASE-01-proven correlator (agent_id→agent-<id>→provision-set, or the proven fallback)" },
-  { id = "EX-3", text = "dispatch-agent/SKILL.md import = the captured patch against B; the B..S single-commit delta-check is relaxed on the claude arm; verify-worker adjusts; OQ-1 resolved (delta-check location named, touch scoped)" },
-  { id = "EX-4", text = "Behaviour-preservation: existing worktree/dispatch suites stay green unchanged" },
+  { id = "EX-1", text = "[RETIRED @ amendment — superseded by EX-7] (was: the SubagentStop hook captures the worker's worktree diff to a patch outside the worktree before the stop is allowed). Retired: no SubagentStop capture; the tree persists and is imported live" },
+  { id = "EX-2", text = "[RETIRED @ amendment — superseded by EX-5] (was: the hook correlates to the correct worktree via the PHASE-01 correlator). Retired: the Agent footer hands worktreePath per-return (mem_019efe28 P2), no correlator" },
+  { id = "EX-3", text = "[AMENDED @ live-import] dispatch-agent/SKILL.md drives the 5-step symmetric funnel (read footer worktreePath → verify-worker --dir → import --from-worktree → reap iff import ok); the B..S single-commit check reads vacuously on the claude arm; OQ-1 RESOLVED (delta-check = pure classify_import in src/worktree/import.rs)" },
+  { id = "EX-4", text = "Behaviour-preservation: existing worktree/dispatch suites stay green unchanged; classify_import pure core UNMOVED (EX-4 behaviour-frozen)" },
+  { id = "EX-5", text = "worktree import --from-worktree <dir> --base B exists: gathers the live worker diff (tracked via `diff HEAD` core.quotePath=false/--no-renames + untracked via index-free `--no-index /dev/null`), runs the UNCHANGED classify_import belt, applies with `git apply --index`, non-committing. Router = --fork XOR --from-worktree; file-based --patch removed. gather relocated capture.rs → import.rs (T2's tested code survives, moved)" },
+  { id = "EX-6", text = "The reap is gated on import success (F-3): `git worktree remove --force` fires ONLY after import --from-worktree exits 0; on import failure (belt reject / apply error) the funnel HALTS and LEAVES the tree (diagnostic), never --force-reaps the sole copy of an unimported delta" },
+  { id = "EX-7", text = "Capture apparatus retired: capture.rs deleted, SubagentStop command + guard classification + hooks.json SubagentStop entry + its install-templating test removed. Installer asserts NO WorktreeRemove entry exists in the materialized hooks.json (F-2/AF-3); create-fork/WorktreeCreate unchanged" },
 ]
 verification = [
-  { id = "VT-1", expects = "SubagentStop capture: worker diff (tracked + untracked) lands in an outside-the-worktree patch before stop; correlator resolves the worktree (module home decided at PHASE-05 phase-plan; capture.rs is the intended default)", test_file = "src/worktree/capture.rs", keywords = ["capture", "diff"] },
-  { id = "VT-2", expects = "behaviour-preservation: existing worktree/dispatch suites green unchanged", test_file = "src/worktree/create.rs", keywords = ["test"] },
-  { id = "VA-1", expects = "Agent confirms dispatch-agent/SKILL.md imports the captured patch, relaxes the B..S delta-check on the claude arm, and OQ-1 (delta-check location) is resolved with the touch scoped" },
-  { id = "VH-1", expects = "Human accepts a live claude /dispatch E2E with one jailed worker: escape vectors denied + canaries intact + funnel completes green via captured-patch import (covers OQ-2 end-to-end)" },
+  { id = "VT-1", expects = "[RETIRED @ amendment — superseded by VT-3] (was: SubagentStop capture writes the worker diff to an outside-the-worktree patch). Retired with capture.rs", test_file = "src/worktree/import.rs", keywords = ["from_worktree"] },
+  { id = "VT-2", expects = "behaviour-preservation: existing worktree/dispatch suites green unchanged; classify_import pure core unmoved", test_file = "src/worktree/import.rs", keywords = ["classify_import"] },
+  { id = "VT-3", expects = "import --from-worktree: gathers live tracked+untracked diff and applies onto the coord tree via the unchanged classify_import belt + git apply --index (the relocated gather_worktree_patch)", test_file = "src/worktree/import.rs", keywords = ["from_worktree", "classify_import", "untracked"] },
+  { id = "VT-4", expects = "import --from-worktree FAILS CLOSED (nonzero) on a belt violation (.doctrine/.claude reject / head≠B / apply reject), pinning the orchestrator's halt-no-reap gate (F-3) — reap is `&&`-gated on this exit code in the SKILL.md funnel", test_file = "src/worktree/import.rs", keywords = ["from_worktree", "reject"] },
+  { id = "VT-5", expects = "install asserts the materialized plugin hooks.json ships NO WorktreeRemove entry (F-2/AF-3), and the SubagentStop entry is gone from the templated set", test_file = "src/skills.rs", keywords = ["WorktreeRemove"] },
+  { id = "VA-1", expects = "[AMENDED @ live-import] Agent confirms dispatch-agent/SKILL.md drives the 5-step symmetric funnel (footer worktreePath → verify-worker --dir → import --from-worktree → reap iff ok), the B..S check reads vacuously, and OQ-1 is resolved (classify_import in import.rs) with the touch scoped" },
+  { id = "VH-1", expects = "[AMENDED @ live-import] Human accepts a live claude /dispatch E2E on the FORK path with one jailed worker: escape vectors denied + canaries intact + tree persists + funnel completes green via `import --from-worktree` live import + orchestrator reap (confirms the Fork-path persistence + branch-case footer, §5.5 ASM; covers OQ-2 end-to-end)" },
 ]
 specs        = []
 requirements = []

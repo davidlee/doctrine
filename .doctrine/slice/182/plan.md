@@ -22,7 +22,11 @@ The five phases map onto the slice objectives:
 - **PHASE-03** — the `pretooluse` shell, registration, and fail-closed install —
   objectives 1 + 2's enforcement + objective 4.
 - **PHASE-04** — the per-arming policy surface — objective 3.
-- **PHASE-05** — funnel convergence via `SubagentStop` capture — objective 5.
+- **PHASE-05** — funnel convergence via symmetric live-import
+  (`worktree import --from-worktree`) — objective 5.
+  **AMENDED 2026-07-01** (design §10 PHASE-05 amendment + RV-205 inquisition): the
+  `SubagentStop` capture design was retired after a live probe disproved its teardown
+  premise. See "Why funnel convergence is last" below.
 
 ## Sequencing & Rationale
 
@@ -69,15 +73,30 @@ the spawn handshake: `arm-spawn` writes `jail.toml` beside `base` in one arming 
 learns at spawn. Absence ⇒ the strictest floor, so the wall holds even with no
 declared policy.
 
-**Why funnel convergence is last (PHASE-05) and riskiest.** Confinement's
-*consequence* — ro-`.git` kills the worker's self-commit — only bites once the jail
-is actually enforcing (PHASE-03/04). Convergence onto a captured working-tree-diff
-depends on the PHASE-01 proof that `SubagentStop` is blocking, observes the tree
-intact, AND correlates to the right worktree (the RV-202 gap). The E2E leg (live
-claude `/dispatch`, one jailed worker, escape vectors denied + funnel green) is the
-VH acceptance and the slice's tallest verification. OQ-1 (delta-check location:
-skill-orchestration vs `src/dispatch.rs`) is resolved here, where the touch is
-concrete.
+**Why funnel convergence is last (PHASE-05) and riskiest — AMENDED to live-import.**
+Confinement's *consequence* — ro-`.git` kills the worker's self-commit — only bites
+once the jail is actually enforcing (PHASE-03/04). The funnel converges onto the
+worker's **live** working-tree diff. The original design routed this through a
+`SubagentStop` capture hook on the assumption that the harness tears the worker
+worktree down on subagent finish; a PHASE-05 live probe (2026-07-01) **disproved
+that premise** — with `create-fork` as the `WorktreeCreate` hook and no
+`WorktreeRemove` hook, the tree **persists on disk** post-return, diff intact
+(INV-6), and the Agent footer hands its `worktreePath` per-return (proven,
+`mem_019efe28` P2). So the orchestrator imports the **live** tree directly:
+read footer `worktreePath` → `verify-worker --dir` (identity/base belt, unchanged
+Rust) → `worktree import --from-worktree` (relocated gather + unchanged
+`classify_import` belt + `git apply --index`) → `git worktree remove --force` **iff
+import succeeded** (F-3). No capture, no correlator, no teardown race. The capture
+apparatus (`capture.rs`, `SubagentStop` command/guard/hook entry, file-based
+`--patch`) is **retired** (git history is the archive). The E2E leg (live claude
+`/dispatch` on the **Fork** path, one jailed worker, escape vectors denied + tree
+persists + funnel green via `--from-worktree`) is the VH acceptance and the slice's
+tallest verification — it also confirms the Fork-path persistence + branch-case
+footer (§5.5 ASM). OQ-1 is **resolved**: the delta-check is the pure
+`classify_import` in `src/worktree/import.rs` (not `src/dispatch.rs`). The RV-205
+inquisition hardened this: INV-6 two-boundary enforcement (install-time no-
+`WorktreeRemove` assert + runtime `verify-worker` absence-catch), reap gated on
+import success, Fork-path ASM grounded in hook-presence.
 
 **Dependency chain (linear):** PHASE-01 → PHASE-02 → PHASE-03 → PHASE-04 →
 PHASE-05. Each phase's EN criteria name its upstream green. PHASE-01 can abort the
@@ -90,9 +109,11 @@ point of putting it first.
   `WorktreeCommand::Pretooluse` mirrors `CreateFork`. The `create-fork` provision
   step is net-new beside the existing `run_provision`/`write_marker`
   (`fork.rs`/`marker.rs`). The install templating modifies the existing
-  `install_hooks_plugin_for_claude` (`src/skills.rs:1024`). The two PreToolUse +
-  one SubagentStop entries are net-new in `plugins/doctrine/hooks/hooks.json`
-  (today: SessionStart + WorktreeCreate only).
+  `install_hooks_plugin_for_claude` (`src/skills.rs:1024`). The two PreToolUse
+  entries are net-new in `plugins/doctrine/hooks/hooks.json` (today: SessionStart +
+  WorktreeCreate only). **AMENDED:** the `SubagentStop` entry is NOT added (capture
+  retired); PHASE-05 instead REMOVES it (the T1–T4 landings are reverted) and asserts
+  no `WorktreeRemove` entry ever ships (F-2/AF-3).
 - **Behaviour-preservation gate.** PHASE-05 EX-4 / VT-2: the existing
   worktree/dispatch suites are the proof that shared machinery (create-fork,
   dispatch funnel) stays green; they must pass unchanged.
@@ -124,11 +145,11 @@ loose):
   assigns "policy-file read" to the shell. Resolution: PHASE-02 tests the **pure**
   `JailPolicy` parse / Default / `validate_policy`; the disk read is wired in the
   shell (PHASE-03/04). VT-3 + PHASE-04 EN-2 reworded accordingly.
-- **SubagentStop capture module home is unspecified.** §5.1's System Model names
-  only `jail.rs`/`pretooluse.rs`/`shared.rs`; the capture hook (§5.4) has no module
-  placement and its subcommand name is unstated. Defaulted to `src/worktree/capture.rs`
-  (capture is a worktree subcommand, like `create-fork`); the home + subcommand name
-  are a **PHASE-05 phase-plan decision** (PHASE-05 VT-1 notes this).
+- **SubagentStop capture module home is unspecified.** ~~Defaulted to
+  `src/worktree/capture.rs`.~~ **MOOT @ amendment (2026-07-01):** the capture hook is
+  retired; `capture.rs` is deleted in the amended PHASE-05. The live-import gather
+  (`gather_worktree_patch`) relocates into `src/worktree/import.rs` behind the
+  `--from-worktree` verb (design §5.4 D-import-verb).
 - **Path-C abort is a slice exit, not a re-plan.** PHASE-01 EX-2 can refute Path L
   (`SubagentStop` unworkable: not blocking, tree gone, or no correlator). That abort
   **stops this slice and hands the funnel to IDE-024 (Path C)** — it does not spawn
