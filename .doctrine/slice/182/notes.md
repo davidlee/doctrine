@@ -385,3 +385,69 @@ Fixed as owner: swap to runtime `test_support::repo_root().join(...)`
 (the guard's mandated form). Test-only, behaviour-identical. Guard now green.
 Cross-slice ownership stayed clean because SL-182's agent made the fix.
 Audit: fold into VT-7 conformance evidence.
+
+---
+
+## PHASE-04 — Per-arming policy provision (objective 3) COMPLETE (2026-07-01)
+
+All three write/read seams wired end to end; `doctrine check gate` exit 0
+(workspace clippy zero-warn + fmt + tests), `architecture_layering` 17 pass.
+Commits: T1 (Serialize on JailPolicy) · T3 `b42df19c` (create-fork provision) ·
+T4 (arm-spawn declares) · T2/T5 (pretooluse resolve). EX-1..EX-4 met.
+
+### The surface, as built
+- **arm-spawn declares** (`dispatch.rs run_arm_spawn` + `write_arming_jail_policy`):
+  `--extra-rw <path>` (repeatable) + `--no-network` build a `JailPolicy`; written
+  as `spawn/jail.toml` beside `base` in ONE arming step (F-4). A Default policy
+  (no flags) writes nothing and CLEARS any stale `jail.toml` (pairing hygiene —
+  a leftover declaration can never ride a fresh base). D-armcli User-decided.
+- **create-fork provisions** (`create.rs provision_jail_policy`, NET-NEW in
+  `act_on_create` Fork arm): copies `spawn/jail.toml` → `jail/<name>.toml` under
+  the coord root, keyed by the harness worktree name, before the worker's first
+  tool call. Absent declaration ⇒ no-op ⇒ Default. Copy failure with a present
+  declaration ⇒ propagate (create-fork fail-closed, aborts spawn).
+- **pretooluse resolves** (`pretooluse.rs resolve_provisioned_policy`+`load_policy`,
+  replaces the `JailPolicy::default()` seam at :241): keyed `cwd →
+  basename(worktree) → jail/<name>.toml`. Binary outcome — a fully-valid
+  materialised policy, or Default. NEVER denies (objective 3).
+
+### Decisions resolved this phase (as-built deltas — HARVEST AT AUDIT)
+- **D-provision-site = `create.rs:act_on_create`, NOT `fork.rs:fork_core`.** §5.3
+  says "beside run_provision + write_marker" — those calls live in `fork_core`,
+  but that copier is SHARED by non-dispatch fork paths and writes INSIDE the fork;
+  the jail provision is dispatch-create-fork-specific and writes OUTSIDE the fork
+  (coord root, name-keyed). So it lands in `act_on_create` after `fork_core`
+  succeeds. Matches VT-1 `test_file=create.rs`. `fork_core` unchanged.
+  → coherence-flag §5.3 wording at audit.
+- **D-mainroot = strip `.worktrees/<name>`, NOT git-common-dir.** git-common-dir
+  points at the PRIMARY `.git`, not the coord root where `.worktrees/` + the jail
+  dir co-reside. Reader recovers the coord root by stripping the doctrine-OWNED
+  `.worktrees/<name>` layout (create.rs owns both write + read shape; promoted
+  `WORKTREES_SUBDIR` `pub(crate)`). Locating the file is layout-owned, distinct
+  from worktree RECOGNITION/trust (A1, handled by `cwd_is_project_worktree`).
+- **D-materialize-before-validate (security order).** `load_policy` canonicalises
+  each `extra_rw` (R4-canon: existence + symlink-resolve) BEFORE `validate_policy`,
+  so validate judges the paths the leaf actually binds — a symlink cannot resolve
+  past the wall after validation. Any non-canonicalising OR unsafe entry ⇒ floor
+  the WHOLE policy to Default (binary outcome). Closes the PHASE-02 R4-canon
+  boundary obligation with tests (`non_existent_extra_rw_floors_whole_policy`,
+  `unsafe_extra_rw_ancestor_floors`).
+- **D-loadfloor.** Every resolution failure (absent / malformed / non-materialising
+  / validate-reject) folds to Default, never deny — a worker with no valid widening
+  is still fully jailed to its worktree (the safe outcome; EX-3).
+- **D-serialize.** `Serialize` added to `JailPolicy` — one schema source for
+  write (`toml::to_string` in arm-spawn) and read (`from_toml_str` in pretooluse).
+
+### T5 — module dead_code expect KEPT (plan prediction wrong)
+The plan/handover predicted P04 would make the jail.rs module
+`#![cfg_attr(not(test), expect(dead_code))]` unfulfilled (validate_policy +
+from_toml_str were the last not(test)-dead items). Ground truth (clippy): the
+SL-183 `Seatbelt` seam is STILL legitimately dead under not(test), so the module
+expect stays fulfilled. Removing it surfaces those as `-D warnings`. No change.
+
+### Carry-forward / reconcile debt to /audit
+- **MF-3** (unchanged) — plan P02 EX-1 lists `load_policy` in the pure surface;
+  it is shell (reads disk). Fix EX-1 text via `/reconcile`.
+- **§5.2 PolicyError** typed-enum vs design's `Result<_,String>` — coherence-flag.
+- **§5.3 provision-site wording** ("beside run_provision + write_marker" ⇒ implies
+  fork.rs) vs as-built create.rs site — coherence-flag (D-provision-site above).
