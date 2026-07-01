@@ -441,8 +441,10 @@ orchestrator:
    no-WorktreeRemove-hook invariant *enforced*, INV-6);
 3. `worktree import --from-worktree <worktreePath> --base B` — reads the live
    worker diff and applies it onto the coord tree (verb below);
-4. `git worktree remove <worktreePath>` — reaps the spent tree (symmetric with the
-   pi arm's orchestrator-removes).
+4. `git worktree remove --force <worktreePath>` — reaps the spent tree (symmetric
+   with the pi arm's orchestrator-removes). `--force` is required: the tree is
+   **intentionally dirty** (its uncommitted diff was just imported), which plain
+   `git worktree remove` refuses.
 
 No `SubagentStop` hook, **no correlator** (the footer hands the path — the RV-202
 open seam is void), no capture file, no teardown race.
@@ -544,6 +546,10 @@ installed (INV-6).
   **harness-level** decision (a subagent's `isolation:worktree` tree removed or not),
   independent of *which* branch `create-fork` produced ⇒ persistence is assumed
   identical on the Fork path. Pinned at VH-1 (live Fork-path dispatch), not asserted.
+  **Fails safe if wrong:** should the Fork-path tree be torn down after all, the
+  pre-import `verify-worker --dir` fail-closes (`no-worker-head`, INV-6) — the funnel
+  **halts loud**, never imports an empty/absent delta. So the assumption is not
+  load-bearing-without-a-net; a wrong ASM costs a halt, not silent data loss.
 
 ## 6. Open Questions & Unknowns
 
