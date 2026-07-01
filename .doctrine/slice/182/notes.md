@@ -472,8 +472,37 @@ implemented and green; only VH-1 (live Fork-path E2E) remains, human-gated.
   --name-only HEAD` + `ls-files --others`), NOT the old `--patch` arm's `git apply
   --numstat` — mirrors the surviving `--fork` idiom, no temp-file hop. Recorded in
   the phase sheet Progress block.
-- **OUTSTANDING — VH-1 (A9), human-gated:** live claude `/dispatch`, one jailed
-  worker on the **Fork** path — escape vectors denied + canaries intact + tree
-  persists post-return + funnel green via `--from-worktree` + orchestrator reap.
-  Confirms §5.5 Fork-path ASM + branch-case footer end-to-end. Phase stays
-  `in_progress` until accepted.
+- **VH-1 (A9) — ACCEPTED 2026-07-01 (live Fork-path E2E).** Live claude `/dispatch`
+  on SL-182, one jailed Fork-path worker `agent-a29cf7c4dba0cac86` @ B=`9441ca9f`,
+  branch `dispatch/agent-…`. Confirmed live: footer `worktreePath` present on the
+  **armed branch case** (the §5.5 ASM's Passthrough-only gap — now closed); tree
+  persisted post-return (registered, HEAD==B, tracked+untracked delta intact);
+  4/4 write-escapes denied (B1/B2 bash → ro-fs bwrap jail; B3 Write → tool-layer;
+  B4 self-commit → ro-`.git` index); canaries sha256-intact; `import --from-worktree`
+  exit 0 (both paths `--index`-staged); reap fired only after the delta was committed.
+  Throwaway coord tree/branch/canaries torn down; `main` promoted to `edge` as the
+  pre-dispatch ritual. PHASE-05 flipped `completed`; slice → `audit`.
+  - *Standing caveat:* B3 was denied by the **harness** isolation guard, pre-empting
+    doctrine's own Edit|Write pretooluse deny — so doctrine's specific Edit|Write hook
+    firing for a subagent stays inferential (config-verified + INV-4 unit-tested; the
+    load-bearing Bash wall *was* exercised live). Defense-in-depth; tolerated.
+  - *Method note:* VH-1 used a synthetic worker delta (README line + one untracked
+    file) — SL-182 had no phase left to land. Regression capture/diff and
+    `record-boundary` deliberately skipped (synthetic throwaway; a boundary row would
+    pollute the registry). The import belt ran real against the live tree.
+
+## Audit (RV-208, 2026-07-01)
+
+Conformance-mode audit. All 5 phases `completed`, gate green (`doctrine check gate`
+exit 0), `classify_import` unmoved, `run_import_fork` byte-frozen. 3 findings, all
+verified terminal, no blocker:
+- **F-1** (minor, → reconcile): §5.5 Fork-path ASM + branch-case footer now proven
+  live (VH-1) — canon update from "pinned at VH-1" to "proven 2026-07-01".
+- **F-2** (minor, → reconcile): dispatch-agent design-target selector names the
+  derived `.claude/` copy; retarget to authored `plugins/…`; drop undelivered
+  `.claude/skills/dispatch/SKILL.md` target.
+- **F-3** (minor, tolerated): conformance undeclared polluted by SL-184 edge-interleave,
+  not scope creep — 13 real source targets conformant, boundaries intact.
+
+Reconciliation brief (both F-1/F-2 = per-slice design.md edits; no REV) in
+`review/208/review-208.md`. Handed to `/reconcile`.

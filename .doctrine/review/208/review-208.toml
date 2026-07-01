@@ -1,0 +1,43 @@
+id    = 208
+slug  = "audit-sl-182-claude-arm-write-confinement-conformance-vh-1-closure"
+title = "Audit: SL-182 claude-arm write-confinement — conformance + VH-1 closure"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-182"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = '§5.5 Fork-path ASM + branch-case footer: canon reads "unproven, pinned at VH-1" — observed proven live 2026-07-01'
+detail = 'design.md §5.5 ASM (RV-205 F-4) and OQ-2 residual state that Fork-path teardown parity (worktree persistence) and the branch-case footer (`worktreePath` on the armed branch, vs the detached Passthrough probe) are grounded-by-construction but "pinned at VH-1" / "confirmation, not sole support." VH-1 has now been run and human-accepted (this session): live Fork-path worker `agent-a29cf7c4dba0cac86` @ B=9441ca9f returned `worktreePath` in its footer on the armed `dispatch/<name>` branch; the tree persisted post-return (registered, HEAD==B, tracked+untracked delta intact); `import --from-worktree` applied both paths (exit 0); reap fired only after the delta was committed; 4/4 write-escape vectors denied. Canon should be reconciled from "assumption pinned at VH-1" to "proven live 2026-07-01". Positive confirmation — no code defect.'
+disposition = "verified"
+response = 'Observation confirmed: VH-1 was run + human-accepted this session; Fork-path persistence and the armed-branch-case footer are now proven live, not merely grounded-by-construction. Remediation is a design-artifact truth update (not a code change) → delegated to /reconcile via the Reconciliation Brief (per-slice direct edit): design.md §5.5 ASM + §5.4/§6 OQ-2 residual reconciled from "assumption pinned at VH-1 / confirmation-not-sole-support" to "proven live 2026-07-01 (worker agent-a29cf7c4dba0cac86)".'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "design-target selector names derived .claude/ SKILL.md copy; authored edit landed on plugins/ source (undeclared+undelivered pair)"
+detail = '`slice conformance 182`: undeclared `M plugins/doctrine/skills/dispatch-agent/SKILL.md`; undelivered `.claude/skills/dispatch-agent/SKILL.md` AND `.claude/skills/dispatch/SKILL.md`. The A7 deliverable (5-step live-import funnel rewrite) correctly edited the authored source `plugins/doctrine/skills/dispatch-agent/SKILL.md` (the `.claude/` copy is derived/materialized, refuses `git add` "beyond a symbolic link" — noted in phase-05 Progress). The design-target selector points at the derived path, so conformance reports the real authored edit as undeclared and the derived selector as undelivered. Additionally `.claude/skills/dispatch/SKILL.md` is undelivered — the planned "light-touch dispatch/SKILL.md if it names --patch" (A7) was evidently not needed/done. Fix is a design-artifact edit (selector → authored `plugins/...` path; drop or confirm the `dispatch/SKILL.md` target), delegated to reconcile. No code/behaviour defect.'
+disposition = "verified"
+response = "Observation confirmed: the design-target selector for the dispatch-agent funnel names the derived .claude/ copy, not the authored plugins/ source that was correctly edited. Remediation is a design-artifact edit (not code) → delegated to /reconcile via the Reconciliation Brief (per-slice direct edit): update the design-target selector to plugins/doctrine/skills/dispatch-agent/SKILL.md; drop or justify the .claude/skills/dispatch/SKILL.md target (undelivered — the planned light-touch was not needed). The delivered artifact is correct; only the design's declared path is stale."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "conformance undeclared (95) polluted by cross-slice edge-interleave (SL-184 memory work + unrelated .doctrine churn)"
+detail = "`slice conformance 182` undeclared includes source paths that are SL-184 memory work — `src/memory.rs`, `src/retrieve.rs`, `src/mcp_server/tools.rs`, `tests/e2e_mcp_server.rs`, `tests/e2e_memory_sync.rs` — plus a large mass of `.doctrine/` authored churn (SL-184 reviews 204/206/207, backlog 220/221/222, ~15 memory items). Root cause: SL-182 and SL-184 were co-developed on the shared `edge` branch; SL-182's per-phase boundary ranges (e.g. PHASE-05 fa02a50e→9441ca9f) bracket interleaved SL-184 commits, so their touched paths fall inside SL-182's recorded deltas. This is edge-interleave noise, not SL-182 scope creep: all 13 real SL-182 source targets are in the conformant cell; boundaries.toml carries 5 non-degenerate rows; the flip did not clobber PHASE-05. Boundary-hygiene is already captured (mem.pattern.doctrine.phase-complete-clobbers-boundary; IMP-222 doctor gc). No code impact."
+disposition = "tolerated"
+response = 'Accepted drift with rationale: the undeclared cross-slice paths (SL-184 memory work + unrelated .doctrine churn) are an artifact of co-development on the shared edge branch — SL-182 phase boundary ranges bracket interleaved SL-184 commits. Not SL-182 scope creep: all 13 real SL-182 source targets are conformant, boundaries.toml is intact (5 non-degenerate rows, no clobber), and there is zero code/behaviour impact. The systemic boundary-hygiene concern is already captured (mem.pattern.doctrine.phase-complete-clobbers-boundary + IMP-222 doctor gc affordance); no new remediation warranted for this slice. Conformance is a where-to-look signal, and it correctly pointed here — the disposition is "look, understood, benign."'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,9 +1,9 @@
 id = 182
 slug = "claude-confinement-hooks"
 title = "Claude-arm subagent write-confinement hooks"
-status = "started"
+status = "reconcile"
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-07-01"
 tags = []
 
 [relationships]

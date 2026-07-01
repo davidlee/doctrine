@@ -1,0 +1,42 @@
+memory_uid = "mem_019f1cafd8737421a1d7f2c68e56fe44"
+memory_key = "mem.fact.dispatch.claude-fork-path-persist-footer-proven"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Claude-arm dispatch Fork path: worktree persists + footer worktreePath — proven live (VH-1)"
+summary = "SL-182 VH-1: armed-branch Fork-path worker tree persists post-return; footer carries worktreePath; full funnel green."
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "worktree"]
+tags = ["dispatch", "worktree", "claude-arm", "confinement", "sl-182"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "57134fd209435cf70bfa0cd34e0681a233a6c8ed"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c3f1545327cf44f3357e33312ffd4a78fb84b9ba4ec9f065bbdf457d9d00bfff"
+base_commit = "9441ca9f39ac6dddf95a4280f66ec878da36ba0e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
