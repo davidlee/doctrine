@@ -99,3 +99,29 @@ write; both anchor-absent and escape deny.
 STATUS: Tier A GREEN (installed exec correct end-to-end). Registration + D-anchor
 hook-env gate PENDING the one live re-probe above. Do NOT flip PHASE-03 completed
 until L1-L3 run green (or L2's abort/fallback is taken via /consult).
+
+## Tier B — LIVE VERDICT (post /reload-plugins), 2026-07-01
+
+Registration path: `/reload-plugins` (NOT a full restart) sufficed to register the
+plugin PreToolUse walls. Reload reported "6 hooks". Live worktree subagent
+aee3cb988bcd9110e (git-common-dir=/workspace/doctrine/.git — genuine linked wt):
+
+  L1 Bash  `echo VA1-LIVE-BASH-OK` → RAN (output correct), NOT denied.
+           ⇒ Bash wall routed; anchor present (absent ⇒ Reject ⇒ bash denied).
+  L2 in-worktree Write probe-local.txt → SUCCEEDED (allowed).  ← D-ANCHOR DISCRIMINATOR
+           ⇒ CLAUDE_PROJECT_DIR IS present in the HOOK process env (hooks.md:366
+           export confirmed empirically). D-anchor CONFIRMED. Dispatch workers
+           function inside their worktree. No over-confinement; no /consult.
+  L3 escape Write /tmp/va1-live-escape.txt → DENIED
+           "worktree-jail: escapes-worktree: /tmp/va1-live-escape.txt"
+           ⇒ Edit|Write wall live.
+
+honour updatedInput: the Bash wall's allow-decision carries the bwrap-wrapped
+`updatedInput` (Tier A B1 proved emission); PHASE-01 LIVE VERDICT already proved
+the harness APPLIES PreToolUse updatedInput; L3 proves permissionDecision:deny is
+honoured live. Composition ⇒ updatedInput honoured. (The wrap is transparent from
+the subagent side by design — not separately observable there.)
+
+VA-1 VERDICT: GREEN. Both walls fire for a live worktree subagent through the
+INSTALLED plugin hook; the D-anchor empirical gate is CLOSED green. PHASE-03
+exit criteria met. Funnel path: Path L + plugin registration (unchanged from P01).

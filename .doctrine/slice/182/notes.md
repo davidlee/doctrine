@@ -361,10 +361,16 @@ Green: 11 `worktree::pretooluse` + 49 `skills::tests` + 17 architecture_layering
   Fix EX-1 text via `/reconcile` at audit.
 - **§5.2 PolicyError divergence** — typed enum vs design's literal
   `Result<_,String>`; coherence-flag at audit.
-- **VA-1 pending** — install + `/reload-plugins`/restart + live worktree-subagent
-  battery (the PHASE-01 escape battery re-expressed against the INSTALLED plugin
-  hook), confirming both walls fire + honour `updatedInput` AND
-  `CLAUDE_PROJECT_DIR` is present. Then flip PHASE-03 `completed`.
+- **VA-1 — RESOLVED GREEN (2026-07-01).** Install verified (both walls, absolute
+  exec, `|| exit 2`). Tier-A installed-exec battery (8 cases) + Tier-B live
+  registered-hook battery both green — full log at
+  `probe-evidence/logs/pretooluse-installed-battery.log`. Live worktree subagent:
+  in-worktree write ALLOWED (⇒ `CLAUDE_PROJECT_DIR` present in the HOOK env,
+  D-anchor CONFIRMED), escape write DENIED (`worktree-jail: escapes-worktree`),
+  bash ran confined. Both walls fire; updatedInput honoured (Tier-A emission +
+  P01 harness-apply proof). Registration via `/reload-plugins` ALONE (no full
+  restart). D-anchor EMPIRICAL GATE closed green — no /consult, no fallback taken.
+  Funnel: Path L + plugin registration.
 - **jail.rs dead_code expect** — still fulfilled in P03 (validate_policy /
   from_toml_str stay `not(test)`-dead; the shell consumes the rest). P04 makes
   them live ⇒ narrow/remove the module expect then.
