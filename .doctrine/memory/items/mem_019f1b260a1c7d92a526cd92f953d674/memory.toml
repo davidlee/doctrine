@@ -1,0 +1,41 @@
+memory_uid = "mem_019f1b260a1c7d92a526cd92f953d674"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SL-182 per-arming policy: network is a bool, not an enum"
+summary = ""
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["sl-182", "sl-183", "jail", "policy-schema"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "152664dad80f1db6ea76cc43d2cb68b9feb441c0"
+tree = "c5309c244abd4af400e1dca09eec7ced7966c022"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "152664dad80f1db6ea76cc43d2cb68b9feb441c0"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
