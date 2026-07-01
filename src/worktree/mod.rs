@@ -22,6 +22,7 @@ mod shared;
 pub(crate) use shared::is_linked_worktree;
 
 mod allowlist;
+mod capture;
 
 // SL-182 PHASE-02: pure jail core (leaf). Skeleton (T0) → TDD-filled T1..T8;
 // consumed by the PHASE-03 `pretooluse` shell. Dead-code is held by a module-inner
