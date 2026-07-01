@@ -104,9 +104,19 @@ the load-bearing intent: parity, not a mac-shaped special case.
     against the regex — no pre-existing inode, unlike a bwrap bind). And it governs
     **every** write syscall (Bash included), so it is *stronger* than IDE-025's
     claude-arm form (a per-path Edit/Write-tool predicate a `Bash` write can slip).
-  - **bwrap** can approximate via per-file rw-binds of the point-in-time set, but
-    degrades: new-file-under-glob needs parent-dir write (subtree), and
-    atomic-rename saves cross the file's own bind mount → `EXDEV`. Partial, brittle.
+  - **bwrap** can only approximate via per-file rw-binds of the point-in-time set,
+    which degrades: new-file-under-glob needs parent-dir write (subtree), and
+    atomic-rename saves cross the file's own bind mount → `EXDEV`. But that is a
+    *mechanism* artifact (mount-bind = subtree graft, not a path predicate), NOT a
+    hard Linux constraint. Predicate-capable Linux floors exist and are unused:
+    **Landlock** (LSM, kernel ≥5.13 — subtree rules but clean create/rename, no
+    EXDEV) and **seccomp user-notify** (arbitrary glob via a path-resolving
+    supervisor, = what Seatbelt is, assembled in userspace). So Linux allowlist
+    parity for [[IDE-025]] would be a *new floor layer* (Landlock/seccomp beside
+    the bwrap worktree bound), not impossible. Open design unknowns for that path:
+    Landlock availability/min-kernel inside the bwrap jail, and whether
+    nested-bwrap composes with a Landlock ruleset. Out of scope for SL-185
+    (macOS parity only) — recorded so the asymmetry is not misread as fundamental.
   Consequence for THIS slice: the shared seam is not just the per-worker **policy
   schema** but the **profile builder** itself. Design the seatbelt policy this slice
   stamps so a future `mode = "selector-strict"` / `write_allowlist` field can drive
