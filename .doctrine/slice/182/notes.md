@@ -230,3 +230,69 @@ subagents driven via the `Agent` tool. All three probe items GREEN; teardown cle
 
 VA-1: items 1/2/3 each pinned-green; registration path = **plugin**, funnel path =
 **Path L**. Teardown clean (EX-4). Awaiting **VH-1** (User accept) before PHASE-02.
+
+---
+
+## PHASE-02 — pure jail core (`src/worktree/jail.rs`) COMPLETE (2026-07-01)
+
+TDD T1–T8 landed against the T0-locked interface; T9 gate green. 31 in-module
+tests cover VT-1..VT-8. `cargo clippy --bin doctrine` zero-warn; `cargo test
+--test architecture_layering` 17 pass (MixedUmbrella green — leaf tier holds).
+Commit `b67b6299`.
+
+### Adjudicated T0 decisions — as-implemented
+- **Typed `PolicyError` enum** (`IsRoot`/`AncestorOfMainRoot`/`TouchesGit`/
+  `Malformed(String)`) for `validate_policy` + `from_toml_str`. **Diverges from
+  design §5.2's literal `Result<_,String>`** — sanctioned phase-delegated seam
+  decision (T0 decision 3). **RECONCILE DEBT: coherence-flag §5.2 at audit** so
+  the design text matches the impl. Deny *reasons* that ride to the user
+  (`Backend::Deny{reason}`, `Target::Reject`) stay `String` (they ARE the JSON).
+- **`base64` crate added** (`base64 = "0.22"`, workspace + root dep) — leaf-legal
+  external, cf. `worktree::allowlist`→`glob`. Standard alphabet == probe's
+  `base64 -w0`/`-d`.
+- **`Path::starts_with` component-wise** (never string prefix) — VT-2 pins the
+  sibling-prefix guard (`/wt` ⊄ `/wt-evil`).
+- **`#[serde(deny_unknown_fields)]`** — a typo'd key is `Err(Malformed)`, not a
+  silent fall-through to the permissive Default floor (VT-3 unknown-field case).
+
+### Decisions resolved this phase
+- **D-parity-source = extract-at-test-time (token-filter).** `pi_spawn_core_tokens`
+  reads `scripts/pi-spawn-confined.sh` at test time, strips comment lines, splices
+  `\`-continuations, takes tokens between `bwrap` and `pi`, and filters pi-specific
+  groups (`--bind <…/.pi> <…/.pi>`, `--setenv NAME VAL`). A core-flag edit to the
+  script breaks VT-7 loudly (R2 mitigated). Line-slice rejected (handover/plan
+  disagreed on the range; the pi bind interleaves the core flags).
+- **D-opaque-exec-test = hermetic `sh -c`.** VT-5 assembles the wrap, runs it via
+  `sh -c`, and asserts stdout. `env P=<space+quote path>` threads the tricky value
+  through argv single-quote-escaping; the decoded `orig_cmd` echoes `$P` back ⇒
+  round-trip AND execution proven in one shot. Host has coreutils (no skip needed).
+
+### SL-183 seam-gap — RESERVED (load-bearing)
+`Backend::Seatbelt(ResolvedMac)` (was a unit variant) is the **additive data
+channel**: `select_jailer` threads `ResolvedMac` into the `Seatbelt` jailer; the
+macOS `wrap_argv` body is deferred (`unimplemented!("SL-183")`, unreachable on
+Linux). `ResolvedMac` is an empty `Default` struct today — SL-183 populates the
+fields (getconf DUTMP, TMPDIR, materialized profile path) and fills `wrap_argv`
+with **no SL-182 signature refactor** (OQ-mac3 satisfied). Field-level
+`#[cfg_attr(test, expect(dead_code, ...))]` self-clears when SL-183 reads it.
+
+### Boundary obligations carried forward (do NOT lose)
+- **R4-canon → PHASE-03/04.** The leaf trusts every path arrives shell-
+  canonicalized (symlink-resolved, absolute) and each `extra_rw` **materialized**
+  (bind-source existence, TOCTOU-safe). Security-load-bearing; no leaf test can
+  catch a bypass. PHASE-03 (`decide_write` `real`) + PHASE-04 (`extra_rw`
+  provision) MUST carry boundary tests asserting canonicalization + materialization
+  before the leaf is called.
+- **MF-3 reconcile debt.** plan.toml PHASE-02 **EX-1 lists `load_policy`** in the
+  pure surface, but `load_policy` reads disk (shell-owned) and is correctly ABSENT
+  (leaf owns only `from_toml_str`). EX-1 unsatisfiable as written by a pure leaf.
+  plan.toml is authored/locked ⇒ correct EX-1 text (`load_policy`→`from_toml_str`)
+  via `/reconcile` at audit; do NOT silently edit.
+
+### Lint note (dead_code expect topology)
+The module carries `#![cfg_attr(not(test), expect(dead_code, ...))]` — the pure
+surface has no `not(test)` consumer until PHASE-03. Under `test` the VT suite
+makes the surface live, so the module expect is `not(test)`-scoped; the lone
+still-dead item under `test` (the reserved `Seatbelt.resolved` field) carries its
+own `#[cfg_attr(test, expect(dead_code))]`. Both expectations verified fulfilled
+against ground truth (`cargo test` + `cargo clippy --bin doctrine`), not the LSP.
