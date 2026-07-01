@@ -2,11 +2,11 @@ memory_uid = "mem_019ec65e469073c3acb27009eb6dc1b7"
 memory_key = "mem.pattern.dispatch.worktree-import-corrupt-patch-use-checkout"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
-title = "doctrine worktree import corrupts the patch under rtk; use the checkout-import substitute"
-summary = "doctrine worktree import fails 'corrupt patch at <stdin>:N' in the rtk env; checkout-import the net diff after manual belt checks"
+status = "archived"
+title = "[rtk uninstalled] doctrine worktree import corrupts the patch under rtk; use the checkout-import substitute"
+summary = "OBSOLETE: rtk is no longer installed. This memory documented agent Bash-call workarounds (NOT in-process subprocess behaviour). doctrine worktree import failed under rtk. None of this applies now."
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-07-01"
 
 [scope]
 paths = []

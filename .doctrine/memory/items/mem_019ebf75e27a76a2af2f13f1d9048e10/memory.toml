@@ -2,11 +2,11 @@ memory_uid = "mem_019ebf75e27a76a2af2f13f1d9048e10"
 memory_key = "mem.pattern.dispatch.rtk-git-diff-stat-use-checkout-import"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
-title = "Dispatch import under rtk: git diff is stat-proxied, use git checkout to import"
-summary = "rtk proxies git diff to a stat summary — pipe to git apply fails; import disjoint worker deltas via git checkout S -- files (or rtk proxy git diff for a real patch)"
+status = "archived"
+title = "[rtk uninstalled] Dispatch import under rtk: git diff is stat-proxied, use git checkout to import"
+summary = "OBSOLETE: rtk is no longer installed. This memory documented agent Bash-call workarounds (NOT in-process subprocess behaviour). rtk proxied git diff to a stat summary. None of this applies now."
 created = "2026-06-13"
-updated = "2026-06-13"
+updated = "2026-07-01"
 
 [scope]
 paths = []

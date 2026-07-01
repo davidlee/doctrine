@@ -2,11 +2,11 @@ memory_uid = "mem_019ec4402638795284634fb30727805b"
 memory_key = "mem.pattern.tooling.git-cat-file-e-exit-masked-use-ls-tree"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
-title = "git cat-file -e exit code can false-positive under the rtk hook; use ls-tree for existence"
-summary = "git cat-file -e exit code unreliable under rtk hook — use git ls-tree --name-only for existence checks"
+status = "archived"
+title = "[rtk uninstalled] git cat-file -e exit code can false-positive under the rtk hook; use ls-tree for existence"
+summary = "OBSOLETE: rtk is no longer installed. This memory documented agent Bash-call workarounds (NOT in-process subprocess behaviour). git cat-file -e exit code was unreliable under rtk. None of this applies now."
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-07-01"
 
 [scope]
 paths = []

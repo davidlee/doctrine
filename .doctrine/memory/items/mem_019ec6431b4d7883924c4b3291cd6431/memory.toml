@@ -2,11 +2,11 @@ memory_uid = "mem_019ec6431b4d7883924c4b3291cd6431"
 memory_key = "mem.pattern.dispatch.rtk-masks-git-plumbing-during-funnel-reanchor"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
-title = "rtk masks git plumbing — funnel re-anchor proofs must bypass via rtk proxy git, checkout-import unsafe under real overlap"
-summary = "rtk hook masks git diff/log/rev-parse/ls-tree outputs; funnel re-anchor disjointness proofs must use rtk proxy git, and checkout-import is unsafe under overlap"
+status = "archived"
+title = "[rtk uninstalled] rtk masks git plumbing — funnel re-anchor proofs must bypass via rtk proxy git, checkout-import unsafe under real overlap"
+summary = "OBSOLETE: rtk is no longer installed. This memory documented agent Bash-call workarounds (NOT in-process subprocess behaviour). The rtk hook masked git diff/log/rev-parse/ls-tree outputs. None of this applies now."
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-07-01"
 
 [scope]
 paths = []
