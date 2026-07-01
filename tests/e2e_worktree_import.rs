@@ -62,6 +62,14 @@ fn init_repo(dir: &Path) {
     git(dir, &["init", "-q", "-b", "main"]);
     git(dir, &["config", "user.email", "t@example.com"]);
     git(dir, &["config", "user.name", "Test"]);
+    // Pin excludes to empty (shared with linked worktrees via the common config): the
+    // --from-worktree gather's untracked leg is `ls-files --others --exclude-standard`,
+    // which otherwise honours the HOST's global `core.excludesFile` — commonly ignoring
+    // `.claude/`. Without this, the claude-touch fixture's untracked `.claude/` file is
+    // excluded → empty delta → the wrong ("no delta") halt on such hosts. (Production is
+    // correct: an ignored governance path is safe-by-omission; this only de-flakes the
+    // test's dependence on ambient host ignore state.)
+    git(dir, &["config", "core.excludesFile", "/dev/null"]);
     std::fs::create_dir_all(dir.join(".doctrine")).unwrap();
     std::fs::write(dir.join("a.txt"), "hello").unwrap();
     git(dir, &["add", "."]);
