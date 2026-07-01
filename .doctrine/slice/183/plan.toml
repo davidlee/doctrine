@@ -1,0 +1,168 @@
+# Implementation plan for SL-183 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-183"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable: EN-1 entry, EX-1 exit,
+# and verification by mode — VT-1 test (automated), VA-1 agent check, VH-1 human.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-01 — Confirmation probe (RV-203 F-2/F-3 verification obligation)
+# The base profile is probe-proven (RSK-014 H2 pass 1/2). The DUTMP-deny +
+# anchored-xcrun_db-allow additions and SBPL regex-match semantics are NOT yet
+# probed — this shell probe pins them BEFORE any Rust commits to the profile
+# shape. Disposable (like the discharged H1/H2 probes); NOT SL-182-blocked.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Confirmation probe — final profile + SBPL regex semantics"
+objective = """
+Empirically pin the two design-decided-but-unprobed facts before Rust: (1) the \
+exact final profile — coarse PTMP+DUTMP denies FIRST, WT/TMP/anchored-xcrun_db/RWn \
+allows LAST — preserves the worktree writable, denies /private/tmp and the rest of \
+DARWIN_USER_TEMP_DIR, keeps canaries intact, and lets an xcrun-dependent tool run; \
+(2) SBPL `regex` match semantics — anchoring behaviour and param-in-regex \
+composition — so the anchored `/xcrun_db[^/]*$` pattern matches the observed \
+`xcrun_db-<hash>` family and NOTHING deeper. Disposable shell rig under the RSK-014 \
+probe scratch; results appended to probe-h2-seatbelt/results.md. No Rust.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design LOCKED (SL-183 in `plan`); RV-203 discharged." },
+  { id = "EN-2", text = "macOS host available (probe cannot run in the Linux/bwrap jail, R-mac4)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Final profile proven: PTMP+DUTMP coarse denies precede WT/TMP/xcrun_db/RWn allows; in-wt write succeeds, /private/tmp + non-xcrun_db /var/folders writes denied, all canaries intact." },
+  { id = "EX-2", text = "xcrun-dependent tool (e.g. /usr/bin/python3 or `xcrun --find`) runs WITHOUT the xcrun_db denial error under the final profile." },
+  { id = "EX-3", text = "SBPL regex semantics pinned: `/xcrun_db[^/]*$` matches `xcrun_db-<hash>` and is proven NOT to match a deeper subpath (e.g. `.../T/xcrun_db_x/canary` denied); param-in-regex composition behaviour recorded." },
+  { id = "EX-4", text = "Results appended to probe-h2-seatbelt/results.md with the exact profile text and the matrix; RV-203 F-2/F-3 obligations marked discharged." },
+]
+verification = [
+  { id = "VA-1", text = "Agent confirms the probe results.md records the final profile text, the deny/allow matrix, the xcrun-works line, and the regex-boundary vectors — all as pass." },
+  { id = "VH-1", text = "Human runs / spot-checks the probe on a macOS host and accepts the final profile shape before Rust." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-02 — Pure builders (ADR-001 pure layer, RV-203 F-1/F-9)
+# seatbelt_profile + sandbox_exec_argv as PURE functions: resolved inputs in,
+# String/Vec out. Named-constant catalog. Unit-testable in isolation, no I/O.
+# Needs SL-182's jail.rs / select_jailer fork point on disk.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure profile + argv builders + named constants"
+objective = """
+Implement the two PURE builders behind SL-182's Jailer seam: \
+`seatbelt_profile(resolved) -> String` (deny-coarse-first / allow-specific-last \
+ordering per F-A; device-sink set + anchored xcrun_db regex + conditional \
+`(deny network*)` only on network==Deny) and `sandbox_exec_argv(resolved) -> \
+Vec<OsString>` (splices realpath'd -D params, opaque base64 body, TMPDIR=<wt>/.tmp). \
+All profile tokens, -D param names, device-sink set, XCRUN_DB_REGEX, and DENY_NETWORK \
+are single-sourced named constants (STD-001). No realpath/exec/disk in this layer.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 profile shape accepted (the builders emit the proven profile)." },
+  { id = "EN-2", text = "SL-182 landed: src/worktree/jail.rs + the select_jailer capability-as-data fork point exist on disk (needs SL-182)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "seatbelt_profile emits the PHASE-01 profile verbatim (ordering invariant F-A held) for a representative resolved policy." },
+  { id = "EX-2", text = "sandbox_exec_argv emits the sandbox-exec argv with realpath'd -D params, opaque base64 body, and TMPDIR set — as OsString vector, no string-splicing of paths into the profile body." },
+  { id = "EX-3", text = "Both builders are pure (no realpath/getconf/exec/fs) — signatures take resolved inputs; the network deny line appears iff resolved.network == Deny." },
+  { id = "EX-4", text = "All literals single-sourced as named constants; no inline magic strings (STD-001)." },
+]
+verification = [
+  { id = "VT-1", text = "seatbelt_profile ordering + conditional-network + device-sink + xcrun_db-regex unit tests", test_file = "src/worktree/jail.rs", keywords = ["seatbelt_profile", "deny file-write", "xcrun_db", "network"] },
+  { id = "VT-2", text = "sandbox_exec_argv emits realpath'd -D params + base64 body + TMPDIR, pure", test_file = "src/worktree/jail.rs", keywords = ["sandbox_exec_argv", "TMPDIR", "-D"] },
+  { id = "VA-1", text = "Agent confirms no realpath/getconf/exec/std::fs call sites inside either pure builder; all tokens are named consts." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-03 — Impure resolver + fail-closed wiring (RV-203 F-1/F-4/F-6)
+# resolve_inputs (git-derive cwd->worktree, realpath, getconf, mkdir <wt>/.tmp,
+# policy read) — FAIL-CLOSED on all 6 branches; the select_jailer macOS branch.
+# Needs SL-182's jail.rs.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Impure resolve_inputs (fail-closed) + select_jailer macOS branch"
+objective = """
+Implement the thin impure shell `resolve_inputs(cwd, policy) -> Result<Resolved, \
+Deny>`: derive the worktree from cwd via `git rev-parse --show-toplevel` -> realpath \
+-> basename -> per-arming policy lookup; run getconf DARWIN_USER_TEMP_DIR; ensure \
+<wt>/.tmp. Every failure branch (a: cwd not in a git worktree; b: toplevel == main \
+checkout; c: nested repo/submodule basename mismatch; d: ambiguous gitdirs; e: policy \
+missing/unreadable; f: policy malformed / unknown network enum) ⇒ Deny ⇒ the arm \
+emits `deny worktree-subagent Bash`, NEVER a fallback template or pass-through \
+(POL-002, F-B4). Wire the Seatbelt builders into SL-182's select_jailer as the macOS \
+branch — no SL-182 refactor (OQ-mac3). network defaults open only on a VALID policy.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 pure builders green (resolve_inputs feeds them resolved inputs)." },
+  { id = "EN-2", text = "SL-182 landed: select_jailer fork point + per-arming policy schema (extra_rw + network) on disk." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "resolve_inputs derives the worktree from cwd via git (realpath'd toplevel != main checkout), looks up the per-arming policy by basename, ensures <wt>/.tmp, resolves DUTMP via getconf." },
+  { id = "EX-2", text = "All 6 fail-closed branches (a–f) return Deny; the arm emits `deny worktree-subagent Bash` — no fallback path template, no unwrapped pass-through." },
+  { id = "EX-3", text = "select_jailer routes macOS to the Seatbelt builder; SL-182's shared functions (resolve_target/decide_bash/decide_write/pathcheck/opaque_wrap/validate_policy) reused UNCHANGED." },
+  { id = "EX-4", text = "network is a closed enum; a valid policy defaults open (no deny line); a missing/malformed policy ⇒ branch (e)/(f) Deny — never a silent network default." },
+]
+verification = [
+  { id = "VT-1", text = "resolve_inputs fail-closed branch tests — each of a–f yields Deny", test_file = "src/worktree/jail.rs", keywords = ["resolve_inputs", "Deny", "rev-parse", "toplevel"] },
+  { id = "VT-2", text = "select_jailer macOS routing + network closed-enum default-open-on-valid / deny-on-malformed", test_file = "src/worktree/jail.rs", keywords = ["select_jailer", "network", "malformed"] },
+  { id = "VA-1", text = "Agent confirms impurity (git/realpath/getconf/mkdir/fs) lives ONLY in resolve_inputs, not the pure builders; no fallback path template exists on any deny branch." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-04 — Parity + in-situ integration verification
+# Behaviour-preservation (SL-182 suites green), the in-situ containment assertion
+# (mirrors the discharged pass-2), and the degrade contract. Needs a macOS host.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Parity + in-situ containment + degrade-contract verification"
+objective = """
+Prove the arm at parity with the Linux/bwrap arm and green end-to-end: (1) \
+behaviour-preservation — SL-182's reused suites stay green UNCHANGED (the parity \
+proof); (2) in-situ — under a real isolation:worktree subagent on macOS, every \
+external write vector denied by the nested floor, worktree writable, wrapper applied \
+via updatedInput (mirrors the discharged RSK-014 H2 pass 2 criterion); (3) the \
+degrade contract — a simulated nesting-refused / resolve Deny yields `deny \
+worktree-subagent Bash`, never unwrapped pass-through.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 + PHASE-03 green (builders + resolver + wiring complete)." },
+  { id = "EN-2", text = "macOS host available for the in-situ leg (R-mac4)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SL-182's reused-function suites pass UNCHANGED (behaviour-preservation gate)." },
+  { id = "EX-2", text = "In-situ leg: every external vector denied, worktree writable, wrapper confirmed applied via updatedInput under a real macOS isolation:worktree subagent." },
+  { id = "EX-3", text = "Degrade contract asserted: nesting-refused / resolve-Deny ⇒ `deny worktree-subagent Bash`; no unwrapped pass-through path exists." },
+  { id = "EX-4", text = "doctrine check gate green; lint zero warnings." },
+]
+verification = [
+  { id = "VT-1", text = "Behaviour-preservation: SL-182 reused-function suites green unchanged", test_file = "src/worktree/jail.rs", keywords = ["validate_policy", "decide_write", "pathcheck"] },
+  { id = "VA-1", text = "Agent verifies the in-situ containment run (every vector denied, wt writable, updatedInput WRAP) on a macOS host, mirroring the pass-2 matrix." },
+  { id = "VH-1", text = "Human accepts the in-situ + degrade-contract evidence on macOS before slice close." },
+]
+specs        = []
+requirements = []
