@@ -152,3 +152,7 @@ release bump: # readme-index
 # correctness guard; the tree is otherwise clean.
 publish: web-build release-check
   cargo publish --allow-dirty
+
+fake-darwin:
+  cargo check --target aarch64-apple-darwin
+
