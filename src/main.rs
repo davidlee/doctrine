@@ -446,7 +446,8 @@ mod write_class_tests {
     #[test]
     fn memory_search_retrieve_lifespan_flag_parses_on_the_shared_args() {
         let search =
-            Cli::try_parse_from(["doctrine", "memory", "search", "--lifespan", "semantic"]).unwrap();
+            Cli::try_parse_from(["doctrine", "memory", "search", "--lifespan", "semantic"])
+                .unwrap();
         let Command::Memory {
             command: MemoryCommand::Search { args, .. },
         } = search.command

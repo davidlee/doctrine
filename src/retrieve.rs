@@ -837,12 +837,12 @@ fn load_query(
     })
 }
 
-/// `doctrine memory find [--path-scope/--glob/--command/--tag/--query] [--type]
+/// `doctrine memory search [--path-scope/--glob/--command/--tag/--query] [--type]
 /// [--status] [--include-draft] [--format] [--json] [--offset] [--page]
-/// [--limit]`. The find surface over the shared pipeline: `load_query` → `query`
-/// → paginate → render. find applies NO holdback (D8/D17); `base_filter`
+/// [--limit]`. The search surface over the shared pipeline: `load_query` → `query`
+/// → paginate → render. search applies NO holdback (D8/D17); `base_filter`
 /// already excludes quarantined/retracted/superseded/archived (and draft unless
-/// `--include-draft`). It needs no body read (find renders rows, not framed
+/// `--include-draft`). It needs no body read (search renders rows, not framed
 /// bodies).
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_search(
@@ -881,7 +881,10 @@ pub(crate) fn run_search(
     let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
     // Total = all candidates (holdback-exempt for find — D6).
     let total = ranked.len();
-    // Paginate: skip(offset).take(limit).
+    // Paginate: skip(offset).take(limit). The `.min(len)` clamp is load-bearing —
+    // `get(offset..end)` returns None (→ empty) when end > len, so without the clamp
+    // the common `--limit`-unset case (end == usize::MAX) yields no rows. (RV-206 F-5
+    // proposed removing this; reverted — the redundancy claim was wrong.)
     let end = ranked
         .len()
         .min(offset.saturating_add(limit.unwrap_or(usize::MAX)));
@@ -909,7 +912,9 @@ pub(crate) fn run_search(
     parts.push(body);
     // Truncation notice: table mode only, when results are truncated or offset exceeds total.
     if format == crate::listing::Format::Table && shown < total {
-        let page_size = limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT);
+        // No `--limit` on search means "show all"; the effective page size is the
+        // number actually shown, not the retrieve surface's default (F-2, RV-206).
+        let page_size = limit.unwrap_or(shown);
         parts.push(crate::listing::format_truncation_notice(
             shown, total, offset, page_size,
         ));
