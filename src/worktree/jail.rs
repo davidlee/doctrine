@@ -1293,6 +1293,59 @@ mod tests {
         );
     }
 
+    // ---- EX-3 (PHASE-04) · macOS-arm degrade contract, end-to-end -------------
+    // The macOS twin of the bwrap-reason test above. Proves the FULL Seatbelt
+    // resolver→backend→decision chain fails CLOSED: every `resolve_inputs` Deny
+    // branch (the "resolve-Deny" and "nesting-refused" framings both land here as
+    // `Err ⇒ Backend::Deny`) rides through `seatbelt_backend` into a jailed
+    // `decide_bash` as a `Decision::Deny` carrying the macOS reason — NEVER
+    // `WrapBash` (unwrapped-through-a-wrapper) and NEVER `PassThrough`. This is
+    // the unit proof of the degrade posture that pass-2 left un-triggered
+    // (nesting composed, so the contract never fired live).
+    #[test]
+    fn seatbelt_resolve_deny_degrades_to_bash_deny_never_wraps_or_passes() {
+        let target = Target::Jail(pb("/wt"));
+        // One representative per fail-closed family; the malformed branch carries a
+        // detail suffix so we assert the stem, not exact equality, for it.
+        let branches = [
+            ResolveDeny::NotAWorktree,
+            ResolveDeny::IsMainCheckout,
+            ResolveDeny::AmbiguousGitDirs,
+            ResolveDeny::PolicyMissing,
+            ResolveDeny::PolicyMalformed("unknown key `frobnicate`".to_string()),
+        ];
+        for branch in branches {
+            let expected_reason = branch.reason();
+            // resolver Err ⇒ Seatbelt backend degrades to Deny{reason}
+            let backend = seatbelt_backend(Err(branch.clone()));
+            assert_eq!(
+                backend,
+                Backend::Deny {
+                    reason: expected_reason.clone()
+                },
+                "seatbelt_backend must map Err({branch:?}) to Backend::Deny"
+            );
+            // …and a Deny backend in a jailed context denies Bash with that reason,
+            // never wrapping and never passing through.
+            match decide_bash(
+                &target,
+                "echo hi",
+                "greet",
+                &JailPolicy::default(),
+                &backend,
+            ) {
+                Decision::Deny { reason } => assert_eq!(
+                    reason, expected_reason,
+                    "degrade must carry the macOS reason for {branch:?}"
+                ),
+                other => panic!(
+                    "expected Decision::Deny for {branch:?}, got {other:?} \
+                     (fail-open regression: never WrapBash/PassThrough on a degraded arm)"
+                ),
+            }
+        }
+    }
+
     #[test]
     fn decide_write_inside_worktree_passes_escape_denies() {
         let target = Target::Jail(pb("/wt"));

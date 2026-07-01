@@ -183,3 +183,32 @@ PHASE-04. `resolve_inputs`'s getconf/realpath failures currently map to fail-clo
 Denies reusing `NotAWorktree`/`PolicyMissing` reasons (no new a–f branch — the
 enumeration is `cwd`→policy derivation, not host-tool availability). If PHASE-04 wants
 a distinct "sandbox-env-unavailable" reason surfaced, add a variant then.
+
+## PHASE-04 (parity + in-situ + degrade) — progress
+
+### EX-1 / VT-1 — behaviour-preservation gate: SATISFIED
+SL-182's reused-fn suites green UNCHANGED — `validate_policy_*` (5), `decide_write_*`
+(3), `pathcheck_*` (5). Full jail module 62→63 (EX-3 test added, below). git log
+confirms no edit to those fn bodies since PHASE-03 (last jail.rs touches were the
+PHASE-02/03 Seatbelt fork, additive). Parity proof intact.
+
+### EX-3 — degrade contract: SATISFIED (unit)
+New pure test `seatbelt_resolve_deny_degrades_to_bash_deny_never_wraps_or_passes`
+(jail.rs `mod tests`) asserts the FULL macOS chain for all 5 `ResolveDeny` branches:
+`seatbelt_backend(Err) ⇒ Backend::Deny{mac reason}` → `decide_bash(Target::Jail) ⇒
+Decision::Deny{mac reason}`, never `WrapBash`/`PassThrough`. Twin of the pre-existing
+bwrap-reason test (which hand-builds `Backend::Deny`); this one proves the *macOS
+resolver→backend→decision wiring* degrades closed. **Mutation-verified**: forcing
+`seatbelt_backend` Err→`Seatbelt(default)` (fail-open) turns it red — the test has
+teeth. "nesting-refused" and "resolve-Deny" framings both collapse to `Err ⇒ Deny`,
+so one parameterised test discharges both (design §9). Contract un-triggered live
+(pass-2: nesting composed) — this is the posture proof.
+
+### Binary/hook topology resolved (was a session blocker)
+Three `doctrine` binaries existed; confusion was PATH. RESOLVED: stale
+`~/.local/bin/doctrine` removed; `which doctrine` → fresh `~/.cargo/bin/doctrine`
+(Jul 1 19:31). Hook (`.claude/skills/doctrine/hooks/hooks.json`) invokes that same
+fresh `~/.cargo/bin` path by absolute string — it knows `worktree pretooluse` and
+carries `Seatbelt::Jailer::wrap_argv` + profile strings. `.claude/settings.local.json`
+`hooks:{}` empty; the skill hooks.json is the live source. So the EX-2 live in-situ
+leg is genuinely runnable through the real consumer (not just the pass-2 rig).
