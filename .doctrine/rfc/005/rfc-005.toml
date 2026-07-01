@@ -6,7 +6,7 @@ slug = "dispatch-funnel-integrity"
 title = "Dispatch funnel integrity: hazard survey and correctness posture"
 status = "open"
 created = "2026-06-24"
-updated = "2026-06-27"
+updated = "2026-07-01"
 tags = []
 
 [relationships]
@@ -97,4 +97,44 @@ target = "SL-157"
 [[relation]]
 label = "related"
 target = "SL-166"
+
+[[relation]]
+label = "related"
+target = "SL-182"
+
+[[relation]]
+label = "related"
+target = "SL-183"
+
+[[relation]]
+label = "related"
+target = "SL-170"
+
+[[relation]]
+label = "related"
+target = "SL-181"
+
+[[relation]]
+label = "related"
+target = "RSK-014"
+
+[[relation]]
+label = "related"
+target = "IDE-024"
+
+[[relation]]
+label = "related"
+target = "RFC-006"
+
+[[relation]]
+label = "related"
+target = "RFC-012"
+
+[[relation]]
+label = "related"
+target = "IMP-194"
+
+[[relation]]
+label = "related"
+target = "ADR-008"
 
