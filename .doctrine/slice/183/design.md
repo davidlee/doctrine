@@ -4,11 +4,12 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-<!-- STATUS: design RATIFIED, lock pending /inquisition. §§ below carry the
-     RSK-014 H2 probe findings (pass 1 orchestrator + pass 2 in-situ subagent, both
-     DONE — `.doctrine/backlog/risk/014/probe-h2-seatbelt/`). D-mac1..4 RATIFIED with
-     the user 2026-07-01; OQ-mac4 RESOLVED (narrow xcrun_db allow). Remaining before
-     lock: adversarial /inquisition pass → resolve RV → user lock. -->
+<!-- STATUS: design LOCKED 2026-07-01 (slice → plan). §§ below carry the RSK-014 H2
+     probe findings (pass 1 orchestrator + pass 2 in-situ subagent, both DONE —
+     `.doctrine/backlog/risk/014/probe-h2-seatbelt/`). D-mac1..4 RATIFIED; OQ-mac4
+     RESOLVED (anchored xcrun_db allow); RV-203 inquisition discharged (9 findings
+     resolved). Verification obligations carried into /plan: final DUTMP/xcrun_db
+     profile probe + SBPL regex semantics (RV-203 F-2/F-3). -->
 
 ## 1. Design Problem
 

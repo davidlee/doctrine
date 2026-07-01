@@ -1,9 +1,9 @@
 id = 183
 slug = "seatbelt-jail-arm"
 title = "macOS Seatbelt write-confinement arm"
-status = "design"
+status = "plan"
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-07-01"
 tags = []
 
 [relationships]
