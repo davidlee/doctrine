@@ -102,12 +102,18 @@ fn add_worktree_on_branch(root: &Path, path: &Path, branch: &str) {
     );
 }
 
+// SL-182 PHASE-05 T7 (D-verify-worker): this case doubles as the claude /dispatch
+// arm confirmation. On that arm the worker's `.git` is ro (PHASE-03 jail) ⇒ it
+// cannot self-commit ⇒ HEAD stays at B and the delta rides a captured patch, not a
+// fork commit. verify-worker proves worker identity/base only — HEAD==B with no
+// worker commit MUST verify green. No Rust change was required for the claude arm.
 #[test]
 fn stamped_b_based_worker_verifies_ok() {
     let tmp = tempfile::tempdir().unwrap();
     let root = init_repo(tmp.path());
     let base = git(root, &["rev-parse", "HEAD"]);
 
+    // HEAD == B (no worker commit — the ro-`.git` claude arm), stamped, isolated.
     let wt = tmp.path().join("wt-ok");
     add_worktree(root, &wt, &base);
     stamp_marker(&wt);
