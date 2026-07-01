@@ -28,6 +28,7 @@ target = "SL-182"
 
 [[relation]]
 label = "fulfils"
+degree = "partial"
 target = "IMP-045"
 
 [[selector]]
