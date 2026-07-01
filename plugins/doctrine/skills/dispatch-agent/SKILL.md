@@ -65,19 +65,44 @@ isolation: worktree
 prompt: <pre-distilled worker prompt, including the base-guard block above>
 ```
 
-## Post-spawn (pre-funnel gate, claude arm)
-1. Read the Agent return footer for `worktreePath:`.
+## Post-spawn funnel (claude arm) — symmetric live-import
+
+The worker's ro-`.git` blocks its self-commit, so its delta never rides a fork
+commit — it lives in the **worktree**, which **persists** on disk after the Agent
+returns (doctrine ships `create-fork` as the `WorktreeCreate` hook and **no**
+`WorktreeRemove` hook, so the harness does NOT auto-reap; `docs/claude/hooks.md:2442`).
+The orchestrator imports that live tree directly. Five steps, in order:
+
+1. **Footer.** Read the Agent return footer for `worktreePath:`.
    NO footer / no `worktreePath:` ⇒ no isolated tree was created (hook abort or
    fallback-to-main) ⇒ ABORT, do NOT enter the funnel. Re-dispatch, or switch to
    the subprocess arm if the hook is failing.
-2. Derive the worker's identity from `worktreePath` (the normative datum; P2/I3):
+2. **Identity.** Derive from `worktreePath` (the normative datum, live-proven):
    `name = basename(worktreePath)`, `branch = dispatch/<name>`. Do NOT read the
    footer's `worktreeBranch` field — it is `undefined` for the hook-created tree
    (PHASE-04 VA-1, live 2.1.181).
-3. doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <derived branch>
+3. **Verify.** `doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <derived branch>`
    Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base / branch-mismatch.
-   (`--branch` binds dir↔branch — both belts then verify ONE worker state.)
-4. Hand the derived <branch> to the funnel as S.
+   (`--branch` binds dir↔branch — both belts verify ONE worker state. The
+   `no-worker-head` refusal is ALSO the runtime catch if the tree ever went missing —
+   the second boundary behind the install-time no-`WorktreeRemove` assert, RV-205 F-2.)
+4. **Import.** `doctrine worktree import --base <B> --from-worktree <worktreePath>`
+   Gathers the live tracked+untracked delta, runs the `classify_import` belt
+   (`.doctrine/`/`.claude/` reject, HEAD==B, clean coord tree), applies onto `B`
+   NON-committing. This realizes the router funnel's arm-neutral **Import** beat on
+   this arm (the `B..S` single-commit check reads vacuously — a worktree carries no
+   commits). A belt/precond violation exits **nonzero** → the funnel HALTS here.
+5. **Reap — GATED on step 4 exit 0 (F-3).** ONLY after `import` succeeded (and the
+   batch's commit + `record-boundary` have landed) reap the tree:
+   ```
+   doctrine worktree import --base "$B" --from-worktree "$WT" && \
+     <commit + record-boundary> && \
+     git worktree remove --force "$WT"
+   ```
+   The `--force` is required (the tree is intentionally dirty). **On import failure
+   the funnel HALTS and LEAVES the tree on disk** for diagnosis — never `--force`-reap
+   the sole copy of an unimported delta. A parallel batch reaps each tree
+   independently, each gated on its own import.
 
 ## Boundary recording
 After the batch's code commit and before the knowledge commit:
@@ -122,5 +147,10 @@ spawn with a `subagent_type` other than `dispatch-worker`; run `fork` or bwrap h
 **Always:** `arm-spawn --base B` then cd into the spawn dir before the spawn, cd
 back to the coord root after; pin `subagent_type` to `dispatch-worker`; embed the
 base-guard block in the distilled worker prompt; derive `branch` from
-`worktreePath`; run `verify-worker` before `import`; return to the router for the
-funnel cadence.
+`worktreePath`; run `verify-worker` before `import --from-worktree`; `&&`-gate the
+`git worktree remove --force` reap on a clean import exit (a failed import HALTS and
+LEAVES the tree — never `--force`-reap an unimported delta); return to the router for
+the funnel cadence.
+
+**Never:** import from a captured patch file or a fork commit on this arm (retired —
+the delta is the live worktree); reap the worker tree before `import` returns 0.
