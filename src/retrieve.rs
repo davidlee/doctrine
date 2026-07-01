@@ -12,7 +12,7 @@
 //! plus facets (`commands`, `tags`). A memory matches if its scope ADMITS that
 //! location via any dimension; the highest-specificity dimension wins.
 //!
-//! PHASE-04 wires the impure shell (`freeze`/`query`/`run_find`) over this pure
+//! PHASE-04 wires the impure shell (`freeze`/`query`/`run_search`) over this pure
 //! core, so the module is no longer dead — the PHASE-01 `#![expect(dead_code)]`
 //! is retired (its self-clearing condition has arrived).
 
@@ -637,7 +637,7 @@ pub(crate) fn query<'a>(
 /// (B8/D8/D17). `spec` is the matched dimension (`-` for a bare `--query`). Every
 /// free value is `scrub_line`d (F-A10) so a newline cannot forge a row.
 /// Render find results as a human-readable column-aligned table.
-fn format_find_table(cands: &[&Candidate<'_>]) -> String {
+fn format_search_table(cands: &[&Candidate<'_>]) -> String {
     let scrub = |s: &str| crate::memory::scrub_line(s);
     let rows: Vec<[String; 8]> = cands
         .iter()
@@ -685,9 +685,9 @@ fn format_find_table(cands: &[&Candidate<'_>]) -> String {
     }
 }
 
-/// A serde row for `memory find --json`, mirroring the find table columns.
+/// A serde row for `memory search --json`, mirroring the search table columns.
 #[derive(Serialize)]
-struct MemoryFindRow {
+struct MemorySearchRow {
     uid: String,
     #[serde(rename = "type")]
     kind: String,
@@ -699,10 +699,10 @@ struct MemoryFindRow {
     title: String,
 }
 
-impl From<&&Candidate<'_>> for MemoryFindRow {
+impl From<&&Candidate<'_>> for MemorySearchRow {
     fn from(c: &&Candidate<'_>) -> Self {
         let m = c.memory;
-        MemoryFindRow {
+        MemorySearchRow {
             uid: m.uid.clone(),
             kind: m.kind.as_str().to_owned(),
             status: m.status.as_str().to_owned(),
@@ -715,10 +715,10 @@ impl From<&&Candidate<'_>> for MemoryFindRow {
     }
 }
 
-/// Render find results as a JSON envelope: `{ "kind": "memory_find", "rows": […] }`.
-fn format_find_json(cands: &[&Candidate<'_>]) -> Result<String> {
-    let rows: Vec<MemoryFindRow> = cands.iter().map(MemoryFindRow::from).collect();
-    crate::listing::json_envelope("memory_find", &rows)
+/// Render search results as a JSON envelope: `{ "kind": "memory_search", "rows": […] }`.
+fn format_search_json(cands: &[&Candidate<'_>]) -> Result<String> {
+    let rows: Vec<MemorySearchRow> = cands.iter().map(MemorySearchRow::from).collect();
+    crate::listing::json_envelope("memory_search", &rows)
 }
 
 /// The frozen-snapshot bundle the `find`/`retrieve` verbs both stand on. The two
@@ -776,8 +776,9 @@ fn load_query(
 /// `--include-draft`). It needs no body read (find renders rows, not framed
 /// bodies).
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
-pub(crate) fn run_find(
+pub(crate) fn run_search(
     writer: &mut impl Write,
+    _color: bool,
     path: Option<PathBuf>,
     paths: Vec<String>,
     globs: Vec<String>,
@@ -819,8 +820,8 @@ pub(crate) fn run_find(
     let shown = visible.len();
     let mut parts: Vec<String> = Vec::new();
     let body = match format {
-        crate::listing::Format::Table => format_find_table(&visible),
-        crate::listing::Format::Json => format_find_json(&visible)?,
+        crate::listing::Format::Table => format_search_table(&visible),
+        crate::listing::Format::Json => format_search_json(&visible)?,
     };
     parts.push(body);
     // Truncation notice: table mode only, when results are truncated or offset exceeds total.
@@ -963,19 +964,19 @@ pub(crate) fn retrieve_reference(
     Ok(())
 }
 
-/// Structured result from `find_for_mcp` — rows + total, consumed by the
-/// `memory_find` MCP handler which builds the pagination envelope.
+/// Structured result from `search_for_mcp` — rows + total, consumed by the
+/// `memory_search` MCP handler which builds the pagination envelope.
 #[derive(Debug)]
-pub(crate) struct FindForMcp {
+pub(crate) struct SearchForMcp {
     pub(crate) rows: Vec<serde_json::Value>,
     pub(crate) total: usize,
 }
 
-/// Structured find for MCP consumption (design §3). Reuses `load_query` →
+/// Structured search for MCP consumption (design §3). Reuses `load_query` →
 /// `query` — no parallel implementation. Returns ranked rows enriched with
 /// `key` and `held_back_on_retrieve` fields.
 #[expect(clippy::too_many_arguments, reason = "MCP surface fans flags 1:1")]
-pub(crate) fn find_for_mcp(
+pub(crate) fn search_for_mcp(
     path: Option<PathBuf>,
     paths: Vec<String>,
     globs: Vec<String>,
@@ -988,7 +989,7 @@ pub(crate) fn find_for_mcp(
     include_draft: bool,
     offset: usize,
     limit: Option<usize>,
-) -> Result<FindForMcp> {
+) -> Result<SearchForMcp> {
     let loaded = load_query(
         path, paths, globs, commands, tags, lifespan, free_query, type_f, status_f,
     )?;
@@ -1028,7 +1029,7 @@ pub(crate) fn find_for_mcp(
             })
         })
         .collect();
-    Ok(FindForMcp { rows, total })
+    Ok(SearchForMcp { rows, total })
 }
 
 /// A serde row for `memory retrieve --json`.
@@ -2673,7 +2674,7 @@ weight = {weight}
     }
 
     #[test]
-    fn format_find_row_carries_full_uid_and_required_columns() {
+    fn format_search_row_carries_full_uid_and_required_columns() {
         let m = memory(&Fixture {
             paths: &["src/main.rs"],
             trust_level: "low",
@@ -2683,7 +2684,7 @@ weight = {weight}
         });
         let mut c = cand(&m, 0, false, Some(Dimension::Paths));
         c.staleness = Staleness::Unknown;
-        let out = format_find_table(&[&c]);
+        let out = format_search_table(&[&c]);
         // full uid (not a short prefix), the matched dim, and the risk columns.
         assert!(out.contains(UID), "full uid printed");
         assert!(out.contains("paths"), "spec column = matched dim");
@@ -2695,7 +2696,7 @@ weight = {weight}
     }
 
     #[test]
-    fn format_find_scrubs_a_newline_title() {
+    fn format_search_scrubs_a_newline_title() {
         let m = memory(&Fixture {
             title: "real",
             ..Default::default()
@@ -2704,7 +2705,7 @@ weight = {weight}
         let mut m2 = m.clone();
         m2.title = "row1\nforged-row2".to_owned();
         let c = cand(&m2, 0, false, None);
-        let out = format_find_table(&[&c]);
+        let out = format_search_table(&[&c]);
         assert!(
             !out.contains("\nforged-row2"),
             "newline must not forge a row"
@@ -2713,9 +2714,9 @@ weight = {weight}
     }
 
     #[test]
-    fn format_find_empty_is_empty_string() {
+    fn format_search_empty_is_empty_string() {
         let empty: [&Candidate<'_>; 0] = [];
-        assert_eq!(format_find_table(&empty), "");
+        assert_eq!(format_search_table(&empty), "");
     }
 
     // === PHASE-05: the retrieve holdback, floor, and suppress-then-take. =======
@@ -2935,13 +2936,14 @@ weight = {weight}
         root
     }
 
-    /// VT-1: writer-capture — run_find with &mut Vec<u8> writes expected output.
+    /// VT-1: writer-capture — run_search with &mut Vec<u8> writes expected output.
     #[test]
-    fn writer_capture_run_find() {
+    fn writer_capture_run_search() {
         let root = temp_project_with_one_memory();
         let mut buf = Vec::new();
-        run_find(
+        run_search(
             &mut buf,
+            false,
             Some(root.path().to_path_buf()),
             vec![],
             vec![],
@@ -2958,7 +2960,7 @@ weight = {weight}
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
-        assert!(!output.is_empty(), "run_find must write to buffer");
+        assert!(!output.is_empty(), "run_search must write to buffer");
         assert!(
             output.contains("Writer capture test"),
             "output must contain the seeded memory title"
@@ -2993,13 +2995,14 @@ weight = {weight}
         assert!(!output.is_empty(), "run_retrieve must write to buffer");
     }
 
-    /// EX-5: run_find rejects limit=Some(0).
+    /// EX-5: run_search rejects limit=Some(0).
     #[test]
-    fn run_find_rejects_limit_zero() {
+    fn run_search_rejects_limit_zero() {
         let root = temp_project_with_one_memory();
         let mut buf = Vec::new();
-        let err = run_find(
+        let err = run_search(
             &mut buf,
+            false,
             Some(root.path().to_path_buf()),
             vec![],
             vec![],
@@ -3321,12 +3324,12 @@ weight = {weight}
         );
     }
 
-    // ── find_for_mcp ─────────────────────────────────────────────────────
+    // ── search_for_mcp ─────────────────────────────────────────────────────
 
     #[test]
-    fn find_for_mcp_returns_rows_with_key_field() {
+    fn search_for_mcp_returns_rows_with_key_field() {
         let root = temp_project_with_one_memory();
-        let result = find_for_mcp(
+        let result = search_for_mcp(
             Some(root.path().to_path_buf()),
             vec![],
             vec![],
@@ -3357,9 +3360,9 @@ weight = {weight}
     }
 
     #[test]
-    fn find_for_mcp_rejects_limit_zero() {
+    fn search_for_mcp_rejects_limit_zero() {
         let root = temp_project_with_one_memory();
-        let err = find_for_mcp(
+        let err = search_for_mcp(
             Some(root.path().to_path_buf()),
             vec![],
             vec![],

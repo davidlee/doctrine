@@ -305,7 +305,7 @@ fn sync_produces_all_shipped_dirs() {
 /// `memory find`, and carries the ADR-002 shipped signature (`repo=""`,
 /// `anchor_kind=none`).
 #[test]
-fn each_new_shipped_memory_finds_by_scoped_search_and_has_shipped_signature() {
+fn each_new_shipped_memory_searches_by_scoped_search_and_has_shipped_signature() {
     let repo = doctrine_repo();
     let (ok, _) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
     assert!(ok, "sync must exit 0");

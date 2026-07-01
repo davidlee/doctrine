@@ -37,7 +37,7 @@ fn parse_expand_depth(s: &str) -> Result<usize, String> {
     Ok(depth)
 }
 
-/// Shared scope/filter/format fields for `MemoryCommand::Find` and
+/// Shared scope/filter/format fields for `MemoryCommand::Search` and
 /// `MemoryCommand::Retrieve`. Both variants flatten this struct via
 /// `#[command(flatten)]` — each shared field is defined once (DRY).
 #[derive(Args, Debug)]
@@ -249,9 +249,10 @@ pub(crate) enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
-    /// Find memories by scope or free-text, ranked.
-    /// Rows carry trust + severity so the holdback-exempt find surface keeps risk visible.
-    Find {
+    /// Search memories by scope or free-text, ranked.
+    /// Rows carry trust + severity so the holdback-exempt search surface keeps risk visible.
+    #[command(alias = "find")]
+    Search {
         /// Positional query (zero or one; maps to --query). Mutually exclusive with --query.
         query: Option<String>,
 
@@ -552,7 +553,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 run_list(&mut io::stdout(), path, memory_type, args)
             }
         }
-        MemoryCommand::Find { query, args } => {
+        MemoryCommand::Search { query, args } => {
             // Merge positional query + --query; mutually exclusive.
             let free_query = match (query, args.flag_query) {
                 (Some(_), Some(_)) => {
@@ -574,8 +575,9 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 None => args.offset,
             };
             let resolved_format = if args.json { Format::Json } else { args.format };
-            crate::retrieve::run_find(
+            crate::retrieve::run_search(
                 &mut io::stdout(),
+                color,
                 args.path,
                 args.path_scope,
                 args.glob,

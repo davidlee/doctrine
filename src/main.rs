@@ -444,14 +444,14 @@ mod write_class_tests {
     }
 
     #[test]
-    fn memory_find_retrieve_lifespan_flag_parses_on_the_shared_args() {
-        let find =
-            Cli::try_parse_from(["doctrine", "memory", "find", "--lifespan", "semantic"]).unwrap();
+    fn memory_search_retrieve_lifespan_flag_parses_on_the_shared_args() {
+        let search =
+            Cli::try_parse_from(["doctrine", "memory", "search", "--lifespan", "semantic"]).unwrap();
         let Command::Memory {
-            command: MemoryCommand::Find { args, .. },
-        } = find.command
+            command: MemoryCommand::Search { args, .. },
+        } = search.command
         else {
-            panic!("expected memory find");
+            panic!("expected memory search");
         };
         assert_eq!(args.lifespan, Some(memory::Lifespan::Semantic));
 
@@ -468,8 +468,8 @@ mod write_class_tests {
     }
 
     #[test]
-    fn memory_find_invalid_lifespan_is_rejected() {
-        let cli = Cli::try_parse_from(["doctrine", "memory", "find", "--lifespan", "garbage"]);
+    fn memory_search_invalid_lifespan_is_rejected() {
+        let cli = Cli::try_parse_from(["doctrine", "memory", "search", "--lifespan", "garbage"]);
         assert!(cli.is_err());
     }
 

@@ -202,7 +202,7 @@ fn vt2_tools_list() {
         "review_withdraw",
         "review_status",
         "review_prime",
-        "memory_find",
+        "memory_search",
         "memory_retrieve",
         "memory_show",
         "memory_list",
@@ -749,10 +749,10 @@ fn seed_memory_corpus(root: &Path) {
     fs::create_dir_all(&shipped).unwrap();
 }
 
-// EX-4: memory_find + memory_list round-trip against seeded corpus
+// EX-4: memory_search + memory_list round-trip against seeded corpus
 
 #[test]
-fn memory_find_and_list_roundtrip() {
+fn memory_search_and_list_roundtrip() {
     let dir = tmp();
     let root = dir.path();
     fs::create_dir_all(root.join(".git")).unwrap();
@@ -764,14 +764,14 @@ fn memory_find_and_list_roundtrip() {
     let stdout = child.stdout.take().expect("stdout");
     let mut reader = BufReader::new(stdout);
 
-    // memory_find: scoped query for "safe"
-    let params = tools_call_params("memory_find", serde_json::json!({ "query": "safe" }));
+    // memory_search: scoped query for "safe"
+    let params = tools_call_params("memory_search", serde_json::json!({ "query": "safe" }));
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
-    assert!(resp.get("error").is_none(), "memory_find: {resp:?}");
+    assert!(resp.get("error").is_none(), "memory_search: {resp:?}");
 
     let text = tool_result_text(&resp);
-    let out: Value = serde_json::from_str(text).expect("parse memory_find JSON");
-    assert_eq!(out["kind"], "memory_find");
+    let out: Value = serde_json::from_str(text).expect("parse memory_search JSON");
+    assert_eq!(out["kind"], "memory_search");
     assert!(
         out["total"].as_u64().unwrap() >= 1,
         "should find at least 1 memory"
