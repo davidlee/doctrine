@@ -451,3 +451,29 @@ expect stays fulfilled. Removing it surfaces those as `-D warnings`. No change.
 - **§5.2 PolicyError** typed-enum vs design's `Result<_,String>` — coherence-flag.
 - **§5.3 provision-site wording** ("beside run_provision + write_marker" ⇒ implies
   fork.rs) vs as-built create.rs site — coherence-flag (D-provision-site above).
+
+## PHASE-05 execute landing (2026-07-01, symmetric live-import)
+
+The amended PHASE-05 (SubagentStop capture retired → symmetric live-import) is
+implemented and green; only VH-1 (live Fork-path E2E) remains, human-gated.
+
+- **Commits:** `832f9265` feat (Rust) + `6c58426c` doc (SKILL.md funnel).
+- **What landed:** `worktree import --patch <file>` → `--from-worktree <dir>`;
+  `run_import_from_worktree` gathers the live tracked+untracked delta and feeds the
+  UNCHANGED pure `classify_import` belt; `gather_worktree_patch` +
+  new `gather_worktree_delta_paths` relocated from the deleted `capture.rs`;
+  `WorktreeCommand::SubagentStop` + its guard/hook/tests retired; install-time AF-3
+  assert (no `WorktreeRemove` / no `SubagentStop` entry ships); dispatch-agent
+  SKILL.md rewritten to the 5-step funnel with the F-3 `&&`-gated reap.
+- **Criteria:** EX-3..7 met; VT-1..5 PASS (`slice verify-vt`); VA-1 OVERALL PASS
+  (independent agent audit, 6/6 claims confirmed); EX-4 behaviour-preservation held
+  (`run_import_fork` byte-frozen, `classify_import` unmoved, full gate green).
+- **Delta-paths deviation (benign):** belt paths derived by name-only (`diff
+  --name-only HEAD` + `ls-files --others`), NOT the old `--patch` arm's `git apply
+  --numstat` — mirrors the surviving `--fork` idiom, no temp-file hop. Recorded in
+  the phase sheet Progress block.
+- **OUTSTANDING — VH-1 (A9), human-gated:** live claude `/dispatch`, one jailed
+  worker on the **Fork** path — escape vectors denied + canaries intact + tree
+  persists post-return + funnel green via `--from-worktree` + orchestrator reap.
+  Confirms §5.5 Fork-path ASM + branch-case footer end-to-end. Phase stays
+  `in_progress` until accepted.
