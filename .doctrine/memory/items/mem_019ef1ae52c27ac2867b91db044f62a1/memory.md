@@ -105,7 +105,9 @@ Module layering (ADR-001): leaf ← engine ← command, no cycles.
 
 - `.doctrine/spec/product/004/` — PRD: core product specification
 - `.doctrine/spec/tech/007/` — Tech spec: memory system
-- `.doctrine/spec/product/008/` — PRD: dispatch system
+- `.doctrine/spec/product/015/` — PRD: dispatch/worktree system
+- `.doctrine/spec/tech/012/` — Tech spec: dispatch/worktree
+- `.doctrine/spec/tech/021/` — Tech spec: dispatch orchestrator process
 - `install/using-doctrine.md` — which verb for which intent, storage tiers,
   reading via `show`
 - `install/glossary.md` — entity kinds, ids, reference forms, verification
