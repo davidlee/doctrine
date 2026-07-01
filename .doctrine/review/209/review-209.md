@@ -148,3 +148,41 @@ is **no REV**. Each entry cites its finding.
 ### Governance/spec (REV)
 
 - None. SL-183 makes no governance or spec change.
+
+## Reconciliation Outcome
+
+Reconcile pass complete (2026-07-01). All findings were terminal
+(`verified`/`aligned`/`tolerated`) at handoff; the brief was entirely per-slice
+direct edits — **no REV** (SL-183 introduces no governance/spec change). User
+approved all edits (apply all 5; F-6 → §5.4).
+
+### Direct edits applied
+- **design.md §5.1 (RV-209 F-2)** — xcrun_db allow line corrected bare-regex →
+  `require-all (subpath (param "DUTMP")) (regex …)` to match the shipped
+  `seatbelt_profile`; added a reconcile note explaining the bare form leaked
+  `/private/tmp/xcrun_db-*`.
+- **design.md §5.5 F-B4 (RV-209 F-3)** — added a note: 6 fail-closed *conditions*
+  (a–f) realised via 5 typed `ResolveDeny` reasons (c≡e dedup to `PolicyMissing`
+  by shared mechanism + invariant Deny outcome). Not a scope cut.
+- **design.md §5.4 (RV-209 F-6)** — added a note: the consumer-tier obligations
+  (T3a `probe_backend` cfg-split routing macOS→Seatbelt; T3b `.sb` materialization)
+  parity-by-reuse did not cover, landed in PHASE-04 as consult-approved increments;
+  PHASE-03's EX-3 held at the `select_jailer` leaf level.
+- **design.md §5.4 (RV-209 F-1)** — added a note: PHASE-01 (code-free probe)
+  carries no source-delta by design; conformance rests on evidence (results.md),
+  not a delta row, so the registry `incomplete` is intentional.
+- **notes.md PHASE-02 (RV-209 F-8)** — added a trail-note: recorded oid `8abcaae0`
+  is orphaned; the ISS-204 fix is present + correct on the current tree via a
+  different oid. Trail-accuracy only.
+
+### REVs completed
+- None.
+
+### Withdrawn / tolerated
+- **RV-209 F-4** — tolerated (rationale in finding disposition): unrelated cordage
+  perf flake, out of SL-183's diff, timing not logic; captured as **RSK-224**.
+- **RV-209 F-5** — aligned; EX-2 discharged live. The provisioning-trigger
+  residual (auto-provision on the non-dispatch spawn path, unit-test-only)
+  captured as follow-up **IMP-223**.
+
+Reconcile pass complete — handoff to /close.

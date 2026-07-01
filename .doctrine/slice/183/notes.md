@@ -118,6 +118,14 @@ unit tests green. **Deviation from the original "SL-182 owns this surface" note 
 deliberate and user-sanctioned** — if the SL-182 thread also lands a fix, expect a
 trivial dup/conflict on this one line (same target form). ISS-204 → resolved/fixed.
 
+> **Reconcile trail-note (RV-209 F-8, 2026-07-01).** The recorded oid `8abcaae0`
+> is now orphaned (NOT an ancestor of HEAD) — history was restructured and the
+> SL-183-form fix landed via a different oid; `66821afe fix(SL-182): drop
+> compile-time CARGO_MANIFEST_DIR from VT-7 helper` IS an ancestor. The fix is
+> present and correct on the current tree (`jail.rs` `pi_spawn_core_tokens` uses
+> `repo_root().join("scripts/pi-spawn-confined.sh")`; `no_baked_paths` passes),
+> so there is no residual dup to resolve — this is a trail-accuracy note only.
+
 **PHASE-02 flipped `completed`** (`code_start 3a760f92`, forward-intact; conformance
 confirms the PHASE-02 source-delta row registered — only PHASE-01 remains registry-gap,
 accepted as a code-free probe phase per the boundary note above).

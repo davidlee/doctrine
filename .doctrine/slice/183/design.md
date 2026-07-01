@@ -80,7 +80,7 @@ DEFERRED to `/plan` / first-impl (§9, F-B2). Do not read them as pass-1 evidenc
 ; ANCHORED to one path segment (F-3): observed file is `xcrun_db-<hash>`, so the
 ; pattern is DUTMP + "/xcrun_db" + non-slash* + end — never a deeper subpath.
 ; XCRUN_DB_REGEX (named const); SBPL regex-match semantics pinned at /plan-probe:
-(allow file-write* (regex #"/xcrun_db[^/]*$"))  ; applied under a DUTMP subpath scope
+(allow file-write* (require-all (subpath (param "DUTMP")) (regex #"/xcrun_db[^/]*$")))  ; DUTMP-scoped (shipped form)
 (allow file-write* (subpath (param "RWn")))     ; per validated extra_rw
 ; (deny network*)  iff policy.network == deny   ; default OPEN; emitted only on
 ;                                               ; opt-in, via the same policy→profile
@@ -89,6 +89,13 @@ DEFERRED to `/plan` / first-impl (§9, F-B2). Do not read them as pass-1 evidenc
 Invoked: `sandbox-exec -D WT=<realpath> -D TMP=<realpath> -D PTMP=/private/tmp
 -D DUTMP=<realpath getconf DARWIN_USER_TEMP_DIR> -D RWn=… -f <profile>
 -- bash -c "$(base64 -d <<<$B64)"`. Children inherit.
+
+> **Reconcile (RV-209 F-2, 2026-07-01).** The xcrun_db allow above was corrected
+> bare-regex → `require-all (subpath (param "DUTMP")) (regex …)` to match the
+> shipped `seatbelt_profile` + `XCRUN_DB_REGEX`. Probed bare (results.md Pass 3),
+> the regex-only form LEAKED — it allowed `/private/tmp/xcrun_db-*`, entirely
+> outside the per-user temp. §5.5 EDGE(F-E) prose already required the DUTMP
+> scoping, so this was an illustrative-line error, not a decision change.
 
 ### 5.2 Interfaces & Contracts
 
@@ -139,6 +146,27 @@ create-fork hook, looked up by `cwd → basename`. **No new state.** `validate_p
 The funnel import/delta-check is identical to SL-182 (the ro-`.git` self-commit
 consequence is the same — the worktree's real gitdir is outside wt → write-denied
 by the floor). No fork in the funnel; only the argv builder.
+
+> **Reconcile (RV-209 F-6, 2026-07-01).** Parity-by-reuse forked only the
+> argv/profile *builder*, but the macOS arm carries two consumer-tier obligations
+> bwrap does not: (T3a) the shipped `worktree pretooluse` `probe_backend` must
+> route macOS → Seatbelt (bwrap only produced `Bwrap`/`Deny{bwrap-unavailable}`),
+> and (T3b) the `.sb` profile body must be *written to disk* before the wrapped
+> `sandbox-exec -f <profile>` runs — bwrap confines via inline argv flags (no
+> external file), Seatbelt needs a disk `-f` profile. Both landed in **PHASE-04**
+> as consult-approved increments (`probe_backend` cfg-split + `materialize_
+> seatbelt_profile`, fail-closed to Deny). PHASE-03's EX-3 was true at the
+> `select_jailer` leaf level; the consumer-tier reach completed in PHASE-04.
+
+> **Reconcile (RV-209 F-1, 2026-07-01).** PHASE-01 (the confirmation probe)
+> carries **no git-range source-delta by design** — it ships no Rust; its
+> conformance value is the evidence in `probe-h2-seatbelt/results.md`, not a
+> code delta. `doctrine slice conformance` therefore reports `incomplete` for
+> PHASE-01 (its `code_start` was orphaned by parallel-thread history
+> restructuring; the non-forward binding was correctly refused — oids are the
+> immutable boundary, history-repair forbidden). PHASE-02/03/04 all carry
+> forward-intact boundary rows. Rely on evidence-conformance, not
+> delta-conformance, for PHASE-01. (Consulted + accepted: David, Option 1.)
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -200,6 +228,14 @@ Pinned empirically (RSK-014 H2 pass 1, orchestrator context):
   unreadable; (f) policy present but malformed / schema-invalid (covers the network
   ambiguity, F-B6). This is the macOS twin of SL-182's fail-closed posture and the
   POL-002 discharge for the whole arm.
+  > **Reconcile (RV-209 F-3, 2026-07-01).** The six *conditions* (a–f) are
+  > realised through **five** typed `ResolveDeny` reasons (`NotAWorktree`,
+  > `IsMainCheckout`, `AmbiguousGitDirs`, `PolicyMissing`, `PolicyMalformed`):
+  > condition (c) (nested-repo/submodule basename never provisioned) and (e)
+  > (policy absent) deduplicate to `PolicyMissing` — they share one mechanism
+  > (`read_policy → Ok(None)`) and one invariant outcome (fail-closed `Deny`, no
+  > unwrapped pass-through). "6 conditions, 5 typed reasons" — every condition
+  > still denies; not a scope cut.
 - **ASSUMPTION (M1-sub permission-mode) — RESOLVED (F-F).** In the *subagent*
   context the permission gate is NOT transparent to writes (unlike pass-1
   orchestrator F-C): under `auto`, gate/operator-popup denials mask most vectors
