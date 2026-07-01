@@ -296,3 +296,75 @@ makes the surface live, so the module expect is `not(test)`-scoped; the lone
 still-dead item under `test` (the reserved `Seatbelt.resolved` field) carries its
 own `#[cfg_attr(test, expect(dead_code))]`. Both expectations verified fulfilled
 against ground truth (`cargo test` + `cargo clippy --bin doctrine`), not the LSP.
+
+---
+
+## PHASE-03 — pretooluse shell, registration & fail-closed install (2026-07-01)
+
+Implementation COMPLETE; **VA-1 (live) pending** (needs install + session restart
+— cannot run in the authoring session). Phase stays `in_progress` until VA-1.
+Commits: `d457859a` (T1-T3/T5 shell) · `7b48995c` (T4/T6/T7/T8 install+register).
+Green: 11 `worktree::pretooluse` + 49 `skills::tests` + 17 architecture_layering;
+`cargo clippy --bin doctrine` zero-warn; fmt clean.
+
+### Decisions resolved this phase
+- **D-anchor = `CLAUDE_PROJECT_DIR` + git-common-dir equality (A1).**
+  `cwd_is_project_worktree` = `is_linked_worktree(cwd)` AND
+  `common_git_dir(cwd) == common_git_dir(CLAUDE_PROJECT_DIR)`. **Robust either
+  way:** the equality holds whether the anchor points at the main tree or any
+  same-repo worktree (both resolve to the one shared `.git`); a sibling repo's
+  worktree (e.g. a ro-mounted `/workspace` repo) differs ⇒ Reject. Replaces the
+  probe's hard-coded `$ROOT/.worktrees/agent-*` prefix. Fail-closed: absent anchor
+  or any git error ⇒ `false` ⇒ Reject (deny). Added `shared::common_git_dir`
+  (DRY — `is_linked_worktree` now rides it).
+  - **EMPIRICAL GATE (VA-1):** that `CLAUDE_PROJECT_DIR` is SET (and points at
+    main, or any same-repo tree) in a *worktree-subagent* hook process is
+    UNVERIFIED — the PHASE-01 probe hard-coded ROOT and never dumped hook env. If
+    absent for real workers, ALL worker writes/Bash deny (over-confinement — safe
+    but breaks dispatch). VA-1 must confirm presence; if absent, fall back
+    (is_linked_worktree-only, accepting the sibling-repo edge as deferred
+    hardening) — a `/consult`, not a silent change.
+- **D-canon-impl = shell out to `realpath -m`.** `canonicalize_missing` runs the
+  host `realpath -m` (missing-safe), joining `cwd` for relative paths — byte-parity
+  with the proven `pretooluse-pathcheck.sh`. Chosen over a lexical normalizer for
+  security fidelity on the write-wall (correctness-first). **Efficiency note:** a
+  subprocess per Edit/Write (plus 2-3 git rev-parse per call for topology) on the
+  hook hot path; the orchestrator fast-path (no `agent_id`) short-circuits BEFORE
+  any of it. A lexical realpath-m (no subprocess) is a viable later optimization
+  if measured — not needed now.
+- **D-quote-reuse.** Install templating reuses the leaf's INV-5
+  `jail::shell_single_quote` (now `pub(crate)`, re-exported from `worktree`) to
+  single-quote the baked absolute exec — one canonical POSIX escaper, no parallel
+  impl (design §5.4 tied the quoting to "same discipline as INV-5"). Candidate for
+  a shared leaf util if a third consumer appears.
+- **D-policy-floor.** P03 resolves policy to `JailPolicy::default()` (strictest
+  floor). The per-worktree `jail/<name>.toml` lookup by `cwd→basename` +
+  `validate_policy` is **PHASE-04** — wired at the single `let policy = …` site in
+  `run_pretooluse`.
+- **Guard class = Read.** `WorktreeCommand::Pretooluse` writes no authored state
+  and runs INSIDE the confined subagent (worker context) on every tool call ⇒
+  must be open under worker-mode (`commands/guard.rs`).
+- **Unregistered tool ⇒ PassThrough** (not deny): the matcher only routes
+  Bash/Edit/Write; guarding an unread tool would be a latent jail hole (§5.2).
+
+### VT/EX map (as-built)
+- EX-1/VT-1 → `decide`+`render`, all §5.2 shapes (bash-wrap, write-deny,
+  orchestrator pass-through, isolation:none deny, INV-2 repo-root deny, in-worktree
+  pass). EX-2/VT-2 → `template_hooks_commands` + `install_materializes_…` (real
+  install path bakes absolute exec, both walls, `|| exit 2`). EX-3/VT-3 →
+  `jailed_bash_with_no_bwrap_backend_denies…` (runtime Deny) + templating guard
+  (exec-vanish). R4-canon → T4 tempdir boundary (`..` + symlink escape denied).
+  EX-4/VA-1 → **pending live** + runbook shipped (dispatch-agent SKILL.md).
+
+### Carry-forward / reconcile debt (unchanged, still open)
+- **MF-3** — plan P02 EX-1 lists `load_policy`; leaf exposes only `from_toml_str`.
+  Fix EX-1 text via `/reconcile` at audit.
+- **§5.2 PolicyError divergence** — typed enum vs design's literal
+  `Result<_,String>`; coherence-flag at audit.
+- **VA-1 pending** — install + `/reload-plugins`/restart + live worktree-subagent
+  battery (the PHASE-01 escape battery re-expressed against the INSTALLED plugin
+  hook), confirming both walls fire + honour `updatedInput` AND
+  `CLAUDE_PROJECT_DIR` is present. Then flip PHASE-03 `completed`.
+- **jail.rs dead_code expect** — still fulfilled in P03 (validate_policy /
+  from_toml_str stay `not(test)`-dead; the shell consumes the rest). P04 makes
+  them live ⇒ narrow/remove the module expect then.
