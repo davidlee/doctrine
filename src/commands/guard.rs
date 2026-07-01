@@ -101,7 +101,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             MemoryCommand::Validate { .. }
             | MemoryCommand::Show { .. }
             | MemoryCommand::List { .. }
-            | MemoryCommand::Find { .. }
+            | MemoryCommand::Search { .. }
             | MemoryCommand::Retrieve { .. }
             | MemoryCommand::ResolveLinks { .. }
             | MemoryCommand::Backlinks { .. }

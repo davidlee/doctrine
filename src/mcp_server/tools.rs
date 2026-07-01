@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 18 tools: 10 review + 8 memory (`memory_find`, `memory_retrieve`, `memory_show`,
+//! 18 tools: 10 review + 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
 //! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`).
 //! Each review tool calls the matching `review::run_*` function,
 //! maps errors through `ReviewError` variant identity (design D8, §5), and
@@ -192,8 +192,8 @@ fn tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
-            name: "memory_find".to_owned(),
-            description: "Discovery tool — metadata only, no bodies. Use first to probe context. Holdback-exempt: rows may include memories suppressed by `memory_retrieve`. Do not treat high-risk rows as consumable knowledge; use `memory_show` for inspection then `memory_retrieve` for safe recall. Requires at least one selector or defaults to 20-row cap.\n\nReturns: { kind: 'memory_find', rows: [{ uid, key?, type, status, staleness, trust, severity, spec, title, held_back_on_retrieve }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
+            name: "memory_search".to_owned(),
+            description: "Discovery tool — metadata only, no bodies. Use first to probe context. Holdback-exempt: rows may include memories suppressed by `memory_retrieve`. Do not treat high-risk rows as consumable knowledge; use `memory_show` for inspection then `memory_retrieve` for safe recall. Requires at least one selector or defaults to 20-row cap.\n\nReturns: { kind: 'memory_search', rows: [{ uid, key?, type, status, staleness, trust, severity, spec, title, held_back_on_retrieve }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -214,7 +214,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "memory_retrieve".to_owned(),
-            description: "Agent-context recall with trust holdback. Returns security-framed data blocks (nonce + staleness + attribution). Low-trust ∧ high-severity memories are suppressed. Use after `memory_find` identified relevant candidates. Supply `reference` for single-memory recall through holdback.\n\nReturns: framed text blocks (mem_… header + body), one per recalled memory.".to_owned(),
+            description: "Agent-context recall with trust holdback. Returns security-framed data blocks (nonce + staleness + attribution). Low-trust ∧ high-severity memories are suppressed. Use after `memory_search` identified relevant candidates. Supply `reference` for single-memory recall through holdback.\n\nReturns: framed text blocks (mem_… header + body), one per recalled memory.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -237,7 +237,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "memory_show".to_owned(),
-            description: "Full memory inspection — header, body, relations, wikilinks, backlinks. Use only after selecting an exact uid via `memory_find`. For token efficiency, use `view: summary` to skip body, or `include_body: false`. Held-back memories (field `held_back_on_retrieve: true`) are shown with a metadata warning; do not treat as consumable knowledge.\n\nReturns: { memory: { uid, key?, title, type, status, trust, severity, body?, consumable, held_back_on_retrieve, backlinks: [{ uid, title, type, method }], backlinks_total: int } }".to_owned(),
+            description: "Full memory inspection — header, body, relations, wikilinks, backlinks. Use only after selecting an exact uid via `memory_search`. For token efficiency, use `view: summary` to skip body, or `include_body: false`. Held-back memories (field `held_back_on_retrieve: true`) are shown with a metadata warning; do not treat as consumable knowledge.\n\nReturns: { memory: { uid, key?, title, type, status, trust, severity, body?, consumable, held_back_on_retrieve, backlinks: [{ uid, title, type, method }], backlinks_total: int } }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -251,7 +251,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "memory_list".to_owned(),
-            description: "Browse/index only — all memories, newest first, capped at 50 by default. Prefer scoped `memory_find` for targeted discovery.\n\nReturns: { kind: 'memory', rows: [{ uid, type, status, trust, key?, title }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
+            description: "Browse/index only — all memories, newest first, capped at 50 by default. Prefer scoped `memory_search` for targeted discovery.\n\nReturns: { kind: 'memory', rows: [{ uid, type, status, trust, key?, title }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -533,7 +533,7 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             let out = review::run_prime(Some(root.to_path_buf()), &args)?;
             Ok(serde_json::to_string(&out)?)
         }
-        "memory_find" => {
+        "memory_search" => {
             let fields = ExtractFields::from_value(arguments, &[]);
             let limit = fields.opt_usize_field("limit");
             let has_selectors = fields.opt_str_field("query").is_some()
@@ -550,7 +550,7 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             } else {
                 limit
             };
-            let result = retrieve::find_for_mcp(
+            let result = retrieve::search_for_mcp(
                 Some(root.to_path_buf()),
                 fields.vec_str_field("path_scope"),
                 fields.vec_str_field("glob"),
@@ -572,7 +572,7 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 None
             };
             Ok(serde_json::to_string_pretty(&json!({
-                "kind": "memory_find",
+                "kind": "memory_search",
                 "rows": result.rows,
                 "total": result.total,
                 "offset": offset,
@@ -1205,7 +1205,7 @@ When MCP tools are available, use these tools instead of CLI commands:
 | `doctrine review withdraw` | `review_withdraw` | |
 | `doctrine review status` | `review_status` | |
 | `doctrine review prime` | `review_prime` | |
-| `doctrine memory find` | `memory_find` | |
+| `doctrine memory search` | `memory_search` | |
 | `doctrine memory retrieve` | `memory_retrieve` | |
 | `doctrine memory show <ref>` | `memory_show` | `reference` param |
 | `doctrine memory list` | `memory_list` | |
@@ -1286,7 +1286,7 @@ mod tests {
         assert!(names.contains(&"review_withdraw"));
         assert!(names.contains(&"review_status"));
         assert!(names.contains(&"review_prime"));
-        assert!(names.contains(&"memory_find"));
+        assert!(names.contains(&"memory_search"));
         assert!(names.contains(&"memory_retrieve"));
         assert!(names.contains(&"memory_show"));
         assert!(names.contains(&"memory_list"));
@@ -1930,19 +1930,19 @@ mod tests {
         assert!(backlinks.len() <= 1, "backlinks should be capped at 1");
     }
 
-    // VT-1: memory_find with no args returns capped 20 rows with pagination metadata
-    // VT-2: memory_find rows include key and held_back_on_retrieve fields
+    // VT-1: memory_search with no args returns capped 20 rows with pagination metadata
+    // VT-2: memory_search rows include key and held_back_on_retrieve fields
 
     #[test]
-    fn memory_find_no_args_returns_paginated_results() {
+    fn memory_search_no_args_returns_paginated_results() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir_all(root.join(".git")).unwrap();
         seed_memory_corpus(root);
-        let result = memory_dispatch(root, "memory_find", json!({}));
+        let result = memory_dispatch(root, "memory_search", json!({}));
         let text = result["content"][0]["text"].as_str().unwrap();
         let parsed: Value = serde_json::from_str(text).unwrap();
-        assert_eq!(parsed["kind"], "memory_find");
+        assert_eq!(parsed["kind"], "memory_search");
         // With 2 seeds and no selectors → capped at 20
         let rows = parsed["rows"].as_array().unwrap();
         assert!(!rows.is_empty(), "should return rows");
@@ -1962,21 +1962,21 @@ mod tests {
     }
 
     #[test]
-    fn memory_find_with_selectors_returns_scoped_results() {
+    fn memory_search_with_selectors_returns_scoped_results() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir_all(root.join(".git")).unwrap();
         seed_memory_corpus(root);
         let result = memory_dispatch(
             root,
-            "memory_find",
+            "memory_search",
             json!({
                 "query": "Skinny"
             }),
         );
         let text = result["content"][0]["text"].as_str().unwrap();
         let parsed: Value = serde_json::from_str(text).unwrap();
-        assert_eq!(parsed["kind"], "memory_find");
+        assert_eq!(parsed["kind"], "memory_search");
         let rows = parsed["rows"].as_array().unwrap();
         assert!(rows.len() >= 1, "should find at least 1 memory");
         // The Skinny CLI memory should be in results
@@ -2028,18 +2028,18 @@ mod tests {
     // — the double-encoding guard.
 
     #[test]
-    fn memory_find_text_parses_as_json_object() {
+    fn memory_search_text_parses_as_json_object() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir_all(root.join(".git")).unwrap();
         seed_memory_corpus(root);
-        let result = memory_dispatch(root, "memory_find", json!({}));
+        let result = memory_dispatch(root, "memory_search", json!({}));
         let text = result["content"][0]["text"].as_str().unwrap();
         // Should parse as a JSON object, not a quoted string
         let parsed: Value = serde_json::from_str(text).unwrap();
         assert!(
             parsed.is_object(),
-            "memory_find result must be a JSON object"
+            "memory_search result must be a JSON object"
         );
     }
 }
