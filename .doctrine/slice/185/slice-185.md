@@ -93,6 +93,12 @@ the load-bearing intent: parity, not a mac-shaped special case.
 - **ASSUMPTION:** SL-183's probe findings (nesting, canonicalization, child
   inheritance) hold for the subprocess spawn shape. Re-probe only if the launcher
   changes the nesting/exec assumptions.
+- **RISK (gating, design AR-3/RISK-1):** SL-183's probe wrapped short-lived
+  *bash*, not a long-lived `pi --mode rpc` fifo process. Whether `sandbox-exec`
+  cleanly hosts pi's fifo/rpc/child-spawn is the **go/no-go** — potentially fatal
+  to the launcher strategy, not just a VH check. Front-load it as the first
+  mac-side action; the Linux pure-layer work is low-regret regardless. See
+  `design.md` §7.
 - **OQ-3 / IDE-025 adjacency (for `/design`):** [[IDE-025]] proposes a
   selector-sourced write-allowlist *jail mode*. It stays a separate slice (distinct
   config-surface feature, currently an unscoped idea) — but its mechanism IS

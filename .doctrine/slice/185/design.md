@@ -30,18 +30,26 @@ closes.
 ```
 doctrine worktree fork --worker  → $D
 case $(uname) in
-  Darwin) mapfile -d '' PREFIX < <(doctrine worktree jail-prefix \
-            --dir "$D" --main-root "$ROOT") || abort ;;
-  *)      PREFIX=( bwrap --ro-bind / / … ) ;;   # (A): Linux inline, UNTOUCHED
+  Darwin)
+    # AR-1: emit argv to a FILE, not process-substitution — so the exit status
+    # is real (direct command) and NUL bytes survive (file, not $()/var).
+    doctrine worktree jail-prefix --dir "$D" --main-root "$ROOT" \
+      --out "$D/.tmp/jail.argv" || abort            # fail-closed: no unconfined pi
+    mapfile -d '' PREFIX < "$D/.tmp/jail.argv"
+    [ "${#PREFIX[@]}" -gt 0 ] || abort              # AR-1: empty prefix ⇒ abort (defence in depth)
+    ;;
+  *)  PREFIX=( bwrap --ro-bind / / … ) ;;           # (A): Linux inline, UNTOUCHED
 esac
 timeout "${PREFIX[@]}" pi --mode rpc … < fifo > out
 ```
 
-macOS branch: `jail-prefix` materializes `$D/.tmp/jail.sb` and emits the
+macOS branch: `jail-prefix` materializes `$D/.tmp/jail.sb` and writes the
 `sandbox-exec -f … -D WT=<realpath> … --` prefix (NUL-delimited, terminating in
-`--`). One whole-process wrap; children inherit (SL-183-probed). Fail-closed: any
-resolve/materialize error → nonzero exit + reason on stderr → the script
-**aborts the spawn**, never falling through to an unconfined `pi`.
+`--`) to `--out`. One whole-process wrap; children inherit (SL-183-probed).
+**Fail-closed (AR-1):** any resolve/materialize/write error → nonzero exit +
+reason on stderr, no `--out` file (or empty) → the script **aborts the spawn**,
+never falling through to an unconfined `pi`. The file seam is load-bearing: a
+`$(…)` capture would both strip NUL and swallow the child's exit status.
 
 Net: macOS subprocess workers gain a write-floor identical in policy to the
 claude arm (deny `file-write*`, re-allow under `$D` + validated `extra_rw`);
@@ -114,20 +122,26 @@ smuggle root/ancestor/`.git`). Pure builders — `seatbelt_profile`,
 
 ```rust
 WorktreeCommand::JailPrefix { dir: PathBuf, main_root: Option<PathBuf>,
+                             out: PathBuf,                 // AR-1: NUL-delim argv sink
                              network: bool, extra_rw: Vec<PathBuf> }
 ```
 
-`run_jail_prefix()` — impure command tier, cfg-split (mirrors `probe_backend`):
+`run_jail_prefix()` — impure command tier, cfg-split (its OWN backend
+resolution — NOT `probe_backend`, whose macOS branch reads the disk policy D3
+rejects; AR-4):
 
 - Build `JailPolicy` from flags (default = `JailPolicy::default()` worktree floor).
-- `#[cfg(not(target_os = "macos"))]` — `select_jailer(Backend::Bwrap)`; `bwrap`
-  absent ⇒ fail-closed. `wrap_argv(realpath(dir), &policy)` → bwrap prefix.
+- `#[cfg(not(target_os = "macos"))]` — reuse the **bwrap-presence helper**
+  factored out of `probe_backend` (AR-4, avoid a parallel check); present ⇒
+  `select_jailer(Backend::Bwrap)`, absent ⇒ fail-closed. `wrap_argv(realpath(dir),
+  &policy)` → bwrap prefix.
 - `#[cfg(target_os = "macos")]` — `resolve_with_policy(&policy, dir, main_root, RealEnv)`
-  (main_root **required** here) → `Seatbelt { resolved }`; `write_seatbelt_profile`
-  (io error ⇒ fail-closed `Deny{seatbelt-profile-write-failed}`); `wrap_argv` →
-  sandbox-exec prefix.
-- Emit the prefix **NUL-delimited** to stdout. On any `Deny` → nonzero exit +
-  reason on stderr, empty stdout.
+  (main_root **required**; absent ⇒ fail-closed) → `Seatbelt { resolved }`;
+  `write_seatbelt_profile` (io error ⇒ fail-closed `Deny{seatbelt-profile-write-failed}`);
+  `wrap_argv` → sandbox-exec prefix.
+- Write the prefix **NUL-delimited** to `--out` (AR-1). On any `Deny` → nonzero
+  exit + reason on stderr, **no** `--out` written (never a partial/empty file the
+  caller could mistake for success).
 
 ### `src/worktree/pretooluse.rs` — dedupe
 
@@ -190,9 +204,16 @@ mac (needs the target installed). Catches mac-branch bitrot between VH passes.
 
 - **OQ-a** — `resolve_inputs` recomposition double-calls `worktree_topology`:
   thread topology through vs accept two git calls. Plan decides.
-- **OQ-b** — the default subprocess policy needs one `extra_rw` for `~/.pi`
-  (session dir), or a `TMPDIR` redirect — mirror what the bwrap arm binds. Plan
-  pins the exact grant.
+- **OQ-b (revised, AR-2)** — does the default subprocess policy need **any**
+  `~/.pi` grant at all? Seatbelt is allow-default / deny-`file-write*` — reads are
+  open — and the script already redirects pi's session under `$D`
+  (`--session-dir "$D/.pi-session"`). So `~/.pi` config is read-open for free; a
+  grant is needed **only if pi writes `~/.pi` at runtime** with the session
+  redirected. The bwrap `--bind ~/.pi` grants write only because `--ro-bind /`
+  made everything ro first — not evidence pi writes there. Plan/probe must
+  *establish whether pi writes `~/.pi`*; if yes → `extra_rw` (+ existence/realpath,
+  which fails closed if `~/.pi` is absent); if no → no grant. Do not assume the
+  bwrap bind implies a needed write grant.
 - **OQ-c** — `main_root` sourcing: explicit `--main-root "$ROOT"` (the script has
   it) vs git-derive. Leaning explicit (unambiguous). Plan confirms.
 
@@ -207,9 +228,46 @@ mac (needs the target installed). Catches mac-branch bitrot between VH passes.
 
 ## 7. Risks / assumptions
 
-- SL-183 probe findings (nesting, canonicalization, child inheritance) hold for a
-  single whole-process `sandbox-exec` wrap. Re-probe only if the launcher changes
-  a nesting/exec assumption; the pi-fifo/rpc-under-sandbox question is new and
-  rides VH-4.
+- **RISK-1 (gating, AR-3) — pi's fifo/rpc under `sandbox-exec` is potentially
+  fatal, not merely VH-4.** SL-183's probe wrapped short-lived *bash* commands;
+  it does NOT cover a long-lived `pi --mode rpc` process reading a fifo and
+  spawning children. If `sandbox-exec` breaks that, the whole launcher strategy
+  fails and the Rust is moot. Falsification-first (SL-183's own posture) says
+  probe this **cheap and early**: a disposable
+  `sandbox-exec -f <floor.sb> -- pi --mode rpc … < fifo` on a mac, BEFORE heavy
+  investment. Tension: dev is Linux-first (the slice's premise), so the probe is
+  itself mac-deferred. Resolution: the Linux pure-layer work is low-regret
+  (factored/reused regardless), but **RISK-1 is the go/no-go a mac must answer,
+  ideally probed before the launcher wiring lands** — sequence it as the first
+  mac-side action, not the last. If it fails: reconsider the launcher (e.g. confine
+  pi's *children* rather than the rpc host, or a different mac seam) — the Rust
+  `jail-prefix`/factoring survives either way.
+- SL-183 probe findings (nesting, canonicalization, child inheritance) otherwise
+  hold for a single whole-process wrap.
 - cfg-rot: the mac branch is not compiled by a plain Linux `cargo build`;
-  mitigated by D2 (command shell Linux-tested) + the `--target` guard.
+  mitigated by D2 (command shell Linux-tested — `resolve_with_policy`/
+  `write_seatbelt_profile`/`seatbelt_profile` are all exercised on Linux via
+  `FakeEnv`; only the macOS `RealEnv` wiring is cfg-gated) + the `--target` guard.
+
+## 8. Adversarial review log
+
+Internal hostile pass on the drafted design; material findings integrated above.
+
+- **AR-1 (bug, fixed §1/§3):** `mapfile -d '' < <(jail-prefix)` hides the child's
+  exit status and can't carry NUL through `$()`; the `|| abort` never fired →
+  unconfined pi on failure. Fixed: `jail-prefix --out <file>` (real exit status,
+  NUL survives in a file) + empty-`PREFIX` guard.
+- **AR-2 (claim corrected §5 OQ-b):** "needs an `extra_rw` for `~/.pi`" was
+  unjustified — Seatbelt reads are open and the session is already under `$D`; a
+  write grant is needed only if pi actually writes `~/.pi`. Downgraded to a
+  probe/plan question, not a default.
+- **AR-3 (gating risk added §7 RISK-1):** the pi-under-`sandbox-exec` question is
+  potentially fatal and uncovered by SL-183's probe; front-load it as the mac
+  go/no-go rather than final VH.
+- **AR-4 (design corrected §3):** `jail-prefix` must not reuse `probe_backend`
+  (its macOS branch reads the disk policy D3 rejects); it uses its own backend
+  resolution and only reuses a factored bwrap-presence helper.
+- **Considered, no change:** moving `validate_policy` into `resolve_with_policy`
+  preserves the original from_toml → validate → realpath order (behaviour-preserved);
+  the `uname` OS-dispatch is legitimate backend selection, not host-project
+  coupling (POL-002 intact — SL-183 set this precedent with its cfg-split).
