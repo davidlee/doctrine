@@ -1,0 +1,10 @@
+1782828266.456830167	DENY agent_id=a34f02a09278e1455 file=/tmp/escape_probe reason=escapes-worktree:/tmp/escape_probe
+1782828269.575963795	DENY agent_id=a34f02a09278e1455 file=/home/david/escape_probe reason=escapes-worktree:/home/david/escape_probe
+1782828274.707254537	PASS agent_id=a34f02a09278e1455 file=/workspace/doctrine/.worktrees/agent-a34f02a09278e1455/escape_inside
+1782829727.557374109	DENY agent_id=a2b5480ab8add9162 file=/tmp/nec_probe_discrim reason=cwd-not-a-worktree:/workspace/doctrine
+1782830558.533648203	DENY agent_id=FAKE123 file=/workspace/doctrine/AGENTS.md reason=escapes-worktree:/workspace/doctrine/AGENTS.md
+1782830558.546052898	DENY agent_id=FAKE123 file=/workspace/doctrine/.git/config reason=escapes-worktree:/workspace/doctrine/.git/config
+1782830558.559737663	DENY agent_id=FAKE123 file=/workspace/doctrine/Cargo.toml reason=escapes-worktree:/workspace/doctrine/Cargo.toml
+1782830558.573561760	PASS agent_id=FAKE123 file=/workspace/doctrine/.worktrees/agent-FAKE123/src/foo.rs
+1782860737.980988276	DENY agent_id=a9fa4285c23fc26f7 file=/tmp/escape_probe_E reason=escapes-worktree:/tmp/escape_probe_E
+1782860738.717170675	PASS agent_id=a9fa4285c23fc26f7 file=/workspace/doctrine/.worktrees/agent-a9fa4285c23fc26f7/wt_write_canary_F

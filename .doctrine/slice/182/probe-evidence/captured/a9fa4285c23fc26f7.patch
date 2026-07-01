@@ -1,0 +1,10 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index c8cc0bbc..4809f557 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -95,3 +95,5 @@ binary after `cargo build`, and no two worktrees thrash a shared cache.
+ - Always use READ tool *before* writing any substantial edit (e.g.
+   filling a template, writing `handover.md`) to avoid expensive write
+   failure. `cot`, etc do NOT count!
++
++PROBE_EDIT_G tracked-mod

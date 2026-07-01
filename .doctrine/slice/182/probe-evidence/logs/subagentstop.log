@@ -1,0 +1,13 @@
+1782860759.213902016	STOP agent_id=a9fa4285c23fc26f7 worktree_path_field=<absent> hook_pwd=/workspace/doctrine/.worktrees/agent-a9fa4285c23fc26f7 atp=/home/david/.claude/projects/-workspace-doctrine/603445cc-94d4-4ba9-a11b-59de7483cff1/subagents/agent-a9fa4285c23fc26f7.jsonl
+1782860759.216659407	CORRELATE-OK via=a wt=/workspace/doctrine/.worktrees/agent-a9fa4285c23fc26f7
+1782860759.255575155	CAPTURE-OK tree-intact wt=/workspace/doctrine/.worktrees/agent-a9fa4285c23fc26f7 patch_bytes=393 untracked=3
+1782860815.790483290	STOP agent_id=abdb78d35c75d448d worktree_path_field=<absent> hook_pwd=/workspace/doctrine/.worktrees/agent-abdb78d35c75d448d atp=/home/david/.claude/projects/-workspace-doctrine/603445cc-94d4-4ba9-a11b-59de7483cff1/subagents/agent-abdb78d35c75d448d.jsonl
+1782860815.793203600	CORRELATE-OK via=a wt=/workspace/doctrine/.worktrees/agent-abdb78d35c75d448d
+1782860815.867660328	CAPTURE-OK tree-intact wt=/workspace/doctrine/.worktrees/agent-abdb78d35c75d448d patch_bytes=0 untracked=1
+1782860815.869506468	BLOCK-PROBE firing exit 2 (one-shot) — observe whether the stop was held/awaited
+1782860818.520908707	STOP agent_id=abdb78d35c75d448d worktree_path_field=<absent> hook_pwd=/workspace/doctrine/.worktrees/agent-abdb78d35c75d448d atp=/home/david/.claude/projects/-workspace-doctrine/603445cc-94d4-4ba9-a11b-59de7483cff1/subagents/agent-abdb78d35c75d448d.jsonl
+1782860818.523517536	CORRELATE-OK via=a wt=/workspace/doctrine/.worktrees/agent-abdb78d35c75d448d
+1782860818.596919551	CAPTURE-OK tree-intact wt=/workspace/doctrine/.worktrees/agent-abdb78d35c75d448d patch_bytes=0 untracked=1
+1782861227.274097517	STOP agent_id=aa5da182df8cea74b worktree_path_field=<absent> hook_pwd=/workspace/doctrine atp=/home/david/.claude/projects/-workspace-doctrine/603445cc-94d4-4ba9-a11b-59de7483cff1/subagents/agent-aa5da182df8cea74b.jsonl
+1782861227.275792644	CORRELATE-OK via=b wt=/workspace/doctrine
+1782861227.292614848	CAPTURE-OK tree-intact wt=/workspace/doctrine patch_bytes=0 untracked=0
