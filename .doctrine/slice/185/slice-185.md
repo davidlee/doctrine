@@ -93,6 +93,12 @@ the load-bearing intent: parity, not a mac-shaped special case.
 - **ASSUMPTION:** SL-183's probe findings (nesting, canonicalization, child
   inheritance) hold for the subprocess spawn shape. Re-probe only if the launcher
   changes the nesting/exec assumptions.
+- **RISK (canonicalization, design XR-1):** the new inline `--extra-rw` grant is
+  raw orchestrator-shell input, unlike the claude arm's disk-sourced (pre-canon)
+  policy. `validate_policy` is a lexical check with a "pre-canonicalized"
+  precondition, so `jail-prefix` MUST realpath each inline grant *before*
+  validating — else a `..`/symlink grant widens the sandbox to `/` / `.git`.
+  External (codex) pass; design §3 XR-1.
 - **RISK (gating, design AR-3/RISK-1):** SL-183's probe wrapped short-lived
   *bash*, not a long-lived `pi --mode rpc` fifo process. Whether `sandbox-exec`
   cleanly hosts pi's fifo/rpc/child-spawn is the **go/no-go** — potentially fatal
