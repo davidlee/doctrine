@@ -1045,10 +1045,84 @@ pub(crate) fn install_hooks_plugin_for_claude(
 
     let hooks = PluginAssets::get("doctrine/hooks/hooks.json")
         .context("Embedded hooks config 'doctrine/hooks/hooks.json' not found")?;
-    crate::fsutil::write_atomic(&hooks_dir.join("hooks.json"), &hooks.data)?;
-    writeln!(out, "  refreshed hooks/hooks.json")?;
+    // SL-182 F-1: bake fail-closed exec resolution at materialization, not a
+    // verbatim byte-copy — see `template_hooks_commands`.
+    let embedded =
+        std::str::from_utf8(&hooks.data).context("embedded plugin hooks.json is not UTF-8")?;
+    let exec = crate::boot::resolve_exec()?;
+    let templated = template_hooks_commands(embedded, &exec)?;
+    crate::fsutil::write_atomic(&hooks_dir.join("hooks.json"), templated.as_bytes())?;
+    writeln!(
+        out,
+        "  refreshed hooks/hooks.json (exec baked: {})",
+        exec.display()
+    )?;
 
     Ok(())
+}
+
+// ---- SL-182 PHASE-03: fail-closed hook exec templating (F-1, design §5.4) -------
+/// The bare program token in the embedded (checked-in) plugin hook commands.
+const HOOK_DOCTRINE_TOKEN: &str = "doctrine";
+/// The confinement subcommand — its command gets the fail-closed vanish-guard.
+const HOOK_PRETOOLUSE_SUBCMD: &str = "worktree pretooluse";
+/// Shell suffix converting a vanished/`127` exec into a blocking `exit 2` ⇒ deny
+/// (`PreToolUse` fails OPEN otherwise — `mem.fact.claude.pretooluse-hook-fail-open`).
+const HOOK_EXIT2_GUARD: &str = " || exit 2";
+
+/// Bake fail-closed exec resolution into the embedded plugin hooks (SL-182 F-1,
+/// design §5.4). `PreToolUse` hooks fail OPEN — only `exit 2` blocks — so a bare
+/// `doctrine` on PATH that resolves to a stale/absent binary would let a guarded
+/// tool run UNCONFINED (the RSK-014 hole, reopened by the installer). Rewrite each
+/// command's leading `doctrine` token to the resolved absolute `exec`
+/// (single-quote-escaped, INV-5), reaching parity with the settings `HookSpec` bake;
+/// append `|| exit 2` to the confinement (`pretooluse`) command so a vanished
+/// binary DENIES. Leading-token only — args untouched, so the checked-in asset
+/// stays valid as authored (EX-2).
+fn template_hooks_commands(embedded: &str, exec: &Path) -> anyhow::Result<String> {
+    let mut doc: serde_json::Value =
+        serde_json::from_str(embedded).context("parse embedded plugin hooks.json")?;
+    let exec_quoted = crate::worktree::shell_single_quote(&exec.to_string_lossy());
+    let events = doc
+        .get_mut("hooks")
+        .and_then(serde_json::Value::as_object_mut)
+        .context("plugin hooks.json missing a `hooks` object")?;
+    for entries in events.values_mut() {
+        let Some(entries) = entries.as_array_mut() else {
+            continue;
+        };
+        for entry in entries.iter_mut() {
+            let Some(hooks) = entry
+                .get_mut("hooks")
+                .and_then(serde_json::Value::as_array_mut)
+            else {
+                continue;
+            };
+            for hook in hooks.iter_mut() {
+                let Some(cmd) = hook.get("command").and_then(serde_json::Value::as_str) else {
+                    continue;
+                };
+                let rewritten = template_command(cmd, &exec_quoted);
+                hook["command"] = serde_json::Value::String(rewritten);
+            }
+        }
+    }
+    serde_json::to_string_pretty(&doc).context("serialize templated hooks.json")
+}
+
+/// Rewrite one hook command: leading `doctrine` → `exec_quoted`, plus the
+/// `|| exit 2` vanish-guard on the `pretooluse` command. A command not led by a
+/// bare `doctrine` token is left verbatim (defensive — no such command ships).
+fn template_command(cmd: &str, exec_quoted: &str) -> String {
+    let base = match cmd.strip_prefix(HOOK_DOCTRINE_TOKEN) {
+        Some(rest) if rest.is_empty() || rest.starts_with(' ') => format!("{exec_quoted}{rest}"),
+        _ => cmd.to_string(),
+    };
+    if cmd.contains(HOOK_PRETOOLUSE_SUBCMD) {
+        format!("{base}{HOOK_EXIT2_GUARD}")
+    } else {
+        base
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1218,6 +1292,123 @@ mod tests {
     use std::cell::RefCell;
 
     const TEST_REPO: &str = "davidlee/doctrine";
+
+    // ── SL-182 PHASE-03 VT-2: fail-closed hook exec templating (F-1) ────────────
+
+    /// A path with a space exercises the INV-5 single-quote discipline.
+    const SPACED_EXEC: &str = "/opt/my tools/doctrine";
+
+    #[test]
+    fn templating_bakes_absolute_exec_into_every_command() {
+        // Mirrors the embedded asset shape: a SessionStart + a PreToolUse entry.
+        let embedded = r#"{"hooks":{
+            "SessionStart":[{"matcher":"*","hooks":[{"type":"command","command":"doctrine boot --emit"}]}],
+            "PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"doctrine worktree pretooluse"}]}]
+        }}"#;
+        let out = template_hooks_commands(embedded, Path::new(SPACED_EXEC)).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+
+        let session = v["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert_eq!(
+            session, "'/opt/my tools/doctrine' boot --emit",
+            "leading token → single-quoted absolute exec; args untouched"
+        );
+        assert!(
+            !session.starts_with("doctrine "),
+            "no bare-PATH `doctrine` leading token survives (fail-open closed)"
+        );
+
+        let ptu = v["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert_eq!(
+            ptu, "'/opt/my tools/doctrine' worktree pretooluse || exit 2",
+            "the confinement command carries the fail-closed vanish-guard"
+        );
+    }
+
+    #[test]
+    fn templating_guards_only_pretooluse_not_other_hooks() {
+        assert_eq!(
+            template_command("doctrine worktree create-fork", "'/x/doctrine'"),
+            "'/x/doctrine' worktree create-fork",
+            "non-pretooluse command gets the exec bake but NO exit-2 guard"
+        );
+        assert_eq!(
+            template_command("doctrine worktree pretooluse", "'/x/doctrine'"),
+            "'/x/doctrine' worktree pretooluse || exit 2",
+        );
+        // Defensive: a command not led by a bare `doctrine` token is left verbatim.
+        assert_eq!(
+            template_command("/usr/bin/env doctrine boot", "'/x/doctrine'"),
+            "/usr/bin/env doctrine boot",
+        );
+    }
+
+    #[test]
+    fn install_materializes_fail_closed_hooks_json() {
+        // End-to-end EX-2/EX-3: the real install path bakes an ABSOLUTE exec (here
+        // the test binary via resolve_exec) into every command — no bare-PATH
+        // `doctrine` survives — and the pretooluse walls carry `|| exit 2`.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut sink = Vec::new();
+        install_hooks_plugin_for_claude(tmp.path(), false, &mut sink).unwrap();
+
+        let materialized = tmp.path().join(".claude/skills/doctrine/hooks/hooks.json");
+        let body = fs::read_to_string(&materialized).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        let mut commands = Vec::new();
+        for entries in v["hooks"].as_object().unwrap().values() {
+            for entry in entries.as_array().unwrap() {
+                for hook in entry["hooks"].as_array().unwrap() {
+                    commands.push(hook["command"].as_str().unwrap().to_string());
+                }
+            }
+        }
+        assert!(!commands.is_empty(), "some commands materialized");
+        for cmd in &commands {
+            assert!(
+                cmd.starts_with('\''),
+                "every command leads with a single-quoted absolute exec, not bare PATH: {cmd}"
+            );
+            assert!(
+                !cmd.starts_with("doctrine "),
+                "no fail-open bare-PATH doctrine survives: {cmd}"
+            );
+        }
+        let guarded: Vec<&String> = commands
+            .iter()
+            .filter(|c| c.contains(HOOK_PRETOOLUSE_SUBCMD))
+            .collect();
+        assert_eq!(guarded.len(), 2, "both pretooluse walls materialized");
+        for cmd in guarded {
+            assert!(cmd.ends_with(HOOK_EXIT2_GUARD), "fail-closed guard: {cmd}");
+        }
+    }
+
+    #[test]
+    fn embedded_hooks_asset_ships_bare_doctrine_and_both_pretooluse_walls() {
+        // The checked-in asset stays authored-bare (EX-2); templating is install-time.
+        // Also pins T7: both PreToolUse matchers (Bash + Edit|Write) are registered.
+        let raw = PluginAssets::get("doctrine/hooks/hooks.json").unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&raw.data).unwrap();
+        let ptu = v["hooks"]["PreToolUse"].as_array().unwrap();
+        let matchers: Vec<&str> = ptu.iter().map(|e| e["matcher"].as_str().unwrap()).collect();
+        assert!(matchers.contains(&"Bash"), "Bash wall registered");
+        assert!(
+            matchers.contains(&"Edit|Write"),
+            "Edit|Write wall registered"
+        );
+        for e in ptu {
+            assert_eq!(
+                e["hooks"][0]["command"], "doctrine worktree pretooluse",
+                "asset ships the bare command (templated at install)"
+            );
+        }
+    }
 
     // ADR-005 / SL-023 PHASE-04 (VT-1): the de-dup'd skills route rather than
     // restate. Guards the named sites against re-growing flag-syntax templates,

@@ -311,7 +311,10 @@ mod tests {
         // The original command is opaquely wrapped in a nested bwrap jail bound to
         // the worktree — never echoed verbatim (INV-5 / opaque_wrap).
         assert!(wrapped.contains(BWRAP_BIN), "wrapped in bwrap: {wrapped}");
-        assert!(wrapped.contains(WT), "jail bound to the worktree: {wrapped}");
+        assert!(
+            wrapped.contains(WT),
+            "jail bound to the worktree: {wrapped}"
+        );
         assert!(
             !wrapped.contains("echo hi"),
             "original command is opaque (base64), not literal: {wrapped}"
@@ -439,5 +442,94 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(reason.contains(REASON_NO_BWRAP), "per-arm reason: {reason}");
+    }
+
+    // ── T4: R4-canon boundary (security-load-bearing) ───────────────────────────
+    // The leaf's `pathcheck` is a PURE component-wise prefix test that TRUSTS its
+    // inputs are already canonical. The shell's `canonicalize_missing` is the wall:
+    // it must resolve `..` and symlinks BEFORE `decide_write`, or an escaping write
+    // slips through. No leaf test can catch a bypass — it lives here, on real disk.
+
+    use std::os::unix::fs::symlink;
+
+    /// A jailed write to `real` under `wt` (both canonical) — the shell path.
+    fn write_decision(wt: &Path, real: &Path) -> Decision {
+        let mut inp = input(Some("a1"), TOOL_WRITE);
+        inp.cwd = Some(wt.display().to_string());
+        decide(
+            &inp,
+            wt,
+            true,
+            Some(real),
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        )
+    }
+
+    #[test]
+    fn canonicalize_resolves_dotdot_escape_and_denies() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let wt = root.join("wt");
+        let outside = root.join("outside");
+        fs::create_dir_all(&wt).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        // Raw `../outside/secret` looks worktree-relative; canonicalization exposes
+        // the escape.
+        let real = canonicalize_missing(&wt, "../outside/secret").expect("realpath -m");
+        assert!(
+            !real.starts_with(&wt),
+            "`..` must resolve OUTSIDE the worktree: {}",
+            real.display()
+        );
+        assert_eq!(
+            write_decision(&wt, &real),
+            Decision::Deny {
+                reason: format!("escapes-worktree: {}", real.display()),
+            },
+            "an escaping `..` write is denied"
+        );
+    }
+
+    #[test]
+    fn canonicalize_follows_symlink_escape_and_denies() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let wt = root.join("wt");
+        let outside = root.join("outside");
+        fs::create_dir_all(&wt).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        // A symlink INSIDE the worktree pointing OUT — a string-prefix check on the
+        // raw path (`<wt>/escape/...`) would wrongly pass; realpath -m follows it.
+        symlink(&outside, wt.join("escape")).unwrap();
+
+        let real = canonicalize_missing(&wt, "escape/secret").expect("realpath -m");
+        assert!(
+            real.starts_with(&outside) && !real.starts_with(&wt.join("escape")),
+            "symlink resolved to the real target outside: {}",
+            real.display()
+        );
+        assert!(
+            matches!(write_decision(&wt, &real), Decision::Deny { .. }),
+            "a write through an escaping symlink is denied"
+        );
+    }
+
+    #[test]
+    fn canonicalize_keeps_in_worktree_write_and_passes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let wt = root.join("wt");
+        fs::create_dir_all(&wt).unwrap();
+
+        // A missing target (new file) still canonicalizes (realpath -m) and stays in.
+        let real = canonicalize_missing(&wt, "src/new.rs").expect("realpath -m");
+        assert!(real.starts_with(&wt), "in-worktree: {}", real.display());
+        assert_eq!(
+            write_decision(&wt, &real),
+            Decision::PassThrough,
+            "an in-worktree write passes"
+        );
     }
 }

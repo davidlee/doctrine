@@ -290,8 +290,11 @@ pub(crate) fn opaque_wrap(orig_cmd: &str, argv: &[OsString]) -> String {
 
 /// POSIX single-quote escaping: wrap in `'…'`, and render an embedded `'` as `'\''`.
 /// Safe for arbitrary bytes (spaces, quotes, globs) — nothing inside `'…'` is special
-/// except `'` itself.
-fn shell_single_quote(s: &str) -> String {
+/// except `'` itself. The canonical INV-5 escaper: `opaque_wrap` uses it for the
+/// wrapper argv, and the PHASE-03 install templating reuses it (via the worktree
+/// re-export) to single-quote the baked absolute exec into every plugin hook
+/// command (design §5.4 — "same quoting discipline as INV-5").
+pub(crate) fn shell_single_quote(s: &str) -> String {
     let escaped = s.replace('\'', "'\\''");
     format!("'{escaped}'")
 }

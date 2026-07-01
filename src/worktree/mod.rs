@@ -27,6 +27,9 @@ mod allowlist;
 // consumed by the PHASE-03 `pretooluse` shell. Dead-code is held by a module-inner
 // `expect` in jail.rs (covers both cfg while items are unconsumed).
 mod jail;
+// SL-182 PHASE-03: the canonical INV-5 POSIX escaper, reused by the install-time
+// hook templating (skills.rs) to single-quote the baked absolute exec (design §5.4).
+pub(crate) use jail::shell_single_quote;
 
 // SL-182 PHASE-03: the PreToolUse hook shell (command tier). Drives the pure jail
 // core (leaf) with impure inputs resolved here: git topology, host capability,

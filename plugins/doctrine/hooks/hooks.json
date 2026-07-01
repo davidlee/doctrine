@@ -21,6 +21,26 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "doctrine worktree pretooluse"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "doctrine worktree pretooluse"
+          }
+        ]
+      }
     ]
   }
 }

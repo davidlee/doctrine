@@ -92,6 +92,24 @@ therefore needs **no** funnel `slice record-delta` step; `record-delta` survives
 on this arm **only** as the manual escape hatch (correct a range / bootstrap a
 pre-binding phase).
 
+## Worker confinement (SL-182)
+The claude worker is confined by two installed **PreToolUse** hooks (plugin
+`hooks.json` → `doctrine worktree pretooluse`): **Bash** is opaquely rewritten
+into a nested bwrap jail (rw the worktree, ro everything else); **Edit|Write**
+outside the worktree is denied. The orchestrator (no `agent_id`) passes through.
+Confinement is by construction — no cooperative worker flag.
+
+- **No hot-reload.** Plugin `hooks/` changes load at session start only
+  (`docs/claude/plugins-reference.md:394`). After `doctrine install` (or any
+  hooks edit), pick them up with **`/reload-plugins`** (lighter) or a session
+  restart — otherwise the OLD hooks (or none) are live.
+- **Fail-closed install.** The installed command is the resolved **absolute**
+  exec with a `|| exit 2` guard, so a missing/stale binary **denies** rather than
+  running the tool unconfined (PreToolUse otherwise fails open — only exit 2
+  blocks).
+- **Escape hatch.** A broken Bash wrapper can lock you out of Bash, but Edit/Write
+  are not Bash-gated: disable the offending hook via Edit, then `/reload-plugins`.
+
 ## Red Flags
 **Never:** spawn without first `arm-spawn`-ing and cd'ing INTO the spawn dir (a
 spawn from the coord root is a benign pass-through, never a dispatch worker); read
