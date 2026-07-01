@@ -102,6 +102,73 @@ const REASON_NO_BACKEND: &str = "no-jail-backend";
 /// The `.git` directory name — an `extra_rw` touching it is rejected (INV-3).
 const GIT_DIR: &str = ".git";
 
+// ---- SL-183 macOS Seatbelt vocabulary (STD-001: single-sourced, no inline
+//      literals; §5.2 constant catalog). The base profile shape is probe-proven
+//      (RSK-014 H2 pass 3); the require-all xcrun_db scoping is the F-P3-A
+//      correction to design §5.1's illustrative bare regex. -----------------------
+/// The `sandbox-exec` launcher binary.
+const SANDBOX_EXEC: &str = "sandbox-exec";
+/// `-D <name>=<value>` param flag (realpath'd values ride here, never the profile
+/// body — F-A footgun mitigation, INV-M2).
+const FLAG_D: &str = "-D";
+/// `-f <profile>` — the materialized `.sb` profile file (PHASE-03 writes it).
+const FLAG_F: &str = "-f";
+/// The `env` launcher — sets `TMPDIR` for the wrapped command without touching the
+/// shared `opaque_wrap` body (D2 seam-preserving choice; the proven
+/// `seatbelt-jail.sh` exported TMPDIR inside the body, `env` is its argv analog).
+const ENV_BIN: &str = "env";
+
+/// `-D` param NAMES referenced by the profile (`(param "WT")` …). The profile emits
+/// these names; `sandbox_exec_argv` binds `-D <name>=<realpath>`.
+const PARAM_WT: &str = "WT";
+const PARAM_TMP: &str = "TMP";
+const PARAM_PTMP: &str = "PTMP";
+const PARAM_DUTMP: &str = "DUTMP";
+/// `extra_rw` params are `RW0`, `RW1`, … — the stem, indexed at emit.
+const PARAM_RW_PREFIX: &str = "RW";
+/// The `TMPDIR` env var name (`env TMPDIR=<tmp>` prefixes the wrapped command).
+const ENV_TMPDIR: &str = "TMPDIR";
+
+/// `/private/tmp` — coarse-denied FIRST (F-A). A literal, not a resolved param:
+/// macOS `/tmp` symlinks here, and the private-tmp deny collapses scratch into the
+/// worktree rw scope (D-mac3). Named per STD-001.
+const PTMP_LITERAL: &str = "/private/tmp";
+
+/// SBPL profile tokens (STD-001). §5.1's profile shows these inline for readability
+/// ONLY — none ship as inline literals.
+const SB_VERSION: &str = "(version 1)";
+const SB_ALLOW_DEFAULT: &str = "(allow default)";
+const SB_DENY_WRITE_FLOOR: &str = "(deny file-write*)";
+
+/// Device write sinks that MUST stay writable under the floor (F-B). Probe-proven
+/// set (RSK-014 H2): `/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, and
+/// the tty family. Emitted as `(allow file-write* …)` lines between the coarse
+/// denies and the WT/TMP allows.
+const DEVICE_SINK_ALLOWS: &[&str] = &[
+    r#"(allow file-write* (literal "/dev/null"))"#,
+    r#"(allow file-write* (literal "/dev/zero"))"#,
+    r#"(allow file-write* (literal "/dev/random"))"#,
+    r#"(allow file-write* (literal "/dev/urandom"))"#,
+    r#"(allow file-write* (regex #"^/dev/tty"))"#,
+];
+
+/// The `xcrun_db` cache-file re-allow regex (F-3 / F-E, anchored to one path segment).
+///
+/// Matches the OS-owned `xcrun_db` cache family under DUTMP: the committed cache is
+/// plain `xcrun_db`, the atomic temps are `xcrun_db-<hash>`; `xcrun_db[^/]*$` (empty
+/// or non-slash tail, anchored to `$`) covers both.
+///
+/// **OVER-MATCH CAVEAT (F-P3-3):** scoped to DUTMP this still allows ANY basename
+/// beginning `xcrun_db` at ANY depth (`xcrun_db_x`, `xcrun_dbEVIL`, nested
+/// `…/xcrun_db`). xcrun writes only at DUTMP top level so it is safe in practice;
+/// documented, NOT tightened — a literal would break the `xcrun_db-<hash>` family.
+const XCRUN_DB_REGEX: &str = r#"#"/xcrun_db[^/]*$""#;
+
+/// `network == false` ⇒ this line is appended (coarse syscall-deny, not iface
+/// removal — the stated coarseness caveat, §5.2 / scope objective 5). Default-open:
+/// omitted on a valid network==true policy.
+const DENY_NETWORK: &str = "(deny network*)";
+
 /// The hook's verdict for a single tool call. Deny is expressed as **data**, never
 /// an exit code (the shell always exits 0 — `mem.fact.claude.pretooluse-hook-fail-open`).
 /// - `PassThrough` → emit nothing (orchestrator / non-jailed).
@@ -145,14 +212,35 @@ pub(crate) enum Backend {
     Deny { reason: String },
 }
 
-/// SL-183 macOS Seatbelt inputs, shell-resolved (`getconf DARWIN_USER_TEMP_DIR`,
-/// `TMPDIR=<wt>/.tmp`, the materialized `sandbox-exec -f` profile path). Reserved
-/// here as the ADDITIVE data channel on `Backend::Seatbelt` so SL-183 slots its
-/// builder in with NO SL-182 signature refactor (OQ-mac3 / D-mac2; SL-183 coherence
-/// seam-gap). Empty today; SL-183 populates the fields — `Default` keeps SL-182's
-/// test constructor compiling unchanged.
+/// SL-183 macOS Seatbelt inputs, shell-resolved. The ADDITIVE data channel on
+/// `Backend::Seatbelt` — SL-183 slots its builders in with NO SL-182 signature
+/// refactor (OQ-mac3 / D-mac2). PHASE-03's `resolve_inputs` populates these
+/// (impure: `getconf DARWIN_USER_TEMP_DIR`, realpath, `<wt>/.tmp` creation, profile
+/// materialization); the PHASE-02 pure builders consume them. **Every path is
+/// already shell-canonicalized (realpath'd)** — the purity fence: no resolution in
+/// this layer (INV-M2, D-canon). `#[derive(Default)]` is retained so SL-182's
+/// `ResolvedMac {}` / `..Default::default()` test constructors compile unchanged
+/// (behaviour-preservation).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct ResolvedMac {}
+pub(crate) struct ResolvedMac {
+    /// Realpath'd worktree → `-D WT`, `(subpath (param "WT"))`.
+    pub wt: PathBuf,
+    /// Realpath'd `<wt>/.tmp` → `-D TMP`, `(subpath (param "TMP"))`, and the
+    /// `TMPDIR=` export for the wrapped command.
+    pub tmp: PathBuf,
+    /// Realpath'd `getconf DARWIN_USER_TEMP_DIR` (`/private/var/folders/…`) →
+    /// `-D DUTMP`; coarse-denied, then require-all-scoped for the `xcrun_db` re-allow.
+    pub dutmp: PathBuf,
+    /// Validated (`validate_policy`) rw grants beyond the worktree → `-D RW0..RWn`,
+    /// `(subpath (param "RWn"))` per index.
+    pub extra_rw: Vec<PathBuf>,
+    /// `false` ⇒ append `DENY_NETWORK`. Mirrors `JailPolicy.network` (bool, default
+    /// open — reused as-is, never widened).
+    pub network: bool,
+    /// The materialized `.sb` profile file → `sandbox-exec -f <profile_path>`
+    /// (PHASE-03 writes the `seatbelt_profile` output here).
+    pub profile_path: PathBuf,
+}
 
 /// Per-arming jail policy (design §5.3). Parsed here (pure); the disk read is the
 /// shell's. Default is the permissive floor that preserves current behaviour.
@@ -319,26 +407,20 @@ impl Jailer for Bwrap {
 /// `select_jailer(Backend::Seatbelt(_)) == Some(_)` (VT-8); never built on Linux. Holds
 /// the shell-resolved `ResolvedMac` so SL-183 fills `wrap_argv` with no signature change.
 pub(crate) struct Seatbelt {
-    // Unread today (macOS `wrap_argv` deferred to SL-183). Under the bin build the whole
-    // surface is dead and the module-level `not(test)` expectation absorbs this; under
-    // `test` the rest of the surface is live, so the field needs its own expectation.
-    #[cfg_attr(
-        test,
-        expect(
-            dead_code,
-            reason = "SL-183 reads the shell-resolved macOS inputs; reserved additive channel"
-        )
-    )]
+    // Read by `wrap_argv` → `sandbox_exec_argv` under `test`. Under the bin build the
+    // whole macOS surface is dead (Seatbelt is never constructed on Linux) and the
+    // module-level `not(test)` expectation absorbs it — so no field-level attr.
     resolved: ResolvedMac,
 }
 
 impl Jailer for Seatbelt {
-    #[expect(
-        clippy::unimplemented,
-        reason = "SL-183 fills the Seatbelt sandbox-exec argv builder; unreachable on Linux"
-    )]
+    /// The `wt`/`policy` the trait passes are already folded into `self.resolved`
+    /// (PHASE-03's `resolve_inputs` derives the realpath'd `ResolvedMac` FROM them),
+    /// so the builder reads the canonical resolved set — not the raw trait args. The
+    /// profile body is materialized separately (PHASE-03) at `resolved.profile_path`,
+    /// which the argv references via `-f`.
     fn wrap_argv(&self, _wt: &Path, _policy: &JailPolicy) -> Vec<OsString> {
-        unimplemented!("SL-183 — Seatbelt sandbox-exec argv, deferred")
+        sandbox_exec_argv(&self.resolved)
     }
 }
 
@@ -383,6 +465,88 @@ pub(crate) fn bwrap_argv(wt: &Path, policy: &JailPolicy) -> Vec<OsString> {
         argv.push(FLAG_UNSHARE_NET.into());
     }
     argv.push(FLAG_ARG_SEP.into());
+    argv
+}
+
+/// Build the macOS Seatbelt (SBPL) profile body (§5.1, SL-183 PHASE-02). PURE:
+/// resolved paths in, `String` out — no realpath/getconf/exec/fs. Rules are ordered
+/// **deny-coarse-first / allow-specific-last** (F-A, last-match-wins): allow-default
+/// header → write floor → coarse PTMP+DUTMP denies → device sinks → WT/TMP allows →
+/// the **require-all-scoped** `xcrun_db` re-allow (F-P3-A; a bare regex leaks outside
+/// DUTMP) → one `RWn` allow per `extra_rw` → conditional `(deny network*)`. Paths are
+/// NOT spliced here — the profile references `(param "…")`; `sandbox_exec_argv` binds
+/// the realpaths via `-D`. VT-1.
+pub(crate) fn seatbelt_profile(resolved: &ResolvedMac) -> String {
+    let mut lines: Vec<String> = vec![
+        SB_VERSION.to_string(),
+        SB_ALLOW_DEFAULT.to_string(),
+        SB_DENY_WRITE_FLOOR.to_string(),
+        // coarse denies FIRST (F-A).
+        format!(r#"(deny file-write* (subpath (param "{PARAM_PTMP}")))"#),
+        format!(r#"(deny file-write* (subpath (param "{PARAM_DUTMP}")))"#),
+    ];
+    // device write sinks — must stay writable (F-B).
+    lines.extend(DEVICE_SINK_ALLOWS.iter().map(|s| (*s).to_string()));
+    // specific allows LAST.
+    lines.push(format!(
+        r#"(allow file-write* (subpath (param "{PARAM_WT}")))"#
+    ));
+    lines.push(format!(
+        r#"(allow file-write* (subpath (param "{PARAM_TMP}")))"#
+    ));
+    // xcrun_db re-allow — require-all-scoped to DUTMP (F-P3-A).
+    lines.push(format!(
+        r#"(allow file-write* (require-all (subpath (param "{PARAM_DUTMP}")) (regex {XCRUN_DB_REGEX})))"#
+    ));
+    // one allow per validated extra_rw, indexed RW0..RWn.
+    for (n, _) in resolved.extra_rw.iter().enumerate() {
+        lines.push(format!(
+            r#"(allow file-write* (subpath (param "{PARAM_RW_PREFIX}{n}")))"#
+        ));
+    }
+    // network deny is opt-in (default open); emitted only on network==false.
+    if !resolved.network {
+        lines.push(DENY_NETWORK.to_string());
+    }
+    lines.push(String::new()); // trailing newline
+    lines.join("\n")
+}
+
+/// Build the `sandbox-exec` launcher argv PREFIX (§5.1, SL-183 PHASE-02). PURE:
+/// resolved paths in, `Vec<OsString>` out. Binds realpath'd `-D` params (paths ride
+/// argv, NEVER the profile body — F-A footgun, INV-M2), points `-f` at the
+/// materialized profile, and terminates with `--`. `opaque_wrap` appends the wrapped
+/// command after; TMPDIR is set via a trailing `env TMPDIR=<tmp>` token (D2 — keeps
+/// the shared `opaque_wrap` body unchanged, the argv analog of the proven shell's
+/// in-body `export TMPDIR`). VT-2.
+pub(crate) fn sandbox_exec_argv(resolved: &ResolvedMac) -> Vec<OsString> {
+    let mut argv: Vec<OsString> = vec![SANDBOX_EXEC.into()];
+    // -D <name>=<realpath> bindings — OsString to preserve non-UTF-8 paths.
+    let mut bind = |name: &str, value: &Path| {
+        argv.push(FLAG_D.into());
+        let mut pair = OsString::from(name);
+        pair.push("=");
+        pair.push(value.as_os_str());
+        argv.push(pair);
+    };
+    bind(PARAM_WT, &resolved.wt);
+    bind(PARAM_TMP, &resolved.tmp);
+    bind(PARAM_PTMP, Path::new(PTMP_LITERAL));
+    bind(PARAM_DUTMP, &resolved.dutmp);
+    for (n, rw) in resolved.extra_rw.iter().enumerate() {
+        bind(&format!("{PARAM_RW_PREFIX}{n}"), rw);
+    }
+    // -f <profile> then the launcher terminator.
+    argv.push(FLAG_F.into());
+    argv.push(resolved.profile_path.as_os_str().to_os_string());
+    argv.push(FLAG_ARG_SEP.into());
+    // TMPDIR export for the wrapped command, via `env` (opaque_wrap appends `bash
+    // -c <body>` after this tail).
+    argv.push(ENV_BIN.into());
+    let mut tmpdir = OsString::from(ENV_TMPDIR);
+    tmpdir.push("=");
+    tmpdir.push(resolved.tmp.as_os_str());
+    argv.push(tmpdir);
     argv
 }
 
@@ -907,6 +1071,201 @@ mod tests {
         assert_eq!(
             decide_write(&target, Some(&pb("/opt/cache/blob")), &policy),
             Decision::PassThrough
+        );
+    }
+
+    // ---- SL-183 PHASE-02 fixtures ----------------------------------------------
+
+    /// A representative resolved macOS policy: realpath'd worktree + `.tmp`, the
+    /// per-user temp, one extra rw grant, network open. `network`/`extra_rw` are
+    /// varied per test.
+    fn resolved_mac() -> ResolvedMac {
+        ResolvedMac {
+            wt: pb("/private/tmp/wt-abc"),
+            tmp: pb("/private/tmp/wt-abc/.tmp"),
+            dutmp: pb("/private/var/folders/xy/T"),
+            extra_rw: vec![],
+            network: true,
+            profile_path: pb("/private/tmp/wt-abc/.tmp/jail.sb"),
+        }
+    }
+
+    /// Byte offset of `needle` in `hay`, or a panic naming the missing token —
+    /// keeps ordering assertions readable.
+    fn at(hay: &str, needle: &str) -> usize {
+        hay.find(needle)
+            .unwrap_or_else(|| panic!("profile missing token: {needle:?}\n---\n{hay}"))
+    }
+
+    // ---- VT-1: seatbelt_profile (T1) -------------------------------------------
+
+    #[test]
+    fn seatbelt_profile_orders_deny_coarse_first_allow_specific_last() {
+        // F-A last-match-wins: floor → coarse denies (PTMP, DUTMP) → device sinks
+        // → specific allows (WT, TMP, xcrun_db) — strictly increasing offsets.
+        let p = seatbelt_profile(&resolved_mac());
+        let floor = at(&p, SB_DENY_WRITE_FLOOR);
+        // PTMP is referenced by param in the body; the literal path rides -D (F-A).
+        let ptmp = at(&p, r#"(deny file-write* (subpath (param "PTMP")))"#);
+        let dutmp = at(&p, r#"(deny file-write* (subpath (param "DUTMP")))"#);
+        let dev = at(&p, DEVICE_SINK_ALLOWS[0]);
+        let wt = at(&p, r#"(subpath (param "WT"))"#);
+        let tmp = at(&p, r#"(subpath (param "TMP"))"#);
+        let xcrun = at(&p, XCRUN_DB_REGEX);
+        assert!(
+            floor < ptmp && ptmp < dutmp && dutmp < dev && dev < wt && wt < tmp && tmp < xcrun,
+            "rule ordering violated (F-A): floor={floor} ptmp={ptmp} dutmp={dutmp} dev={dev} wt={wt} tmp={tmp} xcrun={xcrun}"
+        );
+        // allow-default header precedes the floor.
+        assert!(at(&p, SB_ALLOW_DEFAULT) < floor);
+        assert!(p.starts_with(SB_VERSION));
+    }
+
+    #[test]
+    fn seatbelt_profile_scopes_xcrun_db_reallow_with_require_all() {
+        // F-P3-A: the xcrun_db re-allow MUST be require-all-scoped to DUTMP; a bare
+        // regex LEAKS outside DUTMP (proven RSK-014 H2 pass 3).
+        let p = seatbelt_profile(&resolved_mac());
+        assert!(
+            p.contains(&format!(
+                r#"(require-all (subpath (param "{PARAM_DUTMP}")) (regex {XCRUN_DB_REGEX}))"#
+            )),
+            "xcrun_db re-allow not require-all-scoped to DUTMP:\n{p}"
+        );
+    }
+
+    #[test]
+    fn seatbelt_profile_emits_device_sinks() {
+        let p = seatbelt_profile(&resolved_mac());
+        for sink in DEVICE_SINK_ALLOWS {
+            assert!(p.contains(sink), "device sink missing: {sink}\n{p}");
+        }
+    }
+
+    #[test]
+    fn seatbelt_profile_network_line_is_conditional() {
+        let mut open = resolved_mac();
+        open.network = true;
+        assert!(
+            !seatbelt_profile(&open).contains(DENY_NETWORK),
+            "network=true must NOT emit the network deny (default open)"
+        );
+        let mut closed = resolved_mac();
+        closed.network = false;
+        assert!(
+            seatbelt_profile(&closed).contains(DENY_NETWORK),
+            "network=false MUST emit {DENY_NETWORK}"
+        );
+    }
+
+    #[test]
+    fn seatbelt_profile_emits_one_rw_allow_per_extra_rw() {
+        let mut none = resolved_mac();
+        none.extra_rw = vec![];
+        let p0 = seatbelt_profile(&none);
+        assert!(!p0.contains(&format!(r#"(param "{PARAM_RW_PREFIX}0")"#)));
+
+        let mut two = resolved_mac();
+        two.extra_rw = vec![pb("/opt/a"), pb("/opt/b")];
+        let p2 = seatbelt_profile(&two);
+        assert!(p2.contains(&format!(
+            r#"(allow file-write* (subpath (param "{PARAM_RW_PREFIX}0")))"#
+        )));
+        assert!(p2.contains(&format!(
+            r#"(allow file-write* (subpath (param "{PARAM_RW_PREFIX}1")))"#
+        )));
+        assert!(!p2.contains(&format!(r#"(param "{PARAM_RW_PREFIX}2")"#)));
+    }
+
+    // ---- VT-2: sandbox_exec_argv (T3) ------------------------------------------
+
+    /// Join an `OsString` argv into a lossy `String` for substring assertions.
+    fn argv_str(argv: &[OsString]) -> String {
+        argv.iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn sandbox_exec_argv_binds_realpathd_d_params() {
+        let r = resolved_mac();
+        let argv = sandbox_exec_argv(&r);
+        let s = argv_str(&argv);
+        // -D <name>=<realpath> for each of WT/TMP/PTMP/DUTMP — as OsString tokens.
+        assert!(s.contains(&format!("{PARAM_WT}={}", r.wt.display())));
+        assert!(s.contains(&format!("{PARAM_TMP}={}", r.tmp.display())));
+        assert!(s.contains(&format!("{PARAM_PTMP}={PTMP_LITERAL}")));
+        assert!(s.contains(&format!("{PARAM_DUTMP}={}", r.dutmp.display())));
+        // the -D flag itself is present (paired with each binding).
+        assert!(argv.iter().any(|a| a == FLAG_D));
+    }
+
+    #[test]
+    fn sandbox_exec_argv_binds_one_rw_param_per_extra_rw() {
+        let mut r = resolved_mac();
+        r.extra_rw = vec![pb("/opt/a"), pb("/opt/b")];
+        let s = argv_str(&sandbox_exec_argv(&r));
+        assert!(s.contains(&format!("{PARAM_RW_PREFIX}0=/opt/a")));
+        assert!(s.contains(&format!("{PARAM_RW_PREFIX}1=/opt/b")));
+    }
+
+    #[test]
+    fn sandbox_exec_argv_references_profile_and_terminates() {
+        let r = resolved_mac();
+        let argv = sandbox_exec_argv(&r);
+        // launcher head.
+        assert_eq!(
+            argv.first().map(|a| a.as_os_str()),
+            Some(OsString::from(SANDBOX_EXEC).as_os_str())
+        );
+        // -f <profile_path>.
+        let s = argv_str(&argv);
+        assert!(s.contains(FLAG_F));
+        assert!(argv.iter().any(|a| a == r.profile_path.as_os_str()));
+        // TMPDIR export rides an `env` token (D2: opaque_wrap stays shared/unchanged).
+        assert!(argv.iter().any(|a| a == ENV_BIN));
+        assert!(s.contains(&format!("{ENV_TMPDIR}={}", r.tmp.display())));
+        // the `--` separator precedes the env/body tail so opaque_wrap appends after.
+        let sep = argv
+            .iter()
+            .position(|a| a == FLAG_ARG_SEP)
+            .expect("no -- separator");
+        let envpos = argv
+            .iter()
+            .position(|a| a == ENV_BIN)
+            .expect("no env token");
+        assert!(sep < envpos, "env/body tail must follow --");
+    }
+
+    #[test]
+    fn seatbelt_wrap_argv_delegates_to_sandbox_exec_argv() {
+        // The trait adapter reads self.resolved (not the raw wt/policy) and returns
+        // the same launcher argv as the standalone builder.
+        let r = resolved_mac();
+        let jailer = Seatbelt {
+            resolved: r.clone(),
+        };
+        assert_eq!(
+            jailer.wrap_argv(&r.wt, &JailPolicy::default()),
+            sandbox_exec_argv(&r)
+        );
+    }
+
+    #[test]
+    fn sandbox_exec_argv_never_splices_paths_into_profile_body() {
+        // F-A footgun: paths ride -D params, NEVER string-spliced into SBPL. The
+        // argv is the launcher; the profile body is a FILE (-f), not inline.
+        let r = resolved_mac();
+        let argv = sandbox_exec_argv(&r);
+        let s = argv_str(&argv);
+        assert!(
+            !s.contains("file-write*"),
+            "argv must not carry profile-body tokens"
+        );
+        assert!(
+            !s.contains("subpath"),
+            "argv must not carry profile-body tokens"
         );
     }
 }

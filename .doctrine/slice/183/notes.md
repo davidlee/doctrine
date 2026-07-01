@@ -61,6 +61,51 @@ ancestor of code_end c321254c (not a forward delta)` and **skipped** the binding
   propagate. At `/audit`: note PHASE-01 has no git-range delta by design of a code-free
   probe phase; rely on evidence-conformance, not delta-conformance, for it.
 
+## PHASE-02 (pure builders) — implemented, gate blocked on SL-182
+
+`seatbelt_profile` + `sandbox_exec_argv` implemented TDD behind SL-182's `Seatbelt`
+seam; `Seatbelt::wrap_argv` wired to the builder. **41 jail unit tests green**
+(31 SL-182 behaviour-preserved + 10 new SL-183). Clippy clean.
+
+### Seam-gap closed: ResolvedMac fields (sanctioned by its doc comment)
+
+SL-182 landed `ResolvedMac {}` EMPTY. PHASE-02 populated it: `wt`, `tmp`, `dutmp`,
+`extra_rw`, `network: bool`, `profile_path` — all shell-canonicalized (PHASE-03's
+`resolve_inputs` fills them; the pure builders consume them). Kept `#[derive(Default)]`
+so SL-182's `ResolvedMac {}` test constructors compile unchanged (behaviour-preserved,
+verified). No SL-182 signature/body change.
+
+### D2 (TMPDIR) resolved seam-preservingly
+
+Proven `seatbelt-jail.sh` exports TMPDIR *inside the wrapped body*; `opaque_wrap`
+(shared, bwrap+seatbelt) must stay unchanged. So `sandbox_exec_argv` emits a trailing
+`env TMPDIR=<tmp>` token after `--`; `opaque_wrap` appends `bash -c <body>` after that.
+`opaque_wrap` untouched → PHASE-04 parity proof intact.
+
+### F-P3-A encoded
+
+`XCRUN_DB_REGEX` const + `seatbelt_profile` emit the `require-all (subpath (param
+"DUTMP")) (regex …)` scoped form, NOT §5.1's bare regex. Over-match caveat is in the
+const's doc comment. §5.1 reconcile-at-close debt (bare→require-all) still stands.
+
+### BLOCKER — full gate red on a PRE-EXISTING SL-182 CHR-014 violation (ISS-204)
+
+`doctrine check commit`'s full `test` recipe fails `e2e_no_baked_paths::no_baked_paths`
+(CHR-014 / SL-162): SL-182's `pi_spawn_core_tokens` VT-7 helper bakes
+`env!("CARGO_MANIFEST_DIR")` (introduced by SL-182 `b67b6299`, verified at clean
+detached-HEAD — NOT an SL-183 artifact). Consulted (David): **SL-182 is being actively
+worked in a parallel thread; the fix was handed to that thread.** SL-183 must NOT edit
+jail.rs's SL-182 test surface (conflict + ownership). Captured as **ISS-204**
+(`references SL-182 --role concerns`).
+
+**Consequence for PHASE-02 close:** the pure builders are green in isolation, but
+PHASE-02 must NOT flip `completed` until the full gate is green (else `code_end_oid`
+binds to a red-gate state). **HOLD the completed-flip on ISS-204.** Commit the green
+builder work now (durable); flip `completed` + re-run the gate once SL-182's thread
+lands the fix. If SL-182's fix touches jail.rs concurrently, expect a rebase/merge on
+this file — my additions are append-only (new consts block, new `ResolvedMac` fields,
+two new fns, new tests), so conflicts should be localized.
+
 ### Probe hygiene notes
 
 - Every `(param "X")` the profile references MUST have a `-D X` bound or
