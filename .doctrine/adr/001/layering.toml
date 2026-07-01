@@ -126,6 +126,7 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 "worktree::shared" = "engine"     # cross-machine helpers; imports git (leaf)
 "worktree::allowlist" = "leaf"    # pure tier-classification core; imports glob (external) only — no domain, disk, git, clock, or rng (D4)
 "worktree::jail" = "leaf"         # SL-182: pure jail core — no disk/git/clock/rng; topology+capability+policy-read done by the shell, passed in as data (R1)
+"worktree::pretooluse" = "command"  # SL-182 PHASE-03: PreToolUse hook shell — stdin JSON in, hookSpecificOutput out; drives jail (leaf) + shared topology (engine)
 "worktree::marker" = "engine"
 "worktree::provision" = "engine"   # provision is impure shell; imports engine + leaf
 "worktree::import" = "engine"      # import classify+run; imports engine + leaf

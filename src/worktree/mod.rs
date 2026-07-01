@@ -28,6 +28,12 @@ mod allowlist;
 // `expect` in jail.rs (covers both cfg while items are unconsumed).
 mod jail;
 
+// SL-182 PHASE-03: the PreToolUse hook shell (command tier). Drives the pure jail
+// core (leaf) with impure inputs resolved here: git topology, host capability,
+// path canonicalization. `run_pretooluse` is the `WorktreeCommand::Pretooluse` entry.
+mod pretooluse;
+pub(crate) use pretooluse::run_pretooluse;
+
 mod marker;
 #[cfg(test)]
 pub(crate) use marker::{Cause, DISPATCH_WORKER_AGENT_TYPE, describe_mode};
@@ -151,6 +157,16 @@ pub(crate) enum WorktreeCommand {
     /// stdout. No `-p`: the root is the payload cwd's `--show-toplevel`.
     /// Orchestrator-classed — fires in the markerless parent coord tree.
     CreateFork,
+
+    /// Confine a subagent tool call for the claude `PreToolUse` hook (stdin
+    /// payload). Reads `{agent_id?, cwd, tool_name, tool_input}` JSON on stdin;
+    /// a subagent (`agent_id` present) whose `cwd` is a worktree of THIS project
+    /// is confined — Bash is rewritten via `updatedInput` into a nested bwrap
+    /// jail; Edit/Write escaping the worktree is denied. The orchestrator
+    /// (no `agent_id`) passes through. Emits `hookSpecificOutput` JSON (or
+    /// nothing) on stdout; **exit 0 always** — deny is data, not an exit code
+    /// (`mem.fact.claude.pretooluse-hook-fail-open`).
+    Pretooluse,
 
     /// Create or resume a coordination worktree.
     /// For a slice on branch `dispatch/<slice>` off the resolved trunk.
@@ -308,6 +324,7 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             path,
         } => run_fork(path, &base, &branch, &dir, worker),
         WorktreeCommand::CreateFork => run_create_fork(),
+        WorktreeCommand::Pretooluse => run_pretooluse(),
         WorktreeCommand::Coordinate { slice, dir, path } => {
             // Resolve the g2 authoring-branch VALUE here (command tier) — not in
             // coordinate.rs, which must stay off the config loader (ADR-001/VA-1).

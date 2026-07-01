@@ -32,6 +32,19 @@ pub(super) fn resolve_common_dir(root: &Path, common: &str) -> anyhow::Result<Pa
         .with_context(|| format!("canonicalize git-common-dir {}", joined.display()))
 }
 
+/// The repo's shared gitdir (`git rev-parse --git-common-dir`), canonicalized.
+/// Identifies the repository behind `root`: two worktrees of the SAME repo share
+/// one common-dir, whereas a sibling repo's worktree resolves to a different one.
+/// SL-182 PHASE-03 uses it to confirm a subagent `cwd` belongs to THIS project
+/// (matched against `CLAUDE_PROJECT_DIR`'s common-dir), the git-topology check
+/// that replaces the probe's hard-coded `.worktrees/` path prefix (A1).
+pub(super) fn common_git_dir(root: &Path) -> anyhow::Result<PathBuf> {
+    resolve_common_dir(
+        root,
+        &git::git_text(root, &["rev-parse", "--git-common-dir"])?,
+    )
+}
+
 /// True iff `root` sits on a *linked* worktree rather than the primary tree:
 /// `git rev-parse --git-dir` (this tree's gitdir) differs from `--git-common-dir`
 /// (the repo's shared gitdir). On the primary tree both resolve to the same
@@ -40,10 +53,7 @@ pub(super) fn resolve_common_dir(root: &Path, common: &str) -> anyhow::Result<Pa
 /// may call it; `memory record` calls it to warn on squash-orphan risk.
 pub(crate) fn is_linked_worktree(root: &Path) -> anyhow::Result<bool> {
     let git_dir = resolve_common_dir(root, &git::git_text(root, &["rev-parse", "--git-dir"])?)?;
-    let common = resolve_common_dir(
-        root,
-        &git::git_text(root, &["rev-parse", "--git-common-dir"])?,
-    )?;
+    let common = common_git_dir(root)?;
     Ok(git_dir != common)
 }
 
