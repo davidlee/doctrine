@@ -43,6 +43,24 @@ defers the macOS profile body to SL-183. **Re-check SL-182 design at PHASE-02 en
 — it is still in flight. New constraint to honour: per-arming profile granularity
 (serial ⇒ per-worker, parallel ⇒ one shared profile; RV-200 F-1 / RV-202).
 
+### Conformance-boundary note — PHASE-01 source-delta binding absent (accepted)
+
+At `completed`, doctrine warned `record_source_delta: code_start 38ca3a76 is not an
+ancestor of code_end c321254c (not a forward delta)` and **skipped** the binding:
+`phase-01.toml` keeps `code_start_oid = 38ca3a76` and has **no `code_end_oid`**.
+
+- Cause: `code_start` (38ca3a76 "mem(SL-183): network-field-is-bool") was stamped on
+  a lineage later discarded when the `f3539349`/`133880a2` "doctrine" auto-commits +
+  parallel SL-182 landings restructured history. 38ca3a76 is now orphaned (in no
+  branch, not an ancestor of HEAD). HEAD `c321254c` (edge tip) is forward-intact and
+  the probe evidence (`results.md`, the rig) is fully reachable/committed.
+- Decision (consulted, David — Option 1): **accept the absent binding**. PHASE-01
+  ships NO Rust — its conformance value is the evidence in `results.md`, not a source
+  delta. History-repair is forbidden (doctrine tracks oids as the boundary; AGENTS.md
+  / handover). PHASE-02+ stamp `code_start` fresh from HEAD, so the anomaly does not
+  propagate. At `/audit`: note PHASE-01 has no git-range delta by design of a code-free
+  probe phase; rely on evidence-conformance, not delta-conformance, for it.
+
 ### Probe hygiene notes
 
 - Every `(param "X")` the profile references MUST have a `-D X` bound or
