@@ -123,7 +123,7 @@ exit_criteria = [
   { id = "EX-4", text = "Both PreToolUse walls (Bash bwrap-wrap, Edit|Write pathcheck) fire for a worktree subagent through the installed hook; the runbook documents no-hot-reload + /reload-plugins + the Edit/Write escape hatch" },
 ]
 verification = [
-  { id = "VT-1", expects = "synthetic stdin → emitted JSON: bash-wrap, write-deny, orchestrator pass-through (no agent_id), isolation:none deny (agent_id + repo-root cwd), INV-2 repo-root-ancestor deny", test_file = "src/worktree/pretooluse.rs", keywords = ["pretooluse", "pass_through", "deny", "updatedInput"] },
+  { id = "VT-1", expects = "synthetic stdin → emitted JSON: bash-wrap, write-deny, orchestrator pass-through (no agent_id), isolation:none deny (agent_id + repo-root cwd), INV-2 repo-root-ancestor deny", test_file = "src/worktree/pretooluse.rs", keywords = ["pretooluse", "PassThrough", "deny", "updatedInput"] },
   { id = "VT-2", expects = "install templating bakes an absolute exec into every plugin hooks.json command's leading token (parity with settings HookSpec bake)", test_file = "src/skills.rs", keywords = ["install_hooks_plugin_for_claude", "resolve_exec", "doctrine"] },
   { id = "VT-3", expects = "fail-closed exec: a missing/non-resolving doctrine denies, never unconfined pass-through (F-1)", test_file = "src/worktree/pretooluse.rs", keywords = ["fail", "closed", "deny"] },
   { id = "VA-1", expects = "Agent confirms, on the installed hook, both walls fire for a live worktree subagent and honour updatedInput — the PHASE-01 proof re-expressed against the installed path" },
