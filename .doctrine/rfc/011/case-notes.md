@@ -703,3 +703,18 @@ native behavior instead. Token cost: whole capture apparatus + correlator (RV-20
 + blocking-hook analysis (RV-201) built & reverting. Root cause: probed the wrong
 config (native, not the shipped WorktreeCreate-hook path). Lesson: probe the
 PRODUCTION hook manifest, not a stripped probe harness.
+
+[inquisition; SL-182-PH05-RV205-2026-07-01]
+Hostile pass (RV-205) on the live-import amendment nearly burned a full cycle on a
+FALSE blocker. F-1 raised the footer `worktreePath` as "undocumented + unprobed"
+(true of docs/claude) — but the fact was ALREADY PROVEN in doctrine's own memory
+(mem_019efe28 P2, wtc-cwd probe, 2026-06-25) and simply UNCITED in the design.
+Root cause: a load-bearing proven harness fact lived in a memory the design did not
+reference, so on re-read it read as faith and drew a blocker. Cost: one raise +
+dispose + contest + re-dispose round, plus my proposed (unnecessary) "probe the
+footer" remediation, before the User pointed at the memory. Token-efficiency lesson:
+when a design asserts a harness fact, it should CITE the proving memory inline
+(mem id), not restate the fact bare — the citation is what stops a later reviewer
+(or a fresh context) re-litigating settled empiricism. The retrieve-memory step at
+design time should have surfaced mem_019efe28; it did not, because the amendment was
+authored mid-execution without a fresh /retrieve-memory sweep over the footer seam.
