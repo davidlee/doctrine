@@ -1,0 +1,54 @@
+memory_uid = "mem_019f1b67752c7470aa529e0d0b87a547"
+memory_key = "mem.fact.doctrine.phase-code-start-oid-is-head-at-flip"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Phase code_start_oid binds to HEAD at the in_progress flip — never rewrite that commit"
+summary = "A phase's code_start_oid binds to HEAD at the in_progress flip — never squash that commit, even if empty"
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine slice phase"]
+tags = ["doctrine", "lifecycle", "git", "conformance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "743d17e35f7a7c06c0f9a3867334fce4fe4583de"
+tree = "5369e960ee90e21a945db3756cd1941557c541fd"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "743d17e35f7a7c06c0f9a3867334fce4fe4583de"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019f031a315c7803900fcf398092e674"
+
+[[relation]]
+label = "related"
+target = "mem_019f0d369fe97231a788b89d56629d43"
+
+[[relation]]
+label = "related"
+target = "mem_019e9a11e8337613bdf8e96f75a9e6b2"
+
