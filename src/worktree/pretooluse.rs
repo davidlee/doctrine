@@ -33,6 +33,8 @@ use super::create::{JAIL_SUBPATH, WORKTREES_SUBDIR};
 use super::jail::{
     Backend, Decision, JailPolicy, decide_bash, decide_write, resolve_target, validate_policy,
 };
+#[cfg(target_os = "macos")]
+use super::jail::{RealEnv, resolve_inputs, seatbelt_backend};
 
 // ---- stdin field / tool vocabulary (STD-001: single-sourced) -------------------
 /// Harness-supplied project-root anchor (`docs/claude/hooks.md:462`). The topology
@@ -52,14 +54,32 @@ const DECISION_ALLOW: &str = "allow";
 const REASON_PREFIX: &str = "worktree-jail: ";
 
 // ---- host capability probe vocabulary (STD-001) --------------------------------
+// `bwrap` capability vocabulary. `BWRAP_BIN` / `REASON_NO_BWRAP` back the Linux
+// prod arm AND the arm-neutral `decide()` tests (which drive `Backend::Bwrap` as
+// the representative wrap backend on any host). On macOS prod they are unreferenced
+// (the arm probes Seatbelt instead) but the tests still need them — hence
+// always-compiled with dead-code allowed on macOS. The PATH probe (`have_bwrap` /
+// `ENV_PATH`) is Linux-exclusive and fully gated.
+#[cfg_attr(
+    all(target_os = "macos", not(test)),
+    expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
+)]
 const BWRAP_BIN: &str = "bwrap";
 const REALPATH_BIN: &str = "realpath";
 /// `realpath -m` — canonicalize a possibly-missing path (a write target need not
 /// exist yet). Matches the proven probe (`pretooluse-pathcheck.sh`).
 const REALPATH_MISSING_FLAG: &str = "-m";
+#[cfg(not(target_os = "macos"))]
 const ENV_PATH: &str = "PATH";
 /// The per-arm `Backend::Deny` reason when the Linux host has no `bwrap`.
+#[cfg_attr(
+    all(target_os = "macos", not(test)),
+    expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
+)]
 const REASON_NO_BWRAP: &str = "bwrap-unavailable";
+/// Placeholder backend reason for the Edit/Write path, where the backend is never
+/// read (`decide_write` walls on `pathcheck`). Never surfaced to a user.
+const REASON_BACKEND_UNUSED: &str = "backend-unused-on-write-path";
 
 /// The `PreToolUse` stdin subset consumed (design §5.2). Every field is optional
 /// so a malformed / partial payload folds to `Default` — fail-closed: a subagent
@@ -145,6 +165,17 @@ fn render(decision: &Decision) -> Option<String> {
     }
 }
 
+/// The harness-supplied project-root anchor (`CLAUDE_PROJECT_DIR`), realpath'd.
+/// One source shared by the topology check (A1) and the macOS Seatbelt arm's
+/// `main_root` (`resolve_inputs`' policy-dir + validate base). This module IS the
+/// claude-specific `PreToolUse` handler (ADR-011 per-harness altitude), so the
+/// claude env var is a legitimate contract, not new coupling. `None` ⇒ absent or
+/// uncanonicalizable ⇒ every consumer fails closed.
+fn project_anchor() -> Option<PathBuf> {
+    let raw = std::env::var_os(ENV_PROJECT_DIR)?;
+    fs::canonicalize(PathBuf::from(raw)).ok()
+}
+
 /// Is `cwd` a linked worktree of THIS project? (A1 — git topology, not a path
 /// prefix.) Two gates: `is_linked_worktree(cwd)` AND `cwd`'s git-common-dir equals
 /// the `CLAUDE_PROJECT_DIR` anchor's common-dir. The equality holds for any
@@ -156,10 +187,9 @@ fn cwd_is_project_worktree(cwd: &Path) -> bool {
     if !matches!(super::shared::is_linked_worktree(cwd), Ok(true)) {
         return false;
     }
-    let Some(anchor) = std::env::var_os(ENV_PROJECT_DIR) else {
+    let Some(anchor) = project_anchor() else {
         return false;
     };
-    let anchor = PathBuf::from(anchor);
     match (
         super::shared::common_git_dir(cwd),
         super::shared::common_git_dir(&anchor),
@@ -255,7 +285,8 @@ fn load_policy(main_root: &Path, name: &str) -> JailPolicy {
 
 /// Whether `bwrap` resolves on `PATH` (the `command -v bwrap` the probe ran).
 /// Capability is DATA: absence ⇒ `Backend::Deny` ⇒ the leaf denies with the
-/// per-arm reason, never an unconfined pass-through (fail-closed).
+/// per-arm reason, never an unconfined pass-through (fail-closed). Linux arm only.
+#[cfg(not(target_os = "macos"))]
 fn have_bwrap() -> bool {
     let Some(path) = std::env::var_os(ENV_PATH) else {
         return false;
@@ -263,9 +294,16 @@ fn have_bwrap() -> bool {
     std::env::split_paths(&path).any(|dir| dir.join(BWRAP_BIN).is_file())
 }
 
-/// Resolve the host capability descriptor (RV-202 — capability-as-data). Linux:
-/// `bwrap` present ⇒ `Bwrap`, else `Deny{bwrap-unavailable}`.
-fn probe_backend() -> Backend {
+/// Resolve the host capability descriptor (RV-202 — capability-as-data), per host
+/// arm (ADR-011 per-harness altitude; SL-183 D-mac2). `cfg`-split, not runtime:
+/// `bwrap` is Linux-only, Seatbelt macOS-only — mirrors jail.rs's "Seatbelt never
+/// built on Linux" gating and keeps the mac-only `getconf`/`resolve_inputs` off
+/// Linux CI. The pure routing downstream (`select_jailer` → `decide_bash`) is
+/// arm-neutral over whichever `Backend` this returns.
+///
+/// **Linux/bwrap:** `bwrap` present ⇒ `Bwrap`, else `Deny{bwrap-unavailable}`.
+#[cfg(not(target_os = "macos"))]
+fn probe_backend(_cwd: &Path) -> Backend {
     if have_bwrap() {
         Backend::Bwrap
     } else {
@@ -273,6 +311,21 @@ fn probe_backend() -> Backend {
             reason: REASON_NO_BWRAP.to_string(),
         }
     }
+}
+
+/// **macOS/Seatbelt (SL-183):** resolve the impure inputs through the leaf's
+/// injected `ResolveEnv` seam (`RealEnv`, the sole site of git/getconf/realpath/
+/// mkdir/policy-read) and map the outcome onto a `Backend`. `Ok ⇒ Seatbelt(resolved)`
+/// (the jailer wraps Bash into `sandbox-exec`); `Err ⇒ Deny{reason}` — fail-closed
+/// on every `cwd`→policy derivation branch (POL-002, F-B4), NEVER an unconfined
+/// pass-through. `main_root` = the realpath'd `CLAUDE_PROJECT_DIR` anchor (this is
+/// the claude hook handler; the anchor already grounds the topology check). An
+/// absent anchor degrades to a non-worktree root ⇒ the leaf denies (fail-closed).
+#[cfg(target_os = "macos")]
+fn probe_backend(cwd: &Path) -> Backend {
+    let main_root = project_anchor().unwrap_or_default();
+    let env = RealEnv { main_root };
+    seatbelt_backend(resolve_inputs(cwd, &env.main_root, &env))
 }
 
 /// `doctrine worktree pretooluse` — the `PreToolUse` hook entry. Reads stdin,
@@ -297,7 +350,20 @@ pub(crate) fn run_pretooluse() -> anyhow::Result<()> {
         .and_then(|c| fs::canonicalize(c).ok())
         .unwrap_or_default();
     let is_project_worktree = cwd_is_project_worktree(&cwd);
-    let backend = probe_backend();
+    // Capability resolution is consumed ONLY by the Bash wall (`decide_bash` →
+    // `select_jailer`); `decide_write` walls Edit/Write on `pathcheck` alone and
+    // ignores the backend. Resolve it LAZILY for Bash only — on macOS `probe_backend`
+    // spawns git/getconf and mkdir's `<wt>/.tmp` (a `resolve_inputs` side effect), so
+    // running it on every Edit/Write would burden the hot hook path (INV-1) and mutate
+    // the fs where it is never read. Edit/Write get a cheap placeholder backend.
+    let backend = match input.tool_name.as_deref() {
+        Some(TOOL_BASH) => probe_backend(&cwd),
+        // Edit/Write never read the backend (`decide_write` walls on pathcheck); a
+        // never-consumed placeholder avoids the impure probe on this path.
+        _ => Backend::Deny {
+            reason: REASON_BACKEND_UNUSED.to_string(),
+        },
+    };
     // Resolve the per-worktree policy provisioned at arm/create time (design §5.3, D2):
     // cwd → basename(worktree) → `jail/<name>.toml`. Absence/malformed/invalid ⇒ the
     // Default floor, NEVER deny (objective 3).
