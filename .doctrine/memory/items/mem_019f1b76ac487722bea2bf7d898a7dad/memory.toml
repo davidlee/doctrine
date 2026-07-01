@@ -1,0 +1,50 @@
+memory_uid = "mem_019f1b76ac487722bea2bf7d898a7dad"
+memory_key = "mem.fact.claude.project-dir-in-worktree-subagent-hook-env"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "CLAUDE_PROJECT_DIR present in worktree-subagent hook env"
+summary = "CLAUDE_PROJECT_DIR IS set in the PreToolUse hook process env for isolation:worktree subagents (points at the project root) — but NOT in the subagent tool-exec env"
+created = "2026-07-01"
+updated = "2026-07-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["confinement", "hooks", "claude-code"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "63f2f87fb3c283bbdd4055ff08499a717ba66b6e"
+tree = "396d90c95bab09bf4574f0c6c9b594eda5f7c603"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "63f2f87fb3c283bbdd4055ff08499a717ba66b6e"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-182"
+
+[[source]]
+kind = "commit"
+ref = "63f2f87f"
+
