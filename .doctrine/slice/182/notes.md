@@ -368,3 +368,14 @@ Green: 11 `worktree::pretooluse` + 49 `skills::tests` + 17 architecture_layering
 - **jail.rs dead_code expect** — still fulfilled in P03 (validate_policy /
   from_toml_str stay `not(test)`-dead; the shell consumes the rest). P04 makes
   them live ⇒ narrow/remove the module expect then.
+
+### CHR-014 cross-slice catch (2026-07-01, commit 66821afe)
+SL-183 agent surfaced (sl182.txt) that PHASE-03's VT-7 helper
+`pi_spawn_core_tokens()` baked the repo root via `env!("CARGO_MANIFEST_DIR")`
+(jail.rs:597, from b67b6299) — a CHR-014/SL-162 violation tripping
+`e2e_no_baked_paths`. Unit-only test runs had masked it; the full
+`check commit` recipe was RED on baseline, blocking SL-183's own gate.
+Fixed as owner: swap to runtime `test_support::repo_root().join(...)`
+(the guard's mandated form). Test-only, behaviour-identical. Guard now green.
+Cross-slice ownership stayed clean because SL-182's agent made the fix.
+Audit: fold into VT-7 conformance evidence.
