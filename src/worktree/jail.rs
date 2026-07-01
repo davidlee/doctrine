@@ -67,7 +67,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // ---- bwrap flag vocabulary (STD-001: single-sourced, no inline literals) --------
 const BWRAP: &str = "bwrap";
@@ -159,7 +159,7 @@ pub(crate) struct ResolvedMac {}
 // `deny_unknown_fields` (MF-4): the policy is an orchestrator-authored SECURITY
 // document; a typo'd key (`network`, `extra_rws`) must be a loud parse `Err`, not a
 // silent fall-through to the *permissive* Default floor (network=true). Fail-closed.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct JailPolicy {
     /// Absolute paths granted rw inside the jail (beyond the worktree). Default `[]`.
@@ -583,6 +583,19 @@ mod tests {
             JailPolicy::from_toml_str("extra_rws = []"),
             Err(PolicyError::Malformed(_))
         ));
+    }
+
+    #[test]
+    fn to_toml_string_round_trips_through_from_toml_str() {
+        // PHASE-04 T1: `arm-spawn` writes a declared policy via `toml::to_string`;
+        // `create-fork` copies it; `pretooluse` reads it back through `from_toml_str`.
+        // The written form MUST re-parse to the same value (one schema, both ends).
+        let p = JailPolicy {
+            extra_rw: vec![pb("/nix/store"), pb("/cache")],
+            network: false,
+        };
+        let text = toml::to_string(&p).expect("serialize policy to TOML");
+        assert_eq!(JailPolicy::from_toml_str(&text).expect("re-parse"), p);
     }
 
     // ---- VT-7 parity + VT-4: bwrap argv (T5) -----------------------------------
