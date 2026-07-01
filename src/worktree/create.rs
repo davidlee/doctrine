@@ -205,7 +205,9 @@ pub(crate) const ARMING_JAIL_FILE: &str = "jail.toml";
 /// `cwd → basename(worktree)`). Runtime state: gitignored, GC'd with teardown.
 pub(crate) const JAIL_SUBPATH: &str = ".doctrine/state/dispatch/jail";
 /// Where every created tree lives under the coord-tree root: `<root>/.worktrees/<name>`.
-const WORKTREES_SUBDIR: &str = ".worktrees";
+/// `pub(crate)` so the `pretooluse` reader recovers the coord root by stripping this
+/// same layout (design §5.3 — one owner of the `.worktrees/<name>` shape, no re-spell).
+pub(crate) const WORKTREES_SUBDIR: &str = ".worktrees";
 
 /// The `WorktreeCreate` payload subset we read (tolerate extra fields). JSON on
 /// stdin: `{ "cwd": "<orchestrator cwd at spawn>", "name": "<unique slug>" }`. The

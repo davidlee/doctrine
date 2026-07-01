@@ -20,6 +20,7 @@
 //! (no `agent_id`, INV-1) short-circuits BEFORE any subprocess — this hook fires
 //! on EVERY tool call, including the human's, and must leave that path free.
 
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -28,7 +29,10 @@ use std::process::Command;
 use anyhow::Context;
 use serde::Deserialize;
 
-use super::jail::{Backend, Decision, JailPolicy, decide_bash, decide_write, resolve_target};
+use super::create::{JAIL_SUBPATH, WORKTREES_SUBDIR};
+use super::jail::{
+    Backend, Decision, JailPolicy, decide_bash, decide_write, resolve_target, validate_policy,
+};
 
 // ---- stdin field / tool vocabulary (STD-001: single-sourced) -------------------
 /// Harness-supplied project-root anchor (`docs/claude/hooks.md:462`). The topology
@@ -191,6 +195,64 @@ fn canonicalize_missing(cwd: &Path, file_path: &str) -> Option<PathBuf> {
     (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
 }
 
+/// Resolve the per-worktree jail policy provisioned for `cwd` (design §5.3, D2). Keyed
+/// `cwd → basename(worktree) → file`: every dispatch worktree lives at
+/// `<root>/.worktrees/<name>` (create.rs), so the coord root that owns the provisioned
+/// policy is `cwd` with the `.worktrees/<name>` suffix stripped, and the worktree name
+/// is `basename(cwd)`. Git-common-dir is deliberately NOT used — it points at the
+/// PRIMARY `.git`, not the coord root where `.worktrees/` and the jail dir co-reside.
+/// Any layout mismatch (cwd is not `.../.worktrees/<name>`) ⇒ Default floor — locating
+/// the file is a layout-owned concern distinct from worktree RECOGNITION/trust (A1,
+/// handled by `cwd_is_project_worktree`). Absence/failure NEVER denies (objective 3).
+fn resolve_provisioned_policy(cwd: &Path) -> JailPolicy {
+    let Some(name) = cwd.file_name().and_then(OsStr::to_str) else {
+        return JailPolicy::default();
+    };
+    let Some(parent) = cwd.parent() else {
+        return JailPolicy::default();
+    };
+    if parent.file_name() != Some(OsStr::new(WORKTREES_SUBDIR)) {
+        return JailPolicy::default();
+    }
+    let Some(main_root) = parent.parent() else {
+        return JailPolicy::default();
+    };
+    load_policy(main_root, name)
+}
+
+/// Read + validate + materialize the provisioned policy at
+/// `<main_root>/`⟨`JAIL_SUBPATH`⟩`/<name>.toml` (design §5.1/§5.3). Binary outcome: a
+/// fully-valid, materialized policy, or the Default floor. Every failure mode —
+/// absent file, malformed body, an `extra_rw` that does not canonicalize (R4-canon
+/// materialization: the leaf trusts every bind-source exists + is symlink-resolved),
+/// or a `validate_policy` rejection (`/`, ancestor of `main_root`, or `.git`) — folds
+/// to Default. It NEVER denies: a worker with no valid widening is still fully jailed
+/// to its worktree, which is the safe outcome (objective 3).
+fn load_policy(main_root: &Path, name: &str) -> JailPolicy {
+    let file = main_root.join(JAIL_SUBPATH).join(format!("{name}.toml"));
+    let Ok(body) = fs::read_to_string(&file) else {
+        return JailPolicy::default(); // absent (or unreadable) ⇒ floor
+    };
+    let Ok(mut policy) = JailPolicy::from_toml_str(&body) else {
+        return JailPolicy::default(); // malformed / unknown key ⇒ floor, never deny
+    };
+    // R4-canon: canonicalize BEFORE validating so `validate_policy` sees the resolved
+    // paths the leaf will actually bind (a symlink could otherwise resolve past the
+    // wall). Any entry that does not exist ⇒ floor the whole policy.
+    let mut canon = Vec::with_capacity(policy.extra_rw.len());
+    for p in &policy.extra_rw {
+        let Ok(real) = fs::canonicalize(p) else {
+            return JailPolicy::default();
+        };
+        canon.push(real);
+    }
+    policy.extra_rw = canon;
+    if validate_policy(&policy, main_root).is_err() {
+        return JailPolicy::default(); // unsafe widening ⇒ floor
+    }
+    policy
+}
+
 /// Whether `bwrap` resolves on `PATH` (the `command -v bwrap` the probe ran).
 /// Capability is DATA: absence ⇒ `Backend::Deny` ⇒ the leaf denies with the
 /// per-arm reason, never an unconfined pass-through (fail-closed).
@@ -236,9 +298,10 @@ pub(crate) fn run_pretooluse() -> anyhow::Result<()> {
         .unwrap_or_default();
     let is_project_worktree = cwd_is_project_worktree(&cwd);
     let backend = probe_backend();
-    // PHASE-04 wires the per-worktree `jail/<name>.toml` lookup + validate_policy;
-    // here the strictest floor (rw worktree, ro rest) always applies.
-    let policy = JailPolicy::default();
+    // Resolve the per-worktree policy provisioned at arm/create time (design §5.3, D2):
+    // cwd → basename(worktree) → `jail/<name>.toml`. Absence/malformed/invalid ⇒ the
+    // Default floor, NEVER deny (objective 3).
+    let policy = resolve_provisioned_policy(&cwd);
     let real = match input.tool_name.as_deref() {
         Some(TOOL_EDIT | TOOL_WRITE) => input
             .tool_input
@@ -531,5 +594,112 @@ mod tests {
             Decision::PassThrough,
             "an in-worktree write passes"
         );
+    }
+
+    // ── VT-3: per-worktree policy resolution (cwd→basename), floor-not-deny ──────
+
+    /// Build `<root>/.worktrees/<name>` + provision `jail/<name>.toml = body`; return
+    /// the (canonicalised) worktree cwd the reader keys on.
+    fn provision(root: &Path, name: &str, body: Option<&str>) -> PathBuf {
+        let wt = root.join(WORKTREES_SUBDIR).join(name);
+        fs::create_dir_all(&wt).unwrap();
+        if let Some(body) = body {
+            let jail = root.join(JAIL_SUBPATH);
+            fs::create_dir_all(&jail).unwrap();
+            fs::write(jail.join(format!("{name}.toml")), body).unwrap();
+        }
+        wt
+    }
+
+    #[test]
+    fn resolves_declared_policy_by_cwd_basename() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let allowed = root.join("allowed");
+        fs::create_dir_all(&allowed).unwrap();
+        let wt = provision(
+            &root,
+            "agent-abc",
+            Some(&format!(
+                "network = false\nextra_rw = [\"{}\"]\n",
+                allowed.display()
+            )),
+        );
+
+        let policy = resolve_provisioned_policy(&wt);
+        assert!(!policy.network, "declared network=false honoured");
+        assert_eq!(policy.extra_rw, vec![allowed], "materialised extra_rw");
+    }
+
+    #[test]
+    fn absent_declaration_resolves_default_floor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let wt = provision(&root, "agent-abc", None); // worktree, but no jail file
+        assert_eq!(resolve_provisioned_policy(&wt), JailPolicy::default());
+    }
+
+    #[test]
+    fn malformed_declaration_floors_never_denies() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        // Unknown key (deny_unknown_fields ⇒ Err) MUST floor, not deny — a worker is
+        // still fully jailed to its worktree under Default (objective 3).
+        let wt = provision(&root, "agent-abc", Some("extra_rws = []\n"));
+        assert_eq!(resolve_provisioned_policy(&wt), JailPolicy::default());
+    }
+
+    #[test]
+    fn non_existent_extra_rw_floors_whole_policy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        // R4-canon: an extra_rw that does not canonicalise (does not exist) must never
+        // reach the leaf as a bind — the whole policy floors to Default.
+        let wt = provision(
+            &root,
+            "agent-abc",
+            Some("extra_rw = [\"/does/not/exist\"]\n"),
+        );
+        assert_eq!(resolve_provisioned_policy(&wt), JailPolicy::default());
+    }
+
+    #[test]
+    fn unsafe_extra_rw_ancestor_floors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        // extra_rw = an ancestor of main_root ⇒ validate_policy rejects ⇒ floor.
+        let wt = provision(
+            &root,
+            "agent-abc",
+            Some(&format!("extra_rw = [\"{}\"]\n", root.display())),
+        );
+        assert_eq!(resolve_provisioned_policy(&wt), JailPolicy::default());
+    }
+
+    #[test]
+    fn parallel_siblings_share_one_provisioned_profile() {
+        // F-1: a parallel batch off one arming provisions the SAME profile to every
+        // sibling (shared per-arming granularity, not a leak). Two names, identical
+        // bodies ⇒ both resolve the same non-Default profile.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let body = "network = false\n";
+        let a = provision(&root, "agent-a", Some(body));
+        let b = provision(&root, "agent-b", Some(body));
+        let pa = resolve_provisioned_policy(&a);
+        let pb = resolve_provisioned_policy(&b);
+        assert_eq!(pa, pb, "siblings share one profile");
+        assert!(!pa.network, "the shared declared profile is honoured");
+    }
+
+    #[test]
+    fn cwd_outside_worktrees_layout_floors() {
+        // Locating the file is layout-owned: a cwd that is not `.../.worktrees/<name>`
+        // ⇒ Default (never a deny). Distinct from the A1 trust check.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let stray = root.join("not-worktrees").join("agent-abc");
+        fs::create_dir_all(&stray).unwrap();
+        assert_eq!(resolve_provisioned_policy(&stray), JailPolicy::default());
     }
 }
