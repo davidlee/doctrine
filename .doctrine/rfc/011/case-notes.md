@@ -775,3 +775,14 @@ selectors undelivered. Recovered with `slice record-delta`. The completion
 auto-stamp has no guard against "you are on the main tree with no worktree delta to
 bind" — it silently writes a degenerate row over a good one. Captured as memory
 mem.pattern.doctrine.phase-complete-clobbers-boundary.
+
+[slice; SL-185-scoping]
+`slice selector add` and `link` reject the prefixed id `SL-185` (want bare
+`185`) while `slice status`/`show` want the same bare number — but `link`
+source arg wants prefixed `SL-185`. Mixed id-form convention across sibling
+verbs costs a retry each. Separately: authoring `[[selector]]` after
+`slice new` scaffolds, then `link` appending `[[relation]]`, tripped an F1
+"typed table authored after array" guard — the scaffold's own ordering
+(relation block last, above the comment) forces a manual re-home of the
+selector table above the relations before any link succeeds. Two retries
+lost to id-form + toml-ordering friction, neither substantive.

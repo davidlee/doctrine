@@ -12,15 +12,19 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/worktree/jail.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "scripts/pi-spawn-confined.sh"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/mod.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/pretooluse.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"

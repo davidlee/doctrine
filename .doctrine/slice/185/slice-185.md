@@ -45,7 +45,10 @@ the load-bearing intent: parity, not a mac-shaped special case.
 ## Non-Goals
 
 - **Linux subprocess arm** — bwrap confinement via `pi-spawn-confined.sh` already
-  ships; not re-touched except at the shared seam if OQ-1 lands in Rust.
+  ships; not re-touched (D1 = altitude (A); unifying it onto `jail-prefix` is the
+  (B) follow-up).
+- **Codex arm** — no codex confined-spawn script exists; SL-185 is **pi-only**.
+  Codex confinement is a follow-up (trivial under design goal G1: one spawn line).
 - **The claude PreToolUse arm** — SL-183, done. Only reused, not modified.
 - **Reads / confidentiality, network egress wall, the `launchd`/`launchctl
   submit` IPC residual** — inherited Non-Goals from SL-183; Seatbelt leaves reads
