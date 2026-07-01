@@ -23,6 +23,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, bail};
 use clap::Subcommand;
 
+use crate::worktree::JailPolicy;
+
 use crate::boundary::{BoundaryRow, Provenance};
 use crate::corpus_guard;
 use crate::git::{self, MergeTree, RefCas, ZERO_OID};
@@ -215,6 +217,17 @@ pub(crate) enum DispatchCommand {
         #[arg(long)]
         slice: Option<u32>,
 
+        /// Per-arming jail widening (objective 3): absolute paths granted rw inside the
+        /// worker jail beyond its worktree. Repeatable. Empty (+ default network) ⇒ no
+        /// declaration ⇒ the pretooluse Default floor (design §5.3, D2).
+        #[arg(long = "extra-rw")]
+        extra_rw: Vec<PathBuf>,
+
+        /// Deny the worker jail network access (`--unshare-net`). Default keeps
+        /// today's network behaviour. Setting it declares a non-Default policy.
+        #[arg(long = "no-network")]
+        no_network: bool,
+
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -405,16 +418,35 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
         DispatchCommand::PlanNext { slice, json, path } => run_plan_next(path, slice, json),
         DispatchCommand::Status { slice, json, path } => run_status(path, slice, json),
         DispatchCommand::DeliverTo { path } => run_deliver_to(path),
-        DispatchCommand::ArmSpawn { base, slice, path } => run_arm_spawn(path, &base, slice),
+        DispatchCommand::ArmSpawn {
+            base,
+            slice,
+            extra_rw,
+            no_network,
+            path,
+        } => run_arm_spawn(path, &base, slice, extra_rw, no_network),
     }
 }
 
-/// `dispatch arm-spawn` — write the arming `base` file and print the spawn dir
-/// (SL-152 PHASE-03; design §5.2/§5.3). The arming dir is in the coord tree's own
-/// runtime state (gitignored, withheld `Tier::State` ⇒ never provisioned into a
-/// worker fork). The path const is SHARED with the `worktree create-fork` reader
-/// ([`crate::worktree::ARMING_SUBPATH`]) — one contract anchor, no re-spelling.
-fn run_arm_spawn(path: Option<PathBuf>, base: &str, slice: Option<u32>) -> anyhow::Result<()> {
+/// `dispatch arm-spawn` — write the arming `base` file (and the paired `jail.toml`
+/// policy DECLARATION) and print the spawn dir (SL-152 PHASE-03; design §5.2/§5.3).
+/// The arming dir is in the coord tree's own runtime state (gitignored, withheld
+/// `Tier::State` ⇒ never provisioned into a worker fork). The path const is SHARED
+/// with the `worktree create-fork` reader ([`crate::worktree::ARMING_SUBPATH`]) — one
+/// contract anchor, no re-spelling.
+///
+/// F-4 pairing: `base` and `jail.toml` are written in this SINGLE arming step, and a
+/// re-arm rewrites both — there is no separate "update jail.toml" path. When the
+/// declared policy equals the Default floor (no `--extra-rw`, network on), NO
+/// `jail.toml` is written and any STALE one is removed, so a leftover declaration can
+/// never pair with a fresh `base` (design §5.3).
+fn run_arm_spawn(
+    path: Option<PathBuf>,
+    base: &str,
+    slice: Option<u32>,
+    extra_rw: Vec<PathBuf>,
+    no_network: bool,
+) -> anyhow::Result<()> {
     // Fail closed on a base outside the reader's accepted envelope (4..=64 hex), so a
     // bad base surfaces at arm time, not silently as a no-fork at spawn time.
     let b = base.trim();
@@ -428,6 +460,7 @@ fn run_arm_spawn(path: Option<PathBuf>, base: &str, slice: Option<u32>) -> anyho
         .with_context(|| format!("create arming dir {}", spawn.display()))?;
     crate::fsutil::write_atomic(&spawn.join("base"), format!("{b}\n").as_bytes())
         .with_context(|| format!("write arming base in {}", spawn.display()))?;
+    write_arming_jail_policy(&spawn, extra_rw, no_network)?;
 
     let spawn_canon = std::fs::canonicalize(&spawn)
         .with_context(|| format!("canonicalize arming dir {}", spawn.display()))?;
@@ -436,6 +469,38 @@ fn run_arm_spawn(path: Option<PathBuf>, base: &str, slice: Option<u32>) -> anyho
     }
     writeln!(io::stdout(), "{}", spawn_canon.display())?;
     Ok(())
+}
+
+/// Write (or clear) the arming jail-policy DECLARATION beside `base` in `spawn`
+/// (F-4 pairing). The declared policy is `{ extra_rw, network: !no_network }`. When it
+/// equals the Default floor, absence and an explicit Default are indistinguishable to
+/// the reader (both ⇒ pretooluse Default), so we write NOTHING and remove any stale
+/// `jail.toml` — the pairing-hygiene guard that stops a leftover declaration riding a
+/// fresh `base`. Otherwise the policy is serialised through the single `JailPolicy`
+/// schema (round-trips to `from_toml_str` on read).
+fn write_arming_jail_policy(
+    spawn: &Path,
+    extra_rw: Vec<PathBuf>,
+    no_network: bool,
+) -> anyhow::Result<()> {
+    let policy = JailPolicy {
+        extra_rw,
+        network: !no_network,
+    };
+    let decl = spawn.join(crate::worktree::ARMING_JAIL_FILE);
+    if policy == JailPolicy::default() {
+        match std::fs::remove_file(&decl) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => {
+                Err(e).with_context(|| format!("clear stale jail declaration {}", decl.display()))
+            }
+        }
+    } else {
+        let body = toml::to_string(&policy).context("serialize arming jail policy")?;
+        crate::fsutil::write_atomic(&decl, body.as_bytes())
+            .with_context(|| format!("write jail declaration {}", decl.display()))
+    }
 }
 
 /// PURE — coordination-worktree placement guard (no env/disk; CLAUDE.md split).
@@ -3298,6 +3363,67 @@ mod tests {
         std::fs::write(&full, phases).unwrap();
         git(dir, &["add", "-A"]);
         git(dir, &["commit", "-q", "-m", "seed plan"]);
+    }
+
+    // ---- VT-2: arm-spawn writes the jail declaration beside base (PHASE-04) --------
+
+    #[test]
+    fn arm_spawn_writes_jail_declaration_beside_base() {
+        let repo = tempfile::tempdir().unwrap();
+        init_repo(repo.path());
+
+        run_arm_spawn(
+            Some(repo.path().to_path_buf()),
+            "68250bcd",
+            None,
+            vec![PathBuf::from("/nix/store")],
+            true, // --no-network
+        )
+        .unwrap();
+
+        let spawn = repo.path().join(crate::worktree::ARMING_SUBPATH);
+        assert!(spawn.join("base").exists(), "base written");
+        let decl = spawn.join(crate::worktree::ARMING_JAIL_FILE);
+        assert!(decl.exists(), "jail.toml written beside base (F-4 pairing)");
+        // The declaration round-trips through the single JailPolicy schema.
+        let policy = JailPolicy::from_toml_str(&std::fs::read_to_string(&decl).unwrap()).unwrap();
+        assert_eq!(policy.extra_rw, vec![PathBuf::from("/nix/store")]);
+        assert!(!policy.network, "--no-network declared");
+    }
+
+    #[test]
+    fn arm_spawn_default_policy_writes_no_declaration_and_clears_stale() {
+        let repo = tempfile::tempdir().unwrap();
+        init_repo(repo.path());
+        let spawn = repo.path().join(crate::worktree::ARMING_SUBPATH);
+        let decl = spawn.join(crate::worktree::ARMING_JAIL_FILE);
+
+        // First arm declares a policy ⇒ jail.toml present.
+        run_arm_spawn(
+            Some(repo.path().to_path_buf()),
+            "68250bcd",
+            None,
+            vec![PathBuf::from("/nix/store")],
+            false,
+        )
+        .unwrap();
+        assert!(decl.exists(), "declaration present after a non-Default arm");
+
+        // Re-arm with the Default floor (no flags) ⇒ no declaration; the stale one is
+        // cleared so it cannot pair with the fresh base (F-4 hygiene).
+        run_arm_spawn(
+            Some(repo.path().to_path_buf()),
+            "abcd1234",
+            None,
+            vec![],
+            false,
+        )
+        .unwrap();
+        assert!(spawn.join("base").exists(), "base rewritten");
+        assert!(
+            !decl.exists(),
+            "stale jail.toml cleared on a Default re-arm"
+        );
     }
 
     #[test]

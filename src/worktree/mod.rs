@@ -29,7 +29,7 @@ mod allowlist;
 mod jail;
 // SL-182 PHASE-03: the canonical INV-5 POSIX escaper, reused by the install-time
 // hook templating (skills.rs) to single-quote the baked absolute exec (design §5.4).
-pub(crate) use jail::shell_single_quote;
+pub(crate) use jail::{JailPolicy, shell_single_quote};
 
 // SL-182 PHASE-03: the PreToolUse hook shell (command tier). Drives the pure jail
 // core (leaf) with impure inputs resolved here: git topology, host capability,
@@ -54,7 +54,7 @@ mod provision;
 mod subagent;
 
 pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
-pub(crate) use create::{ARMING_SUBPATH, run_create_fork};
+pub(crate) use create::{ARMING_JAIL_FILE, ARMING_SUBPATH, run_create_fork};
 pub(crate) use fork::run_fork;
 pub(crate) use gc::run_gc;
 pub(crate) use import::run_import;
