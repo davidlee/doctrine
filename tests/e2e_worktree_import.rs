@@ -501,3 +501,209 @@ fn import_refused_under_worker_mode() {
         stderr(&out)
     );
 }
+
+// ---------------------------------------------------------------------------
+// SL-182 PHASE-05 T5 — `import --base <B> --patch <file>` (the claude arm, OQ-1)
+// ---------------------------------------------------------------------------
+// ro-`.git` blocks the worker's self-commit, so its delta rides a captured patch
+// instead of a fork commit. The `--patch` arm reuses the pure `classify_import`
+// belt UNCHANGED (single_commit vacuous); the `--fork` goldens above are frozen
+// (EX-4). These pin: happy apply, the belt on patch paths, head-moved, empty-halt,
+// and the clap mutual-exclusion.
+
+/// Build a captured working-tree patch (raw bytes, trailing newline intact — the
+/// `git()` helper trims, which would corrupt an EOF hunk) off `B`, touching `files`
+/// (intent-to-add surfaces new files in the diff). Returns `(B, patch_file)`.
+fn make_patch(src: &Path, holder: &Path, name: &str, files: &[(&str, &str)]) -> (String, PathBuf) {
+    let base = git(src, &["rev-parse", "HEAD"]);
+    let wt = holder.join(name);
+    git(src, &["worktree", "add", wt.to_str().unwrap(), &base]);
+    for (rel, body) in files {
+        let p = wt.join(rel);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&p, body).unwrap();
+    }
+    let mut add = vec!["add", "-N", "--"];
+    add.extend(files.iter().map(|(r, _)| *r));
+    git(&wt, &add);
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(&wt)
+        .args(["-c", "core.quotePath=false", "diff", "--no-renames", "HEAD"])
+        .output()
+        .expect("spawn git diff");
+    assert!(out.status.success(), "git diff for patch capture failed");
+    let patch_file = holder.join(format!("{name}.patch"));
+    std::fs::write(&patch_file, &out.stdout).unwrap();
+    (base, patch_file)
+}
+
+#[test]
+fn import_patch_happy_stages_delta_uncommitted() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let (base, patch) = make_patch(
+        src.path(),
+        holder.path(),
+        "pat-ok",
+        &[("feature.rs", "fn f() {}\n")],
+    );
+
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "import",
+            "--base",
+            &base,
+            "--patch",
+            patch.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "happy --patch import must succeed; stderr: {}",
+        stderr(&out)
+    );
+    // import != commit: HEAD unchanged == B.
+    assert_eq!(git(src.path(), &["rev-parse", "HEAD"]), base);
+    let staged = git(src.path(), &["diff", "--cached", "--name-only"]);
+    assert!(
+        staged.lines().any(|l| l == "feature.rs"),
+        "delta staged; got {staged:?}"
+    );
+}
+
+#[test]
+fn import_patch_refuses_doctrine_touch() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let (base, patch) = make_patch(
+        src.path(),
+        holder.path(),
+        "pat-doc",
+        &[(".doctrine/state/leak.txt", "sneaky\n")],
+    );
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "import",
+            "--base",
+            &base,
+            "--patch",
+            patch.to_str().unwrap(),
+        ],
+    );
+    assert_refusal(&out, "doctrine-touch");
+}
+
+#[test]
+fn import_patch_refuses_claude_touch() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let (base, patch) = make_patch(
+        src.path(),
+        holder.path(),
+        "pat-cla",
+        &[(".claude/settings.local.json", "{}\n")],
+    );
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "import",
+            "--base",
+            &base,
+            "--patch",
+            patch.to_str().unwrap(),
+        ],
+    );
+    assert_refusal(&out, "claude-touch");
+}
+
+#[test]
+fn import_patch_refuses_head_moved() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let (base, patch) = make_patch(
+        src.path(),
+        holder.path(),
+        "pat-hm",
+        &[("feature.rs", "fn f() {}\n")],
+    );
+    // Advance the coordination HEAD past B ⇒ head_at_base false.
+    std::fs::write(src.path().join("moved.txt"), "moved").unwrap();
+    git(src.path(), &["add", "."]);
+    git(src.path(), &["commit", "-q", "-m", "advance HEAD"]);
+
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "import",
+            "--base",
+            &base,
+            "--patch",
+            patch.to_str().unwrap(),
+        ],
+    );
+    assert_refusal(&out, "head-moved");
+}
+
+#[test]
+fn import_patch_empty_halts() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let base = git(src.path(), &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
+    let patch = holder.path().join("empty.patch");
+    std::fs::write(&patch, b"").unwrap();
+
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "import",
+            "--base",
+            &base,
+            "--patch",
+            patch.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "an empty captured patch must report-and-halt (R-capture-lossy); stderr: {}",
+        stderr(&out)
+    );
+    assert!(stderr(&out).contains("empty"), "halt names the empty patch");
+}
+
+#[test]
+fn import_rejects_both_fork_and_patch() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let base = git(src.path(), &["rev-parse", "HEAD"]);
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree", "import", "--base", &base, "--fork", "x", "--patch", "/tmp/p",
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "clap must reject --fork and --patch together"
+    );
+}

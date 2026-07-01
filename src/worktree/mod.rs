@@ -213,9 +213,17 @@ pub(crate) enum WorktreeCommand {
         #[arg(long)]
         base: String,
 
-        /// The fork branch carrying the single non-merge commit `S` (`S^ == B`).
+        /// The fork branch carrying the single non-merge commit `S` (`S^ == B`) —
+        /// the pi/subprocess arm's committed-fork source. Mutually exclusive with
+        /// `--patch`.
+        #[arg(long, conflicts_with = "patch")]
+        fork: Option<String>,
+
+        /// A captured working-tree patch file (the claude arm, SL-182 PHASE-05):
+        /// the worker's delta as an applyable patch, since ro-`.git` blocks its
+        /// self-commit. Mutually exclusive with `--fork`; exactly one is required.
         #[arg(long)]
-        fork: String,
+        patch: Option<PathBuf>,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -355,7 +363,12 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
                 .authoring_branch;
             run_coordinate(path, slice, &dir, authoring.as_deref())
         }
-        WorktreeCommand::Import { base, fork, path } => run_import(path, &base, &fork),
+        WorktreeCommand::Import {
+            base,
+            fork,
+            patch,
+            path,
+        } => run_import(path, &base, fork.as_deref(), patch.as_deref()),
         WorktreeCommand::Land { fork, path } => run_land(path, &fork),
         WorktreeCommand::Gc {
             fork,

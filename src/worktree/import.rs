@@ -122,7 +122,27 @@ pub(crate) fn classify_import(
 /// it to git.rs so the integrate dirty pre-gate + the §2.5 race re-check share the
 /// Orchestrator-classed; refused under worker-mode by `worker_guard` (the verb is
 /// the orchestrator's, never a worker's).
-pub(crate) fn run_import(path: Option<PathBuf>, base: &str, fork: &str) -> anyhow::Result<()> {
+pub(crate) fn run_import(
+    path: Option<PathBuf>,
+    base: &str,
+    fork: Option<&str>,
+    patch: Option<&Path>,
+) -> anyhow::Result<()> {
+    // Exactly one source. clap `conflicts_with` already rejects both-given at parse;
+    // this rejects neither-given and dispatches to the arm's body.
+    match (fork, patch) {
+        (Some(fork), None) => run_import_fork(path, base, fork),
+        (None, Some(patch)) => run_import_patch(path, base, patch),
+        (Some(_), Some(_)) => bail!("import: --fork and --patch are mutually exclusive"),
+        (None, None) => bail!("import: exactly one of --fork / --patch is required"),
+    }
+}
+
+/// The pi/subprocess arm: import a worker's single committed fork `S` (`S^ == B`).
+/// BEHAVIOUR-FROZEN (EX-4) — the body below is the pre-PHASE-05 `run_import`
+/// verbatim; the `--patch` arm is strictly additive and shares only the pure
+/// [`classify_import`] core.
+fn run_import_fork(path: Option<PathBuf>, base: &str, fork: &str) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
 
     // --- gather: precond 1 — HEAD == B (ref-equality on resolved shas) ---
@@ -190,6 +210,84 @@ pub(crate) fn run_import(path: Option<PathBuf>, base: &str, fork: &str) -> anyho
     writeln!(
         io::stdout(),
         "imported {base}..{fork}: delta staged (uncommitted)"
+    )?;
+    Ok(())
+}
+
+/// The claude arm (SL-182 PHASE-05, OQ-1): import the worker's CAPTURED PATCH.
+/// ro-`.git` blocks the worker's self-commit, so the fork tip stays at `B` and the
+/// committed-fork path is a dead end here (`<fork>^ == B^ != B` ⇒ `MultiCommit`).
+/// The delta rides the captured patch instead. Reuses [`classify_import`] UNCHANGED:
+/// the `single_commit` precond is **vacuously true** (a patch carries zero commits,
+/// trivially ≤ 1), so the LOAD-BEARING checks on this arm are the belt
+/// (`.doctrine/`/`.claude/` reject) + `head_at_base` + `tree_clean` — all still run
+/// through the pure core. Gather → pure-classify → act, same shape as the fork arm.
+fn run_import_patch(path: Option<PathBuf>, base: &str, patch: &Path) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+
+    // A missing/empty patch means the worker produced no capturable delta (the
+    // SubagentStop capture failed or lost the tree). Report-and-halt — never launder
+    // an empty import green (R-capture-lossy, design §5.4 / the funnel's halt).
+    let patch_bytes =
+        fs::read(patch).with_context(|| format!("read captured patch {}", patch.display()))?;
+    if patch_bytes.is_empty() {
+        bail!(
+            "import: captured patch {} is empty — worker produced no delta; halting",
+            patch.display()
+        );
+    }
+
+    // --- gather: preconds 1 / 1b — HEAD == B, tracked tree clean (== fork arm) ---
+    let base_sha = resolve_commit(&root, base)?;
+    let head_sha = resolve_commit(&root, "HEAD")?;
+    let head_at_base = matches(&base_sha, &head_sha);
+    let tree_clean = gather_tree_clean(&root)?;
+
+    // --- precond 2 — single_commit VACUOUS: a captured patch carries no commits ---
+    let single_commit = true;
+
+    // --- belt input — the patch's touched paths, via `git apply --numstat` (a DRY
+    // inspection: it mutates nothing). Same hardening as the fork arm's belt so a
+    // non-ASCII `.doctrine/` path emits verbatim (quotePath off) and no rename hides
+    // a governance source leg (--no-renames). The capture side already hardened the
+    // diff (SL-182 T2); this is belt-and-suspenders on the read-back. numstat line =
+    // `<added>\t<removed>\t<path>` — the path is the segment after the last tab. ---
+    // NB: `git apply` has no `--no-renames` (that is a `git diff` flag) — the capture
+    // side already hardened the diff, so the patch carries no rename pairs; here we
+    // only keep quotePath off so a non-ASCII path in the numstat output is verbatim.
+    let numstat = git::git_text(
+        &root,
+        &[
+            "-c",
+            "core.quotePath=false",
+            "apply",
+            "--numstat",
+            &patch.to_string_lossy(),
+        ],
+    )
+    .with_context(|| format!("git apply --numstat {}", patch.display()))?;
+    let delta_paths: Vec<String> = numstat
+        .lines()
+        .filter_map(|line| line.rsplit('\t').next())
+        .map(str::to_owned)
+        .collect();
+
+    // --- pure classify (belt lives in the pure core, reused unchanged) ---
+    match classify_import(head_at_base, tree_clean, single_commit, &delta_paths) {
+        Err(refusal) => bail!("import-refused: {}", refusal.token()),
+        Ok(Apply::Ok) => {}
+    }
+
+    // --- act: apply the captured patch into the index, NON-committing (ADR-006 D7).
+    // Same `git apply --3way --index` as the fork arm; the orchestrator commits
+    // separately. The raw bytes carry the trailing newline `git apply` requires. ---
+    git::git_apply_index(&root, &patch_bytes)
+        .with_context(|| format!("git apply --3way --index {}", patch.display()))?;
+
+    writeln!(
+        io::stdout(),
+        "imported patch {}: delta staged (uncommitted)",
+        patch.display()
     )?;
     Ok(())
 }
