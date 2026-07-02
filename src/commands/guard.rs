@@ -325,6 +325,8 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         // that mutates source (e.g. `cargo fmt`) is a worker-legal source delta,
         // not an authored write — and a worker running `check gate` to verify its
         // fork is the intended use, so Read is correct AND necessary (SL-163 §5.3).
+        // prompt resolve/model-keys/explain/check are all read-only (SL-186).
+        | Command::Prompt { .. }
         | Command::Check { .. }
         | Command::Status { .. } => Read,
         // Mutates the canonical-id triple — an authored write (D2/D6).

@@ -79,10 +79,16 @@ exit_criteria = [
   { id = "EX-5", text = "Hymns-specific embedded→disk projector (starter set for exposed slots) — own code, reuses fsutil/globmatch/dtoml; NOT sync_corpus" },
 ]
 verification = [
-  { id = "VT-1", expects = "path→slot/selector derivation: single-axis path defaults (harness/claude, role/worker, model/<vendor>/<seg>/_default); band = first segment; full-relative model key", test_file = "src/commands/prompt.rs", keywords = ["HYMNS_ROOT", "Selector"] },
-  { id = "VT-2", expects = "sidecar per-axis supersede: declared axes override path-derived, undeclared fall back to path; sidecar replaces carried onto the Snippet", test_file = "src/commands/prompt.rs", keywords = ["sidecar", "replaces"] },
-  { id = "VT-3", expects = "provenance tagging by root (embedded=Framework, disk=User) + embedded⊕disk union", test_file = "src/commands/prompt.rs", keywords = ["Provenance", "union"] },
-  { id = "VT-4", expects = "SealSet from manifest seal section; sealed disk twin excluded by loader before matching (loader-side half of INV-6)", test_file = "src/commands/prompt.rs", keywords = ["SealSet", "manifest"] },
+  # PHASE-04 D-B relocated the impure corpus loader from src/commands/prompt.rs
+  # into src/install.rs to avoid an install→commands layering back-edge (ADR-001).
+  # The loader + its unit tests moved verbatim (tests still pass); test_file follows
+  # the code. VT-1 keyword corrects HYMNS_ROOT→HYMNS_DIRNAME (impl const name);
+  # VT-3 keyword corrects the prose "union" to the real fn load_disk_corpus (the
+  # embedded⊕disk union site). Verification intent unchanged; no criterion renumbered.
+  { id = "VT-1", expects = "path→slot/selector derivation: single-axis path defaults (harness/claude, role/worker, model/<vendor>/<seg>/_default); band = first segment; full-relative model key", test_file = "src/install.rs", keywords = ["HYMNS_DIRNAME", "Selector"] },
+  { id = "VT-2", expects = "sidecar per-axis supersede: declared axes override path-derived, undeclared fall back to path; sidecar replaces carried onto the Snippet", test_file = "src/install.rs", keywords = ["sidecar", "replaces"] },
+  { id = "VT-3", expects = "provenance tagging by root (embedded=Framework, disk=User) + embedded⊕disk union", test_file = "src/install.rs", keywords = ["Provenance", "load_disk_corpus"] },
+  { id = "VT-4", expects = "SealSet from manifest seal section; sealed disk twin excluded by loader before matching (loader-side half of INV-6)", test_file = "src/install.rs", keywords = ["SealSet", "manifest"] },
 ]
 specs        = []
 requirements = []
