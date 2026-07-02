@@ -56,26 +56,26 @@ Out of scope:
   referenced only insofar as it constrains the unify-vs-tighten choice.
 - Any change to the claude arm's boundary recording.
 
-## Affected surface (coarse — `/design` refines)
+## Affected surface (design-locked — see design.md §5)
 
-- `plugins/doctrine/skills/dispatch-subprocess/SKILL.md` — where the pi arm picks
-  the `--start`/`--end` range (start here per handoff).
-- `.doctrine/skills/dispatch-subprocess/SKILL.md` — the second home of this skill
-  (mem: "dispatch-subprocess skill lives in two places"); keep in sync.
-- `src/dispatch.rs` — funnel Record beat, boundary-recording surface, and the
-  auto phase-binding referenced by record-delta's help.
-- `src/slice.rs` — `run_record_delta` (2282–2322); stores oids only.
-- `src/dispatch.rs` — `run_record_boundary` (712–744, dual-write ledger + registry),
-  and the **conformance read seam**: the record verbs store start/end oids only —
-  the over-attribution lives in the *reader*. Conformance reads a two-dot
-  `git diff start..end` span, whereas the `phase/<slice>-NN` path (2501/2511)
-  does a *chained single-commit tree cut* filtering `.doctrine/`. The clean-vs-noisy
-  divergence is the read, not the record — design must decide where the single-commit
-  scope is enforced (tighter stored oids on the pi arm vs routing its rows through
-  the chained-cut read).
-- `src/ledger.rs` (`record_boundary`, 554–566), `src/state.rs` (`record_source_delta`
-  UPSERT, 668–711) — registry write path.
-- `src/state.rs` — read-only reference (`capture_phase_boundary`, 495–568); NOT edited here.
+Root cause (verified, corrected during design): conformance reads a two-dot
+`git diff code_start..code_end` (`src/slice.rs:2245`, no path filter). It is clean
+iff `code_end == S` (the batch commit, `code_start == S^`). The **claude** arm
+already records `[S^, S]` (pins `code_end = S` before knowledge) → clean. The **pi**
+arm records past `S` → polluted. SL-189 brings pi to parity; the claude writer is
+untouched.
+
+- `src/state.rs` — **new** `single_commit_boundary` helper beside
+  `record_source_delta` (:668); reuses `git::parents` (`src/git.rs:1017`).
+- `src/slice.rs` — `RecordDelta` arg enum (:320) + `run_record_delta` (:2291): add
+  `--commit` mode (`Option<String>`, clap ArgGroup vs the range pair), branch to the
+  helper.
+- `plugins/doctrine/skills/dispatch-subprocess/SKILL.md` — pi Record beat →
+  `record-delta --commit <S>` (pin `S` at step 7).
+- `plugins/doctrine/skills/dispatch/SKILL.md` — router step 8 pi-arm line.
+- NOT edited: `.doctrine/skills/` (gitignored, regenerates from `plugins/`);
+  `src/dispatch.rs` `run_record_boundary` (claude arm already tight); `src/state.rs`
+  `capture_phase_boundary` (solo — IMP-175 follow-up).
 
 ## Risks / Assumptions / Open Questions
 
