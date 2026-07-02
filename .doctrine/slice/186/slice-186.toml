@@ -1,7 +1,7 @@
 id = 186
 slug = "prompt-cascade-resolver"
 title = "Prompt cascade: per-context instruction resolver"
-status = "started"
+status = "audit"
 created = "2026-07-01"
 updated = "2026-07-02"
 tags = []
