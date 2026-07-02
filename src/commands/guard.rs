@@ -77,12 +77,22 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::slice::SliceCommand::Phase { .. } => Write("slice phase"),
             crate::slice::SliceCommand::RecordDelta { .. } => Write("slice record-delta"),
             crate::slice::SliceCommand::Status { .. } => Write("slice status"),
+            crate::slice::SliceCommand::ReconcilePhases { .. } => {
+                Write("slice reconcile-phases")
+            }
             crate::slice::SliceCommand::List { .. }
             | crate::slice::SliceCommand::Show { .. }
             | crate::slice::SliceCommand::Conformance { .. }
             | crate::slice::SliceCommand::VerifyVt { .. }
             | crate::slice::SliceCommand::Paths { .. } => Read,
-            crate::slice::SliceCommand::Selector { .. } => Write("slice selector"),
+            crate::slice::SliceCommand::Selector { command } => match command {
+                // `doctor` is a read-only advisory report (SL-190 PHASE-06).
+                crate::slice::SelectorCommand::Doctor { .. } => Read,
+                crate::slice::SelectorCommand::Add { .. }
+                | crate::slice::SelectorCommand::Note { .. }
+                | crate::slice::SelectorCommand::List { .. }
+                | crate::slice::SelectorCommand::Rm { .. } => Write("slice selector"),
+            },
         },
         Command::Memory { command } => match command {
             MemoryCommand::Record { .. } => Write("memory record"),
@@ -221,12 +231,16 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             // authored state. It fires INSIDE the confined subagent (worker
             // context) on every tool call, so it MUST be open under worker-mode —
             // Read.
+            // list is the worktree inventory verb (SL-190 PHASE-05) — a
+            // read-only enumeration + landed probe, no authored write; open to
+            // workers.
             WorktreeCommand::Provision { .. }
             | WorktreeCommand::CheckAllowlist { .. }
             | WorktreeCommand::BranchPointCheck { .. }
             | WorktreeCommand::VerifyWorker { .. }
             | WorktreeCommand::Pretooluse
-            | WorktreeCommand::Status { .. } => Read,
+            | WorktreeCommand::Status { .. }
+            | WorktreeCommand::List { .. } => Read,
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.
             WorktreeCommand::Fork { .. } => Orchestrator("fork"),

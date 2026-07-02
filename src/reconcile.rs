@@ -272,6 +272,8 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
                 slice_id,
                 Some(crate::slice::SliceStatus::Design),
                 args.note.as_deref(),
+                false,
+                false,
             )?;
             let doc = compose_redesign_rec(&args.req, &args.slice, evidence);
             crate::rec::materialise_populated(&root, &doc)?
@@ -476,6 +478,8 @@ mod tests {
             1,
             Some(crate::slice::SliceStatus::Design),
             None,
+            false,
+            false,
         )
         .unwrap();
         crate::slice::run_status(
@@ -483,6 +487,8 @@ mod tests {
             1,
             Some(crate::slice::SliceStatus::Plan),
             None,
+            false,
+            false,
         )
         .unwrap();
         crate::slice::run_status(
@@ -490,6 +496,8 @@ mod tests {
             1,
             Some(crate::slice::SliceStatus::Ready),
             None,
+            false,
+            false,
         )
         .unwrap();
         crate::slice::run_status(
@@ -497,6 +505,8 @@ mod tests {
             1,
             Some(crate::slice::SliceStatus::Started),
             None,
+            false,
+            false,
         )
         .unwrap();
 

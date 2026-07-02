@@ -132,6 +132,7 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 "worktree::import" = "engine"      # import classify+run; imports engine + leaf
 "worktree::land" = "engine"        # land classify+run; imports engine + leaf
 "worktree::gc" = "engine"          # gc classify+run; imports engine + leaf
+"worktree::inventory" = "engine"   # SL-190: worktree list classify+run; imports engine (gc, marker) + leaf (git, root)
 "worktree::fork" = "engine"        # fork; imports engine + leaf
 "worktree::subagent" = "engine"    # subagent stamp+verify; imports engine + leaf
 "worktree::coordinate" = "command"  # coordinate calls crate::slice::run_phases (upward edge, Non-Goal)
