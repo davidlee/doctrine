@@ -71,9 +71,10 @@ After workers return, in exact order:
    the coord tree; F-6 guard; upsert by phase) — by arm:
    - **claude** — `dispatch record-boundary` already double-writes it (+ the
      `phase/<N>` ref-cut); no separate call (`/dispatch-agent`).
-   - **codex/pi** — `doctrine slice record-delta <SL> PHASE-NN --start <B> --end
-     <B+1>` — the arm's registry write (symmetric derive deferred, D6/IMP-171; no
-     `record-boundary` on this arm; `/dispatch-subprocess`).
+   - **codex/pi** — `doctrine slice record-delta <SL> PHASE-NN --commit <S>` (`S`
+     pinned at step 7) — the arm's commit-scoped `[S^,S]` registry write, matching
+     the claude arm (symmetric derive deferred, D6/IMP-171; no `record-boundary` on
+     this arm; `/dispatch-subprocess`).
    Neither is a "remember to also record" hand-step any more: the Conclude beat's
    completeness gate halts if a landed phase is missing its row (below).
 **Report-and-halt** on conflict, moved HEAD, or authored-tree touch — never auto-resolve.
