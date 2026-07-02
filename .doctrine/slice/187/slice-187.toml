@@ -1,7 +1,7 @@
 id = 187
 slug = "prompt-cascade-delivery"
 title = "Prompt cascade: per-harness delivery & boot integration"
-status = "reconcile"
+status = "done"
 created = "2026-07-02"
 updated = "2026-07-02"
 tags = []
