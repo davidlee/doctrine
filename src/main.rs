@@ -70,7 +70,6 @@ mod rfc;
 mod risk;
 mod root;
 mod search;
-mod skills;
 mod slice;
 mod spec;
 mod standard;
@@ -242,31 +241,6 @@ fn main() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use {crate::Cli, clap::Parser};
-    #[test]
-    fn only_memory_conflicts_with_skill() {
-        let r = Cli::try_parse_from([
-            "doctrine",
-            "skills",
-            "install",
-            "--only-memory",
-            "--skill",
-            "code-review",
-        ]);
-        assert!(r.is_err());
-    }
-
-    #[test]
-    fn only_memory_conflicts_with_domain() {
-        let r = Cli::try_parse_from([
-            "doctrine",
-            "skills",
-            "install",
-            "--only-memory",
-            "--domain",
-            "doctrine",
-        ]);
-        assert!(r.is_err());
-    }
 
     #[test]
     fn only_memory_alone_parses() {
@@ -274,12 +248,6 @@ mod tests {
         // the removed `skills install` to `install`.
         let r = Cli::try_parse_from(["doctrine", "install", "--only-memory"]);
         assert!(r.is_ok());
-    }
-
-    #[test]
-    fn skills_install_is_gone() {
-        let r = Cli::try_parse_from(["doctrine", "skills", "install"]);
-        assert!(r.is_err());
     }
 }
 
@@ -315,11 +283,6 @@ mod write_class_tests {
     #[test]
     fn install_is_write() {
         assert_eq!(cls(&["doctrine", "install"]), Some("install"));
-    }
-
-    #[test]
-    fn skills_list_is_read() {
-        assert_eq!(cls(&["doctrine", "skills", "list"]), None);
     }
 
     #[test]

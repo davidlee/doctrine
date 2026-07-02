@@ -121,15 +121,6 @@ pub(crate) enum Command {
         command: crate::catalog::CatalogCommand,
     },
 
-    /// List available skills and their install status.
-    ///
-    /// Hidden deprecated alias — the consolidated `install` surface is the primary path.
-    #[command(hide = true)]
-    Skills {
-        #[command(subcommand)]
-        command: crate::skills::SkillsCommand,
-    },
-
     /// Start the local map explorer web server.
     Map {
         #[command(subcommand)]
@@ -1064,7 +1055,6 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 yes,
             },
         ),
-        Command::Skills { command } => crate::skills::dispatch(command, color),
         Command::ConceptMap { command } => crate::concept_map::dispatch(command, color),
         Command::Slice { command } => crate::slice::dispatch(command, color),
         Command::Memory {

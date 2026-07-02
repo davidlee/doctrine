@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 
@@ -20,6 +20,22 @@ use crate::memory::MemoryType;
 #[derive(RustEmbed)]
 #[folder = "install/"]
 struct Assets;
+
+/// Embedded skill plugins — everything under `plugins/`.
+#[derive(RustEmbed)]
+#[folder = "plugins/"]
+struct PluginAssets;
+
+// ── Constants (moved from skills.rs, IMP-226) ────────────────────────────
+
+const MEMORY_SUBSET_DOMAIN: &str = "doctrine-memory";
+const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
+const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
+const RUNNER_BUNX: &str = "bunx";
+const RUNNER_NPX: &str = "npx";
+const DISPATCH_WORKER_AGENT_FILE: &str = "dispatch-worker.md";
+const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
+const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
 
 /// Read one embedded `install/`-relative asset's bytes (`None` if absent). The
 /// single accessor over the embed for callers outside this module (the agents
@@ -332,9 +348,9 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
     }
 
     // 3. Skills per agent
-    let catalog = crate::skills::discover()?;
-    let selected = crate::skills::select_for_install(&catalog, args.skills, args.domains)?;
-    let (runner_name, runner) = crate::skills::resolve_runner();
+    let catalog = discover()?;
+    let selected = select_for_install(&catalog, args.skills, args.domains)?;
+    let (runner_name, runner) = resolve_runner();
     let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
 
     let mut non_claude_agents: Vec<String> = Vec::new();
@@ -396,20 +412,13 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             }
 
             // 3. Agent-def install (kept as-is).
-            if let Err(e) = crate::skills::install_agents_for(
-                root,
-                "claude",
-                None,
-                args.global,
-                false,
-                &mut out,
-            ) {
+            if let Err(e) = install_agents_for(root, "claude", None, args.global, false, &mut out) {
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
             }
         } else {
             non_claude_agents.push(agent.clone());
             // Agent-def install per non-Claude agent.
-            if let Err(e) = crate::skills::install_agents_for(
+            if let Err(e) = install_agents_for(
                 root,
                 agent,
                 Some(agent),
@@ -425,8 +434,8 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
     // Batch-delegate all confirmed non-Claude agents to a single npx invocation.
     if !non_claude_agents.is_empty() {
         let mut out = io::stdout();
-        if let Err(e) = crate::skills::install_for_other(
-            &crate::skills::InstallOtherArgs {
+        if let Err(e) = install_for_other(
+            &InstallOtherArgs {
                 agent_names: &non_claude_agents,
                 selected: &selected,
                 global: args.global,
@@ -763,7 +772,796 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn program_available(prog: &str) -> bool {
+    std::process::Command::new(prog)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Resolve the delegated skills runner: try `npx` first, fall back to `bunx`.
+/// Returns the program name and a concrete runner.
+pub(crate) fn resolve_runner() -> (&'static str, ProcessRunner) {
+    resolve_runner_with(&program_available)
+}
+
+/// Same as `resolve_runner()` but with an injectable availability check.
+/// The `check` predicate returns `true` when a program is available.
+fn resolve_runner_with(check: &dyn Fn(&str) -> bool) -> (&'static str, ProcessRunner) {
+    if check(RUNNER_NPX) {
+        (RUNNER_NPX, ProcessRunner { name: RUNNER_NPX })
+    } else {
+        (RUNNER_BUNX, ProcessRunner { name: RUNNER_BUNX })
+    }
+}
+
 // ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
+
+/// `SKILL.md` YAML frontmatter (only the fields we consume).
+#[derive(Debug, Deserialize)]
+struct Meta {
+    name: String,
+    description: String,
+}
+
+/// One discovered skill.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Entry {
+    domain: String,
+    id: String,
+    description: String,
+    /// Embedded file paths comprising the skill, e.g.
+    /// `doctrine/skills/code-review/SKILL.md`.
+    files: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Pure: frontmatter
+// ---------------------------------------------------------------------------
+
+/// Parse leading `---` YAML frontmatter from a `SKILL.md` body.
+fn parse_meta(md: &str) -> anyhow::Result<Meta> {
+    let after = md
+        .strip_prefix("---")
+        .context("SKILL.md missing leading '---' frontmatter")?
+        .trim_start_matches(['\r', '\n']);
+    let end = after
+        .find("\n---")
+        .context("SKILL.md frontmatter is not terminated by '---'")?;
+    let yaml = after.get(..end).context("frontmatter slice out of range")?;
+    let meta: Meta = serde_yaml::from_str(yaml).context("Failed to parse SKILL.md frontmatter")?;
+    Ok(meta)
+}
+
+// ---------------------------------------------------------------------------
+// Pure-ish: discovery (reads compile-time embed, not the filesystem)
+// ---------------------------------------------------------------------------
+
+/// Discover all embedded skills, grouped by `<domain>/skills/<skill>/`.
+pub(crate) fn discover() -> anyhow::Result<Vec<Entry>> {
+    use std::collections::BTreeMap;
+
+    let mut grouped: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+    for path in PluginAssets::iter() {
+        let p = path.as_ref();
+        let parts: Vec<&str> = p.split('/').collect();
+        if let [domain, "skills", skill, ..] = parts.as_slice() {
+            if MARKETPLACE_ONLY_DOMAINS.contains(domain) {
+                continue;
+            }
+            grouped
+                .entry(((*domain).to_string(), (*skill).to_string()))
+                .or_default()
+                .push(p.to_string());
+        }
+    }
+
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut entries = Vec::new();
+    for ((domain, skill), files) in grouped {
+        let skill_md = format!("{domain}/skills/{skill}/SKILL.md");
+        let asset = PluginAssets::get(&skill_md)
+            .with_context(|| format!("Skill '{domain}/{skill}' has no SKILL.md"))?;
+        let text = std::str::from_utf8(&asset.data)
+            .with_context(|| format!("{skill_md} is not valid UTF-8"))?;
+        let meta = parse_meta(text).with_context(|| format!("In {skill_md}"))?;
+        if meta.name != skill {
+            bail!(
+                "Skill dir '{skill}' != frontmatter name '{}' ({skill_md})",
+                meta.name
+            );
+        }
+        if !seen.insert(skill.clone()) {
+            bail!("Duplicate skill id '{skill}' across domains; ids must be unique");
+        }
+        entries.push(Entry {
+            domain,
+            id: skill,
+            description: meta.description,
+            files,
+        });
+    }
+    Ok(entries)
+}
+
+// ---------------------------------------------------------------------------
+// Pure: selection / planning
+// ---------------------------------------------------------------------------
+
+/// Filter `all` by skill ids and/or domains. Empty filters match everything.
+pub(crate) fn select<'a>(all: &'a [Entry], ids: &[String], domains: &[String]) -> Vec<&'a Entry> {
+    all.iter()
+        .filter(|e| {
+            let id_ok = ids.is_empty() || ids.iter().any(|i| i == &e.id);
+            let dom_ok = domains.is_empty() || domains.iter().any(|d| d == &e.domain);
+            id_ok && dom_ok
+        })
+        .collect()
+}
+
+/// Validate that every requested id/domain matches at least one skill.
+pub(crate) fn validate_filters(
+    all: &[Entry],
+    ids: &[String],
+    domains: &[String],
+) -> anyhow::Result<()> {
+    for id in ids {
+        if !all.iter().any(|e| &e.id == id) {
+            bail!("Unknown skill '{id}'");
+        }
+    }
+    for d in domains {
+        if !all.iter().any(|e| &e.domain == d) {
+            bail!("Unknown domain '{d}'");
+        }
+    }
+    Ok(())
+}
+
+/// The base both skill trees hang off: the project `root`, or the user home with
+/// `global`. Single source for the `.claude/skills` link dir, the
+/// `.doctrine/skills` canonical dir, AND the F4 derived-tree gitignore — so under
+/// `--global` the ignore follows the tree to `$HOME` rather than landing in the
+/// project for a tree that isn't there (SL-010 B1).
+fn install_base(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    if global {
+        let home = std::env::var_os("HOME").context("HOME is not set; cannot resolve --global")?;
+        Ok(PathBuf::from(home))
+    } else {
+        Ok(root.to_path_buf())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pure: canonical tree + ownership-by-target-equality (SL-010 D3)
+//
+// A managed agent link is doctrine's *iff its value equals the relative target
+// we would write* — type (is_symlink) is necessary but not sufficient. Anything
+// else (a foreign symlink, or a real dir/file) is kept untouched. This is both
+// the never-clobber guarantee and the override hatch.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Agents leg (SL-056 PHASE-11) — install the Claude dispatch-worker agent def
+// the same way skills install: materialize a canonical copy from the embed,
+// then symlink the agent dir at it (reusing classify_link/write_link/
+// relative_target — no parallel symlink impl).
+// ---------------------------------------------------------------------------
+
+/// The Claude agents directory (project-local or, with `global`, user home).
+fn claude_agents_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".claude/agents"))
+}
+
+/// The pi agents directory (project-local or, with `global`, user home).
+fn pi_agents_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".pi/agents"))
+}
+
+/// The canonical agents tree, mirroring `canonical_dir` so the relative link
+/// target is stable.
+fn agent_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".doctrine/agents"))
+}
+
+/// Relative path from `from` to `to`. Both must be absolute and normalised
+/// (no `.`/`..` components) — the root-/`$HOME`-derived dirs always are.
+fn relative_path(from: &Path, to: &Path) -> PathBuf {
+    let from_c: Vec<_> = from.components().collect();
+    let to_c: Vec<_> = to.components().collect();
+    let common = from_c.iter().zip(&to_c).take_while(|(a, b)| a == b).count();
+    let mut rel = PathBuf::new();
+    for _ in common..from_c.len() {
+        rel.push("..");
+    }
+    for c in to_c.iter().skip(common) {
+        rel.push(c.as_os_str());
+    }
+    rel
+}
+
+/// The relative symlink value for `<id>`: from the agent skills dir (where the
+/// link lives) to `canonical_dir/<id>`. Derived from the two dirs, never
+/// hard-coded — `../../.doctrine/skills/<id>` in the common project-local case,
+/// and correct under a shared `--global` base.
+fn relative_target(agent_skills_dir: &Path, canonical_dir: &Path, id: &str) -> PathBuf {
+    relative_path(agent_skills_dir, &canonical_dir.join(id))
+}
+
+/// Why an agent skill path is foreign — left untouched and warned.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ForeignReason {
+    /// A real directory or file the user owns (e.g. a pinned copy override).
+    RealDir,
+    /// A symlink whose value is not our canonical target — points elsewhere.
+    ForeignSymlink(PathBuf),
+}
+
+/// Reconciliation action for one agent skill link, by proven ownership.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Link {
+    /// Nothing there → create the relative symlink.
+    Create {
+        id: String,
+        dest: PathBuf,
+        target: PathBuf,
+    },
+    /// A symlink already equal to our target → ensure it (no-op, or heal a
+    /// dangling-but-ours link once its canonical is re-materialised).
+    Relink {
+        id: String,
+        dest: PathBuf,
+        target: PathBuf,
+    },
+    /// Foreign (a real dir, or a symlink pointing elsewhere) → never touched.
+    KeepForeign {
+        id: String,
+        dest: PathBuf,
+        reason: ForeignReason,
+    },
+}
+
+/// Classify `dest` (an agent skill path) against the canonical `target` by
+/// proven ownership. Uses `symlink_metadata`/`read_link`, never `exists()`
+/// (which follows links): a dangling link whose value equals our target is
+/// still ours and is healed, not recreated.
+fn classify_link(id: &str, dest: &Path, target: &Path) -> Link {
+    let Ok(meta) = fs::symlink_metadata(dest) else {
+        return Link::Create {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            target: target.to_path_buf(),
+        };
+    };
+    if !meta.file_type().is_symlink() {
+        return Link::KeepForeign {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            reason: ForeignReason::RealDir,
+        };
+    }
+    match fs::read_link(dest) {
+        Ok(value) if value == target => Link::Relink {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            target: target.to_path_buf(),
+        },
+        Ok(value) => Link::KeepForeign {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            reason: ForeignReason::ForeignSymlink(value),
+        },
+        // Unreadable symlink (race/perm) — treat as foreign, never clobber.
+        Err(_) => Link::KeepForeign {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            reason: ForeignReason::ForeignSymlink(PathBuf::new()),
+        },
+    }
+}
+
+/// A `.tmp-<name>` sibling of `path`, the staging name for an atomic swap.
+fn staging_path(path: &Path) -> anyhow::Result<PathBuf> {
+    let parent = path.parent().context("path has no parent directory")?;
+    let name = path.file_name().context("path has no file name")?;
+    Ok(parent.join(format!(".tmp-{}", name.to_string_lossy())))
+}
+
+/// Create the relative symlink `dest -> target` atomically: symlink at a temp
+/// name then `rename` over `dest`. `rename` DOES replace an existing symlink (only
+/// a non-empty *directory* is the exception), so an owned-link relink never leaves
+/// a half-state. Callers pass only Create/Relink dests (missing or proven ours).
+fn write_link(dest: &Path, target: &Path) -> anyhow::Result<()> {
+    use std::os::unix::fs::symlink;
+    let tmp = staging_path(dest)?;
+    // Clear any crashed leftover from a prior interrupted write (a stale symlink
+    // may dangle, so remove unconditionally and ignore a not-found error).
+    fs::remove_file(&tmp).ok();
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    symlink(target, &tmp).with_context(|| format!("Failed to stage link {}", tmp.display()))?;
+    fs::rename(&tmp, dest)
+        .with_context(|| format!("Failed to swap link {} → {}", tmp.display(), dest.display()))?;
+    Ok(())
+}
+
+/// Human-readable `kept` reason for an honest warning.
+fn foreign_reason(reason: &ForeignReason) -> String {
+    match reason {
+        ForeignReason::RealDir => "real dir".to_string(),
+        ForeignReason::ForeignSymlink(to) => format!("foreign symlink → {}", to.display()),
+    }
+}
+
+/// Assemble the `npx skills add …` argv (program `npx`/`bunx` excluded).
+fn delegate_argv(
+    agents: &[&str],
+    skills: &[&Entry],
+    global: bool,
+    subset: bool,
+    repo: &str,
+) -> Vec<String> {
+    let mut argv = vec!["skills".to_string(), "add".to_string(), repo.to_string()];
+    for agent in agents {
+        argv.push("--agent".to_string());
+        argv.push(agent.to_string());
+    }
+    if global {
+        argv.push("--global".to_string());
+    }
+    if subset {
+        for e in skills {
+            argv.push("--skill".to_string());
+            argv.push(e.id.clone());
+        }
+    }
+    argv.push("--yes".to_string());
+    argv
+}
+
+// ---------------------------------------------------------------------------
+// Imperative: command execution behind a seam
+// ---------------------------------------------------------------------------
+
+/// Runs an external command. Seam so plans are tested without spawning Node.
+pub(crate) trait Runner: std::fmt::Debug {
+    /// Run `program` with `args`; return whether it exited successfully.
+    fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool>;
+}
+
+/// Real runner: spawns the process and inherits stdio.
+#[derive(Debug)]
+pub(crate) struct ProcessRunner {
+    name: &'static str,
+}
+
+impl Runner for ProcessRunner {
+    fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool> {
+        let status = std::process::Command::new(program)
+            .args(args)
+            .status()
+            .with_context(|| format!("Failed to run '{program}' (is {} installed?)", self.name))?;
+        Ok(status.success())
+    }
+}
+
+/// Install skills for a non-Claude agent: delegate to `npx skills`.
+/// Extracted from `execute()` for reuse from the consolidated `install::run()`
+/// forward-step dispatch (SL-088 PHASE-02).
+pub(crate) struct InstallOtherArgs<'a> {
+    pub(crate) agent_names: &'a [String],
+    pub(crate) selected: &'a [&'a Entry],
+    pub(crate) global: bool,
+    pub(crate) repo: &'a str,
+    pub(crate) runner: &'a dyn Runner,
+    pub(crate) runner_name: &'a str,
+}
+
+pub(crate) fn install_for_other(
+    args: &InstallOtherArgs<'_>,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let subset = !args.selected.is_empty();
+    let agent_strs: Vec<&str> = args.agent_names.iter().map(String::as_str).collect();
+    let argv = delegate_argv(&agent_strs, args.selected, args.global, subset, args.repo);
+    let label = args.agent_names.join(", ");
+    writeln!(
+        out,
+        "agents {label} (delegate): {} {}",
+        args.runner_name,
+        argv.join(" ")
+    )?;
+    if !args.runner.run(args.runner_name, &argv)? {
+        bail!(
+            "{runner_name} skills failed for agents: {label}",
+            runner_name = args.runner_name,
+            label = label
+        );
+    }
+    Ok(())
+}
+
+/// Select and validate skills for the consolidated install path.
+/// Thin wrapper over `validate_filters` + `select` so `install.rs` doesn't
+/// reach into the private filter logic.
+pub(crate) fn select_for_install<'a>(
+    catalog: &'a [Entry],
+    skills: &[String],
+    domains: &[String],
+) -> anyhow::Result<Vec<&'a Entry>> {
+    validate_filters(catalog, skills, domains)?;
+    Ok(select(catalog, skills, domains))
+}
+
+/// Public wrapper for `install_agent_def`.
+pub(crate) fn install_agents_for(
+    root: &Path,
+    agent_name: &str,
+    canon_subdir: Option<&str>,
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let embed_asset = match agent_name {
+        "claude" => DISPATCH_WORKER_AGENT_ASSET,
+        _ => DISPATCH_WORKER_AGENT_ASSET_PI,
+    };
+    install_agent_def(
+        root,
+        agent_name,
+        canon_subdir,
+        embed_asset,
+        global,
+        dry_run,
+        out,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Imperative: printing
+// ---------------------------------------------------------------------------
+
+/// Install a dispatch-worker agent def for the given agent: materialize the
+/// canonical copy from the embed into `.doctrine/agents/` (under an optional
+/// subdir), then symlink the agent's link dir at it. Idempotent — refreshes
+/// the canonical each run and only (re)writes a link that is missing or proven
+/// ours, never clobbering a foreign one. Reuses
+/// `classify_link`/`write_link`/`relative_target` — no parallel symlink impl.
+pub(crate) fn install_agent_def(
+    root: &Path,
+    agent_name: &str,
+    canon_subdir: Option<&str>,
+    embed_asset: &str,
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let canon_base = agent_canonical_dir(root, global)?;
+    let canon_dir = match canon_subdir {
+        Some(sub) => canon_base.join(sub),
+        None => canon_base,
+    };
+    let link_dir = match agent_name {
+        "claude" => claude_agents_dir(root, global)?,
+        _ => pi_agents_dir(root, global)?,
+    };
+    let canon = canon_dir.join(DISPATCH_WORKER_AGENT_FILE);
+    let dest = link_dir.join(DISPATCH_WORKER_AGENT_FILE);
+    let target = relative_target(&link_dir, &canon_dir, DISPATCH_WORKER_AGENT_FILE);
+
+    writeln!(out, "agent {agent_name} (dispatch-worker):")?;
+    writeln!(
+        out,
+        "  agent     {DISPATCH_WORKER_AGENT_FILE} → {}",
+        dest.display()
+    )?;
+    if dry_run {
+        return Ok(());
+    }
+
+    // 1. Refresh the canonical copy from the embed (always overwrite — derived).
+    let data = embedded_asset(embed_asset)
+        .with_context(|| format!("Embedded agent def '{embed_asset}' not found"))?;
+    fs::create_dir_all(&canon_dir)
+        .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
+    crate::fsutil::write_atomic(&canon, &data)?;
+
+    // 2. Reconcile the agent link by proven ownership (re-classify at mutation
+    //    time, like `execute`'s skill links).
+    match classify_link(DISPATCH_WORKER_AGENT_FILE, &dest, &target) {
+        Link::Create { .. } => {
+            write_link(&dest, &target)?;
+            writeln!(out, "  linked    {DISPATCH_WORKER_AGENT_FILE}")?;
+        }
+        Link::Relink { .. } => {
+            write_link(&dest, &target)?;
+            writeln!(out, "  relinked  {DISPATCH_WORKER_AGENT_FILE}")?;
+        }
+        Link::KeepForeign { reason, .. } => {
+            writeln!(
+                out,
+                "  kept      {DISPATCH_WORKER_AGENT_FILE} ({})",
+                foreign_reason(&reason)
+            )?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Hooks plugin leg — install the doctrine Claude plugin as a skills-directory
+// plugin so hooks (SessionStart / WorktreeCreate) auto-load without a
+// marketplace install step. The per-skill symlinks are untouched; the plugin
+// dir carries only the manifest + hooks.
+// ---------------------------------------------------------------------------
+// Tests (skills — moved from skills.rs, IMP-226)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests_skills {
+    use super::*;
+
+    const TEST_REPO: &str = "davidlee/doctrine";
+
+    // ADR-005 / SL-023 PHASE-04 (VT-1): the de-dup'd skills route rather than
+    // restate. Guards the named sites against re-growing flag-syntax templates,
+    // option/enum tables, or `--status` transition commands. Each must also keep
+    // a pointer to the shared tier-1/2 docs. Evidence-bound to the named set.
+    #[test]
+    fn dedup_skills_route_not_restate() {
+        let named = [
+            "record-memory",
+            "retrieve-memory",
+            "spec-product",
+            "spec-tech",
+            "execute",
+            "phase-plan",
+            "canon",
+            "inquisition",
+        ];
+        // Offender fragments removed by the de-dup — must not reappear.
+        let banned = [
+            "--status in_progress",
+            "--status completed",
+            "--kind functional|quality",
+            "--type <type>",
+            "--path-scope <file>",
+            "--command \"<tok>\"",
+        ];
+        for skill in named {
+            let path = format!("doctrine/skills/{skill}/SKILL.md");
+            let asset = PluginAssets::get(&path).expect("named skill must be embedded");
+            let text = std::str::from_utf8(&asset.data).expect("utf8");
+            for frag in banned {
+                assert!(
+                    !text.contains(frag),
+                    "restate-line: {skill} reproduces flag syntax `{frag}`"
+                );
+            }
+            assert!(
+                text.contains("using-doctrine") || text.contains("--help"),
+                "reachability: {skill} must point at a tier-1/2 reference"
+            );
+        }
+    }
+
+    fn entry(domain: &str, id: &str) -> Entry {
+        Entry {
+            domain: domain.to_string(),
+            id: id.to_string(),
+            description: format!("{id} desc"),
+            files: vec![format!("{domain}/skills/{id}/SKILL.md")],
+        }
+    }
+
+    // --- frontmatter ---
+
+    #[test]
+    fn parse_meta_extracts_name_and_description() {
+        let md = "---\nname: code-review\ndescription: Review a diff.\n---\n\n# body\n";
+        let meta = parse_meta(md).unwrap();
+        assert_eq!(meta.name, "code-review");
+        assert_eq!(meta.description, "Review a diff.");
+    }
+
+    #[test]
+    fn parse_meta_rejects_missing_frontmatter() {
+        assert!(parse_meta("# no frontmatter\n").is_err());
+    }
+
+    // --- discovery (against the embedded sample) ---
+
+    #[test]
+    fn discover_finds_embedded_sample_skill() {
+        let cat = discover().unwrap();
+        let cr = cat.iter().find(|e| e.id == "code-review").unwrap();
+        assert_eq!(cr.domain, "doctrine");
+        assert!(!cr.description.is_empty());
+        assert!(cr.files.iter().any(|f| f.ends_with("SKILL.md")));
+    }
+
+    #[test]
+    fn discover_excludes_marketplace_only_domains() {
+        let cat = discover().unwrap();
+        // doctrine-memory + doctrine-partner are marketplace-only subsets
+        // (symlinks to doctrine); they must not enter the CLI catalog, or they
+        // collide with the canonical skills on duplicate ids.
+        assert!(cat.iter().all(|e| e.domain != "doctrine-memory"));
+        assert!(cat.iter().all(|e| e.domain != "doctrine-partner"));
+        // …while the canonical skills remain in the doctrine domain.
+        assert!(
+            cat.iter()
+                .any(|e| e.id == "record-memory" && e.domain == "doctrine")
+        );
+        assert!(cat.iter().any(|e| e.id == "pair" && e.domain == "doctrine"));
+        assert!(
+            cat.iter()
+                .any(|e| e.id == "walkthrough" && e.domain == "doctrine")
+        );
+    }
+
+    // --- selection ---
+
+    #[test]
+    fn select_filters_by_id_and_domain() {
+        let all = vec![entry("review", "code-review"), entry("rust", "clippy")];
+        assert_eq!(select(&all, &["clippy".into()], &[]).len(), 1);
+        assert_eq!(select(&all, &[], &["review".into()]).len(), 1);
+        assert_eq!(select(&all, &[], &[]).len(), 2);
+    }
+
+    #[test]
+    fn validate_filters_rejects_unknown() {
+        let all = vec![entry("review", "code-review")];
+        assert!(validate_filters(&all, &["nope".into()], &[]).is_err());
+        assert!(validate_filters(&all, &[], &["nope".into()]).is_err());
+        assert!(validate_filters(&all, &["code-review".into()], &["review".into()]).is_ok());
+    }
+
+    // --- subset derivation (--only-memory) ---
+
+    // --- claude links (the plan builder) ---
+
+    // --- canonical materialise ---
+
+    // --- canonical dir + relative target ---
+
+    #[test]
+    fn relative_target_is_computed_from_the_two_dirs() {
+        // Project-local: .claude/skills → .doctrine/skills/<id>.
+        let agent = Path::new("/proj/.claude/skills");
+        let canon = Path::new("/proj/.doctrine/skills");
+        assert_eq!(
+            relative_target(agent, canon, "code-review"),
+            PathBuf::from("../../.doctrine/skills/code-review")
+        );
+        // A shared --global base ($HOME) stays correct — same relative shape,
+        // computed not hard-coded.
+        let g_agent = Path::new("/home/u/.claude/skills");
+        let g_canon = Path::new("/home/u/.doctrine/skills");
+        assert_eq!(
+            relative_target(g_agent, g_canon, "code-review"),
+            PathBuf::from("../../.doctrine/skills/code-review")
+        );
+    }
+
+    // --- ownership classification ---
+
+    #[test]
+    fn classify_link_covers_the_ownership_trichotomy() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let target = PathBuf::from("../../.doctrine/skills/code-review");
+
+        // missing → Create
+        let missing = dir.path().join("missing");
+        assert!(matches!(
+            classify_link("code-review", &missing, &target),
+            Link::Create { .. }
+        ));
+
+        // symlink whose value == target → Relink (dangling-but-ours: the target
+        // need not resolve — ownership is the value, not resolvability).
+        let ours = dir.path().join("ours");
+        symlink(&target, &ours).unwrap();
+        assert!(matches!(
+            classify_link("code-review", &ours, &target),
+            Link::Relink { .. }
+        ));
+
+        // symlink pointing elsewhere → KeepForeign(foreign-symlink → where)
+        let foreign = dir.path().join("foreign");
+        symlink("somewhere/else", &foreign).unwrap();
+        match classify_link("code-review", &foreign, &target) {
+            Link::KeepForeign {
+                reason: ForeignReason::ForeignSymlink(where_),
+                ..
+            } => assert_eq!(where_, PathBuf::from("somewhere/else")),
+            other => panic!("expected foreign-symlink, got {other:?}"),
+        }
+
+        // real dir → KeepForeign(real-dir)
+        let real = dir.path().join("real");
+        fs::create_dir_all(&real).unwrap();
+        assert!(matches!(
+            classify_link("code-review", &real, &target),
+            Link::KeepForeign {
+                reason: ForeignReason::RealDir,
+                ..
+            }
+        ));
+    }
+
+    // --- delegate argv ---
+
+    #[test]
+    fn delegate_argv_all_skills_omits_skill_flags() {
+        let e = entry("review", "code-review");
+        let argv = delegate_argv(&["codex"], &[&e], false, false, TEST_REPO);
+        assert_eq!(
+            argv,
+            vec!["skills", "add", TEST_REPO, "--agent", "codex", "--yes"]
+        );
+    }
+
+    #[test]
+    fn delegate_argv_subset_and_global() {
+        let e = entry("review", "code-review");
+        let argv = delegate_argv(&["cursor"], &[&e], true, true, TEST_REPO);
+        assert_eq!(
+            argv,
+            vec![
+                "skills",
+                "add",
+                TEST_REPO,
+                "--agent",
+                "cursor",
+                "--global",
+                "--skill",
+                "code-review",
+                "--yes",
+            ]
+        );
+    }
+
+    #[test]
+    fn delegate_argv_multiple_agents() {
+        let e = entry("review", "code-review");
+        let argv = delegate_argv(&["pi", "codex"], &[&e], false, false, TEST_REPO);
+        assert_eq!(
+            argv,
+            vec![
+                "skills", "add", TEST_REPO, "--agent", "pi", "--agent", "codex", "--yes",
+            ]
+        );
+    }
+
+    // --- agent resolution ---
+
+    // --- plan ---
+
+    #[test]
+    fn resolve_runner_with_npx_available() {
+        let (name, _runner) = resolve_runner_with(&|prog| prog == "npx");
+        assert_eq!(name, RUNNER_NPX);
+    }
+
+    #[test]
+    fn resolve_runner_with_falls_back_to_bunx() {
+        let (name, _runner) = resolve_runner_with(&|_prog| false);
+        assert_eq!(name, RUNNER_BUNX);
+    }
+
+    // --- plan ---
+}
+
 // Tests
 // ---------------------------------------------------------------------------
 
