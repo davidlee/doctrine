@@ -6,35 +6,41 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ---
 
-## ⏸ PARKED (2026-07-01) — resume AFTER hard-containment work lands
+## ▶ UNPARKED (2026-07-03) — A2 taken: guard retired, reshaped REV-only
 
-**Status: design, BLOCKED on RV-199 F-1 (blocker, open). Do NOT proceed to
-`/plan`.** Parked deliberately by the User pending the **confinement slice** (the
-real OQ-D close — graduate `probe-h1/` → doctrine skill hooks; RSK-014 / IMP-045).
+**Status: design (reshaped). RV-199 resolved (done, all findings terminal). Ready
+for `/inquisition` or `/plan`.** The park precondition — confinement landing — is
+**satisfied**: SL-182 (Linux/bwrap claude arm, ro shared `.git`), SL-183 (macOS
+Seatbelt), SL-185 (subprocess parity) are all **done**. Not "forthcoming" — shipped.
 
-**Why parked, not killed.** The inquisition (RV-199) voided SL-181's mechanism
-*and* cast doubt on its residual value (F-2: the accident gap may be near-empty).
-Both questions are better answered AFTER containment lands — confinement reshapes
-what's left for an anti-accident guard to do, and the F-2 marker-lifecycle trace is
-shared input. Resolving SL-181 now would be premature.
+**Decision A2 (user, 2026-07-03): retire the guard, keep the REV.** The guard has
+**no configuration where it both matters and works** (design.md §1 table):
+- confined arms → the ro-`.git` floor already blocks worker ref-mutation;
+- no sandbox backend → SL-182 hook fails **closed**, worker runs nothing;
+- writable standalone clone (IDE-024) → contained to a disposable object store, and
+  not `is_linked` so the guard is blind to it anyway;
+- unconfined → exactly the RV-199 **F-1** false-allow (worker rides `dispatch/<name>`).
 
-**Re-entry (when you return):**
-1. Read this banner → the **INQUISITION VERDICT** section below → `design.md` §0–§4.
-2. `doctrine review show RV-199` — the 3 charges (F-1 blocker open, F-2/F-3 major).
-3. **First decide A1 vs A2** (bottom of the verdict section) using the **F-2 trace**:
-   is an unstamped claude worker actually reachable, and on what branch?
-   - gap real → A1: `/design` rework the coord signal (anchor on the *registered
-     coordination-worktree dispatch state*, NOT the `dispatch/` prefix — Scope obj-1
-     already specced this), pin F-2 with a test, repair F-3, re-inquisition, `/plan`.
-   - gap near-empty → A2: retire/shrink SL-181; fold any residual into the
-     confinement slice's anti-accident corner.
-4. Durable trap that sank the design:
-   `mem.fact.dispatch.dispatch-branch-prefix-not-coord-unique`.
+So F-1's "heresy confessed" verdict is **upheld** and the redress is **removal**,
+not the A1 signal rework. Two residual scenarios the User raised (linux-no-bwrap;
+writable clone) both dissolve — see the §1 table.
 
-**Don't lose:** the §5 REV (retract ADR-012 OQ-D "marker is the real close") is the
-slice's *primary* deliverable and is still owed regardless of A1/A2 — confinement
-being proven-achievable (probe-h1) only strengthens it. Even if SL-181's guard is
-retired, the REV (or its content) must still land to make ADR-012 honest.
+**What was reshaped this session:**
+- `design.md` — rewritten REV-only (§0 thesis, §1 retirement argument, §2 REV
+  content, §3 zero code, §4 verification, §5 decisions D1–D4, §6 superseded guard).
+- `slice-181.md` — scope collapsed to the single REV deliverable; guard non-goals.
+- selectors — all 8 cleared (zero touch-set; conformance holds SL-181 to no code).
+- title → "OQ-D reframe: confinement is the close (REV-only)".
+- RV-199 — F-1/F-2/F-3 re-disposed `accepted-*` and verified terminal (done).
+
+**Still owed (the whole point):** the **REV against ADR-012** (+ ADR-006 D2a/D2b) —
+retract "the positive marker is the real close of OQ-D"; record the genuine close as
+**shipped confinement** (SL-182/183/185). Authored at execute (design/execute
+separation), not now. IMP-065 close + RSK-014 downgrade are the REV's *effects*,
+recorded at reconcile/close.
+
+**Durable trap that sank the original design (still valid):**
+`mem.fact.dispatch.dispatch-branch-prefix-not-coord-unique`.
 
 ---
 

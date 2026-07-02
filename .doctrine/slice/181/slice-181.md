@@ -1,129 +1,101 @@
-# Orchestration worker-safety: accidental ref-corruption guard + OQ-D reframe
+# OQ-D reframe: confinement is the close, retract the positive-marker overclaim
 
-Reframes (does **not** "close") ADR-012 **OQ-D** (RV-023 F-2), the redress carried
-as **IMP-065**. Pairs a cheap anti-accident guard with a **Revision** that retracts
-the over-claimed "positive marker is the real close" framing. Successor concern to
-SL-064. Standing residual tracked as **RSK-014**.
+**REV-only** (reshaped 2026-07-03, A2). Lands a **Revision** against ADR-012 that
+retracts the over-claimed "positive marker is the real close of OQ-D" and records
+the genuine close as **shipped confinement** (SL-182/183/185). The anti-accident
+guard this slice once carried is **retired** — no code ships. Successor concern to
+SL-064; residual tracked as **RSK-014**; originates from **IMP-065**.
 
-## Context — and the correction
+## Context — the reshape
 
-ADR-012 deferred OQ-D as "the real close" of the dispatch impersonation gap
-(ADR-011 D6/M2): an **unstamped worker** (stamp-hook failure / matcher drift —
-ISS-011) is `is_linked && marker_absent`, **indistinguishable by absence** from the
-markerless coordination tree SL-064 introduced (`coordinate.rs::run_coordinate`),
-so its **Orchestrator verb class** (`fork`/`import`/`gc`/`coordinate`/sync) is
-permitted fail-open. IMP-065 proposed a *positive* orchestrator marker to
-disambiguate by presence.
+ADR-012 deferred OQ-D (RV-023 F-2) as "the real close" of the dispatch
+impersonation gap (ADR-011 D6/M2): an **unstamped worker** is `is_linked &&
+marker_absent`, indistinguishable by absence from the markerless SL-064
+coordination tree (`coordinate.rs::run_coordinate`), so its **Orchestrator verb
+class** (`fork`/`import`/`gc`/`sync`/`candidate`) runs fail-open. IMP-065 proposed a
+*positive* marker to disambiguate by presence.
 
-**Design finding (this slice): a positive marker cannot close that gap.** Worker
-identity is a presence-only file (`.doctrine/state/dispatch/worker`) + an optional
-`DOCTRINE_WORKER` env. **Both are cooperative flags, not enforced boundaries** —
-an agent sets/unsets its own env at will and writes/deletes/`cd`s around an
-unprotected file at will. The *only* arm with real isolation is
-`scripts/pi-spawn-confined.sh` (bwrap `--ro-bind / /`); claude `Agent` and vanilla
-pi subagents have **none**. So an uncontained worker defeats any marker trivially
-(`cd` into the coord tree, or forge the file); a bwrap worker can't misbehave
-anyway. **In every arm the marker buys ~zero against a *capable* worker** — and
-ADR-006 D2a already concedes this ("the fence … is the funnel + the jail, **not** a
-fail-closed CLI floor"). RSK-014 records the full state of play.
+Two findings collapsed that plan (design.md §0–§1):
 
-**What is left, and is worth a cheap fix:** the **accidental, cooperative,
-unstamped worker that stays in its own tree** and runs an Orchestrator verb there.
-The R-5 import belt catches `.doctrine/` *file* writes at import but **not ref
-mutation** (`gc`/`sync`/`import`/`candidate` rewrite shared refs, absent from the
-`B..S` file delta) — so this one honest-failure path is genuinely uncaught today.
-Anthropic models' strong alignment against *malicious compliance* means an
-anti-accident guard goes further than the cooperative-flag critique implies: the
-honest worker is the common case.
+1. **A positive marker cannot close it.** Worker identity is a presence-only file +
+   optional `DOCTRINE_WORKER` env — **cooperative flags, not enforced boundaries**
+   (RSK-014; ADR-006 D2a already concedes it). A capable worker forges or `cd`s
+   around either trivially.
+2. **The genuine close — confinement — has shipped.** SL-182 (Linux/bwrap claude
+   arm, **ro shared `.git`**), SL-183 (macOS Seatbelt), SL-185 (subprocess parity).
+   Where a backend runs, worker ref-mutation is blocked at the OS floor, stamped or
+   not.
 
-## Scope & Objectives
+And the interim guard was found to have **no configuration where it both matters
+and works** (design §1): confined → floor already blocks; no-backend → SL-182
+fail-closed, worker runs nothing; standalone clone → contained + not `is_linked`;
+unconfined → RV-199 **F-1** voids the mechanism (worker fork rides `dispatch/<name>`
+⇒ false-allow). So the guard is retired, not reworked.
 
-1. **Cheap accidental-ref-corruption guard.** Refuse an Orchestrator-classed verb
-   (`fork`/`import`/`gc`/`coordinate`/`dispatch sync`/`candidate`/`arm-spawn`) when
-   the cwd tree is a linked worktree that is **not** the registered coordination
-   worktree. Framed and tested as **honest-failure defence-in-depth, NOT an
-   impersonation boundary**. Preferred mechanism: derive coordination identity from
-   **existing dispatch state** (the registered coord worktree / `dispatch/<slice>`
-   branch the orchestrator already wrote) rather than minting a new marker file —
-   DRY, no second cooperative artefact to forge. (Mechanism is the one open design
-   decision; see OQ-1.)
-2. **Revision against ADR-012** (and the ADR-006 D2a/D2b notes): retract "the
-   positive marker is the real close of OQ-D"; reclassify the residual as
-   **enforcement-bound and consciously accepted** — the genuine close is
-   *confinement* (bwrap, linux-only; or `claude -p`, cost-untenable), tracked in
-   RSK-014. Honest scope/bounds of orchestration worker-safety is the **primary
-   deliverable**, the guard the secondary.
+## Scope & Objective
+
+**One deliverable: the Revision.** A **REV against ADR-012** (+ ADR-006 D2a/D2b
+notes) that:
+- retracts "the positive coordination marker (IMP-065) is the real close of OQ-D";
+- records the genuine close as **shipped confinement** (SL-182/183/185), superseding
+  the prior "closable, not-yet-landed" / "unclosable on claude" framing;
+- reclassifies the RSK-014 residual as **enforcement-closed on every arm running a
+  confinement backend**, with a bounded, self-limiting residual (no-backend
+  fail-closes; standalone clone is contained);
+- records that the anti-accident branch-check guard was designed, inquisited
+  (RV-199 F-1), and **retired** — SL-181 ships no code.
 
 ## Non-Goals
 
-- **No new cooperative marker presented as security.** A positive marker file does
-  not raise the enforcement altitude; do not build one and call it an impersonation
-  fix. (If the guard ends up needing a stamped artefact, it is labelled
-  anti-accident DiD, not a boundary.)
-- **Does not close the impersonation gap.** A capable/misbehaving worker is out of
-  scope — that needs confinement (RSK-014 / ADR-008 / D2b), unsolved on the claude
-  arm. This slice does not pretend otherwise.
-- **Does NOT gate ordinary authored writes.** D6a ("mode, not location, decides")
-  lets a solo `/execute` in a worktree write directly, marker-absent. The guard is
-  scoped to the **Orchestrator verb class** only — re-breaking general Write is the
-  reverted-G2 hazard (SL-056 PHASE-05, owner-locked VH).
-- Not a dispatch **topology** change (ADR-012, shipped).
+- **No guard, no new code.** The anti-accident branch-check is retired (design §1).
+  `slice conformance` holds SL-181 to a **zero touch-set**; any `src/` edit is an
+  undeclared-edit finding.
+- **No new cooperative marker.** A presence-only marker never raised the enforcement
+  altitude; none is built or claimed.
+- **Not a topology or confinement change.** Confinement already shipped
+  (SL-182/183/185); this slice does not re-open it — it only makes ADR-012 honest
+  about it.
+- **Does not itself close IMP-065 / downgrade RSK-014.** Those are the REV's
+  *effects*, recorded at reconcile/close (design §4), not authored during
+  design/execute of the REV.
 
-## Affected Surface (locked — see `design.md` §6)
+## Affected Surface
 
-- `src/commands/guard.rs` — the Orchestrator-only branch-check clause in `worker_guard`.
-- `src/worktree/shared.rs` — new `is_coordination_worktree` predicate.
-- `src/git.rs` — promote `current_branch` here (DRY); `DISPATCH_BRANCH_PREFIX` const.
-- `src/dispatch.rs` — drop the private `current_branch`, call `git::current_branch`.
-- `src/worktree/mod.rs` — `pub(crate)` re-exports for `guard.rs`.
-- **REV** against `ADR-012` (+ ADR-006 D2a/D2b notes) — the primary governance deliverable.
-- **Not touched:** `marker.rs` / `subagent.rs` — the new-marker plan is dropped.
+- **REV** against `ADR-012` (+ ADR-006 D2a/D2b notes) — the **sole** deliverable.
+- **No `src/` files.** All prior design-target + scope-relevant selectors cleared.
+- **Not touched:** `guard.rs`, `worktree/shared.rs`, `git.rs`, `dispatch.rs`,
+  `marker.rs`, `subagent.rs` — the guard plan is dropped.
 
 ## Risks / Assumptions / Open Questions
 
-**Resolved in `design.md` (mechanism locked):**
-- **OQ-1 → branch-pattern, not a marker** (design D1). Coord tree identified by
-  `HEAD` on `dispatch/<NNN>` (`is_coordination_worktree` in `worktree/shared.rs`);
-  no new marker file, no `Cause` variant, no stamp/teardown verb.
-- **OQ-2 → YES, unconditional gate** (design D2). Researcher verdict: the coord
-  tree is the *sole* legitimate linked-worktree Orchestrator caller; no legit flow
-  breaks.
-- **OQ-3 → trusted-path never shipped** (design §5). No positive trusted-orchestrator
-  gate exists in `src/`; this guard is the first delivery of OQ-D plan-gate (i),
-  framed as anti-accident.
-
-**Carried into execute / inquisition:**
-- **OQ-A (residual, test-pinned, harness-fragile).** The claude unstamped worker
-  must run on a non-`dispatch/N` branch (`worktree-agent-<id>`) during execution
-  for the guard to catch it (the `dispatch/N` association is collapse-time). Pinned
-  by the impersonation test; **the inquisition's primary target.** Residual → RSK-014.
-- **OQ-C (minor).** Detached-HEAD in the coord tree self-bricks Orchestrator verbs
-  (cure printed). Confirm no merge-conflict path leaves the coord HEAD detached.
+**Resolved:**
+- **A2 chosen (retire, not rework)** — user, 2026-07-03. F-1 voided the mechanism;
+  confinement voided the need.
+- **OQ-D close identified** — confinement, shipped (SL-182/183/185). No marker
+  residual remains.
+- **Guard's two-residual challenge dissolved** — both cases the guard might still
+  serve (linux-no-bwrap; writable standalone clone) either fail-closed or fall
+  outside the linked-worktree domain (design §1).
 
 **Assumptions:**
-- **A1.** `needs: ISS-011` closed (SL-124/SL-125) — actionable.
-- **A2 (governance).** ADR-006 D2a/D2b owner-locked (VH). The REV is the sanctioned
-  amendment path; the guard's value-claim matches the REV's honest framing.
-- **A3 (premise of the value).** Anti-accident guard is worth it because honest
-  failure (ISS-011 stamp drift) is still live post-SL-124/125 (`SubagentStart` is
-  un-failclosable), and Anthropic models are well-aligned against malice, so the
-  honest case dominates.
+- **A1 (governance).** ADR-006 D2a/D2b and ADR-012 owner-locked (VH); the REV is the
+  sanctioned amendment path, routed via reconcile — not hand-edited.
+- **A2 (enforcement floor).** SL-182's `PreToolUse` hook is unconditionally active on
+  the claude dispatch path and fail-closed on a missing backend. (Confirmed from the
+  shipped `pretooluse-wrap.sh`; re-confirm at execute if the REV leans on it hard.)
 
 ## Verification / Closure Intent
 
-- **Accidental case caught:** an unstamped worker (linked, not the coord tree)
-  running `gc`/`sync`/`import` from its own cwd is **refused** (today: fail-open).
-- **Legit case preserved:** the registered coordination tree runs Orchestrator
-  verbs; a solo `/execute` in a worktree **still writes** general authored entities
-  (D6a intact); general Write class unchanged.
-- **Honest framing landed:** the REV retracts "real close"; SL-181 and IMP-065 no
-  longer claim impersonation closure; RSK-014 carries the residual.
-- **Tests labelled** anti-accident DiD, not impersonation proofs — no test asserts
-  the guard stops a capable worker (it doesn't).
-- Behaviour-preservation: existing `e2e_worktree_coordinate` + worker-guard suites
-  stay green except where they encoded the absence dependence.
+- **REV lands** against ADR-012 (+ D2a/D2b notes); its statements match design §2.
+- **Zero code delta** — `slice conformance SL-181` reports an empty design-target
+  set and no undeclared edits.
+- **RV-199 resolved** — F-1/F-2/F-3 terminal (accepted; guard retired); no open
+  blocker gates the slice.
+- **Reconcile effects:** IMP-065 closed (reframed-superseded); RSK-014 downgraded
+  ("enforcement-closed on confined arms; bounded residual").
 
-## Follow-Ups
+## Follow-Ups (reconcile/close)
 
-- **RSK-014** — claude-subagent confinement state-of-play; the real close lives there.
-- **IMP-065** — to be closed as "reframed, not closed-by-marker" when this lands.
+- **RSK-014** — downgrade to "solved on confined arms; bounded residual." The REV
+  carries the reclassification.
+- **IMP-065** — close as reframed/superseded-by-confinement when the REV lands.

@@ -1,46 +1,14 @@
 id = 181
 slug = "positive-coordination-marker"
-title = "Worker-safety: accidental ref-corruption guard + OQ-D reframe"
+title = "OQ-D reframe: confinement is the close (REV-only)"
 status = "design"
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-07-03"
 tags = ["area:dispatch"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
-
-[[selector]]
-selector = "src/worktree/marker.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/worktree/coordinate.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/worktree/create.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/guard.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/worktree/subagent.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/worktree/shared.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/git.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/dispatch.rs"
-intent = "design-target"
 
 [[relation]]
 label = "governed_by"
