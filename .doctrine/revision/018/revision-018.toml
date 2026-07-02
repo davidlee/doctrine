@@ -1,7 +1,7 @@
 id      = 18
 slug    = "oq-d-close-is-shipped-confinement-not-the-positive-marker"
 title   = "OQ-D close is shipped confinement, not the positive marker"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
+status = "done"
 approval = "approved"
 updated = "2026-07-02"
 tags    = []

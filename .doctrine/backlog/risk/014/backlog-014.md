@@ -200,3 +200,21 @@ Recipe + evidence for the above: [[mem.pattern.dispatch.claude-worktree-subagent
 
 Refs: SL-181, IMP-065, ADR-006 D2a/D2b, ADR-012 OQ-D, ADR-008 (jail isolation),
 ADR-011 D6/M2.
+
+---
+
+**RESOLVED — mitigated (SL-181, 2026-07-03; REV-018).** Downgraded from "unsolved
+— cooperative-only off the bwrap arm." Confinement has since **shipped on every
+spawn arm**: SL-182 (Linux/bwrap claude arm, ro shared `.git`), SL-183 (macOS
+Seatbelt), SL-185 (subprocess parity). The "Confinement altitude, by arm" table
+above is the *pre-SL-182* state; where a backend now runs, a worker — stamped or
+not — **cannot mutate shared refs** (enforcement floor at the OS layer, not the
+cooperative marker). The residual is **bounded and self-limiting**, two degenerate
+cases only: (1) **no backend** → the SL-182 `PreToolUse` hook **fail-closes**, the
+worker executes nothing; (2) **writable standalone clone** (non-worktree) →
+corruption is **contained** to that clone's disposable object store and the agent
+is not `is_linked`. No cooperative-marker residual remains, because no marker is
+claimed as the fence. The OQ-6 socket-reachable-privileged-peer residual (above)
+is a *per-project jail-hygiene* concern, not a doctrine worker-mode gap. Reframe
+recorded in ADR-006 D2a/D2b + ADR-012 via REV-018; the superseded IMP-065 is
+closed-obsolete.

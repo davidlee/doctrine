@@ -5,10 +5,10 @@ id = 65
 slug = "positive-coordination-tree-marker-close-oq-d-replace-marker-absence-dependence-in-d2a"
 title = "Positive coordination-tree marker (close OQ-D): replace marker-absence dependence in D2a"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "obsolete"
 created = "2026-06-14"
-updated = "2026-06-15"
+updated = "2026-07-02"
 tags = ["area:dispatch"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

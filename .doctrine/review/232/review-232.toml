@@ -12,5 +12,53 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-181"
 
+[[finding]]
+id = "F-1"
+status = "withdrawn"
+severity = "minor"
+title = "check gate red — expected green; observed cordage denylist test panics on root-resolution, independent of SL-181"
+detail = "doctrine check gate fails: crates/cordage/tests/denylist.rs:78 'denylist walk found no src/lib.rs — root resolution is wrong (got 0 files under /home/david/dev/doctrine/crates/cordage)'. Path is the HOST checkout, not the jail root /workspace/doctrine. SL-181 is REV-only (zero src delta; REV commits touched only .doctrine/**), so it cannot cause or fix this. Pre-existing env/path-resolution bug, distinct from closed ISS-007 (README vocab). Filed ISS-205."
+
+[[finding]]
+id = "F-2"
+status = "withdrawn"
+severity = "nit"
+title = "conformance reports 2 undeclared paths — expected clean; observed the REV entity files themselves, which are the sanctioned deliverable not drift"
+detail = "slice conformance SL-181 lists undeclared: .doctrine/revision/018/revision-018.{toml,md}. These are REV-018 — the slice's sole deliverable — not src/ scope creep. EX-4 (git diff --stat -- src/ empty) holds. Design §4's prediction of 'no undeclared edits' was optimistic: the conformance algebra counts authored REV files in the phase window. No code touched."
+
+[[finding]]
+id = "F-3"
+status = "withdrawn"
+severity = "major"
+title = "REV-018 amendments authored+approved but unapplied — reconciled truth (ADR-012/006 edits, IMP-065 close, RSK-014 downgrade) not yet written; must land at reconcile"
+detail = "REV-018 faithfully encodes design §2 (a)-(d): retract 'positive marker (IMP-065) is real close of OQ-D'; record shipped confinement SL-182/183/185; reclassify RSK-014 residual to enforcement-closed-on-confined-arms; record guard designed→inquisited(RV-199 F-1)→retired. Two modify rows target ADR-012 (primary) + ADR-006, approval=approved, unapplied (status=proposed). Per design D3/D4 the apply + IMP-065 reframed-supersede close + RSK-014 downgrade are reconcile's write surface, not execute's. Delegated to /reconcile."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Conformance flags REV-018 entity files as undeclared — expected zero src/ touch, observed 2 undeclared .doctrine/revision/018 paths"
+detail = "slice conformance SL-181: undeclared(2) = revision-018.toml, revision-018.md; undelivered(0); conformant(0). These ARE the REV deliverable of a REV-only slice, not src drift. EX-4 gate — git diff --stat -- src/ — is empty. The conformance model is code-delta-focused and has no design-target selector for a REV-only slice (design §3 declared a zero touch-set), so the deliverable necessarily appears undeclared. Lead, not defect."
+disposition = "aligned"
+response = "Correct observation, no change. The 2 undeclared paths are the sanctioned REV-018 deliverable of a REV-only slice; a code-delta conformance model has no selector for authored governance output. EX-4 (src/ empty) holds — zero code impact per design §3. Not scope creep."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "REV-018 coherence with design §2 — expected faithful encoding of (a)-(d) + correct modify targets, observed match"
+detail = "Change rows: modify ADR-012 (primary) + modify ADR-006 — correct targets (§2). Rationale states (a) retract 'positive marker is real close of OQ-D'; (b) genuine close = shipped confinement SL-182/183/185; (c) RSK-014 residual reclassified to enforcement-closed-on-confined-arms, bounded/self-limiting; (d) guard designed, inquisited (RV-199 F-1 blocker), retired. Load-bearing claim (confinement blocks ref-mutation at ro .git floor) re-confirmed: SL-182/183/185 all done. Faithful, complete, no scope excess."
+disposition = "aligned"
+response = "Confirmed. REV-018 is a faithful, complete encoding of locked design §2 (a)-(d) with correct modify targets (ADR-012 primary, ADR-006). Load-bearing confinement claim sound (SL-182/183/185 done). No excess, no gap."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Governance truth unchanged on disk — ADR-012/006 overclaim, IMP-065 open, RSK-014 undowngraded pending REV-018 apply"
+detail = "REV-018 is approved-but-UNAPPLIED (approval=approved, status=proposed) — execute correctly stopped short of the governance write (design D3/D4). Consequently ADR-012 still says 'the real close is the positive marker (IMP-065)'; ADR-006 D2a/D2b lack the confinement-floor notes; IMP-065 still open (not superseded); RSK-014 not downgraded. These are the REV's PENDING EFFECTS, owned by reconcile (the governance write surface). Routed to the reconciliation brief; not a drift to tolerate, the planned next-stage write."
+disposition = "verified"
+response = "Confirmed and routed to /reconcile (governance write surface). Remediation = reconcile applies REV-018 (surfaced-for-manual edits 1.1-1.4 to ADR-012 + 2.1-2.3 to ADR-006), then closes IMP-065 (reframed-superseded) and downgrades RSK-014. See ## Reconciliation Brief. Not tolerated drift — the planned next-stage write; finding stays verified, remediation is reconcile's."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

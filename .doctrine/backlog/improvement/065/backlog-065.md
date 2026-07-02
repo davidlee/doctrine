@@ -29,3 +29,16 @@ positive marker *supersedes* the absence dependence rather than layering on it.
 
 Refs: ADR-012 §Open OQ-D; ADR-006 D2a/D2b; ADR-011 D6/M2; RV-023 F-2;
 SL-064 design §2; SL-056 PHASE-05.
+
+---
+
+**CLOSED — obsolete (SL-181, 2026-07-03; REV-018).** The positive-marker approach
+is **superseded, not delivered**. Two findings retire it (SL-181 design §0–§1;
+RV-199 F-1): (1) a positive marker is a **cooperative flag, not a boundary** — a
+capable worker forges it or `cd`s around it, so it could never *close* OQ-D, only
+re-shape the same soft signal; (2) the genuine close — **enforcement** — has
+shipped as confinement (SL-182 Linux/bwrap ro shared `.git`, SL-183 macOS
+Seatbelt, SL-185 subprocess parity), blocking worker ref-mutation at the OS floor
+stamped-or-not. OQ-D is closed by confinement; this improvement is obsolete. The
+reframe is recorded in ADR-012 + ADR-006 D2a/D2b via REV-018. Residual is tracked
+(downgraded) on RSK-014.

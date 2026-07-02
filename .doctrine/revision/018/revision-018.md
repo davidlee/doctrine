@@ -93,3 +93,27 @@ Additive notes only; the historical D2a/D2b reasoning (owner-locked, VH) stands.
 > before: `IMP-065 — the deferred positive coordination marker (OQ-D real close).`
 >
 > after: `IMP-065 — positive coordination marker, **retired** (SL-181); OQ-D real close = **shipped confinement** (SL-182/183/185).`
+
+## Reconcile narrative (SL-181)
+
+Applied at reconcile 2026-07-03 (RV-232 audit clean, VH-1 accepted). All rows
+were `modify` (surfaced-for-manual); landed by hand-edit under the authored-truth
+honour model:
+
+- **ADR-012 (modify, primary)** — edits 1.1–1.4 landed: Consequences › Residual
+  identity gap retracts "the real close is the positive marker" → shipped
+  confinement; the OQ-D-close note appended to *Decisions formerly open* (historical
+  decision preserved); the OQ-D plan-gate note and References line corrected.
+- **ADR-006 (modify)** — additive notes 2.1–2.3 landed: D2a "enforcement floor has
+  landed" note; D2b "residual enforcement-closed on confined arms" note; References
+  line (IMP-065 retired; OQ-D close = confinement). Historical D2a/D2b reasoning
+  (owner-locked, VH) stands untouched — the notes are additive.
+- **Prose correction (recorded):** edit 2.1's draft read "The 2056 re-weigh"; landed
+  as "The **SL-056** re-weigh" — an obvious id typo for the SL-056 PHASE-05 G2
+  revert this very D2a block documents. Corrected under the honour model; substance
+  unchanged.
+
+Governance effects of the landing (design D4): **IMP-065** closed (obsolete —
+superseded by confinement, not delivered); **RSK-014** resolved (mitigated —
+downgraded from "unsolved" to enforcement-closed-on-confined-arms with a bounded,
+self-limiting residual). No `src/` change (design §3).

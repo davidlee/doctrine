@@ -56,3 +56,14 @@ from the title + SL-121 design + memory corpus. Token spend: ~7k to discover
 what amounted to a 2-line change. The memory corpus was the right place
 (mem_019edd33d3b273928001e6c867cb2de5 nailed the problem statement), but
 having it in the IMP body would've saved several round-trips.
+
+[phase-plan/execute; sl181-postcompact-resume]
+Compaction summary said REV "to author" and "revision list EMPTY", but the
+prior (compacted) session had already: authored+approved REV-018, flipped
+SL-181 → audit, AND run /audit to a clean RV-232 (0 findings). Re-deriving true
+state cost ~6 probe commands (revision list/show/paths, slice status, git
+show, review show) because the summary lagged the on-disk reality. Also found
+3 uncommitted residues the prior session left mid-transition: slice toml status
+bump, and two slug symlinks (REV-018, RV-232) the `*/new` verbs create but the
+author's path-scoped `git add` of the numeric dir missed. Cost: summary-vs-disk
+drift forces defensive re-verification on every post-compaction resume.
