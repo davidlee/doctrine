@@ -35,7 +35,10 @@ case $(uname) in
     # is real (direct command) and NUL bytes survive (file, not $()/var).
     doctrine worktree jail-prefix --dir "$D" --main-root "$ROOT" \
       --out "$D/.tmp/jail.argv" || abort            # fail-closed: no unconfined pi
-    mapfile -d '' PREFIX < "$D/.tmp/jail.argv"
+    # bash-3.2 (macOS stock): no `mapfile`. Portable NUL-delimited read; the
+    # `|| [ -n "$t" ]` clause captures the final non-NUL token (--out carries no
+    # trailing NUL per AR-1) — a bare `mapfile -d ''` would silently drop it.
+    PREFIX=(); while IFS= read -r -d '' t || [ -n "$t" ]; do PREFIX+=("$t"); done < "$D/.tmp/jail.argv"
     [ "${#PREFIX[@]}" -gt 0 ] || abort              # AR-1: empty prefix ⇒ abort (defence in depth)
     ;;
   *)  PREFIX=( bwrap --ro-bind / / … ) ;;           # (A): Linux inline, UNTOUCHED
@@ -137,7 +140,12 @@ arm. Do NOT reorder `resolve_with_policy` to realpath-before-validate: that woul
 break the behaviour-preserved claude ordering; canonicalize at the inline source
 instead.
 
-### `src/worktree/mod.rs` — new command-tier consumer
+### `src/worktree/mod.rs` + `src/worktree/jail_prefix.rs` — new command-tier consumer
+
+`mod.rs` carries only the `WorktreeCommand::JailPrefix` variant and its dispatch
+arm; the handler `run_jail_prefix()` and its helpers live in a dedicated
+`src/worktree/jail_prefix.rs` module (extracted during PHASE-04 — cleaner than
+inlining a cfg-split command handler in `mod.rs`).
 
 ```rust
 WorktreeCommand::JailPrefix { dir: PathBuf, main_root: Option<PathBuf>,
@@ -145,7 +153,7 @@ WorktreeCommand::JailPrefix { dir: PathBuf, main_root: Option<PathBuf>,
                              network: bool, extra_rw: Vec<PathBuf> }
 ```
 
-`run_jail_prefix()` — impure command tier, cfg-split (its OWN backend
+`jail_prefix::run_jail_prefix()` — impure command tier, cfg-split (its OWN backend
 resolution — NOT `probe_backend`, whose macOS branch reads the disk policy D3
 rejects; AR-4):
 
@@ -176,15 +184,19 @@ claude PreToolUse suites are the behaviour-preservation proof.
 
 `uname` branch: `Darwin` → the **§1 `--out` file contract** (XR-2 — NOT
 process-substitution, which reburies the AR-1 exit-status/NUL hole): `jail-prefix
---out "$D/.tmp/jail.argv" || abort`, then `mapfile -d '' PREFIX < "$D/.tmp/jail.argv"`,
-then the `[ "${#PREFIX[@]}" -gt 0 ] || abort` empty-guard. `*` → the existing inline
+--out "$D/.tmp/jail.argv" || abort`, then the portable NUL-delimited reader
+`PREFIX=(); while IFS= read -r -d '' t || [ -n "$t" ]; do PREFIX+=("$t"); done < …`
+(macOS stock bash is 3.2 — no `mapfile`; the `|| [ -n "$t" ]` clause captures the
+final non-NUL token, which a bare `mapfile -d ''` would drop), then the
+`[ "${#PREFIX[@]}" -gt 0 ] || abort` empty-guard. `*` → the existing inline
 bwrap array. A single `timeout "${PREFIX[@]}" pi …` exec site. The `--out` path is
 truncated/removed before the call so a stale prior-run file cannot be mistaken for
 success (jail-prefix writes it only on full success).
 
 ### design-target selectors
 
-`src/worktree/jail.rs`, `src/worktree/mod.rs`, `src/worktree/pretooluse.rs`,
+`src/worktree/jail.rs`, `src/worktree/mod.rs`, `src/worktree/jail_prefix.rs`,
+`src/worktree/pretooluse.rs`, `src/commands/guard.rs`,
 `scripts/pi-spawn-confined.sh`.
 
 ## 4. Verification

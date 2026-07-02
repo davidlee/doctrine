@@ -159,3 +159,46 @@ machinery is not spec-registered — so both are **direct edits at /reconcile**,
   the real-pi VH — these are evidence, already landed in the ledger, no further
   write needed. `notes.md` harvest (durable findings) is the remaining
   reconcile/close-tail task.
+
+## Reconciliation Outcome
+
+### Direct edits applied (per-slice `design.md`)
+
+- **F-1 (module location).** §3 heading + prose corrected: `run_jail_prefix()`
+  lives in a dedicated `src/worktree/jail_prefix.rs` module; `mod.rs` carries only
+  the `WorktreeCommand::JailPrefix` variant + dispatch arm. Verified against the
+  shipped tree (`mod.rs:41` `mod jail_prefix;`, `mod.rs:381` dispatch →
+  `jail_prefix::run_jail_prefix`, handler at `jail_prefix.rs:77`).
+- **F-5 (reader idiom, user-approved deviation).** §1 (target sketch) and §3
+  (launcher-branch prose) both corrected: `mapfile -d ''` → the portable
+  `PREFIX=(); while IFS= read -r -d '' t || [ -n "$t" ]; do PREFIX+=("$t"); done`
+  loop, with the rationale recorded inline — macOS stock bash is 3.2 (no
+  `mapfile`), and `--out` carries no trailing NUL (AR-1) so the `|| [ -n "$t" ]`
+  clause is required to capture the final token a bare `mapfile` would drop
+  (verified live: 16 tokens vs mapfile's 15). This blocks a future "restore
+  mapfile" regression that would break macOS confinement.
+
+### Structured selector reconciliation (makes F-1/F-2 conformant)
+
+- Added `src/worktree/jail_prefix.rs` (F-1) and `src/commands/guard.rs` (F-2) to
+  the SL-185 `design-target` selector set (with notes), mirroring the §3 prose
+  list. Post-repair `slice conformance`: **6 conformant / 0 undelivered / 4
+  undeclared** — all 4 undeclared cells are the already-`aligned` findings
+  (3× IMP-230 backlog files → F-4; `tests/e2e_worktree_jail_prefix.rs` → F-3,
+  named by plan VT not design-target). These are correctly *not* design-target
+  selectors, so they remain undeclared-but-aligned by design.
+
+### REVs completed
+
+- None. No governance/spec finding surfaced (F-3/F-4/F-6 all `aligned`;
+  F-1/F-5 are per-slice `design.md` corrections; the jail/seatbelt machinery is
+  not spec-registered).
+
+### Withdrawn / tolerated
+
+- None withdrawn or tolerated. All 6 findings remain `verified`; remediation
+  recorded here per the audit→reconcile seam (findings are never mutated to
+  `fixed`).
+
+Reconcile pass complete — every brief item resolved, no half-applied REV blocks
+the close-gate. Handoff to /close.
