@@ -1,7 +1,7 @@
 id = 185
 slug = "subprocess-seatbelt-parity"
 title = "Subprocess-arm Seatbelt confinement (macOS jail parity)"
-status = "design"
+status = "ready"
 created = "2026-07-01"
 updated = "2026-07-01"
 tags = []
