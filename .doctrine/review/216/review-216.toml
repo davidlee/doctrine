@@ -1,0 +1,117 @@
+id    = 216
+slug  = "sl-180-plan-inquisition-vt-mandate-strength-phase-balance-layering-integrity-contiguity-audit"
+title = "SL-180 plan inquisition: VT mandate strength, phase balance, layering integrity, contiguity audit"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-180"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = 'VT-1 keywords ["against","strict"] match current production code — gate falsely green before implementation'
+detail = """
+VT-1 mandates `keywords = ["against", "strict"]` in `test_file = "src/slice.rs"`. Both substrings exist in the CURRENT tree: "against" appears in comments at lines 300, 355, 741, 1051, 1629, 2311, 3252, 4163; "strict" appears at line 5748 as "strict ancestor". A VT gate that greps for keyword presence would attribute VT-1 as passing against the current codebase — before `--against`/`--strict` CLI flags are built.
+
+The keywords MUST be tokens that do not exist in the current tree, so the gate cannot report false green. Options:
+(a) Use compound keywords like `"--against"` and `"--strict"` (double-dash prefixed) — these do NOT exist in current src/slice.rs.
+(b) Use test-only tokens like `"dry_run_conformance"` or `"test_against_strict"` that appear exclusively in test code.
+(c) Split into separate VT entries with unique keywords.
+
+Recommendation: use `"--against"` and `"--strict"` (the actual CLI flag spellings). These are unique to the new code, non-ambiguous, and directly reference the feature under test."""
+disposition = "fix-now"
+response = """Accepted. VT-1 keywords `["against", "strict"]` MUST be changed to `["--against", "--strict"]` — the double-dash-prefixed CLI flag spellings do NOT exist as substrings in current `src/slice.rs` (verified by grep: no `"--against"` or `"--strict"` in the file today). This is the minimal fix that prevents false-green attribution without changing the mandate's intent. The expectation text already names the exact flags; the keywords should match the tokens the code will introduce."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = 'VT-2 keyword "quotePath" gates on production fn presence, not a real non-ASCII path test'
+detail = """
+VT-2 mandates `keywords = ["quotePath"]` in `test_file = "src/slice.rs"`. The new production function `actual_from_range` will contain `core.quotePath=false` in its git invocation. A keyword-grep over the entire file would match this production code — VT-2 would report green even if NO test exercises a non-ASCII path through the fold.
+
+The expectation text says: "A range whose diff includes a non-ASCII path folds and renders that path verbatim (quotePath=false) rather than C-quoted — proving the fold hardening bites."
+
+The keyword should prove the TEST exists, not just the production flag. Options:
+(a) Use a test-scoped keyword like `"non_ascii_path"` or `"unicode_path"` that would only appear in a test fixture exercising non-ASCII paths.
+(b) Require a test-only token that names the specific test function, e.g. `"test_against_non_ascii_path"`.
+(c) Keep "quotePath" but additionally require a non-ASCII path literal (e.g. a Unicode filename in a test fixture).
+
+Recommendation: change keywords to `["non_ascii", "quotePath"]` — "quotePath" alone signals the hardening exists, and "non_ascii" forces the test to actually exercise a non-ASCII path rather than just checking the flag is set. The compound match eliminates the false-green risk."""
+disposition = "fix-now"
+response = 'Accepted. VT-2 keywords changed from `["quotePath"]` to `["non_ascii", "quotePath"]`. The compound match closes the false-green risk: "quotePath" signals the hardening flag exists (production code), and "non_ascii" forces the test to exercise a non-ASCII path (a Unicode filename in a test fixture). Neither token exists in current `src/slice.rs` (confirmed: zero hits for "non_ascii" or "quotePath" in the file today). The expectation text already describes non-ASCII behaviour; the keyword "non_ascii" is the test-level proof that the fold hardening actually bites.'
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-02 spans 5 files across 3 concerns — conformance refactor, import belt, and skill edits are separable"
+detail = """
+PHASE-02 touches 5 files: `src/conformance.rs` (undeclared_paths + compile extract), `src/worktree/import.rs` (UndeclaredScope + classify_import sig change), `src/worktree/mod.rs` (--slice plumbing), and two dispatch SKILL.md files.
+
+PHASE-01 is 1 file (`src/slice.rs`). The asymmetry is notable but not inherently wrong — the question is cohesion vs size.
+
+The conformance.rs changes (undeclared_paths + compile extract from compute) are a self-contained refactor WITH their own VT (VT-3) and behaviour-preservation gate (6 existing compute tests must stay green). They are separable from the import belt: they depend on nothing in PHASE-02, and the belt depends on them.
+
+The skill edits are pure documentation — they could ride as a separate PHASE-03 or as a post-PHASE-02 commit.
+
+However, the design's phasing rationale is correct: "PHASE-01 builds the shared `slice::selectors(…, intent)` reader" that PHASE-02 consumes. The conformance refactor and belt work ARE tightly coupled (undeclared_paths IS the belt's pure need). Splitting them would create an artificial handoff where PHASE-02a delivers undeclared_paths and PHASE-02b consumes it.
+
+Verdict: the plan's 2-phase split is **justifiable but borderline**. The risk is that a 5-file phase has more surface for merge conflicts during parallel dispatch, not that it's incoherent. If PHASE-02 fails and needs rework, the blast radius is larger.
+
+Recommendation: document the accepted risk in plan.md; no structural change required. The design's coupling argument (undeclared_paths IS the belt's need) holds."""
+disposition = "tolerated"
+response = """
+Tolerated with documentation. The 5-file PHASE-02 is borderline but the coupling argument holds: `undeclared_paths` IS the belt's pure need — splitting the conformance refactor from the belt creates an artificial handoff. The skills edits are documentation (no code risk). 
+
+Mitigation accepted: document in plan.md that PHASE-02's size is an accepted tradeoff for cohesion — the `undeclared_paths` + `compile` extract is the belt's pure primitive and separating them would force a rework handoff. The real risk (merge conflicts during parallel dispatch) is acknowledged and judged low because the 5 files touch 3 distinct modules with disjoint ownership surfaces."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "No EX criterion names the double root resolve acceptance — implicit design concession not surfaced in plan"
+detail = """
+Design §8 lists "Double root resolve in the belt path (shell + arm)" as a risk accepted as benign. The shell (`worktree::mod::run`) resolves root once for `slice::selectors`, and each arm (`run_import_fork` / `run_import_from_worktree`) resolves root again for git work.
+
+The plan has no EX requiring or naming this. PHASE-02 EX-3 says the shell "resolves design-target selectors in worktree::mod::run and threads &selectors into both arms" — this describes the data flow but does not acknowledge that the root is resolved twice.
+
+This is not a defect — the double resolve IS idempotent (same root::find markers). But the plan should name an accepted risk explicitly rather than relying on an implicit design concession. A reader of the plan alone would not know this was considered.
+
+Recommendation: add an EX or a risk note in plan.md documenting that double root resolve is accepted as benign (idempotent same-root resolve), or add an EX that requires both resolves to agree (defensive). The lighter touch is preferred — this is a design-accepted risk, not a correctness gap."""
+disposition = "fix-now"
+response = """Accepted. Add a note in plan.md under PHASE-02's "Sequencing & Rationale" (or a new "Accepted Risks" section) documenting: "Double root resolve in the belt path (shell + arm) is accepted as benign — `root::find` with the same default markers is idempotent. The shell resolves root once for `slice::selectors`, and each arm resolves again for git work. This keeps the slice read out of engine (ADR-001 gate)." No EX needed — this is a design-accepted risk, not a correctness gap."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "TOML contiguity invariant: root cause confirmed in append_relation_row, secondary victims beyond SL-190.toml likely"
+detail = """
+ISS-058 already captures this defect. The audit confirms:
+
+**Root cause:** `append_relation_row` (`src/relation.rs:1126-1192`) always appends new `[[relation]]` rows at the END of the array via `array.push(row)` (line ~1190). It makes zero effort to insert adjacent to existing same-label rows. When a label already exists non-contiguously in the file, the write produces interleaved labels that break the contiguity storage invariant.
+
+**Primary vector:** `doctrine link <source> <label> <target>` → `run_link` (`src/commands/relation.rs:127`) → `append_edge` → `append_relation_row`.
+
+**Secondary vector:** `doctrine supersede` → `src/commands/supersede.rs:199` → `append_edge` → `append_relation_row`.
+
+**Observed victim:** `.doctrine/slice/190/slice-190.toml` — the test `relation_rows_of_one_label_are_contiguous` (`tests/e2e_relation_migration_storage.rs:383`) panics because `related` label rows are interleaved: `related`(IMP-174) → `related`(SL-180) → `related`(IDE-017) → `related`(RFC-005) → `governed_by`(ADR-006) → `governed_by`(ADR-012) → `related`(IMP-191). The last `related` was appended after the `governed_by` block, breaking contiguity.
+
+**Fix options (per ISS-058):**
+(a) Make `append_edge`/`link` insert the new row adjacent to the existing same-label run (group-on-write).
+(b) Canonically re-sort rows on write (sorts all relation rows by label on every write). This also fixes hand-authored disorder.
+
+**This is NOT a SL-180 concern** — the plan does not touch relation writing. ISS-058 is the correct backlog home. This finding records the audit in the inquisition ledger for completeness and recommends updating ISS-058 with the confirmed root cause analysis."""
+disposition = "aligned"
+response = 'Aligned. ISS-058 already captures this defect with the correct root cause analysis. The audit confirms: `append_relation_row` (`src/relation.rs:1126-1192`) always appends at end via `array.push(row)`, never groups same-label rows. Primary vector is `doctrine link` → `run_link` → `append_edge` → `append_relation_row`. Observed victim is `.doctrine/slice/190/slice-190.toml` (contiguity test panics on interleaved `related` rows). Not a SL-180 concern — the plan does not touch relation writing. Recommend updating ISS-058 body with the confirmed root cause (the "first step: reproduce against fresh build" in ISS-058 is now verified — 0.9.0/trunk has the same append-at-end behaviour).'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
