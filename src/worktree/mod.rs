@@ -52,6 +52,10 @@ mod create;
 mod fork;
 mod gc;
 mod import;
+// SL-190 PHASE-05: worktree inventory + provenance (`worktree list`). ENGINE tier
+// (mirrors gc.rs): pure `classify_worktree` core + impure `run_list` shell over the
+// `git::list_worktrees` primitive and the PHASE-04 shared landed oracle.
+mod inventory;
 mod land;
 mod provision;
 mod subagent;
@@ -60,6 +64,7 @@ pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
 pub(crate) use create::{ARMING_JAIL_FILE, ARMING_SUBPATH, run_create_fork};
 pub(crate) use fork::run_fork;
 pub(crate) use gc::run_gc;
+pub(crate) use inventory::run_list;
 pub(crate) use import::run_import;
 pub(crate) use land::run_land;
 pub(crate) use provision::{run_check_allowlist, run_provision};
@@ -313,6 +318,27 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Inventory the linked worktrees with dispatch provenance.
+    /// Prints `path·role·slice·branch·head·marker·live?·landed`. The `landed`
+    /// column is role-conditional + fail-soft (default on). Read-classed.
+    List {
+        /// Only show worktrees belonging to this slice.
+        #[arg(long)]
+        slice: Option<u32>,
+
+        /// Emit a structured JSON array instead of the table.
+        #[arg(long)]
+        json: bool,
+
+        /// Suppress the `landed` column.
+        #[arg(long)]
+        no_landed: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Verify a worker's base commit.
     /// Post-spawn check: prove the worker worktree's HEAD descends from the
     /// base `B` it was meant to fork off. Diagnostic only — fail-loud, NEVER
@@ -403,6 +429,12 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             path,
         } => run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
         WorktreeCommand::Status { assert, path } => run_status(path, assert),
+        WorktreeCommand::List {
+            slice,
+            json,
+            no_landed,
+            path,
+        } => run_list(path, slice, json, no_landed),
         WorktreeCommand::VerifyWorker { base, dir, branch } => {
             run_verify_worker(&base, &dir, branch.as_deref())
         }
