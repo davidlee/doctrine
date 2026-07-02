@@ -304,14 +304,14 @@ pub(crate) fn evaluate(
     //     no stored SCCs ⇒ singletons; Reject Along/Against ⇒ the stored
     //     degraded_sccs grouped (SCCs survive transpose), the rest singletons.
     let partition = scc_partition(degraded_sccs, view.overlay, view.direction, node_count);
-    // (2) Condensation DAG + reverse-topo (sinks first), built from the SAME
-    //     direction-resolved neighbour view — `out` for Along, `incoming` for
-    //     Against (A-2); inter-SCC edges only (self/intra-SCC dropped, C3).
-    let reverse_topo = condensation_reverse_topo(&view, &partition);
+    // (2) Condensation DAG (reverse-topo, sinks first + quotient succ adjacency),
+    //     built from the SAME direction-resolved neighbour view — `out` for Along,
+    //     `incoming` for Against (A-2); inter-SCC edges only (self/intra-SCC
+    //     dropped, C3). The `succ` adjacency is reused by the fold — no second walk.
+    let cond = condensation(&view, &partition);
     // (3) Per-combinator fold up the reverse-topo order; each node emits the same
     //     (value, contributors) fold_node would, with no reachable-set materialised.
-    let (values, contributors) =
-        fold_condensation(&view, combinator, &effective, &partition, &reverse_topo);
+    let (values, contributors) = fold_condensation(combinator, &effective, &partition, &cond);
 
     Channel {
         values,
@@ -407,13 +407,21 @@ fn scc_partition(
     Partition { scc_of, members }
 }
 
-/// Reverse-topological order (sinks first) of the condensation DAG, built from the
-/// **same direction-resolved neighbour view** `evaluate` walks (`out` for `Along`,
-/// `incoming` for `Against`; A-2). Inter-SCC edges are the member neighbours
-/// quotiented by SCC id — a neighbour in the same SCC (self/intra, C3) is dropped,
-/// so the quotient is a genuine DAG and reverse-topo is well-defined. Explicit
-/// stack, no recursion; O(V+E).
-fn condensation_reverse_topo(view: &Resolved<'_>, partition: &Partition) -> Vec<usize> {
+/// The condensation of the direction-resolved neighbour view: the reverse-topo
+/// order (sinks first) AND the quotient successor adjacency (`succ[id]` = the
+/// distinct successor-SCC ids of SCC `id`). Both come from ONE pass over the
+/// neighbour view — the fold reads `succ` directly instead of re-walking the view.
+struct Condensation {
+    reverse_topo: Vec<usize>,
+    succ: Vec<BTreeSet<usize>>,
+}
+
+/// Build the [`Condensation`] from the **same direction-resolved neighbour view**
+/// `evaluate` walks (`out` for `Along`, `incoming` for `Against`; A-2). Inter-SCC
+/// edges are the member neighbours quotiented by SCC id — a neighbour in the same
+/// SCC (self/intra, C3) is dropped, so the quotient is a genuine DAG and
+/// reverse-topo is well-defined. Explicit stack, no recursion; O(V+E).
+fn condensation(view: &Resolved<'_>, partition: &Partition) -> Condensation {
     let scc_count = partition.members.len();
     // Distinct successor SCC ids per SCC (BTreeSet ⇒ deterministic, deduped).
     let mut succ: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); scc_count];
@@ -467,7 +475,10 @@ fn condensation_reverse_topo(view: &Resolved<'_>, partition: &Partition) -> Vec<
             }
         }
     }
-    order
+    Condensation {
+        reverse_topo: order,
+        succ,
+    }
 }
 
 /// A flag-combinator accumulator: the present-true and present-false seed nodes
@@ -485,57 +496,37 @@ struct FlagWitnesses {
 /// and the whole SCC shares one result; `CountDistinct` folds STRICT `reach` and
 /// each member restricts to `\ {n}` off the shared SCC witness set (C2/F34).
 fn fold_condensation(
-    view: &Resolved<'_>,
     combinator: Combinator,
     effective: &BTreeMap<NodeId, ChannelValue>,
     partition: &Partition,
-    reverse_topo: &[usize],
+    cond: &Condensation,
 ) -> (
     BTreeMap<NodeId, ChannelValue>,
     BTreeMap<NodeId, BTreeSet<NodeId>>,
 ) {
     match combinator {
-        Combinator::Max => fold_max_condensation(view, effective, partition, reverse_topo),
+        Combinator::Max => fold_max_condensation(effective, partition, cond),
         Combinator::Any | Combinator::All | Combinator::CountDistinct => {
-            fold_flags_condensation(view, combinator, effective, partition, reverse_topo)
+            fold_flags_condensation(combinator, effective, partition, cond)
         }
     }
-}
-
-/// The distinct successor-SCC ids of `scc_id` under the direction-resolved view —
-/// the same quotient `condensation_reverse_topo` builds, recomputed locally so the
-/// fold needs no second adjacency allocation.
-fn successor_sccs(view: &Resolved<'_>, partition: &Partition, scc_id: usize) -> BTreeSet<usize> {
-    let mut succ: BTreeSet<usize> = BTreeSet::new();
-    if let Some(group) = partition.members.get(scc_id) {
-        for &node in group {
-            for nb in view.neighbours(node) {
-                if let Some(&nb_id) = partition.scc_of.get(ord_index(nb)) {
-                    if nb_id != scc_id {
-                        succ.insert(nb_id);
-                    }
-                }
-            }
-        }
-    }
-    succ
 }
 
 /// `Max` fold up the condensation: each SCC's `(value, argmax)` is the max over its
 /// own member seeds (own seed included — `{n} ∪ reach`) and its successor SCCs'
 /// results, min-`NodeId` tiebreak. Mutual reachability ⇒ the whole SCC shares one
-/// `(value, argmax)`. Fully O(V+E) — a singleton argmax, no set materialised.
+/// `(value, argmax)`. Fully O(V+E) — a singleton argmax, no set materialised. Reads
+/// the prebuilt `cond.succ` quotient — no second neighbour walk.
 fn fold_max_condensation(
-    view: &Resolved<'_>,
     effective: &BTreeMap<NodeId, ChannelValue>,
     partition: &Partition,
-    reverse_topo: &[usize],
+    cond: &Condensation,
 ) -> (
     BTreeMap<NodeId, ChannelValue>,
     BTreeMap<NodeId, BTreeSet<NodeId>>,
 ) {
     let mut scc_best: Vec<Option<(i64, NodeId)>> = vec![None; partition.members.len()];
-    for &scc_id in reverse_topo {
+    for &scc_id in &cond.reverse_topo {
         let mut best: Option<(i64, NodeId)> = None;
         // Own member seeds ({n} ∪ reach includes every SCC member's own seed).
         if let Some(group) = partition.members.get(scc_id) {
@@ -546,7 +537,7 @@ fn fold_max_condensation(
             }
         }
         // Already-folded successor SCC results (sinks-first ⇒ ready).
-        for succ_id in successor_sccs(view, partition, scc_id) {
+        for &succ_id in cond.succ.get(scc_id).into_iter().flatten() {
             if let Some(Some((value, argmax))) = scc_best.get(succ_id).copied() {
                 best = supersede(best, value, argmax);
             }
@@ -588,17 +579,16 @@ fn supersede(best: Option<(i64, NodeId)>, value: i64, node: NodeId) -> Option<(i
 /// STRICT — the shared set is the pre-subtraction SCC witnesses and each member
 /// restricts to `\ {n}` (C2/F34).
 fn fold_flags_condensation(
-    view: &Resolved<'_>,
     combinator: Combinator,
     effective: &BTreeMap<NodeId, ChannelValue>,
     partition: &Partition,
-    reverse_topo: &[usize],
+    cond: &Condensation,
 ) -> (
     BTreeMap<NodeId, ChannelValue>,
     BTreeMap<NodeId, BTreeSet<NodeId>>,
 ) {
     let mut scc_wit: Vec<FlagWitnesses> = vec![FlagWitnesses::default(); partition.members.len()];
-    for &scc_id in reverse_topo {
+    for &scc_id in &cond.reverse_topo {
         let mut wit = FlagWitnesses::default();
         if let Some(group) = partition.members.get(scc_id) {
             for &node in group {
@@ -613,7 +603,7 @@ fn fold_flags_condensation(
                 }
             }
         }
-        for succ_id in successor_sccs(view, partition, scc_id) {
+        for &succ_id in cond.succ.get(scc_id).into_iter().flatten() {
             if let Some(succ_wit) = scc_wit.get(succ_id) {
                 wit.trues.extend(succ_wit.trues.iter().copied());
                 wit.falses.extend(succ_wit.falses.iter().copied());
