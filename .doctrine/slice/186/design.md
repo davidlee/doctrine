@@ -82,8 +82,8 @@ A **snippet** is one `.md` (prose). Its **slot** is `<band>/<label>`; its
 
 ```
                  ┌──────────── context vector ("the element") ─────────┐
-                 │ context · harness · model · arm · stage  (+ project) │
-                 │   (context = orchestrator|worker; supplies role axis)│
+                 │ role · harness · model · arm · stage  (+ project)    │
+                 │   (role = orchestrator|worker; also selects the shape)│
                  └──────────────────────────────────────────────────────┘
                                       │  resolve(context, corpus)
    corpus = embedded(framework) ⊕ disk(user)   ▼
@@ -153,14 +153,14 @@ sees seal" claim — it sees exactly the sealed-slot set, nothing more.)
 **Command (ADR-001 command layer) — `src/commands/prompt.rs`:**
 
 ```
-doctrine prompt resolve --context <orchestrator|worker>
+doctrine prompt resolve --role <orchestrator|worker>
                         [--harness <name>] [--model <id>] [--arm <subagent|subprocess>]
                         [--stage <skill/verb>] [--band <name>]...
     → disk:   regenerate the UNIVERSAL .doctrine/state/boot.md (write-if-changed);
-              context-INVARIANT — flags never alter the on-disk artifact (INV-7).
-      stdout: <universal snapshot> ++ <hymns for the context>.  Idempotent.
-    · --context names the assembly SHAPE (which bands, envelope) AND supplies the role
-      axis (orchestrator|worker); axis flags refine within.
+              axis-INVARIANT — flags never alter the on-disk artifact (INV-7).
+      stdout: <universal snapshot> ++ <hymns for the role>.  Idempotent.
+    · --role is the role-axis value (orchestrator|worker) AND selects the assembly shape
+      (which bands, envelope) — one concept, one name (F15/A); axis flags refine within.
     · --band repeatable; absent = every band the shape includes — never `model` (live, §5.4).
 
 doctrine prompt model-keys [--harness <name>]
@@ -169,7 +169,7 @@ doctrine prompt model-keys [--harness <name>]
     · The "named set to choose from" for agent self-identification (§5.4).
     · Reflects authored guidance only — NOT a registry. Empty ⇒ don't ask.
 
-doctrine prompt explain --context <c> [axes…]
+doctrine prompt explain --role <r> [axes…]
     → precedence trace: per slot, which snippets matched, who won, why
       (band→specificity→provenance→alpha). The cascade's debugger (R3).
 
@@ -188,9 +188,9 @@ see §5.4 for why that's deliberate, not a gap.
 **Engine (pure) — `src/hymns.rs`:**
 
 ```rust
-struct ContextVector { context: Context, harness: Option<Harness>, model: Option<ModelKey>,
+struct ContextVector { role: Role, harness: Option<Harness>, model: Option<ModelKey>,
                        arm: Option<Arm>, stage: Option<StageKey>, bands: BandFilter }
-// Context = orchestrator | worker — names the assembly shape AND supplies the `role` axis.
+// Role = orchestrator | worker — the role-axis value; also selects the assembly shape (F15/A).
 struct Snippet { slot: Slot, selector: Selector, provenance: Provenance, body: String }
 struct Slot { band: Band, label: String }
 // Selector: axis→pattern map (path-derived, sidecar-superseded); `replaces: Option<Slot>`.
@@ -211,38 +211,13 @@ memory-specific (`MEMORY_SHIPPED_DIR`, `memory.{toml,md}` uids), not a general
 projector (finding 7); the hymns walk/overlay is its own code (a generic embedded⊕disk
 projector may be extracted later, but is not assumed to exist).
 
-**Delivery — stdout-preferred, file-fallback (`src/commands/prompt.rs` + `src/boot.rs`).**
-Harness- and context-specific hymns are **never written to disk**; they ride the
-per-invocation stdout stream, where harness-specific prose is legal (a session emit is
-not a shared file). `prompt resolve` is the session-start entry and does two things:
-
-1. **Disk (context-invariant, INV-7):** regenerate the *universal* `.doctrine/state/boot.md`
-   — governance snapshot ++ *universal-band* hymns, both harness-agnostic — reusing boot's
-   existing generator (`write_if_changed`). `--context`/`--harness` never change the disk
-   artifact, preserving the shared `@`-import contract. "Any call unstales boot" (INV-8):
-   write-if-changed makes it a **no-op under stable governance** and a refresh exactly when
-   an input changed — freshness over cache-optimisation, per user call.
-2. **Stdout (context-shaped):** `<universal boot.md> ++ <harness/role/stage(/model) hymns
-   for the context>`, resolved per the wired harness.
-
-Per-harness capability altitude (ADR-011):
-
-```
-tier 1  stdout injection   universal snapshot + hymns              PREFERRED
-        claude/codex : SessionStart hook runs `prompt resolve --context orchestrator --harness <h>`
-        pi           : before_agent_start extension execSyncs it, appends to systemPrompt
-tier 2  file fallback      @-import .doctrine/state/boot.md         DEGRADED
-        any harness that can't inject → universal governance + universal hymns only, no harness hymns
-```
-
-**Finding 8 dissolved.** Harness-specific prose never touches the shared `boot.md`, so the
-original concern (harness churn on a file two harnesses import) is gone by construction. The
-only disk delta is a **universal-band hymns** section (harness-agnostic authored prose,
-incl. the model-band floor directive so it reaches both tiers) — a single deliberate additive
-section, goldens churn once (R2). The rejected `hymns.md` alternative is moot: hymns ride the
-stdout stream, not a committed file. **Boot-subsumption** — folding `doctrine boot` entirely
-under `prompt resolve --boot/--check` — is the clean endpoint but a **follow-up** (OQ-4); this
-slice *reuses* boot's generator and leaves the `boot` verb standing.
+**Output = stdout only.** `prompt resolve` emits assembled markdown to stdout; it is
+read-only and does not itself write disk. **How that output reaches live agents** — the
+session-start stdout injection, the on-disk universal `boot.md` fallback, the two-channel
+cache split, the model-band floor/supplement, onboarding-memory inlining, and the pi/hook
+wiring — is **SL-187** (the delivery slice), split off on a blast-radius boundary (this
+engine is inert until SL-187 wires it). This slice locks the *contract* SL-187 consumes:
+the verb signatures above, the composed-markdown shape, and the model-agnostic emit.
 
 ### 5.3 Data, State & Ownership
 
@@ -251,7 +226,7 @@ slice *reuses* boot's generator and leaves the `boot` verb standing.
 | `install/hymns/**` (+ sidecar `.toml`) | framework (committed) | resolver (embedded) | compile |
 | `.doctrine/hymns/**` | user (+ projected starters) | resolver (disk) | runtime |
 | `install/manifest.toml` seal/expose section | framework | installer + resolver (as embedded SealSet) | install / runtime |
-| assembled markdown | resolver | agent / boot.md section | on demand / boot |
+| assembled markdown | resolver | agent (via SL-187 delivery) | on demand |
 
 - **Provenance** = source root (embedded vs disk). Not stored, derived.
 - **Seal** has two consumers: the **installer** uses it to decide what to project;
@@ -266,59 +241,25 @@ slice *reuses* boot's generator and leaves the `boot` verb standing.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Two delivery channels, split by cache property (D8):**
+**Corpus load → resolve.** The loader walks embedded `install/hymns/**` ⊕ disk
+`.doctrine/hymns/**` once per invocation (no cache — D6), producing the `Snippet` corpus +
+`SealSet`; `resolve(ctx, corpus, sealed)` filters → matches → orders → concatenates to
+markdown. Stateless and pure; the same `(corpus, ctx)` always yields the same bytes (a
+determinism the delivery slice relies on for its cache-hold).
 
-- **Cache-stable boot sector — MODEL-AGNOSTIC.** governance snapshot + universal hymns +
-  the **inlined onboarding memories**. Rides the token cache, so it must not churn
-  mid-session → `model` is excluded *on purpose* (survives `/model` swaps). tier-1: the
-  SessionStart hook stdout / pi extension (session-stable harness/role hymns are fine to
-  cache); tier-2: `@`-import of the universal disk `boot.md` (universal-only). "Any call
-  unstales boot" (INV-8) keeps it fresh; harness-agnostic on disk, so `@`-import stays valid.
-- **Cache-busting supplement — MODEL-SPECIFIC.** the MCP `doctrine_onboard` tool: model
-  identification + the **model band**. A tool call busts cache regardless, so dynamic model
-  content lives here for free, never polluting the cacheable sector.
+**Callers (contract — realised in SL-187).** Two shapes select via `--role`:
+`--role orchestrator` (session-start base) and `--role worker` (spawn envelope, +model +arm
++stage). The resolver just composes; *when/where* each is injected is SL-187.
 
-**Onboarding memories move into the cached sector.** They are stable, model-agnostic, and
-loaded every session — so boot **inlines the bodies** of memories carrying the `onboarding`
-tag (single-source: memories stay the source, no parallel hymn copy), retiring the footer's
-"load these next turn" round-trip. Every other memory stays a lazy signpost. `doctrine_onboard`
-correspondingly **sheds the memory load** and does one thing: the model ceiling.
-
-**Live model band (D5) — capability altitude:**
-- **Floor (in scope, works everywhere incl. Claude `/model`):** the **universal band**
-  carries a **standing directive** — *"your model guidance is not baked; identify your
-  model (`doctrine prompt model-keys` offers the set) and run `doctrine prompt resolve
-  --band model --model <id>`; re-resolve on change."* Universal (not harness) prose, so it
-  rides the disk snapshot and reaches **both delivery tiers**. Agent-driven, always in
-  context, degrades gracefully (unknown model ⇒ universal-only).
-- **Ceiling (in scope for MCP; per-harness elsewhere):** the MCP `doctrine_onboard`
-  tool is the concrete ceiling — it identifies the model (offers `model-keys` / reads the
-  client's model) and emits the **model band** on the **cache-busting** side (§5.4
-  two-channel). A tool call busts cache anyway, so dynamic model content is free there while
-  the cached sector stays model-agnostic. Non-MCP harnesses with an init/on-change seam
-  (pi env) may auto-inject later — incremental, like boot delivery (SL-119).
-- **Advisory-by-construction (finding 6).** The floor is best-effort; on a mid-session
-  model swap the agent *may* fail to re-resolve, leaving stale model guidance. That is
-  accepted, because **no correctness invariant may rest on the model band** — it is
-  fine-tuning, and stale-tuning ⊆ graceful degradation. Anything a model genuinely
-  *must* obey belongs in an always-present band (preamble/harness) or is sealed —
-  never in the mutable model band. Guaranteed model-band freshness requires the
-  ceiling; the floor does not claim it.
-
-**Self-identification is not a hidden registry (finding 5).** No maintained
-alias/normalisation table exists. The agent already holds a fuzzy self-description
-("Claude Sonnet 4"); `prompt model-keys` hands it the *small, corpus-reflected* set of
-exact keys, and the agent (an LLM, good at this) picks the nearest in one shot. A
-mismatch degrades gracefully (broader `_default` or universal-only). The exact-key
-guarantee, where wanted, comes from the harness injecting the key (ceiling) — not
-from doctrine enumerating models. Declining to normalise is the deliberate anti-churn
-stance (P4/P6), not an unsolved gap.
-
-**Worker spawn:** orchestrator knows the target model → `resolve(context=worker,
-model=…, arm=…, stage=…)` at spawn → model band included fresh, no staleness. Stdout
-envelope only — a spawn resolve still unstales the universal disk snapshot (INV-8), but
-the worker consumes the stdout stream, not the file. The orchestrator stops hand-rolling
-context (the token win).
+**Self-identification is not a hidden registry (finding 5).** The `model-keys` verb exists so
+an agent can resolve the mutable `model` band on demand without doctrine maintaining a churny
+model table. No alias/normalisation table exists: the agent already holds a fuzzy
+self-description ("Claude Sonnet 4"); `prompt model-keys` hands it the *small, corpus-reflected*
+set of exact keys, and the agent (an LLM, good at this) picks the nearest in one shot. A
+mismatch degrades gracefully (broader `_default` or universal-only). Declining to normalise is
+the deliberate anti-churn stance (P4/P6), not an unsolved gap. **No correctness invariant may
+rest on the model band** — it is fine-tuning; stale-tuning ⊆ graceful degradation (the delivery
+mechanics + floor/supplement live in SL-187).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -337,20 +278,8 @@ context (the token win).
 - **INV-5** Pure engine: no disk/clock/env (SealSet passed in); loader is the only impurity.
 - **INV-6** A disk snippet whose slot is in the SealSet is dropped before matching
   (seal hard-win, finding 1).
-- **INV-7** The on-disk `.doctrine/state/boot.md` is **always the universal, MODEL-AGNOSTIC
-  composition** (governance + universal-band hymns + inlined `onboarding`-tagged memory
-  bodies) — **context-invariant**: `--context`/`--harness`/… extend the *stdout* stream
-  only, never the disk artifact. Model-agnostic for two reasons: the shared `@`-import
-  contract, and **cache stability** (model content would churn the cache on `/model` — it
-  rides the cache-busting `doctrine_onboard` path instead).
-- **INV-8** Every `prompt resolve` regenerates the universal disk snapshot
-  (write-if-changed) — unconditionally. No-op under stable governance; a refresh exactly
-  when an input changed. Freshness beats cache-preservation; concurrent regens converge
-  (same committed governance ⇒ identical bytes).
-- **INV-9** `onboarding`-tag selection **unions the shipped + local memory corpora** —
-  a shipped memory and a user memory are both eligible, resolved the same way boot's Memory
-  section already enumerates both. A shipped inline and a user inline compose; neither shadows
-  the other (memories are keyed, not slotted — no seal/replaces semantics here).
+- **INV-7** `resolve` is deterministic: the same `(corpus, ctx, sealed)` yields byte-identical
+  output. (SL-187's cache-hold depends on this.)
 - **Edge — non-match ≠ override:** `harness=claude` snippets simply don't match a
   pi context; that's absence, not suppression.
 - **Edge — equal specificity:** provenance breaks it (framework<user), then alpha on
@@ -373,10 +302,7 @@ context (the token win).
   or is that a follow-up once the resolver lands? Leaning follow-up — keep this slice
   to the resolver + corpus; wiring defs to it is a clean next step (also unblocks
   IMP-197). Confirm at plan.
-- **OQ-4 — Boot-subsumption.** `prompt resolve --boot/--check` could subsume `doctrine
-  boot` entirely (one context-assembly umbrella). Clean endpoint, but scope-widening
-  (re-homing boot's staleness/hook-install machinery). Deferred follow-up; this slice
-  reuses boot's generator and leaves the verb standing (D7).
+- *(Delivery/boot-subsumption open questions moved to **SL-187**.)*
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -399,59 +325,29 @@ context (the token win).
   **band's own namesake axis** fixes it *without* a global axis ranking (the primary
   axis is always the band's — non-arbitrary). Rejected: full global lexicographic tuple
   (reopens axis-priority per new axis); plain scalar sum (the finding-3 footgun).
-- **D4 — Separate pure engine (`src/hymns.rs`); the command shell reuses boot's
-  generator for the disk write.** Rejected: generalize boot into a hymns assembly —
-  boot's governance sections are entity-derived (not files) and the rewrite risks the
-  behaviour gate. The engine stays pure; boot's generator is called, not rewritten.
-- **D5 — Model band live via `--band` filter; kept OFF the cached sector for cache
-  stability. Floor** = universal-band standing directive (both tiers). **Ceiling** = MCP
-  `doctrine_onboard` (in scope): model-id + model band on the cache-busting path; per-harness
-  env auto-inject deferred elsewhere.
-- **D7 — Delivery: stdout-preferred, disk-fallback; `--context` a first-class named
-  shape; hymns never touch disk.** Harness-/context-specific prose can't ride the shared
-  `@`-imported `boot.md`, and `--emit`-to-stdout is preferred over baking files (user
-  steer). So `prompt resolve` unstales the *universal* disk snapshot (INV-7/8) and emits
-  `universal ++ context hymns` to stdout; per-harness altitude (claude/codex hook, pi
-  `before_agent_start` extension — **in scope**; file fallback for the rest). `--context`
-  names the assembly shape (not sugar for `--role`+axes): orchestrator and worker are
-  structurally distinct envelopes, so the shape is first-class. Rejected: a baked
-  per-harness `boot.md` tail (harness prose on a shared file — the original F8);
-  `--boot`-gated disk write (INV-8 makes the gate pointless — unstale is free under
-  stable governance). Deferred: full boot-subsumption under `prompt` (OQ-4).
-- **D8 — Two delivery channels by cache property; onboarding memories inlined into the
-  cached sector; `doctrine_onboard` = model ceiling.** The cache-stable boot sector is
-  model-agnostic (governance + universal hymns + inlined `onboarding` memories), so it
-  survives `/model` without busting cache; model-specific content rides the cache-busting
-  `doctrine_onboard` tool (identification + model band). Onboarding memories move from a
-  cache-busting signpost-fetch *into* the cached sector — inlined, single-source via an
-  `onboarding` tag (designation checked: the ADR-002 orientation class is too broad; the
-  current footer id-list is unstructured). Rejected: model/memories on the cached sector
-  (churns cache on every model change / every session); `doctrine_onboard` as a third
-  boot-*sector* arm (a tool call can't seed the cache it busts — it's the ceiling, not the
-  sector).
-- **D6 — No cache.** Boot's content-diff key covers baked bands; on-demand resolves
-  are cheap, pure, stateless. (Confirmed: doctrine hot-loads far larger entity sets
-  per page view without caching.)
+- **D4 — Separate pure engine (`src/hymns.rs`); a thin command shell.** Rejected: generalize
+  boot into a hymns assembly — boot's governance sections are entity-derived (not files) and
+  such a rewrite risks the behaviour gate. The engine stays pure; the verb is a thin shell
+  over loader+engine. (Its *consumption* by boot delivery is SL-187.)
+- **D6 — No cache.** On-demand resolves are cheap, pure, stateless. (Confirmed: doctrine
+  hot-loads far larger entity sets per page view without caching.)
 - **Registry boundary — no model registry (P4/P5/P6).** The corpus is the sparse,
   self-pruning vocabulary; self-ID reflects it (`model-keys`); model→param mapping
-  and env auto-detect are out (harness domain / optional ceiling).
+  and env auto-detect are out (harness domain).
+- *(Delivery decisions — cache-property split, unstale, onboarding inline, onboard
+  floor-supplement, `--role` delivery wiring — are **SL-187** D1–D5.)*
 
 ## 8. Risks & Mitigations
 
 - **R1 — Accidental model registry** (churn magnet). *Mit:* P4/P6 fence; no
   `models.toml`; `model-keys` reflects the corpus, never enumerates. Guard in review.
-- **R2 — Boot regression** from the universal-hymns disk section. *Mit:* boot's
-  generator is *reused, not rewritten*; entity-derived sections + logic untouched (suites
-  green); the only disk delta is one additive **universal-band** section (harness-agnostic),
-  goldens churn once. Harness-specific prose never touches `boot.md` (F8 dissolved), so no
-  cross-harness regression surface.
-- **R3 — Two-root / ordering confusion** for authors (why isn't my edit winning?).
+- **R2 — Two-root / ordering confusion** for authors (why isn't my edit winning?).
   *Mit:* `band→specificity→provenance` documented; a user edit wins only at the *same
   slot* (broad-shadows-narrow no longer surprises); `resolve` is inspectable; seal is
   explicit in the manifest and enforced.
-- **R4 — Band/label validation drift** (stage vocab). *Mit:* validator reads one
+- **R3 — Band/label validation drift** (stage vocab). *Mit:* validator reads one
   authoritative list (OQ-2); `doctrine check` covers it.
-- **R5 — Scope creep into agent-def field-merge.** *Mit:* Non-Goal fence; defs are
+- **R4 — Scope creep into agent-def field-merge.** *Mit:* Non-Goal fence; defs are
   static shells with one injection hole, no per-field merge.
 
 ## 9. Quality Engineering & Validation
@@ -470,14 +366,11 @@ context (the token win).
 - **E2E golden:** `doctrine prompt resolve …` over a hermetic fixture corpus
   (framework + user + a sealed slot with a user twin), asserting exact output.
   `doctrine prompt model-keys` reflects only authored keys, as full relative keys.
-- **Boot behaviour-preservation:** existing boot suites green unchanged; one new
-  golden for the hymns section; model band demonstrably absent from `boot.md`.
-- **Onboarding inline (INV-9):** a golden with a **shipped** `onboarding`-tagged memory
-  AND a **local** one — both bodies inline into the cached sector; a local memory sharing a
-  shipped uid inlines the local body (collect_all local-wins); model-agnostic (no model
-  content). `doctrine_onboard` no longer emits the memory bodies (they moved to the sector).
 - **Layering gate:** `tests/architecture_layering.rs` stays green (command ← engine
   ← leaf; no cycle).
+
+*(Delivery-side validation — boot behaviour-preservation, onboarding-inline goldens,
+cache-hold — lives in **SL-187**.)*
 
 ## 10. Review Notes
 
@@ -495,34 +388,24 @@ context (the token win).
   no correctness invariant rests on it (§5.4).
 - **F7 (maj)** `sync_corpus` reuse fiction + def co-location → own projector; defs stay
   in `install/agents/**` (§5.2/§5.3, code-impact).
-- **F8 (min)** boot not byte-stable → **dissolved** by the revised delivery (D7,
-  post-review user steer): hymns ride the stdout emit, never the shared `boot.md`; only a
-  harness-agnostic universal-hymns section touches disk. Separate `hymns.md` file moot.
+- **F8 (min)** boot not byte-stable → dissolved by the delivery rework: hymns ride the
+  stdout emit, never the shared `boot.md`. **The rework itself now lives in SL-187.**
 - **F9 (min)** grammars locked: model-key = full relative; stage vocab source (OQ-2).
 - *Survived:* the ADR-001 module split (pure engine + thin command) — unchanged.
+
+**Codex (GPT-5.5) re-pass on the delivery rework — 2026-07-02.** 7 findings; F10–F14 all
+concerned the delivery half → **carried to SL-187** (dismissed F10/F11, wording-fix F12,
+accepted F13/F14; see SL-187 §10). **F15 (min)** `--context` overloaded → renamed **`--role`**
+(one concept: role-axis value + assembly shape; F15/A). **F16 (maj)** scope creep → **this
+split** — SL-186 = the inert resolver engine; SL-187 = the live-surface delivery.
 
 ## Code Impact (design-target)
 
 - **`src/hymns.rs`** — NEW pure engine (`resolve`, `matches`, `specificity`,
   `SealSet`, types).
 - **`src/commands/prompt.rs`** — NEW command (`resolve`, `model-keys`, `explain`,
-  `check`) + the impure loader (embedded⊕disk walk, sidecar overlay, seal-twin drop);
-  `resolve` unstales the universal disk snapshot (reuse boot generator) + emits
-  `universal ++ context hymns` to stdout.
-- **`src/boot.rs`** — expose its universal-snapshot generator for `resolve` to reuse;
-  add the universal-band hymns section to the disk snapshot (harness-agnostic); **inline
-  the bodies of `onboarding`-tagged memories** into the cached sector — reusing
-  `memory::collect_all` (items ∪ shipped, local-wins dedup) + a tag filter, so shipped +
-  local are covered with **no new union code** — retiring the footer "load these next turn"
-  instruction; harness/model/role/stage bands are stdout-only, not baked.
-- **MCP `doctrine_onboard` handler** — model identification + emit the **model band**
-  (cache-busting ceiling); **drop** the two-memory load (now inlined into the cached sector).
-- **Onboarding designation (data)** — tag the shipped `overview` + `orientation`
-  memories `onboarding` in `install/memory/**`; boot's selection unions shipped + local so a
-  user may tag their own (INV-9).
-- **Per-harness delivery wiring** — claude/codex SessionStart hook + **pi
-  `before_agent_start` system-extension** (extend the existing extension: execSync
-  `prompt resolve --context orchestrator`, append to systemPrompt). In scope.
+  `check`) + the impure loader (embedded⊕disk walk, sidecar overlay, seal-twin drop).
+  Emits assembled markdown to stdout; read-only.
 - **`src/install.rs` / `install/manifest.toml`** — seal/expose projection section +
   embedded SealSet accessor; a hymns-specific embedded→disk projector (NOT
   `sync_corpus`, which is memory-only).
@@ -530,5 +413,7 @@ context (the token win).
   examples) + convention doc. **`install/agents/` stays** (defs are a separate
   surface; `{{ resolve }}` injection hole is a follow-up — OQ-3).
 - **`src/main.rs`** — wire the `prompt` command.
-- **Tests** — `src/hymns.rs` unit + goldens; e2e prompt-resolve golden; boot
-  golden update.
+- **Tests** — `src/hymns.rs` unit + goldens; e2e prompt-resolve golden.
+
+*(Delivery-side code impact — `src/boot.rs` generator/inline, `doctrine_onboard`, memory
+tagging, pi/hook wiring — is **SL-187**.)*

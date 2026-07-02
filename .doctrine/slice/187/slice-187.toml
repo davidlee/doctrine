@@ -1,22 +1,18 @@
-id = 186
-slug = "prompt-cascade-resolver"
-title = "Prompt cascade: per-context instruction resolver"
+id = 187
+slug = "prompt-cascade-delivery"
+title = "Prompt cascade: per-harness delivery & boot integration"
 status = "design"
-created = "2026-07-01"
-updated = "2026-07-01"
+created = "2026-07-02"
+updated = "2026-07-02"
 tags = []
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = []                      # slice→work soft sequence: { to, rank }
-
-[[relation]]
-label = "governed_by"
-target = "ADR-011"
+after = [{ to = "SL-186", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
 label = "related"
-target = "PRD-007"
+target = "SL-186"
 
 [[relation]]
 label = "references"
@@ -24,36 +20,24 @@ role = "originates_from"
 target = "IMP-155"
 
 [[selector]]
-selector = ".doctrine/agents/**"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/**/prompt*"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/prompt.rs"
+selector = "src/boot.rs"
 intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "scope-relevant"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "install/manifest.toml"
-intent = "design-target"
-
-[[selector]]
-selector = "src/main.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/hymns.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "install/hymns/**"
-intent = "design-target"
+intent = "scope-relevant"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
