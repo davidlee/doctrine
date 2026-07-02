@@ -137,8 +137,12 @@ gets caught before code exists.
 
 **Belt firing in practice (F4 disposition).** `--slice` is optional only to keep
 the verb backward-compatible for *ad-hoc manual* imports. Inside dispatch the
-belt is NOT inert: PHASE-02 edits both dispatch skills (§6) so the orchestrator
-*always* passes `--slice <id>` on the coordination-root import. So the only
+belt is NOT inert: PHASE-02 edits the dispatch-agent skill (§6) — the arm that
+actually invokes `worktree import` — so the orchestrator *always* passes
+`--slice <id>` on the coordination-root import. The subprocess arm carries scope
+via `slice record-delta` (no import invocation), and `--slice` is CLI-threaded to
+*both* import arms, so subprocess is covered automatically if it ever gains one
+(reconciled, RV-233 F-1). So the only
 imports that skip the scope check are hand-run ones outside the dispatch funnel —
 out of the scope-creep threat model (a human running `worktree import` by hand
 owns the consequence). Promoting `--slice` to required is the §9 open question,
@@ -251,8 +255,15 @@ src/worktree/import.rs                                # UndeclaredScope, classif
 src/worktree/mod.rs                                   # --slice arg, selector read, plumbing
 src/slice.rs                                          # --against/--strict, slice::selectors, actual_from_range, quotePath fold
 plugins/doctrine/skills/dispatch-agent/SKILL.md       # add --slice <id> to import invocation
-plugins/doctrine/skills/dispatch-subprocess/SKILL.md  # same (subprocess arm)
 ```
+
+> **Not a target: `dispatch-subprocess/SKILL.md`** (reconciled, RV-233 F-1). The
+> subprocess arm records the boundary via `slice record-delta` — it has **no**
+> `worktree import` invocation to annotate — so there is no skill edit to make.
+> `--slice` is CLI-threaded to *both* import arms (`--fork` / `--from-worktree` in
+> `worktree::mod`), so subprocess is covered automatically if it ever gains an
+> import. It was declared a design-target selector at design time (undeliverable
+> by design); the selector was dropped at reconcile so conformance reads clean.
 
 Literal paths (design names each file); test code rides the same modules
 (inline `#[cfg(test)]`). `.agents/skills/` is derived output of `just reinstall`

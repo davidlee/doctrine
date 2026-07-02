@@ -99,3 +99,35 @@ Both findings are terminal (verified); no blocker. The slice is ready to reconci
 ### Governance/spec (REV)
 - **(none).** No ADR/REQ/POL/STD change. ADR-001 layering upheld and independently
   verified; behaviour-preserving for ASCII; no governance surface touched.
+
+## Reconciliation Outcome
+
+### Direct edits applied (RV-233 F-1)
+- **Selector registry**: dropped the `dispatch-subprocess/SKILL.md` design-target
+  selector (`slice selector rm`). It was undeliverable by design — the subprocess
+  arm has no `worktree import` invocation. `slice conformance SL-180` now reads
+  **0 undeclared / 0 undelivered / 5 conformant** (fully delivered).
+- **design.md §6**: removed the subprocess line from the design-target fence; added
+  a "Not a target" note explaining the record-delta arm carries scope and `--slice`
+  is CLI-threaded to both import arms.
+- **design.md §3 (F4)**: corrected "PHASE-02 edits both dispatch skills" → edits the
+  agent skill (the import-invoking arm); subprocess covered via record-delta + the
+  CLI thread.
+
+### Plan criteria (left immutable — EX-/VA- append-only; not a reconcile direct-edit surface)
+- **plan.toml EX-4 / VA-2 (PHASE-02)** overstate the requirement ("both
+  `…/SKILL.md` pass `--slice` on the import invocation"). The subprocess arm has no
+  import invocation, so that half was unsatisfiable-by-design. The criteria are left
+  as the historical PHASE-02 target; the **authority (design.md §3/§6) is corrected**
+  and governs (the plan is not higher authority than the design). Shipped behaviour
+  was always correct — the CLI threads `--slice` to both import arms; only the plan
+  prose overstated the *skill-edit* surface.
+
+### Follow-up (non-terminal work, routed off-slice)
+- **RV-233 F-2** (verify-vt line-anchored patterns): tooling sharp edge, not SL-180
+  drift. Captured as **IMP-235** (`after IMP-209`). No slice edit.
+
+### Governance/spec (REV)
+- **(none).**
+
+Reconcile pass complete — handoff to `/close`.

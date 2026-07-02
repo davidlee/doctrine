@@ -30,10 +30,6 @@ intent = "design-target"
 selector = "plugins/doctrine/skills/dispatch-agent/SKILL.md"
 intent = "design-target"
 
-[[selector]]
-selector = "plugins/doctrine/skills/dispatch-subprocess/SKILL.md"
-intent = "design-target"
-
 [[relation]]
 label = "references"
 role = "concerns"
