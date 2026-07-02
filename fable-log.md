@@ -27,3 +27,21 @@ next: process triage worklist; ship the top still-open doc-gap fix.
   Edges collapse to
   top-level; the map
   hides the deep paths.
+
+## 04:05 — turn 2: processed triage, shipped top-3 skill/doc guardrails
+observed: triage sub-agent (a608c2f9) classified all remaining case-notes. Most
+  OBE (RV-216-contiguity fixed by ISS-058) or by-design (worker confinement,
+  --status flag, clippy denies). Three still-open, high-value, low-collision
+  doc-gaps shipped, each verified vs code first:
+  - a7e9ec0e: /audit + /reconcile brief-surface guardrails — plan.toml criteria
+    are immutable-append & off-surface; conformance findings must name the
+    selector-registry verb (slice selector rm/add), not §6 prose (the mirror).
+  - fe3eed9a: /close — stage the */new slug symlink (git add <kind>/NNN*), which
+    a path-scoped add of the numeric dir strands uncommitted.
+  Remaining actionable = worktree land --fork error hint (code, next) + a hot
+  arm-spawn doc-gap (defer). check quick is a no-op (no quick suite configured).
+next: TDD the worktree land --fork path-vs-branch error hint in src/worktree/land.rs.
+
+  Notes triaged clean —
+  the stale friction falls away,
+  three guardrails land.

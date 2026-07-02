@@ -38,12 +38,24 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Process the triage sub-agent's worklist (agentId a608c2f9a5f7f8337,
-launched ~03:55, background). It returns a classified table of every remaining
-case-note friction (still_open? / class / value / collision) + a ranked "TOP
-DOC-FIXES TO DO NOW" list. Pick the top still-open doc-gap and ship it (verify
-claim vs code first, edit the named authored doc/skill, commit clean). Repeat.
-If agent output already arrived, act on it directly.
+NEXT-ACTION: Code increment (fresh, self-contained, TDD) — `doctrine worktree
+land --fork` bails with a bare `land-refused: no-such-fork` even when a fork DIR
+(not branch) was passed; `--fork` wants a BRANCH name (ISS-058 case-note). Add a
+path-vs-branch hint to the error. Find it in `src/worktree/land.rs` (`run_land`,
+the `no-such-fork` bail). TDD: red test asserting the hint, green, refactor.
+Triage rated collision med (worktree area) but my branch is isolated + User
+cherry-picks, so a clean tested error-msg improvement is a fine gift. If it turns
+messy/hot, file a backlog item instead and move to another isolated code fix.
+
+TRIAGE WORKLIST (agentId a608c2f9a5f7f8337, done ~03:59) — full table saved in
+this turn's reasoning. Top-3 doc-fixes ALL SHIPPED. Remaining actionable:
+  - worktree land --fork error hint (cli-behavior, code) → NEXT-ACTION above.
+  - arm-spawn --path guard (doc-gap but HOT dispatch/SL-190) → defer or backlog.
+  - backlog/SKILL.md body-discipline note (#4, low value, author-dependent) → skip
+    unless idle.
+  Everything else: OBE (RV-216-contiguity fixed by ISS-058) or by-design
+  (worker confinement, marker e2e red, --status flag, clippy denies, References
+  role) — no action.
 
 INCREMENT-2 RESULT: OBE. `memory retrieve` is scope/query-based by design (no
 positional); `install/boot-footer.md` ALREADY reworded on edge (adds
