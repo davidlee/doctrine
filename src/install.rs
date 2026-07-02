@@ -1112,17 +1112,16 @@ mod tests {
     }
 
     #[test]
-    fn embedded_manifest_creates_and_ignores_the_skills_derived_tree() {
+    fn embedded_manifest_ignores_the_skills_derived_tree() {
         let manifest = load_manifest().unwrap();
-        // The canonical skills tree is created-and-ignored: the installer
-        // materialises the dir, but its contents are derived (regenerable from
-        // the embed) and must not be committed (SL-010 D2). Without the ignore
-        // entry a consumer would commit the derived tree — the blanket
-        // `.doctrine/*` only masks it in this repo, the manifest writes additive
-        // entries, not the blanket.
+        // The canonical skills tree is gitignored by the manifest: the dir is
+        // created on-the-fly by `skills install`, but its contents are derived
+        // (regenerable from the embed) and must not be committed (SL-010 D2).
+        // The blanket `.doctrine/*` only masks it in this repo, so the manifest
+        // writes an additive entry.
         assert!(
-            manifest.dirs.create.iter().any(|d| d == ".doctrine/skills"),
-            "manifest must create the canonical skills dir"
+            !manifest.dirs.create.iter().any(|d| d == ".doctrine/skills"),
+            "skills dir is created by `skills install`, not `doctrine install`"
         );
         assert!(
             manifest
