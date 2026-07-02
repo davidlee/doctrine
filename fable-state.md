@@ -44,12 +44,24 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Process scout #2's fresh queue (agent aeb7fec9f60709131, launched
-~05:00) — new isolated, still-real, TDD-able backlog fixes in lower-collision
-areas (cli/render/parser/entity/error-paths). Re-verify each, TDD, commit clean.
-If scout #2 returns thin, fall back to IMP-019 (cordage golden_net independent
-value oracle — test hardening; study the level recurrence first to write a
-CORRECT oracle) or record durable session-gotcha memories.
+NEXT-ACTION: Continue scout #2 queue. Take ISS-059 (highest-value real defect):
+contentset `compute()` (src/contentset.rs:129-141) does fs::read on each selector
+member, only swallowing NotFound — a DIRECTORY/symlink-to-dir member (e.g. a
+memory-master dir) returns IsADirectory(os 21) → `review prime` fails
+(review.rs:~2571). FIRST verify still real + STUDY how conformance/record-delta
+already hash the master-selector DIR (reuse that pattern, don't invent — no
+parallel impl; the "recurse vs resolve" choice must mirror existing code, not be
+a new decision). TDD: contentset.rs inline tests (near
+compute_propagates_non_notfound_io_error:235) — dir selector → hash, not error.
+contentset.rs is a hashing LEAF (not the RV engine), so review-zone caution is
+soft here. If the dir-hash semantics turn out to be a genuine unmade design
+choice, STOP and pick IMP-139 (estimate set error-message split, safe S) instead.
+
+SCOUT #2 QUEUE (re-verify each): ISS-059 (NEXT, high, real functional fail,
+review-adjacent-but-leaf), IMP-139 (S, error-msg split, low value, safe),
+IMP-135 (help-text doc, low value), IMP-137 (needs --remove — adds a flag =
+capability-ish, prefer to skip for autonomous work). IMP-140 DONE below.
+Also still available: IMP-019 (cordage value oracle, test hardening).
 
 IMP-183 DEFERRED: rendering estimate/value in backlog show needs config units
 threaded through format_metadata/format_show/format_inspect (+ tests + JSON

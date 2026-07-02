@@ -148,3 +148,20 @@ next: process scout #2 queue; else IMP-019 (cordage value oracle) or record memo
   Eight frictions named,
   sorted into six clear bins—
   the raw notes cohere.
+
+## 05:10 — turn 9: shipped IMP-140 (needs/after canonical id — store + echo)
+observed: scout #2 delivered a fresh queue. Took IMP-140 (F-13). Probing revealed
+  the bug was DEEPER than echo: `needs SL-1 SL-2` both ECHOED raw (SL-1) and STORED
+  raw (needs=["SL-2"]). Fixed resolve_dep_seq_src to return canonical ids (from the
+  refs it already parses via listing::canonical_id); all 3 callers use them for the
+  leaf write AND the echo, so storage+echo agree and match the backlog path.
+  Echo-only would've made the echo lie about stored raw form. TDD red→green (e2e
+  asserts canonical echo AND stored needs=["SL-002"]); e2e 16 / unit 39 green,
+  clippy+fmt clean (fixed a doc-lazy-continuation + slice::from_ref). Commit 6960789d.
+  9th fix. F-7 idempotent-echo part remains (separate, 3-verb).
+next: ISS-059 (contentset dir-selector hash abort) — verify + reuse existing
+  master-selector dir-hash pattern; else IMP-139.
+
+  Raw "SL-1" made whole—
+  the write and the echo now
+  speak one padded name.
