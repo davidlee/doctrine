@@ -14,24 +14,48 @@ ref   = "SL-186"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "major"
 title = "design.md places the impure corpus loader in src/commands/prompt.rs; P04 D-B relocated it to src/install.rs"
 detail = 'Expected: design.md §5.2 (l.206 "Loader (impure shell, command edge)") and §5.3 Ownership (l.423-424) declare the impure corpus loader (embedded⊕disk walk, sidecar overlay, seal-twin drop) to live in src/commands/prompt.rs. Observed: PHASE-04 decision D-B relocated the loader (load_full_corpus + load_embedded_corpus/load_disk_corpus/path_to_slot/default_selector/overlay_selector/collect_snippet_paths/parse_role/arm/slot_ref/project_starters) into src/install.rs to avoid an install→commands layering back-edge (the def-expansion seam calls the loader from install.rs). Layering gate (tests/architecture_layering.rs) green confirms no ADR-001 cycle. Canon (design.md) now misstates a core module boundary. Evidence: candidate/186/review-001 — loader + its unit tests resolve in src/install.rs (sidecar 16 hits, manifest 108); prompt.rs verbs re-point to crate::install::load_full_corpus.'
+disposition = "verified"
+response = 'Observation confirmed. The impure corpus loader lives in src/install.rs, not src/commands/prompt.rs. Remediation delegated to /reconcile (per-slice direct edit): update design.md §5.2 (l.206 "Loader (impure shell, command edge)") and §5.3 Ownership (l.423-424) to attribute the loader to src/install.rs, noting the D-B rationale (avoids install→commands layering back-edge; layering gate green). See Reconciliation Brief.'
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "major"
 title = "design.md §D7 attributes the canonical-def refresh path to src/skills.rs, which does not exist"
 detail = "Expected: design.md l.342 and l.433 attribute the canonical-def refresh path (install_agents_for) to a module src/skills.rs. Observed: src/skills.rs does not exist; install_agents_for, install_agent_def, and the P04 marker expander expand_worker_marker all live in src/install.rs. The D7 def↔hymn wiring (WORKER_RESOLVE_MARKER expansion, role-band-only resolve at install time) was implemented in install.rs::install_agent_def step 1. Canon references a phantom module. Evidence: grep -rln 'fn install_agent_def|fn expand_worker_marker' src/ → src/install.rs only; ls src/skills.rs → No such file."
+disposition = "verified"
+response = "Observation confirmed. src/skills.rs does not exist; install_agents_for / install_agent_def / expand_worker_marker all live in src/install.rs. Remediation delegated to /reconcile (per-slice direct edit): update design.md l.342 and l.433 to attribute the canonical-def refresh + D7 marker expansion to src/install.rs. See Reconciliation Brief."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "SL-186 conformance registry includes authored/knowledge/trunk-merge files absent from the delivered candidate"
 detail = "Expected: slice conformance 'undeclared' reflects code scope-creep — paths edited but outside design-target selectors. Observed: undeclared (17) mixes real SL-186 code with attribution noise — .doctrine/adr/001/layering.toml (M), backlog/improvement/227 + its md/toml, mem.fact.doctrine.cli-id-form-split + mem_019f20c6 md/toml, rfc/011/case-notes.md, slice/186/slice-186.toml, AGENTS.md — NONE of which appear in the delivered candidate (git diff main..candidate/186/review-001 = 19 SL-186 files, zero foreign leakage, no layering.toml change). Cause: pi/subprocess-arm record-delta B→B+1 ranges swept orchestrator-trailed knowledge commits (memories/backlog) plus the refresh-base trunk merge into the source-delta attribution. The delivered artifact is clean; the registry over-attributes."
+disposition = "tolerated"
+response = 'Accepted drift. The delivered artifact is verified clean (candidate/186/review-001 vs main = 19 SL-186 files, no foreign leakage). The over-attribution is a known pi/subprocess-arm characteristic: record-delta B→B+1 ranges span orchestrator-trailed knowledge commits and the refresh-base merge. Conformance is a "where to look" signal, cross-checked here against the projected candidate. Durable follow-up captured as a backlog improvement (pi-arm record-delta range hygiene). No slice-level remediation.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "design-target selectors under-declare the delivered surface (command wiring, dispatch-worker defs, e2e tests)"
+detail = """Expected: design-target selectors cover the slice's delivered surface. Observed: conformant matched only install/hymns/**, install/manifest.toml, src/commands/prompt.rs, src/hymns.rs, src/install.rs, src/main.rs. Real, designed deliverables fall outside the selectors: src/commands/{cli,guard,mod}.rs (prompt-verb + check wiring, EX P03 "wired main.rs/cli.rs"), install/agents/{claude,pi}/dispatch-worker.md (P04 marker line), tests/e2e_prompt_{def_expansion,resolve_golden}.rs (P03/P04 VT). Design prose anticipates all of them; the mechanical selector list does not enumerate them, so conformance flags them undeclared."""
+disposition = "verified"
+response = "Observation confirmed. The deliverables are designed (prose covers them) but the mechanical design-target selectors don't enumerate them. Remediation delegated to /reconcile (per-slice direct edit): extend SL-186 design-target selectors to cover src/commands/{cli,guard,mod}.rs, install/agents/**/dispatch-worker.md, and tests/e2e_prompt_*.rs, so future conformance runs stop flagging designed surface. See Reconciliation Brief."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "P02 VT-1..4 test_file/keywords revised mid-conclude to follow the D-B relocation"
+detail = 'Expected vs observed (documented for the ledger): P02 VT-1..4 originally pinned test_file=src/commands/prompt.rs with keywords incl HYMNS_ROOT (VT-1) and union (VT-3). The D-B loader relocation moved the loader + its tests to src/install.rs, so verify-vt HALTED the conclude. Under /consult approval, plan.toml P02 VT-1..4 were append-edited: test_file→src/install.rs (follows the code), HYMNS_ROOT→HYMNS_DIRNAME (real const; naming drift, never literal), union→load_disk_corpus (real fn at the embedded⊕disk union site; "union" was prose). No criterion renumbered; verification intent unchanged; verify-vt re-ran green and the moved tests pass in the candidate.'
+disposition = "aligned"
+response = "No further action. The P02 VT-1..4 revision was /consult-approved, faithful (test_file follows the relocated code; the two corrected keywords name real tokens), renumbered nothing, and verify-vt re-ran green with the moved tests passing in the candidate. Recorded here for the audit trail; the revision itself is the remediation and is already landed on the review ref."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
