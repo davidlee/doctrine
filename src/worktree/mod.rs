@@ -70,7 +70,7 @@ pub(crate) use coordinate::{CoordAction, CoordRefusal, base_has_slice_plan, clas
 #[cfg(test)]
 pub(crate) use gc::{GcPlan, GcRefusal, GcState, GcVerdict, classify_gc};
 #[cfg(test)]
-pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land};
+pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land, no_such_fork_message};
 #[cfg(test)]
 pub(crate) use subagent::{
     Stamp, StampRefusal, WorkerVerify, WorkerVerifyRefusal, classify_stamp, classify_worker_verify,
@@ -517,6 +517,28 @@ mod tests {
         assert_eq!(
             classify_land(true, "main", st),
             classify_land(true, "detached-xyz", st)
+        );
+    }
+
+    #[test]
+    fn no_such_fork_message_preserves_token_and_hints_branch_not_path() {
+        // ISS-058: `--fork` takes a BRANCH name; passing a worktree PATH yields a
+        // bare `no-such-fork` with no clue (the fork DIRECTORY existed, confusing
+        // the operator). The enriched message keeps the VT-golden token AND hints
+        // the path-vs-branch confusion, naming the offending ref.
+        let msg = no_such_fork_message("solo-foo");
+        assert!(
+            msg.contains("no-such-fork"),
+            "VT-golden token preserved: {msg}"
+        );
+        assert!(msg.contains("solo-foo"), "names the offending ref: {msg}");
+        assert!(
+            msg.contains("branch name"),
+            "hints it wants a branch: {msg}"
+        );
+        assert!(
+            msg.contains("not a worktree path"),
+            "hints the path confusion: {msg}"
         );
     }
 
