@@ -89,10 +89,15 @@ pub(crate) enum ConceptMapCommand {
 
     /// Add an edge to a concept map's DSL.
     Add {
+        /// The concept map to edit (e.g. `CM-001`).
         id: String,
+        /// The edge's source node label.
         source: String,
+        /// The relation verb between source and target.
         rel: String,
+        /// The edge's target node label.
         target: String,
+        /// Append even if the edge already exists (otherwise a duplicate is a no-op).
         #[arg(long)]
         force: bool,
         #[arg(short = 'p', long)]
@@ -101,9 +106,13 @@ pub(crate) enum ConceptMapCommand {
 
     /// Remove an edge from a concept map's DSL.
     Remove {
+        /// The concept map to edit (e.g. `CM-001`).
         id: String,
+        /// The edge's source node label.
         source: String,
+        /// The relation verb between source and target.
         rel: String,
+        /// The edge's target node label.
         target: String,
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
