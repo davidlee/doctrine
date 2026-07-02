@@ -35,6 +35,9 @@ Fixed at root, each a clean commit, verified against code before editing:
 | `CoverageStatus` rendered via `{:?}` Debug (`InProgress`), asymmetric with kebab input | C1-adjacent | Single-source `as_kebab` formatter (= `parse_status` vocab) at both render sites; round-trip test locks the pair. | `07f9a4a2` |
 | cordage `explain()` foreign node returned per-overlay singletons, rustdoc promised empty | correctness | In-range guard in `explain` (`node.0 >= node_count` → empty cone). | `1dacc7a8` |
 | `next` value cell showed ABSENT for value-bearing kinds scored at default 1.0 | correctness | `value_cell` renders the effective default (`1.0*`) for value-bearing kinds, ABSENT for valueless; `DEFAULT_VALUE` single-sourced. The e2e golden had itself encoded the bug. | `e30e482e` |
+| top-level `needs`/`after` stored AND echoed the raw CLI arg (`needs SL-1` → `needs=["SL-2"]`), diverging from the backlog path | C1/correctness | `resolve_dep_seq_src` returns the canonical ids; all three callers use them for the leaf write and the echo, so storage and echo agree. | `6960789d` |
+| `estimate set` collapsed only-lower / only-upper / neither into one generic error | C1 | Split into specific arms naming the missing bound (`LOWER without UPPER`, …). | `44907fbc` |
+| golden_net proved level determinism but not level *values* (a golden could encode a wrong recurrence — obs #3) | test hardening | Added an independent longest-path value oracle asserting `order_key` levels under every permutation. | `4a3f1412` |
 
 ## 3. Not fixed — and why
 
@@ -51,9 +54,19 @@ Fixed at root, each a clean commit, verified against code before editing:
 - **Deferred (larger than one clean autonomous increment):** `arm-spawn --slice`
   coord-resolution guard (hot dispatch/SL-190 code); IMP-183 estimate/value
   render on non-slice show surfaces (signature churn across the backlog render +
-  JSON parity + goldens — borderline slice-worthy); IMP-019 cordage `golden_net`
-  independent value oracle (test hardening, no runtime bug); ISS-205 cordage
-  `env!` baked path (no clean local red — passes when compiled in place).
+  JSON parity + goldens — borderline slice-worthy); ISS-205 cordage `env!` baked
+  path (no clean local red — passes when compiled in place).
+- **Deferred — needs a design decision, not autonomous invention:** ISS-059
+  `review prime` aborts (`IsADirectory`) when a selector resolves to a directory
+  or symlink→dir (a memory-master dir). Root: `resolve_selectors_to_fileset`
+  passes a literal selector through unexpanded, so a dir reaches `contentset::
+  compute`'s `fs::read`. No existing dir-content-hash pattern to reuse. Two
+  candidate fixes, each defining new drift semantics: (a) **[recommended]** expand
+  a dir/symlink→dir selector to its tracked files in `resolve_selectors_to_fileset`
+  (canonicalize → `git ls-files` the real dir → per-file entries; drift stays
+  per-file, consistent with globs); (b) hash the directory's contents in `compute`
+  (walk+combine — defines per-dir walk order / symlink depth / removal semantics).
+  Left for a slice.
 
 ## 4. Cross-cutting observations
 
