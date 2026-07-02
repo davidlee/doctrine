@@ -14,7 +14,7 @@ ref   = "IMP-191"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "No tests for the read-only code path — `run_status` with `None` state is untested"
 detail = """
@@ -28,7 +28,7 @@ response = "Agreed. The read-only branch is the entire value of IMP-191 and must
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "`legal_moves` duplicates the status-variant vocabulary — diverges from `SliceStatus` enum silently"
 detail = """
@@ -42,7 +42,7 @@ response = "Fair. The parallel string array is a maintenance hazard. Will add a 
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "`--note` silently ignored in read-only mode — should warn or error"
 detail = """
