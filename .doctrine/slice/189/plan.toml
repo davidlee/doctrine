@@ -1,0 +1,81 @@
+# Implementation plan for SL-189 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-189"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "single_commit_boundary helper + record-delta --commit mode"
+objective = """
+Add the engine-layer `single_commit_boundary` helper (src/state.rs, beside \
+record_source_delta) that derives [S^, S] for a commit S — resolve to a full oid, \
+require exactly one parent (reject merges AND root commits), build a BoundaryRow. \
+Wire a `--commit <S>` mode onto `slice record-delta` (src/slice.rs RecordDelta arg \
+enum + run_record_delta) that calls the helper; make start/end Option with a clap \
+ArgGroup so --commit XORs the jointly-required range pair. Legacy --start/--end \
+path unchanged. This brings the pi arm to parity with the already-tight claude arm \
+(design §5). Reuses git::parents (src/git.rs:1023) and git::resolve_ref — no new \
+git plumbing.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (pi-only, post-inquisition); git::parents, git::resolve_ref, record_source_delta, RecordDelta enum present in current tree (re-grep verified during /plan)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "single_commit_boundary(root, commit, provenance, phase) exists in src/state.rs, reuses git::parents, and errors on a merge commit (>1 parent) and a root commit (0 parents)." },
+  { id = "EX-2", text = "`doctrine slice record-delta <SL> PHASE-NN --commit <S>` records code_start_oid=S^ , code_end_oid=S with Provenance::Manual via record_source_delta (F-6 guard + upsert unchanged)." },
+  { id = "EX-3", text = "clap contract: --start/--end are Option, jointly required in range mode, both conflict with --commit; exactly one mode required; ambiguous/partial invocations produce a clear diagnostic, never a silent default." },
+  { id = "EX-4", text = "Behaviour-preserved: pre-existing --start/--end e2e coverage and the conformance suite pass unchanged; legacy range path and D12 Manual-provenance non-clobber intact." },
+]
+verification = [
+  { id = "VT-1", expects = "single_commit_boundary derives [S^, S] for a non-merge commit; errors on a merge commit and on a root commit.", test_file = "src/state.rs", keywords = ["single_commit_boundary"] },
+  { id = "VT-2", expects = "SL-186 regression: history B -> refresh-base merge M (foreign src/ file) -> code commit S (S^==M, own paths only) -> trailing .doctrine/ knowledge commit K; recording via the single-commit path yields a conformance `actual` set of S's own paths only — foreign src (in S^) and K's .doctrine/ paths (after S) both excluded. Contrast a raw B..K range which lists all three.", test_file = "src/slice.rs", keywords = ["single_commit_boundary", "conformance", "foreign"] },
+  { id = "VT-3", expects = "arg diagnostics: `--commit` with `--start` errors; `--start` without `--end` errors; neither mode errors. Assert the diagnostic, not just the exit code.", test_file = "tests/e2e_slice_record_delta.rs", keywords = ["--commit", "--start"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "pi dispatch skill Record beat records --commit <S>"
+objective = """
+Point the pi/subprocess arm's funnel Record beat at the new safe default. In \
+plugins/doctrine/skills/dispatch-subprocess/SKILL.md, replace \
+`record-delta --start <B> --end <B+1>` with `record-delta --commit <S>`, and make \
+S-pinning explicit: capture S = the step-7 batch commit (`git rev-parse HEAD`) and \
+record with the pinned oid BEFORE the knowledge trail (not `HEAD` at step 8). \
+Update the pi-arm line in the router plugins/doctrine/skills/dispatch/SKILL.md \
+step 8 to match. Claude arm (dispatch-agent) and .doctrine/skills/ (gitignored, \
+regenerated) untouched.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: `record-delta --commit <S>` exists and is green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch-subprocess/SKILL.md Record beat records `record-delta --commit <S>`, with S captured/pinned at the step-7 commit and recorded before the knowledge trail." },
+  { id = "EX-2", text = "dispatch/SKILL.md router step 8 pi-arm line reflects `--commit <S>` (no longer `--start <B> --end <B+1>`)." },
+  { id = "EX-3", text = "Claude arm (dispatch-agent/SKILL.md) and run_record_boundary NOT changed (already tight); scope stays pi-only." },
+]
+verification = [
+  { id = "VA-1", expects = "Agent reads both edited skills and confirms: (a) pi records --commit <S>; (b) S is pinned at step 7 before knowledge trails; (c) router pi-arm line matches; (d) claude arm prose is untouched and still records code_end=S before knowledge." },
+]
+specs        = []
+requirements = []
