@@ -70,4 +70,11 @@ named sinks from ~4–6 down to one queryable verb, without adding host-coupling
 
 ## Follow-Ups
 
-<!-- filled as they surface -->
+- **IDE-028** (linked `after` + `originates_from`) — auto-push phase-status sheets
+  to the primary tree in the funnel Record beat, automating the manual
+  `reconcile-phases` this slice ships. Deferred: funnel-cadence change, gated on
+  RFC-005 topology settling (IDE-027).
+- **RV-214** — external inquisition (codex GPT-5.5) on the design; 7 charges, all
+  resolved `design-wrong` + verified. Reworked the composite source-of-truth
+  foundation (durable `phase/*` refs, not the gitignored registry cache), the
+  per-phase core signature, and the status-only reconcile writer.
