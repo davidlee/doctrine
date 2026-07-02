@@ -250,6 +250,12 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             // gc reaps a spent worktree fork once provably landed (SL-056 PHASE-09)
             // — Orchestrator-classed; refused under worker-mode.
             WorktreeCommand::Gc { .. } => Orchestrator("gc"),
+            // jail-prefix computes a worker's confinement wrap prefix for the
+            // subprocess spawn arm (SL-185) — an orchestrator spawn-support op. The
+            // design mandates the prefix is ORCHESTRATOR-computed (no worker
+            // influences its own policy), so it is Orchestrator-classed and refused
+            // under worker-mode.
+            WorktreeCommand::JailPrefix { .. } => Orchestrator("jail-prefix"),
             // marker --stamp-subagent is the claude harness spawn path's provision+mark
             // step (SL-056 PHASE-10) — Hookmint, refused under worker-mode (the
             // legit first stamp lands on a marker-absent worktree ⇒ allowed). All

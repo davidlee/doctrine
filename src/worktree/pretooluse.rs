@@ -31,8 +31,8 @@ use serde::Deserialize;
 
 use super::create::{JAIL_SUBPATH, WORKTREES_SUBDIR};
 use super::jail::{
-    Backend, Decision, JailPolicy, decide_bash, decide_write, resolve_target, seatbelt_profile,
-    validate_policy,
+    Backend, Decision, JailPolicy, ResolvedMac, decide_bash, decide_write, resolve_target,
+    seatbelt_profile, validate_policy,
 };
 #[cfg(target_os = "macos")]
 use super::jail::{RealEnv, resolve_inputs, seatbelt_backend};
@@ -77,7 +77,7 @@ const ENV_PATH: &str = "PATH";
     all(target_os = "macos", not(test)),
     expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
 )]
-const REASON_NO_BWRAP: &str = "bwrap-unavailable";
+pub(crate) const REASON_NO_BWRAP: &str = "bwrap-unavailable";
 /// Placeholder backend reason for the Edit/Write path, where the backend is never
 /// read (`decide_write` walls on `pathcheck`). Never surfaced to a user.
 const REASON_BACKEND_UNUSED: &str = "backend-unused-on-write-path";
@@ -85,7 +85,7 @@ const REASON_BACKEND_UNUSED: &str = "backend-unused-on-write-path";
 /// to `resolved.profile_path`: the arm DENIES rather than emit an allow+wrap whose
 /// `sandbox-exec -f <profile>` points at a missing/partial floor. A wrap we cannot
 /// back with a real profile is strictly worse than a deny.
-const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
+pub(crate) const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
 
 /// The `PreToolUse` stdin subset consumed (design §5.2). Every field is optional
 /// so a malformed / partial payload folds to `Default` — fail-closed: a subagent
@@ -293,7 +293,7 @@ fn load_policy(main_root: &Path, name: &str) -> JailPolicy {
 /// Capability is DATA: absence ⇒ `Backend::Deny` ⇒ the leaf denies with the
 /// per-arm reason, never an unconfined pass-through (fail-closed). Linux arm only.
 #[cfg(not(target_os = "macos"))]
-fn have_bwrap() -> bool {
+pub(crate) fn have_bwrap() -> bool {
     let Some(path) = std::env::var_os(ENV_PATH) else {
         return false;
     };
@@ -334,6 +334,17 @@ fn probe_backend(cwd: &Path) -> Backend {
     seatbelt_backend(resolve_inputs(cwd, &env.main_root, &env))
 }
 
+/// The SINGLE profile writer (EX-3): write `seatbelt_profile(resolved)` to
+/// `resolved.profile_path`. The `.sb` profile is a runtime/derived artifact under the
+/// worktree's gitignored `<wt>/.tmp` — regenerated each wrap, never an authored entity
+/// — so a plain `fs::write` is the sanctioned form (clippy policy: authored writes
+/// route through `fsutil::write_atomic`, runtime/derived sites carry an explicit
+/// `#[expect]`).
+pub(crate) fn write_seatbelt_profile(resolved: &ResolvedMac) -> io::Result<()> {
+    #[expect(clippy::disallowed_methods, reason = "runtime seatbelt profile")]
+    fs::write(&resolved.profile_path, seatbelt_profile(resolved))
+}
+
 /// Materialize the macOS Seatbelt `.sb` profile on the wrap path — the impure
 /// command-tier IO the pure `decide`/`sandbox_exec_argv` cannot do (INV-M2 keeps the
 /// leaf pure). The wrap argv references `sandbox-exec -f <resolved.profile_path>`, so
@@ -342,9 +353,8 @@ fn probe_backend(cwd: &Path) -> Backend {
 /// engages. Runs ONLY when the resolved backend is `Seatbelt` AND the decision is a
 /// `WrapBash` (a Seatbelt deny/passthrough, or any non-Seatbelt backend, needs no
 /// file — no-op). **Fail-closed (F-B4):** a write failure downgrades the wrap to a
-/// `Deny` — never an allow+wrap backed by a missing/partial floor. The `<wt>/.tmp`
-/// parent is created by `resolve_inputs` (`ensure_dir`), so a same-run write normally
-/// succeeds; the deny guards the residual (fs error, races, a stale resolved path).
+/// `Deny` — never an allow+wrap backed by a missing/partial floor. Delegates the
+/// actual write to `write_seatbelt_profile` (the single profile writer).
 fn materialize_seatbelt_profile(backend: &Backend, decision: Decision) -> Decision {
     let Backend::Seatbelt(resolved) = backend else {
         return decision; // bwrap / deny backends carry no external profile file.
@@ -352,13 +362,7 @@ fn materialize_seatbelt_profile(backend: &Backend, decision: Decision) -> Decisi
     let Decision::WrapBash { .. } = &decision else {
         return decision; // a Seatbelt deny/passthrough has nothing to back.
     };
-    // The `.sb` profile is a runtime/derived artifact under the worktree's gitignored
-    // `<wt>/.tmp` — regenerated each wrap, never an authored entity — so a plain
-    // `fs::write` is the sanctioned form (clippy policy: authored writes route through
-    // `fsutil::write_atomic`, runtime/derived sites carry an explicit `#[expect]`).
-    #[expect(clippy::disallowed_methods, reason = "runtime seatbelt profile")]
-    let written = fs::write(&resolved.profile_path, seatbelt_profile(resolved));
-    match written {
+    match write_seatbelt_profile(resolved) {
         Ok(()) => decision,
         Err(_e) => Decision::Deny {
             reason: REASON_PROFILE_WRITE_FAILED.to_string(),
@@ -907,6 +911,43 @@ mod tests {
             materialize_seatbelt_profile(&backend, deny.clone()),
             deny,
             "a Seatbelt deny needs no profile"
+        );
+    }
+
+    // ── VT-3 (EX-3): write_seatbelt_profile is the single profile writer ────────
+    // `write_seatbelt_profile(resolved)` writes exactly `seatbelt_profile(resolved)`
+    // to `resolved.profile_path`; an io error (unwritable path) returns `Err`.
+    // Pure `fs::write`, no `sandbox-exec`.
+
+    #[test]
+    fn write_seatbelt_profile_writes_exact_body_to_profile_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dot_tmp = fs::canonicalize(tmp.path()).unwrap().join(".tmp");
+        fs::create_dir_all(&dot_tmp).unwrap();
+        let resolved = resolved_at(&dot_tmp);
+
+        write_seatbelt_profile(&resolved).expect("write succeeds");
+
+        let body = fs::read_to_string(&resolved.profile_path).expect("profile written");
+        assert_eq!(
+            body,
+            seatbelt_profile(&resolved),
+            "write_seatbelt_profile writes exactly seatbelt_profile(resolved)"
+        );
+    }
+
+    #[test]
+    fn write_seatbelt_profile_io_error_returns_err() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let mut resolved = resolved_at(&root.join(".tmp"));
+        // profile_path under a directory that does not exist ⇒ fs::write fails.
+        resolved.profile_path = root.join("nonexistent-dir").join("jail.sb");
+
+        let result = write_seatbelt_profile(&resolved);
+        assert!(
+            result.is_err(),
+            "write_seatbelt_profile must return Err on io error"
         );
     }
 }

@@ -35,6 +35,11 @@ pub(crate) use jail::JailPolicy;
 mod pretooluse;
 pub(crate) use pretooluse::run_pretooluse;
 
+// SL-185 PHASE-02: the `jail-prefix` command (command tier). Emits a confinement
+// wrap prefix (NUL-delimited argv terminating in `--`) to `--out` for the
+// subprocess (pi) spawn arm. Rides `jail.rs`'s `wrap_argv` — no re-authored argv.
+mod jail_prefix;
+
 mod marker;
 #[cfg(test)]
 pub(crate) use marker::{Cause, DISPATCH_WORKER_AGENT_TYPE, describe_mode};
@@ -168,6 +173,37 @@ pub(crate) enum WorktreeCommand {
     /// nothing) on stdout; **exit 0 always** — deny is data, not an exit code
     /// (`mem.fact.claude.pretooluse-hook-fail-open`).
     Pretooluse,
+
+    /// Emit a confinement wrap PREFIX for the subprocess (pi) spawn arm (SL-185).
+    /// Resolves a jail backend for `--dir` under an inline policy (`--network`,
+    /// `--extra-rw`) and writes its wrap prefix — a NUL-delimited argv terminating
+    /// in `--` — to `--out`, so the spawn script can `timeout "${PREFIX[@]}"
+    /// <harness>`. Linux emits a `bwrap` prefix; macOS a `sandbox-exec` prefix.
+    /// Fail-closed (AR-1): any resolve/validate/write error ⇒ nonzero exit + reason
+    /// on stderr + NO `--out` file (never partial/empty). `--main-root` is required
+    /// on macOS (validate + policy base) and ignored on Linux.
+    JailPrefix {
+        /// The worktree to confine (the wrap binds/chdirs here).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// The project main root — required on macOS, ignored on Linux.
+        #[arg(long)]
+        main_root: Option<PathBuf>,
+
+        /// The NUL-delimited argv sink; written only on full success (AR-1).
+        #[arg(long)]
+        out: PathBuf,
+
+        /// Allow network inside the jail (default: deny).
+        #[arg(long)]
+        network: bool,
+
+        /// Extra rw grants beyond the worktree — raw shell input, realpath'd +
+        /// validated before use (XR-1). Repeatable.
+        #[arg(long)]
+        extra_rw: Vec<PathBuf>,
+    },
 
     /// Create or resume a coordination worktree.
     /// For a slice on branch `dispatch/<slice>` off the resolved trunk.
@@ -336,6 +372,13 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
         } => run_fork(path, &base, &branch, &dir, worker),
         WorktreeCommand::CreateFork => run_create_fork(),
         WorktreeCommand::Pretooluse => run_pretooluse(),
+        WorktreeCommand::JailPrefix {
+            dir,
+            main_root,
+            out,
+            network,
+            extra_rw,
+        } => jail_prefix::run_jail_prefix(&dir, main_root.as_deref(), &out, network, &extra_rw),
         WorktreeCommand::Coordinate { slice, dir, path } => {
             // Resolve the g2 authoring-branch VALUE here (command tier) — not in
             // coordinate.rs, which must stay off the config loader (ADR-001/VA-1).

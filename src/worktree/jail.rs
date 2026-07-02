@@ -674,32 +674,22 @@ pub(crate) struct Topology {
     pub is_linked: bool,
 }
 
-/// The thin impure shell (§5.2, D-p3-1). Derive a `ResolvedMac` from the `PreToolUse` `cwd`
-/// and the per-arming policy, FAIL-CLOSED on every ambiguity (§5.5 F-B4 branches a–f).
-/// `profile_dir` is where the materialized `.sb` lives (`<wt>/.tmp`); the actual profile
-/// write is the caller's (the command tier's `materialize_seatbelt_profile`, PHASE-04), so
-/// this returns the intended `profile_path` without writing it — keeping the resolver free
-/// of the profile-body concern.
-///
-/// PURE branch logic over the injected `env`; the ONLY impurity is behind `ResolveEnv`.
-/// `Ok` ⇒ a fully realpath'd `ResolvedMac` (INV-M2 fence honoured for the PHASE-02
-/// builders); `Err(ResolveDeny)` ⇒ the arm denies. There is NO code path that returns a
-/// permissive/template `ResolvedMac` on a failure — the `?` short-circuits every branch to
-/// a Deny.
-pub(crate) fn resolve_inputs(
-    cwd: &Path,
-    main_root: &Path,
+/// Disk lookup of the per-arming jail policy by worktree basename, keyed from the
+/// resolved `Topology`. Rejects the main checkout (branch b: no per-arming policy for
+/// the primary tree), absent/unreadable policies (branch c/e), and malformed bodies
+/// (branch f — `from_toml_str`). Returns the parsed `JailPolicy`; does NOT validate
+/// (validation is `resolve_with_policy`'s). Pure over the injected `env`.
+pub(crate) fn acquire_policy(
+    topo: &Topology,
     env: &dyn ResolveEnv,
-) -> Result<ResolvedMac, ResolveDeny> {
-    // (a)/(d): derive + realpath the worktree via git topology.
-    let topo = env.worktree_topology(cwd)?;
+) -> Result<JailPolicy, ResolveDeny> {
     // (b): the main checkout has no per-arming policy — deny, never guess one.
     if !topo.is_linked {
         return Err(ResolveDeny::IsMainCheckout);
     }
-    let wt = topo.toplevel;
     // (c)/(e): per-arming policy lookup by basename. Absent/unreadable ⇒ Deny.
-    let basename = wt
+    let basename = topo
+        .toplevel
         .file_name()
         .ok_or(ResolveDeny::PolicyMissing)?
         .to_os_string();
@@ -708,11 +698,27 @@ pub(crate) fn resolve_inputs(
     let Ok(Some(body)) = env.read_policy(&basename) else {
         return Err(ResolveDeny::PolicyMissing);
     };
-    // (f): malformed / unknown-key ⇒ Deny (never a silent permissive default). Reuses
-    // SL-182's `from_toml_str` + `validate_policy` UNCHANGED.
+    // (f): malformed / unknown-key ⇒ Deny (never a silent permissive default).
     let policy = JailPolicy::from_toml_str(&body)
         .map_err(|e| ResolveDeny::PolicyMalformed(format!("{e:?}")))?;
-    validate_policy(&policy, main_root)
+    Ok(policy)
+}
+
+/// SHARED core: validate a policy (`validate_policy`), realpath every path the
+/// PHASE-02 builders will bind, and assemble a fully-resolved `ResolvedMac`. Takes
+/// an ALREADY-PARSED policy (from `acquire_policy` for disk, or an inline-crafted
+/// `JailPolicy` for testing) so both sources share one validate→realpath chain.
+/// Behaviour-preserving: `from_toml → validate → realpath` ordering matches the
+/// original `resolve_inputs` body exactly (EX-2).
+pub(crate) fn resolve_with_policy(
+    policy: &JailPolicy,
+    topo: &Topology,
+    main_root: &Path,
+    env: &dyn ResolveEnv,
+) -> Result<ResolvedMac, ResolveDeny> {
+    let wt = &topo.toplevel;
+    // validate_policy BEFORE realpath (from_toml → validate → realpath ordering).
+    validate_policy(policy, main_root)
         .map_err(|e| ResolveDeny::PolicyMalformed(format!("{e:?}")))?;
 
     // realpath every path the PHASE-02 builders will bind (INV-M2 fence).
@@ -725,13 +731,25 @@ pub(crate) fn resolve_inputs(
     let profile_path = tmp.join(SEATBELT_PROFILE_FILE);
 
     Ok(ResolvedMac {
-        wt,
+        wt: wt.clone(),
         tmp,
         dutmp,
         extra_rw,
         network: policy.network,
         profile_path,
     })
+}
+
+/// Behaviour-preserving recomposition (EX-1): ONE `worktree_topology` probe, then
+/// `resolve_with_policy(acquire_policy(topo,env)?, topo, main_root, env)`. No second
+/// topology probe. Match the original `resolve_inputs` contract exactly.
+pub(crate) fn resolve_inputs(
+    cwd: &Path,
+    main_root: &Path,
+    env: &dyn ResolveEnv,
+) -> Result<ResolvedMac, ResolveDeny> {
+    let topo = env.worktree_topology(cwd)?;
+    resolve_with_policy(&acquire_policy(&topo, env)?, &topo, main_root, env)
 }
 
 /// Map a `resolve_inputs` outcome onto SL-182's existing `Backend` so the funnel's Deny
@@ -1042,10 +1060,14 @@ mod tests {
             .iter()
             .position(|t| t == "bwrap")
             .expect("bwrap invocation token");
-        // Tokens strictly between `bwrap` and the wrapped program `pi`, quotes stripped.
+        // Tokens strictly between `bwrap` and the `)` closing the `PREFIX=( … )`
+        // array (SL-185 PHASE-03 hoisted the inline `bwrap … pi` flags into a bash
+        // array driven through a single `timeout "${PREFIX[@]}" pi …` exec site, so
+        // `pi` no longer trails the flags — the array-close `)` is the boundary),
+        // quotes stripped.
         let between: Vec<String> = toks[start + 1..]
             .iter()
-            .take_while(|t| t.as_str() != "pi")
+            .take_while(|t| t.as_str() != ")")
             .map(|t| t.trim_matches('"').to_string())
             .collect();
         // Remove pi-specific groups: `--bind <…/.pi> <…/.pi>` and `--setenv NAME VAL`.
@@ -1924,5 +1946,107 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(JailPolicy::from_toml_str(&bad).is_err());
+    }
+
+    // ---- VT-1 (EX-1 verify): resolve_inputs is a recomposition — ONE topology probe ----
+    // Prove that `resolve_inputs` delegates to `acquire_policy` + `resolve_with_policy`
+    // and that the topology probe happens exactly once (the shell layer calls
+    // `worktree_topology`, then chains the two factored functions).
+
+    #[test]
+    fn resolve_inputs_is_a_recomposition_one_topology_probe() {
+        // Happy path: `resolve_inputs` must produce the same result as manually chaining
+        // `acquire_policy` + `resolve_with_policy` with the ONE topology probe.
+        let env = FakeEnv::default();
+        // The recomposed resolve_inputs:
+        let mac_from_recomposed =
+            resolve_inputs(&pb("/private/tmp/wt-abc"), Path::new(MAC_MAIN), &env)
+                .expect("recomposed resolve_inputs");
+        // The equivalent manual chain:
+        let topo = env
+            .worktree_topology(&pb("/private/tmp/wt-abc"))
+            .expect("topology probe");
+        let policy = acquire_policy(&topo, &env).expect("acquire_policy");
+        let mac_from_chain = resolve_with_policy(&policy, &topo, Path::new(MAC_MAIN), &env)
+            .expect("resolve_with_policy");
+        assert_eq!(mac_from_recomposed, mac_from_chain);
+    }
+
+    // ---- VT-2: resolve_with_policy from a SUPPLIED inline policy (no disk read) -------
+    // EX-2: `resolve_with_policy` is the shared core — accepts an already-parsed
+    // `JailPolicy`, runs `validate_policy`, realpaths, and builds `ResolvedMac`. It also
+    // REJECTS a dangerous inline `extra_rw` (root/ancestor/.git) via the moved
+    // `validate_policy`, preserving the `from_toml → validate → realpath` ordering.
+
+    #[test]
+    fn resolve_with_policy_resolves_from_supplied_inline_policy() {
+        let env = FakeEnv::default();
+        let topo = Topology {
+            toplevel: pb("/private/tmp/wt-abc"),
+            is_linked: true,
+        };
+        let inline = JailPolicy {
+            extra_rw: vec![pb("/opt/cache")],
+            network: false,
+        };
+        let mac =
+            resolve_with_policy(&inline, &topo, Path::new(MAC_MAIN), &env).expect("inline policy");
+        assert_eq!(mac.wt, pb("/private/tmp/wt-abc"));
+        assert_eq!(mac.extra_rw, vec![pb("/opt/cache")]);
+        assert!(!mac.network);
+    }
+
+    #[test]
+    fn resolve_with_policy_rejects_dangerous_inline_extra_rw_root() {
+        let env = FakeEnv::default();
+        let topo = Topology {
+            toplevel: pb("/private/tmp/wt-abc"),
+            is_linked: true,
+        };
+        let inline = JailPolicy {
+            extra_rw: vec![pb("/")],
+            network: true,
+        };
+        let err = resolve_with_policy(&inline, &topo, Path::new(MAC_MAIN), &env).unwrap_err();
+        assert!(
+            matches!(err, ResolveDeny::PolicyMalformed(_)),
+            "root extra_rw must be rejected via validate_policy"
+        );
+    }
+
+    #[test]
+    fn resolve_with_policy_rejects_dangerous_inline_extra_rw_ancestor() {
+        let env = FakeEnv::default();
+        let topo = Topology {
+            toplevel: pb("/private/tmp/wt-abc"),
+            is_linked: true,
+        };
+        let inline = JailPolicy {
+            extra_rw: vec![pb("/home/u")], // ancestor of MAC_MAIN
+            network: true,
+        };
+        let err = resolve_with_policy(&inline, &topo, Path::new(MAC_MAIN), &env).unwrap_err();
+        assert!(
+            matches!(err, ResolveDeny::PolicyMalformed(_)),
+            "ancestor extra_rw must be rejected via validate_policy"
+        );
+    }
+
+    #[test]
+    fn resolve_with_policy_rejects_dangerous_inline_extra_rw_dotgit() {
+        let env = FakeEnv::default();
+        let topo = Topology {
+            toplevel: pb("/private/tmp/wt-abc"),
+            is_linked: true,
+        };
+        let inline = JailPolicy {
+            extra_rw: vec![pb("/home/u/project/.git")],
+            network: true,
+        };
+        let err = resolve_with_policy(&inline, &topo, Path::new(MAC_MAIN), &env).unwrap_err();
+        assert!(
+            matches!(err, ResolveDeny::PolicyMalformed(_)),
+            ".git extra_rw must be rejected via validate_policy"
+        );
     }
 }
