@@ -20,7 +20,7 @@ include = [
   "/install/**",
   "/plugins/**",
   "/memory/**",
-  "/.pi/extensions/doctrine/mcp.ts",
+  "/templates/mcp.ts",
   "/README.md",
   "/LICENSE-GPL-3.0",
   "/LICENSE-MIT",

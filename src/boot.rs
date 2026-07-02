@@ -1764,7 +1764,7 @@ fn plan_pi_extension(root: &Path, exec: &Path) -> ExtAction {
 // ---------------------------------------------------------------------------
 
 /// The PHASE-01 MCP extension template — embedded at compile time.
-const MCP_EXT_TEMPLATE: &str = include_str!("../.pi/extensions/doctrine/mcp.ts");
+const MCP_EXT_TEMPLATE: &str = include_str!("../templates/mcp.ts");
 
 /// The marker line in the template that gets replaced with the baked exec path.
 const MCP_BIN_PATH_MARKER: &str = "declare const BIN_PATH: string;";
