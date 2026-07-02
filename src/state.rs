@@ -711,6 +711,40 @@ pub(crate) fn record_source_delta(
     write_registry(&path, &registry)
 }
 
+/// Derive a single-commit boundary row for `commit` — exactly its own patch
+/// `[S^, S]` (design SL-189 §5.2). Resolve `commit` to a full oid (a ref that
+/// does not resolve is a clean named error), then require EXACTLY one parent:
+/// this rejects BOTH merge commits (>1 parent) AND root commits (0 parents) —
+/// neither has a single "own patch". `git diff S^..S` is then precisely `S`'s
+/// delta, so trailed knowledge, refresh-base merges, and foreign source drop out
+/// by construction. The tight, safe-by-construction counterpart to a hand-passed
+/// `start..end` range; the caller pairs it with [`record_source_delta`], which
+/// re-applies the ancestor/non-merge guard on the built row.
+pub(crate) fn single_commit_boundary(
+    root: &Path,
+    commit: &str,
+    provenance: crate::boundary::Provenance,
+    phase: &str,
+) -> anyhow::Result<crate::boundary::BoundaryRow> {
+    let end = crate::git::resolve_ref(root, commit)?.with_context(|| {
+        format!("single_commit_boundary: {commit} does not resolve to a commit")
+    })?;
+    let parents = crate::git::parents(root, &end)?;
+    let [start] = parents.as_slice() else {
+        anyhow::bail!(
+            "single_commit_boundary: {commit} must have exactly one parent (a non-merge, \
+             non-root commit with a single own patch), found {}",
+            parents.len()
+        );
+    };
+    Ok(crate::boundary::BoundaryRow {
+        phase: phase.into(),
+        code_start_oid: start.clone(),
+        code_end_oid: end,
+        provenance,
+    })
+}
+
 /// Evict one phase's row from the slice's registry — the inverse of
 /// [`record_source_delta`] and its reopen-eviction sibling (design D8; the sole
 /// caller is the PHASE-03 completed→non-completed reopen, which must not leave a
@@ -1460,6 +1494,43 @@ mod tests {
             recorded("PHASE-06"),
             Provenance::Solo,
             "incoming Solo overwrites"
+        );
+    }
+
+    // VT-1 (SL-189): single_commit_boundary derives [S^, S] for a linear
+    // non-merge commit, and ERRORS on BOTH a merge commit (>1 parent) and a root
+    // commit (0 parents) — neither has a single "own patch".
+    #[test]
+    fn single_commit_boundary_scopes_own_patch_rejects_merge_and_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let root_oid = git(&repo, &["rev-parse", "HEAD"]);
+
+        // Linear non-merge S: its parent is the root commit → [root, S].
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "S"]);
+        let s = git(&repo, &["rev-parse", "HEAD"]);
+
+        let built = single_commit_boundary(&repo, &s, Provenance::Manual, "PHASE-01").unwrap();
+        assert_eq!(built.code_start_oid, root_oid, "start = S^");
+        assert_eq!(built.code_end_oid, s, "end = S");
+        assert_eq!(built.phase, "PHASE-01");
+        assert_eq!(built.provenance, Provenance::Manual);
+
+        // Merge commit → rejected (two parents, no single own patch).
+        git(&repo, &["checkout", "-q", "-b", "side", &root_oid]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "side"]);
+        git(&repo, &["checkout", "-q", "main"]);
+        git(&repo, &["merge", "-q", "--no-ff", "--no-edit", "side"]);
+        let merge = git(&repo, &["rev-parse", "HEAD"]);
+        assert!(
+            single_commit_boundary(&repo, &merge, Provenance::Manual, "PHASE-01").is_err(),
+            "merge commit (>1 parent) → rejected"
+        );
+
+        // Root commit → rejected (no parent).
+        assert!(
+            single_commit_boundary(&repo, &root_oid, Provenance::Manual, "PHASE-01").is_err(),
+            "root commit (0 parents) → rejected"
         );
     }
 

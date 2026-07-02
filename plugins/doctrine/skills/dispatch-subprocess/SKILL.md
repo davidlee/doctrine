@@ -41,17 +41,28 @@ Same confinement as codex arm; fifo keeps stdin open (pi RPC exits on EOF).
 
 ## Boundary recording
 At the funnel **Record** beat (router step 8), after the code commit:
-`doctrine slice record-delta <SL> PHASE-NN --start <B> --end <B+1>` — writes the
-per-phase boundary into the primary-tree conformance registry (F-5 resolves it
-from the coord tree; F-6 guard; upsert). This arm has no `record-boundary` and the
-codex/pi symmetric ledger derive is **deferred** (D6/IMP-171), so this `record-delta`
-**is** the arm's registry write — RETAINED, every landed phase, orchestrator-issued.
-It is **no longer skippable**: `dispatch sync --prepare-review`'s completeness gate
-`bail!`s if a completed phase lacks a registry row, so a forgotten write halts the
-pre-audit conclude beat instead of silently passing (the ISS-052 failure mode). The
-same verb doubles as the manual escape hatch (correct a range / bootstrap). Its
-incoming `Manual` is provenance-preserving — it never clears an existing
-funnel/legacy halt (D12).
+`doctrine slice record-delta <SL> PHASE-NN --commit <S>` — the safe-default
+single-commit mode. It derives `[S^, S]` and writes the per-phase boundary into the
+primary-tree conformance registry (F-5 resolves it from the coord tree; F-6 guard;
+upsert).
+
+**Pin `S` at step 7, do not read `HEAD` at step 8.** Step 8 *also* trails knowledge
+commits; if a knowledge commit lands before the record call, `HEAD` is no longer the
+code commit. So capture `S=$(git rev-parse HEAD)` immediately after the step-7 code
+commit and record `--commit "$S"` **before** trailing knowledge (or with the pinned
+oid regardless of order). `git diff S^..S` is exactly `S`'s own patch — trailed
+knowledge and any refresh-base merge (which sits in `S^`) are excluded by
+construction; this is what the old `--start/--end` range failed to do.
+
+This arm has no `record-boundary` and the codex/pi symmetric ledger derive is
+**deferred** (D6/IMP-171), so this `record-delta` **is** the arm's registry write —
+RETAINED, every landed phase, orchestrator-issued. It is **no longer skippable**:
+`dispatch sync --prepare-review`'s completeness gate `bail!`s if a completed phase
+lacks a registry row, so a forgotten write halts the pre-audit conclude beat instead
+of silently passing (the ISS-052 failure mode). The same verb still doubles as the
+manual escape hatch — `--start/--end` remains for a range / bootstrap. Its incoming
+`Manual` is provenance-preserving — it never clears an existing funnel/legacy halt
+(D12).
 
 ## Red Flags
 **Never:** `eval`; spawn outside `env -C "$D"`; omit `timeout`; use a heredoc

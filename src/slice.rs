@@ -311,12 +311,16 @@ pub(crate) enum SliceCommand {
         path: Option<PathBuf>,
     },
 
-    /// Manually record one phase's source delta into the slice's arm-neutral
-    /// registry — the escape hatch beside the automatic solo phase-binding
-    /// (correct a recorded range, or bootstrap a pre-binding slice). `start`/`end`
-    /// are resolved to oids, guarded (`start` ancestor of `end`, non-merge `end`),
-    /// and `UPSERTed` by phase. Resolves to the PRIMARY tree's registry even from a
-    /// linked/coordination worktree.
+    /// Record one phase's source delta into the slice's arm-neutral registry —
+    /// the escape hatch beside the automatic solo phase-binding. Two mutually
+    /// exclusive modes (exactly one required): the SAFE DEFAULT `--commit <S>`
+    /// records exactly `S`'s own patch `[S^, S]` (design SL-189) — trailed
+    /// knowledge, refresh-base merges, and foreign source are excluded because
+    /// they are not in `S`; or the raw `--start <a> --end <b>` range (correct a
+    /// recorded range, or bootstrap a pre-binding / multi-commit phase). Either
+    /// way the built row is guarded (`start` ancestor of `end`, non-merge `end`)
+    /// and `UPSERTed` by phase, resolving to the PRIMARY tree's registry even
+    /// from a linked/coordination worktree.
     RecordDelta {
         /// Slice id owning the phase, e.g. 147.
         #[arg(value_parser = parse_cli_id)]
@@ -325,13 +329,22 @@ pub(crate) enum SliceCommand {
         /// Canonical phase id, e.g. PHASE-01.
         phase: String,
 
-        /// Commit-ish for HEAD before the phase's code landed.
-        #[arg(long)]
-        start: String,
+        /// Safe default: the phase's single import commit `S`. Records exactly
+        /// its own patch `[S^, S]`; rejects a merge or root commit (no single
+        /// own patch). Mutually exclusive with `--start`/`--end`.
+        #[arg(long, group = RECORD_DELTA_MODE, required = true)]
+        commit: Option<String>,
 
-        /// Commit-ish for the phase's cumulative code tip (pre-knowledge-record).
-        #[arg(long)]
-        end: String,
+        /// Escape hatch (with `--end`): commit-ish for HEAD before the phase's
+        /// code landed. Prefer the safe `--commit` mode unless a phase spans
+        /// multiple commits.
+        #[arg(long, group = RECORD_DELTA_MODE, required = true, requires = "end")]
+        start: Option<String>,
+
+        /// Escape hatch (with `--start`): commit-ish for the phase's cumulative
+        /// code tip (pre-knowledge-record). Prefer the safe `--commit` mode.
+        #[arg(long, requires = "start", conflicts_with = "commit")]
+        end: Option<String>,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -423,10 +436,11 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
         SliceCommand::RecordDelta {
             id,
             phase,
+            commit,
             start,
             end,
             path,
-        } => run_record_delta(path, id, &phase, &start, &end),
+        } => run_record_delta(path, id, &phase, commit, start, end),
         SliceCommand::VerifyVt { id, path } => run_verify_vt(path, id),
     }
 }
@@ -435,6 +449,12 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
 
 /// Relative dir of the slice tree inside the project root.
 const SLICE_DIR: &str = ".doctrine/slice";
+
+/// clap `ArgGroup` id for `record-delta`'s two mutually exclusive recording modes
+/// — the safe `--commit <S>` vs the raw `--start/--end` range (STD-001, design
+/// SL-189 §5.2). Membership + `required = true` on each member make the group
+/// required with `multiple = false` (exactly one mode).
+const RECORD_DELTA_MODE: &str = "record-delta-mode";
 
 /// Shipped recipe master for discharging undischarged residual drift — the
 /// single source the close-gate refusal points at (STD-001; design §5.2 Fix 1).
@@ -2279,40 +2299,54 @@ fn run_conformance(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     }
 }
 
-/// `slice record-delta <id> <PHASE-NN> --start <ref> --end <ref>` (SL-147
-/// PHASE-04) — the MANUAL escape hatch beside the automatic solo phase-binding.
-/// Resolves `start`/`end` to full oids (against the resolved root's repo), builds
-/// the [`BoundaryRow`], and calls [`record_source_delta`] (F-6 guard +
-/// upsert) — which resolves the one shared registry file against the PRIMARY tree,
-/// so this works from a linked/coordination worktree as well as the main tree.
-/// Mutually exclusive with the solo binding by USE, not by mechanism: an operator
-/// runs this to correct a range or bootstrap a slice recorded before the binding
-/// existed.
+/// `slice record-delta <id> <PHASE-NN>` in one of two modes (SL-147 PHASE-04,
+/// SL-189) — the MANUAL escape hatch beside the automatic solo phase-binding.
+/// SAFE DEFAULT `--commit <S>`: derive `S`'s own patch `[S^, S]` via
+/// [`single_commit_boundary`] (rejects a merge/root `S`). RAW `--start <a> --end
+/// <b>`: resolve both to full oids and build the range row directly (the
+/// pre-SL-189 behaviour, unchanged — for a multi-commit / bootstrap phase). Both
+/// stamp `Provenance::Manual` (never reclassifies an existing landing path — the
+/// PHASE-01 sticky merge preserves any prior Solo/Funnel/Unknown) and call
+/// [`record_source_delta`] (F-6 guard + upsert), which resolves the one shared
+/// registry file against the PRIMARY tree, so this works from a
+/// linked/coordination worktree too. The clap arg-group enforces exactly one
+/// mode; the `match` below is defence in depth behind it.
 fn run_record_delta(
     path: Option<PathBuf>,
     id: u32,
     phase: &str,
-    start: &str,
-    end: &str,
+    commit: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let resolve = |refish: &str| -> anyhow::Result<String> {
-        crate::git::resolve_ref(&root, refish)?
-            .with_context(|| format!("record-delta: {refish} does not resolve to a commit"))
+    let row = match (commit, start, end) {
+        // Safe default: scope to the single import commit's own patch.
+        (Some(c), None, None) => crate::state::single_commit_boundary(
+            &root,
+            &c,
+            crate::boundary::Provenance::Manual,
+            phase,
+        )?,
+        // Raw escape hatch: an explicit start..end range (unchanged behaviour).
+        (None, Some(s), Some(e)) => {
+            let resolve = |refish: &str| -> anyhow::Result<String> {
+                crate::git::resolve_ref(&root, refish)?
+                    .with_context(|| format!("record-delta: {refish} does not resolve to a commit"))
+            };
+            crate::boundary::BoundaryRow {
+                phase: phase.to_string(),
+                code_start_oid: resolve(&s)?,
+                code_end_oid: resolve(&e)?,
+                provenance: crate::boundary::Provenance::Manual,
+            }
+        }
+        // Unreachable behind the clap arg-group — a defence-in-depth diagnostic.
+        _ => {
+            anyhow::bail!("record-delta: pass exactly one of --commit <S> or --start <a> --end <b>")
+        }
     };
-    crate::state::record_source_delta(
-        &root,
-        id,
-        crate::boundary::BoundaryRow {
-            phase: phase.to_string(),
-            code_start_oid: resolve(start)?,
-            code_end_oid: resolve(end)?,
-            // record-delta is the manual escape hatch (design §5.3). As an
-            // incoming `Manual` it never reclassifies an existing landing path —
-            // the PHASE-01 sticky merge preserves any prior Solo/Funnel/Unknown.
-            provenance: crate::boundary::Provenance::Manual,
-        },
-    )?;
+    crate::state::record_source_delta(&root, id, row)?;
     writeln!(
         io::stdout(),
         "{}: recorded source delta for {phase}",
@@ -6299,6 +6333,99 @@ mod tests {
         assert!(
             gaps.iter().any(|g| g.describe().contains("PHASE-02")),
             "names the uncovered phase: {gaps:?}"
+        );
+    }
+
+    // VT-2 (SL-189 behavioural, SL-186 regression): the single-commit boundary
+    // scopes conformance to `S`'s OWN patch. History: base `B` → refresh-base
+    // merge `M` bringing a foreign `src/foreign.rs` → code commit `S` (`S^ == M`)
+    // touching only the phase's own `src/feature.rs` → a trailing `.doctrine/`
+    // knowledge commit `K` after `S`. Recording `[S^, S]` via
+    // `single_commit_boundary` (the `--commit` path) makes conformance see ONLY
+    // `src/feature.rs`: `foreign.rs` (in `S^`) and `K`'s `.doctrine/` path (after
+    // `S`) are both excluded — the noise a raw `B..K` range would have swept in.
+    #[test]
+    fn single_commit_boundary_excludes_refresh_base_and_trailing_knowledge() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = fs::canonicalize(dir.path()).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        let b = git(&repo, &["rev-parse", "HEAD"]);
+
+        // refresh-base merge M: a side branch adds a FOREIGN src/foreign.rs,
+        // merged --no-ff into main — as a trunk refresh would carry it in.
+        git(&repo, &["checkout", "-q", "-b", "trunk-refresh", &b]);
+        commit_file(&repo, "src/foreign.rs", "// foreign\n");
+        git(&repo, &["checkout", "-q", "main"]);
+        git(
+            &repo,
+            &["merge", "-q", "--no-ff", "--no-edit", "trunk-refresh"],
+        );
+        let m = git(&repo, &["rev-parse", "HEAD"]);
+
+        // code commit S: S^ == M, touches ONLY the phase's own path.
+        let s = commit_file(&repo, "src/feature.rs", "fn f() {}\n");
+        assert_eq!(
+            git(&repo, &["rev-parse", "HEAD~1"]),
+            m,
+            "S^ == the refresh-base merge M"
+        );
+
+        // trailing knowledge commit K after S: a .doctrine/ path.
+        let k = commit_file(&repo, ".doctrine/memory/items/note.md", "trail\n");
+
+        // Fixture slice declares ONLY the phase's own path as a design target.
+        make_slice(&repo, "conf", "Conf", "2026-06-24");
+        run_selector_add(
+            Some(repo.clone()),
+            1,
+            SelectorIntent::DesignTarget,
+            &["src/feature.rs".to_string()],
+            None,
+        )
+        .unwrap();
+        write_phase_completed(&repo, 1, "phase-01");
+
+        // Record [S^, S] via the single-commit boundary (the --commit path).
+        let row = crate::state::single_commit_boundary(
+            &repo,
+            &s,
+            crate::boundary::Provenance::Manual,
+            "PHASE-01",
+        )
+        .unwrap();
+        assert_eq!(row.code_start_oid, m, "start pinned to S^ == M");
+        crate::state::record_source_delta(&repo, 1, row).unwrap();
+
+        let ConformanceOutcome::Computed(result) = conformance_outcome(&repo, 1).unwrap() else {
+            panic!("expected a computed outcome");
+        };
+        // Conformance sees ONLY S's own patch: src/feature.rs, matched.
+        assert_eq!(result.conformant.len(), 1, "{result:?}");
+        assert_eq!(result.conformant[0].path, "src/feature.rs");
+        // foreign.rs (in S^) and K's .doctrine path (after S) are BOTH excluded.
+        assert!(
+            result.undeclared.is_empty(),
+            "no refresh-base / trailing-knowledge noise: {:?}",
+            result.undeclared
+        );
+        assert!(
+            result.undelivered.is_empty(),
+            "own path delivered: {result:?}"
+        );
+
+        // Contrast — the regression this replaces: a raw B..K range sweeps ALL
+        // THREE (foreign source, the phase's own file, and trailing knowledge).
+        let range_diff =
+            crate::git::git_text(&repo, &["diff", "--name-status", &format!("{b}..{k}")]).unwrap();
+        assert!(
+            range_diff.contains("src/foreign.rs"),
+            "B..K would sweep foreign source: {range_diff}"
+        );
+        assert!(range_diff.contains("src/feature.rs"), "B..K: {range_diff}");
+        assert!(
+            range_diff.contains(".doctrine/memory/items/note.md"),
+            "B..K would sweep trailing knowledge: {range_diff}"
         );
     }
 }
