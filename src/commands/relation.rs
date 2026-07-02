@@ -96,7 +96,9 @@ pub(crate) fn run_link(
         let toml_path = crate::memory::resolve_memory_toml_path(&root, &mref)?;
         // Best-effort target validation: if target looks like an entity ref,
         // validate it resolves. Free-text and mem_* targets pass through.
-        if crate::integrity::parse_resolvable_ref(&root, target).is_ok() {
+        if crate::integrity::parse_canonical_ref(target).is_ok()
+            || target.parse::<u32>().is_ok()
+        {
             crate::integrity::ensure_ref_resolves(&root, target).with_context(|| {
                 format!("target `{target}` does not resolve to an existing entity")
             })?;
@@ -120,7 +122,6 @@ pub(crate) fn run_link(
     // Forward-edge validation (§5.5): free-text labels skip both gates; validated
     // labels must resolve AND be of a legal target kind.
     if !matches!(rule.target, crate::relation::TargetSpec::Unvalidated) {
-        crate::integrity::ensure_ref_resolves(&root, target)?;
         let (tkref, _tid) = crate::integrity::parse_resolvable_ref(&root, target)?;
         let (skref, _sid) = crate::integrity::parse_resolvable_ref(&root, source)?;
         crate::relation::check_target_kind(rule, skref.kind, tkref.kind.prefix)?;

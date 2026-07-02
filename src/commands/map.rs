@@ -32,7 +32,7 @@ fn validate_focus(s: &str) -> Result<String, String> {
     } else {
         s.parse::<u32>()
             .map(|_| s.to_owned())
-            .map_err(|_| format!("focus must be a numeric id or canonical entity id (e.g. 1 or SL-001), got '{s}'"))
+            .map_err(|_e| format!("focus must be a numeric id or canonical entity id (e.g. 1 or SL-001), got '{s}'"))
     }
 }
 

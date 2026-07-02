@@ -466,9 +466,18 @@ pub(crate) fn parse_resolvable_ref(
     root: &Path,
     reference: &str,
 ) -> anyhow::Result<(&'static KindRef, u32)> {
-    // Canonical form (has a hyphen) — delegate to the existing parser.
+    // Canonical form (has a hyphen) — parse, then verify the entity exists.
     if reference.contains('-') {
-        return parse_canonical_ref(reference);
+        let (kref, id) = parse_canonical_ref(reference)?;
+        let name = format!("{id:03}");
+        let dir = root.join(kref.kind.dir).join(&name);
+        anyhow::ensure!(
+            fsutil::is_real_dir(&dir),
+            "`{reference}` does not resolve to an entity (no {} at {})",
+            listing::canonical_id(kref.kind.prefix, id),
+            dir.display()
+        );
+        return Ok((kref, id));
     }
     // Bare number — scan all kinds for a matching entity directory.
     let id: u32 = reference.parse().with_context(|| {
