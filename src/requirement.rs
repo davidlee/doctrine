@@ -150,6 +150,23 @@ pub(crate) enum CoverageStatus {
     Blocked,
 }
 
+impl CoverageStatus {
+    /// The stable kebab-case render token — the SAME vocabulary
+    /// [`crate::coverage_store::parse_status`] accepts and the `#[serde(rename_all
+    /// = "kebab-case")]` name. The single source for user-facing CLI rendering
+    /// (the verify report + the forget withdrawal line), so render and `--status`
+    /// input stay symmetric (IMP-056; never the `{:?}` Debug spelling).
+    pub(crate) fn as_kebab(self) -> &'static str {
+        match self {
+            Self::Planned => "planned",
+            Self::InProgress => "in-progress",
+            Self::Verified => "verified",
+            Self::Failed => "failed",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
 /// The parse layer (entity-model tolerant-parse tier — §5.3). `title` keys the
 /// shared-`Meta` convention (inquisition C2 — NOT `name`); `slug` is derived from
 /// it. `description`/`tags`/`acceptance_criteria` default, so a minimal toml
