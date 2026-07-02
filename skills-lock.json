@@ -47,7 +47,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch/SKILL.md",
-      "computedHash": "0420cc4485a14532d23241c0c94e1919b8e62ff7f40f86b29733a3f35cd747f3"
+      "computedHash": "3d4491655a753a55ee4cae596fcb1a06a8f9829845642eb990d3c310d4162439"
     },
     "dispatch-agent": {
       "source": "davidlee/doctrine",
@@ -59,7 +59,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch-subprocess/SKILL.md",
-      "computedHash": "601f71283640c92f7a40826b5a1908b842faa4d6d9ce05a01a3f4715471c97ed"
+      "computedHash": "11e998dbf29b0bd3b046e3b95969891e4e84fb2ae75273534e292461b5fee818"
     },
     "dreaming": {
       "source": "davidlee/doctrine",
