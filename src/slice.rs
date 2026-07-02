@@ -799,6 +799,11 @@ pub(crate) fn run_status(
 
     // Read-only path (IMP-191): no STATE → print current status + rollup.
     let Some(state) = state else {
+        // --note is a write-only flag — error if passed without STATE
+        // so the user doesn't silently lose their intended transition.
+        if note.is_some() {
+            anyhow::bail!("--note requires a target STATE");
+        }
         let rollup = crate::state::phase_rollup(&root, id)?;
         let phase_line = phases_cell(rollup.as_ref());
         let decorated = decorated_status(&from, rollup.as_ref());
@@ -814,7 +819,10 @@ pub(crate) fn run_status(
             writeln!(io::stdout(), "  → {}", legal.join(", "))?;
         }
         if is_divergent(&from, rollup.as_ref()) {
-            writeln!(io::stdout(), "  ⚠ divergent: phases complete but lifecycle not terminal")?;
+            writeln!(
+                io::stdout(),
+                "  ⚠ divergent: phases complete but lifecycle not terminal"
+            )?;
         }
         return Ok(());
     };
@@ -1139,8 +1147,15 @@ fn decorated_status(status: &str, rollup: Option<&crate::state::PhaseRollup>) ->
 /// `Noop`, `FromTerminal`, and `SeamBreach`. Pure — no IO (IMP-191).
 fn legal_moves(current: &str) -> Vec<String> {
     let all = [
-        "proposed", "design", "plan", "ready", "started",
-        "audit", "reconcile", "done", "abandoned",
+        "proposed",
+        "design",
+        "plan",
+        "ready",
+        "started",
+        "audit",
+        "reconcile",
+        "done",
+        "abandoned",
     ];
     all.iter()
         .filter(|to| {
@@ -4566,6 +4581,136 @@ mod tests {
         }
     }
 
+    // --- IMP-191: read-only query form + legal_moves ---
+
+    /// VT-IMP191-1: `legal_moves` from each non-terminal status returns the
+    /// expected set of reachable targets. Excludes Noop, FromTerminal, SeamBreach.
+    #[test]
+    fn legal_moves_from_each_status() {
+        // From proposed: design, abandoned (abandon is always legal from non-terminal).
+        let moves = legal_moves("proposed");
+        assert!(moves.contains(&"design".to_string()));
+        assert!(moves.contains(&"abandoned".to_string()));
+        assert_eq!(moves.len(), 2, "proposed → [design, abandoned] only");
+
+        // From design: plan, abandoned, and back-edges to proposed.
+        let moves = legal_moves("design");
+        assert!(moves.contains(&"plan".to_string()));
+        assert!(moves.contains(&"abandoned".to_string()));
+        // proposed is not a named back-edge from design → it's a Skip.
+        assert!(moves.contains(&"proposed".to_string()));
+
+        // From started: audit, abandoned.
+        let moves = legal_moves("started");
+        assert!(moves.contains(&"audit".to_string()));
+        assert!(moves.contains(&"abandoned".to_string()));
+
+        // From audit: reconcile, abandoned, and back-edges started, design.
+        let moves = legal_moves("audit");
+        assert!(moves.contains(&"reconcile".to_string()));
+        assert!(moves.contains(&"abandoned".to_string()));
+        assert!(moves.contains(&"started".to_string()));
+        assert!(moves.contains(&"design".to_string()));
+
+        // From reconcile: done, abandoned, and back-edges audit, design.
+        let moves = legal_moves("reconcile");
+        assert!(moves.contains(&"done".to_string()));
+        assert!(moves.contains(&"abandoned".to_string()));
+        assert!(moves.contains(&"audit".to_string()));
+        assert!(moves.contains(&"design".to_string()));
+
+        // From done: terminal — FromTerminal is excluded, so no legal moves.
+        let moves = legal_moves("done");
+        assert!(
+            moves.is_empty(),
+            "done is terminal — no legal moves: {moves:?}"
+        );
+
+        // From abandoned: terminal.
+        let moves = legal_moves("abandoned");
+        assert!(moves.is_empty(), "abandoned is terminal");
+
+        // From a drifted (unknown) status: Skip routes everything but seam targets.
+        // classify returns Skip for (bogus, anything-not-seam), so legal_moves
+        // admits all non-seam targets.
+        let moves = legal_moves("bogus");
+        assert!(moves.contains(&"proposed".to_string()));
+        assert!(moves.contains(&"design".to_string()));
+        assert!(moves.contains(&"plan".to_string()));
+        assert!(moves.contains(&"ready".to_string()));
+        assert!(moves.contains(&"started".to_string()));
+        assert!(moves.contains(&"audit".to_string()));
+        assert!(moves.contains(&"abandoned".to_string()));
+        // reconcile and done are seam-breached from bogus → excluded.
+        assert!(!moves.contains(&"reconcile".to_string()));
+        assert!(!moves.contains(&"done".to_string()));
+    }
+
+    /// VT-IMP191-2: every `SliceStatus` variant is reachable via `legal_moves`
+    /// from at least one source status. If a new variant is added to the enum
+    /// but not to the `legal_moves` array, this test fails — a maintenance guard.
+    #[test]
+    fn legal_moves_covers_all_slice_status_variants() {
+        // Every SliceStatus variant's str form must appear in legal_moves output
+        // from at least one source. Build the union.
+        let sources = [
+            "proposed", "design", "plan", "ready", "started",
+            "audit", "reconcile",
+        ];
+        let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+        for src in sources {
+            for m in legal_moves(src) {
+                seen.insert(std::boxed::Box::leak(m.into_boxed_str()));
+            }
+        }
+        // Every SliceStatus variant must appear in the union of legal moves.
+        for variant in [
+            "proposed", "design", "plan", "ready", "started",
+            "audit", "reconcile", "done", "abandoned",
+        ] {
+            assert!(
+                seen.contains(variant),
+                "SliceStatus variant '{variant}' missing from legal_moves union — \
+                 update the `all` array in legal_moves()"
+            );
+        }
+    }
+
+    /// VT-IMP191-3: the read-only query form (`state = None`) succeeds for a
+    /// slice in a known status and does not error.
+    #[test]
+    fn run_status_read_only_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "started");
+        // Read-only: no STATE → prints, returns Ok.
+        run_status(Some(root.to_path_buf()), 1, None, None).unwrap();
+        // Status must be unchanged (this was read-only).
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "started");
+    }
+
+    /// VT-IMP191-4: passing `--note` without STATE is refused — the note is a
+    /// write-only flag and silently ignoring it would mask user error.
+    #[test]
+    fn run_status_note_without_state_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        let err = run_status(
+            Some(root.to_path_buf()),
+            1,
+            None,
+            Some("closing after audit"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("--note requires a target STATE"),
+            "must refuse --note without STATE: {err}"
+        );
+    }
+
     /// Raise one `blocker` finding on a fresh RV targeting `SL-<target_id>`. Returns
     /// the project root unchanged. Drives the real verb path (raise under the turn
     /// guard) so the ledger is authentic.
@@ -4607,9 +4752,14 @@ mod tests {
         set_status_raw(root, 1, "audit");
         raise_blocker_rv(root, 1);
 
-        let err = run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None)
-            .unwrap_err()
-            .to_string();
+        let err = run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Reconcile),
+            None,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("RV-001/F-1"), "names the blocker: {err}");
         assert!(err.contains("refused"), "refusal wording: {err}");
         // The transition was refused BEFORE the write — status unchanged.
@@ -4647,7 +4797,13 @@ mod tests {
         )
         .unwrap();
 
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Reconcile),
+            None,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
 
@@ -4667,7 +4823,13 @@ mod tests {
             crate::review::Role::Raiser,
         )
         .unwrap();
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Reconcile),
+            None,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
 
@@ -5604,8 +5766,13 @@ mod tests {
         make_slice(root, "s", "S", "2026-06-12");
         set_status_raw(root, 1, "audit");
 
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None)
-            .expect("audit → reconcile is not gated by the integration check");
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Reconcile),
+            None,
+        )
+        .expect("audit → reconcile is not gated by the integration check");
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
 
