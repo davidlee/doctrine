@@ -59,19 +59,35 @@ KEEP=$!
 # PI_FIFO are host-/tmp paths opened as fds by THIS shell before bwrap execs, so
 # the inner --tmpfs /tmp does not sever them. --die-with-parent lets the kill -9
 # below reap pi through bwrap.
-timeout "$BACKSTOP" \
-  bwrap \
-    --ro-bind / / \
-    --dev /dev --proc /proc --tmpfs /tmp \
-    --bind "$HOME/.pi" "$HOME/.pi" \
-    --bind "$D" "$D" \
-    --chdir "$D" \
-    --die-with-parent \
-    --setenv DOCTRINE_WORKER 1 \
-    pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
-    --no-extensions --no-skills --no-themes \
-    --offline --approve --tools read,bash,edit,write,grep,find,ls \
-    <"$PI_FIFO" >"$OUT" 2>&1 &
+case "$(uname)" in
+  Darwin)
+    # PHASE-04 (RISK-1-gated) replaces this stub with the real confinement-prefix
+    # reader. Until the mac probe clears, fail closed — never an unconfined pi.
+    echo "[spawn] macOS confinement pending RISK-1 (SL-185 PHASE-04) — aborting" >&2
+    exit 1
+    ;;
+  *)
+    # Linux inline bwrap array — tokens BYTE-UNCHANGED from the prior inline exec
+    # (EX-1). Same flags, same order. The Linux confinement-prefix reader path is
+    # proven in tests/e2e_worktree_jail_prefix.rs; this inline array is its twin.
+    PREFIX=( bwrap
+      --ro-bind / /
+      --dev /dev --proc /proc --tmpfs /tmp
+      --bind "$HOME/.pi" "$HOME/.pi"
+      --bind "$D" "$D"
+      --chdir "$D"
+      --die-with-parent
+      --setenv DOCTRINE_WORKER 1 )
+    ;;
+esac
+# Fail-closed guard: an empty confinement PREFIX must never fall through to an
+# unconfined pi exec (EX-2; defence-in-depth for the future PHASE-04 reader path).
+[ "${#PREFIX[@]}" -gt 0 ] || { echo "[spawn] empty confinement PREFIX — aborting" >&2; exit 1; }
+timeout "$BACKSTOP" "${PREFIX[@]}" \
+  pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
+  --no-extensions --no-skills --no-themes \
+  --offline --approve --tools read,bash,edit,write,grep,find,ls \
+  <"$PI_FIFO" >"$OUT" 2>&1 &
 PI=$!
 
 # Poll for the typed completion event; kill pi when the worker's turn ends.

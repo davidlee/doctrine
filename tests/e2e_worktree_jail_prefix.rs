@@ -245,3 +245,89 @@ fn bwrap_present_writes_out() {
     );
     assert!(out.exists(), "--out present ⇒ the command succeeded");
 }
+
+// ── PHASE-03 VT-1: the shell `mapfile` reader contract over a REAL --out file ─────
+//
+// `scripts/pi-spawn-confined.sh` is the SOURCE OF TRUTH for the confinement PREFIX
+// wiring (VA-1 guards the script's inline Linux array). This test re-encodes the
+// §1 reader contract — `mapfile -d '' PREFIX < "$OUT"` then a `${#PREFIX[@]} > 0`
+// fail-closed guard — and drives it against a genuine `jail-prefix --out` emission,
+// proving the OS-agnostic reader round-trips the NUL-delimited argv and that a
+// stale/empty/absent file aborts rather than spawning an unconfined pi.
+
+/// The script's reader-and-guard contract, verbatim in shell. `$OUT` is the argv
+/// file; a 0-length PREFIX ⇒ `exit 3` (abort), else the tokens are printed one
+/// per line. Kept byte-faithful to the script side (which the array + guard mirror).
+const READER_SNIPPET: &str = "mapfile -d '' PREFIX < \"$OUT\"; \
+[ \"${#PREFIX[@]}\" -gt 0 ] || { echo abort >&2; exit 3; }; \
+printf '%s\\n' \"${PREFIX[@]}\"";
+
+/// Run the reader snippet with `OUT` bound to `out_path` (may be non-existent).
+fn run_reader(out_path: &Path) -> Output {
+    Command::new("bash")
+        .arg("-c")
+        .arg(READER_SNIPPET)
+        .env("OUT", out_path)
+        .output()
+        .expect("spawn bash reader")
+}
+
+#[test]
+fn shell_mapfile_reader_round_trips_real_jail_prefix() {
+    if !bwrap_on_path() {
+        return; // present-path assertion; the absent/empty cases below are host-agnostic.
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let wt = tmp.path().join("wt");
+    std::fs::create_dir_all(&wt).unwrap();
+    let out = tmp.path().join("jail.argv");
+
+    // A real Linux jail-prefix emission — the reader is OS-agnostic, so the bwrap
+    // prefix fully exercises it (design §1).
+    let res = jail_prefix(&wt, &out, &[], false, None);
+    assert!(res.status.success(), "jail-prefix --out succeeds with bwrap present");
+    assert!(out.exists(), "--out file written");
+
+    let read = run_reader(&out);
+    assert!(
+        read.status.success(),
+        "non-empty PREFIX ⇒ reader guard passes (exit 0); stderr: {}",
+        String::from_utf8_lossy(&read.stderr)
+    );
+    let lines: Vec<&[u8]> = read.stdout.split(|b| *b == b'\n').collect();
+    // `printf '%s\n'` per token ⇒ a trailing empty split element; drop it.
+    let tokens: Vec<&[u8]> = lines.iter().copied().filter(|l| !l.is_empty()).collect();
+    assert!(!tokens.is_empty(), "PREFIX is non-empty (guard would else have aborted)");
+    // Same terminator notion the PHASE-02 tests assert on (FLAG_ARG_SEP).
+    assert_eq!(
+        *tokens.last().unwrap(),
+        ARG_SEP,
+        "reader's last PREFIX token is the `--` separator"
+    );
+}
+
+#[test]
+fn shell_mapfile_reader_aborts_on_absent_out() {
+    // Stale-file trap: an absent --out must abort (0-length PREFIX ⇒ exit 3), never
+    // look like an unconfined success.
+    let tmp = tempfile::tempdir().unwrap();
+    let ghost = tmp.path().join("does-not-exist.argv");
+    let read = run_reader(&ghost);
+    assert!(
+        !read.status.success(),
+        "absent --out ⇒ reader guard aborts (nonzero), no unconfined exec"
+    );
+}
+
+#[test]
+fn shell_mapfile_reader_aborts_on_empty_out() {
+    // An empty --out (truncated/partial write) ⇒ 0-length PREFIX ⇒ guard aborts.
+    let tmp = tempfile::tempdir().unwrap();
+    let empty = tmp.path().join("empty.argv");
+    std::fs::write(&empty, b"").unwrap();
+    let read = run_reader(&empty);
+    assert!(
+        !read.status.success(),
+        "empty --out ⇒ reader guard aborts (nonzero), no unconfined exec"
+    );
+}

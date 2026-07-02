@@ -1060,10 +1060,14 @@ mod tests {
             .iter()
             .position(|t| t == "bwrap")
             .expect("bwrap invocation token");
-        // Tokens strictly between `bwrap` and the wrapped program `pi`, quotes stripped.
+        // Tokens strictly between `bwrap` and the `)` closing the `PREFIX=( … )`
+        // array (SL-185 PHASE-03 hoisted the inline `bwrap … pi` flags into a bash
+        // array driven through a single `timeout "${PREFIX[@]}" pi …` exec site, so
+        // `pi` no longer trails the flags — the array-close `)` is the boundary),
+        // quotes stripped.
         let between: Vec<String> = toks[start + 1..]
             .iter()
-            .take_while(|t| t.as_str() != "pi")
+            .take_while(|t| t.as_str() != ")")
             .map(|t| t.trim_matches('"').to_string())
             .collect();
         // Remove pi-specific groups: `--bind <…/.pi> <…/.pi>` and `--setenv NAME VAL`.
