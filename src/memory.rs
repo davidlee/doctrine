@@ -2548,7 +2548,23 @@ pub(crate) fn append_memory_relation(
     let mut row = toml_edit::Table::new();
     row.insert("label", toml_edit::value(label));
     row.insert("target", toml_edit::value(target));
-    array.push(row);
+
+    // Collect all existing rows + the new one, stable-sort by label, then rebuild
+    // the array in canonical label order. Same pattern as append_relation_row
+    // (ISS-058): guarantees same-label contiguity, heals hand-authored disorder.
+    let mut rows: Vec<toml_edit::Table> = array.iter().cloned().collect();
+    rows.push(row);
+    rows.sort_by(|a, b| {
+        let la = a.get("label").and_then(|v| v.as_str()).unwrap_or("");
+        let lb = b.get("label").and_then(|v| v.as_str()).unwrap_or("");
+        la.cmp(lb)
+    });
+    for i in (0..array.len()).rev() {
+        array.remove(i);
+    }
+    for r in rows {
+        array.push(r);
+    }
 
     crate::fsutil::write_atomic(path, doc.to_string().as_bytes())?;
     Ok(AppendOutcome::Wrote)

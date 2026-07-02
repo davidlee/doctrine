@@ -1187,7 +1187,25 @@ fn append_relation_row(
         row.insert("degree", toml_edit::value(d.name()));
     }
     row.insert("target", toml_edit::value(target));
-    array.push(row);
+
+    // Collect all existing rows + the new one, stable-sort by label, then rebuild
+    // the array in canonical label order. This guarantees same-label contiguity
+    // (ISS-058): the new row lands at the end of its label group, stable sort
+    // preserves within-label relative order, and any pre-existing hand-authored
+    // disorder is healed transparently.
+    let mut rows: Vec<toml_edit::Table> = array.iter().cloned().collect();
+    rows.push(row);
+    rows.sort_by(|a, b| {
+        let la = a.get("label").and_then(|v| v.as_str()).unwrap_or("");
+        let lb = b.get("label").and_then(|v| v.as_str()).unwrap_or("");
+        la.cmp(lb)
+    });
+    for i in (0..array.len()).rev() {
+        array.remove(i);
+    }
+    for r in rows {
+        array.push(r);
+    }
 
     Ok((doc.to_string(), AppendOutcome::Wrote))
 }
@@ -2268,6 +2286,37 @@ mod tests {
         let doc = RelationDoc::parse(&next).unwrap();
         let (edges, _illegal) = read_block(&ISSUE_KIND, &doc);
         assert_eq!(edge_pairs(&edges), vec![(RelationLabel::Drift, "a\"b")]);
+    }
+
+    /// ISS-058: appending a row whose label already exists but is NOT the last label
+    /// must insert adjacent to the existing same-label run, not at the end of the
+    /// array. Without this, same-label contiguity breaks and `doctrine check quick`
+    /// rejects the file.
+    #[test]
+    fn append_relation_row_preserves_label_contiguity() {
+        let text = "id = 1\n";
+        // Build up: governed_by → related → another governed_by.
+        // After first two: [governed_by, related]
+        let (text, _) =
+            append_relation_row(text, RelationLabel::GovernedBy, None, None, "ADR-001").unwrap();
+        let (text, _) =
+            append_relation_row(&text, RelationLabel::Related, None, None, "SL-099").unwrap();
+        // Now append a second governed_by — should land adjacent to the first,
+        // NOT after related.
+        let (text, _) =
+            append_relation_row(&text, RelationLabel::GovernedBy, None, None, "ADR-002").unwrap();
+
+        let edges = tier1_edges(&SLICE_KIND, &text).unwrap();
+        let pairs = edge_pairs(&edges);
+        assert_eq!(
+            pairs,
+            vec![
+                (RelationLabel::GovernedBy, "ADR-001"),
+                (RelationLabel::GovernedBy, "ADR-002"),
+                (RelationLabel::Related, "SL-099"),
+            ],
+            "same-label rows must be contiguous (ISS-058)"
+        );
     }
 
     /// `remove_relation_row` deletes a matching row (edit-preserving) and is idempotent
