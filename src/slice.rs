@@ -71,6 +71,7 @@ pub(crate) enum SelectorCommand {
     /// Add or update one or more selectors (batch, one shared intent).
     Add {
         /// Slice id, e.g. 147.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// One intent for all selectors in this batch.
@@ -92,6 +93,7 @@ pub(crate) enum SelectorCommand {
     /// Upsert the `note` field on one selector.
     Note {
         /// Slice id.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// The exact selector string to annotate.
@@ -108,6 +110,7 @@ pub(crate) enum SelectorCommand {
     /// List the selectors for a slice.
     List {
         /// Slice id.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Explicit project root (default: auto-detect).
@@ -118,6 +121,7 @@ pub(crate) enum SelectorCommand {
     /// Remove one or more selectors by exact string match.
     Rm {
         /// Slice id.
+        #[arg(value_parser = parse_cli_id)]
         id: u32,
 
         /// Selector strings to remove.
@@ -1657,7 +1661,7 @@ pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
 
 /// Clap `value_parser` wrapper for [`parse_ref`] — accepts both `SL-NNN` and bare
 /// numbers, with a clap-compatible `Result<u32, String>` signature.
-fn parse_cli_id(s: &str) -> Result<u32, String> {
+pub(crate) fn parse_cli_id(s: &str) -> Result<u32, String> {
     parse_ref(s).map_err(|e| {
         // Strip the anyhow wrapper noise for a clean clap error.
         format!("{e:#}")
