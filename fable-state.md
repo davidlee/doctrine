@@ -44,13 +44,18 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Continue the vetted fix QUEUE. Take IMP-183 next. Re-verify defect
-(estimate/value facets writable to any kind but only slice show renders them;
-backlog show renders none → write-only metadata that still feeds base_score).
-Fix: add estimate/value rows to backlog show render, reusing
-estimate::display::format_estimate_confidence + value::format_value_normal
-(mirror src/slice.rs:1945/1958). Keep to src/backlog.rs (≤2 files); knowledge
-inspect = follow-up. TDD: backlog show render test asserting the rows appear.
+NEXT-ACTION: Process scout #2's fresh queue (agent aeb7fec9f60709131, launched
+~05:00) — new isolated, still-real, TDD-able backlog fixes in lower-collision
+areas (cli/render/parser/entity/error-paths). Re-verify each, TDD, commit clean.
+If scout #2 returns thin, fall back to IMP-019 (cordage golden_net independent
+value oracle — test hardening; study the level recurrence first to write a
+CORRECT oracle) or record durable session-gotcha memories.
+
+IMP-183 DEFERRED: rendering estimate/value in backlog show needs config units
+threaded through format_metadata/format_show/format_inspect (+ tests + JSON
+parity + goldens) — signature churn across the whole backlog render surface,
+borderline slice-worthy. Not a single clean autonomous increment. Left for a
+proper slice.
 
 FIX QUEUE (re-verify each before building — OBE risk real):
   - [DONE 1dacc7a8] ISS-003 cordage explain() foreign-node empty cone.

@@ -132,3 +132,19 @@ DECISIONS-LOG:
   - D4 [IMP-211 default marker]: {1.0* asterisk} vs {(1.0) parens} vs {dim colour}.
     Chose `*` suffix — compact, minimal column-width impact, and the cell fn returns
     a String (colour is applied downstream by listing, harder to thread). Reversible.
+
+## 05:00 — turn 8: deferred IMP-183, shipped RFC-011 taxonomy capstone, launched scout #2
+observed: IMP-183 (estimate/value on backlog show) needs config units threaded
+  through format_metadata/format_show/format_inspect + JSON parity + goldens —
+  signature churn across the backlog render surface, borderline slice-worthy. NOT
+  a clean single increment → deferred (recorded why). Pivoted to the RFC-011
+  capstone: authored .doctrine/rfc/011/friction-taxonomy.md — 6 root-cause classes,
+  a remediation ledger mapping all 8 session fixes to commits, and the by-design/
+  OBE/deferred dispositions. Additive file, doesn't touch case-notes.md. Commit
+  5b0834c9. Launched scout #2 (aeb7fec9) for fresh isolated fixes in cli/render/
+  parser/entity areas the first scout didn't cover.
+next: process scout #2 queue; else IMP-019 (cordage value oracle) or record memories.
+
+  Eight frictions named,
+  sorted into six clear bins—
+  the raw notes cohere.
