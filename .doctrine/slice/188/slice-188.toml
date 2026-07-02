@@ -1,0 +1,61 @@
+id = 188
+slug = "cli-id-form-normalisation"
+title = "CLI id-form normalisation: accept both prefixed and bare canonical ids uniformly"
+status = "proposed"
+created = "2026-07-02"
+updated = "2026-07-02"
+tags = ["cli", "tech-debt", "ux"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/governance.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/integrity.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/review.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/relation.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/facets.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/explore.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "related"
+target = "IMP-227"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-011"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
