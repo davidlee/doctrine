@@ -409,6 +409,8 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         // concerns — work → any numbered entity (aboutness/relevance). One wide
         // source-set row pinned from the live census: SL + RFC + the backlog kinds
         // + RECORD (ASM/DEC/QUE/CON — D6). Target AnyNumbered.
+        //
+        // The record-kind tail (ASM..HYP) must stay in sync with kinds::RECORD.
         sources: &[
             SL, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON, EVD, HYP,
         ],
@@ -530,6 +532,8 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         // SL-145: BACKLOG (ISS/IMP/CHR/RSK/IDE) widened in so a backlog item may be
         // governed by an ADR/POL/STD. Target gate (Kinds(GOV)) unchanged. SL-159
         // PHASE-02: EVD/HYP added so evidence/hypothesis records may be governed.
+        //
+        // The record-kind entries (ASM..HYP) must stay in sync with kinds::RECORD.
         sources: &[
             SL, PRD, SPEC, CM, ASM, DEC, QUE, CON, EVD, HYP, ISS, IMP, CHR, RSK, IDE,
         ],
@@ -1647,6 +1651,7 @@ mod tests {
             // its three rows' source-sets is the pinned census set.
             (
                 RelationLabel::References,
+                // record-kind tail must stay in sync with kinds::RECORD
                 &[
                     "SL", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE", "CON",
                     "EVD", "HYP",
@@ -1654,6 +1659,7 @@ mod tests {
             ),
             (
                 RelationLabel::Supersedes,
+                // record-kind tail must stay in sync with kinds::RECORD
                 &[
                     "SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON", "EVD", "HYP",
                 ],
@@ -2036,7 +2042,9 @@ mod tests {
         if let TargetSpec::Kinds(ks) = r.target {
             let mut got: Vec<&str> = ks.iter().copied().collect();
             got.sort_unstable();
-            assert_eq!(got, ["ASM", "CON", "DEC", "EVD", "HYP", "QUE"]);
+            let mut want: Vec<&str> = RECORD.to_vec();
+            want.sort_unstable();
+            assert_eq!(got, want, "Supersedes target must equal RECORD");
         } else {
             panic!("record supersedes → Kinds(RECORD)");
         }

@@ -9,14 +9,10 @@ use std::collections::BTreeSet;
 use anyhow::Context;
 
 // ---------------------------------------------------------------------------
-// TAGGABLE — entity kinds that accept tags
+// TAGGABLE — entity kinds that accept tags (SL-136)
 // ---------------------------------------------------------------------------
 
-/// Entity kind prefixes that accept tags (SL-136).
-pub(crate) const TAGGABLE: &[&str] = &[
-    "SL", "ADR", "POL", "STD", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "CM", "DEC", "QUE",
-    "CON", "EVD", "HYP", "PRD", "SPEC", "REQ", "REC", "REV", "RV",
-];
+pub(crate) use crate::kinds::TAGGABLE;
 
 // ---------------------------------------------------------------------------
 // fold_filter_tag — lenient filter-fold (distinct from write normalize_tag)
@@ -252,8 +248,6 @@ mod tests {
         assert!(!changed, "remove from empty is no-op");
     }
 
-    use crate::kinds;
-
     // ── fold_filter_tag ─────────────────────────────────────────────
 
     #[test]
@@ -263,12 +257,15 @@ mod tests {
         assert_eq!(fold_filter_tag("a b"), "a b");
     }
 
-    /// SL-161 PHASE-01: every record kind (ASM, DEC, QUE, CON) must be
-    /// in TAGGABLE so tagging works on knowledge records.
+    /// IMP-184: every record kind must be in TAGGABLE so tagging works on
+    /// knowledge records.
     #[test]
     fn record_kinds_are_taggable() {
-        for prefix in kinds::RECORD {
-            assert!(TAGGABLE.contains(prefix), "{prefix} missing from TAGGABLE");
+        for &prefix in crate::kinds::RECORD {
+            assert!(
+                crate::kinds::TAGGABLE.contains(&prefix),
+                "{prefix} missing from TAGGABLE"
+            );
         }
     }
 }
