@@ -37,11 +37,21 @@ direct-land:
 3. Apply those files to main, finish any deferred reconcile code-edits, `just
    check`, commit `close(SL-<N>)`, then `slice status <N> done`.
 
-**Why `done` still passes.** The SL-126 close-integration gate refuses
-`reconcile → done` only when a dispatched slice's journal has an *integration-
-pending trunk row*. A bundle that was never journal-integrated (no trunk row)
-hits the `dispatch_ref_present_no_journal_succeeds` case and waves through — so
-direct-landing does not trip the gate.
+**Does `done` pass? Depends on the journal — CORRECTED at SL-190.** The SL-126
+close-integration gate (`ledger.rs::trunk_integration`) distinguishes two cases,
+not one: a journal that is **absent / zero rows** → `NotDispatched` (waves
+through — the SL-104 case); a journal that **has rows but none target trunk** →
+`Blocked("no trunk row")` (refuses). A funnel-driven dispatched slice journals
+`review/<N>` + `phase/<N>-NN` rows, so it hits the *second* arm and `done`
+**refuses** after a direct-land — even though main genuinely holds the reviewed
+code. SL-104 waved through only because its bundle was never journal-integrated;
+do not generalise that to a phase-journaled slice. SL-190 had to additionally
+**hand-write a verified trunk row** onto `dispatch/<N>`'s `journal.toml`
+(`target_ref = trunk`, `planned_new_oid` = the landed merge tip, an ancestor of
+trunk) before `done` passed. Neither integrate path can write that row for a
+split-lineage slice (candidate path needs the IMP-127-blocked admit; legacy
+`plan_trunk_row` needs a ff the split lineage forbids). Tracked as **IMP-236**
+(give IMP-127's fix a sanctioned record-completed-integration path).
 
 **Cost.** Skips the admitted-OID CAS provenance the close skill prescribes for
 dispatched slices; the conflicted candidate row lingers as gitignored runtime
