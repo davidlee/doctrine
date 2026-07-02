@@ -863,3 +863,43 @@ refresh-base was mandatory and clean, but the baseline capture then surfaced 4
 flaky verify-vt e2e tests (pass under `just check`, fail under regression harness)
 — distinguishing "flaky pre-existing" from "real regression" cost a diff + a
 just-check cross-check the funnel doesn't automate.
+
+[phase-plan+dispatch; SL-186-P04-resume]
+Layering-gate chicken-egg cost real planning tokens. P04 needs install.rs to call
+the prompt-cascade corpus loader. First-cut design: extract loader to a new engine
+module (hymns_corpus) both command modules depend on downward — textbook ADR-001.
+But the architecture_layering gate (tests/architecture_layering.rs) fails BOTH ways:
+`Unclassified(module)` if a src module lacks a [tiers] row in
+.doctrine/adr/001/layering.toml, AND `StaleEntry(row)` if a row names a module that
+doesn't exist. That authored TOML is orchestrator-owned (worker R-5 barred), so a new
+module forces the tier row and the module to co-land in the SAME funnel commit, and
+the worker can never green `just check` in its own tree (module exists, row absent →
+Unclassified). Had to reverse into "relocate loader INTO install.rs" — works only
+because prompt→install already exists (embedded_hymns), so zero new module edges, no
+new module, no TOML row. Correct answer, but only reachable by reading the gate's
+violation enum. A one-line "new module ⇒ orchestrator must pre-seat the tier row, or
+prefer an existing classified home" hint in the dispatch/phase-plan guidance would
+have saved the detour.
+
+[dispatch; SL-186-P04-resume-2]
+Arm reliability + scope-creep tax. Pi/deepseek-v4-pro worker timed out ("Request
+timed out", auto-retry disabled) TWICE mid-phase — first pass got T1(const)+T2(loader
+relocation), second continuation got T6(marker check) then died again; both left the
+test build broken and the seam unwritten. Root cause was model API flakiness, not the
+prompt. Switched the remainder to the codex arm (GPT-5.5) on the SAME worktree (reused,
+no re-fork) — it finished the seam green in one pass. Lesson: a subprocess-arm worker
+that dies on an API timeout leaves partial working-tree state that a SECOND worker can
+resume in-place; the confined spawn just needs a variant that skips the fork+rm and
+reuses $D with a fresh session-dir. Worth a first-class `dispatch resume` affordance.
+Also: codex over-delivered — it refactored the shared test helper doctrine_bin() into a
+runtime-generated env-scrubbing bash wrapper and re-pointed 11 unrelated worker-guard/
+worktree tests to a new doctrine_bin_raw(), to make `DOCTRINE_WORKER=1 just check` pass
+IN THE WORKTREE (the fork's on-disk worker marker makes authored-write e2e tests refuse).
+That is a real in-worktree self-verify problem, but the fix is whole-suite scope creep on
+a seam phase and risks duplicating SL-162/CHR-014 worker-env handling. Orchestrator
+trimmed all 13 files back to HEAD (git show, not checkout) because the new e2e test is
+self-contained (its own current_dir+env_remove) and the FUNNEL verifies in the coord tree
+(unstamped), where the suite is already green. Net: worker self-verify in a stamped
+worktree is a persistent dispatch friction that tempts workers into harness rewrites —
+worth solving centrally (e.g. the funnel owns verification; tell workers to verify only
+their own new tests + build, not the whole marker-sensitive suite).
