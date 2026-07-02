@@ -23,8 +23,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use cordage::{
     Arity, Channel, ChannelSpec, ChannelValue, Combinator, CyclePolicy, Direction, EdgeAttrs,
-    Explanation, Graph, GraphBuilder, NodeId, OrderKey, OrderLayer, OrderSpec, OverlayConfig,
-    Provenance,
+    Explanation, Graph, GraphBuilder, Level, NodeId, OrderKey, OrderLayer, OrderSpec,
+    OverlayConfig, Provenance,
 };
 
 // ── shared fixture vocabulary ─────────────────────────────────────────────────
@@ -478,4 +478,68 @@ fn ordered_degrades_rather_than_lying_on_a_reject_cycle() {
         pos[&nodes[0]] < pos[&nodes[2]],
         "surviving edge 0→2 violated under degradation (false topo)",
     );
+}
+
+// ── VT-3 value oracle (IMP-019): independent longest-path level check ──────────
+//
+// The permutation/build-twice harnesses above prove `order_key` is DETERMINISTIC
+// and permutation-invariant, and the SCC/topo oracle proves the *structure*. But
+// neither pins the level VALUES — a deterministic-but-wrong recurrence would pass.
+// This oracle closes that gap: it recomputes each node's level independently from
+// the edge data (longest path to a root on the single `Along` view) and asserts
+// the engine agrees, under every edge-insertion permutation.
+
+/// Independent longest-path-to-root oracle for a single `Along` overlay: on a
+/// clean (acyclic) view a node's level is the longest directed path reaching it
+/// (`a → c` ⇒ `level[c] = level[a] + 1`; a root is 0). Computed by relaxing
+/// `level[dst] = max(level[dst], level[src] + 1)` to a fixpoint — derived from the
+/// edge list ALONE, never from the engine, so it is a true value oracle.
+fn expected_levels(node_count: usize, edges: &[EdgeSpec]) -> Vec<u32> {
+    let mut level = vec![0u32; node_count];
+    // A DAG's longest paths settle within `node_count` full relaxation sweeps.
+    for _ in 0..node_count {
+        for spec in edges {
+            let cand = level.get(spec.src).expect("src ordinal in range") + 1;
+            let dst = level.get_mut(spec.dst).expect("dst ordinal in range");
+            if *dst < cand {
+                *dst = cand;
+            }
+        }
+    }
+    level
+}
+
+#[test]
+fn order_key_levels_match_independent_longest_path_oracle() {
+    // A diamond whose two arms differ in length, so LONGEST-path (3) and
+    // shortest-path (2) to the sink disagree — the sink's level is only correct if
+    // the engine takes the longest arm. Levels by construction: 0,1,2,1,3.
+    let edges = [
+        e(0, 1, 0, 0), // 0 → 1
+        e(1, 2, 0, 0), // 1 → 2  (long arm 0→1→2→4)
+        e(2, 4, 0, 0), // 2 → 4
+        e(0, 3, 0, 0), // 0 → 3  (short arm 0→3→4)
+        e(3, 4, 0, 0), // 3 → 4
+    ];
+    let node_count = 5;
+    let expected = expected_levels(node_count, &edges);
+    assert_eq!(
+        expected,
+        vec![0, 1, 2, 1, 3],
+        "oracle self-check (longest path)"
+    );
+
+    // The engine must agree with the oracle under EVERY edge-insertion order —
+    // value-correctness AND permutation-invariance of the values in one assertion.
+    for order in permutations(edges.len()) {
+        let (g, nodes) = build_in_order(node_count, reject(), &edges, &order);
+        for (i, node) in nodes.iter().enumerate() {
+            let want = *expected.get(i).expect("node ordinal in range");
+            assert_eq!(
+                g.explain(*node).order_key().level(),
+                Level::Finite(want),
+                "node {i} level under order {order:?}"
+            );
+        }
+    }
 }
