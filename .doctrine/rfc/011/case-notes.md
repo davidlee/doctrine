@@ -67,3 +67,18 @@ show, review show) because the summary lagged the on-disk reality. Also found
 bump, and two slug symlinks (REV-018, RV-232) the `*/new` verbs create but the
 author's path-scoped `git add` of the numeric dir missed. Cost: summary-vs-disk
 drift forces defensive re-verification on every post-compaction resume.
+
+[reconcile; SL-180-recon-c8e8]
+Two frictions, both cost a re-derivation step:
+1. Brief-surface mismatch. Audit's reconciliation brief listed a `plan.toml EX-4`
+   edit, but the /reconcile skill names ONLY design.md + slice-NNN.md as per-slice
+   direct-edit surfaces (plan criteria are EX-/VT- immutable-append). Had to stop
+   and surface the tension to the user rather than blindly execute the brief. A
+   brief item can name a surface the writer skill won't touch — the two skills
+   don't cross-check. Cost: one AskUserQuestion round.
+2. Prose vs registry duality. Brief item "clear the spurious undelivered" reads as
+   a design.md §6 prose edit, but `slice conformance` reads the SELECTOR REGISTRY
+   (slice-180.toml via `slice selector`), not §6 prose. The load-bearing fix was
+   `slice selector rm`; the §6 edit is only the human mirror. Easy to edit the
+   prose and leave conformance still red. The brief should name the registry verb,
+   not just the prose line.
