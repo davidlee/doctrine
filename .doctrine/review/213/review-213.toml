@@ -12,5 +12,26 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-186"
 
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "design.md places the impure corpus loader in src/commands/prompt.rs; P04 D-B relocated it to src/install.rs"
+detail = 'Expected: design.md §5.2 (l.206 "Loader (impure shell, command edge)") and §5.3 Ownership (l.423-424) declare the impure corpus loader (embedded⊕disk walk, sidecar overlay, seal-twin drop) to live in src/commands/prompt.rs. Observed: PHASE-04 decision D-B relocated the loader (load_full_corpus + load_embedded_corpus/load_disk_corpus/path_to_slot/default_selector/overlay_selector/collect_snippet_paths/parse_role/arm/slot_ref/project_starters) into src/install.rs to avoid an install→commands layering back-edge (the def-expansion seam calls the loader from install.rs). Layering gate (tests/architecture_layering.rs) green confirms no ADR-001 cycle. Canon (design.md) now misstates a core module boundary. Evidence: candidate/186/review-001 — loader + its unit tests resolve in src/install.rs (sidecar 16 hits, manifest 108); prompt.rs verbs re-point to crate::install::load_full_corpus.'
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "design.md §D7 attributes the canonical-def refresh path to src/skills.rs, which does not exist"
+detail = "Expected: design.md l.342 and l.433 attribute the canonical-def refresh path (install_agents_for) to a module src/skills.rs. Observed: src/skills.rs does not exist; install_agents_for, install_agent_def, and the P04 marker expander expand_worker_marker all live in src/install.rs. The D7 def↔hymn wiring (WORKER_RESOLVE_MARKER expansion, role-band-only resolve at install time) was implemented in install.rs::install_agent_def step 1. Canon references a phantom module. Evidence: grep -rln 'fn install_agent_def|fn expand_worker_marker' src/ → src/install.rs only; ls src/skills.rs → No such file."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "minor"
+title = "SL-186 conformance registry includes authored/knowledge/trunk-merge files absent from the delivered candidate"
+detail = "Expected: slice conformance 'undeclared' reflects code scope-creep — paths edited but outside design-target selectors. Observed: undeclared (17) mixes real SL-186 code with attribution noise — .doctrine/adr/001/layering.toml (M), backlog/improvement/227 + its md/toml, mem.fact.doctrine.cli-id-form-split + mem_019f20c6 md/toml, rfc/011/case-notes.md, slice/186/slice-186.toml, AGENTS.md — NONE of which appear in the delivered candidate (git diff main..candidate/186/review-001 = 19 SL-186 files, zero foreign leakage, no layering.toml change). Cause: pi/subprocess-arm record-delta B→B+1 ranges swept orchestrator-trailed knowledge commits (memories/backlog) plus the refresh-base trunk merge into the source-delta attribution. The delivered artifact is clean; the registry over-attributes."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
