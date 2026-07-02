@@ -62,12 +62,17 @@ audit time (`slice conformance`). This slice wires it into two new surfaces.
 
 - **False positives at import time.** An author may genuinely need to touch a
   file not in the selectors (compile fallout). Mitigation: IMP-204's design-time
-  dry-run closes the gap *before* import; and the import refusal should be
-  overridable (e.g. `--allow-undeclared` flag) for emergency unblocking.
-- **Selector read in the import path.** `run_import` currently takes only
-  `--base` and `--fork`; adding slice-id resolution to it couples the import
-  verb to the slice registry. Low risk — the coordination context already knows
-  its slice.
+  dry-run closes the gap *before* import; and on refusal, the sanctioned path is
+  **declare-then-retry** — `slice selector add <id> <path> --intent design-target
+  --note "<why>"`, then re-import. No `--allow-undeclared` bypass (design §7):
+  the selector upsert is the durable, reviewed ledger entry; a silent flag would
+  leave no trace.
+- **Selector read in the import path (layering).** `run_import` takes only
+  `--base`/`--fork`/`--from-worktree`; the slice→selector read must NOT land in
+  `worktree::import` (engine — reading `slice` is an upward engine→command edge,
+  ADR-001 violation). Resolution (design §2): the read lives in the command shell
+  `worktree::mod::run`; the pure `classify_import` takes `selectors: &[String]`
+  as data.
 
 ## Verification / Closure Intent
 
