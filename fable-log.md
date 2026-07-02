@@ -165,3 +165,20 @@ next: ISS-059 (contentset dir-selector hash abort) — verify + reuse existing
   Raw "SL-1" made whole—
   the write and the echo now
   speak one padded name.
+
+## 05:20 — turn 10: deferred ISS-059 (design), shipped IMP-139 (estimate-set errors)
+observed: ISS-059 (contentset dir-selector hash abort) is real but the fix is an
+  unmade drift-semantics DECISION — no existing dir-content-hash pattern to reuse
+  (grepped), and defining it (expand-to-files vs hash-dir-contents) belongs in a
+  slice, not autonomous invention. Deferred with both candidate approaches recorded
+  (recommend: expand dir/symlink→dir to tracked files in resolve_selectors_to_fileset).
+  Pivoted to IMP-139 (safe): estimate-set collapsed only-lower/only-upper/neither
+  into one generic error; split into specific messages naming the missing bound.
+  TDD (updated 2 tests + added lone-upper); facet 29 green, clippy+fmt clean.
+  Commit 44907fbc. 10th fix.
+next: IMP-019 (cordage independent value oracle) — study level recurrence first;
+  else record durable memories / wind down.
+
+  "Both bounds" was vague—
+  now the error names the gap:
+  lower without up.

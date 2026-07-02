@@ -44,24 +44,34 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Continue scout #2 queue. Take ISS-059 (highest-value real defect):
-contentset `compute()` (src/contentset.rs:129-141) does fs::read on each selector
-member, only swallowing NotFound — a DIRECTORY/symlink-to-dir member (e.g. a
-memory-master dir) returns IsADirectory(os 21) → `review prime` fails
-(review.rs:~2571). FIRST verify still real + STUDY how conformance/record-delta
-already hash the master-selector DIR (reuse that pattern, don't invent — no
-parallel impl; the "recurse vs resolve" choice must mirror existing code, not be
-a new decision). TDD: contentset.rs inline tests (near
-compute_propagates_non_notfound_io_error:235) — dir selector → hash, not error.
-contentset.rs is a hashing LEAF (not the RV engine), so review-zone caution is
-soft here. If the dir-hash semantics turn out to be a genuine unmade design
-choice, STOP and pick IMP-139 (estimate set error-message split, safe S) instead.
+NEXT-ACTION: IMP-019 (cordage golden_net independent value oracle) — test
+hardening that strengthens what the taxonomy flagged (goldens can encode bugs).
+FIRST study cordage's level recurrence (order_key level semantics) to write a
+CORRECT independent oracle (e.g. inductive longest-path-to-root) — do NOT ship a
+trivially-passing or wrong oracle. Self-contained in crates/cordage/tests/
+golden_net.rs, no production change. If the level semantics prove too subtle to
+independently reproduce with confidence, STOP — record the analysis and instead
+record 1-2 durable session-gotcha memories (bin-crate test invocation;
+worktree/.worktreeinclude/dist provisioning; assert_refusal .contains preserves
+VT goldens) or wind down cleanly.
 
-SCOUT #2 QUEUE (re-verify each): ISS-059 (NEXT, high, real functional fail,
-review-adjacent-but-leaf), IMP-139 (S, error-msg split, low value, safe),
-IMP-135 (help-text doc, low value), IMP-137 (needs --remove — adds a flag =
-capability-ish, prefer to skip for autonomous work). IMP-140 DONE below.
-Also still available: IMP-019 (cordage value oracle, test hardening).
+ISS-059 DEFERRED (design choice, not autonomous): contentset::compute (src/
+contentset.rs:129) fs::read aborts IsADirectory on a directory/symlink-to-dir
+selector (e.g. a memory-master dir) → `review prime` fails. Root: resolve_
+selectors_to_fileset (review.rs:2592) passes a LITERAL selector through
+unexpanded, so a symlink→dir reaches compute. NO existing dir-content-hash
+pattern to reuse (grep found none). Two candidate fixes, each a real drift-
+semantics DECISION (belongs in a slice, not autonomous invention):
+  (a) expand a dir/symlink→dir selector to its tracked files in resolve_selectors_
+      _to_fileset (canonicalize symlink → git ls-files the real dir → per-file
+      entries; drift stays per-file, consistent with globs). Touches review-zone
+      selector expansion.
+  (b) hash the directory's contents in compute (walk+combine) — defines new
+      per-dir drift semantics (walk order, symlink depth, removals).
+Recommend (a). Left for a design decision / slice.
+
+SCOUT #2 QUEUE remainder: IMP-135 (help-text, low), IMP-137 (needs --remove =
+capability, skip for autonomous). IMP-139 + IMP-140 DONE.
 
 IMP-183 DEFERRED: rendering estimate/value in backlog show needs config units
 threaded through format_metadata/format_show/format_inspect (+ tests + JSON
