@@ -4128,7 +4128,13 @@ branch refs/heads/orphan
         let repo = ScratchRepo::new();
         repo.commit("a.txt", "hello", "init");
         let linked = repo._dir.path().join("linked");
-        repo.git(&["worktree", "add", "-b", "feature", &linked.to_string_lossy()]);
+        repo.git(&[
+            "worktree",
+            "add",
+            "-b",
+            "feature",
+            &linked.to_string_lossy(),
+        ]);
 
         let records = list_worktrees(repo.path()).expect("worktree list must succeed");
         assert!(
@@ -4137,11 +4143,10 @@ branch refs/heads/orphan
         );
         // The FIRST record is the primary (git ordering).
         assert!(
-            records[0].path.ends_with(
-                repo.path()
-                    .file_name()
-                    .expect("repo dir has a name")
-            ) || records[0].branch.is_some(),
+            records[0]
+                .path
+                .ends_with(repo.path().file_name().expect("repo dir has a name"))
+                || records[0].branch.is_some(),
             "the first record is the primary worktree, got {:?}",
             records[0]
         );

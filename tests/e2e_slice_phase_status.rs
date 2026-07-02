@@ -89,10 +89,7 @@ fn across_trees_renders_the_divergence_table_and_assert_fires_on_conflict() {
 
     // PHASE-01 landed via a durable phase ref, but a live coord tree still has it
     // `in_progress` → CONFLICT (rework). PHASE-02 is in_progress in coord only.
-    git(
-        &primary,
-        &["branch", "phase/190-01", "refs/heads/main"],
-    );
+    git(&primary, &["branch", "phase/190-01", "refs/heads/main"]);
 
     // A live coordination worktree checked out on dispatch/190 with divergent sheets.
     git(&primary, &["branch", "dispatch/190", "refs/heads/main"]);

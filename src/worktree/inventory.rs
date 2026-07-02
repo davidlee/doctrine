@@ -145,8 +145,8 @@ pub(crate) fn run_list(
     no_landed: bool,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
-    let root =
-        std::fs::canonicalize(&root).with_context(|| format!("canonicalize root {}", root.display()))?;
+    let root = std::fs::canonicalize(&root)
+        .with_context(|| format!("canonicalize root {}", root.display()))?;
 
     let records = git::list_worktrees(&root).context("enumerate worktrees")?;
     let rows: Vec<InventoryRow> = records
@@ -164,7 +164,12 @@ pub(crate) fn run_list(
 }
 
 /// Gather a record's derived facts (impure: disk marker read + the landed oracle).
-fn resolve_row(root: &Path, rec: &WorktreeRecord, is_primary: bool, no_landed: bool) -> InventoryRow {
+fn resolve_row(
+    root: &Path,
+    rec: &WorktreeRecord,
+    is_primary: bool,
+    no_landed: bool,
+) -> InventoryRow {
     let branch = rec.branch.as_deref();
     // The row's marker signal, via the SHARED marker verdict (env is irrelevant to
     // another worktree's provenance — only the on-disk marker of a linked tree is).
@@ -213,7 +218,12 @@ fn slice_of(path: &Path, branch: Option<&str>) -> Option<u32> {
 /// A missing/unresolvable target or fork, or an oracle error, degrades to
 /// [`LandedCell::Unknown`] — NEVER a hard error (the caller owns the missing-target
 /// tri-state PHASE-04 deferred to it).
-fn landed_cell(root: &Path, role: WorktreeRole, rec: &WorktreeRecord, slice: Option<u32>) -> LandedCell {
+fn landed_cell(
+    root: &Path,
+    role: WorktreeRole,
+    rec: &WorktreeRecord,
+    slice: Option<u32>,
+) -> LandedCell {
     let (target, fork) = match role {
         WorktreeRole::Primary | WorktreeRole::Benign => return LandedCell::NotApplicable,
         WorktreeRole::WorkerFork => {
@@ -247,7 +257,12 @@ fn landed_cell(root: &Path, role: WorktreeRole, rec: &WorktreeRecord, slice: Opt
 fn resolve_commit(root: &Path, refspec: &str) -> Option<String> {
     git::git_opt(
         root,
-        &["rev-parse", "--verify", "--quiet", &format!("{refspec}^{{commit}}")],
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{refspec}^{{commit}}"),
+        ],
     )
     .ok()
     .flatten()
@@ -338,9 +353,7 @@ fn print_json(rows: &[InventoryRow], no_landed: bool) -> anyhow::Result<()> {
                 "marker": row.marker,
                 "live": row.live,
             });
-            if !no_landed
-                && let Some(map) = obj.as_object_mut()
-            {
+            if !no_landed && let Some(map) = obj.as_object_mut() {
                 map.insert(
                     "landed".to_string(),
                     serde_json::Value::from(row.landed.token()),
@@ -451,7 +464,10 @@ mod tests {
     fn slice_of_reads_branch_then_path() {
         // Coordination: the numeric branch suffix.
         assert_eq!(
-            slice_of(Path::new("/x/.dispatch/SL-190"), Some("refs/heads/dispatch/190")),
+            slice_of(
+                Path::new("/x/.dispatch/SL-190"),
+                Some("refs/heads/dispatch/190")
+            ),
             Some(190)
         );
         // Worker fork: the SL-<N> path segment (agent branch has no numeric suffix).
@@ -463,7 +479,10 @@ mod tests {
             Some(190)
         );
         // Neither: no dispatch branch, no SL- segment.
-        assert_eq!(slice_of(Path::new("/x/plain"), Some("refs/heads/main")), None);
+        assert_eq!(
+            slice_of(Path::new("/x/plain"), Some("refs/heads/main")),
+            None
+        );
     }
 
     #[test]

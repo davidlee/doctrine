@@ -62,7 +62,14 @@ fn add_worktree(src: &Path, branch: &str, path: &Path) {
     }
     git(
         src,
-        &["worktree", "add", "-b", branch, path.to_str().unwrap(), &base],
+        &[
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            path.to_str().unwrap(),
+            &base,
+        ],
     );
 }
 
@@ -101,7 +108,11 @@ fn fixture() -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
 
     // A worker fork nested under an `SL-190` path (so its slice resolves off the
     // path, its role off the `dispatch/agent-*` branch).
-    let worker = holder.path().join("SL-190").join(".worktrees").join("agent-x");
+    let worker = holder
+        .path()
+        .join("SL-190")
+        .join(".worktrees")
+        .join("agent-x");
     add_worktree(src.path(), "dispatch/agent-x", &worker);
     commit_in(&worker, "w.rs", "fn w() {}");
 
@@ -130,7 +141,10 @@ fn worktree_list_renders_table_with_roles_and_landed_column() {
     let table = stdout(&out);
 
     // Header carries the landed column.
-    assert!(table.contains("landed"), "landed column header; got:\n{table}");
+    assert!(
+        table.contains("landed"),
+        "landed column header; got:\n{table}"
+    );
     assert!(table.contains("role"), "role header; got:\n{table}");
 
     // Every role is represented.
@@ -192,7 +206,9 @@ fn worktree_list_json_is_a_valid_array_of_rows() {
     // Every row object carries the provenance keys, including landed.
     for row in rows {
         let obj = row.as_object().expect("row is an object");
-        for key in ["path", "role", "slice", "branch", "head", "marker", "live", "landed"] {
+        for key in [
+            "path", "role", "slice", "branch", "head", "marker", "live", "landed",
+        ] {
             assert!(obj.contains_key(key), "row has `{key}`; row: {row}");
         }
     }
@@ -202,8 +218,14 @@ fn worktree_list_json_is_a_valid_array_of_rows() {
         .iter()
         .find(|r| r["role"] == "worker-fork")
         .expect("a worker-fork row");
-    assert_eq!(worker["landed"], "landed", "worker fork landed; row: {worker}");
-    assert_eq!(worker["slice"], 190, "worker fork slice from path; row: {worker}");
+    assert_eq!(
+        worker["landed"], "landed",
+        "worker fork landed; row: {worker}"
+    );
+    assert_eq!(
+        worker["slice"], 190,
+        "worker fork slice from path; row: {worker}"
+    );
 }
 
 // --- VT-2: --no-landed suppresses the column -------------------------------

@@ -350,8 +350,14 @@ mod tests {
         // `**` matches all four → over half → broad for a design-target.
         let f = diagnose_selector("**", SelectorScope::WillTouch, &u, &[]);
         assert!(
-            f.iter()
-                .any(|x| matches!(x, SelectorFinding::Broad { matched: 4, universe: 4, .. })),
+            f.iter().any(|x| matches!(
+                x,
+                SelectorFinding::Broad {
+                    matched: 4,
+                    universe: 4,
+                    ..
+                }
+            )),
             "a design-target matching the whole universe is broad: {f:?}"
         );
     }

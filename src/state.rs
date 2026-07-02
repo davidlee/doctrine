@@ -385,8 +385,7 @@ where
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", path.display()))?;
     mutate(doc.as_table_mut())?;
-    fs::write(&path, doc.to_string())
-        .with_context(|| format!("Failed to write {}", path.display()))
+    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
 }
 
 /// Edit-preserving status transition on one phase: set `status`, stamp
@@ -1200,7 +1199,9 @@ pub(crate) fn reconcile_action(truth: &PhaseTruth) -> ReconcileAction {
             Err(_) => ReconcileAction::Skip,
         },
         PhaseTruth::Planned => ReconcileAction::Write(PhaseStatus::Planned),
-        PhaseTruth::Conflict(_) | PhaseTruth::Unknown | PhaseTruth::Anomaly => ReconcileAction::Skip,
+        PhaseTruth::Conflict(_) | PhaseTruth::Unknown | PhaseTruth::Anomaly => {
+            ReconcileAction::Skip
+        }
         PhaseTruth::Local(_) => ReconcileAction::Leave,
     }
 }
@@ -1765,7 +1766,11 @@ mod tests {
             let local_map = vec![(p(), StemStatus::Toml(coord_status))];
             let (truths, div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
             assert_eq!(truths, vec![(p(), want.clone())], "PhaseTruth for {name}");
-            assert_eq!(div.assert_worthy(), *want_assert, "assert_worthy for {name}");
+            assert_eq!(
+                div.assert_worthy(),
+                *want_assert,
+                "assert_worthy for {name}"
+            );
         }
 
         // ANOMALY via a `.md`-only crash-partial (MissingToml), landed + absent.
@@ -1810,7 +1815,10 @@ mod tests {
             let coord_map = vec![(p(), StemStatus::Toml("in_progress"))];
             let local_map = vec![(p(), StemStatus::Toml("completed"))];
             let (truths, div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
-            assert_eq!(truths, vec![(p(), PhaseTruth::InFlight("in_progress".into()))]);
+            assert_eq!(
+                truths,
+                vec![(p(), PhaseTruth::InFlight("in_progress".into()))]
+            );
             assert!(
                 div.assert_worthy(),
                 "coord vs local disagreement arms --assert"
@@ -2348,7 +2356,10 @@ mod tests {
         let boundaries = boundaries_path(&repo, 147).unwrap();
         let registry_before = fs::read(&boundaries).unwrap();
         let sheet = phases_dir(&repo, 147).join("phase-01.toml");
-        let progress_before = fs::read_to_string(&sheet).unwrap().matches("[[progress]]").count();
+        let progress_before = fs::read_to_string(&sheet)
+            .unwrap()
+            .matches("[[progress]]")
+            .count();
 
         // Reconcile to a DIFFERENT status (Completed→InProgress): a genuine write.
         let wrote =
@@ -2371,7 +2382,10 @@ mod tests {
         );
         // ...and NO `[[progress]]` row was appended.
         assert_eq!(
-            fs::read_to_string(&sheet).unwrap().matches("[[progress]]").count(),
+            fs::read_to_string(&sheet)
+                .unwrap()
+                .matches("[[progress]]")
+                .count(),
             progress_before,
             "no progress row appended by the reconcile writer"
         );
@@ -2401,19 +2415,28 @@ mod tests {
     #[test]
     fn reconcile_action_maps_every_truth_variant() {
         use ReconcileAction as A;
-        assert_eq!(reconcile_action(&PhaseTruth::Landed), A::Write(PhaseStatus::Completed));
+        assert_eq!(
+            reconcile_action(&PhaseTruth::Landed),
+            A::Write(PhaseStatus::Completed)
+        );
         assert_eq!(
             reconcile_action(&PhaseTruth::InFlight("in_progress".into())),
             A::Write(PhaseStatus::InProgress)
         );
-        assert_eq!(reconcile_action(&PhaseTruth::Planned), A::Write(PhaseStatus::Planned));
+        assert_eq!(
+            reconcile_action(&PhaseTruth::Planned),
+            A::Write(PhaseStatus::Planned)
+        );
         assert_eq!(
             reconcile_action(&PhaseTruth::Conflict(ConflictKind::Rework)),
             A::Skip
         );
         assert_eq!(reconcile_action(&PhaseTruth::Unknown), A::Skip);
         assert_eq!(reconcile_action(&PhaseTruth::Anomaly), A::Skip);
-        assert_eq!(reconcile_action(&PhaseTruth::Local("completed".into())), A::Leave);
+        assert_eq!(
+            reconcile_action(&PhaseTruth::Local("completed".into())),
+            A::Leave
+        );
     }
 
     // VT-1: a git-unavailable transition (non-repo cwd) DEGRADES — no row, no

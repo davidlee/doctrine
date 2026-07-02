@@ -1056,7 +1056,14 @@ fn run_status_across_trees(root: &Path, id: u32, assert: bool) -> anyhow::Result
     write!(
         io::stdout(),
         "{}",
-        render_across_trees(id, &inputs.landed, coord_map.as_deref(), &local_map, &truth, &div)
+        render_across_trees(
+            id,
+            &inputs.landed,
+            coord_map.as_deref(),
+            &local_map,
+            &truth,
+            &div
+        )
     )?;
 
     // `--assert` fires ONLY on a CONFLICT or an opinionated disagreement; unknown /
@@ -5505,7 +5512,15 @@ mod tests {
         raise_blocker_rv(root, 1);
 
         // started → audit is a forward Advance but NOT the closure seam — passes.
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Audit), None, false, false).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Audit),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "audit");
     }
 
@@ -5670,9 +5685,16 @@ mod tests {
     /// Attempt the `reconcile → done` crossing; return the error string (the gate
     /// refusal) — panics if it unexpectedly SUCCEEDS.
     fn expect_close_refused(root: &Path) -> String {
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None, false, false)
-            .expect_err("reconcile → done should be refused")
-            .to_string()
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .expect_err("reconcile → done should be refused")
+        .to_string()
     }
 
     // --- VT-1: residual drift on a COVERED req refuses; F12 topology refuses an
@@ -5714,9 +5736,16 @@ mod tests {
         // refused structurally — no coverage/REC in sight, the drift gate never runs.
         make_slice(root, "s", "S", "2026-06-12");
         set_status_raw(root, 1, "started");
-        let err = run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None, false, false)
-            .unwrap_err()
-            .to_string();
+        let err = run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(
             err.contains("reconcile") && !err.contains("residual drift"),
             "F12 topology refusal, not the drift gate: {err}"
@@ -5915,7 +5944,15 @@ mod tests {
             vec![cov_key("SL-001", &req)],
         );
 
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None, false, false).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -6091,7 +6128,15 @@ mod tests {
             ReqStatus::Pending,
             vec![blocked, vh],
         );
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None, false, false).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -6174,7 +6219,15 @@ mod tests {
             ReqStatus::Retired,
             vec![key],
         );
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None, false, false).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -6312,8 +6365,15 @@ mod tests {
 
     /// Drive `reconcile → done` to SUCCESS; panic if the gate refuses.
     fn expect_close_succeeds(root: &Path) {
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None, false, false)
-            .expect("reconcile → done should succeed");
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .expect("reconcile → done should succeed");
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 

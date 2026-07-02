@@ -189,7 +189,13 @@ fn reconcile_phases_refuses_when_a_live_coord_tree_exists() {
     let coord = tmp.path().join("coord");
     git(
         &primary,
-        &["worktree", "add", "-q", coord.to_str().unwrap(), "dispatch/190"],
+        &[
+            "worktree",
+            "add",
+            "-q",
+            coord.to_str().unwrap(),
+            "dispatch/190",
+        ],
     );
 
     let out = reconcile(&primary, "190");
