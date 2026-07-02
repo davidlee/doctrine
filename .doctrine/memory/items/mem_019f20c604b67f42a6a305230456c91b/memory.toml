@@ -1,0 +1,43 @@
+memory_uid = "mem_019f20c604b67f42a6a305230456c91b"
+memory_key = "mem.fact.doctrine.cli-id-form-split"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "CLI id-form split: two parsing functions, three conventions"
+summary = "The CLI uses two id-parsing functions: parse_entity_ref (governance.rs, accepts both SL-123 and 123) and parse_canonical_ref (integrity.rs, prefixed-only). ~30 verbs use the former, ~15 the latter, ~16 use raw u32 (bare-only). IMP-227 tracks unification."
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["cli", "id-form", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c830120c00c7161f649172a64cdd8e6018485007"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c31abc30f280ec139152f1960299252432f494830863fc63e4e07d1396100ed2"
+base_commit = "a7f0055b0ac780b24b773ddfa4f5ec66d77cf061"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

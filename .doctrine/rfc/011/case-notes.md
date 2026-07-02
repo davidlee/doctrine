@@ -793,3 +793,15 @@ and directly actionable — no routing ambiguity, no design calls needed. The
 then test-compile), not conceptual. Token efficiency: the handover format 
 (change surface + test update tables) made the work direct — no exploration 
 needed, just execution.
+
+[backlog; IMP-227-audit]
+Full CLI surface audit of the prefixed-vs-bare id-form split (IMP-227). Two
+parsing functions, three conventions, ~60 verbs. The audit is committed into
+IMP-227's body; the item is scoped with a 2-phase fix plan. No incidental
+complexity in the audit itself — systematic file-by-file search, grep for
+parse_canonical_ref vs parse_entity_ref vs bare u32.
+
+One harness-level annoyance: rg regex patterns with pipe chars and regex
+metacharacters (`rg -rn "parse::<u32>|parse_ref"`) consistently returned zero
+results in this repo until simplified to separate grep passes. Not
+doctrine-specific, likely a rg + nix interaction.
