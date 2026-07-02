@@ -808,3 +808,14 @@ doctrine-specific, likely a rg + nix interaction.
 
 [backlog; IMP-228-vtgate-srcdelta]
 No incidental complexity. Backlog tooling was smooth — `backlog new`, `backlog tag`, `backlog show` all worked first try. One minor: `backlog tag --add` exists in mental-model but the actual CLI takes positional tags (not a flag) — `--help` clarified.
+
+[code-review; IMP-191-review]
+* review-ledger.md is at .doctrine/review-ledger.md (installed copy), with a
+  header pointing to install/review-ledger.md as source. Discovered by `find`.
+* `review prime` tool doc says "RV's [target].ref must be a slice reference" —
+  backlog-item targets (IMP, ISS, etc) can't be primed. Not a blocker but the
+  code-review skill says "Open + prime" as step 1 — the prime step is a no-op
+  for non-slice targets. The skill could note this.
+* Writing the synthesis required reading the full review-211.md file back after
+  edit to confirm the appended synthesis landed correctly — no `review show`
+  verb for the synthesis block.
