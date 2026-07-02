@@ -25,17 +25,34 @@ require-all) and ran under `sandbox-exec -D WT/TMP/PTMP/DUTMP -f floor.sb`:
 - **Independent canary verifier** (never trust the vector self-report — RSK-014
   idiom): the outside canary stayed `PRISTINE-OUT`, untouched.
 
-## Residual (NOT covered by the stand-in)
+## Residual — DISCHARGED at close (real pi, SL-185 audit RV-231, 2026-07-02)
 
-The stand-in proves the **sandbox mechanics**, not pi-specific runtime behaviour.
+The stand-in proved the sandbox *mechanics*; the SL-185 close-out audit (RV-231)
+then confirmed them against **real pi 0.80.3 natively on this macOS host** (Darwin
+25.4.0, arm64) — no flake escalation needed (pi installed at
+`~/.npm-global/bin/pi`), driving the real shipped launcher path end-to-end
+(`jail-prefix --extra-rw ~/.pi` → real worker fork → real `sandbox-exec` prefix →
+real `pi --mode rpc`):
 
-- **OQ-b — RESOLVED (user, 2026-07-02): real `pi` DOES need `~/.pi` write access
-  at runtime**, even with the session redirected under `$D`. So the mac arm MUST
-  grant an `extra_rw` for `~/.pi` (+existence/realpath validation, fail-closed if
-  absent) — matching the bwrap arm's `--bind ~/.pi`. The earlier "bwrap bind ≠
-  needed write" caution does NOT apply here; the write is real.
-- Still deferred to the **PHASE-04 VH** step: the actual pi rpc **event stream**
-  under confinement (VH-4), confirmed against real pi (escalate via flake then).
+- **VH-3 (rpc event stream under confinement) — CONFIRMED.** Real `pi --mode rpc`
+  booted under `sandbox-exec`, **stayed alive the whole fifo window** (rc=124
+  timeout-kill, not early exit), and **round-tripped a JSON-RPC frame**
+  (`{"id":1,"type":"response",…}`). The long-lived fifo-reader + child lifecycle
+  holds against the real binary, not just the stand-in. (Independent of a working
+  provider API key — the frame response itself proves the channel round-trips
+  under confinement.)
+- **OQ-b — settled empirically (was: user-asserted).** Real pi writes
+  `~/.pi/agent/*.lock` (`proper-lockfile` mkdir) at boot **even with `--session-dir`
+  under `$D`** — the session redirect covers session storage, not the
+  `~/.pi/agent/` settings/trust locks. The `~/.pi` extra_rw grant is **provably
+  load-bearing** (no grant ⇒ boot crash `EPERM mkdir …/trust.json.lock`) and
+  **provably sufficient** (with grant ⇒ clean boot, zero permission errors).
+  Shipped `pi-spawn-confined.sh:80-81` passes it correctly.
+- **Write-floor + child inheritance re-confirmed on real prefix:** inside-`$WT`
+  write OK, outside DENIED, spawned `/bin/bash` child inherited the floor, outside
+  canary pristine.
+
+No residual remains. RISK-1 fully cleared against real pi; SL-185 closed.
 
 Floor builder: [[mem.pattern.dispatch.seatbelt-write-floor-rule-ordering]].
 In-situ subagent nesting analog: [[mem.pattern.dispatch.seatbelt-insitu-subagent-nesting]].
