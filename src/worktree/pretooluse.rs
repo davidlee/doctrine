@@ -77,7 +77,7 @@ const ENV_PATH: &str = "PATH";
     all(target_os = "macos", not(test)),
     expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
 )]
-const REASON_NO_BWRAP: &str = "bwrap-unavailable";
+pub(crate) const REASON_NO_BWRAP: &str = "bwrap-unavailable";
 /// Placeholder backend reason for the Edit/Write path, where the backend is never
 /// read (`decide_write` walls on `pathcheck`). Never surfaced to a user.
 const REASON_BACKEND_UNUSED: &str = "backend-unused-on-write-path";
@@ -85,7 +85,7 @@ const REASON_BACKEND_UNUSED: &str = "backend-unused-on-write-path";
 /// to `resolved.profile_path`: the arm DENIES rather than emit an allow+wrap whose
 /// `sandbox-exec -f <profile>` points at a missing/partial floor. A wrap we cannot
 /// back with a real profile is strictly worse than a deny.
-const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
+pub(crate) const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
 
 /// The `PreToolUse` stdin subset consumed (design §5.2). Every field is optional
 /// so a malformed / partial payload folds to `Default` — fail-closed: a subagent
@@ -293,7 +293,7 @@ fn load_policy(main_root: &Path, name: &str) -> JailPolicy {
 /// Capability is DATA: absence ⇒ `Backend::Deny` ⇒ the leaf denies with the
 /// per-arm reason, never an unconfined pass-through (fail-closed). Linux arm only.
 #[cfg(not(target_os = "macos"))]
-fn have_bwrap() -> bool {
+pub(crate) fn have_bwrap() -> bool {
     let Some(path) = std::env::var_os(ENV_PATH) else {
         return false;
     };
