@@ -901,7 +901,14 @@ impl Graph {
             level: Level::Finite(0),
             node,
         });
-        let predecessors = query::predecessor_cone(&self.incoming, &self.degraded_sccs, node);
+        // A foreign id (>= node_count) has no in-edges, so `predecessor_cone` would
+        // record it as `{node: {}}` on every overlay — indistinguishable from a real
+        // root. The F14 contract is an EMPTY cone, so guard the query (ISS-003).
+        let predecessors = if node.0 >= self.node_count {
+            BTreeMap::new()
+        } else {
+            query::predecessor_cone(&self.incoming, &self.degraded_sccs, node)
+        };
         let evicted = self
             .provenance
             .evictions()

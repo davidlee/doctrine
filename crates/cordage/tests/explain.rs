@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use cordage::{
-    Arity, CyclePolicy, Direction, EdgeAttrs, EvictReason, GraphBuilder, NodeId, OrderLayer,
+    Arity, CyclePolicy, Direction, EdgeAttrs, EvictReason, GraphBuilder, Level, NodeId, OrderLayer,
     OrderSpec, OverlayConfig,
 };
 
@@ -140,6 +140,37 @@ fn explain_keys_every_overlay_a_root_node_is_singleton_on_each() {
     let ex = g.explain(n);
     assert_eq!(ex.predecessors().get(&ov1), Some(&cone(vec![(n, vec![])])));
     assert_eq!(ex.predecessors().get(&ov2), Some(&cone(vec![(n, vec![])])));
+}
+
+#[test]
+fn explain_of_a_foreign_node_is_empty_not_a_per_overlay_singleton() {
+    // ISS-003 / F14: a foreign id (>= node_count) must yield an EMPTY cone — the
+    // rustdoc contract. A foreign node has no in-edges, so `cone_on_overlay` would
+    // otherwise record it as `{foreign: {}}` on EVERY overlay, indistinguishable
+    // from a real root (contrast the singleton-per-overlay test above). Regression
+    // guard: without the in-range guard in `explain`, `predecessors()` is non-empty.
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(reject());
+    let n = b.node();
+    let m = b.node();
+    b.edge(ov, n, m, EdgeAttrs::new(0, 0));
+    let g = b.build().expect("valid"); // node_count == 2
+
+    // Mint a NodeId beyond g's node_count from a sibling builder (opaque ids only).
+    let mut other = GraphBuilder::new();
+    other.node();
+    other.node();
+    let foreign = other.node(); // the 3rd minted id — foreign to g (node_count 2)
+
+    let ex = g.explain(foreign);
+    assert!(
+        ex.predecessors().is_empty(),
+        "foreign id has an EMPTY predecessor cone, not a per-overlay singleton: {:?}",
+        ex.predecessors()
+    );
+    // The order key and evictions already honour F14 — assert they still do.
+    assert_eq!(ex.order_key().level(), Level::Finite(0));
+    assert!(ex.evicted().is_empty());
 }
 
 #[test]
