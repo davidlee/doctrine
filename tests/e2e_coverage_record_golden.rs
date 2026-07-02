@@ -337,7 +337,7 @@ fn coverage_verify_prints_transition_and_audit_lines() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "SL-057/REQ-001/SL-057/VT: Planned\u{2192}Verified [exit-code-only]\n\
+        "SL-057/REQ-001/SL-057/VT: planned\u{2192}verified [exit-code-only]\n\
          0 VT entries lack a check \u{2014} backfill\n\
          1 exit-code-only cells (no matcher) \u{2014} audit\n"
     );
@@ -438,7 +438,7 @@ fn coverage_forget_prints_withdrawal_then_not_found() {
     assert!(hit.status.success(), "stderr: {}", stderr(&hit));
     assert_eq!(
         stdout(&hit),
-        "withdrew SL-057/REQ-001/SL-057/VT [Planned]\n"
+        "withdrew SL-057/REQ-001/SL-057/VT [planned]\n"
     );
 
     // Miss: the terse not-found line (idempotent).
@@ -540,6 +540,6 @@ fn coverage_record_canonicalizes_requirement_ref() {
     assert!(hit.status.success(), "stderr: {}", stderr(&hit));
     assert_eq!(
         stdout(&hit),
-        "withdrew SL-057/REQ-001/SL-057/VT [Planned]\n"
+        "withdrew SL-057/REQ-001/SL-057/VT [planned]\n"
     );
 }

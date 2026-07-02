@@ -202,12 +202,17 @@ pub(crate) fn forget(root: &Path, slice_id: u32, key: &CoverageKey) -> Result<Fo
 
 /// The terse withdrawal line naming the erased 4-tuple + its status (PURE):
 /// `withdrew <slice>/<requirement>/<change>/<mode> [<Status>]`,
-/// e.g. `withdrew SL-057/REQ-256/SL-057/VT [Failed]`. Single `format!` (no
-/// push/format-in-loop assembly).
+/// e.g. `withdrew SL-057/REQ-256/SL-057/VT [failed]` — the stable kebab token
+/// ([`CoverageStatus::as_kebab`], IMP-056), not the `{:?}` Debug spelling. Single
+/// `format!` (no push/format-in-loop assembly).
 pub(crate) fn withdrawal_line(key: &CoverageKey, status: CoverageStatus) -> String {
     format!(
-        "withdrew {}/{}/{}/{} [{status:?}]",
-        key.slice, key.requirement, key.contributing_change, key.mode,
+        "withdrew {}/{}/{}/{} [{}]",
+        key.slice,
+        key.requirement,
+        key.contributing_change,
+        key.mode,
+        status.as_kebab(),
     )
 }
 
@@ -914,6 +919,24 @@ mod tests {
             &key("SL-057", "REQ-256", "SL-057", "VT"),
             CoverageStatus::Failed,
         );
-        assert_eq!(line, "withdrew SL-057/REQ-256/SL-057/VT [Failed]");
+        assert_eq!(line, "withdrew SL-057/REQ-256/SL-057/VT [failed]");
+    }
+
+    #[test]
+    fn coverage_status_kebab_render_is_symmetric_with_parse() {
+        // IMP-056: the CLI render vocabulary must equal the `--status` input
+        // vocabulary — one kebab token per status, and `parse_status` inverts it.
+        // Locks the render/parse pair against drift (the Debug-leak regression).
+        use CoverageStatus::*;
+        for (status, token) in [
+            (Planned, "planned"),
+            (InProgress, "in-progress"),
+            (Verified, "verified"),
+            (Failed, "failed"),
+            (Blocked, "blocked"),
+        ] {
+            assert_eq!(status.as_kebab(), token, "render token for {status:?}");
+            assert_eq!(parse_status(token), Ok(status), "parse inverts {token}");
+        }
     }
 }
