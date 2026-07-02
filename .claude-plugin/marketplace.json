@@ -9,12 +9,12 @@
   },
   "license": "MIT",
   "keywords": ["memory","governance","spec-driven","development","cli"],
+  "hooks": "./plugins/doctrine/hooks/hooks.json",
   "plugins": [
     {
       "name": "doctrine",
       "source": "./plugins/doctrine",
       "description": "Doctrine's process skills — routing, slicing, design, planning, phase execution, audit and close, governance (canon/inquisition), backlog triage, handover, and memory capture/retrieval.",
-      "hooks": "./plugins/doctrine/hooks/hooks.json"
     },
     {
       "name": "doctrine-memory",
