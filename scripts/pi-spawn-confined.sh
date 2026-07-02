@@ -19,8 +19,14 @@ BR="$2"
 D="$3"
 PF="$4"
 BACKSTOP="${5:-1800}"
-ROOT=/workspace/doctrine
-DOCTRINE=~/.cargo/bin/doctrine
+# ROOT / DOCTRINE are host-resolved, override-friendly (SL-185 PHASE-04): the
+# caller may export them (the Linux jail sets ROOT=/workspace/doctrine); else
+# derive portably so the Darwin arm runs on a stock mac (no /workspace, no
+# ~/.cargo/bin). ROOT ← git toplevel of the script's own dir; DOCTRINE ← PATH,
+# then the cargo-bin fallback.
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+ROOT="${DOCTRINE_ROOT:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || echo /workspace/doctrine)}"
+DOCTRINE="${DOCTRINE_BIN:-$(command -v doctrine || echo "$HOME/.cargo/bin/doctrine")}"
 
 # Fork is orchestrator-classed: run it from the orchestrator root, never from a
 # worker-stamped worktree (else `worktree fork` resolves to worker-mode + refuses).
@@ -61,10 +67,24 @@ KEEP=$!
 # below reap pi through bwrap.
 case "$(uname)" in
   Darwin)
-    # PHASE-04 (RISK-1-gated) replaces this stub with the real confinement-prefix
-    # reader. Until the mac probe clears, fail closed — never an unconfined pi.
-    echo "[spawn] macOS confinement pending RISK-1 (SL-185 PHASE-04) — aborting" >&2
-    exit 1
+    # macOS (Seatbelt) arm — SL-185 PHASE-04 (RISK-1 cleared). The Rust
+    # `jail-prefix` mac branch resolves the floor, materializes the `.sb`, and
+    # writes a NUL-delimited `sandbox-exec … --` prefix to `--out`; we read it
+    # into PREFIX and wrap the pi exec once (children inherit — SL-183-probed).
+    #
+    # OQ-b: real pi WRITES ~/.pi at runtime even with the session under $D, so we
+    # grant it as an --extra-rw (jail-prefix realpath's + validates it, fail-closed
+    # if absent) — parity with the Linux arm's `--bind "$HOME/.pi"`.
+    JAIL_ARGV="$D/.tmp/jail.argv"
+    mkdir -p "$D/.tmp"
+    "$DOCTRINE" worktree jail-prefix --dir "$D" --main-root "$ROOT" \
+      --extra-rw "$HOME/.pi" --out "$JAIL_ARGV" ||
+      { echo "[spawn] jail-prefix failed ($?) — aborting (no unconfined pi)" >&2; exit 1; }
+    # Portable NUL-delimited array read — macOS ships bash 3.2 (no `mapfile`).
+    # `--out` has NO trailing NUL (AR-1), so `read -d ''` returns non-zero on the
+    # final token; `|| [ -n "$tok" ]` captures it. Works on bash 3.2 and 5.
+    PREFIX=()
+    while IFS= read -r -d '' tok || [ -n "$tok" ]; do PREFIX+=("$tok"); done < "$JAIL_ARGV"
     ;;
   *)
     # Linux inline bwrap array — tokens BYTE-UNCHANGED from the prior inline exec

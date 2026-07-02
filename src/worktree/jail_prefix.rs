@@ -36,21 +36,24 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use super::jail::{Backend, JailPolicy, RealEnv, ResolveEnv, select_jailer};
+#[cfg(target_os = "macos")]
+use super::jail::resolve_with_policy;
 #[cfg(not(target_os = "macos"))]
 use super::jail::validate_policy;
-#[cfg(not(target_os = "macos"))]
-use super::pretooluse::{REASON_NO_BWRAP, have_bwrap};
-#[cfg(target_os = "macos")]
-use super::jail::{resolve_with_policy, write_seatbelt_profile};
+use super::jail::{Backend, JailPolicy, RealEnv, ResolveEnv, select_jailer};
 #[cfg(target_os = "macos")]
 use super::pretooluse::REASON_PROFILE_WRITE_FAILED;
+#[cfg(target_os = "macos")]
+use super::pretooluse::write_seatbelt_profile;
+#[cfg(not(target_os = "macos"))]
+use super::pretooluse::{REASON_NO_BWRAP, have_bwrap};
 
 // ---- vocabulary (STD-001: single-sourced, no inline literals) ------------------
 /// The command name, prefixed onto every fail-closed reason surfaced to stderr.
 const CMD_JAIL_PREFIX: &str = "jail-prefix";
 /// The argv record delimiter written to `--out` (AR-1 / EX-4): tokens are joined
-/// by a NUL byte so non-UTF-8 paths survive and `mapfile -d ''` round-trips them.
+/// by a NUL byte so non-UTF-8 paths survive and a NUL-delimited `read` round-trips
+/// them (the Darwin arm's portable reader; Linux `mapfile -d ''` equally).
 const ARGV_NUL_DELIM: u8 = 0;
 /// An inline `--extra-rw` that does not resolve on disk (XR-1 existence obligation).
 const REASON_EXTRA_RW_UNRESOLVABLE: &str = "extra-rw-unresolvable";
@@ -120,13 +123,15 @@ fn resolve_prefix(
     env: &RealEnv,
 ) -> anyhow::Result<Vec<OsString>> {
     let dir_real = env.realpath(dir).map_err(|_e| {
-        anyhow::anyhow!("{CMD_JAIL_PREFIX}: {REASON_DIR_UNRESOLVABLE}: {}", dir.display())
+        anyhow::anyhow!(
+            "{CMD_JAIL_PREFIX}: {REASON_DIR_UNRESOLVABLE}: {}",
+            dir.display()
+        )
     })?;
     // XR-1: now that the grant is canonical, the lexical ancestor test is sound — a
     // grant resolving to `/`, an ancestor of the worktree, or `.git` is rejected.
-    validate_policy(policy, &dir_real).map_err(|e| {
-        anyhow::anyhow!("{CMD_JAIL_PREFIX}: {REASON_UNSAFE_EXTRA_RW}: {e:?}")
-    })?;
+    validate_policy(policy, &dir_real)
+        .map_err(|e| anyhow::anyhow!("{CMD_JAIL_PREFIX}: {REASON_UNSAFE_EXTRA_RW}: {e:?}"))?;
     if !have_bwrap() {
         anyhow::bail!("{CMD_JAIL_PREFIX}: {REASON_NO_BWRAP}");
     }
@@ -139,7 +144,7 @@ fn resolve_prefix(
 /// SHAPE ONLY on this Linux host: `#[cfg(target_os = "macos")]` strips it before
 /// name resolution, so it references the PHASE-01 factored core
 /// (`resolve_with_policy` / `write_seatbelt_profile`) without a local build seeing
-/// them. Probe topology ONCE, resolve over the supplied inline policy (validate_policy
+/// them. Probe topology ONCE, resolve over the supplied inline policy (`validate_policy`
 /// runs inside `resolve_with_policy` — the moved shared check), materialize the `.sb`
 /// the `sandbox-exec -f` prefix references (io error ⇒ fail-closed), then emit.
 #[cfg(target_os = "macos")]

@@ -117,13 +117,20 @@ fn linux_emits_nul_delimited_bwrap_prefix_ending_in_arg_sep() {
     assert!(out.exists(), "--out written on success");
 
     let tokens = read_tokens(&out);
-    assert!(tokens.len() > 3, "a real bwrap prefix has many tokens: {tokens:?}");
+    assert!(
+        tokens.len() > 3,
+        "a real bwrap prefix has many tokens: {tokens:?}"
+    );
     // No interior empty token — the NUL join carries no stray delimiter (EX-4).
     assert!(
         tokens.iter().all(|t| !t.is_empty()),
         "split-on-\\0 round-trips to non-empty tokens: {tokens:?}"
     );
-    assert_eq!(tokens.first().unwrap().as_slice(), BWRAP, "prefix starts with bwrap");
+    assert_eq!(
+        tokens.first().unwrap().as_slice(),
+        BWRAP,
+        "prefix starts with bwrap"
+    );
     assert_eq!(
         tokens.last().unwrap().as_slice(),
         ARG_SEP,
@@ -165,7 +172,10 @@ fn dangerous_extra_rw_dotgit_is_rejected_no_out() {
         "a .git extra-rw grant must be rejected; stdout: {}",
         String::from_utf8_lossy(&res.stdout)
     );
-    assert!(!out.exists(), "no --out file on a rejected (fail-closed) run");
+    assert!(
+        !out.exists(),
+        "no --out file on a rejected (fail-closed) run"
+    );
 }
 
 #[test]
@@ -186,7 +196,10 @@ fn dangerous_extra_rw_ancestor_is_rejected_no_out() {
         "an ancestor-escaping `..` grant must be rejected; stdout: {}",
         String::from_utf8_lossy(&res.stdout)
     );
-    assert!(!out.exists(), "no --out file on a rejected (fail-closed) run");
+    assert!(
+        !out.exists(),
+        "no --out file on a rejected (fail-closed) run"
+    );
 }
 
 #[test]
@@ -246,19 +259,27 @@ fn bwrap_present_writes_out() {
     assert!(out.exists(), "--out present ⇒ the command succeeded");
 }
 
-// ── PHASE-03 VT-1: the shell `mapfile` reader contract over a REAL --out file ─────
+// ── PHASE-03 VT-1: the shell NUL-array reader contract over a REAL --out file ─────
 //
 // `scripts/pi-spawn-confined.sh` is the SOURCE OF TRUTH for the confinement PREFIX
 // wiring (VA-1 guards the script's inline Linux array). This test re-encodes the
-// §1 reader contract — `mapfile -d '' PREFIX < "$OUT"` then a `${#PREFIX[@]} > 0`
-// fail-closed guard — and drives it against a genuine `jail-prefix --out` emission,
-// proving the OS-agnostic reader round-trips the NUL-delimited argv and that a
-// stale/empty/absent file aborts rather than spawning an unconfined pi.
+// §1 reader contract — a portable NUL-delimited read into PREFIX then a
+// `${#PREFIX[@]} > 0` fail-closed guard — and drives it against a genuine
+// `jail-prefix --out` emission, proving the OS-agnostic reader round-trips the
+// NUL-delimited argv and that a stale/empty/absent file aborts rather than
+// spawning an unconfined pi.
+//
+// SL-185 PHASE-04: the reader is the portable `while IFS= read -r -d '' … ||
+// [ -n "$tok" ]` loop, NOT bash-4 `mapfile` — macOS (the Darwin arm's target)
+// ships bash 3.2 where `mapfile` is absent. `|| [ -n "$tok" ]` captures the final
+// token (the `--out` format has no trailing NUL, AR-1). This snippet is a copy of
+// the script's reader; IMP-230 de-duplicates it (single source of truth).
 
-/// The script's reader-and-guard contract, verbatim in shell. `$OUT` is the argv
-/// file; a 0-length PREFIX ⇒ `exit 3` (abort), else the tokens are printed one
-/// per line. Kept byte-faithful to the script side (which the array + guard mirror).
-const READER_SNIPPET: &str = "mapfile -d '' PREFIX < \"$OUT\"; \
+/// The script's reader-and-guard contract, in portable shell (bash 3.2 + 5). `$OUT`
+/// is the argv file; a 0-length PREFIX ⇒ `exit 3` (abort), else the tokens are
+/// printed one per line. Mirrors the Darwin arm of `pi-spawn-confined.sh`.
+const READER_SNIPPET: &str = "PREFIX=(); \
+while IFS= read -r -d '' tok || [ -n \"$tok\" ]; do PREFIX+=(\"$tok\"); done < \"$OUT\"; \
 [ \"${#PREFIX[@]}\" -gt 0 ] || { echo abort >&2; exit 3; }; \
 printf '%s\\n' \"${PREFIX[@]}\"";
 
@@ -285,7 +306,10 @@ fn shell_mapfile_reader_round_trips_real_jail_prefix() {
     // A real Linux jail-prefix emission — the reader is OS-agnostic, so the bwrap
     // prefix fully exercises it (design §1).
     let res = jail_prefix(&wt, &out, &[], false, None);
-    assert!(res.status.success(), "jail-prefix --out succeeds with bwrap present");
+    assert!(
+        res.status.success(),
+        "jail-prefix --out succeeds with bwrap present"
+    );
     assert!(out.exists(), "--out file written");
 
     let read = run_reader(&out);
@@ -297,7 +321,10 @@ fn shell_mapfile_reader_round_trips_real_jail_prefix() {
     let lines: Vec<&[u8]> = read.stdout.split(|b| *b == b'\n').collect();
     // `printf '%s\n'` per token ⇒ a trailing empty split element; drop it.
     let tokens: Vec<&[u8]> = lines.iter().copied().filter(|l| !l.is_empty()).collect();
-    assert!(!tokens.is_empty(), "PREFIX is non-empty (guard would else have aborted)");
+    assert!(
+        !tokens.is_empty(),
+        "PREFIX is non-empty (guard would else have aborted)"
+    );
     // Same terminator notion the PHASE-02 tests assert on (FLAG_ARG_SEP).
     assert_eq!(
         *tokens.last().unwrap(),
