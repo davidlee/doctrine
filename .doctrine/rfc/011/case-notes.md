@@ -94,3 +94,20 @@ on edge, behind the fork) while Bash relative paths hit its worktree copy — th
 two disagreed on content/line numbers, costing several tool calls to diagnose.
 Mitigation for future worker prompts: instruct workers to prefix EVERY file op
 with the worktree root and never touch /workspace/doctrine/* directly.
+
+[close; sl190-imp127-trunkrow-gate]
+IMP-127 direct-land escape is now INCOMPLETE against the SL-126 close-integration
+gate. Prior memory (mem.pattern.dispatch.split-lineage-close-conflict-direct-land)
+says `done` "waves through" a never-journal-integrated bundle — STALE. Current gate
+(ledger.rs trunk_integration): journal ABSENT/zero-rows → NotDispatched (passes);
+journal HAS rows but none target trunk → Blocked("no trunk row"). SL-190's
+dispatch/190 journal carries review/190 + phase/190-01..06 rows (funnel-projected),
+so direct-land trips Blocked even though main genuinely contains the reviewed code
+(gate-green, byte-identical to reviewed tip 0eca671a). Neither integrate path can
+write the trunk row: candidate path needs an admitted close_target (IMP-127 blocks);
+legacy plan_trunk_row sources phase/190-06 tip which CANNOT ff main (split lineage —
+the exact reason the candidate merge existed). Net: a split-lineage dispatched slice
+is UN-CLOSEABLE by any verb once its phase rows are journaled — the direct-land
+escape must also hand-write a trunk row, or IMP-127's fix must add a
+"record-completed-integration" path. Cost: full topology re-derivation + code read to
+prove no verb suffices. Recommend IMP-127 scope note + a memory correction.
