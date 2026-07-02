@@ -1,0 +1,70 @@
+id    = 231
+slug  = "reconciliation-review-of-sl-185"
+title = "reconciliation review of SL-185"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-185"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design §3 places run_jail_prefix in mod.rs; implementation extracted a dedicated src/worktree/jail_prefix.rs module"
+detail = """Conformance reports src/worktree/jail_prefix.rs as UNDECLARED (new file, not in any design-target selector). design.md §3 "### src/worktree/mod.rs — new command-tier consumer" describes run_jail_prefix() living in mod.rs alongside the WorktreeCommand::JailPrefix variant. The shipped code puts the WorktreeCommand variant + dispatch in mod.rs but factored run_jail_prefix and its helpers into a NEW module src/worktree/jail_prefix.rs (the RISK-1 memory's scope.paths already reference it). This is a clean structural improvement (single-responsibility module for the command tier), not a defect — but design.md §3 and its design-target selector list no longer tell the truth about where the code lives. Expected(design §3: mod.rs) vs observed(jail_prefix.rs new module + mod.rs variant only). VT unit tests (2925 green) + e2e (10 green) all pass against the real layout."""
+disposition = "verified"
+response = """Observation confirmed: run_jail_prefix + its helpers live in a new src/worktree/jail_prefix.rs module, not in mod.rs as design.md §3 describes. This is a clean single-responsibility improvement, not a defect — all VT (2925 unit + 10 e2e) green against the real layout, and it matches the RISK-1 memory's recorded scope.paths. Remediation is a per-slice DIRECT EDIT to design.md §3 (reconcile write surface, NOT governance): update the "### src/worktree/mod.rs — new command-tier consumer" subsection to note run_jail_prefix lives in src/worktree/jail_prefix.rs (mod.rs holds only the WorktreeCommand::JailPrefix variant + dispatch), and add jail_prefix.rs to the §3 design-target selector list so future conformance runs are clean. Routed to /reconcile via the reconciliation brief (per-slice direct edit)."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "src/commands/guard.rs modified for jail-prefix CLI wiring, not in design-target selectors"
+detail = "Conformance reports src/commands/guard.rs as UNDECLARED (M). This is the clap arg-parse surface for the new `doctrine worktree jail-prefix` subcommand (--dir/--main-root/--out/--network/--extra-rw). design.md §3 named jail.rs/mod.rs/pretooluse.rs/pi-spawn-confined.sh as the affected surface and did not enumerate the CLI arg-parse touch. Expected(design lists 4 selectors) vs observed(guard.rs also touched for arg wiring). Necessary and idiomatic wiring for a new subcommand; --help output verified to match the design's flag contract exactly (--main-root required on macOS, --out NUL sink, --extra-rw repeatable raw-shell-input realpath'd). No behavioural divergence."
+disposition = "aligned"
+response = "Aligned — src/commands/guard.rs is the necessary clap arg-parse wiring for the new `doctrine worktree jail-prefix` subcommand. The design named the substantive affected surface (jail.rs/mod.rs/pretooluse.rs/pi-spawn-confined.sh) and legitimately did not enumerate every CLI plumbing touch; adding a subcommand requires an arg-parse entry by construction. --help output verified to match the design's flag contract exactly. No behavioural divergence, no design correction needed. (Optionally sweep guard.rs into the §3 selector list alongside the F-1 edit for future conformance cleanliness, but not required.)"
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "tests/e2e_worktree_jail_prefix.rs undeclared in design-target selectors (but named by plan VT criteria)"
+detail = """Conformance reports tests/e2e_worktree_jail_prefix.rs as UNDECLARED (A). It IS declared in plan.toml — PHASE-02 VT-1/2/3 and PHASE-03 VT-1 all cite test_file = "tests/e2e_worktree_jail_prefix.rs". The gap is only that the design's design-target selector list (used by conformance) enumerates source paths, not the test file. 10/10 e2e tests green (NUL round-trip, XR-1 canonicalize-before-validate reject, fail-closed no --out, mapfile reader + empty-guard abort). Expected(design selectors omit test file) vs observed(test file present and green, declared in plan). Test artefact for declared VT — no divergence."""
+disposition = "aligned"
+response = "Aligned — tests/e2e_worktree_jail_prefix.rs is the declared test artefact for PHASE-02 VT-1/2/3 and PHASE-03 VT-1 (all cite it as test_file in plan.toml). It appears undeclared only because conformance hashes the design's source-path selectors, which idiomatically omit test files. 10/10 green covering the load-bearing contracts (NUL round-trip, XR-1 canonicalize-before-validate, fail-closed no --out, mapfile-reader empty-guard). No divergence."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "IMP-230 backlog files (3) landed in the PHASE-04 commit, appear as undeclared"
+detail = "Conformance reports .doctrine/backlog/improvement/230/{backlog-230.md,backlog-230.toml} + the slug symlink as UNDECLARED (A), landed in the PHASE-04 commit 1fdbf4fa. These are authored doctrine state (a backlog item minted via `backlog new` during the phase — the deferred reader de-dup follow-up IMP-230), not code under the design's selectors. Expected(design selectors are source paths) vs observed(backlog authoring rode the phase commit). Correct doctrine hygiene (capture latent work rather than lose it); IMP-230 is the correctly-deferred reader-dedup follow-up the user flagged as non-blocking."
+disposition = "aligned"
+response = "Aligned — the .doctrine/backlog/improvement/230/* files are authored doctrine state (IMP-230, the deferred pi-spawn reader de-dup follow-up minted via `backlog new` during PHASE-04), not code under the design selectors. Correct hygiene: latent work captured rather than lost. IMP-230 is correctly deferred and non-blocking per the user. No divergence."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "design prescribes `mapfile -d ''` (bash-4) but macOS ships bash 3.2; shipped code correctly uses a portable `read -d ''` loop — design is now wrong"
+detail = """design.md §1 (line 38: `mapfile -d '' PREFIX < "$D/.tmp/jail.argv"`), §3 (line 179), and the PHASE-03 plan objective all prescribe `mapfile -d ''` for the NUL-delimited reader. But the DARWIN arm runs on stock macOS, which ships bash 3.2.57 — `mapfile`/`readarray` are bash-4+ builtins, ABSENT on the target platform. The design's prescribed reader would fail on the very OS this slice exists to support. Shipped scripts/pi-spawn-confined.sh:87 instead uses the portable idiom `while IFS= read -r -d '' tok || [ -n "$tok" ]; do PREFIX+=("$tok"); done` (bash 3.2 AND 5 compatible), with an inline comment documenting the bash-3.2 constraint. This deviation is CORRECTNESS-PRESERVING and in fact STRICTER than the design: `--out` carries no trailing NUL (AR-1), so `mapfile -d ''` would also silently DROP the final non-NUL-terminated `env TMPDIR=<tmp>` token — the `|| [ -n "$tok" ]` clause captures it (verified live: reader yields 16 tokens including the trailing env/TMPDIR launcher; a bare mapfile would yield 15 and lose TMPDIR). User-approved deviation. Expected(design: mapfile -d '') vs observed(portable read -d '' loop). Design must be corrected to match — otherwise a future edit "restoring" mapfile would break macOS confinement."""
+disposition = "verified"
+response = """Observation confirmed and MATERIAL: design.md §1/§3 + PHASE-03 plan objective prescribe `mapfile -d ''`, a bash-4 builtin ABSENT on the macOS target (stock bash 3.2.57, verified on this host). The design's prescribed reader would fail on the very platform SL-185 targets. Shipped pi-spawn-confined.sh:87 correctly uses the portable `while IFS= read -r -d '' tok || [ -n "$tok" ]` loop — and it is strictly MORE correct than mapfile (captures the final non-NUL-terminated env/TMPDIR token AR-1 leaves; verified live at 16 tokens vs mapfile's would-be 15). User-approved deviation. Remediation is a per-slice DIRECT EDIT to design.md (reconcile write surface, NOT governance — the seatbelt/jail machinery is not spec-registered): correct §1 line 38 and §3 line 179 to the portable read-loop idiom with a note that macOS ships bash 3.2 (no mapfile) and that --out's missing trailing NUL requires the `|| [ -n "$tok" ]` final-token capture. This prevents a future "restore mapfile" edit from silently breaking macOS confinement. Routed to /reconcile via the reconciliation brief (per-slice direct edit)."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "P01–03 source-delta boundaries were unrecorded (conformance read `incomplete`); re-recorded during audit"
+detail = "At audit start, `slice conformance SL-185` reported `incomplete — partial coverage`: completed phases PHASE-01/02/03 carried NO source-delta row (only PHASE-04's c413b7ec..1fdbf4fa was recorded). Cause (mem.pattern.doctrine.phase-complete-clobbers-boundary): the slice was dispatch-delivered on a Linux worktree (sleipnir); the runtime boundaries registry is gitignored .doctrine/state/ scratch that does not travel with the branch, and flipping status from the main tree does not reconstruct the true ranges. NOTE: PHASE-04's recorded range was CORRECT and non-degenerate (a real single-commit diff, reachable from main) — the user's worry that it too was clobbered did NOT hold. Recovery (evidence-prep, gitignored runtime state — within audit remit): re-recorded via `slice record-delta` mapping each phase to its dispatch-lineage commit — PHASE-01 62d094b7..8863d836, PHASE-02 e067a817..85212b2a, PHASE-03 85212b2a..27b5566a (starts = phase-commit parents on branch dispatch/185, all reachable from main). Conformance then resolved to 4 conformant / 0 undelivered / 6 undeclared. Expected(all completed phases carry rows) vs observed(P01–03 rows absent until re-recorded)."
+disposition = "aligned"
+response = "Aligned — resolved during audit evidence-prep. The missing P01–03 rows were an artefact of dispatch-on-sleipnir delivery + gitignored runtime boundaries registry (not a code or design defect). Re-recorded the true dispatch-lineage ranges via the sanctioned `slice record-delta` escape hatch (all commits reachable from main; PHASE-04's pre-existing row was already correct). Conformance now clean (4 conformant / 0 undelivered / 6 undeclared, all 6 dispositioned here). This is runtime-state repair within audit remit, no authored-artefact change. Captured as durable knowledge in mem.pattern.doctrine.phase-complete-clobbers-boundary (already exists)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
