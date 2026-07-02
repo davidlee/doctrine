@@ -695,6 +695,12 @@ pub(crate) enum Command {
         #[command(subcommand)]
         action: RiskAction,
     },
+
+    /// Resolve and inspect the LLM prompt cascade.
+    Prompt {
+        #[command(subcommand)]
+        command: crate::commands::prompt::PromptCommand,
+    },
 }
 
 // ── help rendering ───────────────────────────────────────────────────────────
@@ -771,6 +777,7 @@ static FAMILIES: &[Family] = &[
             "check",
             "reseat",
             "export",
+            "prompt",
             "reservation",
             "worktree",
             "dispatch",
@@ -1361,6 +1368,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Supersede { new, old, path } => {
             crate::commands::supersede::run_supersede(path, &new, &old)
         }
+        Command::Prompt { command } => crate::commands::prompt::dispatch(command),
         Command::Map { command } => crate::commands::map::dispatch(command),
     }
 }
@@ -1423,7 +1431,7 @@ mod tests {
         }
 
         // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168).
-        assert_eq!(visible.len(), 46, "expected 46 visible top-level commands");
+        assert_eq!(visible.len(), 47, "expected 47 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the
