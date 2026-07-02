@@ -13,20 +13,26 @@ initiative. The case-notes are raw friction logs; turning them into durable root
 fixes reduces token waste for every future agent — directly the RFC-011 mission.
 Compounds, low-collision (docs + isolated code), doesn't need User decisions.
 
-PLAN (ordered increments, each finishes clean within a turn):
-  1. [DONE] ADR-001 gate-edge-model note (SL-180-sess1 friction: wrong tangle
-     proof). Verified vs tests/architecture_layering.rs; added subsection.
-  2. `memory retrieve <key>` positional rejected but boot Onboarding phrasing
-     reads positional (SL-180-sess1). Fix: accept positional key OR fix boot
-     doc phrasing. Verify actual CLI shape first.
-  3. `worktree land --fork` expects branch not path; `no-such-fork` error
-     confusing when the fork DIR exists (ISS-058 note). Fix: clearer error /
-     accept path. Code + test.
-  4. `arm-spawn --slice` diagnostic-only → wrote arming base to wrong dir
-     (sl189 note). HIGHER collision risk (active dispatch/SL-190). Assess late;
-     maybe file backlog instead of touching hot code.
-  5. Consider: empty IMP body templates forcing reverse-engineering (~7k tokens)
-     — process/skill note, not code.
+OBJECTIVE (evolved): started as RFC-011 case-note burn-down (top items now all
+shipped); PIVOTED to the general root pattern behind them — CLI-shape citation
+drift in skills (every wrong flag = token waste for every agent). Same mission
+(token efficiency), broader leverage.
+
+PLAN / PROGRESS:
+  1. [DONE ceff6e90] ADR-001 gate-edge-model note (verified vs layering gate).
+  2. [OBE] memory retrieve phrasing — boot-footer already fixed on edge.
+  3. [DONE e0e7b7b1] worktree land --fork no-such-fork path-vs-branch hint —
+     pure no_such_fork_message + TDD unit test; e2e goldens preserved (10 pass).
+  3b.[DONE a7e9ec0e] /audit + /reconcile brief-surface guardrails (plan criteria
+     off-surface; conformance findings name the selector-registry verb).
+  3c.[DONE fe3eed9a] /close stage-the-slug-symlink guidance.
+  4. arm-spawn --slice doc-gap — HOT (SL-190/dispatch). Still deferred; file
+     backlog OR skill note only if the CLI audit surfaces it cleanly.
+  5. [NEXT] SKILL CLI-shape drift audit — background agent ae7ce25147e69f8c5
+     (launched ~04:12) verifies core-lifecycle skills' `doctrine` command
+     citations against `--help` ground truth, returns confirmed mismatches only.
+     Apply the verified high/med fixes, each a clean commit. This is the current
+     compounding thread for the rest of the window.
 
 PROGRESS (newest first):
   - Increment 1 DONE: ADR-001 body gained "### Gate edge model" subsection —
@@ -38,14 +44,13 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Code increment (fresh, self-contained, TDD) — `doctrine worktree
-land --fork` bails with a bare `land-refused: no-such-fork` even when a fork DIR
-(not branch) was passed; `--fork` wants a BRANCH name (ISS-058 case-note). Add a
-path-vs-branch hint to the error. Find it in `src/worktree/land.rs` (`run_land`,
-the `no-such-fork` bail). TDD: red test asserting the hint, green, refactor.
-Triage rated collision med (worktree area) but my branch is isolated + User
-cherry-picks, so a clean tested error-msg improvement is a fine gift. If it turns
-messy/hot, file a backlog item instead and move to another isolated code fix.
+NEXT-ACTION: Process the SKILL CLI-shape audit agent (ae7ce25147e69f8c5). For
+each CONFIRMED high/med mismatch it returns: re-verify against `--help` yourself
+(agents can err), edit the skill line, commit clean (one commit per skill or a
+tight batch). Skip low/cosmetic. If it reports NONE, that's a clean result —
+record it and pick the next thread (options: reference-doc drift audit of
+glossary.md / using-doctrine.md vs CLI; or a fresh isolated backlog code fix like
+IMP-056 coverage Debug-format rendering).
 
 TRIAGE WORKLIST (agentId a608c2f9a5f7f8337, done ~03:59) — full table saved in
 this turn's reasoning. Top-3 doc-fixes ALL SHIPPED. Remaining actionable:

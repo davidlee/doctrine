@@ -45,3 +45,19 @@ next: TDD the worktree land --fork path-vs-branch error hint in src/worktree/lan
   Notes triaged clean —
   the stale friction falls away,
   three guardrails land.
+
+## 04:12 — turn 3: shipped worktree land TDD fix; launched skill CLI-shape audit
+observed: TDD'd the `worktree land --fork` no-such-fork path-vs-branch hint —
+  pure `no_such_fork_message` helper (land.rs) + unit test in mod.rs; e2e
+  assert_refusal uses `.contains(token)` so the VT golden survives the appended
+  hint (10 e2e pass, clippy+fmt clean). Commit e0e7b7b1. Note: doctrine is a BIN
+  crate — `cargo test --bin doctrine <name>`, NOT `--lib`.
+  Top RFC-011 case-note worklist now cleared (4 fixes shipped). Pivoted the
+  thread to the general root cause — CLI-shape citation drift in skills — and
+  launched a background audit agent (ae7ce25147e69f8c5) to verify core-lifecycle
+  skills' command citations against `--help`, returning confirmed mismatches only.
+next: process the audit agent's confirmed mismatches; apply verified fixes.
+
+  One helper, one hint —
+  the phantom fork now speaks its
+  name: branch, not path.
