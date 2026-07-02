@@ -1,0 +1,42 @@
+memory_uid = "mem_019f2221b5327cd19c6ea1ace68a7689"
+memory_key = "mem.fact.boot.no-universal-hymns-band"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Boot universal section is a Static embed, not a hymns band"
+summary = "boot's disk 'universal' section is an authored Static embed, NOT a hymns band — SL-186's band registry is closed with no universal band"
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = ["src/boot.rs", "src/hymns.rs"]
+globs = []
+commands = []
+tags = ["boot", "hymns", "sl-187"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "63812694e9708fc78962cfaf3a6a482cb14dcba7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "da7b38557836250265a9e0eaf634fec845a259ba53d38619c30d2006d544d37a"
+base_commit = "0e6a5a2a1073a5d013b05c9111c4062f296afadd"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
