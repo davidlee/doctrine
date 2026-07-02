@@ -93,6 +93,26 @@ fn new_issue(root: &Path, title: &str, slug: &str) {
     assert!(out.status.success(), "backlog new {slug}: {}", stderr(&out));
 }
 
+fn seed_adr(root: &Path, id: u32, title: &str) {
+    let name = format!("{id:03}");
+    let dir = root.join(format!(".doctrine/adr/{name}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let toml = format!(
+        "id = {id}\n\
+         slug = \"adr-{name}\"\n\
+         title = \"{title}\"\n\
+         status = \"accepted\"\n\
+         created = \"2026-06-14\"\n\
+         updated = \"2026-06-14\"\n"
+    );
+    std::fs::write(dir.join(format!("adr-{name}.toml")), &toml).unwrap();
+    std::fs::write(
+        dir.join(format!("adr-{name}.md")),
+        format!("# {title}\n\n## Context\n\n## Decision\n\n## Consequences\n"),
+    )
+    .unwrap();
+}
+
 fn slice_toml(root: &Path, id: u32) -> String {
     fs::read_to_string(root.join(format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"))).unwrap()
 }
@@ -212,6 +232,9 @@ fn dep_seq_verbs_refuse_off_allowlist_targets_and_sources() {
     );
 
     // (d) non-authoring SRC kind (an ADR cannot author dep/seq).
+    // Seed ADR-001 so parse_resolvable_ref can resolve it; the work-like
+    // kind gate must fire, not the existence check.
+    seed_adr(root, 1, "Module layering");
     let bad_src = run(root, &["needs", "ADR-001", "SL-001"]);
     assert!(!bad_src.status.success(), "non-authoring SRC refused");
     assert!(

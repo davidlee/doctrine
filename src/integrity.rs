@@ -430,17 +430,7 @@ pub(crate) fn kind_by_prefix(prefix: &str) -> Option<&'static KindRef> {
 /// unknown prefix / non-canonical shape, and a well-formed ref to an id with no
 /// entity directory (dangling). Read-only.
 pub(crate) fn ensure_ref_resolves(root: &Path, reference: &str) -> anyhow::Result<()> {
-    let (kind, id) = parse_resolvable_ref(root, reference)?;
-    let name = format!("{id:03}");
-    // parse_resolvable_ref already confirmed the entity exists (it scanned the
-    // directory), but double-check consistency here for the error message.
-    let dir = root.join(kind.kind.dir).join(&name);
-    anyhow::ensure!(
-        fsutil::is_real_dir(&dir),
-        "`{reference}` does not resolve to an entity (no {} at {})",
-        listing::canonical_id(kind.kind.prefix, id),
-        dir.display()
-    );
+    parse_resolvable_ref(root, reference)?;
     Ok(())
 }
 
@@ -479,20 +469,34 @@ pub(crate) fn parse_resolvable_ref(
         );
         return Ok((kref, id));
     }
-    // Bare number — scan all kinds for a matching entity directory.
+    // Bare number — scan all kinds for matching entity directories.
     let id: u32 = reference.parse().with_context(|| {
         format!("`{reference}` is not a valid entity reference (expected e.g. SL-031 or 31)")
     })?;
     let name = format!("{id:03}");
+    let mut matches: Vec<&'static KindRef> = Vec::new();
     for kref in KINDS {
         let dir = root.join(kref.kind.dir).join(&name);
         if fsutil::is_real_dir(&dir) {
-            return Ok((kref, id));
+            matches.push(kref);
         }
     }
-    anyhow::bail!(
-        "no entity found for bare id `{reference}` — try the prefixed form (e.g. SL-{name})"
-    )
+    match matches.as_slice() {
+        [] => anyhow::bail!(
+            "no entity found for bare id `{reference}` — try the prefixed form (e.g. SL-{name})"
+        ),
+        [single] => Ok((single, id)),
+        many => {
+            let ids: Vec<String> = many
+                .iter()
+                .map(|k| listing::canonical_id(k.kind.prefix, id))
+                .collect();
+            anyhow::bail!(
+                "bare id `{reference}` is ambiguous — matches {}; use the prefixed form",
+                ids.join(", ")
+            )
+        }
+    }
 }
 
 /// `doctrine reseat <CANONICAL_REF> [--to <NNN>]` — renumber an entity's
