@@ -106,7 +106,7 @@ pub(crate) fn resolve_entity_path_and_canonical(
     root: &std::path::Path,
     raw: &str,
 ) -> anyhow::Result<(PathBuf, String)> {
-    let (kref, id) = crate::integrity::parse_canonical_ref(raw)?;
+    let (kref, id) = crate::integrity::parse_resolvable_ref(root, raw)?;
     let path = crate::entity::id_path(root, kref.kind, id, crate::entity::Ext::Toml);
     if !path.exists() {
         anyhow::bail!("entity not found: {raw}");
