@@ -100,7 +100,7 @@ fn est_cost(bounds: Option<(f64, f64)>, ctx: CostCtx, ec: &config::EstimateCost)
 /// Default raw value for a value-bearing entity that authors no `[value]` facet
 /// (SL-177; SL-176 D-value-floor-sibling). Default-when-absent, NOT a min-clamp:
 /// an authored value (incl. < 1.0 and 0.0) is returned untouched.
-const DEFAULT_VALUE: f64 = 1.0;
+pub(crate) const DEFAULT_VALUE: f64 = 1.0;
 
 /// Single definition of an entity's value for priority purposes. Authored value
 /// wins; a value-bearing kind with no facet defaults to `DEFAULT_VALUE`; any other
