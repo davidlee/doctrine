@@ -1,0 +1,65 @@
+id    = 214
+slug  = "design-review-of-sl-190"
+title = "design review of SL-190"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-190"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "Expected: composite 'landed' truth from a committed durable source that survives coord removal + cross-machine. Observed: design §33-44,76-80 grounds it on boundaries.toml, which state.rs:593 places under gitignored .doctrine/state/ (not committed; git ls-files finds zero tracked). Cross-machine landed recovery is impossible from this file."
+detail = "The foundational section claims boundaries.toml is 'Committed, durable, canonical for which phases landed' and that reconcile 'recovers landed truth from the committed registry' on a fresh machine. FALSE: .doctrine/state/ is gitignored (.gitignore:56); boundaries_path resolves against the PRIMARY tree only (state.rs:614) and write_registry is annotated 'disposable gitignored state' (state.rs:642). The actual committed durable ledger is the phase/<N> git ref-cut (double-written by dispatch record-boundary; ADR-012 preserved refs; SKILL 'git refs as the durable ledger'), from which the registry is DERIVED at prepare-review. PENANCE: reground 'landed' truth on the committed phase/<N> refs (or the ledger they cut), and correct every 'committed/durable registry' claim. boundaries.toml is a derived, primary-local cache — not the cross-machine source."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "blocker"
+title = "Expected: resolve_phase_truth resolves per-phase status. Observed: design §96 feeds it coord_rollup/local_rollup, but phase_rollup returns PhaseRollup = aggregate bucket COUNTS (state.rs:74-81), which cannot say WHICH phase is in_progress/blocked/completed. The core is structurally unable to compute the per-phase truth or divergence table it promises."
+detail = "PhaseRollup is {planned,in_progress,completed,blocked,unknown,missing_toml}: u32 (state.rs:74). fold_rollup (state.rs:105) discards phase identity. The composite table (design §48-53) and the per-tree divergence table (§93) are per-PHASE verdicts; counts cannot produce them (2/5 vs 4/4 tells you nothing about phase-03). PENANCE: change the pure core's inputs to per-phase status maps — e.g. resolve_phase_truth(registry_rows: &[BoundaryRow], coord_status: &[(PhaseId, StemStatus)], local_status: &[(PhaseId, StemStatus)]) — sourced from a per-phase reader (read_phase_status), not fold_rollup. Rollups may still feed the summary line but not the resolver."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "blocker"
+title = "Expected: reconcile writes only status fields, idempotently. Observed: design §126 reuses set_phase_status, which (state.rs:365-461) stamps last_updated, appends a [[progress]] audit row every call, re-stamps started/completed, AND via capture_phase_boundary/record/forget_source_delta MUTATES the boundary registry reconcile itself reads as landed-truth. Not idempotent; circular; forges history."
+detail = "set_phase_status side effects: (1) last_updated:=now + a new [[progress]] row per call (state.rs:391,426-437) => NOT idempotent, and forges a progress log that never happened on the target tree; (2) capture_phase_boundary stamps code_start_oid and record_source_delta/forget_source_delta write/evict boundaries.toml rows (state.rs:424,452,461) => reconcile writing phase status would PERTURB the registry it consumed as truth (a read-then-clobber-your-own-source cycle). PENANCE: introduce a dedicated status-only reconcile writer (edit-preserving, sets status field + last_updated only, no [[progress]] append, no boundary capture/eviction), or a set_phase_status mode flag that suppresses the progress-log and registry-capture tail. The design must name it and the verification must prove no registry mutation during reconcile."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "Expected: a TOTAL, unambiguous truth table. Observed: design §48-53 only names LANDED / IN-FLIGHT / LOCAL / CONFLICT and only defines CONFLICT for registry-landed + coord in_progress/blocked. It is silent on: coord 'planned', unknown/missing_toml anomalies (state.rs:79-80, surfaced not folded), a reopened phase reset to planned, and phase-SET drift (registry rows vs coord/local phases disagree on which phases exist)."
+detail = "Runtime statuses include planned and the anomaly buckets unknown/missing_toml (state.rs:74-98, fold_rollup:105); orphaned runtime phases are a real case the code already surfaces. The 'total, testable' claim (§97) is false witness until the table covers every (registry ∈ {row|none}) x (coord ∈ {planned,in_progress,completed,blocked,unknown,missing_toml,absent}) x (local …) combination and the phase-presence mismatch (a phase in the registry but not in the coord plan, or vice versa). PENANCE: write the full decision table (or a total match with an explicit catch-all -> UNKNOWN/ANOMALY) and enumerate it in the verification case table; anomalies must suppress divergence exactly as PhaseRollup::anomalies (state.rs:96) already does."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "Expected: reconcile's cross-tree write is safe under ADR-006 sole-writer. Observed: design §113-118 justifies writing another tree's runtime state 'from wherever invoked' by citing sole-writer, but the write seams are lock-free read-modify-write fs::write (state.rs:439,644) with no CAS/lock; nothing prevents a live orchestrator drive and a concurrent handoff-machine reconcile from racing the same primary tree, or a reconcile clobbering a coord tree mid-drive."
+detail = "ADR-006 sole-writer is an ORCHESTRATOR-role invariant, not a mutual-exclusion mechanism; the design invokes it to bless a write that can now originate from a fresh machine or a second operator (§76-80 cross-machine handoff explicitly enables this). 'Sole writer' degrades to 'last writer wins'. Also 'primary tree' resolution is first-porcelain-entry (git.rs:564) — unexamined for detached/absent-primary. PENANCE: either (a) confine reconcile to writing the PRIMARY tree only and refuse when a live dispatch/<slice> coord tree exists (defer to the drive), documenting single-operator as a precondition; or (b) add an explicit tolerated-risk note with the concurrency assumption stated. Do not cite sole-writer as if it were a lock."
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "major"
+title = "Expected: the gc landed-oracle lift is behaviour-preserving AND the new arbitrary-target path is a stated, tested contract. Observed: design §162-169 calls the whole thing a 'behaviour-preserving refactor' proven by 'the gc suite stays green', but gc hardcodes coordination HEAD into ancestry + git-cherry (gc.rs ~164,188); generalizing to an arbitrary target (deliver-to/trunk) is a semantic EXPANSION whose new path unchanged gc tests never exercise."
+detail = "Extraction safety (gc keeps passing HEAD => gc green) and new-capability correctness (coord rows resolve against deliver-to/trunk) are two different claims; the design conflates them, so the load-bearing new behaviour ships unproven. PENANCE: split the claim — (1) the EXTRACTION is behaviour-preserving (gc suite green, unchanged); (2) the GENERALIZED oracle is a NEW contract requiring its own tests over non-HEAD targets (landed / not-landed / missing-target -> unknown). Add those cases to the verification section explicitly rather than implying gc's suite covers them."
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "minor"
+title = "Expected: design names which module OWNS the shared selector-diagnosis predicate, since duplication is forbidden. Observed: design §183,196-199 commits to 'one pure predicate, two dispositions' but defers OWNERSHIP (which of doctor / SL-180 declares it) to plan time (OQ-3, §245). The decision-to-share is made, but the home is unnamed, leaving a window for parallel selector logic."
+detail = "conformance.rs already owns the glob machinery (conformance.rs:96); the doctor 'reuses' it (§183). Naming conformance.rs (or a selector leaf) as the predicate's home in DESIGN — while leaving only land-ORDER to plan — closes the parallel-implementation risk without over-committing sequencing. PENANCE: state the owning module for diagnose_selector's predicate in the design; keep only 'which slice lands first' as the plan-time question."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

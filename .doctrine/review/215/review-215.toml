@@ -1,0 +1,25 @@
+id    = 215
+slug  = "reconciliation-review-of-sl-189"
+title = "reconciliation review of SL-189"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-189"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "tests/e2e_slice_record_delta.rs edited but absent from design-target selectors (conformance: 1 undeclared)"
+detail = "slice conformance 189 reports 1 undeclared: M tests/e2e_slice_record_delta.rs. The edit is legitimate and design-anticipated — design.md §9 and plan VT-3 (test_file = tests/e2e_slice_record_delta.rs) both name it as the arg-diagnostics + behaviour-preservation home. The slice's selectors declare src/state.rs, src/slice.rs, and the two dispatch SKILL.md files as design-target (all 4 conformant), plus scope-relevant globs, but nothing covers tests/e2e_slice_record_delta.rs. So this is a selector-completeness gap in the slice's authored metadata, not scope creep. Expected: the touched test file matched by a selector so conformance reads fully clean. Observed: 1 undeclared. Remedy is a per-slice metadata edit (add a scope-relevant/design-target selector), owned by /reconcile. Context: this is the SL-189 fix working — 1 benign undeclared vs the 17 undeclared on SL-186 that motivated the slice."
+disposition = "tolerated"
+response = "Accepted, no metadata change. design-target selectors model the design's intended PRODUCTION surface; tests/e2e_slice_record_delta.rs is verification scaffolding — the design (§9) and plan (VT-3 test_file) name it, but it is not deliverable behaviour. VT-1/VT-2 tests live inline in the already-declared design-target files (src/state.rs, src/slice.rs), so only the standalone VT-3 e2e file surfaces as undeclared. Declaring a test file as a design-target would blur the selector's production-surface semantics for a nit. The single undeclared is the benign residue this slice set out to shrink (17 undeclared on SL-186 → 1 here), and is exactly the low-signal case an auditor waves through. No reconcile write required."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
