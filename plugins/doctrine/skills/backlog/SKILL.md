@@ -32,7 +32,7 @@ The CLI is the source of truth for exact flags: `doctrine backlog --help`
 | capture a new item | `doctrine backlog new <kind> [title]` |
 | survey items | `doctrine backlog list [--kind …] [--status …] [--tag …] [--all]` |
 | inspect one item | `doctrine backlog show <ID>` |
-| transition status | `doctrine backlog edit <ID>` (prompts) |
+| transition status | `doctrine backlog edit <ID> --status <STATUS> [--resolution <R>]` |
 | add/remove tags | `doctrine backlog tag <ID> <tag> … [--remove <tag>]` (adds positional; `--remove`/`-d` repeatable) |
 | record a hard dep | `doctrine backlog needs <ID> <DEP-ID> [<DEP-ID> …]` |
 | record soft ordering | `doctrine backlog after <ID> <PREDECESSOR-ID>` |
@@ -55,9 +55,11 @@ a candidate that does not fit the work-status lifecycle
 
 `open → triaged → started → resolved → closed`
 
-- Terminal statuses (`resolved`, `closed`) require a **resolution** (prompted).
+- Terminal statuses (`resolved`, `closed`) require a **resolution**, passed via
+  `--resolution` (`fixed|done|mitigated|accepted|expired|duplicate|wont-do|obsolete|promoted`).
 - Non-terminal statuses forbid a resolution (re-opening auto-clears it).
-- `doctrine backlog edit <ID>` walks the transition in-place.
+- `doctrine backlog edit <ID> --status <STATUS>` transitions in-place. `--status`
+  is required; nothing is prompted. Terminal statuses also need `--resolution`.
 
 ## Tags
 
