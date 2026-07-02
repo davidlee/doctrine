@@ -1,7 +1,7 @@
 id = 180
 slug = "selector-conformance-hardening"
 title = "Selector conformance hardening: design-time dry-run + import-belt scope-creep refusal"
-status = "ready"
+status = "audit"
 created = "2026-06-30"
 updated = "2026-07-02"
 tags = ["area:conformance", "area:dispatch"]
