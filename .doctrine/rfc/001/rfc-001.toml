@@ -6,7 +6,7 @@ slug = "thesis-graph-value-consumption-surfaces"
 title = "Thesis: graph value is gated on consumption surfaces"
 status = "open"
 created = "2026-06-20"
-updated = "2026-06-30"
+updated = "2026-07-02"
 tags = ["area:cli", "area:graph", "area:priority", "area:web", "cordage", "value"]
 
 [relationships]
