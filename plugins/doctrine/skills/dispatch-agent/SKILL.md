@@ -86,16 +86,19 @@ The orchestrator imports that live tree directly. Five steps, in order:
    (`--branch` binds dir↔branch — both belts verify ONE worker state. The
    `no-worker-head` refusal is ALSO the runtime catch if the tree ever went missing —
    the second boundary behind the install-time no-`WorktreeRemove` assert, RV-205 F-2.)
-4. **Import.** `doctrine worktree import --base <B> --from-worktree <worktreePath>`
+4. **Import.** `doctrine worktree import --base <B> --from-worktree <worktreePath> --slice <N>`
    Gathers the live tracked+untracked delta, runs the `classify_import` belt
    (`.doctrine/`/`.claude/` reject, HEAD==B, clean coord tree), applies onto `B`
-   NON-committing. This realizes the router funnel's arm-neutral **Import** beat on
+   NON-committing. `--slice <N>` scope-checks the worker delta against the slice's
+   **design-target** selectors: any touched path no selector declares refuses with
+   `undeclared-scope` (the offending paths + a `slice selector add` hint print
+   before the halt). This realizes the router funnel's arm-neutral **Import** beat on
    this arm (the `B..S` single-commit check reads vacuously — a worktree carries no
-   commits). A belt/precond violation exits **nonzero** → the funnel HALTS here.
+   commits). A belt/precond/scope violation exits **nonzero** → the funnel HALTS here.
 5. **Reap — GATED on step 4 exit 0 (F-3).** ONLY after `import` succeeded (and the
    batch's commit + `record-boundary` have landed) reap the tree:
    ```
-   doctrine worktree import --base "$B" --from-worktree "$WT" && \
+   doctrine worktree import --base "$B" --from-worktree "$WT" --slice "$N" && \
      <commit + record-boundary> && \
      git worktree remove --force "$WT"
    ```

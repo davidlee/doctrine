@@ -63,6 +63,9 @@ pub(crate) enum Refusal {
     DoctrineTouch,
     /// The `B..<fork>` delta force-touches a `.claude/` path.
     ClaudeTouch,
+    /// The delta touches a path NO design-target selector of the `--slice` scope
+    /// declares (SL-180 PHASE-02). Only reachable when `selectors` is non-empty.
+    UndeclaredScope,
 }
 
 impl Refusal {
@@ -75,6 +78,7 @@ impl Refusal {
             Refusal::MultiCommit => "multi-commit",
             Refusal::DoctrineTouch => "doctrine-touch",
             Refusal::ClaudeTouch => "claude-touch",
+            Refusal::UndeclaredScope => "undeclared-scope",
         }
     }
 }
@@ -89,12 +93,17 @@ impl Refusal {
 ///
 /// Precond order matches the funnel: HEAD → tree → single-commit → belt. The belt
 /// prefix-matching lives HERE (pure) — `.doctrine/` then `.claude/`, prefix-match
-/// both tiers with no special-casing.
+/// both tiers with no special-casing. The scope leg runs LAST, AFTER the prefix
+/// legs: a `.doctrine/`/`.claude/` path always yields its tier refusal, never
+/// `UndeclaredScope` (SL-180 PHASE-02). `selectors` are the `--slice` scope's
+/// design-target selectors; an EMPTY `selectors` makes the scope leg a no-op —
+/// byte-for-byte the pre-PHASE-02 belt (VA-3).
 pub(crate) fn classify_import(
     head_at_base: bool,
     tree_clean: bool,
     single_commit: bool,
     delta_paths: &[String],
+    selectors: &[String],
 ) -> Result<Apply, Refusal> {
     if !head_at_base {
         return Err(Refusal::HeadMoved);
@@ -113,7 +122,72 @@ pub(crate) fn classify_import(
             return Err(Refusal::ClaudeTouch);
         }
     }
+    // Scope leg (LAST): reject iff a `--slice` scope was supplied AND some delta
+    // path is declared by no design-target selector. Reuses the pure conformance
+    // predicate (single match implementation).
+    if !selectors.is_empty() {
+        let paths: Vec<&str> = delta_paths.iter().map(String::as_str).collect();
+        if !crate::conformance::undeclared_paths(selectors, &paths).is_empty() {
+            return Err(Refusal::UndeclaredScope);
+        }
+    }
     Ok(Apply::Ok)
+}
+
+/// On an `UndeclaredScope` refusal, print the offending paths and the per-path
+/// remediation hint to stdout before the caller bails (EX-3). Re-derives the
+/// undeclared set from the SAME pure predicate the belt used (single source),
+/// and hands it back so the caller can name the paths in its error too.
+fn report_undeclared_scope(
+    selectors: &[String],
+    delta_paths: &[String],
+) -> anyhow::Result<Vec<String>> {
+    let paths: Vec<&str> = delta_paths.iter().map(String::as_str).collect();
+    let undeclared = crate::conformance::undeclared_paths(selectors, &paths);
+    let mut out = io::stdout();
+    writeln!(
+        out,
+        "import-refused: undeclared-scope — the worker delta touches {} path(s) no design-target selector declares:",
+        undeclared.len()
+    )?;
+    for path in &undeclared {
+        writeln!(
+            out,
+            "  {path}\n    remediation: doctrine slice selector add {path} --intent design-target --note <why>"
+        )?;
+    }
+    Ok(undeclared)
+}
+
+/// Run the pure classifier and, on `UndeclaredScope`, print the diagnostic +
+/// bail with a message naming the offending paths; on any other refusal, bail
+/// with the bare token (the pre-PHASE-02 shape). Shared by both import arms so
+/// the scope reporting has ONE implementation.
+fn classify_or_report(
+    head_at_base: bool,
+    tree_clean: bool,
+    single_commit: bool,
+    delta_paths: &[String],
+    selectors: &[String],
+) -> anyhow::Result<()> {
+    match classify_import(
+        head_at_base,
+        tree_clean,
+        single_commit,
+        delta_paths,
+        selectors,
+    ) {
+        Err(Refusal::UndeclaredScope) => {
+            let undeclared = report_undeclared_scope(selectors, delta_paths)?;
+            bail!(
+                "import-refused: {} ({})",
+                Refusal::UndeclaredScope.token(),
+                undeclared.join(", ")
+            );
+        }
+        Err(refusal) => bail!("import-refused: {}", refusal.token()),
+        Ok(Apply::Ok) => Ok(()),
+    }
 }
 
 /// `doctrine worktree import --base <B> --fork <branch>` — mechanizes the dispatch
@@ -141,12 +215,13 @@ pub(crate) fn run_import(
     base: &str,
     fork: Option<&str>,
     from_worktree: Option<&Path>,
+    selectors: &[String],
 ) -> anyhow::Result<()> {
     // Exactly one source. clap `conflicts_with` already rejects both-given at parse;
     // this rejects neither-given and dispatches to the arm's body.
     match (fork, from_worktree) {
-        (Some(fork), None) => run_import_fork(path, base, fork),
-        (None, Some(dir)) => run_import_from_worktree(path, base, dir),
+        (Some(fork), None) => run_import_fork(path, base, fork, selectors),
+        (None, Some(dir)) => run_import_from_worktree(path, base, dir, selectors),
         (Some(_), Some(_)) => bail!("import: --fork and --from-worktree are mutually exclusive"),
         (None, None) => bail!("import: exactly one of --fork / --from-worktree is required"),
     }
@@ -156,7 +231,12 @@ pub(crate) fn run_import(
 /// BEHAVIOUR-FROZEN (EX-4) — the body below is the pre-PHASE-05 `run_import`
 /// verbatim; the `--patch` arm is strictly additive and shares only the pure
 /// [`classify_import`] core.
-fn run_import_fork(path: Option<PathBuf>, base: &str, fork: &str) -> anyhow::Result<()> {
+fn run_import_fork(
+    path: Option<PathBuf>,
+    base: &str,
+    fork: &str,
+    selectors: &[String],
+) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
 
     // --- gather: precond 1 — HEAD == B (ref-equality on resolved shas) ---
@@ -202,11 +282,14 @@ fn run_import_fork(path: Option<PathBuf>, base: &str, fork: &str) -> anyhow::Res
     )?;
     let delta_paths: Vec<String> = diff.lines().map(str::to_owned).collect();
 
-    // --- pure classify ---
-    match classify_import(head_at_base, tree_clean, single_commit, &delta_paths) {
-        Err(refusal) => bail!("import-refused: {}", refusal.token()),
-        Ok(Apply::Ok) => {}
-    }
+    // --- pure classify (+ scope reporting on UndeclaredScope) ---
+    classify_or_report(
+        head_at_base,
+        tree_clean,
+        single_commit,
+        &delta_paths,
+        selectors,
+    )?;
 
     // --- act: apply the SAME diff into the index, NON-committing (ADR-006 D7) ---
     // `git apply --3way --index` writes the index from the coordination root; under
@@ -244,7 +327,12 @@ fn run_import_fork(path: Option<PathBuf>, base: &str, fork: &str) -> anyhow::Res
 /// The caller (`/dispatch-agent` funnel) reaps the worktree with `git worktree remove
 /// --force` ONLY after this returns 0 (F-3): a nonzero exit halts the funnel and LEAVES
 /// the tree, so a failed import never `--force`-destroys the sole copy of the delta.
-fn run_import_from_worktree(path: Option<PathBuf>, base: &str, dir: &Path) -> anyhow::Result<()> {
+fn run_import_from_worktree(
+    path: Option<PathBuf>,
+    base: &str,
+    dir: &Path,
+    selectors: &[String],
+) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
 
     // Gather the worker's LIVE working-tree delta (tracked + untracked) as one
@@ -273,11 +361,14 @@ fn run_import_from_worktree(path: Option<PathBuf>, base: &str, dir: &Path) -> an
     // verbatim and no rename hides a governance source leg. ---
     let delta_paths = gather_worktree_delta_paths(dir)?;
 
-    // --- pure classify (belt lives in the pure core, reused unchanged) ---
-    match classify_import(head_at_base, tree_clean, single_commit, &delta_paths) {
-        Err(refusal) => bail!("import-refused: {}", refusal.token()),
-        Ok(Apply::Ok) => {}
-    }
+    // --- pure classify (belt lives in the pure core; scope leg reported here) ---
+    classify_or_report(
+        head_at_base,
+        tree_clean,
+        single_commit,
+        &delta_paths,
+        selectors,
+    )?;
 
     // --- act: apply the gathered patch into the index, NON-committing (ADR-006 D7).
     // Same `git apply --3way --index` as the fork arm; the orchestrator commits
@@ -432,6 +523,103 @@ mod tests {
         assert_eq!(
             fs::read_to_string(target.join("newfile")).unwrap(),
             "brand new\n"
+        );
+    }
+
+    // --- VT-4: classify_import with selectors (the pure scope leg) ---
+
+    #[test]
+    fn classify_import_undeclared_delta_path_is_undeclared_scope() {
+        let selectors = vec!["src/**".to_string()];
+        let delta = vec!["docs/readme.md".to_string()];
+        assert_eq!(
+            classify_import(true, true, true, &delta, &selectors),
+            Err(Refusal::UndeclaredScope)
+        );
+    }
+
+    #[test]
+    fn classify_import_doctrine_path_is_doctrine_touch_even_when_undeclared() {
+        // Prefix legs precede the scope leg: a `.doctrine/` path is DoctrineTouch,
+        // never UndeclaredScope, though no selector declares it either.
+        let selectors = vec!["src/**".to_string()];
+        let delta = vec![".doctrine/state/x".to_string()];
+        assert_eq!(
+            classify_import(true, true, true, &delta, &selectors),
+            Err(Refusal::DoctrineTouch)
+        );
+    }
+
+    #[test]
+    fn classify_import_empty_selectors_is_ok_noop() {
+        // Empty selectors ⇒ the scope leg never fires (byte-for-byte old belt).
+        let delta = vec!["anything/at/all".to_string()];
+        assert_eq!(
+            classify_import(true, true, true, &delta, &[]),
+            Ok(Apply::Ok)
+        );
+    }
+
+    #[test]
+    fn classify_import_fully_declared_delta_is_ok() {
+        let selectors = vec!["src/**".to_string()];
+        let delta = vec!["src/a.rs".to_string(), "src/b.rs".to_string()];
+        assert_eq!(
+            classify_import(true, true, true, &delta, &selectors),
+            Ok(Apply::Ok)
+        );
+    }
+
+    // --- VT-5: run_import_from_worktree fed `--slice`-resolved selectors ---
+
+    /// Stand up a coordination primary at HEAD == base with a linked worker
+    /// worktree that mutated the tracked `seed`; returns `(tmp, primary, wt)`.
+    fn worker_tree_touching_seed() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("primary"));
+        let wt = tmp.path().join("wt");
+        git(
+            &primary,
+            &["worktree", "add", "-q", wt.to_str().unwrap(), "HEAD"],
+        );
+        let wt = fs::canonicalize(&wt).unwrap();
+        fs::write(wt.join("seed"), "mutated\n").unwrap();
+        (tmp, primary, wt)
+    }
+
+    #[test]
+    fn run_import_from_worktree_refuses_an_undeclared_worker_path() {
+        let (_tmp, primary, wt) = worker_tree_touching_seed();
+        // No design-target selector declares `seed`.
+        let selectors = vec!["docs/**".to_string()];
+        let err = run_import_from_worktree(Some(primary), "HEAD", &wt, &selectors)
+            .expect_err("an undeclared worker path must be refused");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("import-refused: undeclared-scope"),
+            "carries the token: {msg}"
+        );
+        assert!(msg.contains("seed"), "names the offending path: {msg}");
+    }
+
+    #[test]
+    fn run_import_from_worktree_stages_a_declared_worker_delta() {
+        let (_tmp, primary, wt) = worker_tree_touching_seed();
+        // The literal selector declares `seed` ⇒ conformant ⇒ the delta stages.
+        let selectors = vec!["seed".to_string()];
+        run_import_from_worktree(Some(primary.clone()), "HEAD", &wt, &selectors)
+            .expect("a fully-declared worker delta must import");
+        // The delta landed in the coord index, NON-committing.
+        let staged = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&primary)
+            .args(["diff", "--cached", "--name-only"])
+            .output()
+            .unwrap();
+        let names = String::from_utf8_lossy(&staged.stdout);
+        assert!(
+            names.contains("seed"),
+            "seed staged into the index: {names}"
         );
     }
 }

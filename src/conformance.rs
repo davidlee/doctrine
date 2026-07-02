@@ -94,24 +94,18 @@ pub(crate) struct Conformance {
 /// selectors is reported once against the FIRST selector (selector order).
 /// Iteration is over a `BTreeMap`, so output ordering is deterministic.
 pub(crate) fn compute(selectors: &[String], actual: &BTreeMap<String, Vec<Status>>) -> Conformance {
-    let compiled: Vec<(String, Option<Pattern>)> = selectors
-        .iter()
-        .map(|s| (s.clone(), Pattern::new(s).ok()))
-        .collect();
+    let compiled = compile(selectors);
 
     let mut out = Conformance::default();
     let mut matched: BTreeSet<&str> = BTreeSet::new();
 
     for (path, events) in actual {
-        match compiled
-            .iter()
-            .find(|(_, pat)| pat.as_ref().is_some_and(|p| glob_matches(p, path)))
-        {
-            Some((sel, _)) => {
-                matched.insert(sel.as_str());
+        match matched_selector(&compiled, path) {
+            Some(sel) => {
+                matched.insert(sel);
                 out.conformant.push(Conformant {
                     path: path.clone(),
-                    matched_selector: sel.clone(),
+                    matched_selector: sel.to_string(),
                 });
             }
             None => out.undeclared.push(Undeclared {
@@ -128,6 +122,38 @@ pub(crate) fn compute(selectors: &[String], actual: &BTreeMap<String, Vec<Status
         .collect();
 
     out
+}
+
+/// The paths in `paths` matched by NO selector, returned in INPUT order (the
+/// import belt's scope check, SL-180 PHASE-02). Shares the ONE match
+/// implementation with [`compute`] — a literal selector is a degenerate glob,
+/// an empty `selectors` leaves every path undeclared (nothing declares it).
+pub(crate) fn undeclared_paths(selectors: &[String], paths: &[&str]) -> Vec<String> {
+    let compiled = compile(selectors);
+    paths
+        .iter()
+        .filter(|path| matched_selector(&compiled, path).is_none())
+        .map(|path| (*path).to_string())
+        .collect()
+}
+
+/// Compile the selector strings to `(selector, Option<Pattern>)` pairs once. A
+/// selector that fails to compile as a glob carries `None` and matches nothing
+/// (never panics). Shared by [`compute`] and [`undeclared_paths`].
+fn compile(selectors: &[String]) -> Vec<(String, Option<Pattern>)> {
+    selectors
+        .iter()
+        .map(|s| (s.clone(), Pattern::new(s).ok()))
+        .collect()
+}
+
+/// The FIRST compiled selector matching `path` (selector order), or `None` when
+/// no selector matches. The single per-path match rule behind both cells.
+fn matched_selector<'a>(compiled: &'a [(String, Option<Pattern>)], path: &str) -> Option<&'a str> {
+    compiled
+        .iter()
+        .find(|(_, pat)| pat.as_ref().is_some_and(|p| glob_matches(p, path)))
+        .map(|(sel, _)| sel.as_str())
 }
 
 #[cfg(test)]
@@ -245,5 +271,46 @@ mod tests {
         assert_eq!(c.conformant[0].matched_selector, "src/**");
         // the more specific selector matched nothing of its own → undelivered.
         assert_eq!(c.undelivered, vec!["src/state.rs".to_string()]);
+    }
+
+    // --- VT-3: undeclared_paths (the import belt's scope predicate) ---
+
+    #[test]
+    fn undeclared_paths_returns_the_unmatched_subset_in_input_order() {
+        let sel = vec!["src/**".to_string()];
+        let paths = ["docs/b.md", "src/a.rs", "docs/a.md"];
+        // Only the two docs paths are undeclared, in their input order.
+        assert_eq!(
+            undeclared_paths(&sel, &paths),
+            vec!["docs/b.md".to_string(), "docs/a.md".to_string()]
+        );
+    }
+
+    #[test]
+    fn undeclared_paths_empty_selectors_leaves_every_path_undeclared() {
+        let sel: Vec<String> = Vec::new();
+        let paths = ["src/a.rs", "docs/b.md"];
+        assert_eq!(
+            undeclared_paths(&sel, &paths),
+            vec!["src/a.rs".to_string(), "docs/b.md".to_string()]
+        );
+    }
+
+    #[test]
+    fn undeclared_paths_glob_selector_absorbs_its_matches() {
+        let sel = vec!["src/**".to_string()];
+        let paths = ["src/a.rs", "src/sub/b.rs"];
+        assert!(undeclared_paths(&sel, &paths).is_empty());
+    }
+
+    #[test]
+    fn undeclared_paths_literal_selector_matches_its_exact_path_only() {
+        let sel = vec!["src/state.rs".to_string()];
+        let paths = ["src/state.rs", "src/state_helper.rs"];
+        // The literal absorbs its exact path; the near-miss stays undeclared.
+        assert_eq!(
+            undeclared_paths(&sel, &paths),
+            vec!["src/state_helper.rs".to_string()]
+        );
     }
 }
