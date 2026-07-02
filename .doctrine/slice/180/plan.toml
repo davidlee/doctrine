@@ -1,0 +1,91 @@
+# Implementation plan for SL-180 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-180"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ── PHASE-01 — IMP-204: design-time dry-run + the shared selector reader ──────
+# slice.rs-only. Reuses conformance::compute / render_conformance / fold_name_
+# status_line verbatim; the only new fold is actual_from_range. Lands the shared
+# slice::selectors(root,id,intent) reader that PHASE-02 also consumes.
+[[phase]]
+id        = "PHASE-01"
+name      = "Design-time conformance dry-run (IMP-204) + shared selector reader"
+objective = """
+Add `slice conformance <id> --against <range> [--strict]` that folds a git
+rev-range into the conformance `actual` (swapping the boundary-registry source),
+reusing compute/render/fold verbatim. Introduce the shared intent-filtered
+`slice::selectors(root, id, Option<SelectorIntent>)` reader and route the
+existing registry path (`conformance_outcome`) through it, retiring the inline
+design-target filter. Harden both the new range fold and the registry fold with
+`core.quotePath=false`. Confined to `src/slice.rs`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (post-inquisition, §10 dispositions integrated). conformance::compute, render_conformance, fold_name_status_line, conformance_outcome, run_conformance, SelectorIntent::DesignTarget, selector_paths, parse_cli_id present in current tree (re-grep verified during /plan)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`slice conformance <SL> --against A..B` renders the three cells (undeclared / undelivered / conformant) computed from the range's `--name-status` diff, bypassing the registry read AND the completeness degrade ladder (Unavailable/Incomplete) — a range has no completeness notion." },
+  { id = "EX-2", text = "`--strict` requires `--against` (clap `requires`); it exits nonzero iff the undeclared cell is nonempty (zero otherwise). `--against` whose value lacks `..` errors with a rev-range diagnostic (F8 range-syntax guard), never silently diffing a bare ref against the working tree." },
+  { id = "EX-3", text = "`slice::selectors(root, id, Option<SelectorIntent>)` is the single selector-read seam: `None` ⇒ full union, `Some(DesignTarget)` ⇒ filtered. `conformance_outcome`'s inline design-target filter is replaced by a call to it, AND `selector_paths` (the existing union reader, used by staleness) is re-expressed as `selectors(root, id, None)` — a thin delegate, not a second union implementation. No parallel selector read remains." },
+  { id = "EX-4", text = "`actual_from_range` and the registry fold both run `git -c core.quotePath=false diff --name-status --no-renames …` (F3). Behaviour-preserving for ASCII paths — the existing conformance registry suite is green unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "slice conformance --against A..B folds the range name-status into the three cells; --strict exits nonzero when undeclared is nonempty and zero when empty; --against without `..` errors with the range-syntax diagnostic. Assert the diagnostic + exit behaviour, not just presence.", test_file = "src/slice.rs", keywords = ["against", "strict"] },
+  { id = "VT-2", expects = "A range whose diff includes a non-ASCII path folds and renders that path verbatim (quotePath=false) rather than C-quoted — proving the fold hardening bites at the pure prefix/selector boundary.", test_file = "src/slice.rs", keywords = ["quotePath"] },
+  { id = "VA-1", expects = "Agent confirms slice::selectors(root,id,intent) is the sole selector reader: conformance_outcome delegates to it with no inline design-target filter remaining, and the dry-run shell consumes the same seam. No parallel selector-read implementation (DRY / no-parallel-implementation)." },
+  { id = "VA-2", expects = "Behaviour-preservation: the 6 conformance::compute unit tests and the existing `slice conformance` registry tests pass unchanged (text-frozen); the reader/quotePath refactor altered no verdict for ASCII inputs." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-02 — IMP-199: import-belt scope refusal + plumbing + skills + gate ──
+# conformance.rs (undeclared_paths + compile extract) + worktree/import.rs
+# (UndeclaredScope, selectors param) + worktree/mod.rs (--slice plumbing) +
+# both dispatch SKILL.md. Consumes PHASE-01's slice::selectors reader.
+[[phase]]
+id        = "PHASE-02"
+name      = "Import-belt scope-creep refusal (IMP-199) + dispatch plumbing + layering proof"
+objective = """
+Extend the pure `classify_import` with a `selectors: &[String]` parameter and a
+new `Refusal::UndeclaredScope` (token "undeclared-scope"), appended AFTER the
+`.doctrine/`/`.claude/` prefix legs and a no-op on empty selectors. Add pure
+`conformance::undeclared_paths(selectors, paths)` (extract `compile` from
+`compute`, verdicts unchanged). Thread `--slice <id>` through `worktree import`:
+`worktree::mod::run` (command tier) resolves design-target selectors via
+`slice::selectors` and passes `&selectors` to both import arms; the shell
+re-derives the undeclared list for a legible refusal. Edit both dispatch skills
+to pass `--slice`. Prove the layering gate stays green.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed and green — `slice::selectors(root, id, Option<SelectorIntent>)` exists as the shared reader." },
+  { id = "EN-2", text = "classify_import, Refusal (+ token()), run_import / run_import_fork / run_import_from_worktree, the `worktree import` command variant, and the `.doctrine/`/`.claude/` belt legs present in current tree (re-grep verified)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`conformance::undeclared_paths(selectors: &[String], paths: &[&str]) -> Vec<String>` returns the paths matched by no selector, in input order. `compute` is refactored to share an extracted `compile` + per-path match — the 6 existing compute verdicts are unchanged." },
+  { id = "EX-2", text = "`classify_import(head_at_base, tree_clean, single_commit, delta_paths, selectors)` returns `Err(UndeclaredScope)` iff selectors is nonempty AND some delta path is undeclared, evaluated AFTER the `.doctrine/`/`.claude/` legs (a governance path yields DoctrineTouch, never UndeclaredScope). Empty selectors ⇒ the leg is a no-op. `Refusal::UndeclaredScope.token() == \"undeclared-scope\"`." },
+  { id = "EX-3", text = "`worktree import --slice <id>` (Option<u32>, value_parser = slice::parse_cli_id) resolves design-target selectors in `worktree::mod::run` and threads `&selectors` into both arms; `worktree::import` holds NO `crate::slice` reference (stays engine-tier). On UndeclaredScope the shell prints the undeclared path list + the `doctrine slice selector add … --intent design-target --note` remediation before bailing." },
+  { id = "EX-4", text = "Both `plugins/doctrine/skills/dispatch-agent/SKILL.md` and `dispatch-subprocess/SKILL.md` pass `--slice <N>` on the coordination-root `worktree import` invocation. `.agents/skills/` is left to `just reinstall` (not hand-edited)." },
+  { id = "EX-5", text = "`just gate` (architecture_layering) green: command `tangle_baseline` unchanged and no new `accepted_violation` entry — the `worktree → slice` edge already exists via coordinate.rs and the gate deduplicates it at top-level-module granularity." },
+]
+verification = [
+  { id = "VT-3", expects = "undeclared_paths: unmatched subset returned in input order; empty selectors ⇒ all paths undeclared; a glob selector absorbs its matches (none undeclared); a literal selector matches its exact path only.", test_file = "src/conformance.rs", keywords = ["undeclared_paths"] },
+  { id = "VT-4", expects = "classify_import with selectors: an undeclared delta path ⇒ Err(UndeclaredScope); a `.doctrine/` path ⇒ DoctrineTouch even when it is also undeclared (prefix legs precede the scope leg); empty selectors ⇒ Ok (no-op); a fully-declared delta ⇒ Ok.", test_file = "src/worktree/import.rs", keywords = ["UndeclaredScope", "classify_import"] },
+  { id = "VT-5", expects = "run_import_from_worktree fed --slice-resolved selectors: a worker delta touching an undeclared path fails with `import-refused: undeclared-scope` and lists the offending path; a conformant delta stages (Ok). Reuses the init_repo / linked-worktree test helpers.", test_file = "src/worktree/import.rs", keywords = ["undeclared-scope"] },
+  { id = "VA-1", expects = "Agent runs `just gate` (or `cargo test --test architecture_layering`) after the edge lands and confirms green: command tangle_baseline unchanged, no new accepted_violation, and `worktree::import` still holds zero `crate::slice` references (the read lives only in worktree::mod)." },
+  { id = "VA-2", expects = "Agent reads both edited dispatch skills and confirms the coordination-root `worktree import` invocation now passes `--slice <N>` on both arms, and that `.agents/skills/` was NOT hand-edited (left for `just reinstall`)." },
+  { id = "VA-3", expects = "Behaviour-preservation: existing classify_import / run_import tests keep their verdicts; call sites gained only a mechanical &[] / &selectors argument (the empty-selectors path is byte-for-byte the old belt behaviour)." },
+]
+specs        = []
+requirements = []
