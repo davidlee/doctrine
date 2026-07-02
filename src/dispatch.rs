@@ -58,8 +58,11 @@ pub(crate) enum DispatchCommand {
         prepare_review: bool,
 
         /// Stage-2: replay the prepared journal idempotently and project the
-        /// audited code units (opt-in `--trunk`/`--edge`); runs from parent/root
-        /// after the coordination worktree is removed. Never auto-resolves.
+        /// audited code units. Runs from parent/root after the coordination
+        /// worktree is removed. Trunk is only advanced when `--trunk` is given —
+        /// without it, trunk is left untouched (effectively a dry-run for the
+        /// trunk leg). `--edge` advances an aggregate ref independently.
+        /// Fails rather than auto-resolving conflicts.
         #[arg(long, group = "stage", required = true)]
         integrate: bool,
 
@@ -71,9 +74,9 @@ pub(crate) enum DispatchCommand {
         show_journal_trunk_oid: bool,
 
         /// Project the cumulative code units onto this trunk ref, fast-forward-only +
-        /// expected-tip CAS (e.g. `refs/heads/main`) under `--integrate`; names the
-        /// row to read under `--show-journal-trunk-oid`. Absent under `--integrate` ⇒
-        /// trunk is left untouched.
+        /// expected-tip CAS (e.g. `refs/heads/main`). Also names the row to read
+        /// under `--show-journal-trunk-oid`. Omit to leave trunk untouched — useful
+        /// as a safety check or when only `--edge` is desired.
         #[arg(long, conflicts_with = "prepare_review")]
         trunk: Option<String>,
 
