@@ -131,6 +131,23 @@ pub(crate) enum SelectorCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Advisory selector-health report (SL-190 PHASE-06) — read-only. Flags
+    /// uncompilable / unmatched / redundant / broad selectors against the tracked
+    /// tree. Exit 0 by default; `--assert` exits non-zero on any finding.
+    Doctor {
+        /// Slice id.
+        #[arg(value_parser = parse_cli_id)]
+        id: u32,
+
+        /// Exit non-zero on any finding (advisory exit 0 by default).
+        #[arg(long)]
+        assert: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +256,37 @@ pub(crate) enum SliceCommand {
         /// Optional note — surfaced in the transition output, not stored.
         #[arg(long)]
         note: Option<String>,
+
+        /// Read-only cross-tree phase view (SL-190): render composite per-phase
+        /// truth + a per-tree divergence table (landed | coord | local | → truth),
+        /// gathering landed from `phase/<slice>-NN` refs (registry-cache fallback)
+        /// and the live `dispatch/<slice>` coord tree. Mutually exclusive with a
+        /// target STATE.
+        #[arg(long)]
+        across_trees: bool,
+
+        /// Gate exit: with `--across-trees`, exit non-zero on a CONFLICT or an
+        /// opinionated disagreement only (a fresh-handoff machine is not
+        /// permanently red). Requires `--across-trees`.
+        #[arg(long)]
+        assert: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Rewrite the PRIMARY tree's runtime phase sheets from composite truth
+    /// (SL-190): a status-only writer — sets each phase to its resolved status
+    /// without touching the progress log or the source-delta registry. Composite
+    /// wins where it has an opinion; a locally-set status the composite is silent
+    /// about survives; CONFLICT / UNKNOWN / anomaly phases are skipped + reported.
+    /// Idempotent. REFUSES when a live `dispatch/<slice>` coordination worktree
+    /// exists (during a drive the coord tree is the writer).
+    ReconcilePhases {
+        /// Slice id whose primary-tree phase sheets to reconcile.
+        #[arg(value_parser = parse_cli_id)]
+        id: u32,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -395,8 +443,11 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             id,
             state,
             note,
+            across_trees,
+            assert,
             path,
-        } => run_status(path, id, state, note.as_deref()),
+        } => run_status(path, id, state, note.as_deref(), across_trees, assert),
+        SliceCommand::ReconcilePhases { id, path } => run_reconcile_phases(path, id),
         SliceCommand::List { list, path } => run_list(path, list.into_list_args(color)),
         SliceCommand::Show {
             reference,
@@ -849,13 +900,31 @@ pub(crate) fn run_status(
     id: u32,
     state: Option<SliceStatus>,
     note: Option<&str>,
+    across_trees: bool,
+    assert: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // Cross-tree phase view (SL-190) is a read-only branch: it consumes the pure
+    // `resolve_phase_truth` core and never touches the authored lifecycle status,
+    // so it must not carry a target STATE. Routed before `read_status` so it works
+    // on a fresh handoff machine independent of the authored slice tier.
+    if across_trees {
+        if state.is_some() {
+            anyhow::bail!("--across-trees is read-only; omit the target STATE");
+        }
+        return run_status_across_trees(&root, id, assert);
+    }
+
     let slice_root = root.join(SLICE_DIR);
     let from = read_status(&slice_root, id)?;
 
     // Read-only path (IMP-191): no STATE → print current status + rollup.
     let Some(state) = state else {
+        // --assert is only meaningful for the cross-tree view.
+        if assert {
+            anyhow::bail!("--assert requires --across-trees");
+        }
         // --note is a write-only flag — error if passed without STATE
         // so the user doesn't silently lose their intended transition.
         if note.is_some() {
@@ -883,6 +952,11 @@ pub(crate) fn run_status(
         }
         return Ok(());
     };
+
+    // --assert is a read-only cross-tree gate flag; it has no meaning on a write.
+    if assert {
+        anyhow::bail!("--assert requires --across-trees (a read-only cross-tree view)");
+    }
 
     let to = state.as_str();
     let kind = classify(&from, to);
@@ -957,6 +1031,348 @@ pub(crate) fn run_status(
         status_line(&from, to, kind, posture, note)
     )?;
     Ok(())
+}
+
+/// SL-190 PHASE-02 — the cross-tree phase-status read verb (`slice status <ID>
+/// --across-trees [--assert]`). The impure SHELL over the pure
+/// [`crate::state::resolve_phase_truth`] core: gather three per-phase input maps
+/// (landed = `phase/<slice>-NN` refs with a registry-cache fallback; coord = the
+/// live `dispatch/<slice>` tree's sheets, or none; local = this tree's sheets),
+/// resolve composite truth, and render it + a per-tree divergence table. With
+/// `--assert`, exits non-zero ONLY on a CONFLICT / opinionated disagreement
+/// (`Divergence::assert_worthy`) — a fresh-handoff machine is never permanently
+/// red (design "--assert scope"). All git/disk gathering lives here; resolution
+/// stays in the pure core (ADR-001).
+fn run_status_across_trees(root: &Path, id: u32, assert: bool) -> anyhow::Result<()> {
+    let inputs = gather_truth_inputs(root, id)?;
+
+    // Borrow the owned status strings into the `StemStatus` maps the resolver takes.
+    let coord_map = inputs.coord_rows.as_deref().map(stem_map);
+    let local_map = stem_map(&inputs.local_rows);
+
+    let (truth, div) =
+        crate::state::resolve_phase_truth(&inputs.landed, coord_map.as_deref(), &local_map);
+
+    write!(
+        io::stdout(),
+        "{}",
+        render_across_trees(
+            id,
+            &inputs.landed,
+            coord_map.as_deref(),
+            &local_map,
+            &truth,
+            &div
+        )
+    )?;
+
+    // `--assert` fires ONLY on a CONFLICT or an opinionated disagreement; unknown /
+    // planned / anomaly / silent leave a fresh-handoff machine green (design).
+    if assert && div.assert_worthy() {
+        anyhow::bail!(
+            "across-trees --assert: {} conflict(s), {} disagreement(s) (CONFLICT / \
+             opinionated disagreement) — reconcile before acting on a stale view",
+            div.conflicts.len(),
+            div.disagreements.len(),
+        );
+    }
+    Ok(())
+}
+
+/// The three per-phase input maps for [`crate::state::resolve_phase_truth`],
+/// gathered from `root`'s repo: `landed` (durable `phase/<slice>-NN` refs, with a
+/// recorded source-delta cache fallback), `coord_rows` (the live `dispatch/<slice>`
+/// tree's sheets, or `None` when no live coord tree exists), and `local_rows`
+/// (`root`'s own sheets). Owns its status strings so the caller can borrow them
+/// into the `StemStatus` maps the resolver takes. The single gather seam shared
+/// by `slice status --across-trees` (PHASE-02) and `slice reconcile-phases`
+/// (PHASE-03) — one implementation, no parallel gathering (DRY).
+struct TruthInputs {
+    landed: Vec<(String, crate::state::LandedSignal)>,
+    coord_rows: Option<Vec<(String, Option<String>)>>,
+    local_rows: Vec<(String, Option<String>)>,
+}
+
+/// Gather the [`TruthInputs`] for slice `id` from `root`'s repo (the impure half:
+/// git refs, worktree discovery, sheet reads — all resolution stays in the pure
+/// core, ADR-001). See [`TruthInputs`] for the field semantics.
+fn gather_truth_inputs(root: &Path, id: u32) -> anyhow::Result<TruthInputs> {
+    let slice3 = format!("{id:03}");
+
+    // Landed: durable phase refs win; a recorded source-delta with no ref is the
+    // cache fallback. Absent phases are implicit (the resolver defaults them).
+    let mut landed: Vec<(String, crate::state::LandedSignal)> = Vec::new();
+    let mut have: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for pid in landed_phase_ids(root, &slice3) {
+        if have.insert(pid.clone()) {
+            landed.push((pid, crate::state::LandedSignal::RefPresent));
+        }
+    }
+    if let Ok(rows) = crate::state::read_source_deltas(root, id) {
+        for row in rows {
+            if have.insert(row.phase.clone()) {
+                landed.push((row.phase, crate::state::LandedSignal::CachePresent));
+            }
+        }
+    }
+
+    // Coord: the live `dispatch/<slice>` tree's per-phase sheets, if one exists.
+    // `None` (no live coord tree) routes the resolver to its LOCAL branch — a
+    // load-bearing distinction from "coord present but this phase unknown to it".
+    let coord_ref = format!("{}{slice3}", crate::kinds::DISPATCH_REF_PREFIX);
+    let coord_rows = match crate::git::live_worktree_for_ref(root, &coord_ref) {
+        Ok(Some(entry)) => Some(crate::state::read_phase_statuses(&entry.path, id)?),
+        Ok(None) | Err(_) => None,
+    };
+    let local_rows = crate::state::read_phase_statuses(root, id)?;
+
+    Ok(TruthInputs {
+        landed,
+        coord_rows,
+        local_rows,
+    })
+}
+
+/// SL-190 PHASE-03 — `slice reconcile-phases <ID>`: rewrite the PRIMARY tree's
+/// runtime phase sheets from composite truth via the status-only reconcile writer
+/// ([`crate::state::reconcile_phase_status`] — never `set_phase_status`: no
+/// progress rows, no source-delta registry mutation; design "Reconcile writer").
+/// The composite wins where it has an opinion; a locally-set status the composite
+/// is silent about (a `Local` phase) survives untouched; CONFLICT / UNKNOWN /
+/// anomaly phases are skipped + reported (a rework disagreement is not the verb's
+/// to auto-resolve). A locally-`completed` inline phase absent from the landed
+/// oracle resolves to `Local` and is therefore never regressed (mixed
+/// inline+dispatch slices, EX-2). Idempotent: a phase already at its target is
+/// not rewritten, so a re-run leaves the sheets byte-identical.
+///
+/// REFUSES (non-zero) when a live `dispatch/<slice>` coordination worktree exists
+/// (design "Cross-tree write safety", RV-214 F-5): during an active drive the
+/// coord tree is the phase-sheet writer and reconcile must defer to it. Writes
+/// ONLY the primary tree ([`crate::git::primary_worktree`]), never a coord tree.
+///
+/// SINGLE-OPERATOR PRECONDITION: doctrine has no cross-machine lock, so two
+/// operators reconciling one repo concurrently is out of contract — documented,
+/// not guarded, consistent with the rest of the disposable runtime tier.
+fn run_reconcile_phases(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice3 = format!("{id:03}");
+
+    // Refuse-when-live (F-5): a live coord tree owns the write during a drive.
+    let coord_ref = format!("{}{slice3}", crate::kinds::DISPATCH_REF_PREFIX);
+    if let Ok(Some(entry)) = crate::git::live_worktree_for_ref(&root, &coord_ref) {
+        anyhow::bail!(
+            "slice {} reconcile-phases: refused — a live dispatch coordination worktree \
+             exists at {} (during an active drive the coord tree is the phase-sheet writer; \
+             reconcile is a between-drives / post-conclude recovery tool)",
+            canonical_id(id),
+            entry.path.display()
+        );
+    }
+
+    // Write ONLY the primary tree (F-5): resolve it explicitly rather than writing
+    // wherever invoked. Composite truth is gathered FROM the primary tree too, so a
+    // reconcile invoked from a linked worktree still fixes the primary's sheets.
+    let primary = crate::git::primary_worktree(&root)?;
+
+    let inputs = gather_truth_inputs(&primary, id)?;
+    let coord_map = inputs.coord_rows.as_deref().map(stem_map);
+    let local_map = stem_map(&inputs.local_rows);
+    let (truth, _div) =
+        crate::state::resolve_phase_truth(&inputs.landed, coord_map.as_deref(), &local_map);
+
+    let now = crate::clock::now_timestamp()?;
+    let mut wrote: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    for (pid, t) in &truth {
+        match crate::state::reconcile_action(t) {
+            crate::state::ReconcileAction::Write(status) => {
+                if crate::state::reconcile_phase_status(&primary, id, pid, status, &now)? {
+                    wrote.push(format!("{pid} → {}", status.as_str()));
+                }
+            }
+            crate::state::ReconcileAction::Skip => {
+                skipped.push(format!("{pid} ({})", truth_label(t)));
+            }
+            crate::state::ReconcileAction::Leave => {}
+        }
+    }
+
+    writeln!(
+        io::stdout(),
+        "{}  reconcile-phases → {}",
+        canonical_id(id),
+        primary.display()
+    )?;
+    for w in &wrote {
+        writeln!(io::stdout(), "  wrote {w}")?;
+    }
+    for s in &skipped {
+        writeln!(io::stdout(), "  skipped {s}")?;
+    }
+    if wrote.is_empty() && skipped.is_empty() {
+        writeln!(
+            io::stdout(),
+            "  (nothing to reconcile — sheets already match composite truth)"
+        )?;
+    }
+    Ok(())
+}
+
+/// The `PHASE-NN` ids with a committed `phase/<slice3>-NN` ref (the durable landed
+/// oracle). Mirrors `count_phase_refs` (`dispatch.rs`) but keeps WHICH phases
+/// landed, not just how many. A git failure reads as "none landed" (fail-soft).
+fn landed_phase_ids(root: &Path, slice3: &str) -> Vec<String> {
+    let pattern = format!("{}{slice3}-*", crate::kinds::PHASE_REF_PREFIX);
+    let Ok(out) = crate::git::git_text(root, &["for-each-ref", "--format=%(refname)", &pattern])
+    else {
+        return Vec::new();
+    };
+    let prefix = format!("{}{slice3}-", crate::kinds::PHASE_REF_PREFIX);
+    out.lines()
+        .filter_map(|line| line.strip_prefix(&prefix))
+        .filter(|nn| !nn.is_empty() && nn.bytes().all(|b| b.is_ascii_digit()))
+        .map(|nn| format!("PHASE-{nn}"))
+        .collect()
+}
+
+/// Borrow a per-phase `(id, Option<status>)` reader result into the
+/// `(id, StemStatus)` shape the resolver consumes: `Some → Toml`,
+/// `None → MissingToml` (a `.md`-only / unparseable sheet).
+fn stem_map(rows: &[(String, Option<String>)]) -> Vec<(String, crate::state::StemStatus<'_>)> {
+    rows.iter()
+        .map(|(pid, st)| {
+            (
+                pid.clone(),
+                match st {
+                    Some(s) => crate::state::StemStatus::Toml(s),
+                    None => crate::state::StemStatus::MissingToml,
+                },
+            )
+        })
+        .collect()
+}
+
+/// Render the composite per-phase truth + the per-tree divergence table
+/// (`phase | landed | coord | local | → truth`) plus a divergence summary. Pure:
+/// operates only on the already-gathered maps + resolved truth (SL-190 EX-1).
+fn render_across_trees(
+    id: u32,
+    landed: &[(String, crate::state::LandedSignal)],
+    coord: Option<&[(String, crate::state::StemStatus<'_>)]>,
+    local: &[(String, crate::state::StemStatus<'_>)],
+    truth: &[(String, crate::state::PhaseTruth)],
+    div: &crate::state::Divergence,
+) -> String {
+    use std::fmt::Write as _;
+
+    let headers = ["phase", "landed", "coord", "local", "→ truth"];
+    let mut rows: Vec<[String; 5]> = Vec::new();
+    for (pid, t) in truth {
+        rows.push([
+            pid.clone(),
+            landed_cell(landed, pid),
+            coord_cell(coord, pid),
+            stem_cell(local, pid),
+            truth_label(t),
+        ]);
+    }
+
+    let mut widths = headers.map(str::len);
+    for r in &rows {
+        for (w, c) in widths.iter_mut().zip(r.iter()) {
+            *w = (*w).max(c.len());
+        }
+    }
+    let fmt_row = |cells: &[String; 5]| -> String {
+        let mut line = String::new();
+        for (i, (c, w)) in cells.iter().zip(widths.iter()).enumerate() {
+            if i > 0 {
+                line.push_str("  ");
+            }
+            _ = write!(line, "{c:<width$}", width = *w);
+        }
+        line.trim_end().to_string()
+    };
+
+    let mut out = String::new();
+    _ = writeln!(
+        out,
+        "{}  across-trees{}",
+        canonical_id(id),
+        if coord.is_none() {
+            "  (no live coord tree)"
+        } else {
+            ""
+        }
+    );
+    let header_row: [String; 5] = headers.map(String::from);
+    _ = writeln!(out, "{}", fmt_row(&header_row));
+    for r in &rows {
+        _ = writeln!(out, "{}", fmt_row(r));
+    }
+    if rows.is_empty() {
+        _ = writeln!(out, "  (no phases tracked in any tree)");
+    }
+
+    // Divergence summary — consumes every Divergence facet so no disagreement
+    // shape is silently dropped from the human view.
+    for (label, ids) in [
+        ("conflicts", &div.conflicts),
+        ("disagreements", &div.disagreements),
+        ("anomalies", &div.anomalies),
+        ("unknown", &div.unknown),
+        ("phase-set-mismatch", &div.phase_set_mismatch),
+    ] {
+        if !ids.is_empty() {
+            _ = writeln!(out, "  ⚠ {label}: {}", ids.join(", "));
+        }
+    }
+    out
+}
+
+/// The `landed` column cell for `pid`: `ref` (durable phase ref), `cache`
+/// (registry fallback), or `—` (absent).
+fn landed_cell(landed: &[(String, crate::state::LandedSignal)], pid: &str) -> String {
+    match landed.iter().find(|(k, _)| k == pid).map(|(_, v)| *v) {
+        Some(crate::state::LandedSignal::RefPresent) => "ref",
+        Some(crate::state::LandedSignal::CachePresent) => "cache",
+        Some(crate::state::LandedSignal::Absent) | None => "—",
+    }
+    .to_string()
+}
+
+/// The `coord` column cell for `pid`: `(none)` when no live coord tree exists,
+/// else this phase's coord sheet status (or `—` when the tree has no such phase).
+fn coord_cell(coord: Option<&[(String, crate::state::StemStatus<'_>)]>, pid: &str) -> String {
+    match coord {
+        None => "(none)".to_string(),
+        Some(map) => stem_cell(map, pid),
+    }
+}
+
+/// A per-phase sheet cell for `pid`: the status string, `malformed` for a
+/// `.md`-only/unparseable sheet, or `—` when the phase is absent from the map.
+fn stem_cell(map: &[(String, crate::state::StemStatus<'_>)], pid: &str) -> String {
+    match map.iter().find(|(k, _)| k == pid).map(|(_, v)| v) {
+        Some(crate::state::StemStatus::Toml(s)) => (*s).to_string(),
+        Some(crate::state::StemStatus::MissingToml) => "malformed".to_string(),
+        None => "—".to_string(),
+    }
+}
+
+/// The composite-truth label for the `→ truth` column (design total table).
+fn truth_label(t: &crate::state::PhaseTruth) -> String {
+    use crate::state::{ConflictKind, PhaseTruth};
+    match t {
+        PhaseTruth::Landed => "LANDED".to_string(),
+        PhaseTruth::Conflict(ConflictKind::Rework) => "CONFLICT(rework)".to_string(),
+        PhaseTruth::Conflict(ConflictKind::ReworkReset) => "CONFLICT(rework-reset)".to_string(),
+        PhaseTruth::InFlight(s) => format!("IN-FLIGHT({s})"),
+        PhaseTruth::Planned => "PLANNED".to_string(),
+        PhaseTruth::Local(s) => format!("LOCAL({s})"),
+        PhaseTruth::Anomaly => "ANOMALY".to_string(),
+        PhaseTruth::Unknown => "UNKNOWN".to_string(),
+    }
 }
 
 /// Read the project `doctrine.toml [conduct]` table into a [`conduct::ConductConfig`]
@@ -2098,6 +2514,7 @@ fn dispatch_selector(cmd: SelectorCommand) -> anyhow::Result<()> {
         } => run_selector_note(path, id, &selector, &text),
         SelectorCommand::List { id, path } => run_selector_list(path, id),
         SelectorCommand::Rm { id, globs, path } => run_selector_rm(path, id, &globs),
+        SelectorCommand::Doctor { id, assert, path } => run_selector_doctor(path, id, assert),
     }
 }
 
@@ -2189,6 +2606,96 @@ fn run_selector_rm(path: Option<PathBuf>, id: u32, globs: &[String]) -> anyhow::
         crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())?;
     }
     writeln!(io::stdout(), "Removed {removed} selector(s)")?;
+    Ok(())
+}
+
+/// Map an authored [`SelectorIntent`] to the leaf health-scope the pure predicate
+/// takes — the shell-side conversion (like `fold_name_status_line` mapping git
+/// letters to `conformance::Status`), keeping the leaf free of a command type.
+fn selector_scope(intent: SelectorIntent) -> conformance::SelectorScope {
+    match intent {
+        SelectorIntent::ScopeRelevant => conformance::SelectorScope::ReadFence,
+        SelectorIntent::DesignTarget => conformance::SelectorScope::WillTouch,
+    }
+}
+
+/// Render the advisory `slice selector doctor` report from the pure findings.
+fn render_selector_doctor(cid: &str, findings: &[conformance::SelectorFinding]) -> String {
+    use conformance::SelectorFinding as F;
+    if findings.is_empty() {
+        return format!("{cid}: selectors healthy — no findings\n");
+    }
+    let mut parts = vec![format!("{cid}: {} selector finding(s)\n", findings.len())];
+    for f in findings {
+        let line = match f {
+            F::Uncompilable { selector, error } => {
+                format!("  uncompilable  {selector}  ({error})")
+            }
+            F::Unmatched { selector } => format!("  unmatched     {selector}"),
+            F::Redundant {
+                selector,
+                subsumed_by,
+            } => format!("  redundant     {selector}  (subsumed by {subsumed_by})"),
+            F::Broad {
+                selector,
+                matched,
+                universe,
+            } => format!("  broad         {selector}  ({matched}/{universe} paths)"),
+        };
+        parts.push(format!("{line}\n"));
+    }
+    parts.concat()
+}
+
+/// `slice selector doctor <id> [--assert]` (SL-190 PHASE-06) — the read-only
+/// health shell over the pure [`conformance::diagnose_selector`] predicate. Reads
+/// the slice's authored selectors + intents (both intents, like [`selector_paths`]),
+/// resolves matches against the tracked universe (`git ls-files`, the SAME glob
+/// machinery via the predicate), and reports findings. Advisory (exit 0) by
+/// default; `--assert` exits non-zero on ANY finding (mirrors the `--assert`
+/// idiom of `slice status --across-trees`).
+fn run_selector_doctor(path: Option<PathBuf>, id: u32, assert: bool) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    let (doc, _toml, _body) = read_slice(&slice_root, id)?;
+    let cid = canonical_id(id);
+
+    if doc.selectors.is_empty() {
+        writeln!(io::stdout(), "{cid}: (no selectors)")?;
+        return Ok(());
+    }
+
+    // The tracked universe: every path git knows about in `root`.
+    let universe: std::collections::BTreeSet<String> = crate::git::git_text(&root, &["ls-files"])?
+        .lines()
+        .map(str::to_string)
+        .collect();
+
+    // Peer selector strings, sorted+deduped so the redundancy scan is deterministic.
+    let mut peers: Vec<String> = doc.selectors.iter().map(|s| s.selector.clone()).collect();
+    peers.sort();
+    peers.dedup();
+    let peer_refs: Vec<&str> = peers.iter().map(String::as_str).collect();
+
+    let mut findings = Vec::new();
+    for sel in &doc.selectors {
+        findings.extend(conformance::diagnose_selector(
+            &sel.selector,
+            selector_scope(sel.intent),
+            &universe,
+            &peer_refs,
+        ));
+    }
+
+    write!(io::stdout(), "{}", render_selector_doctor(&cid, &findings))?;
+
+    // `--assert` turns the advisory into a gate: non-zero exit on ANY finding.
+    if assert && !findings.is_empty() {
+        anyhow::bail!(
+            "{cid}: selector doctor --assert: {} finding(s) — fix or re-scope before acting",
+            findings.len()
+        );
+    }
     Ok(())
 }
 
@@ -4658,6 +5165,8 @@ mod tests {
             1,
             Some(SliceStatus::Audit),
             Some("done impl"),
+            false,
+            false,
         )
         .unwrap();
         assert!(
@@ -4836,7 +5345,7 @@ mod tests {
         make_slice(root, "s", "S", "2026-06-04");
         set_status_raw(root, 1, "started");
         // Read-only: no STATE → prints, returns Ok.
-        run_status(Some(root.to_path_buf()), 1, None, None).unwrap();
+        run_status(Some(root.to_path_buf()), 1, None, None, false, false).unwrap();
         // Status must be unchanged (this was read-only).
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "started");
     }
@@ -4853,6 +5362,8 @@ mod tests {
             1,
             None,
             Some("closing after audit"),
+            false,
+            false,
         )
         .unwrap_err()
         .to_string();
@@ -4908,6 +5419,8 @@ mod tests {
             1,
             Some(SliceStatus::Reconcile),
             None,
+            false,
+            false,
         )
         .unwrap_err()
         .to_string();
@@ -4953,6 +5466,8 @@ mod tests {
             1,
             Some(SliceStatus::Reconcile),
             None,
+            false,
+            false,
         )
         .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
@@ -4979,6 +5494,8 @@ mod tests {
             1,
             Some(SliceStatus::Reconcile),
             None,
+            false,
+            false,
         )
         .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
@@ -4995,7 +5512,15 @@ mod tests {
         raise_blocker_rv(root, 1);
 
         // started → audit is a forward Advance but NOT the closure seam — passes.
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Audit), None).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Audit),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "audit");
     }
 
@@ -5160,9 +5685,16 @@ mod tests {
     /// Attempt the `reconcile → done` crossing; return the error string (the gate
     /// refusal) — panics if it unexpectedly SUCCEEDS.
     fn expect_close_refused(root: &Path) -> String {
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None)
-            .expect_err("reconcile → done should be refused")
-            .to_string()
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .expect_err("reconcile → done should be refused")
+        .to_string()
     }
 
     // --- VT-1: residual drift on a COVERED req refuses; F12 topology refuses an
@@ -5204,9 +5736,16 @@ mod tests {
         // refused structurally — no coverage/REC in sight, the drift gate never runs.
         make_slice(root, "s", "S", "2026-06-12");
         set_status_raw(root, 1, "started");
-        let err = run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None)
-            .unwrap_err()
-            .to_string();
+        let err = run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(
             err.contains("reconcile") && !err.contains("residual drift"),
             "F12 topology refusal, not the drift gate: {err}"
@@ -5405,7 +5944,15 @@ mod tests {
             vec![cov_key("SL-001", &req)],
         );
 
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -5581,7 +6128,15 @@ mod tests {
             ReqStatus::Pending,
             vec![blocked, vh],
         );
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -5664,7 +6219,15 @@ mod tests {
             ReqStatus::Retired,
             vec![key],
         );
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None).unwrap();
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -5802,8 +6365,15 @@ mod tests {
 
     /// Drive `reconcile → done` to SUCCESS; panic if the gate refuses.
     fn expect_close_succeeds(root: &Path) {
-        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None)
-            .expect("reconcile → done should succeed");
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Done),
+            None,
+            false,
+            false,
+        )
+        .expect("reconcile → done should succeed");
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -5922,6 +6492,8 @@ mod tests {
             1,
             Some(SliceStatus::Reconcile),
             None,
+            false,
+            false,
         )
         .expect("audit → reconcile is not gated by the integration check");
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");

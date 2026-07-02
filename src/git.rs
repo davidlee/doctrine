@@ -1247,68 +1247,103 @@ pub(crate) fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Ve
     Ok(ids)
 }
 
-/// PURE: scan `git worktree list --porcelain` text for the worktree path that has
-/// `refname` (e.g. `refs/heads/main`) checked out, `None` if none does. The
-/// porcelain stream is blank-line-separated blocks; each opens with a `worktree
-/// <path>` line and, when a branch is checked out, carries a `branch
-/// refs/heads/<name>` line. **Block-reset rule (M9):** a blank line clears the
-/// pending path, so a `branch` line can only bind to the `worktree` line of its own
-/// block — the more defensive of the two pre-extraction parses (a detached or
-/// bare block leaves no stale path to mis-attribute). No I/O — fed by
-/// [`worktree_for_ref`].
-fn parse_worktree_for_ref(listing: &str, refname: &str) -> Option<WorktreeEntry> {
-    // Accumulate the whole `worktree …`-delimited block before deciding: git emits
-    // `prunable` AFTER `branch`, so an early return on the branch match (the pre-D9
-    // shape) would settle the block before its liveness annotation is read. A block
-    // closes on a blank line (M9 reset) or the next `worktree` line; a closed block
-    // yields iff its `branch` matched and it carried a path. A ref is checked out in
-    // at most one worktree, so the first match is the answer.
-    let mut block = WorktreeBlock::default();
-    for line in listing.lines() {
-        if let Some(p) = line.strip_prefix("worktree ") {
-            if let Some(entry) = block.settle(refname) {
-                return Some(entry);
-            }
-            block.path = Some(PathBuf::from(p));
-        } else if let Some(b) = line.strip_prefix("branch ") {
-            block.branch = Some(b.to_string());
-        } else if line == "prunable" || line.starts_with("prunable ") {
-            block.prunable = true;
-        } else if line.is_empty()
-            && let Some(entry) = block.settle(refname)
-        {
-            return Some(entry);
+/// One fully-parsed block of `git worktree list --porcelain` — the SHARED shape
+/// both the branch→path probe ([`parse_worktree_for_ref`]) and the enumerate-all
+/// primitive ([`list_worktrees`]) read (SL-190 PHASE-05, DRY: one porcelain parser).
+/// `branch`/`head` are `None` on a detached or bare block; `prunable` iff git
+/// annotated a stale gitdir. Every field is a FACT off the porcelain stream — no
+/// classification lives here (the pure `worktree::inventory` classifier owns that).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorktreeRecord {
+    /// The worktree's absolute path (the `worktree <path>` line, verbatim).
+    pub(crate) path: PathBuf,
+    /// The checked-out branch ref (`refs/heads/<name>`), `None` when detached/bare.
+    pub(crate) branch: Option<String>,
+    /// The block's `HEAD <sha>`, `None` on a bare block.
+    pub(crate) head: Option<String>,
+    /// git annotated the block `prunable` — a stale gitdir no live checkout backs.
+    pub(crate) prunable: bool,
+    /// The block is the bare repository entry.
+    pub(crate) bare: bool,
+    /// The block has a detached HEAD (no `branch` line).
+    pub(crate) detached: bool,
+}
+
+impl WorktreeRecord {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            branch: None,
+            head: None,
+            prunable: false,
+            bare: false,
+            detached: false,
         }
     }
-    block.settle(refname)
 }
 
-/// Mutable accumulator for one in-flight `git worktree list --porcelain` block while
-/// [`parse_worktree_for_ref`] scans it line by line (PURE, no I/O).
-#[derive(Default)]
-struct WorktreeBlock {
-    path: Option<PathBuf>,
-    branch: Option<String>,
-    prunable: bool,
-}
-
-impl WorktreeBlock {
-    /// Close the block: yield a [`WorktreeEntry`] iff its `branch` matched `refname`
-    /// and it carried a `worktree` path, then reset for the next block. A matched
-    /// branch with no path (the M9 orphan case) yields nothing.
-    fn settle(&mut self, refname: &str) -> Option<WorktreeEntry> {
-        let matched = self.branch.as_deref() == Some(refname);
-        let entry = matched
-            .then(|| self.path.take())
-            .flatten()
-            .map(|path| WorktreeEntry {
-                path,
-                branch: refname.to_string(),
-                prunable: self.prunable,
-            });
-        *self = Self::default();
-        entry
+/// PURE: parse the whole `git worktree list --porcelain` stream into one
+/// [`WorktreeRecord`] per block (no I/O — fed by [`list_worktrees`] /
+/// [`worktree_for_ref`]). The porcelain stream is blank-line-separated blocks; each
+/// opens with a `worktree <path>` line and carries `HEAD`, `branch`, `bare`,
+/// `detached`, `prunable` annotations. **Block-reset rule (M9):** a blank line (or
+/// the next `worktree` line) closes the current block, so an annotation only binds
+/// to the `worktree` line of its own block — a stray `branch` after a blank binds
+/// to nothing. git emits `prunable` AFTER `branch`, so the WHOLE block is read
+/// before it is pushed (an early settle would drop the liveness annotation, the
+/// SL-154 D9 watch-item).
+fn parse_worktree_records(listing: &str) -> Vec<WorktreeRecord> {
+    let mut records = Vec::new();
+    let mut current: Option<WorktreeRecord> = None;
+    for line in listing.lines() {
+        if let Some(p) = line.strip_prefix("worktree ") {
+            if let Some(rec) = current.take() {
+                records.push(rec);
+            }
+            current = Some(WorktreeRecord::new(PathBuf::from(p)));
+        } else if line.is_empty() {
+            // M9 reset: a blank line closes the block, clearing the pending path.
+            if let Some(rec) = current.take() {
+                records.push(rec);
+            }
+        } else if let Some(rec) = current.as_mut() {
+            if let Some(h) = line.strip_prefix("HEAD ") {
+                rec.head = Some(h.to_string());
+            } else if let Some(b) = line.strip_prefix("branch ") {
+                rec.branch = Some(b.to_string());
+            } else if line == "bare" {
+                rec.bare = true;
+            } else if line == "detached" {
+                rec.detached = true;
+            } else if line == "prunable" || line.starts_with("prunable ") {
+                rec.prunable = true;
+            }
+            // `locked` / other annotations are not surfaced here.
+        }
+        // A line before any `worktree` opener (e.g. an M9 orphan) is dropped.
     }
+    if let Some(rec) = current.take() {
+        records.push(rec);
+    }
+    records
+}
+
+/// PURE: the worktree block that has `refname` (e.g. `refs/heads/main`) checked out,
+/// `None` if none does. A thin filter over the SHARED [`parse_worktree_records`]
+/// (M9 reset + trailing-`prunable` preservation live there). A ref is checked out in
+/// at most one worktree, so the first matching block is the answer.
+fn parse_worktree_for_ref(listing: &str, refname: &str) -> Option<WorktreeEntry> {
+    parse_worktree_records(listing).into_iter().find_map(|rec| {
+        if rec.branch.as_deref() == Some(refname) {
+            Some(WorktreeEntry {
+                path: rec.path,
+                branch: refname.to_string(),
+                prunable: rec.prunable,
+            })
+        } else {
+            None
+        }
+    })
 }
 
 /// One worktree block from `git worktree list --porcelain`, scoped to the matched
@@ -1340,6 +1375,21 @@ pub(crate) fn worktree_for_ref(
 ) -> Result<Option<PathBuf>, CaptureError> {
     let listing = git_text(root, &["worktree", "list", "--porcelain"])?;
     Ok(parse_worktree_for_ref(&listing, refname).map(|entry| entry.path))
+}
+
+/// Enumerate ALL linked worktrees git knows about (SL-190 PHASE-05 inventory
+/// primitive): one `git worktree list --porcelain` shell feeding the SHARED PURE
+/// [`parse_worktree_records`]. The FIRST record is the primary (main) worktree, per
+/// git's ordering — the same convention [`primary_worktree`] relies on. Records are
+/// returned verbatim (no liveness/role filtering — the `worktree::inventory` shell
+/// classifies each row). Impure only in the one git read.
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if the `git worktree list` invocation fails.
+pub(crate) fn list_worktrees(root: &Path) -> Result<Vec<WorktreeRecord>, CaptureError> {
+    let listing = git_text(root, &["worktree", "list", "--porcelain"])?;
+    Ok(parse_worktree_records(&listing))
 }
 
 /// The *live* worktree entry that has `refname` checked out, or `None` when no live
@@ -2154,8 +2204,8 @@ mod tests {
         AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, EMPTY_TREE_OID, Frame,
         REMOTE_NORMALIZER, RepoIdKind, RepoIdentity, WorktreeEntry, blob_oid_at, canonical_bytes,
         capture, checkout_state_id, commits_touching, diff_doctrine_paths, explicit_identity,
-        last_corpus_commit, live_worktree_for_ref, normalize_remote_url, parse_worktree_for_ref,
-        sha256, worktree_for_ref,
+        last_corpus_commit, list_worktrees, live_worktree_for_ref, normalize_remote_url,
+        parse_worktree_for_ref, parse_worktree_records, sha256, worktree_for_ref,
     };
 
     use crate::kinds::DISPATCH_REF_PREFIX;
@@ -4004,6 +4054,108 @@ branch refs/heads/orphan
             parse_worktree_for_ref(listing, "refs/heads/orphan"),
             None,
             "after a blank line the path is reset, so the orphan branch binds to no path",
+        );
+    }
+
+    // --- SL-190 PHASE-05: the generalized enumerate-all porcelain parser -------
+
+    #[test]
+    fn parse_worktree_records_enumerates_every_block_with_fields() {
+        // Primary (branch), a linked coordination branch, a detached candidate, and
+        // a stale prunable worker fork — one record each, fields off the stream.
+        let listing = "\
+worktree /repos/main
+HEAD aaaa
+branch refs/heads/edge
+
+worktree /repos/coord
+HEAD bbbb
+branch refs/heads/dispatch/190
+
+worktree /repos/cand
+HEAD cccc
+detached
+
+worktree /repos/stale
+HEAD dddd
+branch refs/heads/dispatch/agent-x
+prunable gitdir file points to non-existent location
+";
+        let records = parse_worktree_records(listing);
+        assert_eq!(records.len(), 4, "one record per block");
+
+        assert_eq!(records[0].path, PathBuf::from("/repos/main"));
+        assert_eq!(records[0].branch.as_deref(), Some("refs/heads/edge"));
+        assert_eq!(records[0].head.as_deref(), Some("aaaa"));
+
+        assert_eq!(
+            records[1].branch.as_deref(),
+            Some("refs/heads/dispatch/190")
+        );
+        assert!(!records[1].prunable);
+
+        assert!(records[2].detached, "the candidate block is detached");
+        assert_eq!(records[2].branch, None, "a detached block has no branch");
+
+        assert_eq!(
+            records[3].branch.as_deref(),
+            Some("refs/heads/dispatch/agent-x")
+        );
+        assert!(
+            records[3].prunable,
+            "a trailing `prunable` line is surfaced on the record"
+        );
+    }
+
+    #[test]
+    fn parse_worktree_records_drops_m9_orphan_after_blank() {
+        // The block-reset rule the shared parser must preserve: a `branch` line after
+        // a blank line binds to no `worktree` opener and is dropped.
+        let listing = "\
+worktree /repos/first
+HEAD eeee
+
+branch refs/heads/orphan
+";
+        let records = parse_worktree_records(listing);
+        assert_eq!(records.len(), 1, "the orphan branch opens no record");
+        assert_eq!(records[0].path, PathBuf::from("/repos/first"));
+        assert_eq!(records[0].branch, None);
+    }
+
+    #[test]
+    fn list_worktrees_enumerates_primary_and_linked() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        let linked = repo._dir.path().join("linked");
+        repo.git(&[
+            "worktree",
+            "add",
+            "-b",
+            "feature",
+            &linked.to_string_lossy(),
+        ]);
+
+        let records = list_worktrees(repo.path()).expect("worktree list must succeed");
+        assert!(
+            records.len() >= 2,
+            "primary + the linked worktree are enumerated, got {records:?}"
+        );
+        // The FIRST record is the primary (git ordering).
+        assert!(
+            records[0]
+                .path
+                .ends_with(repo.path().file_name().expect("repo dir has a name"))
+                || records[0].branch.is_some(),
+            "the first record is the primary worktree, got {:?}",
+            records[0]
+        );
+        assert!(
+            records
+                .iter()
+                .any(|r| r.branch.as_deref() == Some("refs/heads/feature")
+                    && r.path.ends_with("linked")),
+            "the linked feature worktree is enumerated, got {records:?}"
         );
     }
 

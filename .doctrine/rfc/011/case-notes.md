@@ -82,3 +82,15 @@ Two frictions, both cost a re-derivation step:
    `slice selector rm`; the §6 edit is only the human mirror. Easy to edit the
    prose and leave conformance still red. The brief should name the registry verb,
    not just the prose line.
+
+[dispatch-agent; sess-sl190-drive]
+Claude-arm dispatch worked cleanly after the harness/hooks update — WorktreeCreate
+forked each worker at the explicit base, PreToolUse confinement held, funnel
+imported the live worktree delta each phase. Zero token waste on the spawn
+mechanism (contrast prior session where the hook produced no fork).
+Recurring worker friction (PHASE-03 worker self-reported): the worker initially
+pointed Read at the shared-checkout ABSOLUTE path (/workspace/doctrine/src/...,
+on edge, behind the fork) while Bash relative paths hit its worktree copy — the
+two disagreed on content/line numbers, costing several tool calls to diagnose.
+Mitigation for future worker prompts: instruct workers to prefix EVERY file op
+with the worktree root and never touch /workspace/doctrine/* directly.

@@ -161,12 +161,13 @@ fn reap_targets(plan: GcPlan) -> String {
     }
 }
 
-/// The landed-oracle (design §8.1), gathered in the shell: true ONLY when the
-/// fork's commit has provably landed, tested against durable git state — TWO LEGS,
-/// UNION:
-/// * **ancestry leg** — `<fork-tip>` is an ancestor of coordination HEAD (the
-///   `land` route, `merge-base --is-ancestor` exit 0) ⇒ landed;
-/// * **patch-id leg** — `git cherry <coord-HEAD> <fork>` lists at least one commit
+/// The SHARED landed-oracle (design §8.1), gathered in the shell: true ONLY when
+/// `<fork>`'s commit has provably landed against `target` (an arbitrary landing ref,
+/// not just coordination HEAD — SL-190 PHASE-04 lift), tested against durable git
+/// state — TWO LEGS, UNION:
+/// * **ancestry leg** — `<fork-tip>` is an ancestor of `target` (the `land` route,
+///   `merge-base --is-ancestor` exit 0) ⇒ landed;
+/// * **patch-id leg** — `git cherry <target> <fork>` lists at least one commit
 ///   and EVERY listed commit is `-` prefixed (the `import` route: ancestry severed,
 ///   but each patch landed) ⇒ landed. A `+` prefix = a commit whose patch is NOT
 ///   upstream ⇒ not landed.
@@ -178,20 +179,24 @@ fn reap_targets(plan: GcPlan) -> String {
 /// **Squash:** a multi-commit `git merge --squash` yields `+` lines (each fork
 /// commit's patch-id is unmatched by the combined squash commit) — STRUCTURALLY
 /// INDISTINGUISHABLE from a never-landed fork (a *single*-commit squash yields `-`
-/// and IS correctly certified — its content is in HEAD). There is no empty-`cherry`
+/// and IS correctly certified — its content is in `target`). There is no empty-`cherry`
 /// squash signal, so the oracle returns plain `not-landed`; the refusal message
 /// names the squash remedy. (See [`GcRefusal`] — design-faithful collapse.)
 ///
 /// An EMPTY `git cherry` with a non-ancestor tip means no fork commit's patch is
 /// reachable AND none is unmatched — i.e. nothing to certify ⇒ NOT landed (conservative:
 /// never reap on a vacuous true). Impure (the two git reads).
-fn gather_landed(root: &Path, fork: &str) -> anyhow::Result<bool> {
-    // ancestry leg: <fork> is an ancestor of HEAD.
-    if git::git_status_ok(root, &["merge-base", "--is-ancestor", fork, "HEAD"])? {
+///
+/// The return stays a clean total `bool` over a VALID `target`: the missing-target →
+/// unknown tri-state is the CALLER's concern (PHASE-05 inventory), never the oracle's,
+/// so this shared machinery stays behaviour-preserving. gc passes `"HEAD"`.
+pub(crate) fn landed_against(root: &Path, target: &str, fork: &str) -> anyhow::Result<bool> {
+    // ancestry leg: <fork> is an ancestor of <target>.
+    if git::git_status_ok(root, &["merge-base", "--is-ancestor", fork, target])? {
         return Ok(true);
     }
-    // patch-id leg: a non-empty `git cherry HEAD <fork>` whose every line is `-`.
-    let cherry = git::git_cherry(root, "HEAD", fork)?;
+    // patch-id leg: a non-empty `git cherry <target> <fork>` whose every line is `-`.
+    let cherry = git::git_cherry(root, target, fork)?;
     Ok(!cherry.is_empty() && cherry.iter().all(|line| line.starts_with('-')))
 }
 
@@ -203,8 +208,8 @@ fn gather_landed(root: &Path, fork: &str) -> anyhow::Result<bool> {
 ///
 /// Gather → pure-classify → act, patterned after [`run_land`]:
 /// 1. gather the FACTS — `<fork>` existence; its live linked worktree (via the
-///    SHARED [`gather_fork_worktree`]); the landed oracle (via [`gather_landed`],
-///    ONLY while the branch lives); and the `--superseded-head == current-head`
+///    SHARED [`gather_fork_worktree`]); the landed oracle (via [`landed_against`]
+///    with `"HEAD"`, ONLY while the branch lives); and the `--superseded-head == current-head`
 ///    movement-guard match,
 /// 2. [`classify_gc`] returns `Reap(plan)` or `Refuse(token)`,
 /// 3. on `--dry-run`, PRINT the verdict and destroy NOTHING; otherwise execute the
@@ -245,7 +250,8 @@ pub(crate) fn run_gc(
 
     // --- gather: the landed oracle (ONLY while the branch lives — design §8.2) ---
     let landed_verdict = if branch_exists {
-        Some(gather_landed(&root, fork)?)
+        // gc lands against coordination HEAD (the shared oracle's `target`).
+        Some(landed_against(&root, "HEAD", fork)?)
     } else {
         None
     };
@@ -381,4 +387,129 @@ pub(crate) fn run_gc(
         "gc {fork}: reaped (worktree/branch as present)"
     )?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests — the GENERALIZED (non-HEAD `target`) contract of the shared
+// [`landed_against`] oracle (SL-190 PHASE-04, EX-3 / VT-1). gc's own HEAD-target
+// behaviour is proven UNCHANGED by `tests/e2e_worktree_gc.rs` (EX-2); here we
+// exercise a real non-HEAD landing ref against each of the three verdicts:
+// landed-via-ancestry, landed-via-patch-id, and not-landed. Missing-target →
+// soft unknown is the inventory caller's concern (PHASE-05), not the oracle's.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::landed_against;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    /// A throwaway git repo with pinned identity — the fixture idiom shared with
+    /// `git.rs`'s `ScratchRepo`, minimised for the oracle's needs.
+    struct ScratchRepo {
+        _dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+
+    impl ScratchRepo {
+        fn new() -> Self {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let path = dir.path().to_path_buf();
+            let repo = Self { _dir: dir, path };
+            repo.git(&["init", "-q", "-b", "main"]);
+            repo.git(&["config", "user.email", "t@example.com"]);
+            repo.git(&["config", "user.name", "Test"]);
+            repo
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+
+        fn git(&self, args: &[&str]) -> String {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(&self.path)
+                .args(args)
+                .output()
+                .expect("spawn git");
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        }
+
+        fn commit(&self, rel: &str, contents: &str, message: &str) -> String {
+            std::fs::write(self.path.join(rel), contents).expect("write file");
+            self.git(&["add", rel]);
+            self.git(&["commit", "-q", "-m", message]);
+            self.git(&["rev-parse", "HEAD"])
+        }
+    }
+
+    /// ANCESTRY leg against a NON-HEAD `target`: the fork tip is an ancestor of
+    /// `release` (merged in via `--no-ff`) but NOT of HEAD (`main`), so the oracle
+    /// must consult the passed `target`, not a hardcoded HEAD.
+    #[test]
+    fn landed_against_non_head_target_via_ancestry() {
+        let repo = ScratchRepo::new();
+        repo.commit("base.txt", "0", "C0");
+        repo.git(&["checkout", "-q", "-b", "feature"]);
+        let fork = "feature";
+        repo.commit("feat.txt", "f", "feature work");
+        // `release` is the non-HEAD landing target; merge the fork into it.
+        repo.git(&["checkout", "-q", "main"]);
+        repo.git(&["checkout", "-q", "-b", "release"]);
+        repo.git(&["merge", "--no-ff", "-q", "-m", "land feature", fork]);
+        // HEAD returns to `main`, which does NOT contain the fork.
+        repo.git(&["checkout", "-q", "main"]);
+        let target = "release";
+
+        // ancestry leg: `merge-base --is-ancestor <fork> <target>` exit 0 ⇒ landed.
+        assert!(landed_against(repo.path(), target, fork).expect("oracle"));
+        // ...and NOT landed against HEAD (main), proving the `target` param is honoured.
+        assert!(!landed_against(repo.path(), "HEAD", fork).expect("oracle"));
+    }
+
+    /// PATCH-ID leg against a NON-HEAD `target`: the fork's patch is cherry-picked
+    /// onto `release` (ancestry severed, patch-id equal), so `git cherry <target>
+    /// <fork>` yields an all-`-` list ⇒ landed.
+    #[test]
+    fn landed_against_non_head_target_via_patch_id_cherry() {
+        let repo = ScratchRepo::new();
+        repo.commit("base.txt", "0", "C0");
+        repo.git(&["checkout", "-q", "-b", "feature"]);
+        let fork = "feature";
+        let fork_tip = repo.commit("feat.txt", "content", "add feat");
+        // `release` gets an EQUIVALENT patch via cherry-pick — same patch-id, new SHA.
+        repo.git(&["checkout", "-q", "main"]);
+        repo.git(&["checkout", "-q", "-b", "release"]);
+        repo.git(&["cherry-pick", &fork_tip]);
+        repo.git(&["checkout", "-q", "main"]);
+        let target = "release";
+
+        // not an ancestor, but `git cherry <target> <fork>` is all `-` ⇒ landed.
+        assert!(landed_against(repo.path(), target, fork).expect("oracle"));
+    }
+
+    /// NOT LANDED against a NON-HEAD `target`: the fork carries a commit whose patch
+    /// is absent from `release` (a `+` in `git cherry`) and is not an ancestor.
+    #[test]
+    fn not_landed_against_non_head_target() {
+        let repo = ScratchRepo::new();
+        repo.commit("base.txt", "0", "C0");
+        repo.git(&["checkout", "-q", "-b", "feature"]);
+        let fork = "feature";
+        repo.commit("only.txt", "only", "unlanded work");
+        // `release` diverges with unrelated work — the fork's patch never lands.
+        repo.git(&["checkout", "-q", "main"]);
+        repo.git(&["checkout", "-q", "-b", "release"]);
+        repo.commit("other.txt", "other", "unrelated release work");
+        repo.git(&["checkout", "-q", "main"]);
+        let target = "release";
+
+        // neither `--is-ancestor` nor an all-`-` `cherry` ⇒ not landed.
+        assert!(!landed_against(repo.path(), target, fork).expect("oracle"));
+    }
 }

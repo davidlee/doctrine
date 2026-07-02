@@ -349,27 +349,30 @@ fn refresh_symlink(project_root: &Path, slice_id: u32) -> anyhow::Result<()> {
     fsutil::set_symlink(&link, &target)
 }
 
-/// Edit-preserving status transition on one phase: set `status`, stamp
-/// `last_updated` (and `started`/`completed` on first entry), and append a
-/// `[[progress]]` row. Uses `toml_edit` so hand-added comments and unknown keys
-/// survive (entity-model § Rust model) — the file is mutated, never
-/// reserialised. The path is computed from the id (`phase_stem` validates it);
-/// the convenience symlink is never followed. `now` is supplied by the shell
-/// (the clock stays out of this layer).
-// fn-level expect: the lone fs::write is the function's tail expression, which
-// cannot carry a stmt-level attribute on stable Rust (stmt_expr_attributes).
+/// Shared edit-preserving skeleton for the two phase-sheet writers
+/// ([`set_phase_status`] and [`reconcile_phase_status`]): read the id-derived
+/// sheet (`phase_stem` validates the id; the convenience `phases` symlink is
+/// never followed), parse it with `toml_edit` so hand-added comments and unknown
+/// keys survive (entity-model § Rust model — the file is mutated, never
+/// reserialised), hand the mutable root table to `mutate`, then write it back.
+/// The lone `fs::write` lives HERE, so both writers share one skeleton and one
+/// disallowed-methods waiver rather than duplicating the `toml_edit` boilerplate
+/// (SL-190 EX-1, DRY). `now`/status decisions stay with the caller's closure.
+// fn-level expect: the lone fs::write cannot carry a stmt-level attribute on
+// stable Rust (stmt_expr_attributes).
 #[expect(
     clippy::disallowed_methods,
     reason = "runtime phase sheet — disposable, atomicity not required"
 )]
-pub(crate) fn set_phase_status(
+fn edit_phase_sheet<F>(
     project_root: &Path,
     slice_id: u32,
     phase_id: &str,
-    status: PhaseStatus,
-    note: Option<&str>,
-    now: &str,
-) -> anyhow::Result<()> {
+    mutate: F,
+) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut toml_edit::Table) -> anyhow::Result<()>,
+{
     let stem = phase_stem(phase_id)?;
     let path = phases_dir(project_root, slice_id).join(format!("{stem}.toml"));
     let text = fs::read_to_string(&path).with_context(|| {
@@ -381,63 +384,87 @@ pub(crate) fn set_phase_status(
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", path.display()))?;
+    mutate(doc.as_table_mut())?;
+    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
+}
 
-    let table = doc.as_table_mut();
-    // Capture the prior status BEFORE the insert overwrites it: a reopen
-    // (Completed→non-Completed) must retire the now-defunct boundary (D8/P2-1).
-    let was_completed =
-        table.get("status").and_then(Item::as_str) == Some(PhaseStatus::Completed.as_str());
-    table.insert("status", toml_edit::value(status.as_str()));
-    table.insert("last_updated", toml_edit::value(now));
-    if status == PhaseStatus::InProgress && table.get("started").and_then(Item::as_str) == Some("")
-    {
-        table.insert("started", toml_edit::value(now));
-    }
-    // `completed` holds a stamp iff the phase is completed: stamp once on first
-    // completion (a re-complete keeps the original time), and clear it on any
-    // non-completed status so a reopen leaves no stale completion time on an
-    // in-progress/blocked phase (an otherwise internally-contradictory record).
-    if status == PhaseStatus::Completed {
-        if table.get("completed").and_then(Item::as_str) == Some("") {
-            table.insert("completed", toml_edit::value(now));
+/// Edit-preserving status transition on one phase: set `status`, stamp
+/// `last_updated` (and `started`/`completed` on first entry), and append a
+/// `[[progress]]` row — then (DEGRADING, AFTER the sheet write) capture/evict the
+/// phase's source-delta boundary. Shares the read-parse-write skeleton with
+/// [`edit_phase_sheet`]; the registry side-effects that mutate the recorded
+/// boundaries are deliberately kept OUT of that shared core (they are what makes
+/// this writer unsuitable for reconcile, SL-190). `now` is supplied by the shell
+/// (the clock stays out of this layer).
+pub(crate) fn set_phase_status(
+    project_root: &Path,
+    slice_id: u32,
+    phase_id: &str,
+    status: PhaseStatus,
+    note: Option<&str>,
+    now: &str,
+) -> anyhow::Result<()> {
+    // Captured inside the sheet mutation but consumed by the DEGRADING registry
+    // side-effects AFTER the write — those never leak into the shared skeleton.
+    let mut was_completed = false;
+    let mut capture_end = None;
+
+    edit_phase_sheet(project_root, slice_id, phase_id, |table| {
+        // Capture the prior status BEFORE the insert overwrites it: a reopen
+        // (Completed→non-Completed) must retire the now-defunct boundary (D8/P2-1).
+        was_completed =
+            table.get("status").and_then(Item::as_str) == Some(PhaseStatus::Completed.as_str());
+        table.insert("status", toml_edit::value(status.as_str()));
+        table.insert("last_updated", toml_edit::value(now));
+        if status == PhaseStatus::InProgress
+            && table.get("started").and_then(Item::as_str) == Some("")
+        {
+            table.insert("started", toml_edit::value(now));
         }
-    } else {
-        table.insert("completed", toml_edit::value(""));
-        // Reopen (Completed→non-Completed): clear the start-stamp so the binding
-        // re-captures a FRESH range on the next in_progress flip (capture_phase_boundary
-        // below re-stamps it), never reusing the stale start (P2-1). The registry row is
-        // evicted just before the sheet write (D8).
-        if was_completed {
-            table.insert("code_start_oid", toml_edit::value(""));
+        // `completed` holds a stamp iff the phase is completed: stamp once on first
+        // completion (a re-complete keeps the original time), and clear it on any
+        // non-completed status so a reopen leaves no stale completion time on an
+        // in-progress/blocked phase (an otherwise internally-contradictory record).
+        if status == PhaseStatus::Completed {
+            if table.get("completed").and_then(Item::as_str) == Some("") {
+                table.insert("completed", toml_edit::value(now));
+            }
+        } else {
+            table.insert("completed", toml_edit::value(""));
+            // Reopen (Completed→non-Completed): clear the start-stamp so the binding
+            // re-captures a FRESH range on the next in_progress flip (capture_phase_boundary
+            // below re-stamps it), never reusing the stale start (P2-1). The registry row is
+            // evicted just after the sheet write (D8).
+            if was_completed {
+                table.insert("code_start_oid", toml_edit::value(""));
+            }
         }
-    }
 
-    // Solo phase-binding capture (SL-147 PHASE-04, design D5): a SEPARATE,
-    // ADDITIVE, DEGRADING step that records the per-phase code boundary into the
-    // arm-neutral registry. It NEVER alters the status-flip behaviour above — on
-    // any git/bare-repo failure (or in a dispatch coordination context) it
-    // degrades to a no-op with a NAMED warning and the transition still
-    // completes. On InProgress it stamps `code_start_oid` (HEAD) into the sheet
-    // once; on Completed it reads that back and records `(start, HEAD)` via the
-    // F-6 guard + upsert. The stamp must ride THIS doc write, so it mutates the
-    // table before the write; the registry record happens AFTER the write.
-    let capture_end = capture_phase_boundary(project_root, slice_id, phase_id, status, table);
+        // Solo phase-binding capture (SL-147 PHASE-04, design D5): a SEPARATE,
+        // ADDITIVE, DEGRADING step that records the per-phase code boundary into the
+        // arm-neutral registry. It NEVER alters the status-flip behaviour above — on
+        // any git/bare-repo failure (or in a dispatch coordination context) it
+        // degrades to a no-op with a NAMED warning and the transition still
+        // completes. On InProgress it stamps `code_start_oid` (HEAD) into the sheet
+        // once; on Completed it reads that back and records `(start, HEAD)` via the
+        // F-6 guard + upsert. The stamp must ride THIS doc write, so it mutates the
+        // table before the write; the registry record happens AFTER the write.
+        capture_end = capture_phase_boundary(project_root, slice_id, phase_id, status, table);
 
-    let mut row = toml_edit::Table::new();
-    row.insert("timestamp", toml_edit::value(now));
-    row.insert("status", toml_edit::value(status.as_str()));
-    if let Some(note) = note {
-        row.insert("note", toml_edit::value(note));
-    }
-    table
-        .entry("progress")
-        .or_insert_with(|| Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
-        .as_array_of_tables_mut()
-        .context("`progress` exists but is not an array of tables")?
-        .push(row);
-
-    fs::write(&path, doc.to_string())
-        .with_context(|| format!("Failed to write {}", path.display()))?;
+        let mut row = toml_edit::Table::new();
+        row.insert("timestamp", toml_edit::value(now));
+        row.insert("status", toml_edit::value(status.as_str()));
+        if let Some(note) = note {
+            row.insert("note", toml_edit::value(note));
+        }
+        table
+            .entry("progress")
+            .or_insert_with(|| Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+            .as_array_of_tables_mut()
+            .context("`progress` exists but is not an array of tables")?
+            .push(row);
+        Ok(())
+    })?;
 
     // Reopen eviction (design D8): a Completed→non-Completed transition retires the
     // recorded boundary — drop its registry row so a re-completion records a fresh one
@@ -890,6 +917,330 @@ pub(crate) fn registry_completeness(
 }
 
 // ---------------------------------------------------------------------------
+// Composite phase-truth resolver (SL-190 PHASE-01) — pure core
+// ---------------------------------------------------------------------------
+
+/// Per-phase "landed" signal: does a durable/derived artifact say this phase's
+/// source delta is already in? `RefPresent` is the committed `phase/<slice>-NN`
+/// git ref (durable, cross-machine); `CachePresent` is the primary-local
+/// registry cache row (covers the mid-drive window before the refs are cut at
+/// prepare-review); `Absent` is neither. Only presence matters to the resolver —
+/// both present variants read as landed (`is_landed`). See design § "Canonical
+/// source of truth".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LandedSignal {
+    RefPresent,
+    CachePresent,
+    Absent,
+}
+
+impl LandedSignal {
+    /// Whether either landed source (durable ref or derived cache) is present.
+    pub(crate) fn is_landed(self) -> bool {
+        matches!(self, Self::RefPresent | Self::CachePresent)
+    }
+}
+
+/// Which shape a CONFLICT takes (design total table): a phase reads LANDED yet a
+/// live coord sheet disagrees. `Rework` = the sheet is back to
+/// `in_progress`/`blocked` (active re-dispatch); `ReworkReset` = the sheet is
+/// `planned` again (reset to the start). Surfaced, never silently resolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConflictKind {
+    Rework,
+    ReworkReset,
+}
+
+/// The composite per-phase truth — exactly the design total table's outcomes.
+/// `InFlight`/`Local` carry the deciding sheet's status string. `Unknown` is the
+/// total function's catch-all (no source has a usable opinion, incl. phase-set
+/// drift). `Anomaly` mirrors `PhaseRollup::anomalies` (malformed tracking).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PhaseTruth {
+    Landed,
+    Conflict(ConflictKind),
+    InFlight(String),
+    Planned,
+    Local(String),
+    Anomaly,
+    Unknown,
+}
+
+/// Cross-source disagreement summary for a slice's phases. `assert_worthy` is
+/// the `--assert` gate: true ONLY on a CONFLICT or an opinionated disagreement
+/// (two sources holding differing non-anomaly, non-unknown statuses). Anomaly,
+/// Unknown, and phase-set mismatch are surfaced (for the human table) but do NOT
+/// arm `--assert` (design "--assert scope") — otherwise a fresh handoff machine
+/// is permanently red.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct Divergence {
+    pub(crate) conflicts: Vec<String>,
+    pub(crate) disagreements: Vec<String>,
+    pub(crate) anomalies: Vec<String>,
+    pub(crate) unknown: Vec<String>,
+    pub(crate) phase_set_mismatch: Vec<String>,
+}
+
+impl Divergence {
+    /// The `--assert` predicate: conflicts and opinionated disagreements only.
+    pub(crate) fn assert_worthy(&self) -> bool {
+        !self.conflicts.is_empty() || !self.disagreements.is_empty()
+    }
+}
+
+/// One sheet's concrete opinion: a parseable `PhaseStatus`, or `Anomaly` for an
+/// unrecognised status string / `.md`-only crash-partial (mirrors how
+/// `fold_rollup` buckets `unknown`/`missing_toml`).
+enum Opinion {
+    Status(PhaseStatus),
+    Anomaly,
+}
+
+/// Interpret a per-phase `StemStatus` as a sheet opinion. Reuses
+/// `PhaseStatus::from_str` — the single status vocabulary (no parallel list).
+fn opinion(stem: &StemStatus<'_>) -> Opinion {
+    match stem {
+        StemStatus::MissingToml => Opinion::Anomaly,
+        StemStatus::Toml(s) => match PhaseStatus::from_str(s, false) {
+            Ok(ps) => Opinion::Status(ps),
+            Err(_) => Opinion::Anomaly,
+        },
+    }
+}
+
+/// The landed signal for `id`, defaulting to `Absent` when the phase is absent
+/// from the landed map.
+fn landed_at(landed: &[(String, LandedSignal)], id: &str) -> LandedSignal {
+    landed
+        .iter()
+        .find(|(k, _)| k.as_str() == id)
+        .map_or(LandedSignal::Absent, |(_, v)| *v)
+}
+
+/// The sheet opinion for `id` in a per-phase status map, or `None` when the
+/// phase is absent from that map (phase-set drift).
+fn opinion_at(map: &[(String, StemStatus<'_>)], id: &str) -> Option<Opinion> {
+    map.iter()
+        .find(|(k, _)| k.as_str() == id)
+        .map(|(_, v)| opinion(v))
+}
+
+/// Resolve composite per-phase truth from the three source maps — **pure and
+/// total** (no git/disk/clock/rng; the shell gathers the inputs). Iterates the
+/// deterministic union of phase ids across all maps, so no phase is ever
+/// dropped; a phase with no usable opinion falls through to `Unknown`.
+///
+/// `coord` is `Option`: `None` means **no coord tree at all** (→ the LOCAL
+/// branch, design table's "(no coord tree)" row); `Some(map)` with the phase
+/// absent means **coord tree present but this phase unknown to it** (→ `Unknown`
+/// with a phase-set-mismatch, the plan-drift row). That distinction is
+/// load-bearing. Anomaly rows suppress divergence (mirroring
+/// `PhaseRollup::anomalies`).
+pub(crate) fn resolve_phase_truth(
+    landed: &[(String, LandedSignal)],
+    coord: Option<&[(String, StemStatus<'_>)]>,
+    local: &[(String, StemStatus<'_>)],
+) -> (Vec<(String, PhaseTruth)>, Divergence) {
+    // Deterministic union of phase ids across every supplied map (BTreeSet).
+    let mut ids: BTreeSet<String> = BTreeSet::new();
+    ids.extend(landed.iter().map(|(k, _)| k.clone()));
+    if let Some(coord) = coord {
+        ids.extend(coord.iter().map(|(k, _)| k.clone()));
+    }
+    ids.extend(local.iter().map(|(k, _)| k.clone()));
+
+    let mut out = Vec::with_capacity(ids.len());
+    let mut div = Divergence::default();
+
+    for id in ids {
+        let landed_here = landed_at(landed, &id);
+        let truth = match coord {
+            // No coord tree at all → LANDED if landed, else the LOCAL sheet.
+            None => {
+                if landed_here.is_landed() {
+                    PhaseTruth::Landed
+                } else {
+                    match opinion_at(local, &id) {
+                        Some(Opinion::Status(s)) => PhaseTruth::Local(s.as_str().to_string()),
+                        Some(Opinion::Anomaly) => {
+                            div.anomalies.push(id.clone());
+                            PhaseTruth::Anomaly
+                        }
+                        // Known only to the landed map (which says absent) — an
+                        // orphan with no sheet. Total catch-all → Unknown.
+                        None => {
+                            div.phase_set_mismatch.push(id.clone());
+                            div.unknown.push(id.clone());
+                            PhaseTruth::Unknown
+                        }
+                    }
+                }
+            }
+            // Coord tree present.
+            Some(coord_map) => match opinion_at(coord_map, &id) {
+                // Phase absent from the coord tree → plan drift → Unknown.
+                None => {
+                    div.phase_set_mismatch.push(id.clone());
+                    div.unknown.push(id.clone());
+                    PhaseTruth::Unknown
+                }
+                Some(coord_op) => match (landed_here.is_landed(), coord_op) {
+                    (true, Opinion::Status(PhaseStatus::Completed)) => PhaseTruth::Landed,
+                    (true, Opinion::Status(PhaseStatus::InProgress | PhaseStatus::Blocked)) => {
+                        div.conflicts.push(id.clone());
+                        PhaseTruth::Conflict(ConflictKind::Rework)
+                    }
+                    (true, Opinion::Status(PhaseStatus::Planned)) => {
+                        div.conflicts.push(id.clone());
+                        PhaseTruth::Conflict(ConflictKind::ReworkReset)
+                    }
+                    // Landed but the coord sheet is malformed: landed stands,
+                    // anomaly noted, divergence suppressed.
+                    (true, Opinion::Anomaly) => {
+                        div.anomalies.push(id.clone());
+                        PhaseTruth::Landed
+                    }
+                    (
+                        false,
+                        Opinion::Status(
+                            s @ (PhaseStatus::InProgress
+                            | PhaseStatus::Blocked
+                            | PhaseStatus::Completed),
+                        ),
+                    ) => {
+                        note_disagreement(local, &id, s, &mut div);
+                        PhaseTruth::InFlight(s.as_str().to_string())
+                    }
+                    (false, Opinion::Status(PhaseStatus::Planned)) => {
+                        note_disagreement(local, &id, PhaseStatus::Planned, &mut div);
+                        PhaseTruth::Planned
+                    }
+                    // Not landed and the coord sheet is malformed → anomaly.
+                    (false, Opinion::Anomaly) => {
+                        div.anomalies.push(id.clone());
+                        PhaseTruth::Anomaly
+                    }
+                },
+            },
+        };
+        out.push((id, truth));
+    }
+
+    (out, div)
+}
+
+/// Record an opinionated disagreement when the local sheet holds a differing
+/// concrete status from the (non-landed) coord sheet. Anomaly/absent local
+/// sheets never disagree (anomaly suppresses divergence).
+fn note_disagreement(
+    local: &[(String, StemStatus<'_>)],
+    id: &str,
+    coord_status: PhaseStatus,
+    div: &mut Divergence,
+) {
+    if let Some(Opinion::Status(local_status)) = opinion_at(local, id)
+        && local_status != coord_status
+    {
+        div.disagreements.push(id.to_string());
+    }
+}
+
+/// Per-phase status reader: mirrors `phase_rollup`'s IO (`phases_dir` +
+/// `existing_phase_stems` + `read_phase_status`) but keeps phases **distinct**
+/// instead of folding to bucket counts (SL-190 EX-4). Returns, per phase, its
+/// canonical `PHASE-NN` id (via `phase_id_from_stem`) and `Option<status>` —
+/// `None` for a `.md`-only / unparseable `.toml`. The caller maps
+/// `Some → StemStatus::Toml` / `None → StemStatus::MissingToml`. Order is the
+/// deterministic `existing_phase_stems` (`BTreeSet`) order.
+pub(crate) fn read_phase_statuses(
+    project_root: &Path,
+    slice_id: u32,
+) -> anyhow::Result<Vec<(String, Option<String>)>> {
+    let dir = phases_dir(project_root, slice_id);
+    let mut out = Vec::new();
+    for stem in existing_phase_stems(&dir)? {
+        let status = read_phase_status(&dir, &stem)?;
+        out.push((phase_id_from_stem(&stem), status));
+    }
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Reconcile writer (SL-190 PHASE-03) — status-only, no registry side effects
+// ---------------------------------------------------------------------------
+
+/// What the reconcile writer should do with one phase, given its resolved
+/// composite [`PhaseTruth`] (SL-190 EX-4). Distinguishes an enforced status
+/// (`Write`) from the two silences: `Skip` (a disagreement the verb must not
+/// auto-resolve — reported, never written) and `Leave` (the composite has no
+/// opinion, so a locally-set status survives untouched).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ReconcileAction {
+    /// Composite has an opinion — write this status to the primary sheet.
+    Write(PhaseStatus),
+    /// CONFLICT / UNKNOWN / anomaly — skip and report, never auto-written.
+    Skip,
+    /// Composite is silent (a `Local`-only phase) — leave the sheet as-is.
+    Leave,
+}
+
+/// Map a resolved [`PhaseTruth`] to the reconcile writer's action (SL-190 EX-4,
+/// design "Reconcile conflict rule"). `Landed` writes `completed`; `InFlight(s)`
+/// writes `s`; `Planned` writes `planned`; `Conflict` / `Unknown` / `Anomaly` are
+/// SKIPPED (reported, not written); `Local` is LEFT (the composite is silent — a
+/// locally-completed inline phase absent from the landed oracle must never be
+/// regressed). Pure and total; the `InFlight` status string is re-parsed through
+/// the single `PhaseStatus` vocabulary (an unrecognised string degrades to skip).
+pub(crate) fn reconcile_action(truth: &PhaseTruth) -> ReconcileAction {
+    match truth {
+        PhaseTruth::Landed => ReconcileAction::Write(PhaseStatus::Completed),
+        PhaseTruth::InFlight(s) => match PhaseStatus::from_str(s, false) {
+            Ok(ps) => ReconcileAction::Write(ps),
+            Err(_) => ReconcileAction::Skip,
+        },
+        PhaseTruth::Planned => ReconcileAction::Write(PhaseStatus::Planned),
+        PhaseTruth::Conflict(_) | PhaseTruth::Unknown | PhaseTruth::Anomaly => {
+            ReconcileAction::Skip
+        }
+        PhaseTruth::Local(_) => ReconcileAction::Leave,
+    }
+}
+
+/// Status-only reconcile writer (SL-190 PHASE-03, EX-1). Sets ONLY `status` (and
+/// stamps `last_updated`) on the phase sheet — NO `[[progress]]` audit row, NO
+/// `capture_phase_boundary`, NO `record_source_delta`/`forget_source_delta`.
+/// Unlike [`set_phase_status`] it must NOT mutate the source-delta registry it is
+/// reconciled FROM: doing so would be a read-then-clobber-your-own-truth cycle
+/// (design "Reconcile writer"). Shares the edit-preserving skeleton via
+/// [`edit_phase_sheet`] (DRY).
+///
+/// Idempotent by construction: when the sheet already holds `status` the write is
+/// skipped entirely (returns `Ok(false)`), so a re-run leaves the sheet
+/// byte-identical — no `last_updated` churn. Returns `Ok(true)` iff it wrote.
+/// `now` is supplied by the shell (the clock stays out of this layer).
+pub(crate) fn reconcile_phase_status(
+    project_root: &Path,
+    slice_id: u32,
+    phase_id: &str,
+    status: PhaseStatus,
+    now: &str,
+) -> anyhow::Result<bool> {
+    let stem = phase_stem(phase_id)?;
+    let dir = phases_dir(project_root, slice_id);
+    // Idempotence: a phase already at its target status is a no-op — skip the
+    // write so a second reconcile is byte-identical (no last_updated restamp).
+    if read_phase_status(&dir, &stem)?.as_deref() == Some(status.as_str()) {
+        return Ok(false);
+    }
+    edit_phase_sheet(project_root, slice_id, phase_id, |table| {
+        table.insert("status", toml_edit::value(status.as_str()));
+        table.insert("last_updated", toml_edit::value(now));
+        Ok(())
+    })?;
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1329,6 +1680,233 @@ mod tests {
         assert_eq!(r.missing_toml, 1, "unparseable .toml → missing_toml");
     }
 
+    // --- resolve_phase_truth (pure core, SL-190 PHASE-01) -------------------
+
+    /// VT-1: table-driven over the full design total table — LANDED, CONFLICT
+    /// (rework + rework-reset), IN-FLIGHT, PLANNED, LOCAL, ANOMALY, and
+    /// phase-set drift. Asserts both the per-phase `PhaseTruth` and, where
+    /// relevant, `Divergence.assert_worthy()`.
+    #[test]
+    fn resolve_phase_truth_covers_full_design_table() {
+        let p = || "PHASE-01".to_string();
+
+        // (name, landed, coord-sheet status, expected truth, expected assert).
+        // A live coord tree holds `coord_status`; local mirrors it so no
+        // spurious opinionated disagreement is recorded on these rows.
+        let grid: &[(&str, LandedSignal, &str, PhaseTruth, bool)] = &[
+            // LANDED: ref/cache present + coord silent-or-completed.
+            (
+                "landed+completed",
+                LandedSignal::RefPresent,
+                "completed",
+                PhaseTruth::Landed,
+                false,
+            ),
+            // CONFLICT rework: landed + coord back to in_progress/blocked.
+            (
+                "landed+in_progress→rework",
+                LandedSignal::CachePresent,
+                "in_progress",
+                PhaseTruth::Conflict(ConflictKind::Rework),
+                true,
+            ),
+            (
+                "landed+blocked→rework",
+                LandedSignal::RefPresent,
+                "blocked",
+                PhaseTruth::Conflict(ConflictKind::Rework),
+                true,
+            ),
+            // CONFLICT rework-reset: landed + coord reset to planned.
+            (
+                "landed+planned→rework-reset",
+                LandedSignal::CachePresent,
+                "planned",
+                PhaseTruth::Conflict(ConflictKind::ReworkReset),
+                true,
+            ),
+            // LANDED + anomaly-noted: coord sheet malformed, divergence suppressed.
+            (
+                "landed+garbage→landed(anomaly-noted)",
+                LandedSignal::RefPresent,
+                "garbage",
+                PhaseTruth::Landed,
+                false,
+            ),
+            // IN-FLIGHT: not landed, coord actively working.
+            (
+                "absent+in_progress→in-flight",
+                LandedSignal::Absent,
+                "in_progress",
+                PhaseTruth::InFlight("in_progress".into()),
+                false,
+            ),
+            // PLANNED: not landed, coord planned.
+            (
+                "absent+planned→planned",
+                LandedSignal::Absent,
+                "planned",
+                PhaseTruth::Planned,
+                false,
+            ),
+            // ANOMALY: not landed, coord sheet malformed — surface, suppress.
+            (
+                "absent+garbage→anomaly",
+                LandedSignal::Absent,
+                "garbage",
+                PhaseTruth::Anomaly,
+                false,
+            ),
+        ];
+
+        for (name, landed, coord_status, want, want_assert) in grid {
+            let coord_status: &str = coord_status;
+            let landed_map = vec![(p(), *landed)];
+            let coord_map = vec![(p(), StemStatus::Toml(coord_status))];
+            let local_map = vec![(p(), StemStatus::Toml(coord_status))];
+            let (truths, div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
+            assert_eq!(truths, vec![(p(), want.clone())], "PhaseTruth for {name}");
+            assert_eq!(
+                div.assert_worthy(),
+                *want_assert,
+                "assert_worthy for {name}"
+            );
+        }
+
+        // ANOMALY via a `.md`-only crash-partial (MissingToml), landed + absent.
+        {
+            let landed_map = vec![(p(), LandedSignal::RefPresent)];
+            let coord_map = vec![(p(), StemStatus::MissingToml)];
+            let local_map = vec![(p(), StemStatus::MissingToml)];
+            let (truths, div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
+            assert_eq!(truths, vec![(p(), PhaseTruth::Landed)]);
+            assert!(!div.assert_worthy(), "anomaly suppresses divergence");
+        }
+        {
+            let landed_map = vec![(p(), LandedSignal::Absent)];
+            let coord_map = vec![(p(), StemStatus::MissingToml)];
+            let local_map = vec![(p(), StemStatus::MissingToml)];
+            let (truths, div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
+            assert_eq!(truths, vec![(p(), PhaseTruth::Anomaly)]);
+            assert!(!div.assert_worthy());
+            assert!(div.anomalies.contains(&p()), "anomaly surfaced in summary");
+        }
+
+        // LANDED with NO coord tree (design "(none)" row).
+        {
+            let landed_map = vec![(p(), LandedSignal::RefPresent)];
+            let local_map = vec![(p(), StemStatus::Toml("planned"))];
+            let (truths, _div) = resolve_phase_truth(&landed_map, None, &local_map);
+            assert_eq!(truths, vec![(p(), PhaseTruth::Landed)]);
+        }
+
+        // LOCAL: not landed, NO coord tree → the local sheet's status.
+        {
+            let landed_map = vec![(p(), LandedSignal::Absent)];
+            let local_map = vec![(p(), StemStatus::Toml("in_progress"))];
+            let (truths, div) = resolve_phase_truth(&landed_map, None, &local_map);
+            assert_eq!(truths, vec![(p(), PhaseTruth::Local("in_progress".into()))]);
+            assert!(!div.assert_worthy(), "LOCAL alone is not assert-worthy");
+        }
+
+        // Opinionated disagreement (no landed): coord vs local differ → assert.
+        {
+            let landed_map = vec![(p(), LandedSignal::Absent)];
+            let coord_map = vec![(p(), StemStatus::Toml("in_progress"))];
+            let local_map = vec![(p(), StemStatus::Toml("completed"))];
+            let (truths, div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
+            assert_eq!(
+                truths,
+                vec![(p(), PhaseTruth::InFlight("in_progress".into()))]
+            );
+            assert!(
+                div.assert_worthy(),
+                "coord vs local disagreement arms --assert"
+            );
+        }
+
+        // Phase-set drift: coord tree present but this phase absent from it.
+        {
+            let q = || "PHASE-02".to_string();
+            let landed_map = vec![(q(), LandedSignal::Absent)];
+            let coord_map: Vec<(String, StemStatus<'_>)> = vec![]; // present tree, phase absent
+            let local_map = vec![(q(), StemStatus::Toml("planned"))];
+            let (truths, div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
+            assert_eq!(
+                truths,
+                vec![(q(), PhaseTruth::Unknown)],
+                "phase-set drift → Unknown, never dropped"
+            );
+            assert!(
+                div.phase_set_mismatch.contains(&q()),
+                "phase-set mismatch surfaced"
+            );
+            assert!(div.unknown.contains(&q()), "Unknown recorded in summary");
+            assert!(
+                !div.assert_worthy(),
+                "phase-set drift does NOT arm --assert"
+            );
+        }
+
+        // Union is deterministic (sorted) and drops no phase.
+        {
+            let landed_map = vec![
+                ("PHASE-02".to_string(), LandedSignal::RefPresent),
+                ("PHASE-01".to_string(), LandedSignal::Absent),
+            ];
+            let coord_map = vec![
+                ("PHASE-01".to_string(), StemStatus::Toml("in_progress")),
+                ("PHASE-02".to_string(), StemStatus::Toml("completed")),
+            ];
+            let local_map = vec![
+                ("PHASE-01".to_string(), StemStatus::Toml("in_progress")),
+                ("PHASE-02".to_string(), StemStatus::Toml("completed")),
+            ];
+            let (truths, _div) = resolve_phase_truth(&landed_map, Some(&coord_map), &local_map);
+            let ids: Vec<&str> = truths.iter().map(|(id, _)| id.as_str()).collect();
+            assert_eq!(ids, vec!["PHASE-01", "PHASE-02"], "deterministic union");
+            assert_eq!(truths.len(), 2, "no phase dropped");
+        }
+    }
+
+    /// VT-2: the per-phase reader returns each phase's status without collapsing
+    /// to counts — its pairs map to the right `StemStatus` per phase.
+    #[test]
+    fn read_phase_statuses_keeps_phases_distinct() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let phases = phases_dir(root, 9);
+        write_phase_toml(&phases, "phase-01", "completed");
+        write_phase_toml(&phases, "phase-03", "in_progress");
+        // phase-02 has only its .md sheet (crash-partial) → MissingToml.
+        fs::write(phases.join("phase-02.md"), "# sheet\n").unwrap();
+
+        let got = read_phase_statuses(root, 9).unwrap();
+        // The caller's mapping: Some → Toml, None → MissingToml.
+        let as_stem: Vec<(String, StemStatus<'_>)> = got
+            .iter()
+            .map(|(id, s)| {
+                (
+                    id.clone(),
+                    match s {
+                        Some(status) => StemStatus::Toml(status.as_str()),
+                        None => StemStatus::MissingToml,
+                    },
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            as_stem,
+            vec![
+                ("PHASE-01".to_string(), StemStatus::Toml("completed")),
+                ("PHASE-02".to_string(), StemStatus::MissingToml),
+                ("PHASE-03".to_string(), StemStatus::Toml("in_progress")),
+            ],
+            "each phase's StemStatus preserved without collapsing to counts"
+        );
+    }
+
     // --- recorded source-delta registry (SL-147 PHASE-02) ------------------
 
     /// Run git in `dir` with a pinned identity; panic on failure, return stdout.
@@ -1755,6 +2333,109 @@ mod tests {
                 ..row("PHASE-01", &head, &head)
             }],
             "zero-delta row, start == end"
+        );
+    }
+
+    // --- reconcile writer (SL-190 PHASE-03) --------------------------------
+
+    // VT-2: the status-only reconcile writer has NO registry side effects — after a
+    // reconcile the `boundaries.toml` registry is byte-identical AND no `[[progress]]`
+    // row was appended to the reconciled sheet (unlike `set_phase_status`, which would
+    // append a progress row and evict the boundary on this Completed→InProgress reopen).
+    #[test]
+    fn reconcile_writer_leaves_registry_bytes_and_progress_log_untouched() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+
+        // Drive a real completion via `set_phase_status`: this records a boundary row
+        // AND appends two `[[progress]]` rows (in_progress, completed).
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        let boundaries = boundaries_path(&repo, 147).unwrap();
+        let registry_before = fs::read(&boundaries).unwrap();
+        let sheet = phases_dir(&repo, 147).join("phase-01.toml");
+        let progress_before = fs::read_to_string(&sheet)
+            .unwrap()
+            .matches("[[progress]]")
+            .count();
+
+        // Reconcile to a DIFFERENT status (Completed→InProgress): a genuine write.
+        let wrote =
+            reconcile_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, "T3").unwrap();
+        assert!(wrote, "a status change is a real write");
+
+        // The status flipped on the sheet...
+        assert_eq!(
+            read_phase_status(&phases_dir(&repo, 147), "phase-01")
+                .unwrap()
+                .as_deref(),
+            Some("in_progress"),
+        );
+        // ...but the registry bytes are UNTOUCHED (no eviction — reconcile never
+        // mutates the source of truth it reads).
+        assert_eq!(
+            fs::read(&boundaries).unwrap(),
+            registry_before,
+            "boundaries.toml is byte-identical after a reconcile"
+        );
+        // ...and NO `[[progress]]` row was appended.
+        assert_eq!(
+            fs::read_to_string(&sheet)
+                .unwrap()
+                .matches("[[progress]]")
+                .count(),
+            progress_before,
+            "no progress row appended by the reconcile writer"
+        );
+    }
+
+    // VT-2 (idempotence): a reconcile to the sheet's CURRENT status is a no-op — the
+    // sheet is byte-identical (no `last_updated` churn) and the writer reports it did
+    // not write.
+    #[test]
+    fn reconcile_writer_is_a_byte_identical_noop_when_status_already_matches() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+
+        let sheet = phases_dir(&repo, 147).join("phase-01.toml");
+        let before = fs::read(&sheet).unwrap();
+
+        let wrote =
+            reconcile_phase_status(&repo, 147, "PHASE-01", PhaseStatus::InProgress, "T-LATER")
+                .unwrap();
+        assert!(!wrote, "already at target — no write");
+        assert_eq!(fs::read(&sheet).unwrap(), before, "sheet is byte-identical");
+    }
+
+    // EX-4: the PhaseTruth → reconcile-action mapping is explicit and total.
+    #[test]
+    fn reconcile_action_maps_every_truth_variant() {
+        use ReconcileAction as A;
+        assert_eq!(
+            reconcile_action(&PhaseTruth::Landed),
+            A::Write(PhaseStatus::Completed)
+        );
+        assert_eq!(
+            reconcile_action(&PhaseTruth::InFlight("in_progress".into())),
+            A::Write(PhaseStatus::InProgress)
+        );
+        assert_eq!(
+            reconcile_action(&PhaseTruth::Planned),
+            A::Write(PhaseStatus::Planned)
+        );
+        assert_eq!(
+            reconcile_action(&PhaseTruth::Conflict(ConflictKind::Rework)),
+            A::Skip
+        );
+        assert_eq!(reconcile_action(&PhaseTruth::Unknown), A::Skip);
+        assert_eq!(reconcile_action(&PhaseTruth::Anomaly), A::Skip);
+        assert_eq!(
+            reconcile_action(&PhaseTruth::Local("completed".into())),
+            A::Leave
         );
     }
 

@@ -156,12 +156,221 @@ fn matched_selector<'a>(compiled: &'a [(String, Option<Pattern>)], path: &str) -
         .map(|(sel, _)| sel.as_str())
 }
 
+// ---------------------------------------------------------------------------
+// Selector health advisory (SL-190 PHASE-06) — the pure predicate. `slice
+// selector doctor` (the shell in `crate::slice`) is its first consumer; SL-180's
+// future selector gate consumes this SAME function (no parallel matcher, RV-214
+// F-7 — it reuses `compute`'s `glob::Pattern` + `glob_matches` machinery).
+// ---------------------------------------------------------------------------
+
+/// The health-relevant reading of a selector's declared intent. Mirrors slice's
+/// `SelectorIntent` as a leaf value (the shell maps it, exactly as it maps git
+/// name-status letters to [`Status`]) so the pure predicate needn't import a
+/// command-tier type (ADR-001). `ReadFence` = `scope-relevant` (L0): a loose read
+/// fence is legitimate, so `Broad` is suppressed. `WillTouch` = `design-target`
+/// (L1): breadth over-claims the work surface, so `Broad` applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SelectorScope {
+    ReadFence,
+    WillTouch,
+}
+
+/// A `design-target` selector matching more than `BROAD_SHARE_NUM`/`BROAD_SHARE_DEN`
+/// of the tracked universe is flagged `Broad` (advisory). Integer ratio — `f64`
+/// casts are denied (`cast_precision_loss`): `matched·DEN > universe·NUM` ⇔
+/// `matched/universe > NUM/DEN`. Half the universe is the loose default.
+const BROAD_SHARE_NUM: usize = 1;
+const BROAD_SHARE_DEN: usize = 2;
+
+/// One health finding about a single authored selector (SL-190 PHASE-06). Advisory
+/// by default; `slice selector doctor --assert` turns any finding into a non-zero
+/// exit. Carries the offending selector string (F-7 transparency).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SelectorFinding {
+    /// The glob string does not compile as a `glob::Pattern` — it can never match.
+    Uncompilable { selector: String, error: String },
+    /// The selector compiles but matches no path in the tracked universe (stale).
+    Unmatched { selector: String },
+    /// Every path this selector matches is also matched by a strictly broader
+    /// peer — it adds nothing (its match set is a proper subset of `subsumed_by`).
+    Redundant {
+        selector: String,
+        subsumed_by: String,
+    },
+    /// A `design-target` selector matching a suspiciously large share of the
+    /// universe — it likely over-claims the work surface. Suppressed for
+    /// `ReadFence` intent (a loose read fence is legitimate, not nagged).
+    Broad {
+        selector: String,
+        matched: usize,
+        universe: usize,
+    },
+}
+
+/// The set of `universe` paths matched by glob `sel` under the shared match policy
+/// ([`glob_matches`]). `None` when `sel` does not compile. Reuses conformance's
+/// exact glob machinery — no parallel matcher (RV-214 F-7).
+fn matches_in(sel: &str, universe: &BTreeSet<String>) -> Option<BTreeSet<String>> {
+    let pat = Pattern::new(sel).ok()?;
+    Some(
+        universe
+            .iter()
+            .filter(|p| glob_matches(&pat, p))
+            .cloned()
+            .collect(),
+    )
+}
+
+/// Diagnose one authored selector against the tracked `universe` and its peer
+/// selector strings `others`. PURE (std + the `glob` leaf only, like [`compute`]):
+/// no git, disk, or registry. Findings, in order: `Uncompilable` (returned alone —
+/// a broken glob can't be reasoned about further), else `Unmatched` (empty match
+/// set), else any of `Redundant` (proper subset of a broader peer) / `Broad`
+/// (design-target matching over half the universe; suppressed for `ReadFence`).
+/// `others` is scanned in the given order, so the caller sorts for determinism.
+pub(crate) fn diagnose_selector(
+    sel: &str,
+    scope: SelectorScope,
+    universe: &BTreeSet<String>,
+    others: &[&str],
+) -> Vec<SelectorFinding> {
+    let pat = match Pattern::new(sel) {
+        Ok(p) => p,
+        Err(e) => {
+            return vec![SelectorFinding::Uncompilable {
+                selector: sel.to_string(),
+                error: e.to_string(),
+            }];
+        }
+    };
+
+    let matched: BTreeSet<String> = universe
+        .iter()
+        .filter(|p| glob_matches(&pat, p))
+        .cloned()
+        .collect();
+
+    if matched.is_empty() {
+        return vec![SelectorFinding::Unmatched {
+            selector: sel.to_string(),
+        }];
+    }
+
+    let mut findings = Vec::new();
+
+    // Redundant: a peer whose match set is a PROPER superset of ours absorbs us.
+    // Proper (⊃, not ⊇) so two equal globs don't mutually flag each other.
+    if let Some(peer) = others
+        .iter()
+        .filter(|o| **o != sel)
+        .filter_map(|o| matches_in(o, universe).map(|m| (*o, m)))
+        .find(|(_, m)| m.len() > matched.len() && matched.is_subset(m))
+        .map(|(o, _)| o)
+    {
+        findings.push(SelectorFinding::Redundant {
+            selector: sel.to_string(),
+            subsumed_by: peer.to_string(),
+        });
+    }
+
+    // Broad: only `design-target` (WillTouch); a `scope-relevant` read fence is
+    // exempt (a loose read fence is legitimate, not nagged).
+    if scope == SelectorScope::WillTouch
+        && !universe.is_empty()
+        && matched.len() * BROAD_SHARE_DEN > universe.len() * BROAD_SHARE_NUM
+    {
+        findings.push(SelectorFinding::Broad {
+            selector: sel.to_string(),
+            matched: matched.len(),
+            universe: universe.len(),
+        });
+    }
+
+    findings
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn ev(s: &[Status]) -> Vec<Status> {
         s.to_vec()
+    }
+
+    fn universe(paths: &[&str]) -> BTreeSet<String> {
+        paths.iter().map(|p| (*p).to_string()).collect()
+    }
+
+    // --- diagnose_selector: one test per finding (VT-1) ---
+
+    #[test]
+    fn diagnose_uncompilable_glob_is_flagged_alone() {
+        let u = universe(&["src/a.rs"]);
+        let f = diagnose_selector("src/[", SelectorScope::WillTouch, &u, &[]);
+        assert!(
+            matches!(f.as_slice(), [SelectorFinding::Uncompilable { selector, .. }] if selector == "src/["),
+            "a broken glob is Uncompilable and nothing else: {f:?}"
+        );
+    }
+
+    #[test]
+    fn diagnose_unmatched_selector_is_flagged() {
+        let u = universe(&["src/a.rs", "src/b.rs"]);
+        let f = diagnose_selector("docs/*.md", SelectorScope::WillTouch, &u, &[]);
+        assert_eq!(
+            f,
+            vec![SelectorFinding::Unmatched {
+                selector: "docs/*.md".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn diagnose_redundant_when_subsumed_by_a_broader_peer() {
+        let u = universe(&["src/a.rs", "src/b.rs", "src/sub/c.rs"]);
+        // The literal matches only itself; the peer `src/**` is a proper superset.
+        let f = diagnose_selector(
+            "src/a.rs",
+            SelectorScope::WillTouch,
+            &u,
+            &["src/**", "src/a.rs"],
+        );
+        assert!(
+            f.contains(&SelectorFinding::Redundant {
+                selector: "src/a.rs".to_string(),
+                subsumed_by: "src/**".to_string(),
+            }),
+            "a selector whose matches are a subset of another is redundant: {f:?}"
+        );
+    }
+
+    #[test]
+    fn diagnose_broad_design_target_matching_most_of_the_universe() {
+        let u = universe(&["src/a.rs", "src/b.rs", "docs/x.md", "docs/y.md"]);
+        // `**` matches all four → over half → broad for a design-target.
+        let f = diagnose_selector("**", SelectorScope::WillTouch, &u, &[]);
+        assert!(
+            f.iter().any(|x| matches!(
+                x,
+                SelectorFinding::Broad {
+                    matched: 4,
+                    universe: 4,
+                    ..
+                }
+            )),
+            "a design-target matching the whole universe is broad: {f:?}"
+        );
+    }
+
+    #[test]
+    fn diagnose_broad_suppressed_for_scope_relevant_read_fence() {
+        let u = universe(&["src/a.rs", "src/b.rs", "docs/x.md", "docs/y.md"]);
+        // Same broad `**`, but a `scope-relevant` read fence is legitimate.
+        let f = diagnose_selector("**", SelectorScope::ReadFence, &u, &[]);
+        assert!(
+            !f.iter().any(|x| matches!(x, SelectorFinding::Broad { .. })),
+            "broad is suppressed for a scope-relevant read fence: {f:?}"
+        );
     }
 
     // --- net() over the four canonical orderings (F-3) ---
