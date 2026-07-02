@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 32
-slug = "dispatch-branch-prefix-const"
-title = 'Consolidate scattered "dispatch/" branch-prefix magic string to one named constant (STD-001)'
-kind = "chore"
-status = "resolved"
-resolution = "fixed"
-created = "2026-06-30"
+id = 233
+slug = "arm-spawn-should-target-coord-tree-from-slice-or-refuse-a-wrong-root-arming-write"
+title = "arm-spawn should target coord tree from --slice or refuse a wrong-root arming write"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-07-02"
 updated = "2026-07-02"
-tags = ["area:dispatch", "tech-debt"]
+tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
