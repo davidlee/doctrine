@@ -200,28 +200,56 @@ fn pass2_cycles(
 /// eviction in component A never changes whether an edge in disjoint component B
 /// is cyclic. Computing the SCCs once up front (then re-Tarjan only the shrinking
 /// sub-component) drops the cost from O(E·(V+E)) to near-linear in N components.
+///
+/// The induced sub-edge-sets are bucketed in ONE O(E) pass (`bucket_by_component`)
+/// rather than re-filtered per component (which was O(components·E) — the RSK-224
+/// many-small-cycles quadratic).
 fn pass2_evict(edges: &mut BTreeSet<Edge>, overlay: OverlayId, evictions: &mut Vec<EvictedEdge>) {
-    for component in cyclic_components(edges) {
-        evict_component(edges, &component, overlay, evictions);
+    let components = cyclic_components(edges);
+    for sub in bucket_by_component(edges, &components) {
+        evict_component(edges, sub, overlay, evictions);
     }
 }
 
-/// Drive ONE cyclic component to acyclicity. `component` seeds the vertex set;
-/// each step evicts the F17-min edge with both endpoints still inside the
-/// shrinking sub-component, then re-Tarjans only that induced sub-edge-set. Each
-/// step removes one edge → terminates in ≤ |induced edges| steps.
+/// Partition edges into per-cyclic-component induced sub-edge-sets in a single
+/// O(E) pass. Cyclic components are vertex-disjoint, so an edge with both endpoints
+/// in the SAME component belongs to exactly that component's bucket; an edge
+/// crossing components or touching no component never participates in eviction and
+/// is dropped. Byte-identical result to the per-component `both-endpoints-inside`
+/// filter it replaces, at O(E) instead of O(components·E).
+fn bucket_by_component(
+    edges: &BTreeSet<Edge>,
+    components: &[BTreeSet<NodeId>],
+) -> Vec<BTreeSet<Edge>> {
+    let mut comp_of: BTreeMap<NodeId, usize> = BTreeMap::new();
+    for (i, component) in components.iter().enumerate() {
+        for &n in component {
+            comp_of.insert(n, i);
+        }
+    }
+    let mut buckets: Vec<BTreeSet<Edge>> = vec![BTreeSet::new(); components.len()];
+    for &e in edges {
+        if let (Some(&i), Some(&j)) = (comp_of.get(&e.src), comp_of.get(&e.dst)) {
+            if i == j {
+                if let Some(bucket) = buckets.get_mut(i) {
+                    bucket.insert(e);
+                }
+            }
+        }
+    }
+    buckets
+}
+
+/// Drive ONE cyclic component to acyclicity. `sub` is the component's induced
+/// sub-edge-set (from `bucket_by_component`); each step evicts the F17-min edge
+/// with both endpoints still inside the shrinking sub-component, then re-Tarjans
+/// only that sub-edge-set. Each step removes one edge → terminates in ≤ |sub| steps.
 fn evict_component(
     edges: &mut BTreeSet<Edge>,
-    component: &BTreeSet<NodeId>,
+    mut sub: BTreeSet<Edge>,
     overlay: OverlayId,
     evictions: &mut Vec<EvictedEdge>,
 ) {
-    // The induced sub-edge-set of this component (both endpoints inside it).
-    let mut sub: BTreeSet<Edge> = edges
-        .iter()
-        .filter(|e| component.contains(&e.src) && component.contains(&e.dst))
-        .copied()
-        .collect();
     loop {
         let cyclic = cyclic_components(&sub);
         if cyclic.is_empty() {
@@ -553,8 +581,9 @@ fn evict_layer_cycles(
     overlay: OverlayId,
     evictions: &mut Vec<EvictedEdge>,
 ) {
-    for component in cyclic_components(u) {
-        evict_layer_component(u, layer_k, &component, overlay, evictions);
+    let components = cyclic_components(u);
+    for sub in bucket_by_component(u, &components) {
+        evict_layer_component(u, layer_k, sub, overlay, evictions);
     }
 }
 
@@ -562,19 +591,15 @@ fn evict_layer_cycles(
 /// edges. Relies on the G2 layer-k invariant: every U-cycle present at layer k
 /// contains ≥1 `layer_k` edge (each prior layer is at fixpoint before layer k is
 /// inserted, so `U` minus the new `layer_k` edges is acyclic). Hence while a
-/// cyclic sub-component remains a `layer_k` victim always exists.
+/// cyclic sub-component remains a `layer_k` victim always exists. `sub` is the
+/// component's induced sub-edge-set (from `bucket_by_component`).
 fn evict_layer_component(
     u: &mut BTreeSet<Edge>,
     layer_k: &mut BTreeSet<Edge>,
-    component: &BTreeSet<NodeId>,
+    mut sub: BTreeSet<Edge>,
     overlay: OverlayId,
     evictions: &mut Vec<EvictedEdge>,
 ) {
-    let mut sub: BTreeSet<Edge> = u
-        .iter()
-        .filter(|e| component.contains(&e.src) && component.contains(&e.dst))
-        .copied()
-        .collect();
     loop {
         let cyclic = cyclic_components(&sub);
         if cyclic.is_empty() {
