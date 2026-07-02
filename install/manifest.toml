@@ -52,6 +52,10 @@ entries = [
   ".doctrine/skills/*",
 ]
 
+[hymns]
+seal = ["preamble/core"]
+expose = ["harness/claude","model/anthropic/claude-sonnet-4","model/deepseek/_default","role/orchestrator","role/worker"]
+
 [root_markers]
 markers = [
   ".git",

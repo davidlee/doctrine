@@ -11,13 +11,6 @@
 //! `replaces` suppresses, and only from the unique most-specific active snippet of a
 //! slot (INV-3). A disk-provenance snippet whose slot is sealed is dropped before
 //! matching (INV-6). The loader (PHASE-02) is the only impurity; nothing here reads I/O.
-#![allow(
-    dead_code,
-    reason = "SL-186 PHASE-01: inert pure engine authored ahead of its callers; the \
-              PHASE-02 loader and PHASE-03 `prompt` verbs consume this surface. Until \
-              then it is exercised only by the in-module goldens (the slice ships inert \
-              by design — see slice-186.md)."
-)]
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -140,7 +133,7 @@ impl Slot {
     }
 
     /// Full `band/label` path — the deterministic alpha tiebreak key.
-    fn path(&self) -> String {
+    pub(crate) fn path(&self) -> String {
         format!("{}/{}", self.band.as_str(), self.label)
     }
 }
@@ -192,7 +185,7 @@ pub(crate) enum BandFilter {
 }
 
 impl BandFilter {
-    fn includes(&self, band: Band) -> bool {
+    pub(crate) fn includes(&self, band: Band) -> bool {
         match self {
             BandFilter::All => true,
             BandFilter::Only(set) => set.contains(&band),
@@ -263,11 +256,20 @@ impl std::fmt::Display for ResolveError {
 
 impl std::error::Error for ResolveError {}
 
+/// Validate the `replaces` graph over the WHOLE corpus, context-free.
+/// Errors (never silent alpha): a non-unique-top replacer, two replacers
+/// targeting one slot, or a cross-slot cycle.
+pub(crate) fn validate_replaces(corpus: &[Snippet]) -> Result<(), ResolveError> {
+    let all: Vec<&Snippet> = corpus.iter().collect();
+    replaces_suppression(&all)?;
+    Ok(())
+}
+
 /// The ordering key: `band → specificity → provenance → alpha(full slot path)`,
 /// compared ascending so the most-specific / user snippet lands last (last word wins).
 type PrecedenceKey = (Band, (u32, u32), Provenance, String);
 
-fn precedence_key(s: &Snippet) -> PrecedenceKey {
+pub(crate) fn precedence_key(s: &Snippet) -> PrecedenceKey {
     (
         s.slot.band,
         specificity(s.slot.band, &s.selector),

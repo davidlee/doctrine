@@ -27,3 +27,6 @@ Your contract:
   disk marker (stamped by the orchestrator pre-spawn) is your primary identity;
   DOCTRINE_WORKER is a fail-open optimisation. The real protection is the
   orchestrator's import-time R-5 belt — never rely on self-arm alone.
+
+Role guidance:
+{{ prompt resolve --role worker }}
