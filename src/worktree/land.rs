@@ -72,6 +72,18 @@ impl LandRefusal {
     }
 }
 
+/// The `no-such-fork` refusal message, enriched with a path-vs-branch hint. The
+/// common miss (ISS-058) is passing a worktree PATH where `--fork` wants a BRANCH
+/// name — the fork directory exists, so the bare token reads as a phantom fault.
+/// The `no-such-fork` token is preserved verbatim (the VT golden asserts it).
+pub(crate) fn no_such_fork_message(fork: &str) -> String {
+    format!(
+        "land-refused: {token} — no branch `{fork}`; `--fork` expects a branch name, \
+         not a worktree path (list branches with `git branch`)",
+        token = LandRefusal::NoSuchFork.token(),
+    )
+}
+
 /// The gathered state of the `<fork>` branch the precond logic classifies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ForkState {
@@ -170,6 +182,9 @@ pub(crate) fn run_land(path: Option<PathBuf>, fork: &str) -> anyhow::Result<()> 
         bears_marker,
     };
     match classify_land(tree_clean, &head, fork_state) {
+        // `no-such-fork` carries the path-vs-branch hint (ISS-058); the other
+        // precond refusals fail closed with their bare token.
+        Err(LandRefusal::NoSuchFork) => bail!("{}", no_such_fork_message(fork)),
         Err(refusal) => bail!("land-refused: {}", refusal.token()),
         Ok(Merge::Ok) => {}
     }
