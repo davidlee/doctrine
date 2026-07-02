@@ -306,6 +306,14 @@ pub(crate) enum SliceCommand {
         #[arg(value_parser = parse_cli_id)]
         id: u32,
 
+        /// Git rev-range (A..B) to fold as `actual`, bypassing the boundary registry.
+        #[arg(long)]
+        against: Option<String>,
+
+        /// Under `--against`: exit nonzero iff any undeclared path. Requires `--against`.
+        #[arg(long, requires = "against")]
+        strict: bool,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -432,7 +440,12 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             Ok(())
         }
         SliceCommand::Selector { command } => dispatch_selector(command),
-        SliceCommand::Conformance { id, path } => run_conformance(path, id),
+        SliceCommand::Conformance {
+            id,
+            against,
+            strict,
+            path,
+        } => run_conformance(path, id, against, strict),
         SliceCommand::RecordDelta {
             id,
             phase,
@@ -1857,19 +1870,33 @@ pub(crate) fn relation_edges(
     crate::relation::tier1_edges(&SLICE_KIND, &toml_text)
 }
 
-/// The slice's authored selector strings — the UNION of every intent
-/// (`scope-relevant` AND `design-target`), sorted+deduped (SL-147 PHASE-05). The
-/// review-prime staleness source-of-truth: every path the slice touches or reads.
-/// Mirrors the conformance shell's selector read (`conformance_outcome`) but
-/// WITHOUT the design-target filter — staleness cares about the whole declared
-/// surface. `root` is the parent tree; the slice subtree is joined internally.
-pub(crate) fn selector_paths(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+/// The single selector-read seam (SL-180 PHASE-01, EX-3). `None` ⇒ full union
+/// across all intents; `Some(intent)` ⇒ only selectors carrying that intent.
+/// Deduped + sorted. The conformance shell, the design-time dry-run, and
+/// [`selector_paths`] all route through here — no parallel selector read remains.
+/// `root` is the parent tree; the slice subtree is joined internally.
+pub(crate) fn selectors(
+    root: &Path,
+    id: u32,
+    intent: Option<SelectorIntent>,
+) -> anyhow::Result<Vec<String>> {
     let (doc, _toml, _body) = read_slice(&root.join(SLICE_DIR), id)?;
     let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for sel in &doc.selectors {
-        set.insert(sel.selector.clone());
+        if intent.is_none_or(|want| sel.intent == want) {
+            set.insert(sel.selector.clone());
+        }
     }
     Ok(set.into_iter().collect())
+}
+
+/// The slice's authored selector strings — the UNION of every intent
+/// (`scope-relevant` AND `design-target`), sorted+deduped (SL-147 PHASE-05). The
+/// review-prime staleness source-of-truth: every path the slice touches or reads.
+/// A thin delegate over [`selectors`] with no intent filter (EX-3) — never a
+/// second union. `root` is the parent tree; the slice subtree is joined internally.
+pub(crate) fn selector_paths(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+    selectors(root, id, None)
 }
 
 /// Render the readable whole for `Table` mode: an identity header, the flat
@@ -2233,15 +2260,7 @@ enum ConformanceOutcome {
 /// resolves both the shared registry (via the primary worktree) and the local
 /// phase-sheet state tree.
 fn conformance_outcome(root: &Path, id: u32) -> anyhow::Result<ConformanceOutcome> {
-    let slice_root = root.join(SLICE_DIR);
-    let (doc, _toml, _body) = read_slice(&slice_root, id)?;
-
-    let selectors: Vec<String> = doc
-        .selectors
-        .iter()
-        .filter(|s| s.intent == SelectorIntent::DesignTarget)
-        .map(|s| s.selector.clone())
-        .collect();
+    let selectors = selectors(root, id, Some(SelectorIntent::DesignTarget))?;
 
     let rows = crate::state::read_source_deltas(root, id)?;
     if rows.is_empty() {
@@ -2260,6 +2279,8 @@ fn conformance_outcome(root: &Path, id: u32) -> anyhow::Result<ConformanceOutcom
         let diff = crate::git::git_text(
             root,
             &[
+                "-c",
+                "core.quotePath=false",
                 "diff",
                 "--name-status",
                 &format!("{}..{}", row.code_start_oid, row.code_end_oid),
@@ -2275,27 +2296,95 @@ fn conformance_outcome(root: &Path, id: u32) -> anyhow::Result<ConformanceOutcom
     )))
 }
 
+/// Fold a git rev-range's `--name-status` diff into the `actual` map, bypassing
+/// the boundary registry (SL-180 PHASE-01, EX-4). `-c core.quotePath=false` so a
+/// non-ASCII path emits verbatim UTF-8 (not C-quoted); `--no-renames` so a rename
+/// reads as delete+add rather than an `R` line (a range has no per-phase notion
+/// of rename provenance to preserve). Reference form: `src/worktree/import.rs:196`.
+fn actual_from_range(
+    root: &Path,
+    range: &str,
+) -> anyhow::Result<std::collections::BTreeMap<String, Vec<Status>>> {
+    let diff = crate::git::git_text(
+        root,
+        &[
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--name-status",
+            "--no-renames",
+            range,
+        ],
+    )?;
+    let mut actual = std::collections::BTreeMap::new();
+    for line in diff.lines().filter(|l| !l.trim().is_empty()) {
+        fold_name_status_line(line, &mut actual);
+    }
+    Ok(actual)
+}
+
+/// Guard `--against`'s value: a rev-range MUST contain `..` (F8) — otherwise git
+/// would silently diff a bare ref against the working tree. The diagnostic
+/// carries the literal `rev-range` token.
+fn require_rev_range(v: &str) -> anyhow::Result<&str> {
+    if v.contains("..") {
+        Ok(v)
+    } else {
+        anyhow::bail!("--against expects a rev-range (A..B), got '{v}'")
+    }
+}
+
 /// `slice conformance <SL>` — resolve the root, compute the outcome, render it.
-fn run_conformance(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+/// Two sources: `against: None` keeps today's behaviour verbatim (registry +
+/// completeness degrade ladder via [`conformance_outcome`]); `against: Some(range)`
+/// is the design-time dry-run (SL-180 PHASE-01, EX-1/EX-2) — it folds the range's
+/// `--name-status` diff directly, bypassing BOTH the registry read AND the
+/// completeness ladder (a range has no completeness notion). `--strict` (which
+/// clap requires alongside `--against`) exits nonzero iff the undeclared cell is
+/// nonempty.
+fn run_conformance(
+    path: Option<PathBuf>,
+    id: u32,
+    against: Option<String>,
+    strict: bool,
+) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let cid = canonical_id(id);
-    let mut out = io::stdout();
-    match conformance_outcome(&root, id)? {
-        ConformanceOutcome::Unavailable => {
-            writeln!(
-                out,
-                "{cid}: conformance unavailable — no recorded source deltas"
-            )?;
-            Ok(())
+    match against {
+        None => {
+            let mut out = io::stdout();
+            match conformance_outcome(&root, id)? {
+                ConformanceOutcome::Unavailable => {
+                    writeln!(
+                        out,
+                        "{cid}: conformance unavailable — no recorded source deltas"
+                    )?;
+                    Ok(())
+                }
+                ConformanceOutcome::Incomplete(gaps) => {
+                    writeln!(out, "{cid}: conformance incomplete — partial coverage")?;
+                    for gap in &gaps {
+                        writeln!(out, "  - {}", gap.describe())?;
+                    }
+                    Ok(())
+                }
+                ConformanceOutcome::Computed(result) => render_conformance(&cid, &result),
+            }
         }
-        ConformanceOutcome::Incomplete(gaps) => {
-            writeln!(out, "{cid}: conformance incomplete — partial coverage")?;
-            for gap in &gaps {
-                writeln!(out, "  - {}", gap.describe())?;
+        Some(range) => {
+            let range = require_rev_range(&range)?;
+            let selectors = selectors(&root, id, Some(SelectorIntent::DesignTarget))?;
+            let actual = actual_from_range(&root, range)?;
+            let result = conformance::compute(&selectors, &actual);
+            render_conformance(&cid, &result)?;
+            if strict && !result.undeclared.is_empty() {
+                anyhow::bail!(
+                    "{cid}: --strict: {} undeclared path(s) vs {range}",
+                    result.undeclared.len()
+                );
             }
             Ok(())
         }
-        ConformanceOutcome::Computed(result) => render_conformance(&cid, &result),
     }
 }
 
@@ -6427,5 +6516,82 @@ mod tests {
             range_diff.contains(".doctrine/memory/items/note.md"),
             "B..K would sweep trailing knowledge: {range_diff}"
         );
+    }
+
+    // -- SL-180 PHASE-01: design-time dry-run (`--against` / `--strict`) --------
+
+    // VT-1 (F8): a bare ref (no `..`) is rejected with a `rev-range` diagnostic —
+    // never a silent diff of the ref against the working tree.
+    #[test]
+    fn against_bare_ref_errors_with_rev_range_diagnostic() {
+        let err = require_rev_range("main").unwrap_err();
+        assert!(err.to_string().contains("rev-range"), "got: {err}");
+    }
+
+    // A valid range folds into the three cells and drives `--strict`: undeclared
+    // for a path outside the design targets, empty (and strict-clean) when only a
+    // declared path is touched.
+    #[test]
+    fn against_folds_range_into_cells_and_strict_flags_undeclared() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = fs::canonicalize(dir.path()).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        let base = git(&repo, &["rev-parse", "HEAD"]);
+
+        // The fixture slice declares only `src/**` as a design target.
+        make_slice(&repo, "conf", "Conf", "2026-06-24");
+        run_selector_add(
+            Some(repo.clone()),
+            1,
+            SelectorIntent::DesignTarget,
+            &["src/**".to_string()],
+            None,
+        )
+        .unwrap();
+
+        let p1 = commit_file(&repo, "src/feature.rs", "fn f() {}\n"); // declared
+        let p2 = commit_file(&repo, "README.md", "surprise\n"); // undeclared
+
+        let selectors = selectors(&repo, 1, Some(SelectorIntent::DesignTarget)).unwrap();
+
+        // Full range: the undeclared README.md lands in the undeclared cell.
+        let wide = actual_from_range(&repo, &format!("{base}..{p2}")).unwrap();
+        let wide_result = conformance::compute(&selectors, &wide);
+        assert_eq!(wide_result.undeclared.len(), 1, "{wide_result:?}");
+        assert_eq!(wide_result.undeclared[0].path, "README.md");
+        assert_eq!(wide_result.conformant[0].path, "src/feature.rs");
+        assert!(wide_result.undelivered.is_empty(), "{wide_result:?}");
+
+        // Declared-only range: undeclared is empty.
+        let narrow = actual_from_range(&repo, &format!("{base}..{p1}")).unwrap();
+        let narrow_result = conformance::compute(&selectors, &narrow);
+        assert!(narrow_result.undeclared.is_empty(), "{narrow_result:?}");
+
+        // `--strict` end-to-end: nonzero iff undeclared is nonempty.
+        assert!(
+            run_conformance(Some(repo.clone()), 1, Some(format!("{base}..{p2}")), true).is_err(),
+            "strict must fail on an undeclared path"
+        );
+        assert!(
+            run_conformance(Some(repo.clone()), 1, Some(format!("{base}..{p1}")), true).is_ok(),
+            "strict must pass when every touched path is declared"
+        );
+    }
+
+    // VT-2: a real non-ASCII path folds VERBATIM. Without `core.quotePath=false`
+    // git C-quotes the key to `"src/caf\303\251.rs"` and this assert FAILS — the
+    // proof the hardening bites.
+    #[test]
+    fn against_folds_non_ascii_path_verbatim() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        git(&root, &["init", "-q", "-b", "main"]);
+        git(&root, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        commit_file(&root, "src/café.rs", "fn f() {}\n");
+
+        let actual = actual_from_range(&root, "HEAD~1..HEAD").unwrap();
+        // quotePath=false ⇒ verbatim UTF-8 key (not C-quoted \303\251).
+        assert!(actual.contains_key("src/café.rs"));
     }
 }

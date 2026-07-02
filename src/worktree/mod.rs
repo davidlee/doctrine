@@ -249,6 +249,13 @@ pub(crate) enum WorktreeCommand {
         #[arg(long = "from-worktree")]
         from_worktree: Option<PathBuf>,
 
+        /// The slice whose `design-target` selectors scope the import belt
+        /// (SL-180 PHASE-02). When given, the worker delta is refused
+        /// (`undeclared-scope`) if it touches a path no design-target selector
+        /// declares. Absent ⇒ no scope check (byte-for-byte the pre-scope belt).
+        #[arg(long, value_parser = crate::slice::parse_cli_id)]
+        slice: Option<u32>,
+
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -392,8 +399,32 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             base,
             fork,
             from_worktree,
+            slice,
             path,
-        } => run_import(path, &base, fork.as_deref(), from_worktree.as_deref()),
+        } => {
+            // Resolve the `--slice` scope's design-target selectors HERE (command
+            // tier) — the ONLY `crate::slice` call; `import` stays engine-tier and
+            // receives an already-resolved `&[String]` (ADR-001, SL-180 PHASE-02).
+            // Absent `--slice` ⇒ empty selectors ⇒ the scope leg is a no-op.
+            let selectors = match slice {
+                Some(id) => {
+                    let root = crate::root::find(path.clone(), &crate::root::default_markers())?;
+                    crate::slice::selectors(
+                        &root,
+                        id,
+                        Some(crate::slice::SelectorIntent::DesignTarget),
+                    )?
+                }
+                None => Vec::new(),
+            };
+            run_import(
+                path,
+                &base,
+                fork.as_deref(),
+                from_worktree.as_deref(),
+                &selectors,
+            )
+        }
         WorktreeCommand::Land { fork, path } => run_land(path, &fork),
         WorktreeCommand::Gc {
             fork,
