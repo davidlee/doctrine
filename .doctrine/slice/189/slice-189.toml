@@ -1,7 +1,7 @@
 id = 189
 slug = "pi-arm-record-delta-code-scope"
 title = "Pi-arm boundary recording scopes to imported code commit, not funnel span"
-status = "reconcile"
+status = "done"
 created = "2026-07-02"
 updated = "2026-07-02"
 tags = []
