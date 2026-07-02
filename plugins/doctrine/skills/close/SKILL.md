@@ -59,6 +59,12 @@ Inputs:
    conventional commits scoped with the slice id, rather than letting them
    accumulate. Code and workflow edits go together or separately, whichever
    commits cleanly first.
+   > **Stage the slug symlink.** `*/new` verbs lay out `<kind>/NNN/` **and** a
+   > sibling slug symlink `<kind>/NNN-slug -> NNN` (slice, review, revision, rec, …).
+   > A path-scoped `git add <kind>/NNN/` stages the dir but misses the symlink,
+   > stranding it uncommitted. Stage both — `git add <kind>/NNN*` — or add the
+   > symlink explicitly. Check `git status` for a dangling `NNN-slug` before the
+   > final commit.
 3a. **Dispatched slice — integrate the admitted OID (post-audit only).** If the
    slice was driven by `/dispatch`, project the audited units now:
 
