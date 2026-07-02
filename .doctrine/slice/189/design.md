@@ -166,16 +166,36 @@ Manual-provenance sticky-merge) is reused verbatim.
 
 Pi funnel step 8 (`plugins/doctrine/skills/dispatch-subprocess/SKILL.md` +
 `plugins/doctrine/skills/dispatch/SKILL.md` router line): replace
-`record-delta --start <B> --end <B+1>` with `record-delta --commit <S>`, where `S`
-is the step-7 single funnel commit (`HEAD` on `dispatch/<slice>` at record time).
-`.doctrine/skills/` is the gitignored installed copy (regenerated from `plugins/`)
-— not edited.
+`record-delta --start <B> --end <B+1>` with `record-delta --commit <S>`.
+
+**`S` must be pinned at step 7, not read as `HEAD` at step 8.** Step 8 *also*
+trails knowledge; if a knowledge commit lands before the record call, `HEAD` is no
+longer the code commit. The skill captures `S=$(git rev-parse HEAD)` immediately
+after the step-7 commit and records `--commit "$S"` **before** trailing knowledge
+(or with the pinned oid regardless of order). `.doctrine/skills/` is the gitignored
+installed copy (regenerated from `plugins/`) — not edited.
+
+**Batch/phase cardinality** (router step 5): the funnel commits ONE commit `S` per
+*batch*, and a batch is one or more file-disjoint phases (serial default = one phase
+per batch; parallel = several). So step 8 records `--commit <S>` once **per phase in
+the batch**, all pointing at the same `S` — each row is `[S^, S]`, the batch's clean
+delta. Per-phase attribution *within* one batch commit is not derivable from commit
+boundaries and is a pre-existing property, unchanged here.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV** — `git diff S^..S` == `S`'s own patch, for any non-merge non-root `S`.
-- **A1** — funnel Delta-check guarantees exactly one non-merge commit `S` per phase
-  (`S^ == B`); `--commit HEAD` at step 8 is well-defined.
+- **INV** — `git diff S^..S` == `S`'s own patch, for any non-merge non-root `S`. A
+  `refresh-base` merge that landed *before* `S` is in `S^`, so it drops out of the
+  diff — the property that read-side `.doctrine/` filtering cannot achieve (§3).
+- **A1** — the funnel commits exactly one non-merge commit `S` per *batch*
+  (Delta-check, `S^ == B`); `S` pinned at step 7 is well-defined.
+- **A2 — phase atomicity.** `--commit` assumes a phase's code lands in a single
+  commit (the batch commit). True for the serial default (one worker per phase) and
+  for parallel batches (all phases share the one batch commit). A phase split across
+  **multiple** commits (mid-phase re-dispatch) is NOT captured by a single
+  `--commit` — the phase-keyed upsert would keep only the last commit's delta. Such
+  a phase uses the retained `--start/--end` escape hatch (a range spanning its
+  commits). This is a named, accepted limitation, not silently wrong (R4).
 - **Edge — merge `S`**: rejected (no single parent / own-patch). A funnel `S` is
   never a merge (Delta-check), so this only guards operator misuse.
 - **Edge — root commit `S`**: rejected (no parent). Not a funnel case.
@@ -213,15 +233,24 @@ is the step-7 single funnel commit (`HEAD` on `dispatch/<slice>` at record time)
 - **R3** — divergence from the claude arm persists until follow-up. *Mitigation*:
   documented; the helper makes convergence cheap; conformance on the claude arm is
   already masked by the `phase/<N>` projection for review.
+- **R4** — multi-commit phase (mid-phase re-dispatch) under-captured by a single
+  `--commit` (A2). *Mitigation*: rare (serial = one worker per phase); the
+  `--start/--end` escape hatch covers it with a spanning range; the
+  completeness gate still requires *a* row, so it cannot silently vanish. A
+  commit-list-per-phase primitive is possible future work if this proves common.
 
 ## 9. Quality Engineering & Validation
 
 - **VT (helper)** — non-merge `S` → `[S^, S]`; merge `S` → error; root commit →
   error.
-- **VT (behavioral, SL-186 regression)** — repo with base `B`, code commit `S`
-  (`S^==B`), a trailing `.doctrine/` knowledge commit, and a merge bringing a
-  foreign `src/` file; record via `--commit S`; assert conformance `actual` == `S`'s
-  paths only (trailing knowledge + foreign source excluded).
+- **VT (behavioral, SL-186 regression)** — build history so `S`'s parent already
+  contains the noise: base `B` → `refresh-base` merge `M` bringing a foreign
+  `src/foreign.rs` → code commit `S` (`S^ == M`) touching only the phase's own
+  paths → a trailing `.doctrine/` knowledge commit `K` after `S`. Record via
+  `--commit S`; assert conformance `actual` == `S`'s own paths only — `foreign.rs`
+  (in `S^`) and `K`'s `.doctrine/` paths (after `S`) both excluded. Contrast: the
+  legacy `--start B --end K` on the same repo would list all three (the regression
+  this replaces).
 - **VT (arg)** — `--commit` + `--start` → error; neither → error.
 - **Behaviour-preservation** — legacy `--start/--end` tests, F-6 guard (trivially
   holds for `S^..S`), D12 Manual non-clobber, and the existing conformance suite
@@ -229,4 +258,24 @@ is the step-7 single funnel commit (`HEAD` on `dispatch/<slice>` at record time)
 
 ## 10. Review Notes
 
-<!-- adversarial pass appended below -->
+### Internal adversarial pass (author, pre-plan)
+
+- **F-1 (integrated) — phase/commit cardinality.** The funnel commits one commit
+  per *batch*, not per phase; a batch may hold several file-disjoint phases, and a
+  phase *could* (rarely) span multiple commits via mid-phase re-dispatch. The
+  phase-keyed upsert makes a single `--commit` lossy for the multi-commit case.
+  Resolved: named as A2 / R4; the `--start/--end` escape hatch covers it; the
+  completeness gate prevents silent loss.
+- **F-2 (integrated) — `S` provenance at record time.** "`HEAD` at step 8" is
+  wrong once knowledge trails within step 8. Resolved: skill pins `S` at step 7 and
+  records before/independent of the knowledge trail (§5.4).
+- **F-3 (integrated) — VT soundness.** The behavioral VT must place the
+  refresh-base merge in `S^` and the knowledge commit after `S` to actually
+  exercise both exclusions; clarified in §9.
+- **F-4 (checked, no change) — governance.** ADR-012 impl-bundle routing (code vs
+  orchestrator knowledge) is honoured by the code-only scope; POL-002 (no
+  host-project coupling) unaffected; STD-001 — no new magic strings beyond the
+  `--commit` flag attribute (plan to keep any new literal named).
+
+Open for external challenge: whether the multi-commit-phase limitation (A2/R4)
+should instead be solved now by a commit-list primitive rather than deferred.

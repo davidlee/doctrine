@@ -87,9 +87,13 @@ Out of scope:
   vs `record-delta` (PRIMARY arm-neutral registry). Unifying arms must not orphan
   the conformance gate's read path (`dispatch sync --prepare-review` completeness
   gate `bail!`s on a missing row — ISS-052 failure mode).
-- **A1** — The funnel produces exactly **one** non-merge import commit per phase
-  (per IMP-175 evidence + funnel import memory); single-commit scope is therefore
-  well-defined.
+- **A1** — The funnel produces exactly **one** non-merge import commit per *batch*
+  (`S^==B`, Delta-check); single-commit scope is well-defined.
+- **A2** — **Phase atomicity**: a phase's code lands in a single (batch) commit.
+  Holds for serial (one worker/phase) and parallel batches; a phase split across
+  multiple commits (mid-phase re-dispatch) is NOT single-commit-capturable and uses
+  the retained `--start/--end` escape hatch. Named limitation, not silent (design
+  §5.5 A2 / §8 R4).
 - **OQ-1** — Prose-only fix (pass `feat^..feat` in the skill) vs structural
   code-side single-commit scope. Prose is cheapest but leaves the two-dot footgun
   for the manual/escape-hatch caller; code makes it safe by construction.
