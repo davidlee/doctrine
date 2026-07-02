@@ -1,0 +1,42 @@
+memory_uid = "mem_019f21517db674a3a0efe574dfbe085d"
+memory_key = "mem.pattern.dispatch.seatbelt-confines-longlived-fifo-worker"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "RISK-1 clears: long-lived fifo-reader + child spawn survive SL-183 Seatbelt write-floor (SL-185 PHASE-04 go)"
+summary = "The SL-185 RISK-1 go/no-go (does a pi --mode rpc-shaped process survive sandbox-exec confinement?) clears via a faithful stand-in: a long-lived fifo-reading process that spawns a child is correctly confined by the SL-183 floor."
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = ["src/worktree/jail_prefix.rs", "scripts/pi-spawn-confined.sh"]
+globs = []
+commands = []
+tags = ["seatbelt", "macos", "confinement", "dispatch", "sl-185", "risk-1"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "df0cd8c7ecf8acda1915d47ed02527b6daffc676"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a9bc57ca5f6c7291ce3bb1eac5bdc9bd106f75ab2519d1f3cd67007234408afe"
+base_commit = "31d97083ac97ecbf4dd29b4266c4ef45c0354e1a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
