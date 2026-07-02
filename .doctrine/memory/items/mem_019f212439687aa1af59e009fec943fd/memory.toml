@@ -1,0 +1,50 @@
+memory_uid = "mem_019f212439687aa1af59e009fec943fd"
+memory_key = "mem.pattern.dispatch.unarmed-agent-worker-runs-in-coord-tree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Un-armed dispatch-worker Agent runs in the coord tree (native isolation), not an isolated fork"
+summary = "A dispatch-worker Agent spawned WITHOUT arm-spawn (no cd into spawn dir) is a native isolation:worktree — no WorktreeCreate hook, no footer, runs in the coord tree; a non-committing prompt leaves the delta as clean coord-tree working changes, importable in place"
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "worktree", "claude-arm", "funnel"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a54bd110fe3a09dd2a2b7beccce0b64426dcf64d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1b8fdd0b1a8ae05809b8767981288b03d33119b8a89aa465f77c9a1302a412b8"
+base_commit = "c7104730d40f766b1548b544af7c1af3bd520697"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-185"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+

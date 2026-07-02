@@ -1,0 +1,50 @@
+memory_uid = "mem_019f2124384970009cf065db996a5b1a"
+memory_key = "mem.pattern.dispatch.worker-prompt-run-full-suite"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch worker prompt must run the full suite, not only the phase e2e"
+summary = "Dispatch worker prompt must mandate the full regression-relevant suite, not just the phase's own e2e binary — else a red unit test ships"
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "testing", "claude-arm", "worker-prompt"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a54bd110fe3a09dd2a2b7beccce0b64426dcf64d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "74ae7da11fb6850c0bedec32322064d357fab81047425c7519063501d99ad458"
+base_commit = "c7104730d40f766b1548b544af7c1af3bd520697"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-185"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
