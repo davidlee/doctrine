@@ -786,3 +786,10 @@ verbs costs a retry each. Separately: authoring `[[selector]]` after
 (relation block last, above the comment) forces a manual re-home of the
 selector table above the relations before any link succeeds. Two retries
 lost to id-form + toml-ordering friction, neither substantive.
+[CHR-033 implementation; solo turn] The handover from the user was comprehensive 
+and directly actionable — no routing ambiguity, no design calls needed. The 
+`#[expect(dead_code)]`/`cfg_attr(not(test))` dance was a minor friction point 
+(3 iterations: allow→expect→cfg_attr), but each failure was mechanical (clippy 
+then test-compile), not conceptual. Token efficiency: the handover format 
+(change surface + test update tables) made the work direct — no exploration 
+needed, just execution.
