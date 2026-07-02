@@ -47,3 +47,12 @@ VT keyword false-positive risk: the VT gate's keyword-grep mechanism over entire
 * One friction point: `doctrine worktree land --fork` expects a branch name, not a path. CLI error `no-such-fork` was confusing (the fork directory existed).
 * Clippy `unwrap_used` + `expect_used` both denied required switching from index-based collection to `array.iter().cloned()`. Minor but worth noting.
 * Test label selection: `References` for SLICE_KIND requires a `Role`; had to switch to `Related` (label-only, writable for SLICE). This was discoverable but not immediately obvious from the issue sketch.
+
+[IMP-103; preflight→execute] IMP-103 was 2 doc-comment edits. The preflight
+surfaced the dependency chain (IMP-103 after IMP-101 after ISS-024) and
+confirmed the `after` is advisory (no `needs`). Body files for both IMP-101
+and IMP-103 were empty templates — had to reverse-engineer the actual task
+from the title + SL-121 design + memory corpus. Token spend: ~7k to discover
+what amounted to a 2-line change. The memory corpus was the right place
+(mem_019edd33d3b273928001e6c867cb2de5 nailed the problem statement), but
+having it in the IMP body would've saved several round-trips.
