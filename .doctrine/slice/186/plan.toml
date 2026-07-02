@@ -116,6 +116,7 @@ verification = [
   { id = "VT-2", expects = "model-keys golden: reflects only authored keys as FULL relative keys (anthropic/claude-sonnet-4, deepseek/_default); unauthored vendor absent; empty corpus ⇒ empty output", test_file = "tests/e2e_prompt_resolve_golden.rs", keywords = ["model-keys"] },
   { id = "VT-3", expects = "check golden: overlapping/cyclic replaces flagged; sidecar unknown band flagged; unknown stage label flagged; clean corpus passes", test_file = "src/commands/prompt.rs", keywords = ["fn check", "replaces"] },
   { id = "VT-4", expects = "Layering gate green: command(prompt) ← engine(hymns) ← leaf, no cycle", test_file = "tests/architecture_layering.rs", keywords = ["hymns"] },
+  { id = "VT-5", expects = "explain trace: per slot, which snippets matched, who won, and why (band→specificity→provenance→alpha) on a fixture where specificity beats provenance — the ordering is legible, not just the final output", test_file = "src/commands/prompt.rs", keywords = ["fn explain", "specificity"] },
 ]
 specs        = []
 requirements = []
