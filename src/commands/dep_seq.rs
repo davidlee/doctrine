@@ -15,10 +15,7 @@ use std::path::PathBuf;
 /// Revision, never the evergreen doc (the SL-060 invariant). A future phase that
 /// allows cross-tier dep/seq deletes just this predicate (and its refusal tests).
 pub(crate) fn is_work_like(kind: &'static crate::entity::Kind) -> bool {
-    matches!(
-        kind.prefix,
-        "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE" | "REV"
-    )
+    crate::kinds::WORK_LIKE.contains(&kind.prefix)
 }
 
 /// The record membership predicate (SL-158 D2) — the knowledge-record kinds that a
@@ -277,11 +274,8 @@ mod tests {
     /// Governance (SPEC/ADR/POL/STD) and everything else stay excluded.
     #[test]
     fn is_admissible_dep_target_is_work_like_plus_records() {
-        // Work-like (SL, ISS, IMP, CHR, RSK, IDE, REV) + records (ASM, DEC, QUE, CON, EVD, HYP)
-        let admissible: &[&str] = &[
-            "SL", "ISS", "IMP", "CHR", "RSK", "IDE", "REV", "ASM", "DEC", "QUE", "CON", "EVD",
-            "HYP",
-        ];
+        // work-like ∪ RECORD (kinds::ADMISSIBLE_DEP_TARGETS)
+        let admissible: &[&str] = crate::kinds::ADMISSIBLE_DEP_TARGETS;
         for k in integrity::KINDS
             .iter()
             .filter(|k| admissible.contains(&k.kind.prefix))
@@ -481,12 +475,10 @@ mod tests {
         }
         // Every OTHER admitted kind in the corpus table is refused (gov / spec / req /
         // review / reconciliation / knowledge) — the closed allowlist.
-        for k in integrity::KINDS.iter().filter(|k| {
-            !matches!(
-                k.kind.prefix,
-                "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE" | "REV"
-            )
-        }) {
+        for k in integrity::KINDS
+            .iter()
+            .filter(|k| !crate::kinds::WORK_LIKE.contains(&k.kind.prefix))
+        {
             assert!(
                 !is_work_like(k.kind),
                 "{} must NOT be work-like (off the allowlist)",

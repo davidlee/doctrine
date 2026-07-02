@@ -22,23 +22,14 @@ use crate::listing::{Column, ColumnPaint, Format, RenderOpts, render_columns};
 
 // ── KindSelector ──────────────────────────────────────────────────────────
 
-const DEFAULT_SEARCH_KINDS: &[&str] = &[
-    "SL", "ADR", "PRD", "SPEC", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE",
-    "CON", "EVD", "HYP",
-];
+const DEFAULT_SEARCH_KINDS: &[&str] = kinds::SEARCH_DEFAULT;
 
 const GROUP_ALIASES: &[(&str, &[&str])] = &[
     ("backlog", &["ISS", "IMP", "CHR", "RSK", "IDE"]),
     ("governance", &["ADR", "POL", "STD"]),
     ("specs", &["PRD", "SPEC"]),
     ("knowledge", kinds::RECORD),
-    (
-        "all",
-        &[
-            "SL", "ADR", "PRD", "SPEC", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "REQ", "RV",
-            "REC", "REV", "CM", "POL", "STD", "ASM", "DEC", "QUE", "CON", "EVD", "HYP",
-        ],
-    ),
+    ("all", kinds::ALL_KINDS),
 ];
 
 #[derive(Debug, Clone)]
