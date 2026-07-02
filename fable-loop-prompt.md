@@ -16,12 +16,12 @@ INVARIANTS — run these cheaply at the top of EVERY turn, before any real work
 
 2. ISOLATION.  You work in a dedicated worktree on branch `fable-loop`. You must NEVER
    touch the primary worktree's branch — it stays on `edge`, untouched, no exceptions.
-   • Worktree path: /home/david/dev/doctrine-fable-loop
+   • Worktree path: /workspace/doctrine/.worktrees/fable-loop
    • It has been pre-created and seeded (worktree + fable-state.md + fable-log.md exist).
-     Normal path: `cd /home/david/dev/doctrine-fable-loop` and confirm
+     Normal path: `cd /workspace/doctrine/.worktrees/fable-loop` and confirm
      `git rev-parse --abbrev-ref HEAD` == `fable-loop`.
    • Only if it is somehow missing, recreate it off edge:
-       git -C /home/david/dev/doctrine worktree add /home/david/dev/doctrine-fable-loop -b fable-loop edge
+       git -C /workspace/doctrine worktree add /workspace/doctrine/.worktrees/fable-loop -b fable-loop edge
      then `cd` into it.
    • ALL work, edits, commits happen inside this worktree, on `fable-loop`, only.
    • Confirm `/workspace` exists → you are jailed; stay inside the jail. No pushes, no
