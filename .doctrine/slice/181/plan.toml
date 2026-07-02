@@ -1,0 +1,56 @@
+# Implementation plan for SL-181 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-181"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+#
+# REV-only slice: the sole deliverable is a Revision against ADR-012 (+ ADR-006
+# D2a/D2b notes). No `src/` code (design §3). The REV is AUTHORED + APPROVED here
+# (execute); it is APPLIED at reconcile — the sanctioned governance write surface —
+# which edits the ADR prose and lands the IMP-065 close + RSK-014 downgrade.
+[[phase]]
+id        = "PHASE-01"
+name      = "Author the OQ-D-reframe Revision"
+objective = """Author and approve a Revision (the corpus's first REV) that retracts \
+ADR-012's overclaim — "the positive coordination marker (IMP-065) is the real close \
+of OQ-D" — and records the genuine close as SHIPPED confinement (SL-182 Linux/bwrap, \
+SL-183 macOS Seatbelt, SL-185 subprocess parity). The REV `revises` ADR-012 and the \
+ADR-006 D2a/D2b notes, and its rationale carries the full reframe per design §2. \
+Deliverable: an APPROVED-but-unapplied REV whose change rows + rationale fully \
+specify the ADR amendments. Apply is a reconcile action, not this phase."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is REV-only and locked (guard retired, §1–§6); slice-181.md scope carries the single REV deliverable." },
+  { id = "EN-2", text = "RV-199 resolved (done, all findings terminal) — no open blocker gates the slice." },
+  { id = "EN-3", text = "ADR-012 and ADR-006 are readable via `doctrine adr show`; SL-182/183/185 confirmed `done`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A REV exists (`revision new`) with typed `[[change]]` rows that `revises` ADR-012 and ADR-006 (authored via `revision change add`; the only writer of a `revises` edge)." },
+  { id = "EX-2", text = "The REV rationale states: (a) retract 'positive marker is the real close of OQ-D'; (b) genuine close = shipped confinement, citing SL-182/183/185; (c) residual reclassified to 'enforcement-closed on confined arms; bounded, self-limiting residual'; (d) the anti-accident guard was designed, inquisited (RV-199 F-1), and retired." },
+  { id = "EX-3", text = "The REV is approved (`revision approve`) and NOT yet applied — apply is deferred to reconcile (the governance write surface)." },
+  { id = "EX-4", text = "No `src/` files changed under this slice: `git diff --stat` scoped to `src/` since the phase start is empty (design §3 zero touch-set)." },
+]
+verification = [
+  { id = "VA-1", expects = "An agent reads the authored REV (`revision show`) and confirms its change rows target ADR-012 + ADR-006 and its rationale matches design §2 points (a)–(d)." },
+  { id = "VA-2", expects = "An agent confirms `revision show` reports `approval = approved` and status not-applied, and that `git diff --stat -- src/` is empty for the slice." },
+  { id = "VH-1", expects = "Human confirms the REV framing is honest and complete — the ADR-006 D2a/D2b amendment it specifies is owner-locked (VH), so the reframe's honesty is human-accepted before reconcile applies it." },
+]
+specs             = []
+requirements      = []

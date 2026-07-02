@@ -1,9 +1,9 @@
 id = 181
 slug = "positive-coordination-marker"
 title = "OQ-D reframe: confinement is the close (REV-only)"
-status = "design"
+status = "ready"
 created = "2026-06-30"
-updated = "2026-07-03"
+updated = "2026-07-02"
 tags = ["area:dispatch"]
 
 [relationships]
