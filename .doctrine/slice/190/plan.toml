@@ -90,7 +90,8 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 resolver landed; PHASE-02 input-gathering helpers available to reuse." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "A status-only writer exists (edit-preserving toml_edit) that sets ONLY `status` (+ `last_updated`): no `[[progress]]` append, no `capture_phase_boundary`, no `record_source_delta`/`forget_source_delta` (state.rs:424,452,461)." },
+  { id = "EX-1", text = "A status-only writer exists (edit-preserving toml_edit) that sets ONLY `status` (+ `last_updated`): no `[[progress]]` append, no `capture_phase_boundary`, no `record_source_delta`/`forget_source_delta` (state.rs:424,452,461). It SHARES set_phase_status's read-parse-write skeleton (no parallel toml_edit boilerplate) — extract the common core, or add a suppression mode; do not copy-paste (DRY)." },
+  { id = "EX-4", text = "An explicit PhaseTruth → written-status mapping: Landed → `completed`; InFlight(s) → s; Planned → `planned`; Conflict / Unknown / Anomaly → SKIP (reported, not written); Local → leave untouched (composite silent)." },
   { id = "EX-2", text = "`slice reconcile-phases <ID>` writes the primary tree (`primary_worktree`:564) from composite truth; idempotent; skips + reports CONFLICT/UNKNOWN/anomaly; never regresses a locally-completed inline phase absent from the registry." },
   { id = "EX-3", text = "The verb REFUSES (non-zero, named) when a live `dispatch/<slice>` coordination worktree exists; a single-operator precondition is documented." },
 ]
@@ -119,9 +120,9 @@ entrance_criteria = [
   { id = "EN-1", text = "gc.rs `gather_landed`/`classify_gc` (114,188) verified present; existing `tests/e2e_worktree_gc.rs` green before the lift." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "The landed oracle is a shared engine fn taking `target: &str` (replacing the two hardcoded `\"HEAD\"` uses); gc calls it with `\"HEAD\"`." },
+  { id = "EX-1", text = "The landed oracle is a shared engine fn taking `target: &str` (replacing the two hardcoded `\"HEAD\"` uses); gc calls it with `\"HEAD\"`. Return stays a clean `bool` (landed?) — the caller, not the oracle, owns the missing-target → unknown tri-state (keeps shared machinery behaviour-preserving)." },
   { id = "EX-2", text = "EXTRACTION behaviour-preserving: `tests/e2e_worktree_gc.rs` and gc unit tests pass UNCHANGED (shared-machinery gate)." },
-  { id = "EX-3", text = "GENERALIZED path proven: new unit tests exercise a NON-HEAD target (landed / not-landed / missing-target → unknown)." },
+  { id = "EX-3", text = "GENERALIZED path proven: new unit tests exercise a NON-HEAD target (landed via ancestor; landed via patch-id; not-landed). Missing-target handling is the inventory caller's (PHASE-05), not the oracle's." },
 ]
 verification = [
   { id = "VT-1", expects = "New unit tests for the generalized oracle against a non-HEAD target ref: landed (ancestor OR patch-id-equal), not-landed, and missing-target-ref → soft unknown.", test_file = "src/worktree/gc.rs", keywords = ["target", "is-ancestor", "cherry"] },
