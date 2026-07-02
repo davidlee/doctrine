@@ -270,7 +270,7 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
             crate::slice::run_status(
                 Some(root.clone()),
                 slice_id,
-                crate::slice::SliceStatus::Design,
+                Some(crate::slice::SliceStatus::Design),
                 args.note.as_deref(),
             )?;
             let doc = compose_redesign_rec(&args.req, &args.slice, evidence);
@@ -474,28 +474,28 @@ mod tests {
         crate::slice::run_status(
             Some(root.to_path_buf()),
             1,
-            crate::slice::SliceStatus::Design,
+            Some(crate::slice::SliceStatus::Design),
             None,
         )
         .unwrap();
         crate::slice::run_status(
             Some(root.to_path_buf()),
             1,
-            crate::slice::SliceStatus::Plan,
+            Some(crate::slice::SliceStatus::Plan),
             None,
         )
         .unwrap();
         crate::slice::run_status(
             Some(root.to_path_buf()),
             1,
-            crate::slice::SliceStatus::Ready,
+            Some(crate::slice::SliceStatus::Ready),
             None,
         )
         .unwrap();
         crate::slice::run_status(
             Some(root.to_path_buf()),
             1,
-            crate::slice::SliceStatus::Started,
+            Some(crate::slice::SliceStatus::Started),
             None,
         )
         .unwrap();
