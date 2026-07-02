@@ -87,3 +87,23 @@ selector.
 - **F-2** — the `cli.rs` + `e2e_prompt_resolve_golden.rs` design-target selectors
   (a299cf27) land on trunk when `dispatch sync --integrate` projects slice-187.toml.
   No reconcile action; noted so integrate is not misread as introducing scope creep.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **slice-187.toml (RV-235 F-1)** — added design-target selector `install/model-band.md`
+  (`slice selector add 187 … --intent design-target`). Conformance on edge now: **0
+  undelivered, 7 conformant, 4 undeclared** — the 4 remaining are all dispositioned:
+  the two `onboarding`-tag/instrumentation authored paths (aligned) and the two F-2
+  split-brain code paths (`cli.rs`, `e2e_prompt_resolve_golden.rs`) whose selectors
+  arrive with the impl bundle at integrate.
+
+### REVs completed
+- None. No governance/spec drift surfaced; brief carried no REV items.
+
+### Withdrawn / tolerated
+- None. F-1 verified + remediated (selector added); F-2 verified + aligned (resolves at
+  integrate, no write).
+
+Reconcile pass complete — handoff to /close. The code has NOT yet landed on trunk;
+close performs the candidate close_target + admit + `sync --integrate --trunk main`.
