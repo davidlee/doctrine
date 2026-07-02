@@ -1,0 +1,34 @@
+id    = 233
+slug  = "reconciliation-review-of-sl-180"
+title = "reconciliation review of SL-180"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-180"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "EX-4 plan-truth drift: dispatch-subprocess selector is undeliverable-by-design, yet declared"
+detail = """Expected (plan EX-4, PHASE-02): "Both dispatch-agent/SKILL.md and dispatch-subprocess/SKILL.md pass --slice on the coordination-root worktree import invocation." Observed: only dispatch-agent/SKILL.md was edited; dispatch-subprocess/SKILL.md is reported *undelivered* by `slice conformance SL-180`. Root cause (verified directly): dispatch-subprocess/SKILL.md contains NO `worktree import` invocation — its arm records the boundary via `slice record-delta` (symmetric import deferred, D6/IMP-171). So EX-4's premise (subprocess has an import invocation to annotate) is false; the selector is undeliverable, not merely undelivered. The actual belt behaviour IS correct: `--slice` is threaded through the CLI to BOTH import arms (--fork / --from-worktree in worktree/mod.rs), so subprocess is automatically covered if/when it ever documents an import. This is authored-plan truth drift, not a code omission — the EX-4 criterion text and the declared design-target selector overstate the required skill edits."""
+disposition = "verified"
+response = """Observation confirmed by direct inspection: dispatch-subprocess/SKILL.md has no `worktree import` invocation (record-delta arm), so plan EX-4's "both skills pass --slice on the import invocation" is unsatisfiable for that arm, and the declared design-target selector for it is undeliverable-by-design. The deliverable behaviour is correct (CLI threads --slice to both import arms). Remediation is authored-truth, delegated to /reconcile (per-slice direct edit) — see the Reconciliation Brief: (a) correct the plan EX-4 criterion text to scope --slice to arms that actually invoke import; (b) note in design.md §? that subprocess coverage rides the CLI thread, not a skill edit; (c) drop/annotate the dispatch-subprocess design-target selector so `slice conformance` stops reporting a spurious undelivered. No code change. Non-blocking (minor): the shipped behaviour is right; only authored prose overstates."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "verify-vt line-anchored patterns caused a spurious VT-2 in-drive reconcile round"
+detail = """Observed during the drive: PHASE-01 VT-2 mandated patterns=["assert.*café"]; the test was correct but rustfmt wrapped the 2-arg assert! so `assert!(` and `"café"` landed on different lines. verify-vt matches `patterns` per-line (vtgate.rs:139, `source.lines().any(...)`) — line-anchoring is deliberate (load-bearing for `^`-anchored patterns) — so a correctly-authored assertion the formatter wraps false-Fails. Cost one reconcile round (fix: collapse to a single-arg assert, commit 380c1403). Not a defect in the SL-180 deliverable — a verify-vt authoring sharp edge, inverse of IMP-228's false-PASS. Captured as IMP-235 (after IMP-209)."""
+disposition = "follow-up"
+response = "Not SL-180 deliverable drift — a verify-vt tooling sharp edge (line-anchored `patterns` vs a rustfmt-wrapped assert). Already captured as durable work: IMP-235 (improvement, area:cli/coverage/slice, after IMP-209), which lays out the three remediation options. No SL-180 code or authored-truth change needed; the in-drive fix (single-arg assert, 380c1403) already keeps the mandated token on one line. Owned future tooling work, correctly routed to the backlog."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
