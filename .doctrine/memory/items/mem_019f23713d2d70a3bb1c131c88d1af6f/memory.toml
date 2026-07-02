@@ -1,0 +1,51 @@
+memory_uid = "mem_019f23713d2d70a3bb1c131c88d1af6f"
+memory_key = "mem.system.claude.plugin-load-model"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "system"
+status = "active"
+title = "Claude Code project-local plugin load model"
+summary = "CC resolves project-local plugins: known_marketplaces.json is the registry gate, enabledPlugins the switch; direct-write recipe + silent-orphan trap"
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = []
+globs = ["install/**", "plugins/**"]
+commands = ["claude plugin"]
+tags = ["claude-code", "plugins", "install", "marketplace"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1f67cdd2f619f9c74eb69cf61e7ba82c9db0d3e3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f79da04e4347c1ba00ea683df9faccb3094581f5dc0684bd201432829e5e9678"
+base_commit = "71d0f2691618105bb9b1c059aa4a88b6d0b253a3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.concept.claude.trust-layers"
+
+[[relation]]
+label = "related"
+target = "mem.fact.claude.worktreecreate-hook-fires"
+

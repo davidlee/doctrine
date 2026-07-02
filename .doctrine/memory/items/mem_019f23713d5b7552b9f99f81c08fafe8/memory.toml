@@ -1,0 +1,51 @@
+memory_uid = "mem_019f23713d5b7552b9f99f81c08fafe8"
+memory_key = "mem.fact.claude.worktreecreate-hook-fires"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "WorktreeCreate plugin hook fires on 2.1.198; -w bypasses it"
+summary = "CC WorktreeCreate plugin hook registers+fires (proven 2.1.198 via isolation:worktree); native -w bypasses it; the plugin-hooks Set is telemetry, not the gate"
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "doctrine worktree"]
+tags = ["claude-code", "hooks", "dispatch", "worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1f67cdd2f619f9c74eb69cf61e7ba82c9db0d3e3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "03938197e33744004f505da724a74dde3c691da766c6f6ed46f865d92d2826d9"
+base_commit = "71d0f2691618105bb9b1c059aa4a88b6d0b253a3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019efa04e19377c0938e58c059507a61"
+
+[[relation]]
+label = "related"
+target = "mem_019f1a5ce1f472219da91d0724bb766b"
+
