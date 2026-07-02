@@ -63,11 +63,16 @@ fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Res
 ///      the old work-like-only gate to admit knowledge records (ASM/DEC/QUE/CON/EVD/HYP).
 ///      Governance (SPEC/ADR/POL/STD) stays excluded from BOTH gates.
 ///   3. self-edge (SRC == TGT) refused.
+///
+/// Returns SRC's toml path plus the CANONICAL ids of both endpoints
+/// ([`crate::listing::canonical_id`]) — the caller stores and echoes the canonical
+/// form, so a non-canonical input (`SL-1`) normalizes at both the write and the
+/// echo, matching the backlog path (IMP-140 F-13).
 fn resolve_dep_seq_src(
     root: &std::path::Path,
     source: &str,
     target: &str,
-) -> anyhow::Result<PathBuf> {
+) -> anyhow::Result<(PathBuf, String, String)> {
     let toml_path = resolve_dep_seq_src_path(root, source)?;
     let (skref, sid) = crate::integrity::parse_resolvable_ref(root, source)?;
     // TGT must resolve on disk — a free-text or dangling target is refused here
@@ -83,7 +88,9 @@ fn resolve_dep_seq_src(
         !(skref.kind.prefix == tkref.kind.prefix && sid == tid),
         "a {source} edge to itself is not a dependency — self-edges are refused"
     );
-    Ok(toml_path)
+    let source_id = crate::listing::canonical_id(skref.kind.prefix, sid);
+    let target_id = crate::listing::canonical_id(tkref.kind.prefix, tid);
+    Ok((toml_path, source_id, target_id))
 }
 
 /// `doctrine needs <SRC> <TGT>` (SL-060 §5.4, SL-158 D2) — append TGT to SRC's
@@ -99,12 +106,12 @@ pub(crate) fn run_needs_edge(
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let toml_path = resolve_dep_seq_src(&root, source, target)?;
+    let (toml_path, source_id, target_id) = resolve_dep_seq_src(&root, source, target)?;
     crate::dep_seq::append(
         &toml_path,
-        &crate::dep_seq::RelEdit::Needs(&[target.to_string()]),
+        &crate::dep_seq::RelEdit::Needs(std::slice::from_ref(&target_id)),
     )?;
-    writeln!(std::io::stdout(), "{source} needs {target}")?;
+    writeln!(std::io::stdout(), "{source_id} needs {target_id}")?;
     Ok(())
 }
 
@@ -118,17 +125,20 @@ pub(crate) fn run_after_edge(
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let toml_path = resolve_dep_seq_src(&root, source, target)?;
+    let (toml_path, source_id, target_id) = resolve_dep_seq_src(&root, source, target)?;
     crate::dep_seq::append(
         &toml_path,
-        &crate::dep_seq::RelEdit::After { to: target, rank },
+        &crate::dep_seq::RelEdit::After {
+            to: &target_id,
+            rank,
+        },
     )?;
     let suffix = if rank == 0 {
         String::new()
     } else {
         format!(" (rank {rank})")
     };
-    writeln!(std::io::stdout(), "{source} after {target}{suffix}")?;
+    writeln!(std::io::stdout(), "{source_id} after {target_id}{suffix}")?;
     Ok(())
 }
 
@@ -141,15 +151,15 @@ pub(crate) fn run_after_remove(
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let toml_path = resolve_dep_seq_src(&root, source, target)?;
+    let (toml_path, source_id, target_id) = resolve_dep_seq_src(&root, source, target)?;
     let ceiling = if rank == 0 { None } else { Some(rank) };
-    let removed = crate::dep_seq::remove(&toml_path, target, ceiling)?;
+    let removed = crate::dep_seq::remove(&toml_path, &target_id, ceiling)?;
     if removed == 0 {
-        anyhow::bail!("{source} has no after edge to {target}");
+        anyhow::bail!("{source_id} has no after edge to {target_id}");
     }
     writeln!(
         std::io::stdout(),
-        "{source} after {target} removed ({} edge{})",
+        "{source_id} after {target_id} removed ({} edge{})",
         removed,
         if removed == 1 { "" } else { "s" }
     )?;
