@@ -1,0 +1,150 @@
+# Implementation plan for SL-186 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-186"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Pure resolver engine (src/hymns.rs)"
+objective = """
+The pure cascade core: types + `resolve`/`matches`/`specificity` over an
+in-memory corpus, no disk/clock/env (INV-5). Deterministic (INV-7). Owns selector
+matching, band ordering, within-band specificity→alpha, `replaces` suppression, and
+seal disk-twin drop (SealSet passed in). This is the leaf/engine layer — no CLI, no
+loader. Proves the whole precedence model on hand-built fixtures before any I/O
+exists.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (2 Codex passes F1–F16 integrated) + reconciled at plan (D7/OQ-1/OQ-3 resolved); slice in plan status" },
+  { id = "EN-2", text = "No src/hymns.rs exists yet (confirmed at plan); ADR-001 layering gate green on baseline" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Types per §5.2: ContextVector{role,harness,model,arm,stage,bands}, Snippet{slot,selector,provenance,body}, Slot{band,label}, Band (closed registry, fixed order preamble·harness·model·role·stage·project), Selector (axis→pattern + replaces:Option<Slot>), Provenance{Framework,User}, SealSet" },
+  { id = "EX-2", text = "`fn resolve(ctx,&[Snippet],&SealSet)->String` filter→match→order→concat; ordering key band→specificity→provenance(fw<user)→alpha (D1/D3); every match concatenates, only `replaces` suppresses (INV-2)" },
+  { id = "EX-3", text = "`fn specificity(Band,&Selector)->(u32,u32)` = (band-primary-axis depth, Σ other-axis depths), lexicographic (D3); exact-model outranks shallow-model+extra-axes" },
+  { id = "EX-4", text = "`replaces` legal only on unique-most-specific active snippet for its slot (INV-3); two `replaces` one slot / non-top replaces / cycle are surfaced errors, never alpha-ordered silently" },
+  { id = "EX-5", text = "Seal: a disk-provenance snippet whose slot ∈ SealSet is dropped before ordering (INV-6); missing tier ⇒ no output, no error (INV-4); pure — no disk/clock/env (INV-5)" },
+]
+verification = [
+  { id = "VT-1", expects = "Engine goldens (table-driven): band order; specificity>provenance (framework exact-model beats user vendor-default); band-primary-axis (exact-model beats shallow-model+extra-axes, finding-3 case); same-slot provenance tiebreak (user wins); alpha tiebreak; non-match≠override; missing-tier degradation", test_file = "src/hymns.rs", keywords = ["fn resolve", "specificity", "provenance"] },
+  { id = "VT-2", expects = "specificity() unit table pinning the D3 examples exactly, incl. (model-depth 2) > (model-depth 1 + harness + role)", test_file = "src/hymns.rs", keywords = ["fn specificity", "(u32, u32)"] },
+  { id = "VT-3", expects = "replaces: unique-most-specific suppresses lower in slot; two active replaces on one slot rejected; replaces-not-top rejected; replaces cycle rejected (INV-3, authoring errors not silent alpha)", test_file = "src/hymns.rs", keywords = ["replaces", "cycle"] },
+  { id = "VT-4", expects = "seal disk-twin drop: a disk snippet whose slot is in the SealSet is excluded before matching; sealed-slot framework snippet still emits (INV-6)", test_file = "src/hymns.rs", keywords = ["SealSet", "sealed"] },
+  { id = "VA-1", expects = "hymns.rs contains no disk/clock/env access (pure engine, INV-5) — reviewer confirms SealSet is a passed-in argument, not read here", test_file = "src/hymns.rs", keywords = ["fn resolve", "SealSet"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Corpus loader, seal set + embedded→disk projector (impure shell)"
+objective = """
+The thin impurity that feeds the engine: walk embedded `install/hymns/**` ⊕ disk
+`.doctrine/hymns/**`, derive Slot+Selector from path, overlay sidecar `<file>.toml`
+(per-axis supersede + `replaces`), tag provenance by source root, build the embedded
+SealSet from `install/manifest.toml`, and drop disk twins of sealed slots. `HYMNS_ROOT`
+is a single const (OQ-1, STD-001). NOT `corpus::sync_corpus` (memory-specific, finding 7)
+— a hymns-specific embedded→disk projector for the install starter set.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: engine types + resolve/specificity/replaces/seal-drop green" },
+  { id = "EN-2", text = "corpus::sync_corpus confirmed memory-bound (MEMORY_SHIPPED_DIR) — not reused; install.rs Assets embed + manifest.toml schema re-confirmed against tree" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Loader: embedded install/hymns/** ⊕ disk .doctrine/hymns/** → Vec<Snippet>; band = first path segment under HYMNS_ROOT, label = remainder; single HYMNS_ROOT const" },
+  { id = "EX-2", text = "Path→default Selector (harness/claude.md ⇒ {harness:claude}; model/anthropic/claude-sonnet-4.md ⇒ full-relative model key); sidecar .toml supersedes per-axis (declared axes win, undeclared fall back to path); sidecar carries `replaces`" },
+  { id = "EX-3", text = "Provenance derived from source root (embedded=Framework, disk=User), not a flag; embedded⊕disk union at read time" },
+  { id = "EX-4", text = "SealSet built from install/manifest.toml seal/expose section (embedded, compiled in) + accessor; loader drops any disk snippet whose slot ∈ SealSet before returning (feeds INV-6)" },
+  { id = "EX-5", text = "Hymns-specific embedded→disk projector (starter set for exposed slots) — own code, reuses fsutil/globmatch/dtoml; NOT sync_corpus" },
+]
+verification = [
+  { id = "VT-1", expects = "path→slot/selector derivation: single-axis path defaults (harness/claude, role/worker, model/<vendor>/<seg>/_default); band = first segment; full-relative model key", test_file = "src/commands/prompt.rs", keywords = ["HYMNS_ROOT", "Selector"] },
+  { id = "VT-2", expects = "sidecar per-axis supersede: declared axes override path-derived, undeclared fall back to path; sidecar replaces carried onto the Snippet", test_file = "src/commands/prompt.rs", keywords = ["sidecar", "replaces"] },
+  { id = "VT-3", expects = "provenance tagging by root (embedded=Framework, disk=User) + embedded⊕disk union", test_file = "src/commands/prompt.rs", keywords = ["Provenance", "union"] },
+  { id = "VT-4", expects = "SealSet from manifest seal section; sealed disk twin excluded by loader before matching (loader-side half of INV-6)", test_file = "src/commands/prompt.rs", keywords = ["SealSet", "manifest"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "`doctrine prompt` verbs, main wiring, seed corpus + E2E"
+objective = """
+The thin command shell over engine+loader and the first real corpus. Verbs
+`resolve` (assembled markdown to stdout, read-only — NO disk write in SL-186),
+`model-keys` (full relative keys, corpus-reflected), `explain` (precedence trace),
+`check` (corpus integrity: sealed slots present/unshadowed, selectors parse, sidecars
+name real bands, `replaces` unique-most-specific, locked-band labels known). Wire the
+`prompt` command in main.rs/cli.rs. Seed `install/hymns/**` with real universal/harness/
+model/role snippets (incl. a `role/worker` snippet PHASE-04 consumes) + the
+directory-layout + authoring convention doc. Layering gate stays green.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: loader + SealSet + projector green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine prompt {resolve,model-keys,explain,check}` wired (main.rs/cli.rs); command layer per ADR-001 (command ← engine hymns.rs ← leaf); resolve emits assembled markdown to stdout, read-only, writes no disk in SL-186 (delivery/disk-unstale is SL-187)" },
+  { id = "EX-2", text = "resolve --role <orchestrator|worker> selects assembly shape + is the role-axis value (F15/A); --harness/--model/--arm/--stage/--band refine; --band repeatable, absent = every band the shape includes" },
+  { id = "EX-3", text = "model-keys emits full relative keys that exist in the corpus (never bare leaves), one per line; reflects authored guidance only (not a registry); empty ⇒ silent" },
+  { id = "EX-4", text = "check flags: overlapping/cyclic replaces, sidecars naming unknown bands, unknown locked-band (stage) labels, sealed slot missing/shadowed; feeds `doctrine check` (R4)" },
+  { id = "EX-5", text = "install/hymns/** seed corpus (universal, harness, ≥1 model, role incl role/worker) + convention doc; embedded via rust_embed; layering gate tests/architecture_layering.rs green" },
+]
+verification = [
+  { id = "VT-1", expects = "E2E golden: `doctrine prompt resolve --role worker …` over a hermetic fixture corpus (framework + user + a sealed slot with a user twin) → exact assembled markdown; stdout-only, no disk artifact created", test_file = "tests/e2e_prompt_resolve_golden.rs", keywords = ["prompt", "resolve", "--role"] },
+  { id = "VT-2", expects = "model-keys golden: reflects only authored keys as FULL relative keys (anthropic/claude-sonnet-4, deepseek/_default); unauthored vendor absent; empty corpus ⇒ empty output", test_file = "tests/e2e_prompt_resolve_golden.rs", keywords = ["model-keys"] },
+  { id = "VT-3", expects = "check golden: overlapping/cyclic replaces flagged; sidecar unknown band flagged; unknown stage label flagged; clean corpus passes", test_file = "src/commands/prompt.rs", keywords = ["fn check", "replaces"] },
+  { id = "VT-4", expects = "Layering gate green: command(prompt) ← engine(hymns) ← leaf, no cycle", test_file = "tests/architecture_layering.rs", keywords = ["hymns"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Def↔hymn install-time wiring (D7, role band)"
+objective = """
+The minimal end-to-end proof of the def↔hymn seam (OQ-3/D7): the shipped
+`dispatch-worker.md` defs carry a `{{ prompt resolve --role worker }}` injection hole;
+`skills::install_agents_for` expands it — role band only — when it refreshes the
+canonical def from the embed (the existing "always overwrite — derived" fs::write).
+A literal marker replace (no template engine). Per-spawn axes (model/arm/stage) reach
+the worker via SL-187's spawn envelope, which excludes role — no duplication.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: `prompt resolve` + a role/worker seed snippet exist" },
+  { id = "EN-2", text = "skills::install_agents_for canonical-def refresh path (fs::write, 'always overwrite — derived') re-confirmed as the substitution point" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Shipped install/agents/{claude,pi,codex}/dispatch-worker.md carry the `{{ prompt resolve --role worker }}` marker (single agreed marker token)" },
+  { id = "EX-2", text = "install_agents_for expands the marker via the resolver (role band) when writing the canonical def; a def with no marker is written byte-identical (behaviour-preserved)" },
+  { id = "EX-3", text = "`prompt check` treats a def-marker whose role hymns don't resolve as an integrity failure (marker present ⇒ resolvable)" },
+]
+verification = [
+  { id = "VT-1", expects = "def-expansion E2E: install dispatch-worker def with marker → written def contains the role/worker hymn body, marker gone; a marker-free def is byte-identical after refresh", test_file = "tests/e2e_prompt_def_expansion.rs", keywords = ["dispatch-worker", "resolve", "--role worker"] },
+  { id = "VT-2", expects = "check covers the def marker: unresolvable role band behind a present marker is flagged", test_file = "src/commands/prompt.rs", keywords = ["marker", "resolve"] },
+  { id = "VA-1", expects = "Reviewer confirms role band delivered here is not re-emitted by any SL-186 surface elsewhere (SL-187 envelope contract: envelope excludes role)", test_file = "src/skills.rs", keywords = ["dispatch-worker", "resolve"] },
+]
+specs        = []
+requirements = []

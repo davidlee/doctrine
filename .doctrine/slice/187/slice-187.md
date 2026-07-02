@@ -66,7 +66,12 @@ CACHE-BUSTING supplement   MODEL-SPECIFIC — free on a path that busts cache an
   This slice *reuses* boot's generator and leaves the verb standing.
 - **On-model-change auto-inject** (the true model-band ceiling) — needs a per-harness
   on-change seam; deferred.
-- **`{{ resolve }}` injection hole in agent defs** — SL-186 OQ-3 follow-up.
+- **`{{ resolve }}` injection hole in agent defs** — landed in **SL-186** (OQ-3/D7):
+  install-time, **role-band-only** expansion of the shipped `dispatch-worker.md` defs.
+  **Contract seam:** the worker's **role** band arrives baked in the def, so *this*
+  slice's spawn envelope carries only the volatile per-spawn axes (harness/model/arm/
+  stage) and **must not re-emit the `role` band** — else worker role guidance
+  duplicates.
 
 ## Verification / closure intent
 
