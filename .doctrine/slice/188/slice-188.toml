@@ -16,15 +16,15 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/integrity.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/slice.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/review.rs"
@@ -41,6 +41,30 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/explore.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/relation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/facet.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/tag.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/dep_seq.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/supersede.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/map.rs"
+intent = "design-target"
 
 [[relation]]
 label = "related"

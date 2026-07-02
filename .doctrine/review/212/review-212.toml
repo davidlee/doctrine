@@ -1,0 +1,158 @@
+id    = 212
+slug  = "code-review-sl-188-cli-id-form-normalisation"
+title = "Code review: SL-188 CLI id-form normalisation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-188"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "parse_resolvable_ref: silent first-match-wins for ambiguous bare ids"
+detail = """
+`parse_resolvable_ref` scans `KINDS` in array order for a directory matching the bare id and returns the FIRST match — silently. In the current corpus, this is pervasive:
+
+- Bare `188` matches SL-188, REQ-188, IMP-188, and RV-188 → returns SL-188 (slice is first in `KINDS`).
+- Bare `1` matches 17 entities across 17 different kinds → returns SL-001.
+
+A user (or agent) passing bare `188` intending IMP-188 gets SL-188 with no error and no warning. The operation proceeds against the wrong entity — `needs 188 SL-190`, `tag set 188 foo`, `link 188 references ADR-001` — all silently target SL-188 instead of the intended entity.
+
+The function MUST detect ambiguity and refuse to resolve when multiple entities share the bare id. Either:
+- Reject with a list of matches: `bare id 188 is ambiguous — matches SL-188, REQ-188, IMP-188, RV-188; use the prefixed form`, or
+- Accept only when exactly one match exists (error on 0 or 2+).
+
+The user's assumption in the task description ("any edge case where two kinds share an id? They shouldn't — ids are per-namespace") is incorrect for this corpus — ids ARE per-namespace, but bare numbers discard the namespace, creating unresolvable ambiguity."""
+disposition = "fix-now"
+response = 'Confirmed. The silent first-match-wins behavior is incorrect. `parse_resolvable_ref` must detect multi-way matches and reject with an actionable error listing the colliding entities (e.g., "bare id 188 matches SL-188, REQ-188, IMP-188, RV-188; use the prefixed form"). Accept only when exactly one entity exists with that id across all KINDS. The fix is in `parse_resolvable_ref` itself — collect all matches, then branch on count: 0 → not-found error (existing), 1 → return it, 2+ → ambiguity error. No call site changes needed.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Test regression: dep_seq_verbs_refuse_off_allowlist_targets_and_sources — ADR-001 nonexistent"
+detail = """
+The e2e test `dep_seq_verbs_refuse_off_allowlist_targets_and_sources` in `tests/e2e_dep_seq_verbs.rs` now fails after SL-188 landed.
+
+Root cause: `resolve_dep_seq_src_path` calls `parse_resolvable_ref(root, source)` which checks entity existence BEFORE the work-like gate. The test case (d) passes `needs ADR-001 SL-001` where ADR-001 does NOT exist on disk in the test's temp directory. Previously, `parse_canonical_ref("ADR-001")` parsed it syntactically (ADR prefix is valid), then `is_work_like` rejected it with "cannot author needs/after". Now, `parse_resolvable_ref` fails first with "does not resolve to an entity" because the directory `.doctrine/adr/001` doesn't exist.
+
+Actual test failure:
+```
+names the non-authoring source: Error: `ADR-001` does not resolve to an entity (no ADR-001 at /tmp/.tmp11k5Ce/.doctrine/adr/001)
+```
+
+The assertion expects the string "cannot author needs/after" but gets "does not resolve to an entity".
+
+The code behavior change is arguably correct — an entity that doesn't exist SHOULD fail with "does not resolve" before the kind check. But the test was designed to exercise the work-like KIND gate specifically. It needs to seed ADR-001 on disk first so `parse_resolvable_ref` succeeds, letting the `is_work_like` gate fire."""
+disposition = "fix-now"
+response = """The test needs to seed ADR-001 on disk before testing the work-like gate, so `parse_resolvable_ref` can resolve it and the `is_work_like` gate can fire. Alternatively, change the test assertion to accept either "cannot author needs/after" or "does not resolve to an entity" — both are correct behaviors for a non-existent non-work-like source entity. The simpler fix: seed ADR-001 in the test's temp directory before asserting on the `needs ADR-001 SL-001` case. This preserves the test's intent (exercise the work-like gate) while accounting for the new existence check."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "ensure_ref_resolves: redundant second existence check after parse_resolvable_ref"
+detail = """
+`ensure_ref_resolves` now delegates to `parse_resolvable_ref` which already confirms entity existence via `fsutil::is_real_dir`. The function then repeats `fsutil::is_real_dir` on the same directory path — a redundant second check.
+
+```rust
+pub(crate) fn ensure_ref_resolves(root: &Path, reference: &str) -> anyhow::Result<()> {
+    let (kind, id) = parse_resolvable_ref(root, reference)?;
+    let name = format!("{id:03}");
+    // parse_resolvable_ref already confirmed the entity exists (it scanned the
+    // directory), but double-check consistency here for the error message.
+    let dir = root.join(kind.kind.dir).join(&name);
+    anyhow::ensure!(
+        fsutil::is_real_dir(&dir),
+        "`{reference}` does not resolve to an entity (no {} at {})",
+        listing::canonical_id(kind.kind.prefix, id),
+        dir.display()
+    );
+    Ok(())
+}
+```
+
+The comment says "double-check consistency here for the error message" but this is defensive paranoia masquerading as a feature. If the entity vanishes between `parse_resolvable_ref`'s scan and this second check (TOCTOU), the error message is identical to `parse_resolvable_ref`'s own error. The second check adds zero signal, only cost.
+
+If the concern is that `parse_resolvable_ref` might someday stop checking existence, the unit tests for `ensure_ref_resolves_guards_the_forward_edge` already test exactly this path — and those tests call `ensure_ref_resolves`, which calls `parse_resolvable_ref`. The invariant is protected at the test level.
+
+Recommendation: remove the second `is_real_dir` check in `ensure_ref_resolves` and let it be a thin semantic wrapper around `parse_resolvable_ref` that discards the return value. Or retire the function entirely and have call sites use `parse_resolvable_ref(root, ref).map(|_| ())`."""
+disposition = "fix-now"
+response = 'Remove the redundant `is_real_dir` check in `ensure_ref_resolves`. The function becomes a thin semantic wrapper: `parse_resolvable_ref(root, reference).map(|_| ())`. The error message is already produced by `parse_resolvable_ref` with equivalent detail. The function retains its semantic value ("I only care that this resolves") without the dead code.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "validate_focus: bare-number path has no existence check, inconsistent with parse_resolvable_ref pattern"
+detail = """
+The bare-number branch of `validate_focus` in `src/commands/map.rs` accepts any valid u32 string without checking whether an entity with that id exists:
+
+```rust
+fn validate_focus(s: &str) -> Result<String, String> {
+    if s.contains('-') {
+        crate::integrity::parse_canonical_ref(s)
+            .map(|_| s.to_owned())
+            .map_err(|e| format!("..."))
+    } else {
+        s.parse::<u32>()
+            .map(|_| s.to_owned())
+            .map_err(|_e| format!("..."))
+    }
+}
+```
+
+The bare-number path is purely syntactic — `parse::<u32>()` succeeds for any valid integer, regardless of whether the entity exists. The prefixed path is also syntactic (`parse_canonical_ref` validates the prefix and number format, not existence).
+
+The task description acknowledges this as intentional: "bare numbers pass without resolution check (deferred to downstream)." But it's inconsistent with every other verb this change touched — `parse_resolvable_ref` was used everywhere else because existence validation is the contract. `validate_focus` breaks that contract.
+
+The downstream failure mode for a non-existent focus is undefined — the map server may render with a broken focus, panic, or silently ignore it. None of these are user-friendly.
+
+Recommendation: use `parse_resolvable_ref` here too, or at minimum document the downstream behavior in the error message."""
+disposition = "tolerated"
+response = """Intentional as documented in the task description: "bare numbers pass without resolution check (deferred to downstream)." Map serve is a dev/exploration tool, not a mutation verb. A non-existent focus won't corrupt data — the map server handles the downstream resolution. The inconsistency with `parse_resolvable_ref` pattern is noted, but the cost of adding a root dependency to `validate_focus` (which is a clap `value_parser`, currently pure) outweighs the benefit. If this changes in the future (e.g., map serve becomes user-facing), revisit."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Memory-link branch dual-parse heuristic: triple-parses for prefixed refs, fragile coupling to parse_canonical_ref shape"
+detail = """
+The memory-link branch in `run_link` uses a dual syntactic check to implement the "does it look like an entity ref?" heuristic:
+
+```rust
+if crate::integrity::parse_canonical_ref(target).is_ok()
+    || target.parse::<u32>().is_ok()
+{
+    crate::integrity::ensure_ref_resolves(&root, target).with_context(|| {
+        format!("target `{target}` does not resolve to an existing entity")
+    })?;
+}
+```
+
+This is fragile for two reasons:
+
+1. **Redundant parsing.** `ensure_ref_resolves` internally calls `parse_resolvable_ref` which re-parses the same input. If the target is prefixed (`SL-001`), it's parsed by `parse_canonical_ref` → then `parse_resolvable_ref` → then `parse_canonical_ref` again. Triple-parse for one check.
+
+2. **The heuristic is coupled to parse function success/failure.** If `parse_canonical_ref` is ever extended to accept a new format (e.g., optional prefix), this dual-check gate must also change. The coupling is undocumented.
+
+A cleaner approach: attempt `parse_resolvable_ref` directly and branch on the error:
+- If it succeeds: the entity exists → validate (already done by `parse_resolvable_ref` itself)
+- If it fails with a "not a valid entity reference" error: free-text → pass through
+- If it fails with "does not resolve to an entity": dangling ref → error
+
+This avoids the dual parse, centralizes the "looks like a ref" logic in `parse_resolvable_ref`, and produces the same behavior.
+
+The current implementation is functionally correct and the commit message (5a85966f) explains the dual-parse was intentional. But it accumulates technical debt — every call site that wants "validate-if-it-looks-like-a-ref" must replicate this dual-check pattern."""
+disposition = "follow-up"
+response = """The dual-parse heuristic is functionally correct and the intentional design is documented in commit 5a85966f. But it's technical debt — every call site that needs "validate-if-it-looks-like-a-ref" must replicate this pattern. Refactoring `parse_resolvable_ref` (or a sibling like `try_resolve_ref`) to return an enum distinguishing "not-a-ref-shape" from "ref-shape-but-not-found" would centralize this logic. Capture as a backlog improvement."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
