@@ -109,5 +109,12 @@ Out of scope:
 
 ## Follow-Ups
 
-- IMP-175 (solo auto-binding) — sibling; may share a primitive.
-- D6 / IMP-171 (codex/pi symmetric ledger derive) — constrains the unify choice.
+- **IMP-175** (solo `capture_phase_boundary`) — adopt `single_commit_boundary` at
+  the Completed flip (record `[feat^, feat]`); this slice builds the primitive.
+- **Claude funnel** — adopt the primitive on `dispatch record-boundary` (kills the
+  arm divergence at the root).
+- **IDE-026** — auto-wire the commit boundary via harness hooks (SubagentStart /
+  bracketing; bwrap/seatbelt wrap), so recording is a property of the spawn, not an
+  orchestrator beat. Depends on this slice's primitive.
+- D6 / IMP-171 (codex/pi symmetric ledger derive) — the deferred derive that would
+  give the pi arm the clean `phase/<N>` projection the claude arm has.

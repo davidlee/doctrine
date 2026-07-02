@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "plugins/doctrine/skills/dispatch-subprocess/SKILL.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/skills/dispatch-subprocess/SKILL.md"
@@ -29,6 +29,18 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/commands/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/state.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch/SKILL.md"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
