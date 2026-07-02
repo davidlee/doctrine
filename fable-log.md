@@ -182,3 +182,20 @@ next: IMP-019 (cordage independent value oracle) — study level recurrence firs
   "Both bounds" was vague—
   now the error names the gap:
   lower without up.
+
+## 05:30 — turn 11: shipped IMP-019 (cordage level value oracle), refreshed capstone, scout #3 out
+observed: IMP-019 — studied cordage level semantics (level = longest-path-to-root
+  on the Along view; edge a→c ⇒ a=0,c=1). Wrote an INDEPENDENT longest-path oracle
+  (relaxation over the edge list, not the engine) + a diamond fixture where
+  long/short arms disagree (levels 0,1,2,1,3) so the sink is only right if the
+  engine takes the longest arm; asserted under all 120 edge permutations. Engine
+  agrees — closes golden_net's value-coverage gap (taxonomy obs #3). Gate clippy
+  = `cargo clippy` (no --tests), so test-only .expect()/root-#[test] don't hit the
+  gate; non-test clippy clean. Commit 4a3f1412. Refreshed friction-taxonomy.md
+  (11 fixes; ISS-059 moved to a design-decision deferral w/ 2 candidate approaches)
+  — f4023482. Launched scout #3 (a8f178c7) for entity/parse/render-layer bugs.
+next: process scout #3; if thin, wind down (session already strong).
+
+  Longest arm wins now—
+  an oracle apart from the code
+  keeps the level honest.

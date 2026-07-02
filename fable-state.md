@@ -44,16 +44,13 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: IMP-019 (cordage golden_net independent value oracle) — test
-hardening that strengthens what the taxonomy flagged (goldens can encode bugs).
-FIRST study cordage's level recurrence (order_key level semantics) to write a
-CORRECT independent oracle (e.g. inductive longest-path-to-root) — do NOT ship a
-trivially-passing or wrong oracle. Self-contained in crates/cordage/tests/
-golden_net.rs, no production change. If the level semantics prove too subtle to
-independently reproduce with confidence, STOP — record the analysis and instead
-record 1-2 durable session-gotcha memories (bin-crate test invocation;
-worktree/.worktreeinclude/dist provisioning; assert_refusal .contains preserves
-VT goldens) or wind down cleanly.
+NEXT-ACTION: Process scout #3's queue (agent a8f178c7d11b98d69, launched ~05:30)
+— fresh isolated fixes in entity/meta round-trip, CLI parse/validation, id/ref
+parsing, listing render. Re-verify each, TDD, commit clean. If scout #3 returns
+thin (backlog is well-picked now — 3 scouts in), WIND DOWN: the session is
+already strong (11 fixes + capstone). A clean state/log for the User beats
+scraping low-value items. IMP-135 (help-text) is low-value/snapshot-only — skip
+unless nothing better. IMP-137 (needs --remove) adds a flag = capability, skip.
 
 ISS-059 DEFERRED (design choice, not autonomous): contentset::compute (src/
 contentset.rs:129) fs::read aborts IsADirectory on a directory/symlink-to-dir
