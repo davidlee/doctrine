@@ -1,7 +1,7 @@
 id = 190
 slug = "dispatch-orchestrator-state-visibility"
 title = "Dispatch orchestrator state-visibility verbs"
-status = "ready"
+status = "audit"
 created = "2026-07-02"
 updated = "2026-07-02"
 tags = ["area:dispatch", "area:slice", "area:worktree", "token-efficiency"]
