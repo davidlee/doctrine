@@ -128,14 +128,14 @@ name      = "Def↔hymn install-time wiring (D7, role band)"
 objective = """
 The minimal end-to-end proof of the def↔hymn seam (OQ-3/D7): the shipped
 `dispatch-worker.md` defs carry a `{{ prompt resolve --role worker }}` injection hole;
-`skills::install_agents_for` expands it — role band only — when it refreshes the
+`install::install_agents_for` expands it — role band only — when it refreshes the
 canonical def from the embed (the existing "always overwrite — derived" fs::write).
 A literal marker replace (no template engine). Per-spawn axes (model/arm/stage) reach
 the worker via SL-187's spawn envelope, which excludes role — no duplication.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete: `prompt resolve` + a role/worker seed snippet exist" },
-  { id = "EN-2", text = "skills::install_agents_for canonical-def refresh path (fs::write, 'always overwrite — derived') re-confirmed as the substitution point" },
+  { id = "EN-2", text = "install::install_agents_for canonical-def refresh path (fs::write, 'always overwrite — derived') re-confirmed as the substitution point (moved from src/skills.rs by IMP-226; now src/install.rs)" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Shipped install/agents/{claude,pi,codex}/dispatch-worker.md carry the `{{ prompt resolve --role worker }}` marker (single agreed marker token)" },
@@ -145,7 +145,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "def-expansion E2E: install dispatch-worker def with marker → written def contains the role/worker hymn body, marker gone; a marker-free def is byte-identical after refresh", test_file = "tests/e2e_prompt_def_expansion.rs", keywords = ["dispatch-worker", "resolve", "--role worker"] },
   { id = "VT-2", expects = "check covers the def marker: unresolvable role band behind a present marker is flagged", test_file = "src/commands/prompt.rs", keywords = ["marker", "resolve"] },
-  { id = "VA-1", expects = "Reviewer confirms role band delivered here is not re-emitted by any SL-186 surface elsewhere (SL-187 envelope contract: envelope excludes role)", test_file = "src/skills.rs", keywords = ["dispatch-worker", "resolve"] },
+  { id = "VA-1", expects = "Reviewer confirms role band delivered here is not re-emitted by any SL-186 surface elsewhere (SL-187 envelope contract: envelope excludes role)", test_file = "src/install.rs", keywords = ["dispatch-worker", "resolve"] },
 ]
 specs        = []
 requirements = []
