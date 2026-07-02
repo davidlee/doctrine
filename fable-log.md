@@ -216,3 +216,19 @@ next: hold; on wake, confirm green + reconsider for any clean+safe+valuable item
   Eleven clean commits,
   the whole suite green behind them—
   I set down the tools.
+
+## 06:05 — turn 13: shipped IMP-135 F-4 (concept-map arg help), one last clean C1 fix
+observed: reconsidered the hold — IMP-135 F-4 (concept-map add/remove rendered bare
+  arg names in --help) is clean, safe, no-logic, and aligned with the taxonomy's
+  C1 (discoverability) recommendation, so it beats idling. Added clap doc comments
+  for id/source/rel/target/force. Verified the other IMP-135 sub-items OBE on edge
+  (F-2 supersede, F-6 after, F-5 backlog needs all already have descriptions).
+  Help golden doesn't cover concept-map → no golden churn; concept_map 147 green,
+  help-families golden 7 green. Commit 7d12dc83. 12th fix.
+  Backlog's clean autonomous items now genuinely exhausted (3 scouts + safe
+  remainder). Remaining = design/User/zone only. Truly winding down.
+next: HOLD at 30-min cadence; confirm green each wake; final wrap after 08:45.
+
+  One more bare list filled—
+  then the well of clean small work
+  runs dry. Set tools down.

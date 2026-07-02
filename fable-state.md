@@ -44,11 +44,13 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION (WIND-DOWN): full bin test suite running (bg b5h1hxzlo) to verify all
-11 fixes collectively green pre-handover. On green: session is complete — hold at
-low cadence (window open till 08:45) unless a genuinely safe+valuable item appears.
-Do NOT force the scout #3 items (all brush design/zone lines — see below). On any
-red: investigate + fix before anything else.
+NEXT-ACTION (HOLD): session complete — 12 fixes + capstone, full bin suite 2962
+green (b0844e39). Turn 13 added IMP-135 F-4 (concept-map arg help, 7d12dc83) as a
+last clean C1 fix. The backlog's clean autonomous items are now EXHAUSTED (3
+scouts + safe remainder). Everything left needs design / User input / avoid-zone
+(IMP-235, IMP-107, IMP-192, ISS-059, IMP-183 — all documented below/in taxonomy).
+HOLD at 30-min cadence; on each wake confirm branch green + reconsider for any new
+clean+safe+valuable item; do NOT manufacture busywork. FINAL WRAP after 08:45.
 
 SCOUT #3 FINDINGS (real issues, but NOT autonomous-safe — surfaced for the User):
   - IMP-235 (vtgate): line-anchored `patterns` false-Fail a formatter-wrapped
