@@ -105,7 +105,6 @@ review = "command"          # → engine/leaf + contentset, input, integrity, wo
 revision = "command"        # → engine/leaf + rec, requirement; revision entity-kind handler
 rfc = "command"             # → engine/leaf + catalog, integrity, kinds; RFC entity-kind handler
 relation_graph = "command"  # uniformly command — all-kind seam through adr, backlog, catalog, …
-skills = "command"          # → boot, fsutil, install, root; skills plugin infrastructure
 slice = "command"           # → engine/leaf + coverage, coverage_scan, conduct, dtoml, estimate, input, lifecycle, plan, rec, requirement, review, state, value; slice entity-kind handler
 spec = "command"            # → engine/leaf + registry, requirement; spec entity-kind handler
 standard = "command"        # → engine/leaf; standard entity-kind handler

@@ -290,18 +290,22 @@ mechanics + floor/supplement live in SL-187).
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 — Corpus name / config.** Name RESOLVED: `hymns`. Open sub-point: expose
-  the disk root as a `doctrine.toml` override, or const-only? Leaning const-only
-  (root-relative bands make a later override trivial).
+- **OQ-1 — Corpus name / config.** Name RESOLVED: `hymns`. Sub-point RESOLVED
+  (user, plan): **const-only** (`HYMNS_ROOT`); no `doctrine.toml` override — root-relative
+  bands make a later override trivial, so YAGNI on the knob (STD-001 single-source).
 - **OQ-2 — Stage-label vocabulary source.** The locked set of valid `stage/` labels
   = the shipped skill/verb names. Where is the authoritative list read from (a
   const, the skills manifest)? Design detail for the validator.
-- **OQ-3 — Def↔hymn wiring (revised post-review).** Agent defs stay in
-  `install/agents/**` (finding 7); they are *not* migrated into `hymns/`. Open: does
-  *this* slice add the `{{ prompt resolve … }}` injection hole to `dispatch-worker.md`,
-  or is that a follow-up once the resolver lands? Leaning follow-up — keep this slice
-  to the resolver + corpus; wiring defs to it is a clean next step (also unblocks
-  IMP-197). Confirm at plan.
+- **OQ-3 — Def↔hymn wiring (RESOLVED, user, plan).** Agent defs stay in
+  `install/agents/**` (finding 7); they are *not* migrated into `hymns/`. This slice
+  **does** add a **minimal, install-time** def↔hymn seam (D7): a
+  `{{ prompt resolve --role worker }}` injection hole in the shipped
+  `dispatch-worker.md` defs, expanded when `install_agents_for` refreshes the
+  canonical def. **Role band only** — model/arm/stage are per-spawn axes that reach
+  the worker via SL-187's spawn envelope, which therefore excludes `role`. Spawn-time
+  expansion (full axes) was rejected as SL-187 scope. This proves the seam
+  end-to-end (edit a `role/worker` hymn → reinstall → def carries it) and unblocks
+  IMP-197.
 - *(Delivery/boot-subsumption open questions moved to **SL-187**.)*
 
 ## 7. Decisions, Rationale & Alternatives
@@ -331,6 +335,19 @@ mechanics + floor/supplement live in SL-187).
   over loader+engine. (Its *consumption* by boot delivery is SL-187.)
 - **D6 — No cache.** On-demand resolves are cheap, pure, stateless. (Confirmed: doctrine
   hot-loads far larger entity sets per page view without caching.)
+- **D7 — Minimal def↔hymn seam is install-time, role-band-only (OQ-3, user).** The
+  shipped `dispatch-worker.md` defs carry a `{{ prompt resolve --role worker }}`
+  injection hole; `skills::install_agents_for` expands it when it refreshes the
+  canonical def from the embed (the existing "always overwrite — derived" write path,
+  `src/skills.rs`). Only the **role** axis is bound — model/arm/stage are unknown at
+  install and reach the worker via SL-187's spawn envelope (which excludes `role`, so
+  the two surfaces don't duplicate). Rejected: **spawn-time expansion** (resolve at
+  `arm-spawn` with full axes) — that is SL-187's spawn-envelope surface, and pulling
+  it here reintroduces the blast-radius overlap the SL-186/SL-187 split exists to
+  avoid. Rejected: **defer entirely** — a hole with no live substitution is untested
+  intent; install-time expansion is the smallest wiring that proves the seam. The
+  substitution is a literal marker replace (no template engine — no other `{{ }}` use
+  exists in defs), guarded by `prompt check` (marker present ⇒ resolvable).
 - **Registry boundary — no model registry (P4/P5/P6).** The corpus is the sparse,
   self-pruning vocabulary; self-ID reflects it (`model-keys`); model→param mapping
   and env auto-detect are out (harness domain).
@@ -410,10 +427,15 @@ split** — SL-186 = the inert resolver engine; SL-187 = the live-surface delive
   embedded SealSet accessor; a hymns-specific embedded→disk projector (NOT
   `sync_corpus`, which is memory-only).
 - **`install/hymns/**`** — NEW seed corpus (universal/harness/model/role/stage
-  examples) + convention doc. **`install/agents/` stays** (defs are a separate
-  surface; `{{ resolve }}` injection hole is a follow-up — OQ-3).
+  examples) + convention doc. **`install/agents/` stays** a separate surface; the
+  shipped `dispatch-worker.md` defs gain the `{{ prompt resolve --role worker }}`
+  injection hole (D7/OQ-3).
+- **`src/skills.rs`** — the canonical-def refresh path (`install_agents_for`, the
+  "always overwrite — derived" `fs::write`) expands the def's injection hole via the
+  resolver (role band). The one install-time consumer of `prompt resolve` in SL-186.
 - **`src/main.rs`** — wire the `prompt` command.
-- **Tests** — `src/hymns.rs` unit + goldens; e2e prompt-resolve golden.
+- **Tests** — `src/hymns.rs` unit + goldens; e2e prompt-resolve golden; def-expansion
+  test (marker → role hymns in the written def).
 
 *(Delivery-side code impact — `src/boot.rs` generator/inline, `doctrine_onboard`, memory
 tagging, pi/hook wiring — is **SL-187**.)*

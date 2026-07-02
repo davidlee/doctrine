@@ -1,0 +1,65 @@
+id    = 210
+slug  = "inquisition-sl-187-delivery-half-design"
+title = "Inquisition: SL-187 delivery-half design"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-187"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "minor"
+title = "Expected verbatim SL-186 contract quote; observed lossy paraphrase that narrows axis-invariance to --role/--harness"
+detail = "design.md:89-94 renders INV-D1 as '--role/--harness never alter the on-disk artifact', but the locked SL-186 §5.2 (design 186/design.md:159-160) says *flags* (all axes: --model/--arm/--stage/--band) never alter disk. The narrowing can be read to permit --model to churn the disk artifact — the opposite of INV-D1's intent. Also drops the repeatable --band and 'model-keys [--harness]' from the quote. Penance: quote SL-186 §5.2's 'flags never alter the on-disk artifact' verbatim; do not enumerate a subset of axes."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "Expected additive boot change; observed a non-additive rewrite of the section table + a producer arm mislabelled 'untouched/additive'"
+detail = "design.md:100 asserts 'entity-derived sections + assembly logic are untouched (behaviour gate)' and 'one additive Section' (R1, design.md:210). But boot.rs:104-132 hard-codes ('Onboarding', SourceKind::Footer) IN the core section sequence, rendered by a dedicated Footer arm (boot.rs:292-297) reading .doctrine/boot-footer.md. D3 REMOVES that footer and REPLACES it with an inline-memory section — that mutates the section table and a producer arm. Removal is not additive; 'goldens churn once' is honest but 'assembly logic untouched' is false. Penance: reframe D3/R1 as an intentional boot-snapshot contract change, not additive; scope validation against that."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "minor"
+title = "Expected tier-2 disk boot.md to be a safe delivery path; observed a concurrency dismissal that only holds if boot.md is NOT relied upon"
+detail = "design.md:71/116 make on-disk boot.md the tier-2 @-import fallback for non-injecting harnesses, then §5.4/INV-D2 (design.md:135) dismiss stale writes as 'projection, not authority'. write_if_changed (boot.rs:316-330 / fsutil.rs:44-75) is read-compare + atomic rename ('last rename wins'): never torn, but a lost fresh projection means a non-injecting harness reading in the stale window gets ≤1-cycle-old governance. The design argues this is benign (rare human governance edit, self-heals next session) — acceptable, but the tension is real. Penance: state the tolerance as an explicit decision, or downgrade tier-2 from 'supported delivery path' to explicit best-effort."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "Expected 'onboard suite stays green unchanged'; observed the memory-drop breaks an existing e2e assertion — the gate claim is false"
+detail = "design.md:229/§9 and R4 (design.md:218) claim doctrine_onboard's change is additive and 'onboard suite stays green'. But tools.rs:1217-1235 emits an 'Onboarding Memories' section and tests/e2e_mcp_server.rs:1083-1085 asserts text.contains('Onboarding Memories'). Dropping the two-memory load DELETES that section and BREAKS that test. So the change is a contract subtraction and the suite CANNOT stay green unchanged. Penance: either keep the memory section, or version the onboard contract and update its acceptance test — and stop calling it additive/green-unchanged."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "Expected a concrete model-identification mechanism for doctrine_onboard; observed hand-waving over a context the tool does not receive"
+detail = "design.md:109/144 say doctrine_onboard will 'offer prompt model-keys, or read the client's model' then emit --band model --model <id>. But the tool schema takes NO arguments (tools.rs:327-333) and the handler receives only name/arguments/root (tools.rs:409-414) — no MCP field carries a model id. 'Read the client's model' has no seam. The 'offer model-keys for agent self-identification' half IS concrete (agent self-resolves); the 'read the client's model' half is fiction. Penance: cut the fictional alternative; commit to 'tool teaches self-identification (emits model-keys guidance), agent resolves the band' OR specify a real argument/context field."
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "major"
+title = "Expected deterministic + observable onboarding selection; observed silent local-wins collisions and an ordering rule the reused helper does not provide"
+detail = "design.md:155-159/INV-D3 promise 'deterministic memory-key order' and local-wins collision 'documented, not silent / observable'. But collect_all (memory.rs:2736-2748) SILENTLY skips shipped uid-dupes — its own comment: 'silently skipped; the repo has no debug-log facility, print is denied' — so local-wins is NOT observable. And collection order is unsorted fs iteration (scan_named); the design must impose the sort itself. A proven boot helper boot_keys (memory.rs:2830-2841) already sorts key-ascending with key.unwrap_or(uid) fallback for keyless memories — SL-187's 'by memory key' omits the uid fallback. Penance: specify order as 'key else uid' (reuse the boot_keys pattern), and either add a collision diagnostic or drop the 'observable' claim."
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "minor"
+title = "Expected the cached-prefix sizing constraint settled pre-plan; observed it deferred behind 'small-by-construction' as an open question"
+detail = "design.md:181 OQ-1 defers any byte/count budget on inlined onboarding memories; §8/R3 (design.md:215) relies on review hygiene. Prefix size is the design's load-bearing axis (it rides every session-start cached sector). Deferring a *hard cap* is fine, but the design should DECIDE the posture now (warning-only at N, no hard cap) rather than leave a bare open question. Penance: promote OQ-1 to a decision — e.g. 'no hard cap; doctrine check warns at N bytes' — so /plan inherits a settled stance, not a fork."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

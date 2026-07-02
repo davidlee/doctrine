@@ -10,7 +10,6 @@ use crate::knowledge::KnowledgeCommand;
 use crate::policy::PolicyCommand;
 use crate::rec::RecCommand;
 use crate::rfc::RfcCommand;
-use crate::skills::SkillsCommand;
 use crate::standard::StandardCommand;
 
 /// Mutation classification for the worker-mode guard (ADR-006 D2a). `Write`
@@ -57,9 +56,6 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
     use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
-        Command::Skills { command } => match command {
-            SkillsCommand::List { .. } => Read,
-        },
         Command::Map { .. } => Write("map"),
         Command::ConceptMap { command } => match command {
             ConceptMapCommand::New { .. } => Write("concept-map new"),

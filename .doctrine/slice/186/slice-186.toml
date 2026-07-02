@@ -1,9 +1,9 @@
 id = 186
 slug = "prompt-cascade-resolver"
 title = "Prompt cascade: per-context instruction resolver"
-status = "design"
+status = "ready"
 created = "2026-07-01"
-updated = "2026-07-01"
+updated = "2026-07-02"
 tags = []
 
 [relationships]
