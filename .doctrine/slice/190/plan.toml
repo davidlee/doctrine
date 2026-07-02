@@ -1,0 +1,190 @@
+# Implementation plan for SL-190 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-190"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ---------------------------------------------------------------------------
+# PHASE-01 — Phase-status pure resolver + per-phase reader (engine, state.rs)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Composite phase-truth resolver (pure core)"
+objective = """
+Add the pure, total `resolve_phase_truth` resolver and its supporting types to the
+engine layer (`src/state.rs`), plus a per-phase status reader. No shell wiring, no
+git — the resolver is a total function over three per-phase input maps. This is the
+foundation both §1 verbs consume (RV-214 F-1/F-2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (RV-214 integrated); state.rs symbols (PhaseRollup:74, StemStatus:64, phase_rollup:291) verified present in the current tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`resolve_phase_truth(landed, coord, local)` exists in src/state.rs, taking PER-PHASE maps (not PhaseRollup counts): landed as [(PhaseId, LandedSignal)], coord/local as [(PhaseId, StemStatus)]; returns per-phase [(PhaseId, PhaseTruth)] + a Divergence summary." },
+  { id = "EX-2", text = "The resolver is PURE — no git, disk, clock, or rng (ADR-001 pure layer); impurity stays in the caller." },
+  { id = "EX-3", text = "`PhaseTruth` and `LandedSignal` enums exist; PhaseTruth covers Landed / Conflict / InFlight / Planned / Local / Anomaly / Unknown, matching the design's total table." },
+  { id = "EX-4", text = "A per-phase status reader exists (e.g. `read_phase_statuses(root, slice) -> Vec<(String, StemStatus)>`), NOT folding into PhaseRollup." },
+  { id = "EX-5", text = "Totality: the resolver has an explicit catch-all → Unknown; phase-set drift (a phase present in one map, absent in another) resolves to Unknown with the mismatch surfaced, never a panic or a dropped phase." },
+]
+verification = [
+  { id = "VT-1", expects = "Table-driven unit tests over the full design table: LANDED, CONFLICT (rework: landed+in_progress; rework-reset: landed+planned), IN-FLIGHT, PLANNED, LOCAL, ANOMALY (unknown/missing_toml suppress divergence), UNKNOWN, and phase-set drift.", test_file = "src/state.rs", keywords = ["resolve_phase_truth", "PhaseTruth", "Conflict", "phase-set"] },
+  { id = "VT-2", expects = "Unit test that the per-phase reader returns each phase's StemStatus (Toml/MissingToml) without collapsing to counts.", test_file = "src/state.rs", keywords = ["read_phase_statuses", "StemStatus"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-02 — Phase-status query shell (`slice status --across-trees/--assert`)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Cross-tree phase-status query verb"
+objective = """
+Wire the read verb: gather the three inputs (committed `phase/<slice>-NN` refs via
+`for-each-ref`, the primary-local registry cache via `read_source_deltas`, and the
+coord + local per-phase sheet statuses), feed the pure resolver, render composite
+truth + a per-tree divergence table. `--assert` exits non-zero on CONFLICT /
+opinionated-disagreement ONLY. Bare `slice status` stays unchanged (IMP-191).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 resolver + per-phase reader landed and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`slice status <ID> --across-trees` prints composite per-phase truth + a per-tree divergence table, gathering landed from phase refs (a new `git` for-each-ref helper mirroring `count_phase_refs`:3105) with registry-cache fallback, and coord status via `live_worktree_for_ref(\"dispatch/<slice>\")`:1356." },
+  { id = "EX-2", text = "`--assert` exits non-zero on CONFLICT / opinionated-disagreement only; exits zero on unknown / planned / anomaly / silent (fresh-handoff machine is not permanently red). Aligns with `worktree status --assert`'s stale-marker convention (mod.rs:303)." },
+  { id = "EX-3", text = "Bare `slice status <ID>` behaviour is byte-unchanged (local per-tree rollup); read and write remain separate verbs (no reader/writer overload)." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e over a fixture (primary + live coord tree with divergent sheets): --across-trees renders the divergence table; --assert exits non-zero on a seeded CONFLICT and zero on an unknown-only fresh tree.", test_file = "tests/e2e_slice_phase_status.rs", keywords = ["across-trees", "assert", "CONFLICT"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-03 — Reconcile writer + verb (`slice reconcile-phases`)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Primary-tree phase reconcile (status-only write)"
+objective = """
+Add a DEDICATED status-only writer (not `set_phase_status` — which appends progress
+rows and mutates the registry it reads, RV-214 F-3) and the `slice reconcile-phases`
+verb that rewrites the PRIMARY tree's sheets from composite truth. Confined to the
+primary tree; REFUSES when a live `dispatch/<slice>` coord tree exists (RV-214 F-5).
+CONFLICT/UNKNOWN/anomaly phases are skipped + reported; never regress a locally
+`completed` inline phase.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 resolver landed; PHASE-02 input-gathering helpers available to reuse." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A status-only writer exists (edit-preserving toml_edit) that sets ONLY `status` (+ `last_updated`): no `[[progress]]` append, no `capture_phase_boundary`, no `record_source_delta`/`forget_source_delta` (state.rs:424,452,461)." },
+  { id = "EX-2", text = "`slice reconcile-phases <ID>` writes the primary tree (`primary_worktree`:564) from composite truth; idempotent; skips + reports CONFLICT/UNKNOWN/anomaly; never regresses a locally-completed inline phase absent from the registry." },
+  { id = "EX-3", text = "The verb REFUSES (non-zero, named) when a live `dispatch/<slice>` coordination worktree exists; a single-operator precondition is documented." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: reconcile a stale primary tree from composite truth; assert idempotence (second run no-op) and non-regression on a mixed inline+dispatch fixture.", test_file = "tests/e2e_slice_reconcile_phases.rs", keywords = ["reconcile-phases", "idempotent", "refuses"] },
+  { id = "VT-2", expects = "No-side-effect proof: after a reconcile the registry `boundaries.toml` is byte-identical and NO `[[progress]]` row was appended to the reconciled sheets.", test_file = "src/state.rs", keywords = ["reconcile", "progress", "byte"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-04 — gc landed-oracle lift (behaviour-preserving extraction + target param)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Shared landed-oracle (gc lift, target-parameterized)"
+objective = """
+Lift gc's landed oracle (`gather_landed`:188 — currently hardcodes HEAD in both the
+ancestry and `git cherry` legs) into a shared engine fn that takes the landing
+TARGET as a parameter. Two distinct claims (RV-214 F-6): the EXTRACTION is
+behaviour-preserving (gc keeps passing HEAD, its suite stays green unchanged); the
+GENERALIZED non-HEAD target path is a NEW contract with its own tests. No inventory
+wiring yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "gc.rs `gather_landed`/`classify_gc` (114,188) verified present; existing `tests/e2e_worktree_gc.rs` green before the lift." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The landed oracle is a shared engine fn taking `target: &str` (replacing the two hardcoded `\"HEAD\"` uses); gc calls it with `\"HEAD\"`." },
+  { id = "EX-2", text = "EXTRACTION behaviour-preserving: `tests/e2e_worktree_gc.rs` and gc unit tests pass UNCHANGED (shared-machinery gate)." },
+  { id = "EX-3", text = "GENERALIZED path proven: new unit tests exercise a NON-HEAD target (landed / not-landed / missing-target → unknown)." },
+]
+verification = [
+  { id = "VT-1", expects = "New unit tests for the generalized oracle against a non-HEAD target ref: landed (ancestor OR patch-id-equal), not-landed, and missing-target-ref → soft unknown.", test_file = "src/worktree/gc.rs", keywords = ["target", "is-ancestor", "cherry"] },
+  { id = "VT-2", expects = "Behaviour-preservation: the existing gc e2e suite passes unchanged after the lift.", test_file = "tests/e2e_worktree_gc.rs", keywords = ["gc"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-05 — Worktree inventory verb (`worktree list`)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "Worktree inventory + provenance"
+objective = """
+New `src/worktree/inventory.rs`: pure `classify_worktree(is_primary, branch,
+marker_cause) -> WorktreeRole` + shell `run_list`. New `git::list_worktrees()`
+list-all primitive (extracted from the `worktree_for_ref`:1337 porcelain parse).
+`landed` column (default on, role-conditional, fail-soft) reuses the PHASE-04 shared
+oracle with the row-appropriate target. `WorktreeCommand::List` routed. Layering
+umbrella entry for the new module.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 shared target-parameterized oracle landed and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`git::list_worktrees()` enumerates all linked worktrees (porcelain parse reused, not duplicated)." },
+  { id = "EX-2", text = "Pure `classify_worktree` maps (is_primary, branch, marker_cause) → primary / coordination / worker-fork / benign." },
+  { id = "EX-3", text = "`worktree list` prints `path·role·slice·branch·head·marker·live?·landed`; supports `--slice`, `--json`, `--no-landed`. The landed verdict is role-conditional (worker-fork→its dispatch ref; coordination→deliver-to/trunk; primary/benign→N/A) and fail-soft (missing target → unknown, never a hard error)." },
+  { id = "EX-4", text = "`.doctrine/adr/001/layering.toml` carries a sub-classification entry for `worktree/inventory.rs` (mirrors gc.rs tier); `tests/architecture_layering.rs` stays green (no MixedUmbrella)." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit tests for classify_worktree over each (is_primary, branch, marker) combination.", test_file = "src/worktree/inventory.rs", keywords = ["classify_worktree", "WorktreeRole", "coordination"] },
+  { id = "VT-2", expects = "e2e over a fixture (primary + live coord + worker-fork): table, --slice filter, --json shape, landed column present.", test_file = "tests/e2e_worktree_list.rs", keywords = ["worktree", "list", "landed"] },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-06 — Selector doctor (`slice selector doctor`)
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-06"
+name      = "Selector health advisory"
+objective = """
+Add the pure `diagnose_selector` predicate to `src/conformance.rs` (its home,
+RV-214 F-7 — reusing the existing glob machinery, no new matcher) and the read-only
+`SelectorCommand::Doctor` verb (beside Add/Note/List/Rm, slice.rs:70). Advisory by
+default (exit 0), `--assert` gates. Intent-scoped so a loose `scope-relevant` fence
+is not nagged as `broad`. SL-180's future gate consumes this same predicate; only
+land-order stays open (OQ-2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "conformance.rs `compute`:96 glob machinery verified present; SelectorCommand enum:70 present." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Pure `diagnose_selector(sel, matched, others) -> [Finding]` lives in conformance.rs; findings: uncompilable / unmatched / redundant / broad; `broad` suppressed for `scope-relevant` intent." },
+  { id = "EX-2", text = "`slice selector doctor <ID>` reports findings (exit 0 advisory); `--assert` exits non-zero on any finding." },
+  { id = "EX-3", text = "No parallel matcher — the predicate reuses conformance's glob machinery; if staged ahead of SL-180's consumer, guard with `#[expect(dead_code, reason)]`." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit tests for diagnose_selector: uncompilable, unmatched, redundant, broad — and broad-suppressed-for-scope-relevant per intent.", test_file = "src/conformance.rs", keywords = ["diagnose_selector", "unmatched", "redundant", "broad"] },
+  { id = "VT-2", expects = "e2e: `slice selector doctor` advisory exit 0; `--assert` non-zero on a seeded stale selector.", test_file = "tests/e2e_slice_selector_doctor.rs", keywords = ["selector", "doctor", "assert"] },
+]
+specs        = []
+requirements = []
