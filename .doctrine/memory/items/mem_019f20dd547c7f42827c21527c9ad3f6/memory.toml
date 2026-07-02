@@ -1,0 +1,41 @@
+memory_uid = "mem_019f20dd547c7f42827c21527c9ad3f6"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "IMP-191 review RV-211: slice status read-only query form — test guardrail and --note UX"
+summary = "When adding a read-only branch to an existing write verb via Option<T>: (1) always add a variant-coverage guard test for any parallel enum-duplicating array, (2) reject write-only flags (--note) when the STATE argument is absent rather than silently ignoring them."
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = ["src/slice.rs"]
+globs = []
+commands = []
+tags = ["area:cli", "quality", "pattern"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "c6a6f6370fad20c2ec508a8eb708a0673ee9ede3"
+tree = "e0f232cb129f8f2f6c3928327f017010d50953c6"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "c6a6f6370fad20c2ec508a8eb708a0673ee9ede3"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "low"
+weight = 0
+

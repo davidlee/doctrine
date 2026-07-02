@@ -16,7 +16,7 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (28) ────────────────────────────────────────────────────────────
+# ── leaf (29) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
 clock = "leaf"              # out=0: std-only time helpers
@@ -35,6 +35,7 @@ fsutil = "leaf"             # out=0: filesystem utility — impure seam, no doma
 git = "leaf"                # out=0: git ops — impure seam, no domain
 globmatch = "leaf"          # → glob (external): shared glob_matches matcher (SL-147 PHASE-03)
 finding = "leaf"            # out=0: unified doctor Finding type — pure (SL-168 PHASE-01, ADR-001 D2)
+hymns = "leaf"              # out=0: SL-186 pure prompt-cascade resolver engine — pure (no domain deps)
 kinds = "leaf"              # out=0: entity-kind vocabulary — pure constants
 ledger = "leaf"             # out=0: review ledger types — pure
 lexical = "leaf"            # out=0: BM25/lexical engine — pure (no domain)

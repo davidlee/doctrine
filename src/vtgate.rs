@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `vtgate` — the pure VT existence/shape gate core (ADR-001 leaf, SL-170 S3 /
-//! PHASE-03). Given a parsed [`Plan`] (the PHASE-01 lifted VT model) and an
-//! injected `read_file` reader, it judges every **VT-mode** verification
-//! criterion against its structured mandate (`test_file` / `keywords` /
-//! `patterns`) and returns one of four verdicts per row:
+//! PHASE-03). Given a parsed [`Plan`] (the PHASE-01 lifted VT model), an
+//! injected `read_file` reader, and a `modified_files` set from the slice's
+//! source-delta registry, it judges every **VT-mode** verification criterion
+//! against its structured mandate (`test_file` / `keywords` / `patterns`) and
+//! returns one of five verdicts per row:
 //!
-//! - `Pass` — the mandated file exists and every keyword / pattern is present;
+//! - `Pass` — the mandated file was modified by the slice and every keyword /
+//!   pattern is present;
 //! - `Fail` — the file is missing, or a mandated keyword / pattern is absent
 //!   from the source (the gate halts on `Fail` only, INV-4);
 //! - `Uncheckable` — no structured mandate to check (`test_file` is `None`, A1);
+//! - `Unattributable` — the mandated file exists BUT was not modified by the
+//!   slice (according to the source-delta registry); the keyword match carries
+//!   zero signal — was there before the slice did any work (IMP-228);
 //! - `Waived` — a human-authorized escape valve (`waived = true`), reason shown.
 //!
 //! **Threat model is worker OMISSION**, not an adversary (design §5.2): a weak
@@ -28,26 +33,32 @@
 //! uses `patterns`, which is itself language-agnostic (a regex the author owns).
 //!
 //! Pure: std + `regex` only. The fs read (the mandated files are project-root
-//! relative), the `plan.toml` load, and the process exit code all live in the
-//! impure shell (`crate::slice::run_verify_vt`); this module receives a
-//! `read_file: &impl Fn(&str) -> Option<String>` and emits verdicts / a rendered
-//! `String`. The gate reads only authored mandate + landed source — never the
-//! disposable phase sheet (INV-3).
+//! relative), the `plan.toml` load, the source-delta registry read, and the
+//! process exit code all live in the impure shell (`crate::slice::run_verify_vt`);
+//! this module receives a `read_file: &impl Fn(&str) -> Option<String>` and a
+//! `modified_files: &BTreeSet<String>` and emits verdicts / a rendered `String`.
+//! The gate reads only authored mandate + landed source — never the disposable
+//! phase sheet (INV-3).
 
 use regex::Regex;
 
 use crate::plan::{Plan, VerificationCriterion};
 
-/// The verdict for one VT criterion. `Fail` halts the gate; `Uncheckable` and
-/// `Waived` are visible, distinct, and NON-halting (INV-4).
+/// The verdict for one VT criterion. `Fail` halts the gate; `Uncheckable`,
+/// `Unattributable`, and `Waived` are visible, distinct, and NON-halting (INV-4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum VtVerdict {
-    /// The mandated file exists and every keyword / pattern is present.
+    /// The mandated file was modified by the slice and every keyword / pattern
+    /// is present.
     Pass,
     /// The file is missing, or a mandated keyword / pattern is absent. Halts.
     Fail { reason: String },
     /// No structured mandate (`test_file` is `None`) — nothing to grep (A1).
     Uncheckable,
+    /// The mandated file exists but was NOT modified by the slice (per the
+    /// source-delta). The keyword match is inert — the signal predates the
+    /// slice's work.
+    Unattributable { reason: String },
     /// Human-authorized escape valve (`waived = true`); `reason` is surfaced.
     Waived { reason: String },
 }
@@ -77,13 +88,16 @@ const NO_REASON: &str = "(no reason recorded)";
 /// 1. `waived` short-circuits FIRST — return `Waived` before any fs read;
 /// 2. no `test_file` ⇒ `Uncheckable` (A1 — nothing to grep);
 /// 3. the file does not read ⇒ `Fail` (missing);
-/// 4. a `keyword` absent from the raw source, or a `pattern` that matches no
+/// 4. the mandated file is NOT in the slice's `modified_files` set ⇒
+///    `Unattributable` — the keyword signal predates the slice's work;
+/// 5. a `keyword` absent from the raw source, or a `pattern` that matches no
 ///    source line ⇒ `Fail`;
-/// 5. otherwise `Pass` (a `test_file` with no keywords/patterns is an
+/// 6. otherwise `Pass` (a `test_file` with no keywords/patterns is an
 ///    existence-only mandate — `Pass` once the file reads).
 pub(crate) fn check_vt(
     vt: &VerificationCriterion,
     read_file: &impl Fn(&str) -> Option<String>,
+    modified_files: &std::collections::BTreeSet<String>,
 ) -> VtVerdict {
     // (1) waiver short-circuits before touching the filesystem.
     if vt.waived {
@@ -103,7 +117,14 @@ pub(crate) fn check_vt(
             reason: format!("mandated test_file `{path}` not found"),
         };
     };
-    // (4) match keywords / patterns over the RAW source — no comment / string
+    // (4) the mandated file NOT in the slice's source-delta ⇒ keyword signal
+    // predates this slice's work (IMP-228).
+    if !modified_files.contains(path) {
+        return VtVerdict::Unattributable {
+            reason: format!("keyword present but `{path}` not modified by this slice"),
+        };
+    }
+    // (5) match keywords / patterns over the RAW source — no comment / string
     // stripping (POL-002: that is host-language convention; see module doc).
     for kw in &vt.keywords {
         if !source.contains(kw.as_str()) {
@@ -128,7 +149,7 @@ pub(crate) fn check_vt(
             }
         }
     }
-    // (5) file present and every mandate satisfied.
+    // (6) file modified by slice and every mandate satisfied.
     VtVerdict::Pass
 }
 
@@ -138,6 +159,7 @@ pub(crate) fn check_vt(
 pub(crate) fn check_phases(
     plan: &Plan,
     read_file: &impl Fn(&str) -> Option<String>,
+    modified_files: &std::collections::BTreeSet<String>,
 ) -> Vec<PhaseVtReport> {
     plan.phases
         .iter()
@@ -149,7 +171,7 @@ pub(crate) fn check_phases(
                 .filter(|vt| is_vt_mode(&vt.id))
                 .map(|vt| VtLine {
                     id: vt.id.clone(),
-                    verdict: check_vt(vt, read_file),
+                    verdict: check_vt(vt, read_file, modified_files),
                 })
                 .collect(),
         })
@@ -157,7 +179,7 @@ pub(crate) fn check_phases(
 }
 
 /// Does any judged row halt the gate? `true` iff any `Fail` is present (INV-4).
-/// `Uncheckable` / `Waived` are non-halting.
+/// `Uncheckable`, `Unattributable`, and `Waived` are non-halting.
 pub(crate) fn has_failure(reports: &[PhaseVtReport]) -> bool {
     reports
         .iter()
@@ -180,10 +202,12 @@ fn is_vt_mode(id: &str) -> bool {
 const GLYPH_PASS: &str = "✓";
 const GLYPH_FAIL: &str = "✗";
 const GLYPH_UNCHECKABLE: &str = "?";
+const GLYPH_UNATTRIBUTABLE: &str = "≈";
 const GLYPH_WAIVED: &str = "~";
 const LABEL_PASS: &str = "PASS";
 const LABEL_FAIL: &str = "FAIL";
 const LABEL_UNCHECKABLE: &str = "UNCHECKABLE";
+const LABEL_UNATTRIBUTABLE: &str = "UNATTRIBUTABLE";
 const LABEL_WAIVED: &str = "WAIVED";
 
 /// Render the per-phase VT verdicts as a human-readable summary block. House
@@ -211,8 +235,8 @@ pub(crate) fn render_summary(reports: &[PhaseVtReport]) -> String {
     out
 }
 
-/// One rendered verdict line. Glyph + label are named constants; `Fail` and
-/// `Waived` surface their reason.
+/// One rendered verdict line. Glyph + label are named constants; `Fail`,
+/// `Unattributable`, and `Waived` surface their reason.
 fn render_line(line: &VtLine) -> String {
     let id = &line.id;
     match &line.verdict {
@@ -220,6 +244,9 @@ fn render_line(line: &VtLine) -> String {
         VtVerdict::Fail { reason } => format!("{GLYPH_FAIL} {LABEL_FAIL}        {id} — {reason}"),
         VtVerdict::Uncheckable => {
             format!("{GLYPH_UNCHECKABLE} {LABEL_UNCHECKABLE} {id} — no structured mandate")
+        }
+        VtVerdict::Unattributable { reason } => {
+            format!("{GLYPH_UNATTRIBUTABLE} {LABEL_UNATTRIBUTABLE} {id} — {reason}")
         }
         VtVerdict::Waived { reason } => {
             format!("{GLYPH_WAIVED} {LABEL_WAIVED}      {id} — {reason}")
@@ -232,6 +259,15 @@ mod tests {
     use super::*;
     use crate::plan::{Plan, PlanPhase, VerificationCriterion};
     use std::cell::Cell;
+
+    /// Build a modified-files set from one or more path strings.
+    fn modified(paths: &[&str]) -> std::collections::BTreeSet<String> {
+        paths.iter().map(|p| p.to_string()).collect()
+    }
+
+    fn empty_files() -> std::collections::BTreeSet<String> {
+        std::collections::BTreeSet::new()
+    }
 
     /// A bare VT row with the given id and no structured mandate.
     fn vt(id: &str) -> VerificationCriterion {
@@ -251,14 +287,14 @@ mod tests {
         move |p: &str| (p == path).then(|| source.to_string())
     }
 
-    // ---- VT-1: four-verdict + waived short-circuit -------------------------
+    // ---- VT-1: five-verdict + source-delta + waived short-circuit -----------
 
     #[test]
-    fn pass_when_file_exists_and_keyword_present() {
+    fn pass_when_file_exists_modified_and_keyword_present() {
         let mut c = vt("VT-1");
         c.test_file = Some("a.rs".to_string());
         c.keywords = vec!["check_vt".to_string()];
-        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"));
+        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"), &modified(&["a.rs"]));
         assert_eq!(verdict, VtVerdict::Pass);
     }
 
@@ -267,16 +303,16 @@ mod tests {
         let mut c = vt("VT-1");
         c.test_file = Some("missing.rs".to_string());
         c.keywords = vec!["whatever".to_string()];
-        let verdict = check_vt(&c, &no_files);
+        let verdict = check_vt(&c, &no_files, &empty_files());
         assert!(matches!(verdict, VtVerdict::Fail { .. }));
     }
 
     #[test]
-    fn fail_when_keyword_absent_from_source() {
+    fn fail_when_keyword_absent_fromsource() {
         let mut c = vt("VT-1");
         c.test_file = Some("a.rs".to_string());
         c.keywords = vec!["nonexistent".to_string()];
-        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"));
+        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"), &modified(&["a.rs"]));
         assert!(matches!(verdict, VtVerdict::Fail { .. }));
     }
 
@@ -284,7 +320,10 @@ mod tests {
     fn uncheckable_when_keywords_but_no_test_file() {
         let mut c = vt("VT-1");
         c.keywords = vec!["x".to_string()]; // no test_file → A1
-        assert_eq!(check_vt(&c, &no_files), VtVerdict::Uncheckable);
+        assert_eq!(
+            check_vt(&c, &no_files, &empty_files()),
+            VtVerdict::Uncheckable
+        );
     }
 
     #[test]
@@ -299,7 +338,7 @@ mod tests {
             touched.set(true);
             None
         };
-        let verdict = check_vt(&c, &reader);
+        let verdict = check_vt(&c, &reader, &empty_files());
         assert!(!touched.get(), "waiver must short-circuit before fs read");
         assert_eq!(
             verdict,
@@ -310,10 +349,13 @@ mod tests {
     }
 
     #[test]
-    fn existence_only_mandate_passes_without_keywords() {
+    fn existence_only_mandate_passes_when_modified_without_keywords() {
         let mut c = vt("VT-1");
         c.test_file = Some("a.rs".to_string()); // no keywords/patterns
-        assert_eq!(check_vt(&c, &one("a.rs", "anything")), VtVerdict::Pass);
+        assert_eq!(
+            check_vt(&c, &one("a.rs", "anything"), &modified(&["a.rs"])),
+            VtVerdict::Pass
+        );
     }
 
     #[test]
@@ -322,12 +364,20 @@ mod tests {
         c.test_file = Some("a.rs".to_string());
         c.patterns = vec![r"^\s*fn check_vt".to_string()];
         assert_eq!(
-            check_vt(&c, &one("a.rs", "    fn check_vt() {}")),
+            check_vt(
+                &c,
+                &one("a.rs", "    fn check_vt() {}"),
+                &modified(&["a.rs"])
+            ),
             VtVerdict::Pass
         );
         // same token only mid-line (not line-anchored) → Fail.
         assert!(matches!(
-            check_vt(&c, &one("a.rs", "let x = fn check_vt;")),
+            check_vt(
+                &c,
+                &one("a.rs", "let x = fn check_vt;"),
+                &modified(&["a.rs"])
+            ),
             VtVerdict::Fail { .. }
         ));
     }
@@ -345,7 +395,10 @@ mod tests {
         c.test_file = Some("e2e.rs".to_string());
         c.keywords = vec!["check".to_string(), "regression".to_string()];
         let src = r#"cmd.arg("check").arg("regression");"#;
-        assert_eq!(check_vt(&c, &one("e2e.rs", src)), VtVerdict::Pass);
+        assert_eq!(
+            check_vt(&c, &one("e2e.rs", src), &modified(&["e2e.rs"])),
+            VtVerdict::Pass
+        );
     }
 
     #[test]
@@ -358,12 +411,16 @@ mod tests {
         c.patterns = vec![r"^\s*assert_eq!\(.*census".to_string()];
         // shape present → Pass
         assert_eq!(
-            check_vt(&c, &one("a.rs", "    assert_eq!(x, census);")),
+            check_vt(
+                &c,
+                &one("a.rs", "    assert_eq!(x, census);"),
+                &modified(&["a.rs"])
+            ),
             VtVerdict::Pass
         );
         // shape absent (token present but not in the mandated form) → Fail
         assert!(matches!(
-            check_vt(&c, &one("a.rs", "let census = 1;")),
+            check_vt(&c, &one("a.rs", "let census = 1;"), &modified(&["a.rs"])),
             VtVerdict::Fail { .. }
         ));
     }
@@ -386,7 +443,7 @@ mod tests {
         let plan = Plan {
             phases: vec![phase("PHASE-01", vec![vt("VA-1"), vt("VH-1")])],
         };
-        let reports = check_phases(&plan, &no_files);
+        let reports = check_phases(&plan, &no_files, &empty_files());
         assert_eq!(reports.len(), 1);
         assert!(reports[0].lines.is_empty(), "VA/VH are never gated");
         assert!(!has_failure(&reports));
@@ -395,7 +452,7 @@ mod tests {
     #[test]
     fn empty_plan_yields_empty_report_no_failure() {
         let plan = Plan { phases: vec![] };
-        let reports = check_phases(&plan, &no_files);
+        let reports = check_phases(&plan, &no_files, &empty_files());
         assert!(reports.is_empty());
         assert!(!has_failure(&reports));
     }
@@ -407,16 +464,72 @@ mod tests {
         let plan = Plan {
             phases: vec![phase("PHASE-01", vec![c])],
         };
-        let reports = check_phases(&plan, &no_files);
+        let reports = check_phases(&plan, &no_files, &empty_files());
         assert!(has_failure(&reports));
     }
 
-    // ---- render --------------------------------------------------------------
+    // ---- VT-4: unattributable (IMP-228) -----------------------------------
 
     #[test]
-    fn render_surfaces_all_four_verdicts() {
-        // VT-1 (S6): every verdict — Pass / Fail / Uncheckable / Waived — renders,
-        // each reason surfaced, the latter two distinctly from Pass/Fail.
+    fn unattributable_when_file_not_insource_delta() {
+        let mut c = vt("VT-1");
+        c.test_file = Some("a.rs".to_string());
+        c.keywords = vec!["check_vt".to_string()];
+        // The keyword is present, but the file was NOT modified by the slice.
+        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"), &modified(&["b.rs"]));
+        assert!(matches!(verdict, VtVerdict::Unattributable { .. }));
+    }
+
+    #[test]
+    fn unattributable_whensource_delta_empty() {
+        let mut c = vt("VT-1");
+        c.test_file = Some("a.rs".to_string());
+        c.keywords = vec!["check_vt".to_string()];
+        // Empty modified-files set → no slice ever recorded a delta.
+        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"), &empty_files());
+        assert!(matches!(verdict, VtVerdict::Unattributable { .. }));
+    }
+
+    #[test]
+    fn unattributable_is_non_halting() {
+        let reports = vec![PhaseVtReport {
+            phase_id: "PHASE-01".to_string(),
+            lines: vec![VtLine {
+                id: "VT-1".to_string(),
+                verdict: VtVerdict::Unattributable {
+                    reason: "keyword present but `a.rs` not modified by this slice".to_string(),
+                },
+            }],
+        }];
+        assert!(!has_failure(&reports), "Unattributable must be non-halting");
+    }
+
+    #[test]
+    fn pass_when_keyword_in_modified_file() {
+        // The happy path: keyword exists AND the file was modified by the slice.
+        let mut c = vt("VT-1");
+        c.test_file = Some("a.rs".to_string());
+        c.keywords = vec!["check_vt".to_string()];
+        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"), &modified(&["a.rs"]));
+        assert_eq!(verdict, VtVerdict::Pass);
+    }
+
+    #[test]
+    fn fail_when_keyword_absent_in_modified_file() {
+        // File was modified by the slice but keyword is absent → a real omission.
+        let mut c = vt("VT-1");
+        c.test_file = Some("a.rs".to_string());
+        c.keywords = vec!["nonexistent".to_string()];
+        let verdict = check_vt(&c, &one("a.rs", "fn check_vt() {}"), &modified(&["a.rs"]));
+        assert!(matches!(verdict, VtVerdict::Fail { .. }));
+    }
+
+    // ---- render (all FIVE verdicts) ----------------------------------------
+
+    #[test]
+    fn render_surfaces_all_five_verdicts() {
+        // VT-1 (S6): every verdict — Pass / Fail / Uncheckable / Unattributable /
+        // Waived — renders, each reason surfaced, non-Pass distinctly from Pass.
         let reports = vec![PhaseVtReport {
             phase_id: "PHASE-01".to_string(),
             lines: vec![
@@ -436,6 +549,12 @@ mod tests {
                 },
                 VtLine {
                     id: "VT-4".to_string(),
+                    verdict: VtVerdict::Unattributable {
+                        reason: "keyword present but `a.rs` not modified by this slice".to_string(),
+                    },
+                },
+                VtLine {
+                    id: "VT-5".to_string(),
                     verdict: VtVerdict::Waived {
                         reason: "infeasible".to_string(),
                     },
@@ -446,8 +565,13 @@ mod tests {
         assert!(out.contains(LABEL_PASS));
         assert!(out.contains(LABEL_FAIL));
         assert!(out.contains(LABEL_UNCHECKABLE));
+        assert!(out.contains(LABEL_UNATTRIBUTABLE));
         assert!(out.contains(LABEL_WAIVED));
         assert!(out.contains("missing.rs"), "the Fail reason must surface");
+        assert!(
+            out.contains("not modified by this slice"),
+            "the Unattributable reason must surface"
+        );
         assert!(out.contains("infeasible"), "the Waived reason must surface");
     }
 

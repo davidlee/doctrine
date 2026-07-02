@@ -48,6 +48,8 @@ selection. Same tree alone is insufficient — a leaked `DOCTRINE_WORKER`/marker
 changes which tests run and breaks the cancellation property (a fingerprint
 mismatch is then a cache miss → honest re-capture, never a poisoned baseline).
 
+Worker self-reports are advisory; trust only the funnel verify beat.
+
 After workers return, in exact order:
 1. Precond — worktree/index clean, HEAD == B
 2. Delta check — net diff `B..S`, single non-merge commit, `S^ == B`

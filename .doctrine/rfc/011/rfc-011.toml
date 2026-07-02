@@ -6,7 +6,7 @@ slug = "dispatch-token-efficiency"
 title = "Dispatch Token Efficiency"
 status = "open"
 created = "2026-06-27"
-updated = "2026-06-27"
+updated = "2026-07-02"
 tags = []
 
 [relationships]
@@ -53,4 +53,32 @@ target = "IMP-191"
 [[relation]]
 label = "related"
 target = "IMP-192"
+
+[[relation]]
+label = "related"
+target = "IMP-155"
+
+[[relation]]
+label = "related"
+target = "SL-186"
+
+[[relation]]
+label = "related"
+target = "SL-187"
+
+[[relation]]
+label = "related"
+target = "IMP-227"
+
+[[relation]]
+label = "related"
+target = "IMP-174"
+
+[[relation]]
+label = "related"
+target = "IMP-202"
+
+[[relation]]
+label = "related"
+target = "IMP-203"
 

@@ -80,6 +80,11 @@ These are the project-specific additions.)
 
 ## environment
 
+### worktrees
+
+run corpus-inspecting/searching verbs from the coord tree's ./target/debug/doctrine, 
+not ~/.cargo/bin/doctrine.
+
 ### jail
 
 if `/workspace` exists, you're in a nixos bubblewrap jail, defined in flake.nix,

@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, bail};
 use clap::Subcommand;
 
+use crate::slice::parse_cli_id;
 use crate::worktree::JailPolicy;
 
 use crate::boundary::{BoundaryRow, Provenance};
@@ -45,7 +46,7 @@ pub(crate) enum DispatchCommand {
     Sync {
         /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
         /// coordination branch to project.
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// Stage-1: create the reviewable `review/<slice>` and `phase/<slice>-NN`
@@ -97,7 +98,7 @@ pub(crate) enum DispatchCommand {
     /// Orchestrator-classed — refused under worker-mode.
     RecordBoundary {
         /// The slice id (bare number, e.g. `64`) whose ledger to append.
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// The `PHASE-NN` id this code boundary belongs to.
@@ -124,7 +125,7 @@ pub(crate) enum DispatchCommand {
     /// worktree. Merge-only; re-run `sync --prepare-review` after.
     /// Orchestrator-classed — refused under worker-mode.
     RefreshBase {
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -135,7 +136,7 @@ pub(crate) enum DispatchCommand {
     /// under worker-mode.
     Setup {
         /// The slice id (bare number, e.g. `85`).
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// The coordination worktree directory (must not already exist).
@@ -161,7 +162,7 @@ pub(crate) enum DispatchCommand {
     /// Read-only — callable from anywhere.
     PlanNext {
         /// The slice id (bare number).
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// Emit JSON instead of human-readable table.
@@ -178,7 +179,7 @@ pub(crate) enum DispatchCommand {
     /// summary, next-step guidance.
     Status {
         /// The slice id (bare number, e.g. `85`).
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// Emit JSON instead of human-readable table.
@@ -214,7 +215,7 @@ pub(crate) enum DispatchCommand {
 
         /// The slice being dispatched (bare number) — diagnostic only; the arming dir
         /// is per-coord-tree, not per-slice (cross-slice partition is by coord tree).
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: Option<u32>,
 
         /// Per-arming jail widening (objective 3): absolute paths granted rw inside the
@@ -241,7 +242,7 @@ pub(crate) enum CandidateCommand {
     /// writing no row/ref/worktree.
     Create {
         /// The slice id (bare number, e.g. `68`).
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// The human label (e.g. `review-001`); the ref is
@@ -291,7 +292,7 @@ pub(crate) enum CandidateCommand {
     /// ref or the ledger, so it works under worker-mode.
     Status {
         /// The slice id (bare number, e.g. `68`).
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// Explicit project root (default: auto-detect from CWD).
@@ -306,7 +307,7 @@ pub(crate) enum CandidateCommand {
     /// `candidates.toml` — never an evidence/candidate ref. Orchestrator-classed.
     Admit {
         /// The slice id (bare number, e.g. `68`).
-        #[arg(long)]
+        #[arg(long, value_parser = parse_cli_id)]
         slice: u32,
 
         /// Role: `review_surface` | `close_target` (scratch is not admissible).

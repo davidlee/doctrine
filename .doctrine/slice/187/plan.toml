@@ -1,0 +1,129 @@
+# Implementation plan for SL-187 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-187"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Sequencing rationale lives in plan.md. Dependency spine: PHASE-01 → PHASE-02 →
+# PHASE-03 are SL-186-INDEPENDENT (boot generator + memory + onboard); PHASE-04 is
+# HARD-GATED on SL-186 landing the `prompt resolve` verb (it does not exist yet —
+# SL-186 is `started`). PHASE ids immutable; edits append, never renumber.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Boot universal sector — expose generator + universal-hymns section"
+objective = """
+Expose boot's universal-snapshot generator as a reusable entry point (so a future \
+`prompt resolve` reuses it rather than minting a second projector), and add one \
+harness-agnostic `universal`-band hymns section (incl. the model-band floor \
+directive) to the disk snapshot. The entity-derived producer sections and their \
+ordering are UNTOUCHED (behaviour gate) — this delta is purely additive for them. \
+Model/harness/role/stage bands are never baked into the disk artifact.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (RV-210 inquisition reconciled) and names src/boot.rs's section-assembly + write_if_changed path, both present in-tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The universal-snapshot generator is a reusable/exposed entry point callable outside `doctrine boot` (the seam PHASE-04's resolve reuses); existing boot output is unchanged apart from the new section." },
+  { id = "EX-2", text = "The disk boot.md carries a `universal`-band hymns section (harness-agnostic authored prose incl. the model-band floor directive); no model-specific content appears in boot.md." },
+  { id = "EX-3", text = "Entity-derived section goldens are unchanged; the dispatch suite stays green." },
+]
+verification = [
+  { id = "VT-1", expects = "boot snapshot test asserts the universal-band hymns section renders in the disk snapshot AND asserts the negative — no model-band content in boot.md.", test_file = "src/boot.rs", keywords = ["universal", "hymns", "model"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Onboarding memories inlined — tag, select (key-else-uid), footer→inline"
+objective = """
+Tag the shipped `overview` + `orientation` memories `onboarding`; select \
+`onboarding`-tagged memories from shipped∪local via `collect_all` + a tag filter, \
+ordered key-ascending with a uid fallback for keyless memories (reuse the existing \
+`boot_keys` sort pattern — do not mint a second ordering rule); inline their bodies \
+into the disk snapshot, REPLACING the Onboarding footer's signpost instruction \
+(an intentional Onboarding-section contract change, not additive). Local-wins on a \
+shipped↔local uid collision (documented; silent at the collect_all layer). No model \
+content ever inlines.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the universal disk sector exists and its generator is exposed." },
+  { id = "EN-2", text = "The shipped overview + orientation memories exist under install/memory/** and are taggable." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Shipped overview + orientation carry the `onboarding` tag." },
+  { id = "EX-2", text = "The disk snapshot inlines onboarding-tagged bodies in key-else-uid order, replacing the footer signpost instruction; the Onboarding boot golden changes by intent." },
+  { id = "EX-3", text = "No model content inlines; the boot-footer 'load these next turn' round-trip is retired." },
+]
+verification = [
+  { id = "VT-1", expects = "memory selection test: onboarding-tagged memories surface via collect_all + tag filter, ordered key-ascending with uid fallback; a local memory sharing a shipped uid wins (local body selected).", test_file = "src/memory.rs", keywords = ["onboarding", "collect_all"] },
+  { id = "VT-2", expects = "boot snapshot golden: a shipped AND a local onboarding-tagged memory both inline (bodies present) in key order; the footer signpost instruction is absent; no model content.", test_file = "src/boot.rs", keywords = ["onboarding"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "doctrine_onboard contract change — model-band self-ID, drop memory load"
+objective = """
+Change the `doctrine_onboard` MCP tool to emit model-band self-IDENTIFICATION \
+guidance (offer the `prompt model-keys` set + the `prompt resolve --band model \
+--model <id>` directive so the agent resolves the band itself — the tool has no \
+model id to read) and DROP the two-memory load, now carried by the cached sector \
+(PHASE-02). This is a deliberate contract subtraction, not additive: it removes the \
+`Onboarding Memories` section, so the onboard e2e assertion is updated by intent.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — onboarding memory bodies are carried by the always-present cached sector, so dropping them from doctrine_onboard loses nothing." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine_onboard no longer emits the `Onboarding Memories` section (two-memory load dropped)." },
+  { id = "EX-2", text = "doctrine_onboard emits the model-band self-identification guidance (model-keys offer + resolve directive); it never resolves the band on the agent's behalf." },
+  { id = "EX-3", text = "The onboard e2e assertion is updated to the new contract and the onboard suite is green against it." },
+]
+verification = [
+  { id = "VT-1", expects = "onboard e2e asserts doctrine_onboard output NO LONGER contains 'Onboarding Memories' and DOES contain the model-band self-identification guidance (model-keys / --band model).", test_file = "tests/e2e_mcp_server.rs", keywords = ["doctrine_onboard", "Onboarding Memories", "model"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "prompt resolve delivery + per-harness wiring (HARD-GATED on SL-186)"
+objective = """
+Add delivery behaviour to SL-186's `prompt resolve`: regenerate the UNIVERSAL disk \
+boot.md via the PHASE-01 generator (write_if_changed; AXIS-INVARIANT — no axis flag \
+alters the on-disk artifact, INV-D1) and emit `universal ++ role/harness hymns` to \
+stdout. Swap the pi `before_agent_start` extension (generate_pi_extension) and the \
+Claude/Codex SessionStart hook command from `boot --emit` to `prompt resolve --role \
+orchestrator [--harness <h>]` (CHR-033 seam), preserving byte-identical-per-turn \
+injection (INV-D4). Non-injecting harnesses keep the tier-2 @-import universal-only \
+fallback (best-effort, D8).\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "HARD EXTERNAL GATE: SL-186 has landed the `prompt resolve` / `prompt model-keys` verbs — `doctrine prompt resolve` is a recognised subcommand in the binary. (SL-186 is `started`, not done; this phase cannot begin until it lands.)" },
+  { id = "EN-2", text = "PHASE-01 complete — the universal-snapshot generator is exposed for resolve to reuse." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`prompt resolve` regenerates the universal boot.md via write_if_changed and is axis-invariant on disk (--role/--harness/--model/--arm/--stage/--band never alter the artifact); stdout = universal snapshot ++ role/harness hymns." },
+  { id = "EX-2", text = "generate_pi_extension and the Claude/Codex SessionStart hook emit `prompt resolve --role orchestrator`; session start still injects and the injected sector is byte-identical per turn (INV-D4)." },
+]
+verification = [
+  { id = "VT-1", expects = "generate_pi_extension unit test: the emitted extension execs `prompt resolve --role orchestrator`, not `boot --emit`.", test_file = "src/boot.rs", keywords = ["prompt resolve", "--role orchestrator"] },
+  { id = "VT-2", expects = "resolve delivery test: two `prompt resolve` calls differing only in --role/--harness produce a BYTE-IDENTICAL on-disk boot.md (axis-invariance INV-D1) and, on unchanged inputs, a byte-identical injected sector across turns (INV-D4); stdout differs by role/harness.", test_file = "src/boot.rs", keywords = ["resolve", "boot.md"] },
+]
+specs        = []
+requirements = []

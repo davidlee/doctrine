@@ -793,3 +793,58 @@ and directly actionable — no routing ambiguity, no design calls needed. The
 then test-compile), not conceptual. Token efficiency: the handover format 
 (change surface + test update tables) made the work direct — no exploration 
 needed, just execution.
+
+[backlog; IMP-227-audit]
+Full CLI surface audit of the prefixed-vs-bare id-form split (IMP-227). Two
+parsing functions, three conventions, ~60 verbs. The audit is committed into
+IMP-227's body; the item is scoped with a 2-phase fix plan. No incidental
+complexity in the audit itself — systematic file-by-file search, grep for
+parse_canonical_ref vs parse_entity_ref vs bare u32.
+
+One harness-level annoyance: rg regex patterns with pipe chars and regex
+metacharacters (`rg -rn "parse::<u32>|parse_ref"`) consistently returned zero
+results in this repo until simplified to separate grep passes. Not
+doctrine-specific, likely a rg + nix interaction.
+
+[backlog; IMP-228-vtgate-srcdelta]
+No incidental complexity. Backlog tooling was smooth — `backlog new`, `backlog tag`, `backlog show` all worked first try. One minor: `backlog tag --add` exists in mental-model but the actual CLI takes positional tags (not a flag) — `--help` clarified.
+
+[code-review; IMP-191-review]
+* review-ledger.md is at .doctrine/review-ledger.md (installed copy), with a
+  header pointing to install/review-ledger.md as source. Discovered by `find`.
+* `review prime` tool doc says "RV's [target].ref must be a slice reference" —
+  backlog-item targets (IMP, ISS, etc) can't be primed. Not a blocker but the
+  code-review skill says "Open + prime" as step 1 — the prime step is a no-op
+  for non-slice targets. The skill could note this.
+* Writing the synthesis required reading the full review-211.md file back after
+  edit to confirm the appended synthesis landed correctly — no `review show`
+  verb for the synthesis block.
+
+[code-review; IMP-191-review-final]
+* 3 findings → 3 dispositions → 3 verifications = 9 rounds (as status reports).
+* commit 28f53a08 ("test(IMP-191): revise legal_moves assertions") was a
+  mid-review fix commit that the user already had on edge before this review
+  session. My fix commit (ea1aa938) landed on top, now edge has 3 IMP-191
+  commits (c39b4a86 + 28f53 + ea1aa938).
+
+[code-review; RV-212 session]
+SL-188 code review uncovered a pervasive correctness bug (F-1): `parse_resolvable_ref`
+silent first-match-wins for bare ids. Cross-kind id overlap in the corpus means bare `1`
+matches 17 entities. The function must detect ambiguity. This was the user's explicit
+concern in the task description ("any edge case where two kinds share an id?") and the
+answer is YES — pervasively. The fix is in the scan loop: collect all matches, branch
+on count.
+
+Token cost: the three-parse heuristic in the memory-link branch (syntactic →
+ensure_ref_resolves → parse_resolvable_ref) is wasteful. A single parse with
+error-mode discrimination would be cleaner.
+
+Test regression (F-2): the e2e test used a non-existent entity to exercise a kind gate.
+The semantic change (existence check before kind check) is correct; the test needs
+updating. This is a predictable casualty of the parse_resolvable_ref semantic change.
+
+[fix; post-RV-212]
+Implemented RV-212 fixes. The slice-pattern `match matches.as_slice()` avoided both
+`indexing_slicing` and `expect_used` clippy lints. The ambiguity gate now correctly
+rejects bare `1` with 21 matches listed. Token cost of the fix was low — the scan
+loop already iterated all KINDS; the change was collecting instead of early-returning.

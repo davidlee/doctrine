@@ -32,6 +32,7 @@ mod fsutil;
 mod git;
 mod globmatch;
 mod governance;
+mod hymns;
 mod input;
 mod install;
 mod install_config;

@@ -41,7 +41,7 @@ pub(crate) fn is_admissible_dep_target(kind: &'static crate::entity::Kind) -> bo
 /// Resolve a dep/seq source to its TOML path. Validates: canonical-ref parse,
 /// work-like kind (slice or backlog). Returns the resolved path.
 fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Result<PathBuf> {
-    let (skref, sid) = crate::integrity::parse_canonical_ref(source)?;
+    let (skref, sid) = crate::integrity::parse_resolvable_ref(root, source)?;
     anyhow::ensure!(
         is_work_like(skref.kind),
         "`{source}` is a {} entity, which cannot author needs/after — only a slice or a backlog item (issue/improvement/chore/risk/idea) carries dep/seq",
@@ -72,12 +72,11 @@ fn resolve_dep_seq_src(
     target: &str,
 ) -> anyhow::Result<PathBuf> {
     let toml_path = resolve_dep_seq_src_path(root, source)?;
-    let (skref, sid) = crate::integrity::parse_canonical_ref(source)?;
+    let (skref, sid) = crate::integrity::parse_resolvable_ref(root, source)?;
     // TGT must resolve on disk — a free-text or dangling target is refused here
-    // (never write an edge to a non-entity). `parse_canonical_ref` first so a
-    // free-text target surfaces the canonical-ref shape error, then a dir probe.
-    let (tkref, tid) = crate::integrity::parse_canonical_ref(target)?;
-    crate::integrity::ensure_ref_resolves(root, target)?;
+    // (never write an edge to a non-entity). The resolver first so a
+    // free-text target surfaces the ref-shape error, then a dir probe.
+    let (tkref, tid) = crate::integrity::parse_resolvable_ref(root, target)?;
     anyhow::ensure!(
         is_admissible_dep_target(tkref.kind),
         "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record (assumption/decision/question/constraint/evidence/hypothesis); governance docs are excluded",
