@@ -470,10 +470,7 @@ mod tests {
         let err = resolve_entity_path_and_canonical(&root, "SL-999")
             .unwrap_err()
             .to_string();
-        assert!(
-            err.contains("does not resolve to an entity"),
-            "got: {err}"
-        );
+        assert!(err.contains("does not resolve to an entity"), "got: {err}");
     }
 
     // ---- VT-9: -x N sets lower == upper == N ----

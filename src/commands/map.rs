@@ -28,11 +28,15 @@ fn validate_focus(s: &str) -> Result<String, String> {
     if s.contains('-') {
         crate::integrity::parse_canonical_ref(s)
             .map(|_| s.to_owned())
-            .map_err(|e| format!("focus must be a canonical entity id (e.g. SL-001), got '{s}': {e}"))
+            .map_err(|e| {
+                format!("focus must be a canonical entity id (e.g. SL-001), got '{s}': {e}")
+            })
     } else {
-        s.parse::<u32>()
-            .map(|_| s.to_owned())
-            .map_err(|_e| format!("focus must be a numeric id or canonical entity id (e.g. 1 or SL-001), got '{s}'"))
+        s.parse::<u32>().map(|_| s.to_owned()).map_err(|_e| {
+            format!(
+                "focus must be a numeric id or canonical entity id (e.g. 1 or SL-001), got '{s}'"
+            )
+        })
     }
 }
 

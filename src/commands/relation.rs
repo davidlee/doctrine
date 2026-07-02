@@ -96,9 +96,7 @@ pub(crate) fn run_link(
         let toml_path = crate::memory::resolve_memory_toml_path(&root, &mref)?;
         // Best-effort target validation: if target looks like an entity ref,
         // validate it resolves. Free-text and mem_* targets pass through.
-        if crate::integrity::parse_canonical_ref(target).is_ok()
-            || target.parse::<u32>().is_ok()
-        {
+        if crate::integrity::parse_canonical_ref(target).is_ok() || target.parse::<u32>().is_ok() {
             crate::integrity::ensure_ref_resolves(&root, target).with_context(|| {
                 format!("target `{target}` does not resolve to an existing entity")
             })?;
