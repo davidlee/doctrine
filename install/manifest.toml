@@ -15,7 +15,6 @@ create = [
   ".doctrine/revision",
   ".doctrine/rfc",
   ".doctrine/scripts",
-  ".doctrine/skills",
   ".doctrine/slice",
   ".doctrine/spec/product",
   ".doctrine/spec/tech",
